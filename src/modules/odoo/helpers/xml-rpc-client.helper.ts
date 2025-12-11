@@ -8,8 +8,6 @@ export class XmlRpcClientHelper {
 	async methodCall(method: string, params: any[]): Promise<any> {
 		const xmlPayload = this.buildXmlRpcRequest(method, params);
 
-		console.log('XML-RPC Request:', method, 'to', this.url);
-
 		const response = await fetch(this.url, {
 			method: 'POST',
 			headers: {
@@ -19,11 +17,7 @@ export class XmlRpcClientHelper {
 			body: xmlPayload,
 		});
 
-		console.log('HTTP Response Status:', response.status, response.statusText);
-
 		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('HTTP Error Response:', errorText);
 			throw new Error(`XML-RPC request failed: ${response.status} ${response.statusText}`);
 		}
 
@@ -94,8 +88,6 @@ export class XmlRpcClientHelper {
 
 	private parseXmlRpcResponse(xmlText: string): any {
 		try {
-			console.log('XML Response received (first 1000 chars):', xmlText.substring(0, 1000));
-
 			const parser = new XMLParser({
 				ignoreAttributes: true,
 				parseTagValue: true,
@@ -104,7 +96,6 @@ export class XmlRpcClientHelper {
 			});
 
 			const result = parser.parse(xmlText);
-			console.log('Parsed XML result:', JSON.stringify(result, null, 2));
 
 			// Verificar si hay un methodResponse
 			if (!result.methodResponse) {
@@ -137,10 +128,7 @@ export class XmlRpcClientHelper {
 			// Respuesta exitosa
 			if (result.methodResponse.params?.param?.value !== undefined) {
 				const responseValue = this.extractXmlValue(result.methodResponse.params.param.value);
-				console.log('Successful XML-RPC response received, type:', typeof responseValue);
-				if (Array.isArray(responseValue)) {
-					console.log(`Array response with ${responseValue.length} elements`);
-				}
+
 				return responseValue;
 			}
 

@@ -5,7 +5,7 @@ export const swaggerConfig = new DocumentBuilder()
 	.setTitle('API SapiraAI 1.0')
 	.setDescription('API Rest para SapiraAI')
 	.setVersion('1.0.0')
-	.setContact('Lenosoft', 'https://github.com/sapira-ai', 'leonmontero@lenosoft.cl')
+	.setContact('Lenosoft', 'https://lenosoft.cl', 'leonmontero@lenosoft.cl')
 	.addBearerAuth()
 	.build();
 

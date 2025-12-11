@@ -383,7 +383,7 @@ export class OdooService {
 			try {
 				// TODO: Guardar factura en base de datos
 				// const savedInvoice = await this.saveInvoiceToDatabase(invoice, batchId, connection.holding_id, sync_session_id);
-				console.log(`Procesando factura ${invoice.name}`);
+
 				savedInvoices++;
 
 				// Procesar líneas de la factura
@@ -397,10 +397,8 @@ export class OdooService {
 						try {
 							// TODO: Guardar línea en base de datos
 							// await this.saveLineToDatabase(line, invoice.id, batchId, connection.holding_id, sync_session_id);
-							console.log(`Procesando línea ${line.id}`);
 							savedLines++;
 						} catch (lineErr) {
-							console.error(`Error procesando línea ${line.id}:`, lineErr);
 							errors++;
 						}
 					}
@@ -486,8 +484,6 @@ export class OdooService {
 				console.log('No hay partners para sincronizar en este lote');
 				return 0;
 			}
-
-			console.log(`Sincronizando ${uniquePartnerIds.length} partners únicos del lote actual...`);
 
 			// Obtener partners de Odoo
 			const partners = await this.getPartnersData(objectClient, connection, uid, uniquePartnerIds);
