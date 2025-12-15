@@ -1,10 +1,11 @@
-import { Controller, Get, UseGuards, Res, HttpStatus, Patch, Param, Body } from '@nestjs/common';
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
-import { ApiBearerAuth, ApiBody, ApiExcludeController, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, HttpStatus, Res, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiExcludeController, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
-import { PromotionService } from './promotion.service';
+import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
 import { ResponseDTO } from '@/modules/response.dto';
+
 import { PromotionDTO } from './dto/promotion.dto';
+import { PromotionService } from './promotion.service';
 
 @ApiExcludeController()
 @ApiTags('Promotion')

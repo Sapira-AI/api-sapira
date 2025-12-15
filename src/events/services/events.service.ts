@@ -325,7 +325,7 @@ export class EventsService {
 				metadata: event.metadata,
 			});
 
-			// 2. Registrar en AppInsights
+			// 2. Registrar en telemetría (sin Application Insights)
 			const clientError = new Error(event.metadata.error.message);
 			if (event.metadata.error.stack) {
 				clientError.stack = event.metadata.error.stack;

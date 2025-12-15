@@ -1,4 +1,5 @@
 import { Connection } from 'mongoose';
+
 import { CitiesSchema } from './cities.schema';
 
 export const CitiesProviders = [

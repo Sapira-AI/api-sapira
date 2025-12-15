@@ -1,5 +1,4 @@
-import { ApiProperty, OmitType, PartialType } from '@nestjs/swagger';
-import { IsString, IsArray, IsBoolean, IsMongoId, IsDate, IsNumber } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
 
 export class RoleDTO {

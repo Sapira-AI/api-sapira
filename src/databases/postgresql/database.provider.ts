@@ -60,7 +60,7 @@ export class PostgreSQLDatabaseProvider implements OnModuleInit {
 			if (pool && typeof pool.on === 'function') {
 				// Evento de conexión establecida
 				pool.on('connect', (_client: any) => {
-					this.logger.log('🟢 Nueva conexión PostgreSQL establecida');
+					this.logger.log('🟢 Nueva conexión PostgreSQL establecida', _client);
 				});
 
 				// Evento de error en el pool
@@ -80,7 +80,7 @@ export class PostgreSQLDatabaseProvider implements OnModuleInit {
 
 				// Evento cuando se elimina una conexión del pool
 				pool.on('remove', (_client: any) => {
-					this.logger.debug('🗑️ Conexión removida del pool');
+					this.logger.debug('🗑️ Conexión removida del pool', _client);
 				});
 			}
 		} catch (error) {

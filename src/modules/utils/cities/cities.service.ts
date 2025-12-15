@@ -1,8 +1,7 @@
-import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Model } from 'mongoose';
 
 import { Cities } from './cities.schema';
-import { UpdatedRegionDTO } from './cities.dto';
 
 @Injectable()
 export class CitiesService {

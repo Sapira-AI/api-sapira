@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
+
 import { MongooseModules } from '../../../databases/mongoose/database.module';
 
 import { CitiesController } from './cities.controller';
-import { CitiesService } from './cities.service';
 import { CitiesProviders } from './cities.provider';
+import { CitiesService } from './cities.service';
 
 @Module({
 	imports: [

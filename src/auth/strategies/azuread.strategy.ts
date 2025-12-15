@@ -2,12 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { PassportStrategy } from '@nestjs/passport';
-import * as appInsights from 'applicationinsights';
 import { BearerStrategy } from 'passport-azure-ad';
 
 @Injectable()
 export class AzureADStrategy extends PassportStrategy(BearerStrategy, 'azure-ad') {
-	private client: appInsights.TelemetryClient;
 	private readonly logger = new Logger(AzureADStrategy.name);
 
 	/**
@@ -68,37 +66,17 @@ export class AzureADStrategy extends PassportStrategy(BearerStrategy, 'azure-ad'
 		};
 
 		super(config);
-
-		// Inicializar Application Insights si aún no está inicializado
-		if (!appInsights.defaultClient) {
-			appInsights
-				.setup(this.configService.get<string>('APPLICATIONINSIGHTS_CONNECTION_STRING'))
-				.setAutoDependencyCorrelation(true)
-				.setAutoCollectRequests(true)
-				.setAutoCollectPerformance(true, true)
-				.setAutoCollectExceptions(true)
-				.setAutoCollectDependencies(true)
-				.setAutoCollectConsole(true)
-				.setUseDiskRetryCaching(true)
-				.setSendLiveMetrics(true)
-				.setDistributedTracingMode(appInsights.DistributedTracingModes.AI_AND_W3C)
-				.start();
-		}
-
-		this.client = appInsights.defaultClient;
 	}
 
 	async validate(req: any, profile: any): Promise<any> {
 		const startTime = process.hrtime();
 
 		try {
-			this.client.trackEvent({
-				name: 'TokenValidationStart',
-				properties: {
-					userId: profile.oid,
-					policyName: this.configService.get<string>('AZURE_POLICY_NAME'),
-					timestamp: new Date().toISOString(),
-				},
+			// Log to console instead of Application Insights
+			this.logger.log('Token Validation Start:', {
+				userId: profile.oid,
+				policyName: this.configService.get<string>('AZURE_POLICY_NAME'),
+				timestamp: new Date().toISOString(),
 			});
 
 			const user = profile;
@@ -110,7 +88,8 @@ export class AzureADStrategy extends PassportStrategy(BearerStrategy, 'azure-ad'
 				req.headers['x-dependency-duration'] = duration.toString();
 			}
 
-			this.client.trackMetric({
+			// Log metrics to console
+			this.logger.log('Token Validation Duration:', {
 				name: 'TokenValidationDuration',
 				value: duration,
 				properties: {
@@ -119,13 +98,10 @@ export class AzureADStrategy extends PassportStrategy(BearerStrategy, 'azure-ad'
 				},
 			});
 
-			this.client.trackEvent({
-				name: 'TokenValidationSuccess',
-				properties: {
-					userId: profile.oid,
-					duration: duration.toString(),
-					timestamp: new Date().toISOString(),
-				},
+			this.logger.log('Token Validation Success:', {
+				userId: profile.oid,
+				duration: duration.toString(),
+				timestamp: new Date().toISOString(),
 			});
 
 			return user;
@@ -133,8 +109,13 @@ export class AzureADStrategy extends PassportStrategy(BearerStrategy, 'azure-ad'
 			const [seconds, nanoseconds] = process.hrtime(startTime);
 			const duration = seconds * 1000 + nanoseconds / 1000000;
 
-			this.client.trackException({
-				exception: error,
+			// Log exception to console
+			this.logger.error('Token Validation Exception:', {
+				exception: {
+					name: error.name,
+					message: error.message,
+					stack: error.stack,
+				},
 				properties: {
 					operation: 'TokenValidation',
 					userId: profile?.oid,

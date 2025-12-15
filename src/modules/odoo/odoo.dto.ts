@@ -11,7 +11,7 @@ export class InvoiceDTO {
 export class SyncInvoicesDTO {
 	@IsString()
 	@ApiProperty({ required: true, description: 'ID de la conexión de Odoo' })
-	connectionId: string;
+	connection_id: string;
 
 	@IsOptional()
 	@IsNumber()
@@ -50,7 +50,7 @@ export class SyncInvoicesDTO {
 export class SyncPartnersDTO {
 	@IsString()
 	@ApiProperty({ required: true, description: 'ID de la conexión de Odoo' })
-	connectionId: string;
+	connection_id: string;
 
 	@IsOptional()
 	@IsNumber()
@@ -78,4 +78,16 @@ export class SyncPartnersDTO {
 	@IsString()
 	@ApiProperty({ required: false, description: 'ID de sesión de sincronización' })
 	sync_session_id?: string;
+}
+
+export class GetCompaniesDTO {
+	@IsString()
+	@ApiProperty({ required: true, description: 'ID de la conexión de Odoo' })
+	connection_id: string;
+}
+
+export class GetProductsDTO {
+	@IsString()
+	@ApiProperty({ required: true, description: 'ID de la conexión de Odoo' })
+	connection_id: string;
 }

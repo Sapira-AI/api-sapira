@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as appInsights from 'applicationinsights';
 
 export interface BusinessOperationData {
 	workspace?: string;
@@ -14,65 +13,44 @@ export interface BusinessOperationData {
 
 @Injectable()
 export class BusinessMetricsService {
-	private client: appInsights.TelemetryClient;
-
 	private readonly logger = new Logger(BusinessMetricsService.name);
 
 	constructor() {
-		try {
-			this.client = appInsights.defaultClient;
-			if (!this.client) {
-				this.logger.warn('Application Insights no está inicializado');
-			}
-		} catch (error) {
-			this.logger.warn(`Error al obtener el cliente de Application Insights: ${error.message}`);
-			this.client = null;
-		}
+		this.logger.log('BusinessMetricsService initialized without Application Insights');
 	}
 
 	trackBusinessOperation(operation: string, data: BusinessOperationData) {
-		// Verificar si el cliente está disponible antes de usarlo
-		if (!this.client) {
-			this.logger.warn(`No se pudo registrar operación de negocio: ${operation} - Application Insights no disponible`);
-			return;
-		}
+		// Log to console instead of Application Insights
+		this.logger.log('Business Operation Tracked:', {
+			name: 'BusinessOperation',
+			operation,
+			properties: {
+				workspace: data.workspace,
+				success: data.success.toString(),
+				userId: data.userId,
+				operationType: data.operationType,
+				resourceType: data.resourceType,
+				details: JSON.stringify(data.details),
+				errorDetails: data.errorDetails ? JSON.stringify(data.errorDetails) : undefined,
+				timestamp: new Date().toISOString(),
+			},
+			measurements: {
+				duration: data.duration || 0,
+			},
+		});
 
-		try {
-			if (typeof this.client.trackEvent === 'function') {
-				this.client.trackEvent({
-					name: 'BusinessOperation',
-					properties: {
-						operation,
-						workspace: data.workspace,
-						success: data.success.toString(),
-						userId: data.userId,
-						operationType: data.operationType,
-						resourceType: data.resourceType,
-						details: JSON.stringify(data.details),
-						errorDetails: data.errorDetails ? JSON.stringify(data.errorDetails) : undefined,
-						timestamp: new Date().toISOString(),
-					},
-					measurements: {
-						duration: data.duration || 0,
-					},
-				});
-			}
-
-			// Si la operación falló, también registramos una métrica de error
-			if (!data.success && typeof this.client.trackMetric === 'function') {
-				this.client.trackMetric({
-					name: `BusinessOperation_Error_${operation}`,
-					value: 1,
-					properties: {
-						workspace: data.workspace,
-						userId: data.userId,
-						errorType: data.errorDetails?.type,
-						timestamp: new Date().toISOString(),
-					},
-				});
-			}
-		} catch (error) {
-			this.logger.warn(`Error al registrar operación de negocio: ${error.message}`);
+		// Si la operación falló, también lo registramos
+		if (!data.success) {
+			this.logger.error('Business Operation Error:', {
+				name: `BusinessOperation_Error_${operation}`,
+				value: 1,
+				properties: {
+					workspace: data.workspace,
+					userId: data.userId,
+					errorType: data.errorDetails?.type,
+					timestamp: new Date().toISOString(),
+				},
+			});
 		}
 	}
 
@@ -96,25 +74,14 @@ export class BusinessMetricsService {
 
 	// Método para registrar métricas de rendimiento de operaciones
 	trackOperationPerformance(operation: string, duration: number, success: boolean, details?: any) {
-		// Verificar si el cliente está disponible antes de usarlo
-		if (!this.client) {
-			this.logger.warn(`No se pudo registrar rendimiento de operación: ${operation} - Application Insights no disponible`);
-			return;
-		}
-
-		try {
-			if (typeof this.client.trackMetric === 'function') {
-				this.client.trackMetric({
-					name: `Operation_Duration_${operation}`,
-					value: duration,
-					properties: {
-						success: success.toString(),
-						...details,
-					},
-				});
-			}
-		} catch (error) {
-			this.logger.warn(`Error al registrar rendimiento de operación: ${error.message}`);
-		}
+		// Log to console instead of Application Insights
+		this.logger.log('Operation Performance Tracked:', {
+			name: `Operation_Duration_${operation}`,
+			value: duration,
+			properties: {
+				success: success.toString(),
+				...details,
+			},
+		});
 	}
 }

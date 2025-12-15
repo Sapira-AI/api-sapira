@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDefined, IsOptional } from 'class-validator';
-import { ContactDTO } from './contact.dto';
+import { IsDefined } from 'class-validator';
 
 export class UpdateUserMainWorkspaceDTO {
 	@ApiProperty({ required: true })

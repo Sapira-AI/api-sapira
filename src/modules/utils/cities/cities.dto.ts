@@ -1,5 +1,4 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { Cities } from './cities.schema';
 
 export class DistrictDTO {
 	@ApiProperty({ required: true })

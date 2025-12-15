@@ -63,7 +63,7 @@ async function bootstrap() {
 					scriptSrc: process.env.NODE_ENV === 'production' ? ["'self'"] : ["'self'", "'unsafe-inline'"],
 					styleSrc: process.env.NODE_ENV === 'production' ? ["'self'"] : ["'self'", "'unsafe-inline'"],
 					imgSrc: ["'self'", 'data:', 'https:'],
-					connectSrc: ["'self'", 'https://*.b2clogin.com', 'https://*.applicationinsights.azure.com'],
+					connectSrc: ["'self'", 'https://*.b2clogin.com'],
 					frameSrc: ["'self'", 'https://*.b2clogin.com'],
 					fontSrc: ["'self'", 'https:', 'data:'],
 					objectSrc: ["'none'"],
@@ -110,6 +110,7 @@ async function bootstrap() {
 		origin: [
 			'http://localhost:3000',
 			'http://localhost:3001',
+			'http://localhost:8080',
 			'http://localhost:9001',
 			'http://localhost:9002',
 			/\.vercel\.app$/,

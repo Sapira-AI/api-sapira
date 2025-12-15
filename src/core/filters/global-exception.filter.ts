@@ -30,7 +30,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 		// Registrar error usando el método error del logger
 		this.logger.error(exception.message || 'Error interno del servidor', userId, exception.stack, 'GlobalExceptionFilter');
 
-		// Registrar en AppInsights con más contexto
+		// Registrar excepción con más contexto (sin Application Insights)
 		if (this.telemetry) {
 			this.telemetry.trackException(exception, userId, {
 				correlationId,

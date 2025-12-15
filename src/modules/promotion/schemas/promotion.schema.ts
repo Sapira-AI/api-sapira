@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+
 import { RepublishOptions } from './republish-options.schema';
 
 @Schema({ collection: 'promotion', read: 'nearest' })

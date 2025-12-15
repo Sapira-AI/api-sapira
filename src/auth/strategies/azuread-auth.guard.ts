@@ -2,18 +2,14 @@
 import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import * as appInsights from 'applicationinsights';
 import { firstValueFrom, Observable } from 'rxjs';
 
 import { IS_PUBLIC_KEY } from '@/decorators/public.decorator';
 
 @Injectable()
 export class AzureADAuthGuard extends AuthGuard('azure-ad') {
-	private client: appInsights.TelemetryClient;
-
 	constructor(private reflector: Reflector) {
 		super();
-		this.client = appInsights.defaultClient;
 	}
 
 	async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -42,7 +38,7 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 				const [seconds, nanoseconds] = process.hrtime(startTime);
 				const duration = seconds * 1000 + nanoseconds / 1000000;
 
-				this.client.trackMetric({
+				console.log('Auth Guard Validation Duration:', {
 					name: 'AuthGuardValidationDuration',
 					value: duration,
 					properties: {
@@ -58,8 +54,12 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 			const [seconds, nanoseconds] = process.hrtime(startTime);
 			const duration = seconds * 1000 + nanoseconds / 1000000;
 
-			this.client.trackException({
-				exception: error,
+			console.error('Auth Guard Validation Exception:', {
+				exception: {
+					name: error.name,
+					message: error.message,
+					stack: error.stack,
+				},
 				properties: {
 					operation: 'AuthGuardValidation',
 					endpoint: context.getHandler().name,
@@ -79,7 +79,7 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 		const controller = context.getClass()?.name || 'desconocido';
 
 		if (err) {
-			this.client.trackEvent({
+			console.error('Authentication Failure:', {
 				name: 'AuthenticationFailure',
 				properties: {
 					error: err.message,
@@ -96,7 +96,7 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 		}
 
 		if (!user) {
-			this.client.trackEvent({
+			console.error('Authentication Failure - No User:', {
 				name: 'AuthenticationFailure',
 				properties: {
 					error: 'Usuario no autenticado',
@@ -111,7 +111,7 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 			throw new UnauthorizedException('Token de autorización inválido o expirado');
 		}
 
-		this.client.trackEvent({
+		console.log('Authentication Success:', {
 			name: 'AuthenticationSuccess',
 			properties: {
 				userId: user.oid,

@@ -1,12 +1,13 @@
-import { Controller, Get, UseGuards, Res, HttpStatus, Patch, Param, Body } from '@nestjs/common';
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { Body, Controller, Get, HttpStatus, Param, Patch, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiExcludeController, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UpdateWriteOpResult } from 'mongoose';
 
+import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
 import { Public } from '@/decorators/public.decorator';
-import { CitiesService } from './cities.service';
-import { CitiesDTO, DistrictDTO, RegionDTO, RegionUpdateDTO } from './cities.dto';
 import { ResponseDTO } from '@/modules/response.dto';
+
+import { CitiesDTO, DistrictDTO, RegionDTO, RegionUpdateDTO } from './cities.dto';
+import { CitiesService } from './cities.service';
 
 @ApiExcludeController()
 @ApiTags('Utils')

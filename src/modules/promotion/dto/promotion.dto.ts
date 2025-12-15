@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+
 import { RepublishOptions } from '../schemas/republish-options.schema';
 
 export class PromotionDTO {

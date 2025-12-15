@@ -23,6 +23,7 @@
 			"@/*": ["src/*"],
 			"@types/*": ["types/*.d.ts"]
 		},
-		"typeRoots": ["./node_modules/@types", "./src/types"]
+		"typeRoots": ["./node_modules/@types", "./src/types"],
+		"types": ["node"]
 	}
 }
