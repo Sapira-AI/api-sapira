@@ -10,7 +10,7 @@ import { SecurityModule } from '@/security/security.module';
 import { SecurityService } from '@/security/services/security.service';
 
 import { AuthModule } from './auth/auth.module';
-import { AzureADAuthGuard } from './auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from './auth/strategies/supabase-auth.guard';
 import { eventConfig } from './core/config/event.config';
 import { MongooseModules } from './databases/mongoose/database.module';
 import { PostgreSQLDatabaseModule } from './databases/postgresql/database.module';
@@ -19,6 +19,7 @@ import { AuditInterceptorModule } from './interceptors/audit.interceptor.module'
 import { LoggerModule } from './logger/logger.module';
 import { RequestContextMiddleware } from './middlewares/common/request-context.middleware';
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
+import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { ProfileModule } from './modules/profiles/profile.module';
@@ -43,17 +44,17 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 			{
 				name: 'short', // Para endpoints sensibles (auth, login, etc.)
 				ttl: 60000, // 1 minuto
-				limit: 300, // 300 requests por minuto (1 por segundo)
+				limit: 1000, // 1000 requests por minuto
 			},
 			{
 				name: 'medium', // Para operaciones regulares
 				ttl: 300000, // 5 minutos
-				limit: 1500, // 1500 requests por 5 minutos (1 por segundo)
+				limit: 5000, // 5000 requests por 5 minutos
 			},
 			{
 				name: 'long', // Para operaciones pesadas o batch
 				ttl: 3600000, // 1 hora
-				limit: 7200, // 7200 requests por hora (1 por segundo)
+				limit: 20000, // 20000 requests por hora
 			},
 		]),
 		AuditInterceptorModule,
@@ -71,6 +72,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		TelemetryModule,
 		EventsModule,
 		DevicesModule,
+		DatabaseAnalyzerModule,
 		PostgreSQLDatabaseModule,
 		OdooModule,
 	],
@@ -81,7 +83,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		},
 		{
 			provide: APP_GUARD,
-			useClass: AzureADAuthGuard,
+			useClass: SupabaseAuthGuard,
 		},
 		SecurityService,
 	],

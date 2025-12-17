@@ -8,7 +8,7 @@ import { WorkspaceModule } from '@/modules/workspaces/workspace.module';
 
 import { AuditInterceptor } from './audit.interceptor';
 import { DeviceInfoInterceptor } from './device-info.interceptor';
-import { TokenInterceptor } from './token.interceptor';
+// import { TokenInterceptor } from './token.interceptor'; // Comentado: incompatible con SupabaseAuthGuard
 
 /**
  * Módulo global para registrar el interceptor de auditoría
@@ -17,10 +17,6 @@ import { TokenInterceptor } from './token.interceptor';
 @Module({
 	imports: [AuditModule, ProfileModule, EventsModule, WorkspaceModule],
 	providers: [
-		{
-			provide: APP_INTERCEPTOR,
-			useClass: TokenInterceptor, // Primero ejecutamos el interceptor de token
-		},
 		{
 			provide: APP_INTERCEPTOR,
 			useClass: DeviceInfoInterceptor, // Luego el interceptor de dispositivo

@@ -28,7 +28,7 @@ export interface EstimateResult {
 	success: boolean;
 	total_lines: number;
 	total_invoices: number;
-	lines_per_invoice: number;
+	total_partners: number;
 	total_invoices_without_product_lines: number;
 	invoices_without_product_lines_names: string[];
 	message: string;
@@ -165,6 +165,11 @@ export interface OdooCompany {
 	state_id: [number, string] | false;
 	zip: string;
 	partner_id: [number, string];
+	account_sale_tax_id: [number, string] | false;
+	account_purchase_tax_id: [number, string] | false;
+	account_fiscal_country_id: [number, string] | false;
+	tax_calculation_rounding_method: 'round_per_line' | 'round_globally';
+	tax_exigibility: boolean;
 }
 
 export interface SapiraCompany {
@@ -201,6 +206,14 @@ export interface OdooCompanyFormatted {
 	address: string;
 	state: string | null;
 	partner_id: [number, string];
+	default_sale_tax_id: number | false;
+	default_sale_tax_name: string | null;
+	default_purchase_tax_id: number | false;
+	default_purchase_tax_name: string | null;
+	fiscal_country_id: number | false;
+	fiscal_country_name: string | null;
+	tax_calculation_rounding: 'round_per_line' | 'round_globally';
+	use_cash_basis: boolean;
 }
 
 export interface OdooProduct {
