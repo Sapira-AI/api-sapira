@@ -59,10 +59,14 @@ export class OdooService {
 	 * Obtiene las compañías desde Odoo
 	 */
 	async getCompanies(getCompaniesData: GetCompaniesDTO): Promise<GetCompaniesResponseDTO> {
-		const { connection_id } = getCompaniesData;
+		const { connection_id, holding_id } = getCompaniesData;
 
 		if (!connection_id) {
 			throw new Error('connection_id es requerido');
+		}
+
+		if (!holding_id) {
+			throw new Error('holding_id es requerido');
 		}
 
 		try {
@@ -126,7 +130,7 @@ export class OdooService {
 			]);
 
 			// Obtener companies existentes en Sapira para mostrar mapeos actuales
-			const sapiraCompanies: SapiraCompany[] = await this.getSapiraCompanies(connection.holding_id);
+			const sapiraCompanies: SapiraCompany[] = await this.getSapiraCompanies(holding_id);
 
 			// Obtener detalles de impuestos para las companies que tienen configurados
 			const taxDetails = await this.getTaxDetailsForCompanies(companies, objectClient, connection, uid);

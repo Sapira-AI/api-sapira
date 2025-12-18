@@ -33,13 +33,20 @@ export class OdooController {
 		description: 'ID de la conexión de Odoo',
 		example: '1',
 	})
+	@ApiQuery({
+		name: 'holding_id',
+		required: true,
+		type: String,
+		description: 'ID del holding para filtrar compañías de Sapira',
+		example: '05583c6e-9364-4672-a610-0744324e44b4',
+	})
 	@ApiOkResponse({
 		type: GetCompaniesResponseDTO,
 		description: 'Compañías obtenidas exitosamente',
 	})
 	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
-	async getCompanies(@Query('connection_id') connectionId: string): Promise<GetCompaniesResponseDTO> {
-		const result = await this.odooService.getCompanies({ connection_id: connectionId });
+	async getCompanies(@Query('connection_id') connectionId: string, @Query('holding_id') holdingId: string): Promise<GetCompaniesResponseDTO> {
+		const result = await this.odooService.getCompanies({ connection_id: connectionId, holding_id: holdingId });
 		return result as GetCompaniesResponseDTO;
 	}
 

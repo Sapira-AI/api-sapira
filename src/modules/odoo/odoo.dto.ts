@@ -175,6 +175,10 @@ export class GetCompaniesDTO {
 	@IsString()
 	@ApiProperty({ required: true, description: 'ID de la conexión de Odoo' })
 	connection_id: string;
+
+	@IsString()
+	@ApiProperty({ required: true, description: 'ID del holding' })
+	holding_id: string;
 }
 
 export class OdooCompanyDTO {
