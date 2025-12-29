@@ -25,6 +25,7 @@
 		"@azure/ms-rest-azure-js": "^2.1.0",
 		"@azure/ms-rest-js": "^2.7.0",
 		"@azure/storage-blob": "^12.17.0",
+		"@google-cloud/bigquery": "^8.1.1",
 		"@nestjs/axios": "^3.0.2",
 		"@nestjs/azure-storage": "^3.0.0",
 		"@nestjs/cache-manager": "^3.0.0",

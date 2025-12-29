@@ -151,7 +151,7 @@ async function bootstrap() {
 	});
 
 	const configService: ConfigService = app.get<ConfigService>(ConfigService);
-	const port = configService.get('PORT') || 9002;
+	const port = configService.get('PORT') || 8082;
 
 	await app.listen(port);
 	nestLogger.log(`Application started and listening on ${port}`);

@@ -19,8 +19,11 @@ import { AuditInterceptorModule } from './interceptors/audit.interceptor.module'
 import { LoggerModule } from './logger/logger.module';
 import { RequestContextMiddleware } from './middlewares/common/request-context.middleware';
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
+import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { EmailModule } from './modules/email/email.module';
+import { EmailsModule } from './modules/emails/emails.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { ProfileModule } from './modules/profiles/profile.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
@@ -75,6 +78,9 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		DatabaseAnalyzerModule,
 		PostgreSQLDatabaseModule,
 		OdooModule,
+		EmailModule,
+		EmailsModule,
+		BigQueryModule,
 	],
 	providers: [
 		{
