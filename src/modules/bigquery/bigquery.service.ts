@@ -4,11 +4,14 @@ import { ConfigService } from '@nestjs/config';
 
 import { QueryDto } from './dtos/query.dto';
 import { BigQueryResult } from './interfaces/bigquery-result.interface';
+import { ProjectInfo } from './interfaces/project-info.interface';
 
 @Injectable()
 export class BigQueryService {
 	private readonly logger = new Logger(BigQueryService.name);
 	private bigQueryClient: BigQuery;
+	private projectId: string | null = null;
+	private clientEmail: string | null = null;
 
 	constructor(private readonly configService: ConfigService) {
 		this.initializeBigQuery();
@@ -27,15 +30,18 @@ export class BigQueryService {
 
 			const credentialsJson = JSON.parse(credentials);
 
+			this.projectId = credentialsJson.project_id;
+			this.clientEmail = credentialsJson.client_email;
+
 			this.bigQueryClient = new BigQuery({
-				projectId: credentialsJson.project_id,
+				projectId: this.projectId,
 				credentials: {
-					client_email: credentialsJson.client_email,
+					client_email: this.clientEmail,
 					private_key: credentialsJson.private_key,
 				},
 			});
 
-			this.logger.log(`✓ BigQuery inicializado para proyecto: ${credentialsJson.project_id}`);
+			this.logger.log(`✓ BigQuery inicializado para proyecto: ${this.projectId}`);
 		} catch (error) {
 			this.logger.error('Error inicializando BigQuery:', error);
 			this.logger.error('Error detalle:', error.message);
@@ -109,5 +115,13 @@ export class BigQueryService {
 			this.logger.error(`Error obteniendo tablas del dataset ${datasetId}:`, error);
 			throw new InternalServerErrorException('Error al obtener tablas');
 		}
+	}
+
+	getProjectInfo(): ProjectInfo {
+		return {
+			projectId: this.projectId || 'No configurado',
+			clientEmail: this.clientEmail || 'No configurado',
+			isConfigured: !!this.bigQueryClient,
+		};
 	}
 }

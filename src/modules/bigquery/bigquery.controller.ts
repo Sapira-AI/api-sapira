@@ -6,6 +6,7 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { BigQueryService } from './bigquery.service';
 import { QueryDto } from './dtos/query.dto';
 import { BigQueryResult } from './interfaces/bigquery-result.interface';
+import { ProjectInfo } from './interfaces/project-info.interface';
 
 @ApiTags('BigQuery')
 @Controller('bigquery')
@@ -13,6 +14,20 @@ import { BigQueryResult } from './interfaces/bigquery-result.interface';
 @ApiBearerAuth()
 export class BigQueryController {
 	constructor(private readonly bigQueryService: BigQueryService) {}
+
+	@Get('project-info')
+	@ApiOperation({
+		summary: 'Obtener información del proyecto de BigQuery',
+		description: 'Retorna el ID del proyecto y el email de la cuenta de servicio configurada.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Información del proyecto obtenida exitosamente',
+	})
+	@HttpCode(HttpStatus.OK)
+	async getProjectInfo(): Promise<ProjectInfo> {
+		return this.bigQueryService.getProjectInfo();
+	}
 
 	@Post('query')
 	@ApiOperation({

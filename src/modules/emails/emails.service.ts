@@ -626,4 +626,57 @@ export class EmailsService {
 			throw new InternalServerErrorException('Error al eliminar remitente');
 		}
 	}
+
+	async send(params: { to: string; subject: string; html: string; from: string; fromName?: string; replyTo?: string }): Promise<void> {
+		if (!this.sendgridApiKey) {
+			throw new BadRequestException('Servicio de email no configurado. Contacte al administrador.');
+		}
+
+		try {
+			const response = await fetch(`${this.sendgridApiUrl}/mail/send`, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${this.sendgridApiKey}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					personalizations: [
+						{
+							to: [{ email: params.to }],
+						},
+					],
+					from: {
+						email: params.from,
+						name: params.fromName || params.from,
+					},
+					reply_to: params.replyTo
+						? {
+								email: params.replyTo,
+							}
+						: undefined,
+					subject: params.subject,
+					content: [
+						{
+							type: 'text/html',
+							value: params.html,
+						},
+					],
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				this.logger.error('Error enviando email:', errorData);
+				throw new BadRequestException(errorData.errors?.[0]?.message || 'Error al enviar email');
+			}
+
+			this.logger.log(`✓ Email enviado a ${params.to}`);
+		} catch (error) {
+			if (error instanceof BadRequestException) {
+				throw error;
+			}
+			this.logger.error('Error enviando email:', error);
+			throw new InternalServerErrorException('Error al enviar email');
+		}
+	}
 }

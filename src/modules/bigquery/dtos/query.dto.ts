@@ -4,7 +4,7 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 export class QueryDto {
 	@ApiProperty({
 		description: 'Consulta SQL para ejecutar en BigQuery',
-		example: 'SELECT * FROM `datawarehouse-a2e2.dataset.table` LIMIT 10',
+		example: 'SELECT * FROM `datawarehouse-a2e2.finance.sapira` LIMIT 10',
 	})
 	@IsString()
 	@IsNotEmpty()
