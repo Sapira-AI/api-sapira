@@ -2,6 +2,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AuditModule } from '@/audit/audit.module';
@@ -19,8 +20,12 @@ import { AuditInterceptorModule } from './interceptors/audit.interceptor.module'
 import { LoggerModule } from './logger/logger.module';
 import { RequestContextMiddleware } from './middlewares/common/request-context.middleware';
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
+import { AgentsModule } from './modules/agents/agents.module';
+import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { EmailModule } from './modules/email/email.module';
+import { EmailsModule } from './modules/emails/emails.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { ProfileModule } from './modules/profiles/profile.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
@@ -35,6 +40,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 			isGlobal: true,
 			load: [eventConfig],
 		}),
+		ScheduleModule.forRoot(),
 		CacheModule.register({
 			isGlobal: true,
 			ttl: 0, // Desactivado por defecto
@@ -75,6 +81,10 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		DatabaseAnalyzerModule,
 		PostgreSQLDatabaseModule,
 		OdooModule,
+		EmailModule,
+		EmailsModule,
+		BigQueryModule,
+		AgentsModule,
 	],
 	providers: [
 		{
