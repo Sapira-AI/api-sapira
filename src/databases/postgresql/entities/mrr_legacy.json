@@ -1,0 +1,1326 @@
+{
+  "success": true,
+  "message": "Análisis de tabla public.mrr_legacy completado exitosamente",
+  "data": {
+    "table_name": "mrr_legacy",
+    "schema_name": "public",
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "holding_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_legacy_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_item_legacy_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "split_index",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": "1",
+        "character_maximum_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0
+      },
+      {
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "client_tax_id",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "legal_client_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "issue_date",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_currency",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "amount_invoice_currency",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "total_invoice_currency",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "vat",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "quantity",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 4
+      },
+      {
+        "column_name": "unit_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "discount_pct",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 5,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "subtotal",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "allocated_invoice_currency",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "client_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "contract_currency",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "subtotal_contract_currency",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "product_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "term",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0
+      },
+      {
+        "column_name": "period_month",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "is_recurring",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "true",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "fx_contract_to_invoice",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 12,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "fx_contract_to_system",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 12,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "mrr_legacy",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "mrr_legacy_system_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 15,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "momentum",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": "auth.uid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "migrated_to_contract_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "migrated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "migrated_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "batch_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      }
+    ],
+    "indexes": [
+      {
+        "index_name": "idx_mrr_legacy_batch_id",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_batch_id ON public.mrr_legacy USING btree (batch_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_client",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_client ON public.mrr_legacy USING btree (client_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_company",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_company ON public.mrr_legacy USING btree (company_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_holding",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_holding ON public.mrr_legacy USING btree (holding_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_invoice",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_invoice ON public.mrr_legacy USING btree (invoice_legacy_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_invoice_created",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_invoice_created ON public.mrr_legacy USING btree (invoice_legacy_id, created_at)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_invoice_item",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_invoice_item ON public.mrr_legacy USING btree (invoice_item_legacy_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_migrated",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_migrated ON public.mrr_legacy USING btree (migrated_to_contract_id) WHERE (migrated_to_contract_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_not_migrated",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_not_migrated ON public.mrr_legacy USING btree (client_id, invoice_legacy_id, created_at) WHERE (migrated_to_contract_id IS NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_period",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_period ON public.mrr_legacy USING btree (period_month)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_product",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_product ON public.mrr_legacy USING btree (product_name)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_mrr_legacy_recurring",
+        "index_definition": "CREATE INDEX idx_mrr_legacy_recurring ON public.mrr_legacy USING btree (is_recurring) WHERE (is_recurring = true)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "mrr_legacy_invoice_item_legacy_id_split_index_period_month_key",
+        "index_definition": "CREATE UNIQUE INDEX mrr_legacy_invoice_item_legacy_id_split_index_period_month_key ON public.mrr_legacy USING btree (invoice_item_legacy_id, split_index, period_month)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "mrr_legacy_pkey",
+        "index_definition": "CREATE UNIQUE INDEX mrr_legacy_pkey ON public.mrr_legacy USING btree (id)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "16 kB"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constraint_name": "mrr_legacy_client_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "client_id",
+        "foreign_table_name": "clients",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "mrr_legacy_company_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "company_id",
+        "foreign_table_name": "companies",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "mrr_legacy_holding_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "mrr_legacy_invoice_item_legacy_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "invoice_item_legacy_id",
+        "foreign_table_name": "invoice_items_legacy",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "mrr_legacy_invoice_legacy_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "invoice_legacy_id",
+        "foreign_table_name": "invoices_legacy",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "mrr_legacy_migrated_by_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "migrated_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "mrr_legacy_migrated_to_contract_id_fkey",
+        "table_name": "mrr_legacy",
+        "column_name": "migrated_to_contract_id",
+        "foreign_table_name": "contracts",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "SET NULL"
+      }
+    ],
+    "primary_unique_keys": [
+      {
+        "constraint_name": "mrr_legacy_pkey",
+        "constraint_type": "PRIMARY KEY",
+        "column_name": "id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      },
+      {
+        "constraint_name": "mrr_legacy_invoice_item_legacy_id_split_index_period_month_key",
+        "constraint_type": "UNIQUE",
+        "column_name": "invoice_item_legacy_id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      },
+      {
+        "constraint_name": "mrr_legacy_invoice_item_legacy_id_split_index_period_month_key",
+        "constraint_type": "UNIQUE",
+        "column_name": "split_index",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      },
+      {
+        "constraint_name": "mrr_legacy_invoice_item_legacy_id_split_index_period_month_key",
+        "constraint_type": "UNIQUE",
+        "column_name": "period_month",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_name": "trg_calculate_mrr_legacy_fields",
+        "event_manipulation": "INSERT",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION calculate_mrr_legacy_fields()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_calculate_mrr_legacy_fields",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION calculate_mrr_legacy_fields()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_calculate_mrr_legacy_system_currency",
+        "event_manipulation": "INSERT",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION calculate_mrr_legacy_system_currency()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_calculate_mrr_legacy_system_currency",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION calculate_mrr_legacy_system_currency()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_mrr_legacy_updated_at",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION set_updated_at()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_update_invoice_legacy_status_on_mrr",
+        "event_manipulation": "INSERT",
+        "event_object_table": "mrr_legacy",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION update_invoice_legacy_status_on_mrr_creation()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      }
+    ],
+    "policies": [
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "policyname": "Users can delete mrr_legacy from their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "policyname": "Users can insert mrr_legacy in their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "policyname": "Users can update mrr_legacy in their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "policyname": "Users can view mrr_legacy from their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      }
+    ],
+    "statistics": [
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "allocated_invoice_currency",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{211169.00}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{130002.00,130303.00,213918.00,214879.00,215680.00,215768.00,215980.00,405287.00,405733.00,408441.00,410828.00,412774.00,413623.00,414715.00,416126.00,416968.00,418259.00,418636.00,457176.00,460505.00,508494.00,508791.00,515299.00,515309.00,518891.00,519397.00,519424.00,519568.00,520686.00,522948.00,523352.00,525040.00,525344.00,703634.00,704178.00,706449.00,706995.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "amount_invoice_currency",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{211169.00}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{130002.00,130303.00,213918.00,214879.00,215680.00,215768.00,215980.00,405287.00,405733.00,408441.00,410828.00,412774.00,413623.00,414715.00,416126.00,416968.00,418259.00,418636.00,457176.00,460505.00,508494.00,508791.00,515299.00,515309.00,518891.00,519397.00,519424.00,519568.00,520686.00,522948.00,523352.00,525040.00,525344.00,703634.00,704178.00,706449.00,706995.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "batch_id",
+        "n_distinct": -0.102564,
+        "most_common_vals": "{c56c2472-71f7-432a-ab16-5ceff0037890,53b5ea3c-12c0-46d2-be30-4d1868732500,c50619ef-c589-4e29-967c-3bdf1d6024a8,7321b450-722e-4df9-977e-57684a1b0531}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.230769,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "client_id",
+        "n_distinct": 3,
+        "most_common_vals": "{7bc2200d-e558-4339-9682-71ae06912481,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,c8c7d008-9a19-4079-8143-754da3a02611}",
+        "most_common_freqs": [
+          0.666667,
+          0.230769,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "client_tax_id",
+        "n_distinct": -0.102564,
+        "most_common_vals": "{85218700-K,77398633-9,96955880-7,79675760-4}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.230769,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "company_id",
+        "n_distinct": 1,
+        "most_common_vals": "{bb0caa69-162e-4b9e-8e54-9aff347abf1f}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "contract_currency",
+        "n_distinct": 1,
+        "most_common_vals": "{CLF}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "created_at",
+        "n_distinct": -0.128205,
+        "most_common_vals": "{\"2026-01-03 00:26:37.752106+00\",\"2026-01-03 00:07:08.301545+00\",\"2026-01-11 19:44:28.750073+00\",\"2026-01-11 20:06:31.35234+00\"}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.230769,
+          0.0769231
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "created_by",
+        "n_distinct": 2,
+        "most_common_vals": "{9fca1688-5ac3-4c38-8744-d97572e78f01,5a97a296-9216-4200-a0a4-416ac304f98e}",
+        "most_common_freqs": [
+          0.384615,
+          0.333333
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "currency",
+        "n_distinct": 1,
+        "most_common_vals": "{CLP}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "description",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{\"FAC 022839 Servicio Simpliroute recurrente - 1 Meses\n02/01/2025 a 01/02/2025\",\"FAC 023064 Servicio Simpliroute recurrente - 1 Meses\n02/02/2025 a 01/03/2025\",\"FAC 023080 Licencias y Mantención de Software\nServicio SimpliRoute\",\"FAC 023081 Licencias y Mantención de Software\nServicio SimpliRoute\",\"FAC 023082 Licencias y Mantención de Software\nServicio SimpliRoute\",\"FAC 023083 Licencias y Mantención de Software\nServicio SimpliRoute\",\"FAC 023192 Servicio Simpliroute\",\"FAC 023193 Servicio Simpliroute\",\"FAC 023286 Servicio Simpliroute recurrente - 1 Meses\n02/03/2025 a 01/04/2025\",\"FAC 023525 Servicio Simpliroute recurrente - 1 Meses\n02/04/2025 a 01/05/2025\",\"FAC 023539 Servicio Simpliroute recurrente\nFebrero 2025\",\"FAC 023540 Servicio Simpliroute recurrente\nMarzo 2025\",\"FAC 023755 Servicio Simpliroute\",\"FAC 023756 Servicio Simpliroute - Abril 2025\",\"FAC 023805 Servicio Simpliroute recurrente - 1 Meses\n02/05/2025 a 01/06/2025\",\"FAC 023836 Servicio Simpliroute recurrente\nAbril 2025\",\"FAC 024101 Servicio Simpliroute recurrente\nMayo 2025\",\"FAC 024154 Servicio Simpliroute - Junio 2025\",\"FAC 024166 Servicio Simpliroute recurrente\nJunio 2025\",\"FAC 024354 Servicio Simpliroute recurrente - 1 Meses\n02/07/2025 a 01/08/2025\",\"FAC 024469 Servicio Simpliroute - Julio 2025\",\"FAC 024626 Servicio Simpliroute recurrente - 1 Meses\n02/08/2025 a 01/09/2025\",\"FAC 024712 Servicio Simpliroute recurrente\nJulio 2025\",\"FAC 024768 Servicio Simpliroute - Agosto 2025\",\"FAC 024828 Servicio Simpliroute recurrente\nAgosto 2025\",\"FAC 024901 Servicio Simpliroute recurrente - 1 Meses\n02/09/2025 a 01/10/2025\",\"FAC 024935 Servicio Simpliroute recurrente\nSeptiembre 2025 - 15 Licencias\",\"FAC 024998 Servicio Simpliroute recurrente\nSeptiembre 2025\",\"FAC 025175 Servicio Simpliroute recurrente - 1 Meses\n02/10/2025 a 01/11/2025\",\"FAC 025192 Servicio Simpliroute - Septiembre 2025\",\"FAC 025193 Servicio Simpliroute - Octubre 2025\",\"FAC 025228 Servicio Simpliroute recurrente\nOctubre 2025 - 15 Licencias\",\"FAC 025235 Servicio Simpliroute recurrente\nOctubre 2025\",\"FAC 025436 Servicio Simpliroute recurrente - 1 Meses\n02/11/2025 a 01/12/2025\",\"FAC 025502 Servicio Simpliroute recurrente\nNoviembre 2025 - 15 Licencias\",\"FAC 025515 Servicio Simpliroute recurrente\nNoviembre 2025\",\"FAC 025699 Servicio Simpliroute recurrente - 1 Meses\n02/12/2025 a 01/01/2026\",\"FAC 025755 Servicio Simpliroute recurrente\nDiciembre 2025\",\"FAC 025758 Servicio Simpliroute recurrente\nDiciembre 2025 - 15 Licencias\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "discount_pct",
+        "n_distinct": 1,
+        "most_common_vals": "{0.00}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "fx_contract_to_invoice",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{38394.363636}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{34529.909366,34781.344411,38379.450758,38405.891239,38421.685606,38428.323263,38678.125000,38894.181818,38904.166667,38919.864048,38920.619335,39068.909091,39088.446970,39168.844697,39191.163142,39214.545455,39229.380665,39230.545455,39231.419940,39242.296073,39269.090909,39272.253788,39326.737160,39394.545455,39405.871212,39485.606061,39485.634119,39485.757576,39497.583082,39516.161616,39528.096677,39607.859848,39643.560606,39643.602694,39655.589124,39674.242424,39678.549849}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "fx_contract_to_system",
+        "n_distinct": 2,
+        "most_common_vals": "{40.520000,1.000000}",
+        "most_common_freqs": [
+          0.923077,
+          0.0769231
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "holding_id",
+        "n_distinct": 1,
+        "most_common_vals": "{05583c6e-9364-4672-a610-0744324e44b4}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{08bf4d03-780f-406d-9301-2f64d6ee10ac,16add7c4-ae04-46c3-b5c1-dedeae16b8fc,182ec996-2813-48de-9d37-8323a883953d,256aa350-55a6-4b26-a17b-ff49817e75c5,28adb98d-0ab7-49e1-9aae-cf64aea56627,3a307612-119e-4ac4-b185-8ed6e8461222,3f7f8cba-d70c-4b9d-91f7-e7861055b963,415575b6-01d0-44da-a395-984c95c78016,446be8b0-fa57-4032-8417-ffd9459bdc29,44896036-de3f-4ab0-a402-1dc353070437,5511d148-1731-4a95-9843-e4189cf4f0b6,590c1fe8-7ca3-40b7-b5e4-2776203bcc16,5a43e618-fab8-40b0-8a8c-ff3de730d811,634b8879-e70a-46b3-9e2f-1cad50efd99b,6536d4d3-8b86-4934-a419-6c11e800d81c,6a58f7cf-a26c-43f2-b8ea-99a429b04cf4,76b616d7-44f7-4e5d-b386-9971cce9f3d3,7d13b7c5-6c7d-49dd-9c18-2d7ce62e5036,82cb86ae-bb73-407f-9d92-09306c80d1a5,899c3d6e-bf29-419a-9a6e-14899b792d7a,8b9e2a73-3393-4d92-8f01-b7f43e5a353f,91a4f70b-5c78-417e-a6c7-c6ac4ddf004e,97ba48d7-a493-47e6-9256-c3bf04f28c0d,988bf448-7072-4dea-a31c-d7979d114314,9f0d2dec-5f3c-4fca-8518-903e72d350b3,a4849c86-b9b4-42dc-800c-cc226d1b1f83,bd40d7e7-2098-44ce-bddc-9ccf7c36eb2f,c6f37102-09ec-41f1-a329-cf9f6ee562aa,cbd7c591-4393-4bf2-b6a7-c454dd486383,cbf9eb7f-14a2-4076-a99c-b0945cf8487e,cee2aeb0-9e57-4673-8227-63b2ee417f89,d12a9d0d-3b14-4533-adf1-864bfbab4d39,d27eca7f-0413-435d-b998-e0caf6bec51c,dde558d0-cb1e-4813-8515-39be8d88bd71,df8641b7-4155-40a3-8790-fa74a9a4bd0a,ec99bc2c-236f-42eb-b4b3-6344b561ca1b,eec60e54-7a87-4b18-be2a-d3acf2d36867,fc195fe5-1dbf-4984-8596-1c3c5eb89286,fc73ba1f-943f-4814-8238-663c178b4111}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "invoice_currency",
+        "n_distinct": 1,
+        "most_common_vals": "{CLP}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "invoice_item_legacy_id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{0ec32138-a9d1-415f-a3dd-55bf99490174,0fcbf20f-cb49-4986-b82c-83432f26cea2,13b2dcf6-8d88-4929-8d43-5b7352a4bab5,169688f3-323b-407b-85aa-05d5c5227f12,2fa72879-837a-4b1e-8904-364bbdf2072d,3446e6e7-b7dd-49b9-bd25-f502d1d76fab,3570d0b5-8408-4a98-a840-448527ed450f,3c7c1592-4081-48aa-89eb-7141bc191984,46dda985-15d1-4430-b986-30cc7f718bb9,49e7162e-3b99-4d59-8850-f4952a4ae076,5e6c66aa-552f-4a84-ac3b-57d18bdb4ec5,5e7f4bec-fe28-41a3-a1a6-a92c2106fcb3,6df4546d-5a0c-4f22-83bf-456465ceb567,79a0223a-80fd-4ff2-bbf5-bf4fc75ba0a0,7bdd3036-2d92-48c0-80cb-cb806b6838d4,806c0d04-b2ce-4996-a2fa-086dfefb7345,83eeed8f-81f1-41b0-bf8e-34afbf6d9996,882ffb5f-0bf1-4f54-80da-5cd3f82fe4ed,912f9f44-2992-4a87-a6a4-ec7a7545acb5,95df805a-c006-4ad8-b939-758c9301bc97,9f240a7e-5702-4e94-bb43-0403a8dd3ce8,a09e77a4-8a55-41b5-a27b-6cc3026c5951,a208887e-9f77-4110-a9b9-e69dda8edb79,a7520368-3e2f-486f-8424-31b1258379ed,b84051e6-f708-4e25-8fcc-d1757f988be4,c39d547e-0f4e-47f3-926f-8f2ffe05b475,c6a58f4e-0b85-4132-a015-35af656eaaed,c8c5ec0e-b1ab-41e6-b8a8-88097b4f2ac3,d7a8d467-8354-49c7-ac8a-0635a039bea1,d88fc556-8434-427d-b9b7-8a43aacc6350,dca3344a-a57f-46eb-a0a2-049e1c905824,e4a73496-eba8-43a7-955e-29d2a828bf06,e5aa3c85-74ac-48cb-a83d-81395334bbfc,eca69956-cf87-47c2-850a-65ee4b65fc9e,ecfde57e-9f9a-477b-a72c-ed6f5674d755,f16e06f4-b2ce-46f7-9f81-e602db7be869,f686e94b-682f-4935-b5c2-a267da58a7f6,f939d521-229f-4b1d-8711-b87cf0f2f221,fd99d375-acc0-4f3e-b600-5230c09b9739}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "invoice_legacy_id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{0195215d-c2a8-4eaa-ba7c-5fd7a4e54eac,06e55bc2-afb8-4522-99ec-8f8beef99db9,0b7b0db0-795d-4eba-9f40-7e0c33ef396e,10289f9b-ae5b-49aa-8927-a0ac38f11684,135a39fa-6b4e-4c6a-a4a4-36b515f4a279,14a5faba-1516-4414-8ff5-140409205458,1a07c70c-bbb2-474e-aeb0-1ff9cf6d7b18,1a083c51-34da-4647-b06c-59d67e3466a9,2169fd33-5c53-43c3-bae6-ca263666c3f6,266949dc-6321-4a87-ad49-3e90579a7058,2c687759-47d4-4fc4-ad94-cebb17afb445,3d0d9e05-759b-4951-8341-2fe609cf05c0,3d2e2400-41da-4f04-b09c-3a36059d50df,41c94d80-a210-4b95-9565-fb256fe00918,44fdcdab-f908-4ee3-9342-e82d4ef45287,48f53781-b10e-49f7-8bf1-2e39fc527612,4cea9f56-4da0-4367-ae89-738116829134,50722011-7784-4b31-83e8-6af9a0c343bc,5195a50c-1576-48b8-bac1-3450deeb856c,59157a40-a581-45d1-99bb-8a4e698327ce,5af70d71-d0c8-4ee2-ad5c-70454c4107d8,6c2bd73b-e90e-4f61-b3eb-8b46eb228575,6d7c2b89-649e-4aa0-85fa-ac1bb5ef99c3,6de744d5-eb71-425e-9348-3e32388833ee,6e8e4c2c-9c6a-4c65-b133-1e013d0e76b1,85c96fb5-9003-42f4-9d1c-79be79d984d8,8b548587-cfe1-4d93-a323-9f6d5b063ea7,92b0eb28-e4eb-4301-8b20-6d2328be7951,9420fa51-38f6-45e5-ae60-2693e12e6c68,97175c81-0518-43b9-b5fe-31e91c3a3fe3,a2df6d3e-f795-45e7-8ded-519cb41b36b7,a90f6630-b6c3-457e-83a1-a6d50959e167,aca976e6-bb22-4481-8e01-0a890dbe8b67,bc97a9fd-179e-4283-a584-f450cca07bb3,cbe7e3af-a570-41a9-9314-939ddd535d26,cbf45548-e698-4e31-8236-4071709467c6,e6a5a218-f4d4-4d86-b99a-280a55f26eb5,f374e48f-9399-42ca-97eb-80dc3b85874c,f6745b84-646a-42d5-b046-6b30c13919cb}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "invoice_number",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{\"FAC 022839\",\"FAC 023064\",\"FAC 023080\",\"FAC 023081\",\"FAC 023082\",\"FAC 023083\",\"FAC 023192\",\"FAC 023193\",\"FAC 023286\",\"FAC 023525\",\"FAC 023539\",\"FAC 023540\",\"FAC 023755\",\"FAC 023756\",\"FAC 023805\",\"FAC 023836\",\"FAC 024101\",\"FAC 024154\",\"FAC 024166\",\"FAC 024354\",\"FAC 024469\",\"FAC 024626\",\"FAC 024712\",\"FAC 024768\",\"FAC 024828\",\"FAC 024901\",\"FAC 024935\",\"FAC 024998\",\"FAC 025175\",\"FAC 025192\",\"FAC 025193\",\"FAC 025228\",\"FAC 025235\",\"FAC 025436\",\"FAC 025502\",\"FAC 025515\",\"FAC 025699\",\"FAC 025755\",\"FAC 025758\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "is_recurring",
+        "n_distinct": 1,
+        "most_common_vals": "{t}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "issue_date",
+        "n_distinct": -0.769231,
+        "most_common_vals": "{2025-02-06,2025-02-26,2025-04-04,2025-04-29,2025-06-16,2025-10-07,2025-12-17}",
+        "most_common_freqs": [
+          0.102564,
+          0.0512821,
+          0.0512821,
+          0.0512821,
+          0.0512821,
+          0.0512821,
+          0.0512821
+        ],
+        "histogram_bounds": "{2025-01-02,2025-02-02,2025-03-02,2025-04-02,2025-05-02,2025-05-09,2025-06-04,2025-07-02,2025-07-24,2025-08-02,2025-08-19,2025-08-25,2025-08-28,2025-09-02,2025-09-09,2025-09-22,2025-10-02,2025-10-15,2025-10-16,2025-11-02,2025-11-18,2025-11-21,2025-12-02}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "legal_client_name",
+        "n_distinct": -0.102564,
+        "most_common_vals": "{\"ATIKA S A\",\"AHONA LOGISTICS SPA\",\"A3D CHILE S A\",\"Importadora Bicimoto Spa\"}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.230769,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "migrated_at",
+        "n_distinct": 3,
+        "most_common_vals": "{\"2026-01-12 15:48:48.276+00\",\"2026-01-06 10:39:19.605+00\",\"2026-01-12 14:50:29.526+00\"}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "migrated_by",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "migrated_to_contract_id",
+        "n_distinct": 3,
+        "most_common_vals": "{05dd6701-6265-4181-a46e-b224f08b43bd,426c6c4e-3fc9-4934-8084-e238a43e115a,abb0ce60-af5a-4db8-900a-6a5bef347a3c}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "momentum",
+        "n_distinct": 1,
+        "most_common_vals": "{EOP}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "mrr_legacy",
+        "n_distinct": -0.128205,
+        "most_common_vals": "{13.24,10.56,5.50,17.82,3.30}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.179487,
+          0.102564,
+          0.0512821
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "mrr_legacy_system_currency",
+        "n_distinct": -0.153846,
+        "most_common_vals": "{0.33,0.26,0.14,0.44,13.24,0.08}",
+        "most_common_freqs": [
+          0.307692,
+          0.282051,
+          0.179487,
+          0.102564,
+          0.0769231,
+          0.0512821
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "period_month",
+        "n_distinct": -0.384615,
+        "most_common_vals": "{2025-09-01,2025-10-01,2025-01-01,2025-02-01,2025-03-01,2025-04-01,2025-07-01,2025-08-01,2025-11-01,2025-12-01,2025-05-01,2025-06-01}",
+        "most_common_freqs": [
+          0.102564,
+          0.102564,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0769231,
+          0.0512821,
+          0.0512821
+        ],
+        "histogram_bounds": "{2024-10-01,2024-11-01,2024-12-01}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "product_name",
+        "n_distinct": -0.102564,
+        "most_common_vals": "{\"CRM Pro\",\"ERP Enterprise\",\"SaaS Nuevo\",\"Project Management Tool\"}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.230769,
+          0.102564
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "quantity",
+        "n_distinct": -0.205128,
+        "most_common_vals": "{8.0000,13.2440,5.5000,17.8200,1.0000,3.3000,13.2590}",
+        "most_common_freqs": [
+          0.282051,
+          0.230769,
+          0.179487,
+          0.102564,
+          0.0769231,
+          0.0512821,
+          0.0512821
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "split_index",
+        "n_distinct": 1,
+        "most_common_vals": "{1}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "status",
+        "n_distinct": 2,
+        "most_common_vals": "{Pagada,Enviada}",
+        "most_common_freqs": [
+          0.666667,
+          0.333333
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "subtotal",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{211169.00}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{130002.00,130303.00,213918.00,214879.00,215680.00,215768.00,215980.00,405287.00,405733.00,408441.00,410828.00,412774.00,413623.00,414715.00,416126.00,416968.00,418259.00,418636.00,457176.00,460505.00,508494.00,508791.00,515299.00,515309.00,518891.00,519397.00,519424.00,519568.00,520686.00,522948.00,523352.00,525040.00,525344.00,703634.00,704178.00,706449.00,706995.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "subtotal_contract_currency",
+        "n_distinct": -0.128205,
+        "most_common_vals": "{13.24,10.56,5.50,17.82,3.30}",
+        "most_common_freqs": [
+          0.384615,
+          0.282051,
+          0.179487,
+          0.102564,
+          0.0512821
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "term",
+        "n_distinct": 1,
+        "most_common_vals": "{1}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "total_invoice_currency",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{251291.00}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{154702.00,155061.00,254562.00,255706.00,256659.00,256764.00,257016.00,482292.00,482822.00,486045.00,488885.00,491201.00,492211.00,493511.00,495190.00,496192.00,497728.00,498177.00,544039.00,548001.00,605108.00,605461.00,613206.00,613218.00,617480.00,618082.00,618115.00,618286.00,619616.00,622308.00,622789.00,624798.00,625159.00,837324.00,837972.00,840674.00,841324.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "unit_price",
+        "n_distinct": -0.820513,
+        "most_common_vals": "{38394.32,39485.65,39230.48,39516.17,39643.59}",
+        "most_common_freqs": [
+          0.0769231,
+          0.0769231,
+          0.0512821,
+          0.0512821,
+          0.0512821
+        ],
+        "histogram_bounds": "{38864.07,38864.87,38894.11,39062.41,39068.91,39179.35,39214.48,39219.56,39269.00,39314.84,39394.46,39666.58,39674.25,50660.87,50716.58,51055.16,51353.45,51596.69,51702.92,51839.44,52015.72,52121.06,52282.39,52329.54,457176.00,460504.95,508791.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "updated_at",
+        "n_distinct": 2,
+        "most_common_vals": "{\"2026-01-12 21:50:47.95769+00\",\"2026-01-12 15:48:48.572282+00\"}",
+        "most_common_freqs": [
+          0.923077,
+          0.0769231
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "mrr_legacy",
+        "attname": "vat",
+        "n_distinct": -0.974359,
+        "most_common_vals": "{40122.00}",
+        "most_common_freqs": [
+          0.0512821
+        ],
+        "histogram_bounds": "{24700.00,24758.00,40644.00,40827.00,40979.00,40996.00,41036.00,77005.00,77089.00,77604.00,78057.00,78427.00,78588.00,78796.00,79064.00,79224.00,79469.00,79541.00,86863.00,87496.00,96614.00,96670.00,97907.00,97909.00,98589.00,98685.00,98691.00,98718.00,98930.00,99360.00,99437.00,99758.00,99815.00,133690.00,133794.00,134225.00,134329.00}"
+      }
+    ],
+    "size_info": {
+      "total_size": "304 kB",
+      "table_size": "40 kB",
+      "indexes_size": "264 kB"
+    },
+    "permissions": [
+      {
+        "grantee": "anon",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "DELETE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "INSERT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "SELECT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "UPDATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      }
+    ],
+    "analysis_timestamp": "2026-01-19T19:33:03.424Z"
+  }
+}

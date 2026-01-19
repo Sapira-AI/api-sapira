@@ -12,10 +12,10 @@ export class CreateSessionDto {
 	@IsOptional()
 	description?: string;
 
-	@ApiPropertyOptional({ description: 'Holding ID' })
+	@ApiProperty({ description: 'Holding ID (obligatorio)' })
 	@IsString()
-	@IsOptional()
-	holding_id?: string;
+	@IsNotEmpty()
+	holding_id: string;
 }
 
 export class UpdateSessionDto {
@@ -29,8 +29,8 @@ export class UpdateSessionDto {
 	@IsOptional()
 	description?: string;
 
-	@ApiPropertyOptional({ description: 'Holding ID' })
+	@ApiProperty({ description: 'Holding ID (obligatorio)' })
 	@IsString()
-	@IsOptional()
-	holding_id?: string;
+	@IsNotEmpty()
+	holding_id: string;
 }

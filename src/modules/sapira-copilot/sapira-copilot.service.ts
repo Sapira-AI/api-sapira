@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient } from '@supabase/supabase-js';
 import { DataSource } from 'typeorm';
 
 import { ClaudeService } from '@/modules/claude/claude.service';
@@ -17,9 +16,9 @@ export class SapiraCopilotService {
 		private readonly claudeService: ClaudeService
 	) {}
 
-	async sendMessage(message: string, holdingId: string, context?: CopilotContext, accessToken?: string): Promise<CopilotResponse> {
+	async sendMessage(message: string, holdingId: string, context?: CopilotContext): Promise<CopilotResponse> {
 		try {
-			const messages: CopilotMessage[] = context?.messages || [];
+			const messages: CopilotMessage[] = context?.messages || []; // No se deben realizar tantas transformaciones de los mensjaes de contexto podemos podirle al front que los envie directamente en el formato que se requieren
 			messages.push({
 				role: 'user',
 				content: message,
@@ -37,7 +36,7 @@ export class SapiraCopilotService {
 				system_prompt: systemPrompt,
 			};
 
-			const result = await this.claudeService.sendMessage(message, holdingId, claudeContext, true, accessToken);
+			const result = await this.claudeService.sendMessage(message, holdingId, claudeContext, true);
 
 			const widgets = (result as any).widgets || [];
 
@@ -51,35 +50,6 @@ export class SapiraCopilotService {
 			this.logger.error('Error al enviar mensaje al copilot:', error);
 			throw new BadRequestException(`Error al comunicarse con el copilot: ${error.message}`);
 		}
-	}
-
-	async resolveHoldingId(accessToken: string): Promise<string | undefined> {
-		const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-		const anonKey = this.configService.get<string>('SUPABASE_ANON_KEY');
-		if (!supabaseUrl || !anonKey) {
-			throw new BadRequestException('Falta configuración de Supabase para aplicar RLS (SUPABASE_URL / SUPABASE_ANON_KEY).');
-		}
-
-		const rlsClient = createClient(supabaseUrl, anonKey, {
-			global: {
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-				},
-			},
-			auth: {
-				persistSession: false,
-				autoRefreshToken: false,
-				detectSessionInUrl: false,
-			},
-		});
-
-		const { data, error } = await rlsClient.from('user_holdings').select('holding_id').limit(1).single();
-		if (error) {
-			this.logger.warn(`resolveHoldingId: no pude leer user_holdings con RLS. Motivo: ${String((error as any)?.message || error)}`);
-			return undefined;
-		}
-
-		return (data as any)?.holding_id;
 	}
 
 	async createSession(name: string, holdingId: string, description?: string): Promise<CopilotSession> {
@@ -172,16 +142,29 @@ Tu objetivo es ayudar a usuarios a consultar y analizar:
 - Facturas, contratos, clientes y cotizaciones
 - Ingresos reconocidos, diferidos y por facturar
 
-Cuando el usuario pida datos numéricos, históricos o métricas, DEBES usar las skills disponibles.
-NO inventes números ni cifras. Si no tienes una skill para responder, indícalo claramente.
+REGLAS IMPORTANTES:
 
-Genera respuestas en lenguaje natural, concisas y accionables.
-Solo solicita/genera widgets (tablas, gráficos o KPIs) si el usuario lo pide explícitamente.
-Si el usuario pide gráficos/tablas/widgets, NO los describas: DEBES llamar una skill y devolver widgets reales.
-Para MRR:
-- Si el usuario pide "MRR actual", "MRR este mes" o "MRR del último mes", llama get_mrr_series con mode="snapshot".
-- Si el usuario pide "MRR últimos X meses" o un rango, llama get_mrr_series con mode="series".
-Cuando el usuario pida widgets (ej: "genéralos", "genera los gráficos", "arma la tabla", "muéstrame el gráfico"), debes llamar la misma skill nuevamente con include_widgets=true.`;
+1. SIEMPRE usa las skills disponibles para obtener datos. NO inventes números ni cifras.
+
+2. WIDGETS (Gráficos y Tablas):
+   - SIEMPRE pasa include_widgets=true cuando el usuario pida:
+     * Datos históricos o series temporales (ej: "MRR últimos 12 meses", "evolución de...", "tendencia de...")
+     * Comparaciones o desgloses (ej: "MRR por compañía", "por cliente", "por segmento")
+     * Cualquier pregunta que mencione "gráfico", "tabla", "chart", "visualización", "muéstrame"
+   - SOLO omite widgets (include_widgets=false o sin especificar) para:
+     * Preguntas puntuales de un solo valor (ej: "MRR actual", "cuánto es el MRR de este mes")
+     * Preguntas conceptuales o de definición
+
+3. Para MRR específicamente:
+   - "MRR actual" o "MRR este mes" → get_mrr con mode="snapshot", include_widgets=false
+   - "MRR últimos X meses" → get_mrr con mode="series", months_back=X, include_widgets=true
+   - "MRR por [dimensión]" → skill correspondiente con include_widgets=true
+
+4. Si el usuario pide explícitamente ver algo en gráfico/tabla DESPUÉS de ya haber mostrado datos en texto:
+   - Llama la MISMA skill nuevamente con include_widgets=true
+   - NO describas el gráfico, simplemente genera el widget
+
+Genera respuestas concisas en lenguaje natural que acompañen los widgets cuando los generes.`;
 
 		if (context) {
 			prompt += `\n\nContexto adicional:\n${context}`;

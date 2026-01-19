@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -28,29 +28,14 @@ export class SapiraCopilotController {
 		description: 'Error al comunicarse con el copilot',
 	})
 	@HttpCode(HttpStatus.OK)
-	async sendMessage(@Body() dto: ChatMessageDto, @Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
-		}
-
-		const holdingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
-		if (!holdingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
-		}
-
-		console.log('-------------holdingId ------------------------------', holdingId);
-		console.log('----------------------DTOOO.holdingid.. ------------------------------', dto.holding_id);
+	async sendMessage(@Body() dto: ChatMessageDto) {
 		const context = {
-			session_id: dto.session_id,
+			session_id: dto.session_id, // Por ahora no se usa
 			messages: dto.history || [],
-			context: dto.context,
+			context: dto.context, // Por ahora no se usa
 		};
 
-		const result = await this.sapiraCopilotService.sendMessage(dto.message, holdingId, context, accessToken);
+		const result = await this.sapiraCopilotService.sendMessage(dto.message, dto.holding_id, context);
 
 		return {
 			success: true,
@@ -72,20 +57,8 @@ export class SapiraCopilotController {
 		description: 'Error al crear la sesión',
 	})
 	@HttpCode(HttpStatus.CREATED)
-	async createSession(@Body() dto: CreateSessionDto, @Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
-		}
-		const holdingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
-		if (!holdingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
-		}
-
-		const session = await this.sapiraCopilotService.createSession(dto.name, holdingId, dto.description);
+	async createSession(@Body() dto: CreateSessionDto) {
+		const session = await this.sapiraCopilotService.createSession(dto.name, dto.holding_id, dto.description);
 
 		return {
 			success: true,
@@ -103,19 +76,12 @@ export class SapiraCopilotController {
 		description: 'Sesiones obtenidas exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async listSessions(@Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
+	async listSessions(@Query('holding_id') holdingId: string) {
+		if (!holdingId) {
+			throw new BadRequestException('El parámetro holding_id es obligatorio.');
 		}
-		const finalHoldingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
-		if (!finalHoldingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
-		}
-		const sessions = await this.sapiraCopilotService.listSessions(finalHoldingId);
+
+		const sessions = await this.sapiraCopilotService.listSessions(holdingId);
 
 		return {
 			success: true,
@@ -137,19 +103,12 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async getSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
+	async getSession(@Param('sessionId') sessionId: string, @Query('holding_id') holdingId: string) {
+		if (!holdingId) {
+			throw new BadRequestException('El parámetro holding_id es obligatorio.');
 		}
-		const finalHoldingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
-		if (!finalHoldingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
-		}
-		const session = await this.sapiraCopilotService.getSessionById(sessionId, finalHoldingId);
+
+		const session = await this.sapiraCopilotService.getSessionById(sessionId, holdingId);
 
 		return {
 			success: true,
@@ -171,20 +130,8 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async updateSession(@Param('sessionId') sessionId: string, @Body() dto: UpdateSessionDto, @Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
-		}
-		const holdingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
-		if (!holdingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
-		}
-
-		const session = await this.sapiraCopilotService.updateSession(sessionId, dto, holdingId);
+	async updateSession(@Param('sessionId') sessionId: string, @Body() dto: UpdateSessionDto) {
+		const session = await this.sapiraCopilotService.updateSession(sessionId, dto, dto.holding_id);
 
 		return {
 			success: true,
@@ -206,18 +153,11 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async deleteSession(@Param('sessionId') sessionId: string, @Req() req: any) {
-		const authHeader = String(req?.headers?.authorization || '');
-		const accessToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : undefined;
-		if (!accessToken) {
-			throw new BadRequestException('Falta el header Authorization Bearer para poder aplicar RLS.');
-		}
-		const holdingId = await this.sapiraCopilotService.resolveHoldingId(accessToken);
+	async deleteSession(@Param('sessionId') sessionId: string, @Query('holding_id') holdingId: string) {
 		if (!holdingId) {
-			throw new BadRequestException(
-				'No se pudo resolver holding_id para tu usuario autenticado. Asegura que exista un registro en user_holdings accesible por RLS.'
-			);
+			throw new BadRequestException('El parámetro holding_id es obligatorio.');
 		}
+
 		await this.sapiraCopilotService.deleteSession(sessionId, holdingId);
 
 		return {
