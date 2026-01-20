@@ -1,0 +1,1732 @@
+{
+  "success": true,
+  "message": "Análisis de tabla public.contract_items completado exitosamente",
+  "data": {
+    "table_name": "contract_items",
+    "schema_name": "public",
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "contract_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "product_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "product_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "term_months",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0
+      },
+      {
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "discount_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "discount_value",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "final_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "billing_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "billing_frequency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "start_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "quote_item_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "holding_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "end_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "renews_item_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "renewed_by_item_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "is_recurring",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "true",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "categoria",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'RECURRENT'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "related_item_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "item_type",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": 64,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "unit_of_measure",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": 32,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "unit_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "quantity",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "account",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": 128,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "custom_fields",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "churn_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "churn_monthly_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "monthly_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "billing_period_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 2
+      },
+      {
+        "column_name": "auto_renew",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "false",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "auto_renew_term_months",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0
+      },
+      {
+        "column_name": "auto_renewed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      }
+    ],
+    "indexes": [
+      {
+        "index_name": "contract_items_pkey",
+        "index_definition": "CREATE UNIQUE INDEX contract_items_pkey ON public.contract_items USING btree (id)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "40 kB"
+      },
+      {
+        "index_name": "idx_contract_items_auto_renew_end_date",
+        "index_definition": "CREATE INDEX idx_contract_items_auto_renew_end_date ON public.contract_items USING btree (auto_renew, end_date) WHERE (auto_renew = true)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_contract_items_categoria",
+        "index_definition": "CREATE INDEX idx_contract_items_categoria ON public.contract_items USING btree (categoria)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_contract_items_churn_date",
+        "index_definition": "CREATE INDEX idx_contract_items_churn_date ON public.contract_items USING btree (churn_date) WHERE (churn_date IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "8192 bytes"
+      },
+      {
+        "index_name": "idx_contract_items_contract_end_date",
+        "index_definition": "CREATE INDEX idx_contract_items_contract_end_date ON public.contract_items USING btree (contract_id, end_date)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "40 kB"
+      },
+      {
+        "index_name": "idx_contract_items_custom_fields",
+        "index_definition": "CREATE INDEX idx_contract_items_custom_fields ON public.contract_items USING gin (custom_fields)",
+        "index_type": "gin",
+        "is_unique": "NO",
+        "index_size": "32 kB"
+      },
+      {
+        "index_name": "idx_contract_items_holding_id",
+        "index_definition": "CREATE INDEX idx_contract_items_holding_id ON public.contract_items USING btree (holding_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_contract_items_monthly_price",
+        "index_definition": "CREATE INDEX idx_contract_items_monthly_price ON public.contract_items USING btree (monthly_price) WHERE ((monthly_price IS NOT NULL) AND (is_recurring = true))",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "40 kB"
+      },
+      {
+        "index_name": "idx_contract_items_quote_item_id",
+        "index_definition": "CREATE INDEX idx_contract_items_quote_item_id ON public.contract_items USING btree (quote_item_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_contract_items_recurring_dates",
+        "index_definition": "CREATE INDEX idx_contract_items_recurring_dates ON public.contract_items USING btree (is_recurring, start_date, end_date) WHERE (is_recurring = true)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_contract_items_related",
+        "index_definition": "CREATE INDEX idx_contract_items_related ON public.contract_items USING btree (related_item_id) WHERE (related_item_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "8192 bytes"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constraint_name": "contract_items_contract_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "contract_id",
+        "foreign_table_name": "contracts",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "contract_items_product_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "product_id",
+        "foreign_table_name": "products",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "contract_items_quote_item_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "quote_item_id",
+        "foreign_table_name": "quote_items",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "contract_items_related_item_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "related_item_id",
+        "foreign_table_name": "contract_items",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "SET NULL"
+      },
+      {
+        "constraint_name": "contract_items_renewed_by_item_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "renewed_by_item_id",
+        "foreign_table_name": "contract_items",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "contract_items_renews_item_id_fkey",
+        "table_name": "contract_items",
+        "column_name": "renews_item_id",
+        "foreign_table_name": "contract_items",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "fk_contract_items_holding_id",
+        "table_name": "contract_items",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      }
+    ],
+    "primary_unique_keys": [
+      {
+        "constraint_name": "contract_items_pkey",
+        "constraint_type": "PRIMARY KEY",
+        "column_name": "id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_name": "contract_items_revenue_schedule_trigger",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "contract_items_revenue_schedule_trigger",
+        "event_manipulation": "DELETE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "contract_items_revenue_schedule_trigger",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_calculate_contract_categoria",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION trg_set_contract_item_categoria()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_contract_item_change",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_contract()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_contract_item_change",
+        "event_manipulation": "DELETE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_contract()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_contract_item_change",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_contract()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_contract_items_calculate_pricing",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_calculate_pricing_fields()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_contract_items_calculate_pricing",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_calculate_pricing_fields()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_inherit_auto_renew_from_quote_item",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION inherit_auto_renew_from_quote_item()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_set_contract_item_end_date",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION set_contract_item_end_date()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_set_contract_item_end_date",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION set_contract_item_end_date()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_revenue_schedule_after_item_change",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_item_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_revenue_schedule_after_item_change",
+        "event_manipulation": "DELETE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_item_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_revenue_schedule_after_item_change",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_item_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_update_contract_term",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION update_contract_term()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_update_contract_term",
+        "event_manipulation": "DELETE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION update_contract_term()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_update_contract_term",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION update_contract_term()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "validate_contract_item_currency_trigger",
+        "event_manipulation": "INSERT",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION validate_contract_item_currency_consistency()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "validate_contract_item_currency_trigger",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "contract_items",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION validate_contract_item_currency_consistency()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      }
+    ],
+    "policies": [
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "policyname": "Users can delete contract items from their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "policyname": "Users can insert contract items for their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "policyname": "Users can update contract items from their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "policyname": "Users can view contract items from their holding",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "policyname": "holding_access_contract_items",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      }
+    ],
+    "statistics": [
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "account",
+        "n_distinct": 11,
+        "most_common_vals": "{\"API para código de validación\",\"Cuenta B2B\",\"Cuenta Bio Bio\",\"Cuenta Delivery\",\"Cuenta ENTEL\",\"Cuenta Reg TCH\",\"Cuenta Retiro\",Telefonica}",
+        "most_common_freqs": [
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742
+        ],
+        "histogram_bounds": "{123-456,7001,\"7 vhc\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "auto_renew",
+        "n_distinct": 2,
+        "most_common_vals": "{f,t}",
+        "most_common_freqs": [
+          0.990323,
+          0.00967742
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "auto_renew_term_months",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "auto_renewed_at",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "billing_frequency",
+        "n_distinct": 4,
+        "most_common_vals": "{Mensual,Anual,Semestral,Trimestral}",
+        "most_common_freqs": [
+          0.467742,
+          0.374194,
+          0.106452,
+          0.0129032
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "billing_method",
+        "n_distinct": 2,
+        "most_common_vals": "{Anticipado,Vencido}",
+        "most_common_freqs": [
+          0.648387,
+          0.312903
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "billing_period_price",
+        "n_distinct": -0.177419,
+        "most_common_vals": "{0.00,98.00,2000.00,135.00,135.20,1134.00,1215.00,3483.00,11448.00,12087.00,1.50,3.00,8.80,13.24,25.00,72.60,74.30,76.00,100.00,104.00,109.00,126.72,249.50,490.00,693.00,1222.00,2500.05,2737.00,2802.80,3000.00,3355.00,3840.00,4200.00,11616.00,12000.00,19404.00,19760.00,22000.00,28360.00,56166.00,74970.00,162162.00,366753.69}",
+        "most_common_freqs": [
+          0.654839,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{0.80,17.82,53.76,76.80,800.00,1000.00,1026.00,1900.00,10000.00,30000.00,35523.00,240000.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "categoria",
+        "n_distinct": 5,
+        "most_common_vals": "{CROSS-SELL,RENEWAL,NEW,UPSELL,DOWNSELL}",
+        "most_common_freqs": [
+          0.645161,
+          0.296774,
+          0.0258065,
+          0.0258065,
+          0.00645161
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "churn_date",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "churn_monthly_amount",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "contract_id",
+        "n_distinct": -0.406452,
+        "most_common_vals": "{2aef9079-1c55-44fa-8bd5-7e622886cb77,086eca51-a5f9-4c73-93e2-56c5f0599457,179b23aa-c2ef-42dd-bf93-46123b250c29,4695545f-e03f-4bfa-be6e-0708e084fa57,89698ee7-fc5b-41df-b769-046dc6386714,b8940149-4a75-42c1-9fec-3f77236e82ed,e67d12ae-8f9d-4746-9d5d-6c193997c41b,17d33e46-6297-4938-a1e8-ea3596aaebef,29380864-71f8-42c0-80b4-3d3d066a96a6,2c1d7ab5-cc8e-4585-bd19-f5e9feccaccb,7989ad26-6c17-4d02-a5c5-48cb64fd3dc5,88e61d30-0fb0-4ae0-a371-08ec1e222a7a,ea726b96-4299-4762-bbea-1cb96baa8c4a,0f0ca1df-8c88-4b6a-b6e0-46c5a41b61b3,2a8e109c-3956-4600-bd4c-de23515c712a,54684352-766c-4fe1-8c3a-01afe47c1d57,7e9a5277-a76f-490c-9a95-070e99aa89e3,0959815b-edb1-4dc4-9e36-265ecc3f23b5,1acfb6a6-adad-42b8-94d4-a11a5a3abab4,4813ef74-674c-4cfe-8c4a-5ed925850a9a,5e1da7e9-ad0c-4f11-9747-342a662624e5,7c78e122-c932-44e4-b0e7-c1acd0768dd0,8e165978-f1e5-4007-add6-7669683072e1,9a57e54b-5763-487d-8a30-4f43a67319ee,aadd0316-8bb0-4bf9-abb5-d85e40bca2a2,c123c0fd-1d00-42ee-b32f-27efa404600d,cc83ce50-89cc-409b-aaea-4a63bce1145b,f4927b6b-2d4b-4511-92e5-df266e070379,19dc67c1-15a6-40cb-abd5-338781a56b36,25825d39-8bd6-4e30-b95c-53d70dfb86d3,30f10f34-a712-43b3-8345-96753be24d2d,5052415e-0189-4e64-89d5-0b677c86b881,5fcc385c-8235-438d-b80f-38e3c5ca5db4,869258cf-f494-4c23-94bd-eb6774cdd6ba,b161e580-6d35-4861-b512-01852a30fc3e,bbfe987b-7e74-46a6-bf31-2d8491b6cf17,c4ba252a-3270-4f20-9c62-770708826c5c,f51f64ad-cbee-47b2-a789-130986f67571,fc65f808-f1ee-480e-9a1c-aa2266a79b2d,198c0ba5-256d-42df-b886-8d9aa1fbff06,273d7045-a20b-4c0b-9ec7-4f9177878837,2c49ebd7-8b43-455f-a7e8-d85873bb3c12,3434d99e-ff6e-44c5-854c-3b25a247eb2f,40b82552-bacf-459b-b739-ec70c17495a3,419d1a3b-69b5-451a-8399-28e59f4409b7,47d272ae-f404-4770-b91f-891e20beb89b,4814a883-6de6-404f-aa1e-9c775986387b,75515d6d-0d6a-4a79-bb00-d1681735f33a,a201aa06-fc51-469e-a2c7-0f206b8ef2a8,a4063cb8-6599-41ea-800b-0d3a262e07c5,a555ae83-0cc6-45df-9a18-8412a92b888d,a634f958-d95e-4331-80a3-5e3c27903dce,ae9ac848-0a3d-4355-84cd-a1d880ce0d8a,c0c8587c-d4ae-4f19-b985-9983b6485a4c,c563c3dd-9d1b-4cbb-9a7b-f7cada975301,c975408b-b630-48bd-a997-2645ae9a8d25,d51002fb-fbfa-441b-936b-3932f3a9fe6b,ebae2819-7fa6-4fbf-9938-041ece0e5e12,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,ffece0fd-b24c-459e-a9ca-7ac6de643e1d}",
+        "most_common_freqs": [
+          0.0483871,
+          0.0451613,
+          0.0258065,
+          0.0258065,
+          0.0258065,
+          0.0258065,
+          0.0258065,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{002b51b8-fb2d-43f0-b23f-884f622b740d,02d80009-6789-425e-85dc-31fb80148dae,041e2274-827a-4b34-be85-7d29cecdd2e1,059601f4-f923-4521-892a-2b82d9200b3f,05dd6701-6265-4181-a46e-b224f08b43bd,094c96f7-cfdc-41d5-aa27-6501e8b5cace,1071642a-24c3-47c3-992e-4daea622c4f0,14253188-c8c3-4097-862a-92c61a6b6061,19eb67e3-9fd0-494b-9a8b-56b19e01552c,1a07a97d-008c-4ec3-99ed-034d29449615,1ecdc0f3-0cf9-47dc-ba65-00d2f4a690a4,22c2b3bb-d44c-44f7-adc9-b8ba3a6172d6,2645d4b1-4e25-41ad-a2c0-8265c358c4a2,26780efb-1927-4ea4-976c-0957bfd3d94d,2a797814-37f6-44e8-9ee0-8482e8d7f06e,36917f83-8d7d-4a2b-b2f3-c6c855d1f75b,37809d4a-d791-419a-b42d-2395161bc951,37ccbd9c-8274-426e-8534-84edd6b6cefb,4128c202-5619-4502-8c71-f5b2ee5b2a7f,426c6c4e-3fc9-4934-8084-e238a43e115a,44703d48-842f-42fe-861b-2255adc947a1,46883237-2a92-40f2-b399-7c44f8a4e84d,485f0fd7-8563-48f4-8460-f3c9aa40c153,4926f356-c859-40ba-9a61-c41363d9cdb2,53c7a8a2-aff9-48fb-a242-21028c829122,53f22a72-d0d8-4e24-ac05-06e86b1502ce,547708f7-4b94-4f4e-be56-bdc4df2174fb,580a2624-dd35-4e11-918e-39d1d8bbe407,5a9301f5-d289-4b65-b43b-99f4d4e9feb8,5b240cea-cb35-4277-8e1a-7fbc973a0ced,5d6322cd-932d-482e-8192-a3be73b8390b,66cc1c07-2e72-494f-9c93-2efde78b1cd4,6c17b7b6-439a-4b53-84ad-77273c9b11e8,742086bb-f3ae-4822-9abf-a607c68fdcd8,7d940e7d-1a92-4267-81f4-e98653d77dc0,8126804b-87c7-4801-9093-9c153f7d148a,8288e16d-fb14-4f79-925e-5e3108b49a98,89c92c26-44d5-4f33-a8b2-5bd35231deea,8e1c7022-d462-4a4b-86d9-1bac96c8e8b2,92ca9250-c294-4914-870d-20c7b27b62d8,9aa61468-9070-4bcf-9f7b-a20982d28fd4,a9962f27-c587-4127-a791-204e9caaaba8,abb0ce60-af5a-4db8-900a-6a5bef347a3c,afdba02b-0dbf-4af8-a955-188adfea3f4f,bb23b4b1-3f03-4d53-bd27-48a029caf20c,bc3adab8-9e2f-48a4-b11f-b70c406ab54a,c07de7ea-fe4a-4d5e-88a5-00e1fce06794,c505f1df-ae57-4d27-be30-4783ade4c703,c50ec776-1192-48c9-8936-fb3690ce3039,c7bf4fbe-d1f0-4b25-8b99-1a38e1b08d0d,cc759f4a-4aec-42a3-ae26-fe4129ee5d55,ccf49423-631e-41d2-81ee-356ba85c9a9d,d04f5451-e0ee-4c80-95de-7dfec9943be2,d2c01025-96f9-475e-9dc8-bc9a47cde801,d4d6c952-cd9e-4599-b8d5-4d1bbdf2ab50,d618dde2-b4ea-4197-95aa-5c85e517a087,dd3802fc-60bc-446e-9049-2127948aa3cb,dda6269b-7f21-4fff-ad67-9b3c49fd1582,e4fd6dea-7d1f-44ef-896d-6fa66221e725,e7d6dc83-c094-4f81-9395-91cc40be1b15,e88e7f24-2db4-4906-8943-be1036d2b934,efb46d52-2952-4f71-9198-e64fb0d98080,efe8ad33-3d6c-4d9f-89d8-c78ccc15ff9b,f5198bc1-37cb-40d5-a671-1ea09db5539b,f84e7210-435f-4ddd-9504-db6b466dce00,fc735581-0d4f-4ff0-b16f-e92c11dc6054}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "currency",
+        "n_distinct": 7,
+        "most_common_vals": "{USD,CLF,MXN,COP,PEN,EUR,CLP}",
+        "most_common_freqs": [
+          0.677419,
+          0.158065,
+          0.0677419,
+          0.0580645,
+          0.0225806,
+          0.00967742,
+          0.00645161
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "custom_fields",
+        "n_distinct": 4,
+        "most_common_vals": "{\"{}\"}",
+        "most_common_freqs": [
+          0.974194
+        ],
+        "histogram_bounds": "{\"{\\\"custom_fields_cutoff_date\\\": 15}\",\"{\\\"custom_fields_cutoff_date\\\": 15, \\\"custom_fields_min_quantity\\\": 1}\",\"{\\\"custom_fields_cutoff_date\\\": \\\"30\\\", \\\"custom_fields_fuente_de_unidad\\\": \\\"Optimizador\\\", \\\"custom_fields_tipo_de_agreacion\\\": \\\"Count\\\", \\\"custom_fields_fuente_optimizaciones\\\": \\\"Estandar\\\"}\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "discount_type",
+        "n_distinct": 1,
+        "most_common_vals": "{Porcentaje}",
+        "most_common_freqs": [
+          0.0580645
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "discount_value",
+        "n_distinct": 5,
+        "most_common_vals": "{0,10}",
+        "most_common_freqs": [
+          0.0451613,
+          0.00645161
+        ],
+        "histogram_bounds": "{20,53.33,300}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "end_date",
+        "n_distinct": -0.193548,
+        "most_common_vals": "{2025-12-31,2026-09-30,2027-08-31,2025-11-30,2026-01-31,2026-02-28,2026-10-31,2026-06-30,2027-12-31,2025-07-31,2026-11-30,2027-10-31,2025-09-30,2027-06-30,2022-12-31,2023-02-28,2023-07-31,2024-10-31,2025-03-31,2025-06-30,2025-08-31,2026-03-31,2026-04-30,2026-05-31,2026-12-31,2024-04-30,2026-08-31,2028-04-30,2021-05-31,2022-11-30,2023-12-31,2024-01-31,2024-02-29,2024-03-31,2024-12-31,2025-02-28,2028-09-30}",
+        "most_common_freqs": [
+          0.33871,
+          0.0548387,
+          0.0387097,
+          0.0354839,
+          0.0322581,
+          0.0322581,
+          0.0290323,
+          0.0225806,
+          0.0225806,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.016129,
+          0.016129,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{2001-09-05,2019-07-31,2021-11-30,2022-02-28,2023-03-31,2023-04-30,2023-11-30,2024-06-30,2024-07-31,2024-08-31,2024-11-30,2025-01-31,2025-04-30,2025-10-31,2027-01-31,2027-02-28,2027-03-31,2027-07-31,2028-01-31,2028-03-31,2028-07-31,2029-02-28,2029-11-30}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "final_price",
+        "n_distinct": -0.641935,
+        "most_common_vals": "{0,1176.00,12000,24000,25000,49992,56340,912,1200,1620,1622.40,3336,3684,5328,8688,9756,9900,13608,14580,15276,18576,20412,29328,35460,36000,41796,137376.00,145044.00,255769789,18,36,126.72,300.00,1248.00,1308.00,1600,1610.4,2880,4831.2,5880.00,8316.00,8640,10000,14664.00,16608,30000,30000.60,32844.00,33372,35004,40500,46080.00,48000,50400,55296,63180,67224,129540,188784,232848,237120.00,264000.00,340320.00,673992.00,899640.00,1945944.00,4401044.28,50420160,359190000,641250000}",
+        "most_common_freqs": [
+          0.0290323,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{-7500,-5000,-2000,9.600000000000001,50,158.88,158.928,168,342,457.182,645.16608,871.1999999999999,871.2,891.59,891.594,1260,1368,2052,2160,2400,2500,2736,2994.0119999999997,3132,3220.8,4700,4956,6000,6040,7128,7855,8326,8932,9600,9895,10800,12030,12960,18000,21024,22800,24060,26664,28749.6,32496,32916,33264,33633.600000000006,37368,40260.00,41628,42036,44016,47364,52500,53748,54715,55500,57492,57528,60000,60750,61272,65220,66240,67500,68913,72000,72912,79056,80196,85464,104880,108000,109980,120000,130128,139392.00,139392.00000000003,145964,150012,159552,174456,180384,199512,219480,240000,240588,249780,251520,300700,322500,1395000,13182858,80490240,93905280,96650004,184777416,201561600,229528812,513125280}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "holding_id",
+        "n_distinct": 3,
+        "most_common_vals": "{f6e3cb81-8b4a-451e-8402-573e47688d45,5652e95e-bb99-48f5-aa1c-13c8c2638fc6,05583c6e-9364-4672-a610-0744324e44b4}",
+        "most_common_freqs": [
+          0.590323,
+          0.296774,
+          0.112903
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{00f2c21a-0b67-4d0a-9a9a-9ab6fee66542,03d6353b-d33d-412b-a049-47688aa62d89,04b6d8a4-93c1-4afa-aa87-4c4a776dc65c,0967d401-fcbd-4c9f-b75a-4209f706512a,0abaa2e6-a18d-4135-94dd-05a7f5483962,0d96b362-13ea-48e3-92df-1549079bc41b,0f4871c3-0e65-4940-a404-e910ad5d4b85,13fd7cab-36c3-4e08-b847-eeae7c6bfa99,15d75385-c0b2-4856-9b84-37aa89b5c8c8,186a5f69-311e-41b6-9c23-5c4d8b238bb2,18be7485-487a-41a4-90cd-9192bcddc687,1a281537-013e-444c-897e-6e3bfb858b78,1b38a552-210e-450c-8043-2a4142e03f63,20465b21-92b4-49e2-967d-474617238a4d,226c062a-55b5-4242-b15d-4052e2678c08,2605d1bb-c210-427e-8dfe-9f243f6b280b,295cd0e9-23e1-4660-847c-af18dfdd9d63,2d06ca07-3f1a-425e-9ef0-bdf9345b394a,33c9dd37-d6de-4e80-8ce8-c51fb5a56782,3650f840-bf0c-43d1-bc6e-cd835929d24d,37a4c5d5-98e2-4dd6-a4b9-9eebdd5b0375,39893a65-36c2-4fc7-87b4-a7d6d4c8805c,3a04da8e-dcdd-4c24-a70c-3374431928f5,3ea2eae8-54e5-4554-bd94-361d69bb5454,42529841-8997-4f34-a36d-6898bdd98502,458dad78-5012-4a28-8d95-6f1cb1caf8ca,46d1ab80-139c-4608-8786-8c4d4849ac2b,4b4cbd7f-d27d-4442-903c-015c5e58ef4c,4ba455c0-19fd-4160-ae90-5a85e7eb97ac,4c7cf342-e4f6-486e-ad38-e59397fadcb1,4e436cb7-5899-4c71-84e4-bf226b3cdabf,4fdaf586-d233-465a-97d0-ed5921cc28f8,529209a1-96e1-4085-992f-8dc5a1e94e0c,53b144e9-4b84-4df6-a04c-8dd9ba8b3ac8,55a79fa4-6089-4328-9e58-296180ee61e6,57d60cde-cd15-4ed2-bc0b-ba8ef7ca00fb,5a9c8c4f-b07a-424b-a0fc-ab28d680dfdf,5cbed33c-5b6c-468e-9d20-255acef4b151,5f8d420e-e007-4bea-949b-e6e0a27656b7,631e4295-6e55-48b5-896d-558583330846,6457836e-479f-40cd-8eb7-1d550c2552d2,656a5510-4734-4e08-9c1d-9d1ca17a302a,6865379b-8ef0-4591-a85e-77145c2e9e65,6a370ac9-7805-46f8-a72a-ec523a3763ca,6d8acab6-97d6-4b37-aff4-276a5f7b8c1c,6ef0d811-9bc8-4491-b78b-8f407761b95a,718569b4-748f-47eb-9441-0162afdf22a9,7372dec5-2eb6-44f9-a5fc-c85d3a95709c,756c6739-dcd2-40c1-bfbc-ef7272f30e96,7693c9ac-3e5f-4ea8-8ba3-6f4a26e82a8c,77f1b2fc-7c32-4cc5-996b-22751c9a9fa6,78c72eb1-479c-4a22-b4ae-0fc75f878ddd,7beb410c-4f71-4cde-846e-5faf45d30335,7dd46155-3ec8-4dd3-868d-de653a904e0b,81204fb2-458b-4991-b5e1-5878891bc4ff,8218a90b-689c-4a0f-b6b4-79b6c387cd7f,84f435c0-aadf-4152-b9d5-21c2e42d4266,8850c3f5-f4f9-48be-a2e2-a49f3c20b32a,8bc074cc-b8f0-4649-90f8-14c2e07ca9a4,8f6ff353-e23a-4792-87b1-b50c0134426b,90e424e5-aca3-45de-92d1-b65eed2cf9c8,93a81bbc-1777-4b5d-8a33-5e001524f6b3,9875e2cb-5ff6-4f1c-9fa3-d99705ac4355,99544079-c4d7-4208-a8b3-31c6dd255d9d,9a7eb229-47f6-45f7-ac24-4d40e67b8196,9f3475cb-435b-4ae7-aa66-39c60996954a,a0cedf18-83f2-4c38-8981-e6c803cf6c2a,a4f27f96-7e78-406d-91a0-7190f1c55f4e,a6dd3f96-e317-49b4-ae2e-4d583b799eb9,aa22add3-db13-46c9-bece-5a02c7f92790,aba86eab-e8c1-4f9c-aadc-980f64448f2e,aeb04ef5-1582-4ef5-a3e6-81ef26f02e23,b0ec96f8-0a2d-4caf-94ca-5af3b700f55d,b2ca9b2d-7dcd-436c-8b8d-0d2247cc8c0f,b4d8016a-f3e1-4d8d-9d6b-0aea8f6aebab,b75917d5-663a-4f34-9e55-8f45c50a2dac,b855f803-1d69-4cec-b600-ce890ae05378,ba9f6e7b-5f58-431b-8db8-c19117b179fe,c0769d9e-0772-48ed-8e6f-559fa7b1ed22,c231f446-3eb4-494e-ad30-606f2ff90b66,c673685b-ae5c-4eb1-90c1-b07fb16706ea,c8dc2161-1bc5-4922-9033-9b499596256d,cc2dca59-8e6d-4244-8d77-4c0568545bf4,cd1b1140-95c2-49fd-a2c0-93384e0c9bb3,cf3c5540-ee7c-4804-bf1a-ec64ed342cf5,d3a3d8be-63e8-43a6-8642-b8dcf91ad21c,d559e1c7-5434-4cb2-bdb6-09932bbff7c5,d70994fe-96df-42a4-ae82-6dcf328459d5,dadcc86d-032e-43f4-ba68-1d2a5ee81f4b,de7ed303-05e9-4897-8754-f4fc71e9f6a3,e07af854-1a07-41d6-8e8c-cdf3c08d137c,e7af710f-2fe3-4118-a1b4-4dc2135a9b86,ead56188-81a9-48f1-8280-fa361bd53c13,eb7113b4-8e1e-4ea2-904c-4d46fd9cc360,eec689a6-925e-4072-8af7-c3ff1ea6ce44,f1d2e2d3-7931-4d9b-af2d-79eac9edb02a,f50242d7-15fd-4d96-8c26-5a834bb900b6,f6fd8d52-97bd-4ca5-8b5c-f102d0c0fed4,fb3c8360-b518-4b4a-9182-2bb41c131422,fd705f06-e35a-4453-8b33-ff21bb34ffc7,ffb66056-31dd-4396-8e8c-8b43fbacc102}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "is_recurring",
+        "n_distinct": 2,
+        "most_common_vals": "{t,f}",
+        "most_common_freqs": [
+          0.993548,
+          0.00645161
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "item_type",
+        "n_distinct": 4,
+        "most_common_vals": "{Fijo,Variable,Licencias}",
+        "most_common_freqs": [
+          0.177419,
+          0.154839,
+          0.016129
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "monthly_price",
+        "n_distinct": -0.170968,
+        "most_common_vals": "{0.00,98.00,2000.00,135.00,135.20,1134.00,1215.00,3483.00,11448.00,12087.00,1.50,3.00,8.80,10.56,13.24,25.00,72.60,74.30,76.00,100.00,104.00,109.00,249.50,490.00,693.00,1222.00,2500.05,2737.00,2802.80,3000.00,3355.00,3840.00,4200.00,11616.00,12000.00,19404.00,19760.00,22000.00,28360.00,56166.00,74970.00,162162.00,366753.69}",
+        "most_common_freqs": [
+          0.654839,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{0.80,17.82,53.76,76.80,800.00,1000.00,1900.00,10000.00,30000.00,240000.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "price",
+        "n_distinct": -0.629032,
+        "most_common_vals": "{0,12000,1176.00,24000,25000,49992,56340,912,1200,1620,1622.40,3336,3684,5328,8688,9756,9900,13608,14580,15276,18576,20412,29328,30000,35460,36000,41796,137376.00,145044.00,255769789,18,36,126.72,300.00,1248.00,1308.00,1600,1610.4,2880,4831.2,5880.00,8316.00,8640,10000,14664.00,16608,30000.60,32844.00,33372,35004,40500,46080.00,48000,50400,55296,63180,67224,129540,188784,232848,237120.00,240000,264000.00,340320.00,673992.00,899640.00,1945944.00,4401044.28,50420160,359190000,641250000}",
+        "most_common_freqs": [
+          0.0290323,
+          0.0193548,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{-7500,-5000,9.600000000000001,38,50,158.928,168,213.84,342,720,871.1999999999999,871.2,891.59,891.594,1000,1260,1368,1382.4,2142,2160,2500,2736,2994.0119999999997,3132,3220.8,3888,4700,6000,6040,6768,7128,8326,8932,9480,9895,12030,12960,20000,21024,22752,24060,26664,27360,28749.6,32916,33264,33633.60,33633.600000000006,40260.00,40260.00000000001,41628,42036,44016,49670,52500,53748,54715,57024,57492,57528,60156,61272,65220,66240,66456,67500,72000,72230.40000000001,72912,79056,85464,96048,104880,108000,113112,120000,130128,139392.00,139392.00000000003,145964,150012,159552,174456,180384,199512,219480,237024,249780,251520,264288,300700,322500,11299590,13182858,80490240,93905280,184324992,184777416,201561600,229528812,513125280}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "product_id",
+        "n_distinct": 31,
+        "most_common_vals": "{72083667-b165-4889-aabd-ee76b0e5ea99,c81571e9-97ee-4772-a6d9-6b588f1ccf21,89e1c03c-fa42-4436-9aec-3a60e8cc5095,af181872-7f70-49a6-85a0-3d375f6af9ba,8c621fb0-c7c2-4029-8fdb-4c00eb7d9cc5,654a515a-5d23-4888-a1d6-34d3a10ceaf9,63172e59-5f73-4d0f-a4ea-90b35eb2befa,fdb045d3-a884-4045-b3e5-ecc475b6c40d,89bf6f23-fb64-43ba-928f-c17ab21a8d6f,e4ff135f-b859-4ec6-a699-6d00ab931160,fb08c3a9-1dae-46c8-8d7c-932d3f407393,56f84f00-5c2d-44a3-8607-2865177f3732,f13fe93a-7eb1-424e-a772-2d7270b7d29a,57cbb748-4d9b-4abb-9564-0952d547b870,41df6852-bb35-4cec-904b-34930014422e,4de86fd8-0b43-4ea8-b319-a870f8db8af5,a5ebb0f1-fa6b-4fe3-b147-4668d75222e9,09212a77-1177-479c-9186-bcf0a8f1bd6c,1775b335-d4fd-4b96-9ffe-44b7020552d4,3fbfdfa0-3d31-46d7-b3e0-032c6eba68bb,4fc8fceb-fe35-4930-ae80-998d925d0b80,7ffc00a7-f560-4d69-91ad-46784b52b861,e2784bdd-3cac-4b53-bc5d-d9d71d9d36dc}",
+        "most_common_freqs": [
+          0.13871,
+          0.122581,
+          0.0967742,
+          0.0612903,
+          0.0580645,
+          0.0483871,
+          0.0419355,
+          0.0387097,
+          0.0258065,
+          0.0225806,
+          0.0225806,
+          0.016129,
+          0.016129,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{00564214-f769-4fc7-affe-23b2cbedbb05,0ae91058-26ef-44bf-b85a-09c1ed385ff8,111e779c-4d2a-4815-9032-55770ff57079,5c113f05-3a29-4d21-b227-152b2d0a258c,5f2e95c7-ca5f-47bc-adc5-05198be2f576,726ce0ef-16d2-4ca1-9ea2-a66c119c548e,8120f8e9-699a-43e9-8d5b-b28990cbe02a,855666d3-cc9e-45d3-9ef9-69c564512a99}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "product_name",
+        "n_distinct": -0.109677,
+        "most_common_vals": "{PATHFINDER+,uAssessment,uPlanning,uBooking,uRetention,uImprove,uExperience,uForecast,\"CRM Pro\",uExam,uClass,\"Analytics Dashboard\",\"ERP Enterprise\",FORCEFIELD,MANTENIMIENTO,\"SaaS Nuevo\",uFaculty,RETOOL,\"ADVANCED ANALYTICS\",\"Analytics Dashboard (Downsell)\",Capacitación,DATAMART,MODULO,\"Project Management Tool\",RUTEADORES,\"SOPORTE PREMIUM\",TABLEAU,uEngagement,uScore}",
+        "most_common_freqs": [
+          0.206452,
+          0.13871,
+          0.122581,
+          0.0612903,
+          0.0580645,
+          0.0483871,
+          0.0419355,
+          0.0387097,
+          0.0354839,
+          0.0258065,
+          0.0225806,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{\"ASESORIA TECNICA\",\"CMR Pro\",\"Implementación CRM\",\"Implementación  uPlanning\",Soporte}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "quantity",
+        "n_distinct": -0.112903,
+        "most_common_vals": "{1.000000,0.000000,2.000000,5.000000,42.000000,45.000000,120.000000,129.000000,153.000000,208.000000,1.100000,4.000000,8.000000,25.000000,74.000000,91.000000,95.000000,96.000000,100.000000,109.000000,119.000000,130.000000,135.090000,166.670000,210.000000,356.430000,423.000000,560.000000,1320.000000,8662.500000}",
+        "most_common_freqs": [
+          0.73871,
+          0.0290323,
+          0.0193548,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{10.000000,13.240000,13.244000,17.820000,20.000000}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "quote_item_id",
+        "n_distinct": -0.0451613,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{04442faf-fc95-4283-baa7-4eac6f8f841d,1a5a6afd-5c07-44d2-a091-d17dce0a2387,39a00502-6c0d-48c1-9fb6-ae9a8bdbc720,3be56823-4a5b-4aaf-b184-07cc0c07f33a,3ef1d0e4-ae1e-44af-8d50-1f09699af762,4cf8c437-5493-4d26-9870-af95674508e5,4df44502-f3a8-4d2a-89bc-dd380723d344,54182c43-4876-48bc-96f1-a2d6ae9759fb,5d46e234-988a-4094-82a3-8efde45d48f1,87a5f0ab-d964-4b03-b32f-529d65d4e597,8a49e0a2-41be-4115-92d8-d21ff6ad6020,93e0f8fb-9f9f-4b6a-8984-264761fea239,9da1d2f1-07a2-4991-80a7-899beff179c6,af2b0ca6-b58a-4161-8ee0-e7b9b3f682fa}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "related_item_id",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "renewed_by_item_id",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "renews_item_id",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "start_date",
+        "n_distinct": -0.170968,
+        "most_common_vals": "{2025-01-01,2023-10-01,2024-09-01,2024-11-01,2025-03-01,2022-01-01,2024-01-01,2025-12-01,2021-12-01,2022-10-01,2023-01-01,2025-02-01,2025-07-01,2022-07-01,2022-12-01,2023-02-01,2023-03-01,2025-04-01,2026-01-01,2021-05-01,2022-06-01,2024-03-01,2024-04-01,2024-07-01,2025-10-01,2025-11-01,2023-05-01,2023-09-01,2024-05-01,2024-08-01,2025-09-01,2018-04-01,2020-12-01,2021-07-01,2022-02-01,2023-08-01,2024-02-01,2024-12-01,2025-05-01,2025-08-01,2026-02-01,2026-07-01}",
+        "most_common_freqs": [
+          0.303226,
+          0.0516129,
+          0.0419355,
+          0.0354839,
+          0.0354839,
+          0.0322581,
+          0.0322581,
+          0.0258065,
+          0.0225806,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.0193548,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.016129,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{2001-06-06,2019-04-01,2019-08-01,2021-06-01,2022-03-01,2022-05-01,2023-04-01,2023-07-01,2023-12-01,2024-10-01,2025-06-01}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "term_months",
+        "n_distinct": 25,
+        "most_common_vals": "{12,36,24,48,60,5,72,2,14,25,31,1,37,6,8,10}",
+        "most_common_freqs": [
+          0.551613,
+          0.145161,
+          0.0709677,
+          0.0419355,
+          0.0387097,
+          0.016129,
+          0.016129,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{3,4,9,16,18,26,28,45,54}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "unit_of_measure",
+        "n_distinct": 11,
+        "most_common_vals": "{UND,Vehículo,UN,Visitas,Bolsas,Bolsa,Conductores,usuarios,USUARIOS}",
+        "most_common_freqs": [
+          0.648387,
+          0.209677,
+          0.0774194,
+          0.0193548,
+          0.0129032,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{Mensajes,unidad}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "contract_items",
+        "attname": "unit_price",
+        "n_distinct": -0.132258,
+        "most_common_vals": "{27.000000,1.000000,0.800000,1.500000,8.800000,98.000000,0.650000,79.000000,95.400000,2000.000000,0.080000,0.550000,0.700000,1.320000,10.000000,15.000000,30.800000,34.650000,36.300000,50.000000,305.500000,490.000000,630.000000,759.000000,772.200000,867.030000,2737.000000,3000.000000,3050.000000,3840.000000,4200.000000,12000.000000,19760.000000,22000.000000,28360.000000}",
+        "most_common_freqs": [
+          0.0677419,
+          0.0225806,
+          0.0193548,
+          0.0129032,
+          0.0129032,
+          0.0129032,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00967742,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161,
+          0.00645161
+        ],
+        "histogram_bounds": "{1.200000,100.000000,1000.000000,1900.000000,30000.000000,240000.000000}"
+      }
+    ],
+    "size_info": {
+      "total_size": "480 kB",
+      "table_size": "168 kB",
+      "indexes_size": "312 kB"
+    },
+    "permissions": [
+      {
+        "grantee": "anon",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "DELETE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "INSERT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "SELECT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "UPDATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      }
+    ],
+    "analysis_timestamp": "2026-01-20T05:32:15.798Z"
+  }
+}

@@ -103,6 +103,25 @@ export class SkillExecutor {
 			processed.date_to = toDate.toISOString().split('T')[0];
 		}
 
+		// Calcular mes/año actual si no se proporcionan (para invoice skills)
+		if (!processed.month || !processed.year) {
+			const today = new Date();
+			if (!processed.month) {
+				processed.month = today.getMonth() + 1;
+			}
+			if (!processed.year) {
+				processed.year = today.getFullYear();
+			}
+		}
+
+		// Calcular fecha límite para contratos por vencer si se proporciona days_ahead
+		if (processed.days_ahead && typeof processed.days_ahead === 'number') {
+			const today = new Date();
+			const futureDate = new Date(today);
+			futureDate.setDate(futureDate.getDate() + processed.days_ahead);
+			processed.date_to_calculated = futureDate.toISOString().split('T')[0];
+		}
+
 		return processed;
 	}
 
@@ -112,9 +131,19 @@ export class SkillExecutor {
 		const currencyMode = params.currency_mode || 'system';
 		const mrrColumnLegacy = this.getMrrColumn('legacy', currencyMode);
 		const mrrColumnRsm = this.getMrrColumn('rsm', currencyMode);
+		const cmrrColumn = this.getCmrrColumn(currencyMode);
+		const mrrColumn = this.getMrrColumnRsm(currencyMode);
+		const recognizedColumn = this.getRecognizedColumn(currencyMode);
+		const deferredColumn = this.getDeferredColumn(currencyMode);
+		const unbilledColumn = this.getUnbilledColumn(currencyMode);
 
 		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN_LEGACY\}\}/g, mrrColumnLegacy);
 		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN_RSM\}\}/g, mrrColumnRsm);
+		baseQuery = baseQuery.replace(/\{\{CMRR_COLUMN\}\}/g, cmrrColumn);
+		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN\}\}/g, mrrColumn);
+		baseQuery = baseQuery.replace(/\{\{RECOGNIZED_COLUMN\}\}/g, recognizedColumn);
+		baseQuery = baseQuery.replace(/\{\{DEFERRED_COLUMN\}\}/g, deferredColumn);
+		baseQuery = baseQuery.replace(/\{\{UNBILLED_COLUMN\}\}/g, unbilledColumn);
 
 		if (params.group_by && Array.isArray(params.group_by)) {
 			const groupByColumns = params.group_by.map((col: string) => `${col},`).join(' ');
@@ -159,6 +188,71 @@ export class SkillExecutor {
 		}
 	}
 
+	private getCmrrColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'cmrr_period_system_ccy';
+			case 'contract':
+				return 'cmrr_period_contract_ccy';
+			case 'company':
+				return 'cmrr_period_ccy';
+			default:
+				return 'cmrr_period_system_ccy';
+		}
+	}
+
+	private getMrrColumnRsm(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'mrr_period_system_ccy';
+			case 'contract':
+				return 'mrr_period_contract_ccy';
+			case 'company':
+				return 'mrr_period_ccy';
+			default:
+				return 'mrr_period_system_ccy';
+		}
+	}
+
+	private getRecognizedColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'recognized_period_system_ccy';
+			case 'contract':
+				return 'recognized_period_contract_ccy';
+			case 'company':
+				return 'recognized_period_ccy';
+			default:
+				return 'recognized_period_system_ccy';
+		}
+	}
+
+	private getDeferredColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'deferred_balance_eom_system_ccy';
+			case 'contract':
+				return 'deferred_balance_eom_contract_ccy';
+			case 'company':
+				return 'deferred_balance_eom_ccy';
+			default:
+				return 'deferred_balance_eom_system_ccy';
+		}
+	}
+
+	private getUnbilledColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'unbilled_balance_eom_system_ccy';
+			case 'contract':
+				return 'unbilled_balance_eom_contract_ccy';
+			case 'company':
+				return 'unbilled_balance_eom_ccy';
+			default:
+				return 'unbilled_balance_eom_system_ccy';
+		}
+	}
+
 	private generateWidgets(data: any[], skill: SkillDefinition): any[] {
 		if (!skill.response.widgetConfig) {
 			return [];
@@ -166,6 +260,18 @@ export class SkillExecutor {
 
 		const config = skill.response.widgetConfig;
 		const widgets: any[] = [];
+
+		// Caso especial: facturas por emitir - agregar KPI con el total
+		if (skill.name === 'get_invoices_to_issue' && data.length > 0 && data[0].total_count !== undefined) {
+			const totalCount = data[0].total_count || 0;
+			const totalAmount = data[0].total_amount || 0;
+			
+			widgets.push({
+				type: 'kpi',
+				title: 'Total Facturas Pendientes',
+				value: `${totalCount} facturas`,
+			});
+		}
 
 		if (config.type === 'line' || config.type === 'bar' || config.type === 'area') {
 			const xKey = config.xAxis || 'period_month';

@@ -1,0 +1,415 @@
+{
+  "success": true,
+  "message": "Análisis de tabla public.products completado exitosamente",
+  "data": {
+    "table_name": "products",
+    "schema_name": "public",
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "holding_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "product_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "is_recurring",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "default_currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "default_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp without time zone",
+        "is_nullable": "YES",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "salesforce_product_id",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      }
+    ],
+    "indexes": [
+      {
+        "index_name": "idx_products_product_code",
+        "index_definition": "CREATE INDEX idx_products_product_code ON public.products USING btree (product_code)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_products_salesforce_product_id",
+        "index_definition": "CREATE INDEX idx_products_salesforce_product_id ON public.products USING btree (salesforce_product_id) WHERE (salesforce_product_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "8192 bytes"
+      },
+      {
+        "index_name": "products_pkey",
+        "index_definition": "CREATE UNIQUE INDEX products_pkey ON public.products USING btree (id)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "16 kB"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constraint_name": "products_holding_id_fkey",
+        "table_name": "products",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      }
+    ],
+    "primary_unique_keys": [
+      {
+        "constraint_name": "products_pkey",
+        "constraint_type": "PRIMARY KEY",
+        "column_name": "id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      }
+    ],
+    "triggers": [],
+    "policies": [
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "policyname": "tenant_isolation_delete_products",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "policyname": "tenant_isolation_insert_products",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "policyname": "tenant_isolation_select_products",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "policyname": "tenant_isolation_update_products",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      }
+    ],
+    "statistics": [
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "created_at",
+        "n_distinct": -0.127907,
+        "most_common_vals": "{\"2025-08-22 17:02:41.136119\",\"2025-11-03 11:34:26.803448\",\"2025-08-18 13:36:42.688427\",\"2025-08-18 22:50:54.335963\"}",
+        "most_common_freqs": [
+          0.290698,
+          0.244186,
+          0.22093,
+          0.162791
+        ],
+        "histogram_bounds": "{\"2025-06-26 20:22:04.483395\",\"2025-07-24 19:28:46.490194\",\"2025-07-24 19:29:16.092145\",\"2025-07-24 19:29:43.653771\",\"2025-07-24 19:30:17.623846\",\"2025-07-24 19:30:37.681069\",\"2025-07-28 23:27:19.369928\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "default_currency",
+        "n_distinct": 1,
+        "most_common_vals": "{USD}",
+        "most_common_freqs": [
+          0.755814
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "default_price",
+        "n_distinct": 8,
+        "most_common_vals": "{0}",
+        "most_common_freqs": [
+          0.674419
+        ],
+        "histogram_bounds": "{49,79,99,100,299,500,2500}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "holding_id",
+        "n_distinct": 3,
+        "most_common_vals": "{f6e3cb81-8b4a-451e-8402-573e47688d45,5652e95e-bb99-48f5-aa1c-13c8c2638fc6,05583c6e-9364-4672-a610-0744324e44b4}",
+        "most_common_freqs": [
+          0.674419,
+          0.244186,
+          0.0813954
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{00564214-f769-4fc7-affe-23b2cbedbb05,02668d4a-ee95-4382-b8f2-86c83443ca6f,05c32f39-e608-402a-8bad-d7ef831c7300,09212a77-1177-479c-9186-bcf0a8f1bd6c,0ae91058-26ef-44bf-b85a-09c1ed385ff8,0b027fc2-62ec-444b-966f-76af54b0fe67,0e64a3ce-5b1a-49d5-86dd-3125dfa90cf2,111e779c-4d2a-4815-9032-55770ff57079,116dda2a-cedf-4c9c-895c-557097021aec,1775b335-d4fd-4b96-9ffe-44b7020552d4,18cc5506-5dba-4185-870d-79446a693c2b,19f83d89-c92d-4e51-b704-b2f12cbb3344,1a7a5c34-ff2b-47aa-a740-cb953a4e5095,1b47b913-7163-4b05-b466-460367acac33,1d6ad8f0-9abd-4db3-bf76-94f897ff58da,2138bf6b-f951-4083-80fa-e906a31c95a2,231724f3-0526-42f1-a4d5-94575c11ae9e,26c6dd24-e2cf-49b6-a190-6343883a2b98,272b6e7b-ebd8-47d1-86f8-89d03c76fe06,2e3472b1-d5c3-434a-8142-5cf9f25b1962,35291d13-213b-4113-9ca7-2220ffa1808e,3fbfdfa0-3d31-46d7-b3e0-032c6eba68bb,409df8de-81e6-4d58-b6b1-5b6409732881,41df6852-bb35-4cec-904b-34930014422e,423b39b0-e762-4e70-ba88-bd43b4169c1b,4ceb2a76-6362-4261-806e-1a4eec8fa816,4de86fd8-0b43-4ea8-b319-a870f8db8af5,4e7a3be0-0712-48e1-bf34-1eb3e88b8220,4fc8fceb-fe35-4930-ae80-998d925d0b80,5003bd90-2e97-480b-9444-64655f829c39,5192a905-3cc9-4262-9c7d-b5a56002f0a2,5563b21e-51bf-4e93-94b7-73d1b283d5ca,56f84f00-5c2d-44a3-8607-2865177f3732,5755375c-f063-4985-ac35-83be1570fdc9,57cbb748-4d9b-4abb-9564-0952d547b870,59086852-4fdc-4edc-bf7e-ada6ed40f8d2,5c113f05-3a29-4d21-b227-152b2d0a258c,5d9f366d-721e-4225-a46b-64bfaf18493c,5f2e95c7-ca5f-47bc-adc5-05198be2f576,5fdf58df-e4a1-44a9-8182-12bfb14ec12b,63172e59-5f73-4d0f-a4ea-90b35eb2befa,654a515a-5d23-4888-a1d6-34d3a10ceaf9,6bb59a4b-401f-4dcd-bf21-e8a0b22ba156,71c63985-baae-4cef-bd38-565b4a7db65c,72083667-b165-4889-aabd-ee76b0e5ea99,726ce0ef-16d2-4ca1-9ea2-a66c119c548e,755c1bbb-2ea2-4510-873f-c086bb006c42,7c8817ce-e4b3-4aa0-bc49-46c2728d19b5,7ffc00a7-f560-4d69-91ad-46784b52b861,8120f8e9-699a-43e9-8d5b-b28990cbe02a,81481944-1f6a-4f50-9d58-4d337b6b1cf9,8294c5ea-1520-496a-92b7-1949208b8dc4,855666d3-cc9e-45d3-9ef9-69c564512a99,89bf6f23-fb64-43ba-928f-c17ab21a8d6f,89e1c03c-fa42-4436-9aec-3a60e8cc5095,8a2df33a-237b-45df-9200-d004e7d7afb0,8c621fb0-c7c2-4029-8fdb-4c00eb7d9cc5,8e8bc3ed-1f13-4a9c-8be4-28858da52f46,8eb66867-f6fb-46e5-b2c0-bcd60f6dbad3,90e62cdb-2689-445f-8225-58dfbca55d63,9e76c817-9f4d-4ed7-b717-04c38fc473cd,a5ebb0f1-fa6b-4fe3-b147-4668d75222e9,a89b5ab2-4e70-4ec8-bc76-7037a1ec9b64,af181872-7f70-49a6-85a0-3d375f6af9ba,b458bb3d-a7e2-43a0-8bdf-c135183c4ca2,baf3a1df-5e39-4156-983c-120dc1e5f0da,bcfbcb70-69eb-4559-8f14-d6dbe1430eb7,bed60113-1b93-4cbd-85f4-f9563abe0f66,bee89703-5709-40ec-8a41-ba0ddbc00463,c5d9bad0-c0fc-404c-8d1e-f8675439771c,c81571e9-97ee-4772-a6d9-6b588f1ccf21,cc1697a8-0592-491d-899c-1a123960100f,ccf6db4e-22b7-46c4-8adb-ddbf9c83a449,ccffc3fc-78bf-4579-9497-463b295f7fe5,cf028553-a790-4770-886d-12d8279a728f,d88e9651-5a7b-4925-8372-4db7c3429190,db07d147-5856-487a-9bb0-362198f8fee0,e2784bdd-3cac-4b53-bc5d-d9d71d9d36dc,e4ff135f-b859-4ec6-a699-6d00ab931160,e8aeb615-2fb0-4704-a476-94d20c0dc2ff,efea2029-1716-476d-a4d3-4a49032d7b52,f13fe93a-7eb1-424e-a772-2d7270b7d29a,f3bccf02-1b27-4474-8522-5386ac83cb2b,f5f7f491-a62c-4979-9ec3-531a8b10cff1,fb08c3a9-1dae-46c8-8d7c-932d3f407393,fdb045d3-a884-4045-b3e5-ecc475b6c40d}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "is_recurring",
+        "n_distinct": 2,
+        "most_common_vals": "{t,f}",
+        "most_common_freqs": [
+          0.534884,
+          0.465116
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "name",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{\"ADVANCED ANALYTICS\",\"Analytics Dashboard\",\"ASESORIA TECNICA\",Capacitación,CHATBOT,Consultoría,\"CRM Pro\",DATAMART,Desarrollo,Diagnóstico,\"Diagnóstico uAssessment\",\"Diagnóstico uOptimization\",\"Diagnóstico uSuccess\",\"ERP Enterprise\",FORCEFIELD,GEO,GPS,\"Implementación \",\"Implementación CHATBOT\",\"Implementación CRM\",\"Implementación  uAnalytics\",\"Implementación  uAssessment\",\"Implementación  uBooking\",\"Implementación  uClass\",\"Implementación  uEngagement\",\"Implementación uEnrollment\",\"Implementación  uExam\",\"Implementación  uExperience\",\"Implementación  uFaculty\",\"Implementación  uForecast\",\"Implementación  uImprove\",\"Implementación  uLearn\",\"Implementación uLearning\",\"Implementación uOptimization\",\"Implementación  uPlanning\",\"Implementación  uRetention\",\"Implementación  uScore\",\"Implementación uStrategy\",\"Implementación uSuccess\",MAKE,MANTENIMIENTO,MODULO,PATHFINDER+,\"Perpetua uAssessment\",\"Perpetua uBooking\",\"Perpetua uClass\",\"Perpetua uFaculty\",\"Perpetua uForecast\",\"Perpetua uImprove\",\"Perpetua uPlanning\",\"Perpetua uRetention\",Piloto,\"Project Management Tool\",RETOOL,RUTEADORES,\"SaaS Nuevo\",SELLERS,Servidores,SIMPLISYNC,SMS,Soporte,\"SOPORTE PREMIUM\",TABLEAU,TMS,uAnalytics,uAssessment,uBooking,uClass,uEngagement,uEnrollment,uExam,uExperience,uFaculty,uForecast,uImprove,uLearn,uLearning,uOptimization,uPlanning,uRetention,uScore,uStrategy,uSuccess,WATCHTOWER,\"WSP PRO\",\"WSP STD\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "products",
+        "attname": "product_code",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{001-PLA,002-BOO,003-IMP,004-SCO,005-ENG,006-EXP,007-RET,008-FOR,009-ANA,010-ASSE,011-LEA,012-CLA,013-EXA,014-FAC,015-OPT,016-SUCC,017-STR,018-LEN,019-ENR,020-CHB,101-PIL,102-DES,103-CONS,104-SOP,105-001,105-002,105-003,105-004,105-005,105-006,105-007,105-008,105-009,105-010,105-011,105-012,105-013,105-014,105-015,105-016,105-017,105-018,105-019,105-020,105-IMP,106-010,106-015,106-016,106-DIAG,107-SERV,108-001,108-002,108-003,108-007,108-008,108-010,108-012,108-014,ADA-01,ANA-001,ATE-02,CAP-001,CRM-001,DTM-03,ERP-001,FCF-04,GEO-05,GPS-06,IMPL-001,MAN-08,MKE-07,MOD-09,PM-001,PRD-007,PTH-10,RET-11,RUT-12,SEL-13,SMS-15,SPM-16,SSY-14,TAB-17,TMS-18,WPR-20,WST-21,WTT-19}"
+      }
+    ],
+    "size_info": {
+      "total_size": "88 kB",
+      "table_size": "16 kB",
+      "indexes_size": "72 kB"
+    },
+    "permissions": [
+      {
+        "grantee": "anon",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "DELETE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "INSERT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "SELECT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "UPDATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      }
+    ],
+    "analysis_timestamp": "2026-01-20T02:06:18.751Z"
+  }
+}
