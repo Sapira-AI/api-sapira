@@ -265,7 +265,7 @@ export class SkillExecutor {
 		if (skill.name === 'get_invoices_to_issue' && data.length > 0 && data[0].total_count !== undefined) {
 			const totalCount = data[0].total_count || 0;
 			const totalAmount = data[0].total_amount || 0;
-			
+
 			widgets.push({
 				type: 'kpi',
 				title: 'Total Facturas Pendientes',
@@ -280,6 +280,10 @@ export class SkillExecutor {
 			// Determinar el tipo correcto para el frontend
 			const widgetType = config.type === 'line' ? 'chart_line' : config.type === 'bar' ? 'chart_bar' : 'chart_line';
 
+			// Calcular rango de valores para el eje Y
+			const yValues = data.map((item) => Number(item[yKey]) || 0);
+			const maxValue = Math.max(...yValues);
+
 			widgets.push({
 				type: widgetType,
 				title: config.title || skill.name,
@@ -292,17 +296,74 @@ export class SkillExecutor {
 					},
 				],
 				data: data,
+				yAxisConfig: {
+					min: 0,
+					max: maxValue * 1.1,
+					formatWithThousandsSeparator: true,
+				},
 			});
 		}
 
 		if (config.type === 'table') {
 			const columns = config.columns || Object.keys(data[0] || {});
-			const rows = data.map((row) => columns.map((col) => row[col]));
+
+			// Filtrar columnas que no deben mostrarse (IDs, etc.)
+			const keepIndices: number[] = [];
+			const displayColumns: string[] = [];
+
+			columns.forEach((col, idx) => {
+				// No mostrar columnas de ID
+				const colLower = col.toLowerCase();
+				if (colLower.includes('_id') || colLower === 'id' || colLower.includes('holding') || colLower.includes('tenant')) {
+					return;
+				}
+				keepIndices.push(idx);
+				// Aplicar label si existe, sino usar el nombre de la columna
+				displayColumns.push(config.columnLabels?.[col] || col);
+			});
+
+			const rows = data.map((row) =>
+				keepIndices.map((idx) => {
+					const col = columns[idx];
+					const value = row[col];
+
+					// Formatear según el tipo especificado
+					if (config.format?.[col] === 'month-year' && value) {
+						try {
+							const date = new Date(value);
+							const month = String(date.getMonth() + 1).padStart(2, '0');
+							const year = date.getFullYear();
+							return `${month}/${year}`;
+						} catch (e) {
+							return value;
+						}
+					}
+
+					// Formatear números con separadores de miles
+					if (config.format?.[col] === 'currency' && typeof value === 'number') {
+						return new Intl.NumberFormat('en-US', {
+							style: 'currency',
+							currency: 'USD',
+							minimumFractionDigits: 2,
+							maximumFractionDigits: 2,
+						}).format(value);
+					}
+
+					if (config.format?.[col] === 'number' && typeof value === 'number') {
+						return new Intl.NumberFormat('en-US', {
+							minimumFractionDigits: 0,
+							maximumFractionDigits: 2,
+						}).format(value);
+					}
+
+					return value;
+				})
+			);
 
 			widgets.push({
 				type: 'table',
 				title: config.title || skill.name,
-				columns: columns,
+				columns: displayColumns,
 				rows: rows,
 			});
 		}
@@ -341,8 +402,15 @@ export class SkillExecutor {
 			return new Intl.NumberFormat('en-US', {
 				style: 'currency',
 				currency: 'USD',
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2,
+			}).format(value);
+		}
+
+		if (typeof value === 'number') {
+			return new Intl.NumberFormat('en-US', {
 				minimumFractionDigits: 0,
-				maximumFractionDigits: 0,
+				maximumFractionDigits: 2,
 			}).format(value);
 		}
 

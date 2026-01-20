@@ -47,7 +47,8 @@ export class SapiraCopilotService {
 				widgets,
 			};
 		} catch (error) {
-			this.logger.error('Error al enviar mensaje al copilot:', error);
+			this.logger.error('Error al enviar mensaje al copilot:');
+			this.logger.error(error);
 			throw new BadRequestException(`Error al comunicarse con el copilot: ${error.message}`);
 		}
 	}
@@ -173,10 +174,12 @@ REGLAS IMPORTANTES:
 
 5. FORMATO DE RESPUESTA:
    - NO uses emojis, iconos ni símbolos decorativos
-   - NO uses encabezados con símbolos como ###, **, etc.
+   - NO uses formato markdown: NUNCA uses **, __, ###, ####, etc.
+   - NO uses negritas ni cursivas en ninguna parte del texto
    - SOLO usa guiones (-) para listas o enumeraciones
    - Mantén las respuestas limpias y profesionales
-   - Usa texto plano con saltos de línea para organizar la información
+   - Usa texto plano simple con saltos de línea para organizar la información
+   - Escribe todo en texto normal sin resaltar palabras
 
 Genera respuestas concisas en lenguaje natural que acompañen los widgets cuando los generes.`;
 

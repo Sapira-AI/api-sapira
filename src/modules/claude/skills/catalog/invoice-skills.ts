@@ -139,10 +139,17 @@ Usar esta skill cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Facturas Vencidas',
-			columns: ['invoice_number', 'status', 'due_date', 'days_overdue', 'total_system_currency', 'client_id'],
+			columns: ['invoice_number', 'status', 'due_date', 'days_overdue', 'total_system_currency'],
+			columnLabels: {
+				invoice_number: 'Número de Factura',
+				status: 'Estado',
+				due_date: 'Fecha de Vencimiento',
+				days_overdue: 'Días Vencidos',
+				total_system_currency: 'Monto',
+			},
 			format: {
 				total_system_currency: 'currency',
-				due_date: 'date',
+				due_date: 'month-year',
 			},
 		},
 	},
@@ -203,7 +210,7 @@ Usar esta skill cuando el usuario pregunte por:
 			WHERE {{WHERE_CLAUSE}}
 				AND i.status = 'Por Emitir'
 			ORDER BY i.scheduled_at ASC
-			LIMIT 30
+			LIMIT 10
 		`,
 		filters: {},
 		groupBy: [],
@@ -216,9 +223,15 @@ Usar esta skill cuando el usuario pregunte por:
 			type: 'table',
 			title: 'Facturas por Emitir',
 			columns: ['invoice_number', 'scheduled_at', 'days_delayed', 'total_system_currency'],
+			columnLabels: {
+				invoice_number: 'Número de Factura',
+				scheduled_at: 'Fecha Programada',
+				days_delayed: 'Días de Retraso',
+				total_system_currency: 'Monto',
+			},
 			format: {
 				total_system_currency: 'currency',
-				scheduled_at: 'date',
+				scheduled_at: 'month-year',
 			},
 		},
 	},
@@ -299,9 +312,4 @@ Usar esta skill cuando el usuario pregunte por:
 	},
 };
 
-export const INVOICE_SKILLS = [
-	GET_BILLED_BY_PRODUCT_MONTH,
-	GET_INVOICES_OVERDUE,
-	GET_INVOICES_TO_ISSUE,
-	GET_INVOICES_ISSUED_MONTH,
-];
+export const INVOICE_SKILLS = [GET_BILLED_BY_PRODUCT_MONTH, GET_INVOICES_OVERDUE, GET_INVOICES_TO_ISSUE, GET_INVOICES_ISSUED_MONTH];
