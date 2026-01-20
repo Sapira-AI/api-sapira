@@ -22,6 +22,7 @@ import { RequestContextMiddleware } from './middlewares/common/request-context.m
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
 import { AgentsModule } from './modules/agents/agents.module';
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
+import { ClaudeModule } from './modules/claude/claude.module';
 import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmailModule } from './modules/email/email.module';
@@ -29,6 +30,7 @@ import { EmailsModule } from './modules/emails/emails.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { ProfileModule } from './modules/profiles/profile.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
+import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
 import { CitiesModule } from './modules/utils/cities/cities.module';
 import { MSGraphModule } from './modules/utils/msgraph/msgraph.module';
 import { WorkspaceModule } from './modules/workspaces/workspace.module';
@@ -85,6 +87,8 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		EmailsModule,
 		BigQueryModule,
 		AgentsModule,
+		ClaudeModule,
+		SapiraCopilotModule,
 	],
 	providers: [
 		{

@@ -1,0 +1,1683 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.revenue_schedule_monthly completado exitosamente",
+	"data": {
+		"table_name": "revenue_schedule_monthly",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "contract_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "contract_item_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "period_month",
+				"data_type": "date",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "company_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "company_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "contract_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "system_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'USD'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "recognized_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "recognized_cum_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_cum_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "deferred_balance_eom_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "unbilled_balance_eom_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "mrr_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "recognized_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "recognized_cum_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_cum_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "deferred_balance_eom_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "unbilled_balance_eom_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "mrr_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "recognized_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "recognized_cum_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billed_cum_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "deferred_balance_eom_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "unbilled_balance_eom_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "mrr_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "calc_version",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'v1.0'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "source_snapshot_hash",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "NO",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "updated_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "NO",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "deferred_balance_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "unbilled_balance_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "product_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_contract_to_company",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "1",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_contract_to_system",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "1",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_to_company_source",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_to_company_date",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_to_system_source",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_to_system_date",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_total_row",
+				"data_type": "boolean",
+				"is_nullable": "NO",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "deferred_balance_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "unbilled_balance_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "deferred_balance_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "unbilled_balance_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "momentum",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "mrr_period_contracted_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "cmrr_period_contract_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "mrr_period_contracted_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "cmrr_period_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "mrr_period_contracted_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "cmrr_period_system_ccy",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "idx_revenue_schedule_momentum",
+				"index_definition": "CREATE INDEX idx_revenue_schedule_momentum ON public.revenue_schedule_monthly USING btree (momentum, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2000 kB"
+			},
+			{
+				"index_name": "idx_revenue_schedule_monthly_company_period",
+				"index_definition": "CREATE INDEX idx_revenue_schedule_monthly_company_period ON public.revenue_schedule_monthly USING btree (company_id, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2600 kB"
+			},
+			{
+				"index_name": "idx_revenue_schedule_monthly_contract",
+				"index_definition": "CREATE INDEX idx_revenue_schedule_monthly_contract ON public.revenue_schedule_monthly USING btree (contract_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "3880 kB"
+			},
+			{
+				"index_name": "idx_revenue_schedule_monthly_holding_period",
+				"index_definition": "CREATE INDEX idx_revenue_schedule_monthly_holding_period ON public.revenue_schedule_monthly USING btree (holding_id, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2264 kB"
+			},
+			{
+				"index_name": "idx_revenue_schedule_monthly_is_total_row",
+				"index_definition": "CREATE INDEX idx_revenue_schedule_monthly_is_total_row ON public.revenue_schedule_monthly USING btree (contract_id, is_total_row, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2376 kB"
+			},
+			{
+				"index_name": "idx_rsm_cmrr_period",
+				"index_definition": "CREATE INDEX idx_rsm_cmrr_period ON public.revenue_schedule_monthly USING btree (holding_id, period_month, cmrr_period_contract_ccy) WHERE (cmrr_period_contract_ccy > (0)::numeric)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "13 MB"
+			},
+			{
+				"index_name": "idx_rsm_company_period",
+				"index_definition": "CREATE INDEX idx_rsm_company_period ON public.revenue_schedule_monthly USING btree (company_id, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2600 kB"
+			},
+			{
+				"index_name": "idx_rsm_contract_period",
+				"index_definition": "CREATE INDEX idx_rsm_contract_period ON public.revenue_schedule_monthly USING btree (contract_id, period_month)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "2376 kB"
+			},
+			{
+				"index_name": "idx_rsm_mrr_contracted_period",
+				"index_definition": "CREATE INDEX idx_rsm_mrr_contracted_period ON public.revenue_schedule_monthly USING btree (holding_id, period_month, mrr_period_contracted_contract_ccy) WHERE (mrr_period_contracted_contract_ccy > (0)::numeric)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "11 MB"
+			},
+			{
+				"index_name": "revenue_schedule_monthly_contract_id_contract_item_id_perio_key",
+				"index_definition": "CREATE UNIQUE INDEX revenue_schedule_monthly_contract_id_contract_item_id_perio_key ON public.revenue_schedule_monthly USING btree (contract_id, contract_item_id, period_month)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "3344 kB"
+			},
+			{
+				"index_name": "revenue_schedule_monthly_pkey",
+				"index_definition": "CREATE UNIQUE INDEX revenue_schedule_monthly_pkey ON public.revenue_schedule_monthly USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "7824 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "fk_revenue_schedule_company",
+				"table_name": "revenue_schedule_monthly",
+				"column_name": "company_id",
+				"foreign_table_name": "companies",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "fk_revenue_schedule_contract",
+				"table_name": "revenue_schedule_monthly",
+				"column_name": "contract_id",
+				"foreign_table_name": "contracts",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "fk_revenue_schedule_holding",
+				"table_name": "revenue_schedule_monthly",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "fk_revenue_schedule_item",
+				"table_name": "revenue_schedule_monthly",
+				"column_name": "contract_item_id",
+				"foreign_table_name": "contract_items",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "revenue_schedule_monthly_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "revenue_schedule_monthly_contract_id_contract_item_id_perio_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "contract_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "revenue_schedule_monthly_contract_id_contract_item_id_perio_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "contract_item_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "revenue_schedule_monthly_contract_id_contract_item_id_perio_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "period_month",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "trg_assign_momentum",
+				"event_manipulation": "INSERT",
+				"event_object_table": "revenue_schedule_monthly",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION assign_momentum_to_revenue_schedule()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trg_assign_momentum",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "revenue_schedule_monthly",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION assign_momentum_to_revenue_schedule()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "update_revenue_schedule_monthly_updated_at",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "revenue_schedule_monthly",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION update_revenue_schedule_monthly_updated_at()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"policyname": "tenant_isolation_delete_revenue_schedule_monthly",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"policyname": "tenant_isolation_insert_revenue_schedule_monthly",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"policyname": "tenant_isolation_select_revenue_schedule_monthly",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"policyname": "tenant_isolation_update_revenue_schedule_monthly",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_cum_ccy",
+				"n_distinct": 77,
+				"most_common_vals": "{0.00,7360000.00,18400000.00,1.50,25.09,675.00,4860.00,7938.00,12000.00,24381.00,7600000.00,19000000.00,10.50,537.60,676.00,4750000.00}",
+				"most_common_freqs": [
+					0.985758, 0.00130463, 0.00130463, 0.000543596, 0.000543596, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877,
+					0.000434877, 0.000434877, 0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{8000.00,20000.00,129864.20,253269.99,254073.51,293602.22,353063.48,411934.28,412084.63,414455.65,415035.47,513837.00,648248.40,652255.20,1139714.96,1143330.80,1900000.00,2115027.94,2850000.00,3272577.71,3468399.75,3800000.00,3847828.00,4254935.83,4268434.97,4667388.48,4696237.44,5628222.00,5646078.00,5700000.00,6474346.20,6496157.23,6650000.00,7125000.00,7623401.18,7670521.15,9500000.00,9515500.00,10051488.69,11524416.00,11595648.00,11875000.00,13068731.48,13110193.12,14250000.00,15032433.41,15878007.79,15911394.35,16625000.00,18076850.38,19885491.90,21091035.03,21098732.93,21220129.46,21249816.27,23414732.21,23559457.82,26520721.14,26530400.78,26683049.69,26720379.09}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_cum_contract_ccy",
+				"n_distinct": 42,
+				"most_common_vals": "{0.00,8000.00,20000.00,10.50,537.60,675.00,676.00,4860.00,7938.00,12000.00,24381.00,1.50,25.09,6000.00,270.00,405.60,1215.00,4000.00,4536.00,5000.00,10000.00,13932.00}",
+				"most_common_freqs": [
+					0.985758, 0.00184823, 0.00184823, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316,
+					0.000652316, 0.000543596, 0.000543596, 0.000326158, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{7.50,9.00,135.00,384.00,460.80,540.00,2000.00,2268.00,3000.00,3402.00,3645.00,6804.00,6966.00,7000.00,7500.00,10449.00,12500.00,15000.00,17500.00,20898.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_cum_system_ccy",
+				"n_distinct": 44,
+				"most_common_vals": "{0.00,8000.00,20000.00,0.25,13.01,16.36,675.00,4860.00,7938.00,12000.00,24381.00,1.50,25.09,6000.00,9.82,270.00,1215.00,4000.00,4536.00,5000.00,10000.00,13932.00}",
+				"most_common_freqs": [
+					0.985758, 0.00184823, 0.00184823, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000652316,
+					0.000652316, 0.000434877, 0.000434877, 0.000326158, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{0.18,0.22,9.29,11.15,60.78,135.00,540.00,1016.65,2000.00,2268.00,3000.00,3402.00,3645.00,6804.00,6966.00,7000.00,7500.00,10449.00,12500.00,15000.00,17500.00,20898.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_period_ccy",
+				"n_distinct": 34,
+				"most_common_vals": "{0.00,950000.00,2375000.00}",
+				"most_common_freqs": [0.995108, 0.000761035, 0.000761035],
+				"histogram_bounds": "{1.50,25.09,58843.91,58869.23,127036.76,129864.20,130451.04,256918.50,293602.22,1067108.74,1090859.24,1095788.74,1143330.80,1174059.36,1882026.00,1932608.00,2115027.94,2158115.40,2312266.50,3012808.40,3014104.70,3277548.28,3350496.23,3365636.83,3806200.00,3847828.00,6496157.23,6628497.30,10612160.31,15032433.41,15878007.79}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_period_contract_ccy",
+				"n_distinct": 20,
+				"most_common_vals": "{0.00,1000.00,2500.00,1.50,135.00,1134.00,3483.00,76.80,1215.00,2000.00,2268.00,4000.00,6966.00}",
+				"most_common_freqs": [
+					0.995108, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{7.50,25.09,270.00,270.40,384.00,405.60,2430.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "billed_period_system_ccy",
+				"n_distinct": 21,
+				"most_common_vals": "{0.00,1000.00,2500.00,135.00,1134.00,3483.00,0.04,1.86,1215.00,2000.00,2268.00,4000.00,6966.00}",
+				"most_common_freqs": [
+					0.995108, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{0.18,6.54,9.29,9.82,60.78,270.00,1016.65,2430.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "calc_version",
+				"n_distinct": 1,
+				"most_common_vals": "{v2-contract-ccy+fx}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "cmrr_period_ccy",
+				"n_distinct": 318,
+				"most_common_vals": "{0.00,10.56,13.24,11040000.00,11400000.00,1.50,10000.00,240000.00,53.76,17.82,1000.00,1900.00,3840.00,11448.00,12087.00,19760.00,28360.00,56166.00,74970.00,162162.00,27600000.00,28500000.00,490.00,11616.00,72.60,100.00,4200.00,19404.00,693.00,1222.00,135.00,135.20,1134.00,1215.00,2000.00,3483.00,2500.05,2737.00,2802.80,3000.00,3355.00,3.00,25.00,74.30,76.00,76.80,98.00,104.00,109.00,249.50,268.69,370.10,1813.49,12000.00,15544.20,42990.82,71814.20,5193823.46,5200772.61,5246747.37,5270516.61,5292669.26,5303798.12,5304144.23,5306080.16,5336609.94,5344075.82}",
+				"most_common_freqs": [
+					0.923027, 0.00260926, 0.00260926, 0.00260926, 0.00217439, 0.00195695, 0.00184823, 0.00184823, 0.00173951, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00108719, 0.000978474, 0.000978474, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000543596, 0.000543596, 0.000434877,
+					0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{254.17,257.80,265.64,350.10,360.10,365.90,1737.05,1764.49,1836.52,14889.00,15338.40,15741.60,41178.72,41829.22,43536.77,52350.70,54511.66,56034.00,56739.88,57311.65,57700.88,58347.00,58843.91,58869.23,60114.00,61344.00,68787.18,69873.80,72726.19,115401.76,117440.89,117695.51,118581.56,126635.00,129143.70,129864.20,646258.54,652122.01,665535.02,669648.67,961681.33,974577.78,980795.90,986799.18,1063733.96,1079057.70,1090859.24,1133050.68,1139714.96,1146281.21,1162293.30,1166847.12,1173569.70,1175511.45,1222933.61,1876074.00,1913240.00,1923914.00,2331426.63,2352579.55,2400968.02,2415808.32,2567407.27,2604392.35,2632876.31,2739091.07,2883382.61,2908619.28,2915989.32,2923511.23,2949355.03,2954285.03,2980400.87,2981619.54,2999869.49,3006486.68,3014104.70,3035688.04,3157098.62,3209460.10,3241949.92,3267182.87,3331907.46,3350496.23,3485661.01,3769790.79,3836402.28,3844719.93,3873664.42,4000594.31,4071284.05,4080110.94,4110827.55,4192930.58,4267018.86,4276270.12,4308463.49,9597579.62,9767167.02,9788343.08,9862033.41}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "cmrr_period_contract_ccy",
+				"n_distinct": 48,
+				"most_common_vals": "{0.00,12000.00,1.50,10.56,13.24,135.20,30000.00,490.00,11616.00,10000.00,240000.00,53.76,72.60,100.00,4200.00,19404.00,693.00,1222.00,135.00,1134.00,1215.00,2000.00,3483.00,3.00,17.82,25.00,74.30,76.00,76.80,98.00,104.00,109.00,249.50,1000.00,1900.00,2500.05,2737.00,2802.80,3000.00,3355.00,3840.00,11448.00,12087.00,19760.00,28360.00,56166.00,74970.00,162162.00}",
+				"most_common_freqs": [
+					0.923027, 0.00500109, 0.00304414, 0.00260926, 0.00260926, 0.00260926, 0.00250054, 0.00195695, 0.00195695, 0.00184823, 0.00184823,
+					0.00173951, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335,
+					0.00141335, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "cmrr_period_system_ccy",
+				"n_distinct": 55,
+				"most_common_vals": "{0.00,12000.00,3.27,13.24,30000.00,10.56,490.00,11616.00,72.60,100.00,4200.00,19404.00,693.00,1222.00,135.00,1134.00,1215.00,2000.00,3483.00,0.04,0.07,0.61,1.80,1.84,1.86,2.37,2.52,2.64,6.04,60.78,1000.00,2178.36,2500.05,2737.00,2802.80,3000.00,3355.00,42952.90,45350.42,70233.60,361410.40,518704.40,1027276.14,1371201.30,2965942.98,17.82,10000.00,240000.00,7128.80,500.00,1.50,53.76,1900.00,427.89}",
+				"most_common_freqs": [
+					0.923027, 0.00576212, 0.00260926, 0.00260926, 0.00250054, 0.00239182, 0.00195695, 0.00195695, 0.00163079, 0.00163079, 0.00163079,
+					0.00163079, 0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00119591, 0.00108719, 0.00108719, 0.000978474, 0.000761035, 0.000434877,
+					0.000434877, 0.000326158, 0.000217439
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "company_currency",
+				"n_distinct": 4,
+				"most_common_vals": "{CLP,COP,PEN,MXN}",
+				"most_common_freqs": [0.559252, 0.208632, 0.132094, 0.100022],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "company_id",
+				"n_distinct": 11,
+				"most_common_vals": "{4453fc7e-af8d-40f0-a65a-eda4cfa2f974,13f307ee-0ede-45dd-bda9-c1209a35a997,b537ca88-8197-49c6-b3e8-beee842b6eed,fae8212b-28f4-4071-9c86-1c9a775297b7,e95adedd-237d-44b2-bae5-be1f88ffa340,e836870e-e594-4837-91fa-aa4d48ad4766,110bb57b-1be0-4a20-a1cb-18dd822794d7,602b41a0-0970-4b0c-8f8c-748c6b89f54d,8c9e0ed2-2d8b-454a-b243-c0c3c4125b58,bb0caa69-162e-4b9e-8e54-9aff347abf1f,6cef394d-f14d-40d7-9188-dbbf4917f6a4}",
+				"most_common_freqs": [
+					0.507719, 0.19863, 0.116438, 0.0782779, 0.0339204, 0.0176125, 0.0143509, 0.0113068, 0.0104371, 0.0100022, 0.00130463
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "contract_currency",
+				"n_distinct": 7,
+				"most_common_vals": "{USD,CLF,COP,MXN,CLP,EUR,PEN}",
+				"most_common_freqs": [0.779843, 0.102848, 0.078604, 0.0191346, 0.00782779, 0.00782779, 0.00391389],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "contract_id",
+				"n_distinct": 92,
+				"most_common_vals": "{4695545f-e03f-4bfa-be6e-0708e084fa57,086eca51-a5f9-4c73-93e2-56c5f0599457,2aef9079-1c55-44fa-8bd5-7e622886cb77,2c1d7ab5-cc8e-4585-bd19-f5e9feccaccb,179b23aa-c2ef-42dd-bf93-46123b250c29,54684352-766c-4fe1-8c3a-01afe47c1d57,2a8e109c-3956-4600-bd4c-de23515c712a,7989ad26-6c17-4d02-a5c5-48cb64fd3dc5,7c78e122-c932-44e4-b0e7-c1acd0768dd0,f4927b6b-2d4b-4511-92e5-df266e070379,0959815b-edb1-4dc4-9e36-265ecc3f23b5,f51f64ad-cbee-47b2-a789-130986f67571,17d33e46-6297-4938-a1e8-ea3596aaebef,5fcc385c-8235-438d-b80f-38e3c5ca5db4,88e61d30-0fb0-4ae0-a371-08ec1e222a7a,ea726b96-4299-4762-bbea-1cb96baa8c4a,1acfb6a6-adad-42b8-94d4-a11a5a3abab4,0f0ca1df-8c88-4b6a-b6e0-46c5a41b61b3,4813ef74-674c-4cfe-8c4a-5ed925850a9a,c975408b-b630-48bd-a997-2645ae9a8d25,29380864-71f8-42c0-80b4-3d3d066a96a6,198c0ba5-256d-42df-b886-8d9aa1fbff06,7e9a5277-a76f-490c-9a95-070e99aa89e3,ebae2819-7fa6-4fbf-9938-041ece0e5e12,869258cf-f494-4c23-94bd-eb6774cdd6ba,25825d39-8bd6-4e30-b95c-53d70dfb86d3,a555ae83-0cc6-45df-9a18-8412a92b888d,b161e580-6d35-4861-b512-01852a30fc3e,e67d12ae-8f9d-4746-9d5d-6c193997c41b,ae9ac848-0a3d-4355-84cd-a1d880ce0d8a,2c49ebd7-8b43-455f-a7e8-d85873bb3c12,c563c3dd-9d1b-4cbb-9a7b-f7cada975301,273d7045-a20b-4c0b-9ec7-4f9177878837,30f10f34-a712-43b3-8345-96753be24d2d,8288e16d-fb14-4f79-925e-5e3108b49a98,bbfe987b-7e74-46a6-bf31-2d8491b6cf17,c0c8587c-d4ae-4f19-b985-9983b6485a4c,d51002fb-fbfa-441b-936b-3932f3a9fe6b,c123c0fd-1d00-42ee-b32f-27efa404600d,8e165978-f1e5-4007-add6-7669683072e1,afdba02b-0dbf-4af8-a955-188adfea3f4f,40b82552-bacf-459b-b739-ec70c17495a3,5e1da7e9-ad0c-4f11-9747-342a662624e5,aadd0316-8bb0-4bf9-abb5-d85e40bca2a2,e4fd6dea-7d1f-44ef-896d-6fa66221e725,4926f356-c859-40ba-9a61-c41363d9cdb2,19dc67c1-15a6-40cb-abd5-338781a56b36,19eb67e3-9fd0-494b-9a8b-56b19e01552c,2a797814-37f6-44e8-9ee0-8482e8d7f06e,53f22a72-d0d8-4e24-ac05-06e86b1502ce,5b240cea-cb35-4277-8e1a-7fbc973a0ced,7d940e7d-1a92-4267-81f4-e98653d77dc0,92ca9250-c294-4914-870d-20c7b27b62d8,a201aa06-fc51-469e-a2c7-0f206b8ef2a8,bc3adab8-9e2f-48a4-b11f-b70c406ab54a,e7d6dc83-c094-4f81-9395-91cc40be1b15,fc65f808-f1ee-480e-9a1c-aa2266a79b2d,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,75515d6d-0d6a-4a79-bb00-d1681735f33a,3434d99e-ff6e-44c5-854c-3b25a247eb2f,66cc1c07-2e72-494f-9c93-2efde78b1cd4,a4063cb8-6599-41ea-800b-0d3a262e07c5,a634f958-d95e-4331-80a3-5e3c27903dce,e88e7f24-2db4-4906-8943-be1036d2b934,efe8ad33-3d6c-4d9f-89d8-c78ccc15ff9b,002b51b8-fb2d-43f0-b23f-884f622b740d,059601f4-f923-4521-892a-2b82d9200b3f,05dd6701-6265-4181-a46e-b224f08b43bd,094c96f7-cfdc-41d5-aa27-6501e8b5cace,14253188-c8c3-4097-862a-92c61a6b6061,1ecdc0f3-0cf9-47dc-ba65-00d2f4a690a4,22c2b3bb-d44c-44f7-adc9-b8ba3a6172d6,2645d4b1-4e25-41ad-a2c0-8265c358c4a2,26780efb-1927-4ea4-976c-0957bfd3d94d,37809d4a-d791-419a-b42d-2395161bc951,426c6c4e-3fc9-4934-8084-e238a43e115a,485f0fd7-8563-48f4-8460-f3c9aa40c153,547708f7-4b94-4f4e-be56-bdc4df2174fb,6c17b7b6-439a-4b53-84ad-77273c9b11e8,8126804b-87c7-4801-9093-9c153f7d148a,89c92c26-44d5-4f33-a8b2-5bd35231deea,abb0ce60-af5a-4db8-900a-6a5bef347a3c,bb23b4b1-3f03-4d53-bd27-48a029caf20c,c07de7ea-fe4a-4d5e-88a5-00e1fce06794,c50ec776-1192-48c9-8936-fb3690ce3039,c7bf4fbe-d1f0-4b25-8b99-1a38e1b08d0d,d2c01025-96f9-475e-9dc8-bc9a47cde801,d4d6c952-cd9e-4599-b8d5-4d1bbdf2ab50,dda6269b-7f21-4fff-ad67-9b3c49fd1582,efb46d52-2952-4f71-9198-e64fb0d98080,f84e7210-435f-4ddd-9504-db6b466dce00,fc735581-0d4f-4ff0-b16f-e92c11dc6054}",
+				"most_common_freqs": [
+					0.0756686, 0.0684932, 0.0587084, 0.0437052, 0.042618, 0.0380518, 0.0326158, 0.0313112, 0.0291368, 0.0291368, 0.0260926, 0.024788,
+					0.0234834, 0.0234834, 0.0234834, 0.0234834, 0.0208741, 0.0195695, 0.0156556, 0.0156556, 0.0150033, 0.0130463, 0.0130463,
+					0.0130463, 0.0120678, 0.0117417, 0.0117417, 0.0117417, 0.0113068, 0.0104371, 0.00913242, 0.00804523, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00739291, 0.00652316, 0.00652316, 0.00521853, 0.00521853, 0.00521853,
+					0.00521853, 0.00489237, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00347902, 0.00304414, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "contract_item_id",
+				"n_distinct": 248,
+				"most_common_vals": "{3ff8fd8b-8e04-47e3-be0d-cdd2c050d4b6,46d1ab80-139c-4608-8786-8c4d4849ac2b,55d2ff7c-db87-4a6f-a6d2-382504c98c37,98ef99cc-5403-4c11-9447-ae3b1115b80e,c14d9373-cc82-4b0e-af1e-7aa3d37c6d82,c1b64553-0554-4401-b366-a1a8faf8463e,f05d4d1e-e9fe-4ee7-ab8a-08b8cc68c6b4,f5cba22a-ee85-4c8b-aab9-8081040cddc2,18bd244d-64ae-4b34-82bd-41a0038f3af4,3d4ef263-5e62-4f08-9d19-3a95dd03fa75,ab184c8c-e27e-4d38-ac14-e19b7122b67b,066f4924-a154-4c7e-af25-ebeb1d40f240,2605d1bb-c210-427e-8dfe-9f243f6b280b,276cc629-18c9-4b36-9b0b-2fd0a3ad42aa,995c16e1-367f-4e92-819f-fdcbd945e458,b855f803-1d69-4cec-b600-ce890ae05378,e7af710f-2fe3-4118-a1b4-4dc2135a9b86,18955758-4fcd-4c12-a77a-713bad53b351,235d7fe3-3db0-4fc9-bfbc-e4ef73a65074,6457836e-479f-40cd-8eb7-1d550c2552d2,68675569-247a-4b5b-8468-20735b983774,8a97b9a9-5a8a-4119-88db-938220c6cb01,2142bba3-dc0b-4158-b824-ccf7e4ce3fd2,527f9397-447e-4dab-bf42-0fbd67415a94,531949ea-0a64-49c1-bf1c-829a816f1c8d,55a79fa4-6089-4328-9e58-296180ee61e6,6781f8b4-fa42-4bb7-9ac7-8517ec91d10f,8a6319b0-56e3-4650-9415-bcb5d7cf5f4d,93a81bbc-1777-4b5d-8a33-5e001524f6b3,a0c72232-9836-4ef4-b68b-1be8d4d94432,a6dd3f96-e317-49b4-ae2e-4d583b799eb9,b0ec96f8-0a2d-4caf-94ca-5af3b700f55d,b44aee85-8f7b-4112-a505-7316a8f2f882,b7179935-1f33-4840-8057-0189c426470c,e2e2f244-2f51-40eb-bc3b-cb0f088facd6,eadf1143-56ff-4dc7-85a2-f724bb213032,0abaa2e6-a18d-4135-94dd-05a7f5483962,226c062a-55b5-4242-b15d-4052e2678c08,2d06ca07-3f1a-425e-9ef0-bdf9345b394a,356b5587-3f1b-498e-935a-04a8e8031087,42529841-8997-4f34-a36d-6898bdd98502,644bf1fa-a468-4958-96a8-1fd655625167,77fb3c7f-7e98-4df9-83a9-828788e0e5f4,85f1f162-d697-4324-b47e-34318e93160a,99e292fb-03d6-48c1-b7eb-5eb12c6e7c8d,c673685b-ae5c-4eb1-90c1-b07fb16706ea,ccd793ed-3f70-4e80-803d-ada05a9c2d7d,d50cc629-6e2e-4d82-a21f-d1c8059c4419,de00bb95-b3d4-4c4a-a020-66e3319af1ea,de7ed303-05e9-4897-8754-f4fc71e9f6a3,9f3475cb-435b-4ae7-aa66-39c60996954a,eec689a6-925e-4072-8af7-c3ff1ea6ce44,0340037c-7213-4a45-b5e9-0c93089524ce,4dcfec37-154b-4e65-ac5a-7a4336654696,510b386e-5641-49ec-b976-cab1bbd57e68,8218a90b-689c-4a0f-b6b4-79b6c387cd7f,b2b61706-1d04-4366-9314-104478b8ada9,b2ca9b2d-7dcd-436c-8b8d-0d2247cc8c0f,c8dc2161-1bc5-4922-9033-9b499596256d,dc0763df-65d0-41c2-b63b-b6732915b607,30a616d8-e4c1-4978-9f78-81140702dfb6,4fdaf586-d233-465a-97d0-ed5921cc28f8,5490bc06-8169-445b-b4f1-49418eaaf00e,631e4295-6e55-48b5-896d-558583330846,6343ff2e-db37-4c19-80f5-6ec45b5349dc,7372dec5-2eb6-44f9-a5fc-c85d3a95709c,7dd46155-3ec8-4dd3-868d-de653a904e0b,9875e2cb-5ff6-4f1c-9fa3-d99705ac4355,a5bac182-8e75-421b-bc07-9c0e5defbc00,a6a02b5a-e79e-490f-b049-f17bf798e5d4,aeb04ef5-1582-4ef5-a3e6-81ef26f02e23,c896e3d4-45ca-4c68-8854-6d218bd63464,eb7113b4-8e1e-4ea2-904c-4d46fd9cc360,0738427e-48b8-426d-bde5-606833ee2bd9,0d96b362-13ea-48e3-92df-1549079bc41b,14454115-5de4-4faf-975b-31c177cab208,191b5ce6-a345-44dc-b72a-674f006968d7,1b0cca8a-3f89-4789-8eb8-dab65fd8831f,20465b21-92b4-49e2-967d-474617238a4d,2867cf44-3e78-4d0c-8e0d-a18b99aa3582,3ea2eae8-54e5-4554-bd94-361d69bb5454,3f8bafa9-a306-46cd-9aaa-6bcdc4d6e5e8,57d60cde-cd15-4ed2-bc0b-ba8ef7ca00fb,6a9bd3d4-f7fe-44f8-8cd2-959c1078f6c1,b6bc381f-4a8b-4beb-834e-a6d4581f09f3,c231f446-3eb4-494e-ad30-606f2ff90b66,ca732317-18c8-451f-a7b4-bbb6ae8ed40a,e07af854-1a07-41d6-8e8c-cdf3c08d137c,15d75385-c0b2-4856-9b84-37aa89b5c8c8,732c5ad5-9836-4c41-9d68-19a72ecc9f7f,7c6aca73-4b44-4c70-995a-db7afc308800,a31f7c90-81f2-4a10-ac66-b2a984879007,a7dc1f44-4158-42f2-8831-586ed8807084,b9609aac-a339-4d63-a47a-6968c48b7f99,f527e661-5f38-4260-9c94-b2abb906197d,04b6d8a4-93c1-4afa-aa87-4c4a776dc65c,10e8ea92-e51c-4f3c-92ee-5c4cefa2539a,18be7485-487a-41a4-90cd-9192bcddc687,1a281537-013e-444c-897e-6e3bfb858b78,1ae35510-be4c-4d3e-812b-4fb611c33880}",
+				"most_common_freqs": [
+					0.00945858, 0.00945858, 0.00945858, 0.00945858, 0.00945858, 0.00945858, 0.00945858, 0.00945858, 0.00826267, 0.00826267,
+					0.00826267, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00761035, 0.00761035, 0.00761035,
+					0.00761035, 0.00761035, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419,
+					0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00728419, 0.00652316, 0.00652316, 0.00652316, 0.00652316,
+					0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316,
+					0.00587084, 0.00587084, 0.00532725, 0.00532725, 0.00532725, 0.00532725, 0.00532725, 0.00532725, 0.00532725, 0.00532725,
+					0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853,
+					0.00521853, 0.00521853, 0.00521853, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237,
+					0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00489237, 0.00456621, 0.00456621,
+					0.00402261, 0.00402261, 0.00402261, 0.00402261, 0.00402261, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389
+				],
+				"histogram_bounds": "{00f2c21a-0b67-4d0a-9a9a-9ab6fee66542,011e8e58-1ded-4bfc-a96c-41456176a9f9,09b1a333-3fda-4918-ba9a-018638d131ba,0cf9ea31-7837-48cf-a133-6ba12a2156f1,0f4871c3-0e65-4940-a404-e910ad5d4b85,13fd7cab-36c3-4e08-b847-eeae7c6bfa99,17ae76af-3041-48f9-9e1e-94e7daf49fc1,186a5f69-311e-41b6-9c23-5c4d8b238bb2,1b38a552-210e-450c-8043-2a4142e03f63,1e50534d-b832-4f06-9d3a-10603d22bcd0,25c658a6-f23e-4a6e-8acf-bdb24fd8bd83,25c658a6-f23e-4a6e-8acf-bdb24fd8bd83,2f3246b8-b7a8-482d-9e5b-c0fd09b345e5,3587de40-805d-4b17-a54b-b6629af7ef6e,365cd6e3-ca82-4a54-9d7d-c8d8b56772db,377bc23e-d329-48a7-a1c6-1318bcf745d8,37a4c5d5-98e2-4dd6-a4b9-9eebdd5b0375,39a13516-d8f1-4b68-bd2f-99e0ba72c951,3c155e31-8349-419e-80f8-20ea56a06793,3e44c039-14a6-4aa2-b229-8e902431afbf,439dfd45-8203-43ef-8e2e-86c0b6890c3e,47b2a819-0bbc-42c7-85bc-14a22b9433eb,48bd49f3-d3ea-4c59-b297-bf9b82b46975,48bd49f3-d3ea-4c59-b297-bf9b82b46975,4ba455c0-19fd-4160-ae90-5a85e7eb97ac,4c543537-746f-40ba-b1b6-fc337ffd5652,4c6692ed-bb5b-4a58-8d97-4b54672cf68c,4ef69609-ab16-422e-bd3a-f356012208b5,535017c6-3953-4a2f-beaf-d99e11bfb7a4,53b144e9-4b84-4df6-a04c-8dd9ba8b3ac8,57d7cc6b-542b-4dd2-8788-91fc27642010,5a9c8c4f-b07a-424b-a0fc-ab28d680dfdf,5c2b0dd7-e6dd-4e39-93b4-4884cf4eadbd,5cbed33c-5b6c-468e-9d20-255acef4b151,5f8d420e-e007-4bea-949b-e6e0a27656b7,6cddaea7-3f98-490d-bd31-6cd15548777e,6e49cc66-47aa-4b13-b184-bb61f995d129,6ef0d811-9bc8-4491-b78b-8f407761b95a,70017c6c-5528-49ff-91fe-87395f8b2bf7,717ddf19-165a-45aa-80a3-61829c711f6d,740c392c-f112-4bed-974d-999394161378,756c6739-dcd2-40c1-bfbc-ef7272f30e96,7613c2a6-a2dd-4b06-8521-3e9a979d226d,777ede2f-e63e-4b79-a7b5-184972ffaf6e,77f1b2fc-7c32-4cc5-996b-22751c9a9fa6,78c72eb1-479c-4a22-b4ae-0fc75f878ddd,79f55ef1-6432-420c-a507-222aebfbf84e,7ccf485d-6679-4213-af01-e5fab42e7337,7ee47e31-8029-490f-a83d-405dd410019c,81204fb2-458b-4991-b5e1-5878891bc4ff,81c3f714-c61d-42a9-8afb-054027f26ced,82cf318a-a8fe-4a9e-aadd-5223ecf543c7,84f435c0-aadf-4152-b9d5-21c2e42d4266,87b04003-1e00-4072-9318-2fcb43f8610a,8850c3f5-f4f9-48be-a2e2-a49f3c20b32a,8e5edf12-3a65-4d43-9463-24813f908fc6,904395cf-568e-4049-a27a-c6c3cd981c8e,90c656bc-e752-4657-8a1d-5cd0a17f0cfa,90e424e5-aca3-45de-92d1-b65eed2cf9c8,9312b16b-2b2c-4611-ba6a-946fd054e039,989a9fb4-5f09-4253-b186-7b204a936850,99544079-c4d7-4208-a8b3-31c6dd255d9d,9adf4919-be5d-475e-b3f8-399c86b42ee6,9eec35a4-1943-4f80-9cbf-bc4911a59e3a,a2e2adf5-eaa8-44da-845c-c0764271372a,a4f27f96-7e78-406d-91a0-7190f1c55f4e,a7310213-780e-403b-b2a6-5f006fc0804d,ab383b5f-f0d2-408c-b9d4-1f853fdba4c0,ab383b5f-f0d2-408c-b9d4-1f853fdba4c0,ad473a27-5c6a-4d9e-a6bf-09a9f072200e,afc5e1c3-3922-4f4f-aa6b-ada5d1c46f41,b04e060a-1e07-45b1-816d-b73f0f9e3c36,b75917d5-663a-4f34-9e55-8f45c50a2dac,b77bd09e-0fcf-417c-ae83-19f28b5abc46,b8ec129d-ae11-4d13-a2e4-0d89f4cdbef8,bd878695-d521-48cf-91e2-12f796312f38,bd996212-b805-4d53-bd72-da66ead2cb51,c0769d9e-0772-48ed-8e6f-559fa7b1ed22,c5e06d02-9bb2-4bdc-9448-9c949964d953,c91204a3-53a8-4257-83d9-319ec2a9f4b3,cc2dca59-8e6d-4244-8d77-4c0568545bf4,cca1563e-4fb1-4678-b652-14084de67fbc,cf3c5540-ee7c-4804-bf1a-ec64ed342cf5,d066e95f-d7e9-4672-b5d9-e7643d3d0c81,d61132ab-01bd-40c8-b1f1-8b552077d4de,da70057b-f1bd-4aa1-836d-89379ac7a6ca,e78fc763-11a5-4013-a100-152a85b8670b,ead56188-81a9-48f1-8280-fa361bd53c13,eb610485-4b8c-4c56-a7ba-9ffd89c7824b,ec7fd43c-1275-4737-8650-374f28fedac6,eec08e12-c43c-4ab5-a4d9-5e522c04a71c,eeda7adf-d37f-4f28-992c-78b2e6674035,f3ebd058-bee9-481d-a297-197c9034969a,f413c6a5-ff8b-4fdb-806d-a1dbad7a8b9c,f957f406-d4db-4e88-b1aa-4ae40caf84a1,fa01accc-f9ef-402e-b17d-f17922a2ac58,fb3c8360-b518-4b4a-9182-2bb41c131422,fc7e61db-edb4-4b3c-bd9e-52c39c427f39,fdf06d63-e88a-4fb5-82e4-9a30fb193d95,ff4c8124-f63f-4347-83be-1bc89b6f2176,ffb66056-31dd-4396-8e8c-8b43fbacc102}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "created_at",
+				"n_distinct": 5,
+				"most_common_vals": "{\"2026-01-19 16:55:36.350861+00\",\"2026-01-13 12:43:59.707466+00\",\"2026-01-19 18:41:41.291379+00\",\"2026-01-15 04:01:01.28362+00\",\"2026-01-15 19:09:57.983162+00\"}",
+				"most_common_freqs": [0.922592, 0.0652316, 0.00739291, 0.00347902, 0.00130463],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_eom_ccy",
+				"n_distinct": 46,
+				"most_common_vals": "{0.00,950000.00,2375000.00,833.33,1666.66,2499.99}",
+				"most_common_freqs": [0.993477, 0.000761035, 0.000761035, 0.000217439, 0.000217439, 0.000217439],
+				"histogram_bounds": "{-15878007.79,-10612160.31,-6628497.30,-6496157.23,-3847828.00,-3806200.00,-3365636.83,-3350496.23,-3277548.28,-2312266.50,-2158115.40,-2115027.94,-1932608.00,-1882026.00,-1174059.36,-1143330.80,-1095788.74,-1090859.24,-1067108.74,-256918.50,-130451.04,-129864.20,-127036.76,-25.09,-1.50,3333.32,4166.65,4999.98,5000.04,383336.40,766672.80,1150009.20,1533345.60,1916682.00,2300018.40,2683354.80,3066691.20,3450027.60,3833364.00,4216700.40}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_eom_contract_ccy",
+				"n_distinct": 35,
+				"most_common_vals": "{0.00,1000.00,2500.00,-3483.00,-1134.00,-135.00,-6966.00,-4000.00,-2268.00,-2000.00,-1215.00,833.33,1666.66,2499.99}",
+				"most_common_freqs": [
+					0.993477, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{-2430.00,-405.60,-270.40,-270.00,-25.09,-1.50,416.67,833.34,1250.01,1666.68,2083.35,2500.02,2916.69,3333.32,3333.36,3750.03,4166.65,4166.70,4583.37,4999.98,5000.04}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_eom_system_ccy",
+				"n_distinct": 35,
+				"most_common_vals": "{0.00,1000.00,2500.00,-3483.00,-1134.00,-135.00,-6966.00,-4000.00,-2268.00,-2000.00,-1215.00,833.33,1666.66,2499.99}",
+				"most_common_freqs": [
+					0.993477, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{-2430.00,-1016.65,-270.00,-60.78,-9.82,-6.54,416.67,833.34,1250.01,1666.68,2083.35,2500.02,2916.69,3333.32,3333.36,3750.03,4166.65,4166.70,4583.37,4999.98,5000.04}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_period_ccy",
+				"n_distinct": 37,
+				"most_common_vals": "{0.00,383336.40,833.33,-2375000.00,-950000.00}",
+				"most_common_freqs": [0.992825, 0.00119591, 0.000978474, 0.000761035, 0.000761035],
+				"histogram_bounds": "{1.50,25.09,416.67,58843.91,58869.23,127036.76,129864.20,130451.04,256918.50,293602.22,1067108.74,1090859.24,1095788.74,1143330.80,1174059.36,1882026.00,1932608.00,2115027.94,2158115.40,2312266.50,3012808.40,3014104.70,3277548.28,3350496.23,3365636.83,3806200.00,3847828.00,6496157.23,6628497.30,10612160.31,15032433.41,15878007.79}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_period_contract_ccy",
+				"n_distinct": 22,
+				"most_common_vals": "{0.00,416.67,833.33,-2500.00,-1000.00,1.50,135.00,1134.00,3483.00,76.80,1215.00,2000.00,2268.00,4000.00,6966.00}",
+				"most_common_freqs": [
+					0.992825, 0.00130463, 0.000978474, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{7.50,25.09,270.00,270.40,384.00,405.60,2430.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "deferred_balance_period_system_ccy",
+				"n_distinct": 23,
+				"most_common_vals": "{0.00,416.67,833.33,-2500.00,-1000.00,135.00,1134.00,3483.00,0.04,1.86,1215.00,2000.00,2268.00,4000.00,6966.00}",
+				"most_common_freqs": [
+					0.992825, 0.00130463, 0.000978474, 0.000761035, 0.000761035, 0.000326158, 0.000326158, 0.000326158, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{0.18,6.54,9.29,9.82,60.78,270.00,1016.65,2430.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_contract_to_company",
+				"n_distinct": 108,
+				"most_common_vals": "{1.0,938.037,941.013,961.957,932.552,956.620,1000.764,951.550,960.368,966.304,982.296,920.000000,971.600,3.701,926.214,933.812,950.000000,917.877,926.081,929.895,937.561,960.138,907.987,963.442,967.933,3.551,3.601,3.652,3.659,3.748,3.545,3.501,38415.854,38467.253,38807.303,38983.111,39146.962,39229.276,39246.155,39231.836,39471.967,39527.188,3.733,3.750,3.778,3.711,3.712,3.729,3.734,3.739,3.764,3.770,3.781,3.829,3918.444,4032.942,4040.700,4053.975,4063.180,4106.491,4128.438,4135.480,4194.045,4198.631,4248.023,4268.848,4299.792,4384.339,4404.802,3864.767,3867.503,3897.960,3918.725,3926.119,4046.451,37591.378,37638.548,37849.907,37950.089,38078.207,38367.688,36984.324,37187.509,37349.913,37514.773,18.500,18.678,18.706,19.039,19.449,20.038,20.244,20.448,20.539,36750.981,36805.726,16.781,16.790,16.808,17.087}",
+				"most_common_freqs": [
+					0.6409, 0.0101109, 0.0101109, 0.0101109, 0.0100022, 0.00967602, 0.00967602, 0.00945858, 0.00945858, 0.00945858, 0.00793651,
+					0.00782779, 0.00782779, 0.00717547, 0.00717547, 0.00717547, 0.00652316, 0.00554468, 0.00554468, 0.00554468, 0.00554468,
+					0.00554468, 0.00521853, 0.00521853, 0.00521853, 0.00358774, 0.00358774, 0.00358774, 0.00358774, 0.00358774, 0.0033703, 0.00326158,
+					0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.0028267, 0.0028267, 0.0028267, 0.00260926,
+					0.00260926, 0.00260926, 0.00250054, 0.00250054, 0.00250054, 0.00250054, 0.00250054, 0.00250054, 0.00250054, 0.00250054,
+					0.00250054, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182,
+					0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00239182, 0.00173951, 0.00173951, 0.00173951, 0.00173951,
+					0.00173951, 0.00173951, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335,
+					0.00141335, 0.00141335, 0.00141335, 0.00119591, 0.00119591, 0.00119591, 0.00119591
+				],
+				"histogram_bounds": "{17.097,18.092,18.096,19.135,19.625,19.688,20.232,20.301}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_contract_to_system",
+				"n_distinct": 94,
+				"most_common_vals": "{1.0,0.0242,18.29,0.000247,0.000255,0.000242,0.000238,0.000259,3.752,0.05,40.52,0.000227,0.000228,0.000233,0.000234,0.000235,0.000246,0.000248,0.000244,0.000257,38.3865,39.0592,39.1912,40.0949,40.2116,40.4761,40.5248,40.6400,40.8652,41.2444,41.6009,41.6141,41.8206,38.2096,38.7314,40.5092,40.5999,40.6916,41.1009,38.1455,40.5355,0.001080,1.035197,1.041667,1.048218,1.062699,1.072961,1.077586,1.078749,1.081081,1.083424,1.086957,1.090513,1.101322,1.108647,1.118568,1.127396,1.150748,1.162791,1.169591,1.172333,0.000999,0.001018,0.001029,0.001033,0.001035,0.001038,0.001040,0.001041,0.001042,0.001045,0.001051,0.001063,0.001066,0.001067,0.001071,0.001072,0.001075,0.001089,0.001101}",
+				"most_common_freqs": [
+					0.88204, 0.0156556, 0.00782779, 0.00532725, 0.00521853, 0.00391389, 0.00380517, 0.00380517, 0.00358774, 0.00304414, 0.00293542,
+					0.00195695, 0.00195695, 0.00195695, 0.00195695, 0.00195695, 0.00195695, 0.00195695, 0.00184823, 0.00184823, 0.00163079,
+					0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079,
+					0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00141335, 0.00141335,
+					0.000434877, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158,
+					0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{0.048688,0.048905,0.049259,0.049397,0.049427,0.049905,0.050792,0.050955,0.051417,0.052260,0.052524,0.053459,0.053539,0.054054}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_to_company_date",
+				"n_distinct": 140,
+				"most_common_vals": "{2025-04-01,2025-05-01,2025-06-01,2025-03-01,2025-07-01,2025-08-01,2025-01-01,2025-02-01,2025-09-01,2025-10-01,2025-11-01,2025-12-01,2024-12-01,2024-11-01,2026-01-01,2024-10-01,2024-09-01,2026-02-01,2026-03-01,2024-08-01,2024-07-01,2026-04-01,2024-04-01,2024-05-01,2024-06-01,2026-05-01,2026-06-01,2024-03-01,2026-07-01,2026-08-01,2024-01-01,2024-02-01,2026-09-01,2023-10-01,2023-11-01,2023-12-01,2023-09-01,2023-08-01,2023-07-01,2023-05-01,2023-06-01,2026-10-01,2023-03-01,2023-04-01,2023-02-01,2023-01-01,2026-11-01,2026-12-01,2027-01-01,2022-10-01,2022-11-01,2022-12-01,2027-02-01,2027-03-01,2027-04-01,2027-05-01,2027-06-01,2027-07-01,2022-06-01,2022-07-01,2022-08-01,2022-09-01,2027-08-01,2022-02-01,2022-03-01,2022-04-01,2022-05-01,2022-01-01,2027-09-01,2027-10-01,2021-12-01,2027-11-01,2027-12-01,2021-07-01,2021-08-01,2021-09-01,2021-10-01,2021-11-01,2021-06-01,2028-01-01,2021-05-01,2028-02-01,2028-03-01,2028-04-01,2020-12-01,2021-01-01,2021-02-01,2021-03-01,2021-04-01,2028-05-01,2028-06-01,2028-07-01,2018-04-01,2018-05-01,2018-06-01,2018-07-01,2018-08-01,2018-09-01,2018-10-01,2018-11-01}",
+				"most_common_freqs": [
+					0.0217439, 0.0217439, 0.0217439, 0.0216351, 0.0210915, 0.0207654, 0.0206567, 0.0206567, 0.0206567, 0.0200043, 0.0198956,
+					0.0194608, 0.0161992, 0.0160905, 0.0160905, 0.0154381, 0.0153294, 0.015112, 0.0140248, 0.0136986, 0.0135899, 0.0133725, 0.0128289,
+					0.0128289, 0.0128289, 0.0127202, 0.0127202, 0.0125027, 0.0121766, 0.0121766, 0.0120678, 0.0120678, 0.011633, 0.0111981, 0.0111981,
+					0.0111981, 0.0108719, 0.0102196, 0.0101109, 0.0100022, 0.0100022, 0.00989346, 0.00945858, 0.00945858, 0.00924114, 0.00913242,
+					0.0090237, 0.00826267, 0.00739291, 0.00717547, 0.00717547, 0.00717547, 0.0067406, 0.00663188, 0.00652316, 0.00652316, 0.00652316,
+					0.00576212, 0.0056534, 0.0056534, 0.0056534, 0.0056534, 0.0056534, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00489237,
+					0.00402261, 0.00402261, 0.0033703, 0.0033703, 0.0033703, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00250054,
+					0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00163079, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335,
+					0.00130463, 0.00130463, 0.00130463, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754,
+					0.000869754
+				],
+				"histogram_bounds": "{2018-12-01,2018-12-01,2019-01-01,2019-02-01,2019-03-01,2019-03-01,2019-04-01,2019-05-01,2019-06-01,2019-07-01,2019-07-01,2019-08-01,2019-09-01,2019-10-01,2019-11-01,2019-11-01,2019-12-01,2020-01-01,2020-02-01,2020-02-01,2020-03-01,2020-04-01,2020-05-01,2020-06-01,2020-06-01,2020-07-01,2020-08-01,2020-09-01,2020-10-01,2020-10-01,2020-11-01,2028-08-01,2028-09-01,2028-10-01,2028-11-01,2028-12-01,2029-01-01,2029-02-01,2029-04-01,2029-11-01}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_to_company_source",
+				"n_distinct": 4,
+				"most_common_vals": "{missing_fx_rate,monthly_average,no_conversion_needed,contract_fixed_period}",
+				"most_common_freqs": [0.535334, 0.344749, 0.105566, 0.0143509],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_to_system_date",
+				"n_distinct": 86,
+				"most_common_vals": "{2025-06-01,2025-07-01,2025-04-01,2025-01-01,2025-02-01,2025-03-01,2025-05-01,2025-08-01,2025-09-01,2025-10-01,2025-11-01,2025-12-01,2024-08-01,2024-09-01,2024-10-01,2024-11-01,2024-12-01,2024-07-01,2024-05-01,2024-06-01,2024-03-01,2024-04-01,2024-01-01,2024-02-01,2026-01-01,2023-08-01,2023-09-01,2023-10-01,2023-11-01,2023-12-01,2023-02-01,2023-03-01,2023-04-01,2023-05-01,2023-06-01,2023-07-01,2026-02-01,2022-12-01,2023-01-01,2026-03-01,2022-07-01,2022-08-01,2022-09-01,2022-10-01,2022-11-01,2026-04-01,2026-05-01,2026-06-01,2026-07-01,2026-08-01,2026-09-01,2026-10-01,2022-03-01,2022-04-01,2022-05-01,2022-06-01,2026-11-01,2022-01-01,2022-02-01,2026-12-01,2027-01-01,2027-02-01,2027-03-01,2027-04-01,2027-05-01,2027-06-01,2020-12-01,2021-01-01,2021-02-01,2021-03-01,2021-04-01,2021-05-01,2021-06-01,2021-07-01,2021-08-01,2021-09-01,2021-10-01,2021-11-01,2021-12-01,2027-07-01,2027-08-01,2027-09-01,2027-10-01,2027-11-01,2027-12-01,2028-01-01}",
+				"most_common_freqs": [
+					0.00706675, 0.00706675, 0.0067406, 0.00663188, 0.00663188, 0.00663188, 0.00663188, 0.00663188, 0.00663188, 0.00663188, 0.00663188,
+					0.00587084, 0.00424005, 0.00424005, 0.00424005, 0.00424005, 0.00424005, 0.00413133, 0.00402261, 0.00402261, 0.00391389,
+					0.00391389, 0.00347902, 0.00347902, 0.0033703, 0.00315286, 0.00315286, 0.00315286, 0.00315286, 0.00315286, 0.00304414, 0.00304414,
+					0.00304414, 0.00304414, 0.00304414, 0.00304414, 0.0028267, 0.00250054, 0.00250054, 0.00206567, 0.00195695, 0.00195695, 0.00195695,
+					0.00195695, 0.00195695, 0.00195695, 0.00173951, 0.00173951, 0.00173951, 0.00173951, 0.00173951, 0.00173951, 0.00141335,
+					0.00141335, 0.00141335, 0.00141335, 0.00130463, 0.000978474, 0.000978474, 0.000978474, 0.000761035, 0.000761035, 0.000652316,
+					0.000652316, 0.000652316, 0.000652316, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000326158, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "fx_to_system_source",
+				"n_distinct": 5,
+				"most_common_vals": "{no_conversion_needed,missing_fx_rate,monthly_average_inverse,monthly_average,holding_fixed_period}",
+				"most_common_freqs": [0.779843, 0.102196, 0.0517504, 0.0331594, 0.0330507],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "holding_id",
+				"n_distinct": 3,
+				"most_common_vals": "{f6e3cb81-8b4a-451e-8402-573e47688d45,5652e95e-bb99-48f5-aa1c-13c8c2638fc6,05583c6e-9364-4672-a610-0744324e44b4}",
+				"most_common_freqs": [0.901065, 0.0587084, 0.0402261],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{00012647-ffa4-49b4-8682-ae8e41762cb0,02e6aabe-1a89-4731-825d-03839f445f02,04f825c9-40fe-4f01-935d-c112cac20d8a,077e45ea-31a6-4ee5-ba2c-490e18a7a57c,0a37fdf3-3cf4-4492-bb50-1dedcbe3978a,0c957c53-be52-4b9e-aae4-ec76cbccb74c,0f28a2b2-eb63-431f-9c0d-ebff03bc8c57,114f5c8c-8866-4eab-9511-179090b05335,13a3625b-e201-40cf-8300-e815890597ef,16494da9-014e-4d7f-ace7-95e833816f08,190701a6-b505-42f5-9cc5-6a5e94880acf,1b662b3d-957e-4c72-8ef0-6cafb73b99a4,1dce53dd-c541-4ebc-a587-aa566d324643,20b73828-8ffc-4491-b377-1f627beb630c,234b7175-3be5-44ee-b3ec-60e009ddf1f8,25c7ca84-8450-4dfb-a593-2c7c33e26f82,28c37047-5ff1-41d7-b7ce-a38c9d6b343b,2b30e483-a1ff-437e-912a-66a031b8be99,2dc2a970-cc85-42d9-84cc-08c9d0b976ca,3021fb43-673e-470a-a690-61a537f343d1,32f597cf-832b-4441-8d68-c5ec2507c7b1,35efc076-a1a1-4386-8f90-fa08c35af723,38b8b5d5-fca0-4a87-89f0-599a4e2e78d1,3b1daff1-e1aa-4003-913b-074a2905def5,3dd5b80c-5943-4fc5-bb16-eba1a5e984fd,4064c795-43b0-48c9-9551-71be605338f9,42f24aa8-8662-4644-8978-d54aedea9a64,458d73e0-233c-4e02-98bd-06581e272a5a,48238351-48ed-425d-b6e2-1579f036c45b,4a960dbf-c7e2-4b8e-826f-a2e8e0567e9d,4cd529eb-1f66-4109-b299-2753454977bd,4f1be4af-aa1d-4030-b642-7ace7d7edd18,51d6a152-be6a-4e1d-ac16-98d28b864322,54756089-cbb4-46fb-8588-58b004f9c6ff,569dca43-7006-407f-ac40-ff35cecd64ab,59654503-a3dd-4018-a2a0-404a4df99fb6,5bb0a02d-7f40-444a-8e47-877b0b4f8803,5e5b2ee0-4f62-4040-96c7-2205d78566a7,615a32af-9f2c-4d2f-8474-c717ca03cf30,641f6263-67be-4380-b3c8-7664287bc1de,660b63e4-22f1-4bf0-85e0-8415f67929d9,687ea11f-e8ce-4c62-b931-773aceb15522,6b39bcd2-c272-4804-adeb-fbe33028fe34,6de19efa-fa1b-4647-a107-0d196fc1df26,7051cd78-b077-4b35-8400-9b7eb6feb07a,739248c1-e5f3-4fd5-b342-a245dd81b5b2,7653871f-ec2e-418c-a730-21c7d61104c2,78e618aa-805b-41f8-8443-8a8b040026c2,7bb87862-193a-47ac-8f59-470e8c5dd2d3,7e4c617a-2a3e-4b71-a658-6d6619e11117,80b19e97-987b-47de-b8a7-82bf8f2ff2b3,83209352-75e3-4518-ad8c-7eba84d23acf,860c4890-dcce-4690-8dff-fa76be61b364,88617df0-120d-4c15-9449-426805923d71,8b31ad51-6072-4998-8e20-36f66454de4e,8de9cc48-4d4c-4681-8bd2-39902e41e8f3,908ca54f-f577-44d9-84cf-447c376dcc63,936c2084-1229-489c-b246-bfc22b589e6a,9670f547-f34f-47d5-a35d-1260ce496947,98f1765c-1a67-4273-af6e-0e734f7877a1,9b746a6e-7664-48c9-9564-f0d42d39004b,9e208017-1273-4738-894a-5eb937cc4e29,a090dd27-072e-4755-bc47-d8eb0456d2d1,a2f648b6-c85d-4d1f-b2bf-d804cfe27485,a56e1816-4e1f-4fc8-8d35-842c636f6599,a799e4c7-24a0-4e5d-9028-6004d214fd51,a9d2702c-a84f-4b3a-b7d2-1f9360bb2a09,ad49e772-6ceb-4092-a3aa-299393db9492,af970b09-a892-4734-997b-a5e3c9fe5de6,b21b90c0-4e9e-4b2b-8332-dfa76a0c4569,b52bd193-8900-46a6-a6c0-5b7aab869a6a,b7e5e218-5018-42a8-920f-cfc7ad26f41c,ba5b200f-0f54-4ac5-b5de-e68ebb718e5c,bc90b3a4-6228-4621-8891-a93355329149,bf753b63-40a8-4796-806d-ac3785620ff6,c192ba47-4479-40ed-8084-3b5b9afe6c36,c41edb6c-c509-4ba3-868a-206ffecd506f,c6ee4ca2-9e7c-4532-bb9a-c49a70998aff,c9155e0d-9e25-424d-9ce8-91ab60095a82,cbae5078-d519-45fb-b7d3-dd6882e95cca,cded3ee8-5922-4202-b52e-91a5242c797a,d08cef9c-1f4e-4479-ac87-37e4adb1cad7,d2e93ff0-baf5-4144-8bc7-59422636578c,d595850f-a9bb-4e40-bcf5-8270627593e1,d7c5cb8b-d134-4141-9b3d-9f97069ba909,da74f9c1-ff63-4962-8471-3d34fd97dd25,dd3f3b5a-7cac-43bf-babf-ebed92c0b191,df122636-fd10-4dd8-9592-0dddecac2d62,e1b6354b-a553-441a-8e02-76d54cfda5e9,e446271b-57de-431b-afd6-373b9f66fc18,e7112441-cf91-4ba7-85b5-80c825de469f,e958562f-54fb-41a2-ba56-b1c05212a8b8,ebbed0b2-0534-4f6b-9805-35aa4a24d812,ee26c030-1a58-411b-801c-e6610d5409d9,f0bfef3a-33f7-4c3c-9da6-830316408048,f2fb994e-a76a-4b20-ae16-2be82fa8fa56,f5678a9f-4e87-4644-be57-50f997a9277c,f856c27e-2d3c-4f49-92fc-eed4ee197614,fa91dc91-4a36-4efe-8584-f668f312e74f,fd575e51-f11f-4c75-a21c-d4f7928c22d9,fffe0041-7872-4cd5-af47-1bd0e4dc313c}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "is_total_row",
+				"n_distinct": 1,
+				"most_common_vals": "{f}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "momentum",
+				"n_distinct": 6,
+				"most_common_vals": "{BOP,CROSS-SELL,RENEWAL,NEW,UPSELL,DOWNSELL}",
+				"most_common_freqs": [0.973038, 0.0209828, 0.00456621, 0.000652316, 0.000543596, 0.000217439],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_ccy",
+				"n_distinct": -0.188954,
+				"most_common_vals": "{0.00,10687500.00,6912697.00,1000.00,181.00,611.00,2159.00,134.20,1400560.00,222.00,275.00,567.00,792.00,985.00,3933.00,1565.00,3658.00,456.00,2083.00,180.00,292.00,2423.00,3292.00,240.00,1125.00,1536.00,1833.00,6683.00,271.00,516.00,4163.00,5506.00,479.16,1087.00,1104.00,5375.00,1500.00,38750.00,14253480.00,3264.00,2711.00,3896.00,80.00,917.00,1647.00,2001.00,10.56,13.24,2397.00,5602.00,3353760.00,3912720.00,29932500.00,5000.00,3000.00,188.00,2917.00,5265.00,5542.00,35.00,2781.00,307.00,432.00,1038.00,1493.00,1597.00,3142.00,4167.00,1.50,87.00,153.00,354.00,638.00,5208.00,920000.00,14.00,17.82,38.00,53.76,60.00,171.00,790.00,833.33,1900.00,3469.00,3840.00,4000.00,4625.00,5106.00,7122.00,11448.00,12087.00,19760.00,20000.00,28360.00,56166.00,74970.00,162162.00,941632.50,1098571.50}",
+				"most_common_freqs": [
+					0.370407, 0.0130463, 0.0120678, 0.0103283, 0.00880626, 0.00880626, 0.0084801, 0.00826267, 0.00782779, 0.00750163, 0.00750163,
+					0.00750163, 0.00750163, 0.00750163, 0.0067406, 0.00652316, 0.006197, 0.00576212, 0.0056534, 0.00554468, 0.00554468, 0.00554468,
+					0.00554468, 0.00543596, 0.00543596, 0.00543596, 0.00543596, 0.00500109, 0.00489237, 0.00489237, 0.00445749, 0.00445749,
+					0.00424005, 0.00424005, 0.00424005, 0.00424005, 0.00391389, 0.00391389, 0.00391389, 0.00358774, 0.00326158, 0.00326158,
+					0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00250054, 0.00239182, 0.00217439, 0.00195695, 0.00195695, 0.00195695, 0.00173951, 0.00173951, 0.00163079,
+					0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-383336.40,72.60,120.00,350.10,960.70,1005.95,1023.84,1250.00,1600.00,1858.12,1924.16,1949.45,2005.00,3333.00,3729.00,3913.26,4967.00,5488.50,5601.00,5726.34,5842.15,5900.05,6011.11,7420.51,9332.50,11136.00,16235.63,19293.31,36890.83,42502.94,52429.18,58347.00,61617.00,72726.19,100544.75,128459.25,168311.00,172824.84,175195.87,213201.70,254708.85,260774.29,265940.36,273767.81,288890.99,406517.62,454928.51,533554.37,554684.33,569789.27,586784.85,646258.54,882114.57,942270.70,960396.35,1022881.13,1080414.00,1162794.10,1222548.46,1304413.69,1396537.28,1477565.95,1591502.69,1719421.82,1866036.55,1938897.46,2110604.93,2326414.37,2415808.32,2574879.26,2670143.78,2852895.15,2934037.30,3004066.29,3147114.14,3321416.45,3438865.36,3667727.02,3800473.63,3885944.18,4008474.82,4079844.70,4229867.21,4416687.12,4689817.39,5086874.33,5207940.06,5301588.04,5683383.54,6207982.18,7076047.02,7521742.22,8553820.75,8982985.70,9515703.76,10081309.36,12614599.49,15360416.00,16796800.00,21024747.59,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_contract_ccy",
+				"n_distinct": 172,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,134.20,2159.00,10687500.00,6912697.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,1400560.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,2000.00,35.00,80.00,87.00,188.00,278.00,307.00,1038.00,1273.00,1493.00,1597.00,3142.00,3896.00,4167.00,5000.00,5542.00,38750.00,14253480.00,1356.00,1765.00,2223.00,9700.00,76.00,5213.00,432.00,38.00,1.50,10.56,13.24,90.00,120.00,135.20,1384.00,2397.00,2500.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,3353760.00,3912720.00,29932500.00,200.00,153.00,354.00,638.00,5208.00,-416.67,3.00,14.00,17.82,25.00}",
+				"most_common_freqs": [
+					0.370407, 0.0200043, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0130463, 0.0130463, 0.0120678, 0.0117417, 0.0117417, 0.0117417,
+					0.0117417, 0.0117417, 0.0104371, 0.0104371, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316,
+					0.00652316, 0.006197, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00445749, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.0033703, 0.0033703, 0.0033703, 0.0033703, 0.00326158,
+					0.00304414, 0.0028267, 0.00271798, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00195695, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-833.33,53.76,60.00,60.00,72.60,74.30,76.80,98.00,100.00,100.00,104.00,109.00,135.00,171.00,249.50,342.00,470.00,490.00,500.00,594.00,693.00,790.00,833.33,1134.00,1208.00,1215.00,1222.00,1571.00,1896.00,1900.00,1979.00,2005.00,2500.05,2708.00,2737.00,2743.00,2802.80,3333.00,3355.00,3469.00,3483.00,3840.00,3840.00,4000.00,4200.00,4375.00,4625.00,4967.00,5013.00,5106.00,7122.00,11448.00,11616.00,11616.00,12087.00,19404.00,19760.00,20000.00,28360.00,56166.00,56166.00,74970.00,162162.00,941632.50,1098571.50,8054167.00,15360416.00,15398118.00,16796800.00,19127401.00,31616203.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_contracted_ccy",
+				"n_distinct": 307,
+				"most_common_vals": "{0.00,10.56,13.24,11040000.00,1.50,17.82,53.76,1000.00,1900.00,3840.00,10000.00,11448.00,12087.00,19760.00,28360.00,56166.00,74970.00,162162.00,240000.00,27600000.00,490.00,11616.00,72.60,100.00,4200.00,19404.00,693.00,1222.00,135.00,135.20,1134.00,1215.00,2000.00,3483.00,11400000.00,2500.05,2737.00,2802.80,3000.00,3355.00,3.00,25.00,74.30,76.00,76.80,98.00,104.00,109.00,249.50,268.69,370.10,12000.00,42990.82,71814.20,5193823.46,5200772.61,5246747.37,5270516.61,5292669.26,5303798.12,5304144.23,5306080.16,5336609.94,5344075.82,28500000.00}",
+				"most_common_freqs": [
+					0.928571, 0.00260926, 0.00260926, 0.00260926, 0.00195695, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.000978474,
+					0.000978474, 0.000652316, 0.000652316, 0.000652316, 0.000652316, 0.000543596, 0.000543596, 0.000434877, 0.000434877, 0.000434877,
+					0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000326158, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439, 0.000217439,
+					0.000217439, 0.000217439, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": "{254.17,257.80,265.14,354.50,360.10,374.80,1737.05,14704.20,15124.20,15544.20,41178.72,41829.22,42502.94,52350.70,53362.51,56034.00,56162.51,57117.00,57623.78,58210.95,58720.44,58847.75,59290.78,60732.00,61617.00,68903.60,70863.41,115247.56,116421.91,117440.89,117738.47,118581.56,127036.76,129143.70,129864.20,646258.54,652122.01,665535.02,669648.67,960396.35,974577.78,980731.90,986799.18,1057513.97,1079057.70,1089057.31,1095788.74,1139578.54,1143330.80,1156133.25,1162794.10,1168777.76,1175511.45,1215928.26,1882026.00,1913240.00,1923914.00,2345139.40,2378922.58,2404940.60,2501960.04,2575552.58,2618268.94,2632876.31,2854297.95,2883382.61,2914735.21,2915989.32,2923511.23,2949355.03,2954285.03,2980400.87,2981619.54,2993902.92,3006486.68,3013005.00,3035688.04,3147114.14,3192450.25,3227365.74,3248078.62,3314248.65,3344961.74,3365636.83,3764753.69,3803115.69,3844469.05,3846123.19,3995248.82,4035959.51,4071284.05,4081600.12,4110827.55,4229996.03,4267018.86,4276270.12,4308463.49,9597579.62,9767167.02,9788343.08,9862033.41}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_contracted_contract_ccy",
+				"n_distinct": 48,
+				"most_common_vals": "{0.00,12000.00,1.50,10.56,13.24,135.20,11616.00,100.00,19404.00,30000.00,72.60,693.00,135.00,1134.00,1215.00,3483.00,3.00,17.82,25.00,53.76,74.30,76.00,76.80,98.00,104.00,109.00,249.50,490.00,1000.00,1222.00,1900.00,2000.00,2500.05,2737.00,2802.80,3000.00,3355.00,3840.00,4200.00,10000.00,11448.00,12087.00,19760.00,28360.00,56166.00,74970.00,162162.00,240000.00}",
+				"most_common_freqs": [
+					0.928571, 0.00326158, 0.00304414, 0.00260926, 0.00260926, 0.00260926, 0.00195695, 0.00163079, 0.00163079, 0.00163079, 0.00152207,
+					0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_contracted_system_ccy",
+				"n_distinct": 55,
+				"most_common_vals": "{0.00,12000.00,3.27,13.24,10.56,11616.00,100.00,19404.00,30000.00,72.60,693.00,135.00,1134.00,1215.00,3483.00,0.04,0.07,0.61,1.80,1.84,1.86,2.37,2.52,2.64,6.04,60.78,490.00,1000.00,1222.00,2000.00,2500.05,2737.00,2802.80,3000.00,3355.00,4200.00,42952.90,45350.42,70233.60,361410.40,518704.40,1027276.14,1371201.30,2965942.98,17.82,10000.00,240000.00,7128.80,2178.36,1.50,53.76,1900.00,427.89,500.00}",
+				"most_common_freqs": [
+					0.928571, 0.00347902, 0.00260926, 0.00260926, 0.00239182, 0.00195695, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207,
+					0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00119591, 0.00108719, 0.00108719, 0.000978474, 0.000869754, 0.000434877, 0.000434877,
+					0.000326158, 0.000217439, 0.000217439
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "mrr_period_system_ccy",
+				"n_distinct": 502,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,2159.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,134.20,10687500.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,6912697.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,2000.00,1493.00,278.00,307.00,1038.00,1273.00,1597.00,3142.00,3896.00,4167.00,5542.00,5000.00,1356.00,1765.00,2223.00,9700.00,1400560.00,80.00,5213.00,432.00,3.27,13.24,1384.00,2397.00,2500.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,10.56,38750.00,188.00,200.00,35.00,87.00,14253480.00,153.00,354.00,638.00,5208.00,29932500.00,-416.67,0.04,0.07,0.61,1.80,1.84,1.86,2.37,2.52,2.64,6.04,14.00}",
+				"most_common_freqs": [
+					0.370407, 0.0207654, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0104371,
+					0.0104371, 0.0084801, 0.0084801, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00641444,
+					0.00587084, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00445749, 0.00413133,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00369646, 0.0033703,
+					0.0033703, 0.0033703, 0.0033703, 0.00326158, 0.00304414, 0.00304414, 0.0028267, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00239182, 0.00239182, 0.0022831, 0.00195695, 0.00184823, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-833.33,17.82,38.00,53.76,60.00,60.78,72.60,100.00,100.00,135.00,171.00,342.00,470.00,490.00,500.00,594.00,693.00,764.66,790.00,828.38,833.33,931.23,997.74,1134.00,1215.00,1222.00,1250.00,1418.37,1446.78,1457.98,1484.25,1512.60,1546.28,1576.09,1624.48,1672.87,1707.44,1776.56,1884.68,1896.00,1933.82,1992.41,2005.00,2178.36,2490.19,2500.05,2586.38,2639.81,2708.00,2737.00,2743.00,2746.69,2802.80,2978.53,3134.57,3318.66,3333.00,3355.00,3438.86,3469.00,3483.00,3510.77,3535.68,3634.64,3664.75,3803.34,4000.00,4200.00,4283.18,4375.00,4702.94,4903.82,5013.00,5106.00,5151.47,5322.21,5416.58,5448.51,5535.00,7004.21,7122.00,7176.88,7559.78,7820.97,11616.00,12150.00,19404.00,42952.90,45350.42,70233.60,361410.40,518704.40,941632.50,1027276.14,1098571.50,1371201.30,2965942.98,3353760.00,15360416.00,16796800.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "period_month",
+				"n_distinct": 140,
+				"most_common_vals": "{2025-06-01,2025-04-01,2025-05-01,2025-03-01,2025-07-01,2025-08-01,2025-09-01,2025-01-01,2025-02-01,2025-10-01,2025-11-01,2025-12-01,2024-12-01,2024-11-01,2026-01-01,2024-10-01,2024-09-01,2026-02-01,2024-08-01,2024-07-01,2024-05-01,2024-06-01,2024-04-01,2026-03-01,2024-03-01,2024-01-01,2024-02-01,2026-04-01,2026-05-01,2026-06-01,2023-10-01,2023-11-01,2023-12-01,2023-09-01,2026-07-01,2026-08-01,2023-08-01,2026-09-01,2023-07-01,2023-05-01,2023-06-01,2023-03-01,2023-04-01,2023-02-01,2023-01-01,2026-10-01,2026-11-01,2022-12-01,2026-12-01,2022-10-01,2022-11-01,2027-01-01,2027-02-01,2027-03-01,2027-04-01,2027-05-01,2027-06-01,2022-07-01,2022-08-01,2022-09-01,2022-06-01,2027-07-01,2022-03-01,2022-04-01,2022-05-01,2027-08-01,2022-02-01,2022-01-01,2027-09-01,2027-10-01,2021-12-01,2027-11-01,2027-12-01,2021-07-01,2021-08-01,2021-09-01,2021-10-01,2021-11-01,2021-06-01,2028-01-01,2021-05-01,2028-02-01,2028-03-01,2028-04-01,2020-12-01,2021-01-01,2021-02-01,2021-03-01,2021-04-01,2028-05-01,2028-06-01,2028-07-01,2018-04-01,2018-05-01,2018-06-01,2018-07-01,2018-08-01,2018-09-01,2018-10-01,2018-11-01}",
+				"most_common_freqs": [
+					0.0252229, 0.0248967, 0.024788, 0.0246793, 0.0245706, 0.0239182, 0.0238095, 0.0237008, 0.0237008, 0.0231572, 0.0230485, 0.02207,
+					0.0183736, 0.0182648, 0.01783, 0.0176125, 0.0175038, 0.0163079, 0.015873, 0.0157643, 0.0150033, 0.0150033, 0.0148945, 0.0147858,
+					0.0145684, 0.0141335, 0.0141335, 0.0140248, 0.0133725, 0.0133725, 0.0132638, 0.0132638, 0.0132638, 0.0129376, 0.0128289,
+					0.0128289, 0.0122853, 0.0122853, 0.0121766, 0.0120678, 0.0120678, 0.0115242, 0.0115242, 0.0113068, 0.0106545, 0.0105458,
+					0.00924114, 0.00869754, 0.0084801, 0.00815395, 0.00815395, 0.00761035, 0.00695803, 0.00684932, 0.0067406, 0.0067406, 0.0067406,
+					0.00663188, 0.00663188, 0.00663188, 0.00608828, 0.00576212, 0.0056534, 0.0056534, 0.0056534, 0.0056534, 0.00521853, 0.00489237,
+					0.00402261, 0.00402261, 0.0033703, 0.0033703, 0.0033703, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00250054,
+					0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00163079, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335,
+					0.00130463, 0.00130463, 0.00130463, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754,
+					0.000869754
+				],
+				"histogram_bounds": "{2018-12-01,2018-12-01,2019-01-01,2019-02-01,2019-03-01,2019-03-01,2019-04-01,2019-05-01,2019-06-01,2019-07-01,2019-07-01,2019-08-01,2019-09-01,2019-10-01,2019-11-01,2019-11-01,2019-12-01,2020-01-01,2020-02-01,2020-02-01,2020-03-01,2020-04-01,2020-05-01,2020-06-01,2020-06-01,2020-07-01,2020-08-01,2020-09-01,2020-10-01,2020-10-01,2020-11-01,2028-08-01,2028-09-01,2028-10-01,2028-11-01,2028-12-01,2029-01-01,2029-02-01,2029-04-01,2029-11-01}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "product_name",
+				"n_distinct": 34,
+				"most_common_vals": "{uAssessment,uPlanning,uImprove,uRetention,uBooking,uForecast,uExperience,PATHFINDER+,uExam,uClass,uFaculty,\"Implementación  uPlanning\",Soporte,\"ERP Enterprise\",\"SaaS Nuevo\",uScore,\"Analytics Dashboard\",\"CRM Pro\",\"Analytics Dashboard (Downsell)\",uEngagement,MANTENIMIENTO,FORCEFIELD,RETOOL,\"SOPORTE PREMIUM\",TABLEAU,MODULO,\"ADVANCED ANALYTICS\",\"ASESORIA TECNICA\",Capacitación,\"CMR Pro\",DATAMART,\"Implementación CRM\",\"Project Management Tool\",RUTEADORES}",
+				"most_common_freqs": [
+					0.215373, 0.205697, 0.098391, 0.0838226, 0.0789302, 0.0552294, 0.055012, 0.0401174, 0.0296804, 0.0273973, 0.0208741, 0.00945858,
+					0.00945858, 0.00934986, 0.00804523, 0.00782779, 0.00695803, 0.00630572, 0.00434877, 0.00391389, 0.00326158, 0.0028267, 0.00260926,
+					0.00163079, 0.00163079, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_cum_ccy",
+				"n_distinct": -0.507175,
+				"most_common_vals": "{0.00,33372.00,1600.00,3336.00,8326.00,25000.00,47364.00,1610.40,16608.00,41628.00,61272.00,184324992.00,80196.00,12030.00,60156.00,2142.00,4956.00,8932.00,38.00,9480.00,63180.00,359190000.00,24060.00,11299590.00,13182858.00,229528812.00,3888.00,188784.00,10000.00,720.00,2052.00,4700.00,6000.00,3220.80,49670.00,36000.00,168.00,12000.00,85464.00,11040000.00,184777416.00,379394436.00,1200.00,9000.00,2500.00,3000.00,6040.00,7855.00,9895.00,20000.00,52500.00,60750.00,27600000.00,72912.00,1000.00,2000.00,4000.00,5000.00,8000.00,15000.00,65220.00,96048.00,7000.00,11000.00,139392.00,18.00,18000.00,32496.00,134.20,268.40,402.60,536.80,671.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,4163.00,11340.00,13608.00,30000.00,5520000.00,1565.00,2880.00,3130.00,4695.00,4888.00,5106.00,8640.00,9072.00,9776.00,9900.00,10998.00,12220.00,12474.00,13442.00,13500.00,14664.00}",
+				"most_common_freqs": [
+					0.152859, 0.00891498, 0.00858882, 0.00750163, 0.00597956, 0.00587084, 0.00587084, 0.00489237, 0.00456621, 0.00434877, 0.00434877,
+					0.00402261, 0.00391389, 0.00369646, 0.00369646, 0.00358774, 0.00358774, 0.00358774, 0.00304414, 0.00304414, 0.0028267, 0.0028267,
+					0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00250054, 0.00239182, 0.00195695, 0.00173951, 0.00173951, 0.00173951,
+					0.00173951, 0.00163079, 0.00163079, 0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335,
+					0.00130463, 0.00130463, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591,
+					0.00119591, 0.00108719, 0.000978474, 0.000978474, 0.000978474, 0.000978474, 0.000978474, 0.000869754, 0.000869754, 0.000869754,
+					0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000652316, 0.000652316, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877,
+					0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877
+				],
+				"histogram_bounds": "{-4216700.40,60.00,190.00,542.00,891.60,1267.00,1744.60,2280.00,2832.00,3377.00,3996.00,4672.00,5500.00,6584.00,7440.00,8343.00,9350.00,10773.00,12312.00,13875.00,14964.00,16266.00,17544.00,19152.00,20493.29,22176.00,24000.00,26595.00,28270.44,29961.93,31590.00,33612.00,36018.00,38808.00,41191.00,43820.00,46917.00,50080.00,53856.00,58293.00,64233.00,72424.00,81600.00,92046.00,103032.00,114526.70,125222.00,137655.00,154031.00,169119.00,187204.00,209625.00,236758.00,279500.00,449328.00,699683.42,945024.00,1215928.26,1463366.42,1814746.19,2030772.67,2319129.60,2845623.31,3561416.09,4608559.62,5196240.49,5813970.50,6591427.50,7314451.66,8271755.49,9068757.60,9881797.00,11850865.74,14875845.56,17540900.22,19607840.00,22449562.37,24915283.22,26925094.66,29593964.40,31403485.84,34398145.42,38988433.79,43084634.92,47138881.32,51511602.24,56135679.84,60613117.70,63587843.76,70163280.00,78270083.52,89208483.00,100046336.40,107494800.00,124428546.00,153019208.00,193555516.00,235125000.00,331084213.85,470364840.00,661608720.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_cum_contract_ccy",
+				"n_distinct": -0.400848,
+				"most_common_vals": "{0.00,1600.00,33372.00,25000.00,1610.40,8326.00,3336.00,47364.00,41628.00,61272.00,80196.00,12030.00,2142.00,4956.00,8932.00,16608.00,9480.00,720.00,3220.80,38.00,2052.00,60156.00,184324992.00,6040.00,7855.00,9895.00,60750.00,12000.00,72912.00,4700.00,52500.00,63180.00,359190000.00,168.00,10000.00,24060.00,11299590.00,13182858.00,229528812.00,3888.00,6000.00,30000.00,188784.00,20000.00,457.20,36000.00,9000.00,1200.00,57024.00,219480.00,2000.00,3000.00,5000.00,15000.00,49670.00,2500.00,4000.00,18000.00,1000.00,8000.00,32496.00,85464.00,184777416.00,379394436.00,24000.00,27360.00,21000.00,7000.00,11000.00,2400.00,16000.00,65220.00,96048.00,18.00,2160.00,14000.00,22000.00,27000.00,130128.00,139392.00,1440.00,4500.00,19000.00,134.20,240.00,268.40,402.60,480.00,536.80,600.00,671.00,684.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,2444.00,2736.00}",
+				"most_common_freqs": [
+					0.152859, 0.0132638, 0.0128289, 0.0110894, 0.00967602, 0.00858882, 0.00815395, 0.00782779, 0.00663188, 0.00663188, 0.006197,
+					0.00597956, 0.00587084, 0.00587084, 0.00587084, 0.00554468, 0.00543596, 0.00467493, 0.00424005, 0.00413133, 0.00413133,
+					0.00402261, 0.00402261, 0.00347902, 0.00347902, 0.00347902, 0.00347902, 0.00326158, 0.00315286, 0.00304414, 0.0028267, 0.0028267,
+					0.0028267, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00260926, 0.00260926, 0.00239182, 0.00239182,
+					0.00217439, 0.00206567, 0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00173951, 0.00163079, 0.00163079, 0.00163079,
+					0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335,
+					0.00141335, 0.00130463, 0.00130463, 0.00108719, 0.000978474, 0.000978474, 0.000869754, 0.000869754, 0.000869754, 0.000869754,
+					0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000652316, 0.000652316,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596
+				],
+				"histogram_bounds": "{-5000.04,17.82,84.48,153.60,270.40,380.00,532.00,645.12,813.00,940.00,1100.00,1267.00,1500.00,1680.00,1897.00,2147.20,2376.00,2632.00,2835.00,3086.60,3360.00,3666.00,3969.00,4277.00,4608.00,4888.00,5265.00,5605.60,6015.00,6365.00,6775.00,7224.00,7638.00,7975.00,8401.00,8892.00,9582.00,10184.00,10835.00,11400.00,12240.00,12900.00,13608.00,14448.00,15275.00,15996.00,16806.00,17577.00,18715.00,19619.60,20592.00,21670.00,22655.00,23749.00,25001.00,26253.00,27495.00,28476.00,29808.00,31300.00,32916.00,34224.00,35568.00,37560.00,39214.00,41021.00,43008.00,45096.00,47073.00,49420.00,51509.00,54119.00,56823.00,60147.00,64500.00,69132.00,75072.00,81600.00,88044.00,94996.00,102258.00,109980.00,117990.00,127381.00,138550.00,152904.00,167075.00,184851.00,213444.00,249780.00,648648.00,5602240.00,19563600.00,35014000.00,55301576.00,86079840.00,133891807.00,186642819.00,248857092.00,399097440.00,641250000.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_cum_system_ccy",
+				"n_distinct": -0.43803,
+				"most_common_vals": "{0.00,1600.00,33372.00,25000.00,8326.00,3336.00,47364.00,41628.00,61272.00,80196.00,12030.00,2142.00,4956.00,8932.00,16608.00,9480.00,1610.40,2052.00,60156.00,6040.00,7855.00,9895.00,60750.00,12000.00,38.00,72912.00,4700.00,52500.00,63180.00,6000.00,24060.00,10000.00,30000.00,188784.00,720.00,20000.00,36000.00,9000.00,2000.00,3000.00,3220.80,57024.00,219480.00,184324992.00,1200.00,4000.00,5000.00,15000.00,1000.00,2500.00,18000.00,168.00,8000.00,32496.00,85464.00,24000.00,27360.00,7000.00,21000.00,11000.00,16000.00,65220.00,96048.00,2400.00,14000.00,22000.00,27000.00,130128.00,139392.00,2160.00,3888.00,4500.00,19000.00,134.20,268.40,402.60,536.80,600.00,671.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,2736.00,3666.00,4163.00,4888.00,7128.00,7332.00,9072.00,10998.00,11340.00,13000.00,13608.00,14664.00,17000.00,22500.00,23000.00}",
+				"most_common_freqs": [
+					0.152859, 0.0132638, 0.0128289, 0.0110894, 0.00858882, 0.00815395, 0.00782779, 0.00663188, 0.00663188, 0.006197, 0.00597956,
+					0.00587084, 0.00587084, 0.00587084, 0.00554468, 0.00543596, 0.00510981, 0.00413133, 0.00402261, 0.00347902, 0.00347902,
+					0.00347902, 0.00347902, 0.00326158, 0.00315286, 0.00315286, 0.00304414, 0.0028267, 0.0028267, 0.00271798, 0.00271798, 0.00260926,
+					0.00239182, 0.00239182, 0.00217439, 0.00206567, 0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00173951, 0.00173951,
+					0.00173951, 0.00173951, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00141335,
+					0.00141335, 0.00141335, 0.00141335, 0.00130463, 0.00130463, 0.00108719, 0.00108719, 0.000978474, 0.000869754, 0.000869754,
+					0.000869754, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000652316, 0.000652316,
+					0.000652316, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596
+				],
+				"histogram_bounds": "{-5000.04,3.03,15.83,32.72,106.92,261.00,457.20,660.00,900.00,1110.00,1368.00,1581.34,1842.00,2149.00,2442.00,2711.20,2917.00,3130.00,3375.00,3760.00,4065.00,4336.00,4695.00,5068.00,5435.00,5775.00,6204.00,6522.00,6866.19,7336.00,7783.00,8176.00,8636.00,9180.00,9776.00,10415.00,11072.00,11880.00,12520.00,13416.00,14085.00,15000.30,15760.00,16632.00,17423.00,18330.00,19152.00,20007.00,20856.00,21910.00,23044.00,24381.00,25392.00,26595.00,27580.00,28739.49,29735.00,31188.00,32532.00,33537.00,35021.03,36580.00,38328.00,39925.00,41660.00,43132.05,44606.65,46000.00,47616.00,49670.00,51284.02,53531.93,55437.00,57736.66,60489.00,63113.51,65988.00,69000.00,73360.00,78342.00,84000.00,88519.00,93504.00,99314.00,105729.00,113030.12,120904.00,129177.00,138111.00,153387.00,167680.00,184851.00,213980.00,261900.00,1027276.14,5649795.00,14005600.00,55301576.00,110603152.00,269392500.00,641250000.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_period_ccy",
+				"n_distinct": -0.189498,
+				"most_common_vals": "{0.00,10687500.00,6912697.00,1000.00,181.00,611.00,2159.00,134.20,1400560.00,222.00,275.00,567.00,792.00,985.00,3933.00,1565.00,3658.00,456.00,2083.00,180.00,292.00,2423.00,3292.00,240.00,1125.00,1536.00,1833.00,6683.00,271.00,516.00,4163.00,5506.00,479.16,1087.00,1104.00,5375.00,1500.00,38750.00,14253480.00,3264.00,2711.00,3896.00,80.00,917.00,1647.00,2001.00,10.56,13.24,2397.00,5602.00,3353760.00,3912720.00,29932500.00,5000.00,3000.00,188.00,2917.00,5265.00,5542.00,35.00,2781.00,2960.25,307.00,432.00,1038.00,1493.00,1597.00,3142.00,4167.00,1.50,87.00,153.00,354.00,638.00,5208.00,920000.00,14.00,17.82,38.00,53.76,60.00,171.00,790.00,833.33,1900.00,3469.00,3840.00,4000.00,4625.00,5106.00,7122.00,11448.00,12087.00,19760.00,20000.00,28360.00,56166.00,74970.00,162162.00,941632.50}",
+				"most_common_freqs": [
+					0.368232, 0.0130463, 0.0120678, 0.0103283, 0.00880626, 0.00880626, 0.0084801, 0.00826267, 0.00782779, 0.00750163, 0.00750163,
+					0.00750163, 0.00750163, 0.00750163, 0.0067406, 0.00652316, 0.006197, 0.00576212, 0.0056534, 0.00554468, 0.00554468, 0.00554468,
+					0.00554468, 0.00543596, 0.00543596, 0.00543596, 0.00543596, 0.00500109, 0.00489237, 0.00489237, 0.00445749, 0.00445749,
+					0.00424005, 0.00424005, 0.00424005, 0.00424005, 0.00391389, 0.00391389, 0.00391389, 0.00358774, 0.00326158, 0.00326158,
+					0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00250054, 0.00239182, 0.00217439, 0.00195695, 0.00195695, 0.00195695, 0.00173951, 0.00173951, 0.00173951,
+					0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00152207, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-383336.40,72.60,120.00,350.10,960.70,1010.56,1023.84,1273.00,1715.49,1884.43,1924.16,1949.45,2223.00,3333.00,3734.00,3974.50,5213.00,5540.52,5619.65,5750.80,5843.42,5910.50,6114.91,7466.00,9700.00,11217.00,16358.13,19404.00,39069.26,42990.82,55243.05,58847.75,64812.90,79259.36,102334.63,129649.68,168311.00,173148.22,175195.87,213201.70,256451.80,261601.61,267190.00,275210.10,292125.85,414042.07,460000.00,539528.85,556911.23,570559.13,587755.73,665535.02,890957.20,945962.48,967561.56,1045647.26,1087092.00,1139578.54,1211323.15,1276013.63,1370143.67,1461580.80,1567202.85,1697854.11,1853088.08,1927847.44,2075864.08,2272863.65,2378922.58,2561446.32,2660057.57,2818708.77,2921730.09,2993902.92,3138342.08,3307588.29,3414415.49,3657277.04,3783376.88,3868252.77,4000594.31,4063641.15,4210241.54,4384339.00,4656876.36,5051093.14,5200772.61,5297137.97,5623441.12,6181941.96,7067179.06,7431111.34,8444429.93,8956466.74,9424520.00,10064656.64,11941418.22,15360416.00,16796800.00,21024747.59,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_period_contract_ccy",
+				"n_distinct": 174,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,134.20,2159.00,10687500.00,6912697.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,1400560.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,2000.00,35.00,80.00,87.00,188.00,278.00,307.00,1038.00,1273.00,1493.00,1597.00,3142.00,3896.00,4167.00,5000.00,5542.00,38750.00,14253480.00,1356.00,1765.00,2223.00,9700.00,76.00,5213.00,432.00,38.00,1.50,10.56,13.24,90.00,120.00,135.20,1384.00,2397.00,2500.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,3353760.00,3912720.00,29932500.00,200.00,2960.25,153.00,354.00,638.00,5208.00,-416.67,3.00,14.00,17.82}",
+				"most_common_freqs": [
+					0.368232, 0.0200043, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0130463, 0.0130463, 0.0120678, 0.0117417, 0.0117417, 0.0117417,
+					0.0117417, 0.0117417, 0.0104371, 0.0104371, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316,
+					0.00652316, 0.006197, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00445749, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.0033703, 0.0033703, 0.0033703, 0.0033703, 0.00326158,
+					0.00304414, 0.0028267, 0.00271798, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00195695, 0.00173951, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-833.33,25.00,53.76,53.76,60.00,72.60,74.30,76.80,76.80,98.00,100.00,104.00,109.00,135.00,171.00,171.00,249.50,470.00,490.00,500.00,500.00,594.00,693.00,790.00,833.33,1134.00,1208.00,1215.00,1222.00,1600.00,1896.00,1900.00,2005.00,2005.00,2500.05,2708.00,2737.00,2743.00,2802.80,3333.00,3355.00,3469.00,3483.00,3840.00,4000.00,4200.00,4200.00,4375.00,4625.00,4967.00,5013.00,5106.00,7122.00,11448.00,11616.00,12087.00,12150.00,19404.00,19760.00,20000.00,28360.00,56166.00,56166.00,74970.00,162162.00,941632.50,1098571.50,8054167.00,15360416.00,15398118.00,16796800.00,19127401.00,31616203.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "recognized_period_system_ccy",
+				"n_distinct": 504,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,2159.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,134.20,10687500.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,6912697.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,2000.00,1493.00,278.00,307.00,1038.00,1273.00,1597.00,3142.00,3896.00,4167.00,5542.00,5000.00,1356.00,1765.00,2223.00,9700.00,1400560.00,80.00,5213.00,432.00,3.27,13.24,1384.00,2397.00,2500.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,10.56,38750.00,188.00,200.00,35.00,2960.25,87.00,14253480.00,153.00,354.00,638.00,5208.00,29932500.00,-416.67,0.04,0.07,0.61,1.80,1.84,1.86,2.37,2.52,2.64,6.04}",
+				"most_common_freqs": [
+					0.368232, 0.0207654, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0104371,
+					0.0104371, 0.0084801, 0.0084801, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00641444,
+					0.00587084, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00445749, 0.00413133,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00369646, 0.0033703,
+					0.0033703, 0.0033703, 0.0033703, 0.00326158, 0.00304414, 0.00304414, 0.0028267, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00239182, 0.00239182, 0.0022831, 0.00195695, 0.00184823, 0.00173951, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{-833.33,14.00,17.82,38.00,53.76,60.00,60.78,72.60,90.00,100.00,135.00,171.00,250.00,470.00,490.00,500.00,594.00,693.00,722.07,790.00,828.38,833.33,919.49,997.74,1134.00,1215.00,1222.00,1250.00,1418.37,1446.78,1457.98,1488.80,1512.60,1552.88,1600.00,1645.22,1686.70,1714.35,1776.56,1892.73,1896.00,1949.11,2005.00,2005.00,2178.36,2500.05,2500.88,2607.75,2708.00,2708.00,2737.00,2743.00,2768.06,2802.80,3085.59,3216.93,3333.00,3355.00,3355.00,3469.00,3483.00,3483.00,3524.30,3588.26,3647.23,3726.34,3997.64,4000.00,4200.00,4375.00,4625.00,4876.80,5013.00,5106.00,5119.13,5241.74,5396.40,5439.86,5506.65,6015.00,7122.00,7128.80,7429.81,7753.95,11616.00,12150.00,19404.00,42952.90,45350.42,70233.60,361410.40,518704.40,518704.40,1027276.14,1098571.50,1371201.30,2965942.98,3353760.00,15360416.00,16796800.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "source_snapshot_hash",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "system_currency",
+				"n_distinct": 1,
+				"most_common_vals": "{USD}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_eom_ccy",
+				"n_distinct": -0.504675,
+				"most_common_vals": "{0.00,33372.00,1600.00,3336.00,8326.00,25000.00,47364.00,1610.40,16608.00,41628.00,61272.00,184324992.00,80196.00,12030.00,60156.00,2142.00,4956.00,8932.00,38.00,9480.00,63180.00,359190000.00,24060.00,11299590.00,13182858.00,229528812.00,3888.00,188784.00,10000.00,720.00,2052.00,4700.00,6000.00,3220.80,36000.00,49670.00,168.00,85464.00,3680000.00,184777416.00,379394436.00,1200.00,9000.00,12000.00,9200000.00,2500.00,3000.00,6040.00,7855.00,9895.00,52500.00,60750.00,4000.00,20000.00,72912.00,1000.00,2000.00,5000.00,8000.00,15000.00,65220.00,96048.00,7000.00,11000.00,139392.00,32496.00,19.50,134.20,268.40,402.60,536.80,671.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,4163.00,18000.00,30000.00,5520000.00,1565.00,2160.00,2880.00,3130.00,4695.00,4888.00,5106.00,8640.00,9072.00,9776.00,9900.00,10998.00,11340.00,12220.00,13442.00,13500.00,14664.00,17010.00}",
+				"most_common_freqs": [
+					0.156882, 0.00891498, 0.00858882, 0.00750163, 0.00597956, 0.00587084, 0.00587084, 0.00489237, 0.00456621, 0.00434877, 0.00434877,
+					0.00402261, 0.00391389, 0.00369646, 0.00369646, 0.00358774, 0.00358774, 0.00358774, 0.00304414, 0.00304414, 0.0028267, 0.0028267,
+					0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00250054, 0.00239182, 0.00206567, 0.00173951, 0.00173951, 0.00173951,
+					0.00173951, 0.00163079, 0.00163079, 0.00163079, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591, 0.00119591,
+					0.00108719, 0.00108719, 0.00108719, 0.000978474, 0.000978474, 0.000978474, 0.000978474, 0.000869754, 0.000869754, 0.000869754,
+					0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877,
+					0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877, 0.000434877
+				],
+				"histogram_bounds": "{1.50,95.04,306.00,666.00,1032.00,1440.00,1914.00,2444.00,3077.00,3620.00,4248.00,4950.00,5828.00,6875.00,7706.98,8554.00,9639.00,11145.96,12831.00,14003.00,15276.00,16512.00,17814.46,19431.00,20814.00,22500.00,24576.00,26864.00,28704.00,30226.00,32178.00,33919.78,36345.00,39070.32,41660.00,44403.75,47498.00,50688.00,54648.00,58906.60,64767.50,72726.19,82041.00,93504.00,104481.00,114623.31,125834.00,138111.00,154031.00,169119.00,187335.00,210688.00,235375.66,275461.54,426753.89,699683.42,945024.00,1217397.49,1463366.42,1805059.44,2024000.00,2233449.50,2804596.32,3496405.20,4608559.62,5196240.49,5847022.46,6663814.92,7364541.66,8342080.25,9160561.92,10310044.25,12252296.52,15397022.71,17603545.44,20356420.24,22795297.98,25476488.31,27100689.12,30183840.00,31924322.64,35214480.00,40245120.00,44144206.73,48096754.80,52373922.50,56729079.00,60967626.10,64080920.45,70893121.00,79412740.49,89719493.36,100657080.00,108272801.76,125556803.91,153981180.00,193555516.00,235125000.00,331084213.85,470364840.00,661608720.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_eom_contract_ccy",
+				"n_distinct": -0.399761,
+				"most_common_vals": "{0.00,1600.00,33372.00,25000.00,1610.40,8326.00,3336.00,47364.00,41628.00,61272.00,80196.00,12030.00,2142.00,4956.00,8932.00,16608.00,9480.00,720.00,3220.80,38.00,2052.00,60156.00,184324992.00,10000.00,6040.00,7855.00,9895.00,60750.00,72912.00,4700.00,52500.00,63180.00,359190000.00,168.00,4000.00,24060.00,11299590.00,13182858.00,229528812.00,3888.00,6000.00,188784.00,457.20,36000.00,20000.00,12000.00,1200.00,9000.00,57024.00,219480.00,2000.00,3000.00,49670.00,2500.00,5000.00,15000.00,1000.00,18000.00,32496.00,85464.00,184777416.00,379394436.00,27360.00,8000.00,24000.00,30000.00,21000.00,2160.00,2400.00,7000.00,11000.00,16000.00,65220.00,96048.00,14000.00,22000.00,27000.00,130128.00,139392.00,6.00,1440.00,4500.00,19000.00,19.50,134.20,240.00,268.40,402.60,480.00,536.80,600.00,671.00,684.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,2444.00}",
+				"most_common_freqs": [
+					0.156882, 0.0132638, 0.0128289, 0.0109806, 0.00967602, 0.00858882, 0.00815395, 0.00782779, 0.00663188, 0.00663188, 0.006197,
+					0.00597956, 0.00587084, 0.00587084, 0.00587084, 0.00554468, 0.00543596, 0.00467493, 0.00424005, 0.00413133, 0.00413133,
+					0.00402261, 0.00402261, 0.00380517, 0.00347902, 0.00347902, 0.00347902, 0.00347902, 0.00315286, 0.00304414, 0.0028267, 0.0028267,
+					0.0028267, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00271798, 0.00260926, 0.00239182, 0.00239182, 0.00206567,
+					0.00206567, 0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00173951, 0.00173951, 0.00163079, 0.00163079, 0.00163079,
+					0.00152207, 0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00141335, 0.00130463,
+					0.00119591, 0.00119591, 0.00119591, 0.00108719, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754, 0.000869754,
+					0.000869754, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000652316, 0.000652316, 0.000652316,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596
+				],
+				"histogram_bounds": "{1.50,52.80,116.16,200.00,307.00,444.00,560.00,724.00,875.00,1040.00,1199.00,1377.00,1622.40,1824.00,1998.00,2224.00,2475.00,2736.00,2940.00,3142.00,3465.00,3794.00,4088.00,4344.00,4697.00,5040.00,5422.00,5691.00,6192.00,6516.00,6912.00,7336.00,7783.00,8160.00,8624.88,9165.00,9776.00,10407.00,10998.00,11799.00,12498.00,13248.00,14003.00,14775.00,15650.00,16500.00,17108.00,18117.00,19125.00,19944.00,20830.00,21944.00,23000.00,24174.00,25225.20,26592.00,27648.00,29000.00,30226.00,31520.00,33012.00,34544.00,35995.00,37968.00,39577.00,41630.00,43614.00,45792.00,47655.00,49992.00,52224.00,54775.00,57492.00,60872.00,65550.00,69920.00,75408.00,82042.00,88519.00,95468.00,103018.00,110120.00,118727.00,127772.00,139750.00,153408.00,167892.00,187124.00,214734.00,252200.00,673992.00,6591427.50,19607840.00,35214480.00,55301576.00,88595837.00,134374400.00,186642819.00,248857092.00,406125000.00,641250000.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_eom_system_ccy",
+				"n_distinct": -0.436508,
+				"most_common_vals": "{0.00,1600.00,33372.00,25000.00,8326.00,3336.00,47364.00,41628.00,61272.00,80196.00,12030.00,2142.00,4956.00,8932.00,16608.00,9480.00,1610.40,2052.00,60156.00,10000.00,6040.00,7855.00,9895.00,60750.00,38.00,72912.00,4700.00,4000.00,52500.00,63180.00,24060.00,6000.00,188784.00,720.00,36000.00,12000.00,20000.00,2000.00,3000.00,3220.80,9000.00,57024.00,219480.00,184324992.00,1200.00,1000.00,2500.00,5000.00,15000.00,168.00,18000.00,32496.00,85464.00,27360.00,8000.00,24000.00,30000.00,21000.00,7000.00,11000.00,16000.00,65220.00,96048.00,2160.00,2400.00,14000.00,22000.00,27000.00,130128.00,139392.00,3888.00,4500.00,19000.00,0.15,134.20,268.40,402.60,536.80,600.00,671.00,805.20,939.40,1073.60,1207.80,1342.00,1476.20,2736.00,3666.00,4163.00,4888.00,7128.00,7332.00,10998.00,11340.00,13000.00,14664.00,17000.00,17010.00,23000.00,33000.00}",
+				"most_common_freqs": [
+					0.156882, 0.0132638, 0.0128289, 0.0109806, 0.00858882, 0.00815395, 0.00782779, 0.00663188, 0.00663188, 0.006197, 0.00597956,
+					0.00587084, 0.00587084, 0.00587084, 0.00554468, 0.00543596, 0.00510981, 0.00413133, 0.00402261, 0.00369646, 0.00347902,
+					0.00347902, 0.00347902, 0.00347902, 0.00315286, 0.00315286, 0.00304414, 0.0028267, 0.0028267, 0.0028267, 0.00271798, 0.00250054,
+					0.00239182, 0.00217439, 0.00206567, 0.00184823, 0.00184823, 0.00173951, 0.00173951, 0.00173951, 0.00173951, 0.00173951,
+					0.00173951, 0.00173951, 0.00163079, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00141335,
+					0.00141335, 0.00130463, 0.00119591, 0.00119591, 0.00119591, 0.00108719, 0.000978474, 0.000869754, 0.000869754, 0.000869754,
+					0.000869754, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000761035, 0.000652316, 0.000652316,
+					0.000652316, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596,
+					0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596, 0.000543596
+				],
+				"histogram_bounds": "{0.04,7.43,21.34,63.36,158.88,342.00,542.00,798.60,1015.00,1228.00,1500.00,1723.83,1980.00,2250.00,2546.00,2780.00,3040.18,3252.00,3523.00,3896.00,4166.00,4479.00,4851.00,5220.00,5544.00,5962.00,6325.00,6708.00,7059.00,7588.00,7920.00,8332.00,8772.00,9390.00,10005.00,10773.00,11362.54,12220.00,12848.00,13685.00,14580.00,15309.00,16109.19,16816.80,17728.92,18711.00,19467.00,20340.00,21385.00,22168.00,23331.00,24576.00,25662.00,26732.00,27810.00,29000.00,29887.95,31300.00,32844.00,33929.00,35328.00,36905.00,38799.29,40260.00,42000.00,43560.00,45000.00,46368.00,47909.00,49930.41,51816.00,53975.00,55895.00,58200.00,60897.38,63437.41,66188.89,69132.00,74024.00,78660.00,84134.00,88719.93,93710.43,99720.00,106191.00,113862.00,121150.00,129540.00,139004.00,153636.00,168268.00,186558.00,214764.48,264288.00,1046250.00,5705748.40,14005600.00,55301576.00,110603152.00,269392500.00,641250000.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_period_ccy",
+				"n_distinct": -0.188845,
+				"most_common_vals": "{0.00,10687500.00,6912697.00,1000.00,181.00,611.00,2159.00,134.20,1400560.00,222.00,275.00,567.00,792.00,985.00,3933.00,1565.00,3658.00,456.00,2083.00,180.00,292.00,2423.00,3292.00,240.00,1125.00,1536.00,1833.00,6683.00,271.00,516.00,4163.00,5506.00,479.16,1087.00,1104.00,5375.00,1500.00,38750.00,14253480.00,3264.00,2711.00,3896.00,80.00,917.00,1647.00,2001.00,10.56,13.24,2397.00,5602.00,3353760.00,3912720.00,29932500.00,5000.00,3000.00,188.00,2917.00,5265.00,5542.00,35.00,2781.00,2960.25,307.00,432.00,1038.00,1493.00,1597.00,3142.00,4167.00,87.00,153.00,354.00,638.00,5208.00,1.50,920000.00,14.00,17.82,38.00,60.00,171.00,790.00,833.33,1900.00,3469.00,3840.00,4000.00,4625.00,5106.00,7122.00,11448.00,12087.00,19760.00,20000.00,28360.00,56166.00,74970.00,162162.00,941632.50,1098571.50}",
+				"most_common_freqs": [
+					0.372907, 0.0130463, 0.0120678, 0.0103283, 0.00880626, 0.00880626, 0.0084801, 0.00826267, 0.00782779, 0.00750163, 0.00750163,
+					0.00750163, 0.00750163, 0.00750163, 0.0067406, 0.00652316, 0.006197, 0.00576212, 0.0056534, 0.00554468, 0.00554468, 0.00554468,
+					0.00554468, 0.00543596, 0.00543596, 0.00543596, 0.00543596, 0.00500109, 0.00489237, 0.00489237, 0.00445749, 0.00445749,
+					0.00424005, 0.00424005, 0.00424005, 0.00424005, 0.00391389, 0.00391389, 0.00391389, 0.00358774, 0.00326158, 0.00326158,
+					0.00293542, 0.00293542, 0.00293542, 0.00293542, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00250054, 0.00239182, 0.00217439, 0.00195695, 0.00195695, 0.00195695, 0.00173951, 0.00173951, 0.00173951,
+					0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00141335, 0.00141335, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{3.00,76.00,135.20,370.10,975.87,1011.91,1037.66,1273.00,1765.00,1888.04,1926.74,1951.00,2223.00,3333.00,3739.00,4200.00,5213.00,5542.02,5622.00,5750.80,5842.15,5900.05,6033.47,7424.00,9375.00,11199.00,16240.00,19293.31,36912.42,42502.94,52429.18,58347.00,64026.11,77015.50,99437.50,126635.00,168311.00,172866.24,175195.87,213201.70,254708.85,260774.29,265733.60,273078.29,287977.36,335945.23,439329.55,529471.40,550897.20,568165.85,584494.82,600182.86,859743.44,923966.45,961681.33,1034334.85,1084807.08,1187138.70,1244641.21,1317349.18,1430264.82,1508806.66,1634767.71,1766348.46,1877696.27,2011816.03,2159866.80,2341354.59,2528762.90,2628527.22,2745095.65,2908619.28,2975169.11,3052767.20,3241949.92,3391530.66,3610010.24,3762386.46,3864767.00,3926119.00,4046451.00,4170183.59,4276270.12,4516625.76,4939328.43,5155407.61,5264568.84,5336609.94,5879263.83,6423988.99,7213125.34,8054167.00,8599536.35,9098958.90,9705328.88,10143937.84,12789801.22,15360416.00,16796800.00,21047737.20,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_period_contract_ccy",
+				"n_distinct": 184,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,134.20,2159.00,10687500.00,6912697.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,1400560.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,2000.00,35.00,80.00,87.00,188.00,278.00,307.00,1038.00,1273.00,1493.00,1597.00,3142.00,3896.00,4167.00,5000.00,5542.00,38750.00,14253480.00,1356.00,1765.00,2223.00,9700.00,76.00,5213.00,432.00,38.00,10.56,13.24,90.00,120.00,1384.00,2397.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,3353760.00,3912720.00,29932500.00,135.20,1.50,200.00,2500.00,2960.25,153.00,354.00,638.00,4000.00,5208.00,3.00,14.00,17.82}",
+				"most_common_freqs": [
+					0.372907, 0.0191346, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0130463, 0.0130463, 0.0120678, 0.0117417, 0.0117417, 0.0117417,
+					0.0117417, 0.0117417, 0.0104371, 0.0104371, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316,
+					0.00652316, 0.006197, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00402261, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.0033703, 0.0033703, 0.0033703, 0.0033703, 0.00326158,
+					0.00304414, 0.0028267, 0.00271798, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00239182, 0.00217439, 0.00195695, 0.00173951, 0.00173951, 0.00152207, 0.00152207, 0.00152207, 0.00152207, 0.00152207,
+					0.00141335, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{25.00,25.00,53.76,60.00,72.60,72.60,74.30,76.20,78.85,98.00,100.00,100.00,104.00,109.00,135.00,171.00,249.50,249.50,342.00,470.00,490.00,500.00,500.00,594.00,693.00,790.00,790.00,833.33,1134.00,1215.00,1222.00,1222.00,1600.00,1896.00,1900.00,1979.00,2005.00,2430.00,2500.05,2708.00,2737.00,2737.00,2743.00,2802.80,3333.00,3355.00,3402.00,3469.00,3483.00,3840.00,4200.00,4375.00,4375.00,4625.00,4967.00,5013.00,5106.00,5106.00,7122.00,7122.00,11448.00,11616.00,12087.00,12087.00,19404.00,19760.00,19760.00,20000.00,28360.00,56166.00,56166.00,74970.00,162162.00,941632.50,941632.50,1098571.50,8054167.00,15360416.00,15398118.00,15398118.00,16796800.00,19127401.00,31616203.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "unbilled_balance_period_system_ccy",
+				"n_distinct": 515,
+				"most_common_vals": "{0.00,1000.00,181.00,611.00,1565.00,2159.00,271.00,275.00,516.00,567.00,985.00,2083.00,3933.00,134.20,10687500.00,180.00,222.00,240.00,292.00,792.00,1125.00,1536.00,2423.00,3000.00,3292.00,4163.00,456.00,479.16,1087.00,1104.00,1833.00,3658.00,5375.00,1500.00,3264.00,6912697.00,917.00,1647.00,2001.00,2711.00,5506.00,6683.00,1493.00,2000.00,278.00,307.00,1038.00,1273.00,1597.00,3142.00,3896.00,4167.00,5542.00,5000.00,1356.00,1765.00,2223.00,9700.00,1400560.00,80.00,5213.00,432.00,13.24,1384.00,2397.00,2769.00,2781.00,2917.00,4370.00,5265.00,5602.00,6648.00,7516.00,10480.00,3.27,10.56,38750.00,188.00,200.00,35.00,2500.00,2960.25,87.00,14253480.00,153.00,354.00,638.00,4000.00,5208.00,29932500.00,0.07,0.61,1.80,1.84,2.37,2.52,2.64,6.04,14.00,38.00}",
+				"most_common_freqs": [
+					0.372907, 0.0198956, 0.0156556, 0.0156556, 0.0156556, 0.0130463, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0117417, 0.0104371,
+					0.0104371, 0.0084801, 0.0084801, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779, 0.00782779,
+					0.00782779, 0.00782779, 0.0067406, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00652316, 0.00641444,
+					0.00587084, 0.00587084, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00521853, 0.00413133, 0.00402261,
+					0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00391389, 0.00369646, 0.0033703,
+					0.0033703, 0.0033703, 0.0033703, 0.00326158, 0.00304414, 0.00304414, 0.0028267, 0.00260926, 0.00260926, 0.00260926, 0.00260926,
+					0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00260926, 0.00239182, 0.00239182,
+					0.00239182, 0.0022831, 0.00195695, 0.00184823, 0.00173951, 0.00173951, 0.00163079, 0.00163079, 0.00152207, 0.00152207, 0.00152207,
+					0.00152207, 0.00152207, 0.00152207, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463, 0.00130463,
+					0.00130463, 0.00130463, 0.00130463
+				],
+				"histogram_bounds": "{0.04,1.86,17.82,53.76,60.00,60.78,72.60,90.00,100.00,135.00,171.00,270.00,427.89,490.00,490.00,500.00,594.00,693.00,790.00,811.61,833.33,888.19,966.44,1134.00,1215.00,1222.00,1355.60,1424.21,1449.58,1459.38,1489.27,1525.21,1569.18,1600.00,1645.22,1686.70,1714.35,1790.39,1892.73,1896.00,1949.11,2005.00,2005.00,2178.36,2436.75,2500.05,2543.63,2639.81,2708.00,2725.31,2737.00,2743.00,2802.80,2951.33,3100.70,3249.79,3333.00,3355.00,3392.33,3469.00,3483.00,3506.36,3534.86,3620.43,3657.60,3763.85,4148.81,4200.00,4375.00,4625.00,4877.49,5013.00,5106.00,5127.73,5259.46,5396.40,5439.86,5515.74,6000.00,7122.00,7128.80,7303.53,7632.78,7862.27,11616.00,12150.00,19404.00,42952.90,45350.42,70233.60,361410.40,518704.40,941632.50,1027276.14,1098571.50,1371201.30,2965942.98,3353760.00,15360416.00,16796800.00,31616203.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "revenue_schedule_monthly",
+				"attname": "updated_at",
+				"n_distinct": 5,
+				"most_common_vals": "{\"2026-01-19 16:55:36.350861+00\",\"2026-01-13 12:43:59.707466+00\",\"2026-01-19 18:41:41.291379+00\",\"2026-01-15 04:01:01.28362+00\",\"2026-01-15 19:09:57.983162+00\"}",
+				"most_common_freqs": [0.922592, 0.0652316, 0.00739291, 0.00347902, 0.00130463],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "117 MB",
+			"table_size": "64 MB",
+			"indexes_size": "52 MB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-01-19T19:30:44.386Z"
+	}
+}
