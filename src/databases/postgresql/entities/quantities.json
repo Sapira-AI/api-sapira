@@ -1,0 +1,556 @@
+{
+  "success": true,
+  "message": "Análisis de tabla public.quantities completado exitosamente",
+  "data": {
+    "table_name": "quantities",
+    "schema_name": "public",
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "contract_item_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "holding_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "period",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "unit_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "unit_of_measure",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": 32,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "quantity",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      }
+    ],
+    "indexes": [
+      {
+        "index_name": "quantities_contract_item_idx",
+        "index_definition": "CREATE INDEX quantities_contract_item_idx ON public.quantities USING btree (contract_item_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "quantities_holding_idx",
+        "index_definition": "CREATE INDEX quantities_holding_idx ON public.quantities USING btree (holding_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "quantities_period_idx",
+        "index_definition": "CREATE INDEX quantities_period_idx ON public.quantities USING btree (period)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "quantities_pkey",
+        "index_definition": "CREATE UNIQUE INDEX quantities_pkey ON public.quantities USING btree (id)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "quantities_unique_item_period",
+        "index_definition": "CREATE UNIQUE INDEX quantities_unique_item_period ON public.quantities USING btree (contract_item_id, period)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "16 kB"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constraint_name": "quantities_contract_item_id_fkey",
+        "table_name": "quantities",
+        "column_name": "contract_item_id",
+        "foreign_table_name": "contract_items",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "quantities_holding_id_fkey",
+        "table_name": "quantities",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      }
+    ],
+    "primary_unique_keys": [
+      {
+        "constraint_name": "quantities_pkey",
+        "constraint_type": "PRIMARY KEY",
+        "column_name": "id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      },
+      {
+        "constraint_name": "quantities_unique_item_period",
+        "constraint_type": "UNIQUE",
+        "column_name": "contract_item_id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      },
+      {
+        "constraint_name": "quantities_unique_item_period",
+        "constraint_type": "UNIQUE",
+        "column_name": "period",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_name": "after_quantity_invoice_update",
+        "event_manipulation": "INSERT",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_update_invoices_on_override()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "after_quantity_invoice_update",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_update_invoices_on_override()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "after_quantity_upsert",
+        "event_manipulation": "INSERT",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_update_schedule_on_override()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "after_quantity_upsert",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_update_schedule_on_override()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_quantities_set_holding",
+        "event_manipulation": "INSERT",
+        "event_object_table": "quantities",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION quantities_set_holding_from_contract_item()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      }
+    ],
+    "policies": [
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "policyname": "quantities_delete",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "policyname": "quantities_insert",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "policyname": "quantities_select",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "policyname": "quantities_update",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      }
+    ],
+    "statistics": [
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "contract_item_id",
+        "n_distinct": -0.156863,
+        "most_common_vals": "{0967d401-fcbd-4c9f-b75a-4209f706512a,0a3bade4-667a-4ba7-9a12-5076b7889529,5dcd7e74-7d38-4a5c-a51d-60a9f3b8eb7b,7693c9ac-3e5f-4ea8-8ba3-6f4a26e82a8c,940378ab-2708-45c7-aa4f-fe0b19ff36a2,a0393109-d26a-43c3-af55-631896c88b7d,d49ab2cf-a232-49e7-b908-16b24fa545f2,37a4c5d5-98e2-4dd6-a4b9-9eebdd5b0375}",
+        "most_common_freqs": [
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.0392157
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "created_at",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{\"2025-11-02 22:22:44.481586+00\",\"2025-11-27 21:18:24.985455+00\",\"2025-12-11 17:31:13.457333+00\",\"2025-12-11 17:31:13.570509+00\",\"2025-12-11 17:31:13.693498+00\",\"2025-12-11 17:31:13.820674+00\",\"2025-12-11 17:31:13.935975+00\",\"2025-12-11 17:31:14.087718+00\",\"2025-12-11 17:31:14.231148+00\",\"2025-12-11 17:31:14.353036+00\",\"2025-12-11 17:31:14.476109+00\",\"2025-12-11 17:31:14.60625+00\",\"2025-12-11 17:31:14.758556+00\",\"2025-12-11 17:31:14.878782+00\",\"2025-12-11 17:31:14.990046+00\",\"2025-12-11 17:31:15.108578+00\",\"2025-12-11 17:31:15.223961+00\",\"2025-12-11 17:31:15.336859+00\",\"2025-12-11 17:31:15.452756+00\",\"2025-12-11 17:31:15.590242+00\",\"2025-12-11 17:31:15.739038+00\",\"2025-12-11 17:31:15.853676+00\",\"2025-12-11 17:31:16.022559+00\",\"2025-12-11 17:31:16.153583+00\",\"2025-12-11 17:31:16.257137+00\",\"2025-12-11 17:31:16.372225+00\",\"2025-12-11 17:31:16.494346+00\",\"2025-12-11 17:31:16.608911+00\",\"2025-12-11 17:31:16.725376+00\",\"2025-12-11 17:31:16.870291+00\",\"2025-12-11 17:31:16.982005+00\",\"2025-12-11 17:31:17.091323+00\",\"2025-12-11 17:31:17.207619+00\",\"2025-12-11 17:31:17.321141+00\",\"2025-12-11 17:31:17.637259+00\",\"2025-12-11 17:31:17.830262+00\",\"2025-12-11 17:31:17.959866+00\",\"2025-12-11 17:31:18.085896+00\",\"2025-12-11 17:31:18.230222+00\",\"2025-12-11 17:31:18.36018+00\",\"2025-12-11 17:31:18.472639+00\",\"2025-12-11 17:31:18.624753+00\",\"2025-12-11 17:31:18.751647+00\",\"2025-12-11 17:31:18.877061+00\",\"2025-12-11 17:31:18.993405+00\",\"2025-12-11 17:31:19.113724+00\",\"2025-12-11 17:31:19.233267+00\",\"2025-12-11 17:31:19.361403+00\",\"2025-12-11 17:31:19.481499+00\",\"2025-12-11 17:31:19.591551+00\",\"2025-12-11 17:31:19.714045+00\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "created_by",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "holding_id",
+        "n_distinct": 1,
+        "most_common_vals": "{05583c6e-9364-4672-a610-0744324e44b4}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{040bbaf8-c1c6-4849-b573-08db76543182,0dc5b4f9-6697-47f7-a2a5-9809094f823b,17728fd7-4b03-49f3-be83-1f9859203f86,19bc4311-2800-4061-937e-8ddbf7c0a422,19bc9b86-a5bc-4cbc-80c2-f66c716b7b18,1a7733b2-d792-4683-b86a-0615c8088215,1b9b148c-a52d-42a6-a656-de6231dd4019,1e4b0387-f011-4bf7-9f5d-9e8e5fc45eee,228431d3-e345-426f-9bc3-be1079923f9c,3665e37e-7ae4-4732-8529-4e2f1b70437b,38cc0885-5c8e-4abc-ac6c-470a4cf2947b,3e16cd64-cebc-4c80-b156-ed10f0a6b156,433b8070-59a0-4393-9648-7fb263148048,434c27c2-a10b-42c0-87c0-f1513d552e29,4c099c90-ec9e-4ac5-a873-1681f7972c03,5a0b936c-af20-4098-ab68-44efa3775871,6632ddba-b129-4b86-902c-2ae306465b63,6aa72c90-c497-4c5a-80bd-aa63ca9785b7,6b1fcb29-a198-44ce-931f-7912e2482488,6d936d6f-83c2-4b1a-b7b4-420dea9e69b2,6e6c82d4-c5e3-426c-aa51-4b96da171e6c,70b61a60-2a54-4cfd-a189-d2bd12aeac5e,72b9bc92-f425-4e75-941c-4349c9a807bc,7941473d-aaea-430f-b047-d8df6b2a7c97,7ba3ceba-b738-481e-a7e3-b6219ce18aa4,826d89cb-faf9-4f42-aeec-15a3549a9da1,853cd3a4-62f5-4f9b-ab56-2ef392939691,88d8385f-3a70-47ed-b36a-162c86e3fad4,919d77f7-d611-45ce-bf42-3948205ea0d0,997b6409-e223-462a-84fe-9821998f0b46,a590ceea-4080-4a33-ab96-032bdad7140e,a95769f7-bba6-4f9d-99e4-0837f3ed23ed,ac57ff5e-6e3c-4157-ab70-f028dc885396,b05fcc34-576a-4d76-814a-158d86553df6,b2129dd3-27ef-4aaf-9a2f-7bccc0a89b3d,b2d922a7-448e-4009-8d4e-bd531eb89086,b8888c59-c2b8-46fe-8d93-048b4edd2a15,b98cd737-8106-4ffa-bcf6-347a98161ce2,bcedbd59-5625-4346-9796-b3f161402c85,c509d47d-c39b-4ac0-84f9-965112f9fc96,cb11a797-157d-4380-aae3-f98b46d3ce3d,cddb3b80-43ba-401b-b970-67e312a3bf73,d800fdfb-6099-4a20-bdc9-e5184158a38d,d9a6b505-ccb7-4bfe-8cba-b1a3dd064595,da28e07e-59d8-4272-a17d-2884e7a4583d,e2a2a8b3-a4d6-4a13-8109-a3f6a61999af,e31d2855-77ce-4203-aea2-7a4f6dc43337,e8698cd5-4571-4b3f-85ec-7310bb166f53,eb2ce6f1-f66d-4979-a337-092e2975b073,ed6025a7-dd15-4789-9c26-9db02a238e2a,f45d0031-1683-489a-aa19-6a25b57c91e2}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "notes",
+        "n_distinct": -0.0196078,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "period",
+        "n_distinct": -0.176471,
+        "most_common_vals": "{2025-01-01,2025-02-01,2025-03-01,2025-04-01,2025-05-01,2025-06-01,2025-07-01}",
+        "most_common_freqs": [
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255,
+          0.137255
+        ],
+        "histogram_bounds": "{2025-11-01,2025-12-01}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "quantity",
+        "n_distinct": -0.568627,
+        "most_common_vals": "{3.000000,9.000000,5.000000,50.000000,114.000000}",
+        "most_common_freqs": [
+          0.0980392,
+          0.0588235,
+          0.0392157,
+          0.0392157,
+          0.0392157
+        ],
+        "histogram_bounds": "{2.000000,6.000000,7.000000,8.000000,19.000000,25.000000,31.000000,41.000000,42.000000,44.000000,45.000000,49.000000,57.000000,58.000000,59.000000,66.000000,68.000000,69.000000,105.000000,110.000000,113.000000,126.000000,129.000000,134.000000}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "unit_of_measure",
+        "n_distinct": 1,
+        "most_common_vals": "{Vehículo}",
+        "most_common_freqs": [
+          0.960784
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "unit_price",
+        "n_distinct": 3,
+        "most_common_vals": "{27.000000,23.000000}",
+        "most_common_freqs": [
+          0.823529,
+          0.137255
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "quantities",
+        "attname": "updated_at",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{\"2025-11-02 22:22:44.481586+00\",\"2025-11-27 21:18:24.985455+00\",\"2025-12-11 17:31:13.457333+00\",\"2025-12-11 17:31:13.570509+00\",\"2025-12-11 17:31:13.693498+00\",\"2025-12-11 17:31:13.820674+00\",\"2025-12-11 17:31:13.935975+00\",\"2025-12-11 17:31:14.087718+00\",\"2025-12-11 17:31:14.231148+00\",\"2025-12-11 17:31:14.353036+00\",\"2025-12-11 17:31:14.476109+00\",\"2025-12-11 17:31:14.60625+00\",\"2025-12-11 17:31:14.758556+00\",\"2025-12-11 17:31:14.878782+00\",\"2025-12-11 17:31:14.990046+00\",\"2025-12-11 17:31:15.108578+00\",\"2025-12-11 17:31:15.223961+00\",\"2025-12-11 17:31:15.336859+00\",\"2025-12-11 17:31:15.452756+00\",\"2025-12-11 17:31:15.590242+00\",\"2025-12-11 17:31:15.739038+00\",\"2025-12-11 17:31:15.853676+00\",\"2025-12-11 17:31:16.022559+00\",\"2025-12-11 17:31:16.153583+00\",\"2025-12-11 17:31:16.257137+00\",\"2025-12-11 17:31:16.372225+00\",\"2025-12-11 17:31:16.494346+00\",\"2025-12-11 17:31:16.608911+00\",\"2025-12-11 17:31:16.725376+00\",\"2025-12-11 17:31:16.870291+00\",\"2025-12-11 17:31:16.982005+00\",\"2025-12-11 17:31:17.091323+00\",\"2025-12-11 17:31:17.207619+00\",\"2025-12-11 17:31:17.321141+00\",\"2025-12-11 17:31:17.637259+00\",\"2025-12-11 17:31:17.830262+00\",\"2025-12-11 17:31:17.959866+00\",\"2025-12-11 17:31:18.085896+00\",\"2025-12-11 17:31:18.230222+00\",\"2025-12-11 17:31:18.36018+00\",\"2025-12-11 17:31:18.472639+00\",\"2025-12-11 17:31:18.624753+00\",\"2025-12-11 17:31:18.751647+00\",\"2025-12-11 17:31:18.877061+00\",\"2025-12-11 17:31:18.993405+00\",\"2025-12-11 17:31:19.113724+00\",\"2025-12-11 17:31:19.233267+00\",\"2025-12-11 17:31:19.361403+00\",\"2025-12-11 17:31:19.481499+00\",\"2025-12-11 17:31:19.591551+00\",\"2025-12-11 17:31:19.714045+00\"}"
+      }
+    ],
+    "size_info": {
+      "total_size": "96 kB",
+      "table_size": "8192 bytes",
+      "indexes_size": "88 kB"
+    },
+    "permissions": [
+      {
+        "grantee": "anon",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "DELETE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "INSERT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "SELECT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "UPDATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      }
+    ],
+    "analysis_timestamp": "2026-01-20T12:30:13.234Z"
+  }

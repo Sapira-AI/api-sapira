@@ -142,7 +142,8 @@ export class ClaudeService {
 				widgets: allWidgets.length > 0 ? allWidgets : undefined,
 			};
 		} catch (error) {
-			this.logger.error('Error al enviar mensaje a Claude:', error);
+			this.logger.error('Error al enviar mensaje a Claude:');
+			this.logger.error(error);
 			throw new BadRequestException(`Error al comunicarse con Claude: ${error.message}`);
 		}
 	}

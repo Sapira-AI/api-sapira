@@ -1,0 +1,1850 @@
+ {
+  "success": true,
+  "message": "Análisis de tabla public.invoices completado exitosamente",
+  "data": {
+    "table_name": "invoices",
+    "schema_name": "public",
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "client_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "contract_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "issue_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "due_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "contract_currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "amount_contract_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": 18,
+        "numeric_scale": 6
+      },
+      {
+        "column_name": "amount_invoice_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "vat",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "total_invoice_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "amount_system_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "total_system_currency",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "fx_contract_to_invoice",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "pdf_url",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp without time zone",
+        "is_nullable": "YES",
+        "column_default": "now()",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "holding_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'Automatica'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_series",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'FAC'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "document_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'FACTURA'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "issuer_tax_id",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "issuer_legal_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "issuer_address",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "client_entity_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "client_tax_id",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'CREDITO'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "fiscal_regime",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "export_type",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0",
+        "character_maximum_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0
+      },
+      {
+        "column_name": "folio_fiscal_prev",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "attachments",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "sent_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "scheduled_at",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "original_issue_date",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "system_currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'USD'::text",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "fx_contract_to_system",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "is_legacy",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "legacy_invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "legacy_source_system",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "custom_fields",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "related_invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "invoice_group_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "requires_references_for_billing",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "tax_rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "true",
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "consolidated_into_invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "split_from_invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      },
+      {
+        "column_name": "split_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null,
+        "character_maximum_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null
+      }
+    ],
+    "indexes": [
+      {
+        "index_name": "idx_invoices_active_contract_period",
+        "index_definition": "CREATE INDEX idx_invoices_active_contract_period ON public.invoices USING btree (contract_id, scheduled_at, is_active) WHERE (is_active = true)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "32 kB"
+      },
+      {
+        "index_name": "idx_invoices_consolidated_into",
+        "index_definition": "CREATE INDEX idx_invoices_consolidated_into ON public.invoices USING btree (consolidated_into_invoice_id) WHERE (consolidated_into_invoice_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_custom_fields",
+        "index_definition": "CREATE INDEX idx_invoices_custom_fields ON public.invoices USING gin (custom_fields)",
+        "index_type": "gin",
+        "is_unique": "NO",
+        "index_size": "24 kB"
+      },
+      {
+        "index_name": "idx_invoices_group_id",
+        "index_definition": "CREATE INDEX idx_invoices_group_id ON public.invoices USING btree (invoice_group_id) WHERE (invoice_group_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "40 kB"
+      },
+      {
+        "index_name": "idx_invoices_holding_id",
+        "index_definition": "CREATE INDEX idx_invoices_holding_id ON public.invoices USING btree (holding_id)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_invoice_type",
+        "index_definition": "CREATE INDEX idx_invoices_invoice_type ON public.invoices USING btree (invoice_type)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_overdue_check",
+        "index_definition": "CREATE INDEX idx_invoices_overdue_check ON public.invoices USING btree (due_date, status) WHERE (status = ANY (ARRAY['Enviada'::text, 'Emitida'::text]))",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_related_invoice_id",
+        "index_definition": "CREATE INDEX idx_invoices_related_invoice_id ON public.invoices USING btree (related_invoice_id) WHERE (related_invoice_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_requires_references",
+        "index_definition": "CREATE INDEX idx_invoices_requires_references ON public.invoices USING btree (requires_references_for_billing, status) WHERE (requires_references_for_billing = true)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "16 kB"
+      },
+      {
+        "index_name": "idx_invoices_split_from",
+        "index_definition": "CREATE INDEX idx_invoices_split_from ON public.invoices USING btree (split_from_invoice_id) WHERE (split_from_invoice_id IS NOT NULL)",
+        "index_type": "btree",
+        "is_unique": "NO",
+        "index_size": "8192 bytes"
+      },
+      {
+        "index_name": "invoices_pkey",
+        "index_definition": "CREATE UNIQUE INDEX invoices_pkey ON public.invoices USING btree (id)",
+        "index_type": "btree",
+        "is_unique": "YES",
+        "index_size": "40 kB"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constraint_name": "fk_invoices_holding_id",
+        "table_name": "invoices",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "CASCADE"
+      },
+      {
+        "constraint_name": "invoices_client_entity_id_fkey",
+        "table_name": "invoices",
+        "column_name": "client_entity_id",
+        "foreign_table_name": "client_entities",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_client_id_fkey",
+        "table_name": "invoices",
+        "column_name": "client_id",
+        "foreign_table_name": "clients",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_company_id_fkey",
+        "table_name": "invoices",
+        "column_name": "company_id",
+        "foreign_table_name": "companies",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_consolidated_into_invoice_id_fkey",
+        "table_name": "invoices",
+        "column_name": "consolidated_into_invoice_id",
+        "foreign_table_name": "invoices",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "SET NULL"
+      },
+      {
+        "constraint_name": "invoices_contract_id_fkey",
+        "table_name": "invoices",
+        "column_name": "contract_id",
+        "foreign_table_name": "contracts",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_holding_id_fkey",
+        "table_name": "invoices",
+        "column_name": "holding_id",
+        "foreign_table_name": "company_holdings",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_legacy_invoice_id_fkey",
+        "table_name": "invoices",
+        "column_name": "legacy_invoice_id",
+        "foreign_table_name": "invoices_legacy",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "SET NULL"
+      },
+      {
+        "constraint_name": "invoices_related_invoice_id_fkey",
+        "table_name": "invoices",
+        "column_name": "related_invoice_id",
+        "foreign_table_name": "invoices",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "NO ACTION"
+      },
+      {
+        "constraint_name": "invoices_split_from_invoice_id_fkey",
+        "table_name": "invoices",
+        "column_name": "split_from_invoice_id",
+        "foreign_table_name": "invoices",
+        "foreign_column_name": "id",
+        "update_rule": "NO ACTION",
+        "delete_rule": "SET NULL"
+      }
+    ],
+    "primary_unique_keys": [
+      {
+        "constraint_name": "invoices_pkey",
+        "constraint_type": "PRIMARY KEY",
+        "column_name": "id",
+        "is_deferrable": "NO",
+        "initially_deferred": "NO"
+      }
+    ],
+    "triggers": [
+      {
+        "trigger_name": "invoices_revenue_schedule_trigger",
+        "event_manipulation": "INSERT",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "invoices_revenue_schedule_trigger",
+        "event_manipulation": "DELETE",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "invoices_revenue_schedule_trigger",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_assign_invoice_group_id",
+        "event_manipulation": "INSERT",
+        "event_object_table": "invoices",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION assign_invoice_group_id()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_invoice_status_change",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_invoice_contract()",
+        "action_orientation": "ROW",
+        "action_condition": "(old.status IS DISTINCT FROM new.status)"
+      },
+      {
+        "trigger_name": "trigger_auto_populate_invoice_fx_to_system",
+        "event_manipulation": "INSERT",
+        "event_object_table": "invoices",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_populate_invoice_fx_to_system()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_auto_populate_invoice_fx_to_system",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_populate_invoice_fx_to_system()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_auto_populate_invoice_tax_rate",
+        "event_manipulation": "INSERT",
+        "event_object_table": "invoices",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_populate_invoice_tax_rate()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_auto_populate_invoice_tax_rate",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "BEFORE",
+        "action_statement": "EXECUTE FUNCTION auto_populate_invoice_tax_rate()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_revenue_schedule_after_invoice_change",
+        "event_manipulation": "INSERT",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_invoice_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_revenue_schedule_after_invoice_change",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_invoice_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trigger_sync_invoice_items_on_invoice_update",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "invoices",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION sync_invoice_items_on_invoice_update()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      }
+    ],
+    "policies": [
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "invoices_delete_access",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "invoices_holding_isolation",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((holding_id = get_current_user_holding_id()) AND (user_has_permission('VIEW_FACTURACION'::text) OR user_has_permission('EDIT_FACTURACION'::text)))",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "invoices_manage_access",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "invoices_update_access",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))",
+        "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "tenant_isolation_delete_invoices",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "tenant_isolation_insert_invoices",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(holding_id = get_current_user_holding_id())"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "tenant_isolation_select_invoices",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "policyname": "tenant_isolation_update_invoices",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(holding_id = get_current_user_holding_id())",
+        "with_check": null
+      }
+    ],
+    "statistics": [
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "amount_contract_currency",
+        "n_distinct": -0.121739,
+        "most_common_vals": "{5000.000000,20000.000000,13.244000,116.700000,200.000000,500.000000,833.333333,1000.000000,3500.000000,-416.666667,1500.000000,-833.333333,135.200000,56.760000,4000.000000,4200.000000,0.000000,2750.000000}",
+        "most_common_freqs": [
+          0.0565217,
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.0347826,
+          0.026087,
+          0.026087,
+          0.026087,
+          0.0217391,
+          0.00869565
+        ],
+        "histogram_bounds": "{55.260000,55.263840,5778.000000,5940.000000,5967.000000,7292.000000,7940.000000,7967.000000,8509.000000,10021.000000}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "amount_invoice_currency",
+        "n_distinct": -0.156522,
+        "most_common_vals": "{5000,20000,13.244,116.7,135.2,200,500,833.3333333333333333,1000.0000000000000000,3500,-416.6666666666666667,1500,-833.3333333333333333,4000,4200,0.0000000000000000,11448,2750}",
+        "most_common_freqs": [
+          0.0565217,
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.026087,
+          0.026087,
+          0.0217391,
+          0.0130435,
+          0.00869565
+        ],
+        "histogram_bounds": "{135.20000000000002,2161156.00,2169666.00,2192128,2203235.00,2212545.00,2222252.00,2223970.00,2226724.00,5395708,5482571.00,5583600,5833220.00,7031529.00,7471144.00,7504675.00,7962211.00,9778693.00}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "amount_system_currency",
+        "n_distinct": -0.113043,
+        "most_common_vals": "{1000.00,13.244,41.67,200.000000,250.00,500.000000,3500.000000,4728.68,-416.666667,1500.000000,-41.67,3.27,1.37,4000.000000,4200.000000,2750.000000}",
+        "most_common_freqs": [
+          0.108696,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0478261,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.0304348,
+          0.026087,
+          0.026087,
+          0.026087,
+          0.00869565
+        ],
+        "histogram_bounds": "{1.34,2239.29,5778.000000,5940.000000,5967.000000,7292.000000,7940.000000,7967.000000,8509.000000,10021.000000}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "attachments",
+        "n_distinct": 1,
+        "most_common_vals": "{[]}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "client_entity_id",
+        "n_distinct": 11,
+        "most_common_vals": "{6cb9a167-a95a-4b8d-b517-61ed7679b66a,b05d1bd5-7613-42f0-b333-46b028c3b6c2,19448d51-23f8-426c-befe-f64cda4b0f29,590e7401-eec0-471c-a29f-79319f6b0abc,8553f485-6acc-47d9-b689-8fce75ca4f3a,c940120d-e636-4d1f-bd32-17fc23851e79,397a6c69-6188-4d42-83b4-e194f09d80fd,66356aa8-07ae-48c0-9815-41189187c601,b661b5cf-8036-48c9-bc00-5d1d71d993bd,13d457b4-3e84-49f7-9d24-c8c3bf15edbb}",
+        "most_common_freqs": [
+          0.252174,
+          0.226087,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0347826,
+          0.0304348,
+          0.0304348,
+          0.00869565
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "client_id",
+        "n_distinct": 9,
+        "most_common_vals": "{d9b69de7-de46-458b-9fbe-b929a590b454,7bc2200d-e558-4339-9682-71ae06912481,c8c7d008-9a19-4079-8143-754da3a02611,2a1a2950-dbb5-4484-8822-e6a07c665aad,7f138f63-fe05-48e4-9910-446f5ffe7d01,bb239073-1689-449a-9459-5089cca30b43,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,d65eb3d6-a373-428a-9761-56982fe0c6d9,1eafa270-b3a4-44df-9130-00ad8218afe1}",
+        "most_common_freqs": [
+          0.478261,
+          0.16087,
+          0.104348,
+          0.0608696,
+          0.0565217,
+          0.0521739,
+          0.0304348,
+          0.0304348,
+          0.0130435
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "client_tax_id",
+        "n_distinct": 7,
+        "most_common_vals": "{77.123.456-7,WAYMX123456789,B12345678,MEX123456T89,76023713-2,76357700-7}",
+        "most_common_freqs": [
+          0.252174,
+          0.226087,
+          0.0521739,
+          0.0521739,
+          0.0347826,
+          0.0304348
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "company_id",
+        "n_distinct": 5,
+        "most_common_vals": "{e836870e-e594-4837-91fa-aa4d48ad4766,602b41a0-0970-4b0c-8f8c-748c6b89f54d,bb0caa69-162e-4b9e-8e54-9aff347abf1f,e95adedd-237d-44b2-bae5-be1f88ffa340,110bb57b-1be0-4a20-a1cb-18dd822794d7}",
+        "most_common_freqs": [
+          0.308696,
+          0.278261,
+          0.265217,
+          0.121739,
+          0.00869565
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "consolidated_into_invoice_id",
+        "n_distinct": 6,
+        "most_common_vals": "{04287d7a-f603-49bd-bb79-81e655e6e60d,12172e88-0f10-4d46-8082-0a74c6e62a31,b94c4391-c23f-466b-8b06-b13e909d73c0,d53cdcfe-98a9-426c-966e-b69213e5f53d,d54e51bf-e0f8-43b5-bb6e-5fcbfeb97d2f,d6402f90-255a-4609-a268-98dac5751f77}",
+        "most_common_freqs": [
+          0.0130435,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "contract_currency",
+        "n_distinct": 4,
+        "most_common_vals": "{USD,CLF,MXN,PEN}",
+        "most_common_freqs": [
+          0.391304,
+          0.356522,
+          0.226087,
+          0.0130435
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "contract_id",
+        "n_distinct": 16,
+        "most_common_vals": "{29380864-71f8-42c0-80b4-3d3d066a96a6,c123c0fd-1d00-42ee-b32f-27efa404600d,2645d4b1-4e25-41ad-a2c0-8265c358c4a2,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,05dd6701-6265-4181-a46e-b224f08b43bd,26780efb-1927-4ea4-976c-0957bfd3d94d,426c6c4e-3fc9-4934-8084-e238a43e115a,a4063cb8-6599-41ea-800b-0d3a262e07c5,a634f958-d95e-4331-80a3-5e3c27903dce,abb0ce60-af5a-4db8-900a-6a5bef347a3c,5e1da7e9-ad0c-4f11-9747-342a662624e5,e67d12ae-8f9d-4746-9d5d-6c193997c41b,4128c202-5619-4502-8c71-f5b2ee5b2a7f,5f6bf904-7b07-4518-9669-b30255f877ec}",
+        "most_common_freqs": [
+          0.252174,
+          0.226087,
+          0.0565217,
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0304348,
+          0.0304348,
+          0.0130435,
+          0.0130435
+        ],
+        "histogram_bounds": "{02d80009-6789-425e-85dc-31fb80148dae,b8940149-4a75-42c1-9fec-3f77236e82ed}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "created_at",
+        "n_distinct": -0.43913,
+        "most_common_vals": "{\"2025-11-03 14:19:45.43801\",\"2025-10-15 18:14:09.79321\",\"2025-10-15 20:00:11.177482\",\"2025-12-01 20:08:20.185864\",\"2025-12-01 20:28:27.078779\",\"2025-12-01 20:54:11.920152\",\"2025-12-01 22:24:50.061509\",\"2025-12-02 18:21:18.727535\",\"2026-01-12 15:34:47.475918\",\"2026-01-12 15:40:10.826262\",\"2025-12-02 16:45:22.385437\",\"2025-12-02 18:50:45.284714\"}",
+        "most_common_freqs": [
+          0.0608696,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0434783,
+          0.0391304
+        ],
+        "histogram_bounds": "{\"2025-11-28 22:48:48.397474\",\"2025-11-28 23:32:53.675563\",\"2025-11-28 23:34:25.084916\",\"2025-11-29 13:00:09.722192\",\"2025-12-05 16:45:25.330008\",\"2025-12-05 16:53:04.74023\",\"2025-12-05 19:03:50.763795\",\"2025-12-14 21:51:53.414451\",\"2025-12-14 22:36:47.609135\",\"2025-12-14 22:47:59.482129\",\"2025-12-14 22:48:13.04822\",\"2025-12-14 22:48:25.521126\",\"2025-12-14 22:48:36.125847\",\"2025-12-17 12:55:26.380562\",\"2025-12-18 00:21:21.209462\",\"2025-12-18 00:23:13.415725\",\"2025-12-18 00:23:13.674305\",\"2025-12-18 00:23:13.913336\",\"2025-12-18 00:23:14.195432\",\"2025-12-18 00:23:14.423822\",\"2025-12-18 00:23:14.699922\",\"2025-12-18 00:23:14.934581\",\"2025-12-30 14:31:43.388236\",\"2026-01-06 10:36:47.346256\",\"2026-01-06 10:36:47.515921\",\"2026-01-06 10:36:47.666271\",\"2026-01-06 10:36:47.898449\",\"2026-01-06 10:36:48.153266\",\"2026-01-06 10:36:48.399708\",\"2026-01-06 10:36:48.541065\",\"2026-01-06 10:36:48.689355\",\"2026-01-06 10:36:48.840652\",\"2026-01-06 10:36:48.985152\",\"2026-01-06 10:36:49.129402\",\"2026-01-06 10:36:49.270986\",\"2026-01-06 10:39:17.600654\",\"2026-01-06 10:39:17.739923\",\"2026-01-06 10:39:17.953812\",\"2026-01-06 10:39:18.169596\",\"2026-01-06 10:39:18.294011\",\"2026-01-06 10:39:18.422451\",\"2026-01-06 10:39:18.555266\",\"2026-01-06 10:39:18.673851\",\"2026-01-06 10:39:18.882475\",\"2026-01-06 10:39:19.00589\",\"2026-01-06 10:39:19.130302\",\"2026-01-06 10:39:19.257709\",\"2026-01-12 14:50:27.591899\",\"2026-01-12 14:50:27.734046\",\"2026-01-12 14:50:27.90722\",\"2026-01-12 14:50:28.044671\",\"2026-01-12 14:50:28.183113\",\"2026-01-12 14:50:28.33188\",\"2026-01-12 14:50:28.473835\",\"2026-01-12 14:50:28.603376\",\"2026-01-12 14:50:28.728302\",\"2026-01-12 14:50:28.847255\",\"2026-01-12 14:50:28.962396\",\"2026-01-12 14:50:29.071262\",\"2026-01-12 15:48:46.709879\",\"2026-01-12 15:48:46.863766\",\"2026-01-12 15:48:47.012689\",\"2026-01-12 15:48:47.166056\",\"2026-01-12 15:48:47.293813\",\"2026-01-12 15:48:47.42186\",\"2026-01-12 15:48:47.541696\",\"2026-01-12 15:48:47.652658\",\"2026-01-12 15:48:47.781394\",\"2026-01-12 15:48:47.907287\",\"2026-01-12 15:48:48.010399\",\"2026-01-12 15:48:48.117394\",\"2026-01-12 15:54:46.278608\",\"2026-01-12 15:54:46.659935\",\"2026-01-12 15:54:46.983574\",\"2026-01-12 15:54:47.302281\",\"2026-01-12 15:54:47.635691\",\"2026-01-12 15:54:47.988898\",\"2026-01-12 15:54:48.323684\",\"2026-01-12 15:54:48.670465\",\"2026-01-12 15:54:49.008056\",\"2026-01-12 15:54:49.410855\",\"2026-01-12 15:54:49.718526\",\"2026-01-12 15:54:50.018944\",\"2026-01-19 18:13:14.444883\",\"2026-01-19 18:37:22.383476\",\"2026-01-19 18:40:24.060432\",\"2026-01-19 18:41:06.421005\",\"2026-01-19 18:41:24.763656\",\"2026-01-19 18:41:41.291379\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "custom_fields",
+        "n_distinct": 1,
+        "most_common_vals": "{\"{}\"}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "document_type",
+        "n_distinct": 2,
+        "most_common_vals": "{FACTURA,NC}",
+        "most_common_freqs": [
+          0.956522,
+          0.0391304
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "due_date",
+        "n_distinct": -0.304348,
+        "most_common_vals": "{2026-07-01,2026-05-01,2026-02-01,2026-06-01,2026-08-01,2026-09-01,2026-10-01,2026-03-01,2026-04-01,2026-01-01,2025-06-26,2026-11-01,2026-12-01,2025-11-01,2025-12-01,2025-08-01,2025-10-01,2026-05-31,2025-06-22,2025-08-07,2025-09-01,2025-10-30,2025-12-02,2026-01-31,2026-03-03,2026-03-31,2026-07-31,2026-08-31,2026-10-31,2027-01-01}",
+        "most_common_freqs": [
+          0.0652174,
+          0.0608696,
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0478261,
+          0.0478261,
+          0.0391304,
+          0.0304348,
+          0.0304348,
+          0.026087,
+          0.0217391,
+          0.0217391,
+          0.0173913,
+          0.0173913,
+          0.0130435,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{2025-03-03,2025-03-31,2025-04-03,2025-04-10,2025-04-11,2025-04-28,2025-05-04,2025-05-23,2025-05-29,2025-06-01,2025-06-07,2025-06-12,2025-06-28,2025-07-02,2025-07-15,2025-07-29,2025-07-31,2025-08-14,2025-08-20,2025-08-28,2025-08-29,2025-08-31,2025-09-10,2025-09-11,2025-09-26,2025-09-28,2025-10-29,2025-11-28,2025-11-30,2025-12-29,2025-12-30,2025-12-31,2026-01-14,2026-01-28,2026-01-30,2026-02-28,2026-03-02,2026-03-30,2026-04-30,2026-12-31}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "export_type",
+        "n_distinct": 2,
+        "most_common_vals": "{0,1}",
+        "most_common_freqs": [
+          0.786957,
+          0.213043
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "fiscal_regime",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "folio_fiscal_prev",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "fx_contract_to_invoice",
+        "n_distinct": 17,
+        "most_common_vals": "{1}",
+        "most_common_freqs": [
+          0.695652
+        ],
+        "histogram_bounds": "{935.74,940,940.95,941.97,948.87,964.28,975.82,977.58,38452.00,38814.00,38978.00,39149.33,39179.33,39228.00,39260.00,39666.586315263194}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "fx_contract_to_system",
+        "n_distinct": 5,
+        "most_common_vals": "{1.0,0.0242,40.52,0.05,3.752}",
+        "most_common_freqs": [
+          0.404348,
+          0.0869565,
+          0.0608696,
+          0.0478261,
+          0.0130435
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "holding_id",
+        "n_distinct": 2,
+        "most_common_vals": "{05583c6e-9364-4672-a610-0744324e44b4,5652e95e-bb99-48f5-aa1c-13c8c2638fc6}",
+        "most_common_freqs": [
+          0.865217,
+          0.134783
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "id",
+        "n_distinct": -1,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{0010feb5-d8e1-42dd-8652-da3725a76125,01594d05-885e-4111-9b1d-7d691f8ef3ed,02bb9e90-e75e-498e-b993-c08203627d96,03fd598b-0270-4796-a63e-4fef7ec2a4c8,04e6a2d5-0dc7-4f20-bf47-b319ba6e1323,0599ec56-75fc-4232-9a40-40381e779cf3,06835325-9c7c-439f-9e7f-748bed1f772d,090c6af6-c42b-405c-abb1-c2053a15e8af,0d5ed473-64c2-450b-a5ca-497332a36912,11dc082b-8104-468a-b2ec-1f978cf478d9,12172e88-0f10-4d46-8082-0a74c6e62a31,1a5cb16d-3597-43af-adbc-3945c07b59bb,1ba78fbf-ba12-47f4-9b86-089a0e32e3bc,1dc42d56-e39c-4443-b15f-ca8cac7d2d39,1f74ed06-46a8-4b8c-a5e6-075740d22544,2215dff9-8719-47df-9d78-60a488654623,23d84055-905d-4a07-88d0-02d135bd3952,269bdefc-4e72-467c-b0c8-e4e20b8492e5,2c1590b7-10ed-405a-ae5c-73a6932816a2,2c93bc32-9235-4da1-b403-faebb16276a5,2f102773-ee8d-43a0-ae02-e76bc6b24622,30fd9a91-2070-4967-83b9-442ba00ebf02,3257dc59-ae90-4373-aaef-7fa55956f3df,367a5dce-72da-448c-a0c7-c69c62994e30,373eae4b-2db4-4fd6-9b42-049ac46a938b,382d60ff-5298-4204-8e43-721d734d39f6,39782e58-de68-422d-9664-76aa4690edb0,3b05267b-8273-416a-920c-6d19d525c14d,3b29acee-78e0-41b3-acbc-0a84394037e7,41b00fc4-1e0d-4f43-8a95-f2cf8aef5efd,431cf93f-ea2f-487d-9cf9-a5ee376c762e,47b29374-99f6-468b-a214-251f38f7e088,4a382da4-dbfd-4696-9ef8-8afbff948eb4,4ea100bf-4ecb-4b92-8ce6-9d992fde8719,506d4375-1937-400f-b1d7-327571348880,522238fc-43f5-4dcb-90d3-cbce1ffd6b32,5461f026-5a63-42f4-a966-1abb54f738c8,55b05dbb-ed64-421b-8c94-e318fea1cb32,5c15ff2a-7351-4f3f-bd26-1dffcc2dcd02,5ed83cd7-10d1-4d48-8771-78dee71601ed,63a2ceef-da7a-4179-9e35-469c2decc1b8,653caa77-1650-4c1c-ab69-7a64797c4332,68492b86-ee9e-42db-840b-fc0613c0975d,69af0fb2-e5dd-444a-bd49-b61ae0b01970,6bcd7872-6ea4-40c6-9099-03453f1de2ac,704ef7fa-e922-4279-90eb-f3b47ae2e992,73ced4a6-8bd4-47c8-ae86-cc8bb5bfe848,75b6d303-71cd-4181-9294-47e8c299b75a,76b65ba9-9f6e-4344-b571-1f3f5d04fb58,77cd95d9-5d15-47f8-8edc-c8e02766773b,7cc74f66-0c9f-405d-ab01-a0882819d7e6,80fc63ab-da48-49d2-8a42-d61b0d59faae,84bdd7b8-a31b-46fa-b8c0-8e5d8a86d6c9,873ac1eb-7b9e-4fd1-9222-403b7b62eabb,8b100559-0772-46d2-bddb-375cc108d9f7,8d6f966b-64d9-4c54-8a96-5e6f8763881e,91fd41c1-a2f3-45ac-92b2-ee32c6f4607e,930706a6-d686-4e48-9f2c-55fd2bde1b07,94900e3f-dfde-410b-9616-d7e3e309af35,9aa68320-5f74-4847-8e16-611b2a6b8115,9c7ae808-3700-484d-a75f-c482417b643f,a1a5fd3e-47fa-4d39-abdc-44401b261228,a2cb0a1e-9569-4ab4-ba5e-a1bd77a50396,a7244e9f-39b0-44e9-84b3-db7a7c4816d8,ac4fc3fb-d9ad-47c9-90aa-c813d3d59592,ae278960-d333-4b4a-a9f5-f3d9ed510a6d,b002afe1-937d-437c-98a6-6291fa902a49,b2a8c98c-1d6e-4b10-b05e-7c8b5581c977,b447122c-b573-48d5-8cc2-1923de964249,b85fc264-c7f5-4ec8-98f8-8bcd5bcd9c36,b94c4391-c23f-466b-8b06-b13e909d73c0,ba88debc-ada6-4085-9107-8a07a005b903,bd42748a-fca8-44d4-87e4-7ccee4eb70db,c04d8551-2ae5-4775-a5a8-db7e904ece01,c208e4b6-18a3-4242-af68-cacde0b7aaef,c6752f0d-2e7a-4e27-95cb-4820e44be832,c905248a-f373-47f2-beb8-51adcab886db,cb6925d1-37c0-44af-9ec6-133841de0106,ce720518-f24d-4631-b5fd-64c3efabb08e,d0f8b872-88ad-4c1b-93b3-18c95d715390,d53cdcfe-98a9-426c-966e-b69213e5f53d,d54e51bf-e0f8-43b5-bb6e-5fcbfeb97d2f,d6a1bac2-b521-4668-943d-76066a180832,d9e62a93-96fd-4c8f-a9a6-c2830110e660,dd4d55e5-1f70-444c-abb8-a4029234f5d4,dfbebe23-b53b-49eb-9163-713bccb68e1c,e10a0209-d8c7-4418-aa3d-e8e346d32895,e2fdab8f-431f-4d30-b8d4-f6d03c72f363,e4a316dd-5644-453f-a15e-dc7162078fd9,e618c02d-4108-4d9d-b50d-0474b23c9983,ea069098-e01c-474f-8278-875e761c8f23,ed8aa63f-e3d3-4ee7-8a6a-e9aa005b19b2,edeca15b-6177-4e5e-ac25-515d8768e116,ef161f7b-a4b1-4b46-9a05-ef70553fe759,f26b3bfb-72d8-4e26-ae51-913db7302a4d,f3050ca2-33f2-40dc-957f-7158d5a04f16,f4ac7ce7-baa0-4267-9b04-7ea4277ba909,f95d4f51-c7ee-41a1-9b0a-0da722397c19,fac90e7b-cddc-4454-b72c-84f549be2cb3,fd07d06e-dee6-4f23-99eb-9fd85e9d6926,fff36027-69fb-485c-aed5-4c232dc80415}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "invoice_currency",
+        "n_distinct": 5,
+        "most_common_vals": "{USD,CLF,MXN,CLP,PEN}",
+        "most_common_freqs": [
+          0.356522,
+          0.269565,
+          0.226087,
+          0.121739,
+          0.0130435
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "invoice_group_id",
+        "n_distinct": -0.908696,
+        "most_common_vals": "{5aa95b56-80f2-4cdb-9a6a-b325520cde00,0010feb5-d8e1-42dd-8652-da3725a76125,039161e6-169b-4855-b58d-201a8a634971,13e8d8dc-f0c5-4c65-b898-69e36da4a541,26a0d9f9-b9b1-452e-acb7-c7bf3c4e8e28,32512668-fc04-4ab2-9200-b6c7aa07bd10,367a5dce-72da-448c-a0c7-c69c62994e30,479ddc18-c843-4958-870e-c9cc5832b0d0,4ea100bf-4ecb-4b92-8ce6-9d992fde8719,4eb3c6e6-1108-49be-8be2-7b84044a554f,52aec59e-2296-4cd1-a560-389ba1b82d1f,676b23dd-ae36-433b-a73f-e4ad9effc5e1,83831a00-ebe4-4c75-b642-acddb587d0db,8c2a4530-f4c4-43ea-95ca-ff062cab1ef9,9913c33c-f2d3-4fcc-8e37-52d4b9a20026,aa5c9ed4-1fdc-4452-8429-c426c1c73ce7,c04d8551-2ae5-4775-a5a8-db7e904ece01,c6752f0d-2e7a-4e27-95cb-4820e44be832,fac90e7b-cddc-4454-b72c-84f549be2cb3}",
+        "most_common_freqs": [
+          0.0173913,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{009121f0-e184-4be8-9dae-1d2b305d4a7f,01594d05-885e-4111-9b1d-7d691f8ef3ed,03fd598b-0270-4796-a63e-4fef7ec2a4c8,04e6a2d5-0dc7-4f20-bf47-b319ba6e1323,0599ec56-75fc-4232-9a40-40381e779cf3,06835325-9c7c-439f-9e7f-748bed1f772d,07de1484-71cd-4f46-8c49-b0c998512dcc,0c924401-e572-45e5-91da-6935f621951c,100ecafc-4dca-4153-af19-20ab580d4c19,1212a0f4-fbe6-4e47-b77c-194525ef2143,18dc2fc6-98bc-4dc0-be5e-0eb0aa1372c5,1ada98b9-9753-49b8-b53f-98086cee6b46,1cd775ea-eab3-4a07-a84d-b6f59d04ae1b,1edd1e46-1e07-4329-84ae-b06059f2eeb8,1f74ed06-46a8-4b8c-a5e6-075740d22544,2215dff9-8719-47df-9d78-60a488654623,24cb2f43-916a-4169-962a-01e363c4853f,2a7e6371-9d0c-461a-8ad2-d85261b09dee,2c93bc32-9235-4da1-b403-faebb16276a5,2d223897-869c-411b-8a28-7a7f25edd2b0,2fbff9a9-f3e6-4ad0-89e5-da6e40c5e5e8,3257dc59-ae90-4373-aaef-7fa55956f3df,370f5fc9-af42-4a3e-a15c-138843f40334,376b4512-e8bd-4842-93ef-8d28afdd0243,382d60ff-5298-4204-8e43-721d734d39f6,3a56fbd0-889f-4dac-af07-ae957f6a86f1,3b06bd97-b68a-4998-b6d9-7d2e93b71e19,3fd5776d-5f9c-4528-afce-8f7d53c471bd,41b00fc4-1e0d-4f43-8a95-f2cf8aef5efd,431cf93f-ea2f-487d-9cf9-a5ee376c762e,497b5bf3-02a1-4334-95c9-92c223e43c92,4a382da4-dbfd-4696-9ef8-8afbff948eb4,506d4375-1937-400f-b1d7-327571348880,51eb8d7f-9463-4abe-b21e-f2923683f9d2,5461f026-5a63-42f4-a966-1abb54f738c8,55b05dbb-ed64-421b-8c94-e318fea1cb32,5aebc474-a31a-4198-9a2d-8f99a5259f4f,5c15ff2a-7351-4f3f-bd26-1dffcc2dcd02,5ed83cd7-10d1-4d48-8771-78dee71601ed,63a2ceef-da7a-4179-9e35-469c2decc1b8,64a7b1dc-df92-49d1-861a-90cd33140607,66cb19ec-e62e-420c-acab-a3ed68240fc8,686f2149-3d6a-4f60-a8a1-392f403f8f85,69b8efd0-4c24-4cbb-83ab-ea0572ae7c7c,6dd57967-ac3c-4523-a611-8ec27b01c232,704ef7fa-e922-4279-90eb-f3b47ae2e992,73ced4a6-8bd4-47c8-ae86-cc8bb5bfe848,769924da-0ad3-4b3e-b9d4-00d1ab899d5e,76ce30fc-12bc-4b74-95cd-2d5d6bc57961,77cd95d9-5d15-47f8-8edc-c8e02766773b,7ee1788e-0ef3-410b-9d45-94e33a30c9a9,81717e4e-ca59-466f-acbf-d14d28dd6a69,852d3258-61ef-4f8d-83fc-bb4b47fcfce7,8b100559-0772-46d2-bddb-375cc108d9f7,8f59661b-6f08-4a08-a2a4-7640200363bd,90045c9f-488b-4d1b-a95e-fd7be80aae9f,91fd41c1-a2f3-45ac-92b2-ee32c6f4607e,930706a6-d686-4e48-9f2c-55fd2bde1b07,94900e3f-dfde-410b-9616-d7e3e309af35,9aa68320-5f74-4847-8e16-611b2a6b8115,9c7ae808-3700-484d-a75f-c482417b643f,a2139b08-73e3-4976-8357-1cb948e4f7b3,a48acf27-d771-4d77-bc14-da898dc7aa38,a7244e9f-39b0-44e9-84b3-db7a7c4816d8,ac4fc3fb-d9ad-47c9-90aa-c813d3d59592,ae278960-d333-4b4a-a9f5-f3d9ed510a6d,af10dd39-932f-4f09-b293-48395ae74984,b2a8c98c-1d6e-4b10-b05e-7c8b5581c977,b6bee44b-7445-42f6-9a35-0a9f2939ad11,b85fc264-c7f5-4ec8-98f8-8bcd5bcd9c36,ba88debc-ada6-4085-9107-8a07a005b903,bd42748a-fca8-44d4-87e4-7ccee4eb70db,c0f60fae-14b7-4b6d-83ba-a04b4bbbf041,c208e4b6-18a3-4242-af68-cacde0b7aaef,c714959c-80b0-42b3-8e68-9a7ad4b89b05,c905248a-f373-47f2-beb8-51adcab886db,cb6925d1-37c0-44af-9ec6-133841de0106,ce720518-f24d-4631-b5fd-64c3efabb08e,d0f8b872-88ad-4c1b-93b3-18c95d715390,d549f9b3-db0a-4b13-af75-c2edc5e27fa8,d926da0f-eef0-454c-93a6-e5a865acd079,dbcdc2a3-2f70-4bc5-8b04-aaf3dec773b0,dd4d55e5-1f70-444c-abb8-a4029234f5d4,df46e2ae-fce2-4aef-a7ec-4716d9f86645,e04b48f3-5c89-43dd-87ad-561e6d843011,e2123c2c-8935-41a5-8ece-88e2e31adefd,e2fdab8f-431f-4d30-b8d4-f6d03c72f363,e4a316dd-5644-453f-a15e-dc7162078fd9,e9357c9f-7ded-46fe-b9ee-aafbdea63063,ea069098-e01c-474f-8278-875e761c8f23,ed8aa63f-e3d3-4ee7-8a6a-e9aa005b19b2,eda19d1e-ec62-411f-bdb2-026bd90e0272,eea4e2a0-c7ad-4133-81e5-ac1c5a368234,f1367c3f-6e11-43f1-bfde-3c99359ea606,f26b3bfb-72d8-4e26-ae51-913db7302a4d,f3050ca2-33f2-40dc-957f-7158d5a04f16,f4ac7ce7-baa0-4267-9b04-7ea4277ba909,f95d4f51-c7ee-41a1-9b0a-0da722397c19,fb85a838-94d8-4923-9b44-28e3cd537735,fd40ffed-365d-4627-b9a3-64872e46f883,fff36027-69fb-485c-aed5-4c232dc80415}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "invoice_number",
+        "n_distinct": -0.191304,
+        "most_common_vals": "{F101-00003482,\"PEND-4322-Mes 6\"}",
+        "most_common_freqs": [
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{F101-00003595,F101-00003677,\"FAC 023129\",\"FAC 023332\",\"FAC 023598\",\"FAC 023830\",\"FAC 023856\",\"FAC 023900\",\"FAC 023901\",\"FAC 023956\",\"FAC 023957\",\"FAC 023958\",\"FAC 023959\",\"FAC 023960\",\"FAC 024146\",\"FAC 024355\",\"FAC 024381\",\"FAC 024382\",\"FAC 024423\",\"FAC 024449\",\"FAC 024660\",\"FAC 024674\",\"FAC 025738\",INV-TEST-001,\"PEND-221-Mes 1\",\"PEND-221-Mes 10\",\"PEND-221-Mes 11\",\"PEND-221-Mes 12\",\"PEND-221-Mes 2\",\"PEND-221-Mes 3\",\"PEND-221-Mes 4\",\"PEND-221-Mes 5\",\"PEND-221-Mes 6\",\"PEND-221-Mes 7\",\"PEND-221-Mes 8\",\"PEND-221-Mes 9\",\"PEND-4322-Mes 10\",\"PEND-4322-Mes 11\",\"PEND-4322-Mes 12\",\"PEND-4322-Mes 7\",\"PEND-4322-Mes 8\",\"PEND-4322-Mes 9\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "invoice_series",
+        "n_distinct": 1,
+        "most_common_vals": "{FAC}",
+        "most_common_freqs": [
+          0.995652
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "invoice_type",
+        "n_distinct": 3,
+        "most_common_vals": "{Automatica,Manual,Consolidada}",
+        "most_common_freqs": [
+          0.608696,
+          0.365217,
+          0.026087
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "is_active",
+        "n_distinct": 2,
+        "most_common_vals": "{t,f}",
+        "most_common_freqs": [
+          0.943478,
+          0.0565217
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "is_legacy",
+        "n_distinct": 2,
+        "most_common_vals": "{f,t}",
+        "most_common_freqs": [
+          0.952174,
+          0.0478261
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "issue_date",
+        "n_distinct": -0.282609,
+        "most_common_vals": "{2026-05-01,2026-06-01,2026-02-01,2026-03-01,2026-04-01,2026-07-01,2026-08-01,2026-09-01,2026-10-01,2026-01-01,2026-11-01,2025-12-01,2025-05-27,2025-07-02,2025-09-01,2025-11-01,2026-12-01,2025-05-23,2025-07-08,2025-08-02,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
+        "most_common_freqs": [
+          0.0608696,
+          0.0608696,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0521739,
+          0.0478261,
+          0.0391304,
+          0.0347826,
+          0.0304348,
+          0.0173913,
+          0.0130435,
+          0.0130435,
+          0.0130435,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{2025-02-01,2025-02-28,2025-03-04,2025-03-11,2025-03-12,2025-03-29,2025-04-04,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-29,2025-06-02,2025-06-15,2025-06-29,2025-07-01,2025-07-15,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-27,2025-08-29,2025-09-29,2025-09-30,2025-10-01,2025-10-15,2025-10-29,2025-10-31,2025-11-29,2025-11-30,2025-12-15,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "issuer_address",
+        "n_distinct": 4,
+        "most_common_vals": "{\"Av Insurgentes Norte 1000\",\"Av Las Condes 1234\",\"Holanda N° 100, Oficina 606, Providencia - Region Metropolitana \"}",
+        "most_common_freqs": [
+          0.221739,
+          0.2,
+          0.0608696
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "issuer_legal_name",
+        "n_distinct": 4,
+        "most_common_vals": "{\"Hanka México SA de CV\",\"Hanka Chile SpA\",\"Simplit SpA\"}",
+        "most_common_freqs": [
+          0.221739,
+          0.2,
+          0.0608696
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "issuer_tax_id",
+        "n_distinct": 4,
+        "most_common_vals": "{HNKMX12345678,76.123.456-7,76.403.266-7}",
+        "most_common_freqs": [
+          0.221739,
+          0.2,
+          0.0608696
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "legacy_invoice_id",
+        "n_distinct": -0.0478261,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{0ddf2b91-3087-40e9-981e-1c750fad9a5c,13656a52-17ae-4463-91da-d4d84e4d0701,1814c860-5737-42b7-bb77-b763834b6e69,21f95508-b922-4a91-92db-19324ed17a53,2a10351f-245e-47ce-8319-a90808f57211,3dad6ca7-c079-4678-be9b-eba528595f4d,3e95d162-d7b6-43e0-9433-1bc0c91abc66,ae527807-a53a-4ba5-b90d-855ae6034d77,d7f74284-a3b7-4159-a9ee-15e9e4a9a8e5,dc185070-2eb8-4832-bdc3-bf253e30b879,f9fdd72f-c477-47e7-881d-493e11e47c42}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "legacy_source_system",
+        "n_distinct": 2,
+        "most_common_vals": "{Odoo}",
+        "most_common_freqs": [
+          0.0434783
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "notes",
+        "n_distinct": 9,
+        "most_common_vals": "{\"CRM Pro\",\"ERP Enterprise\",\"Nuevos productos agregados\",\"SaaS Nuevo\",\"test corss-selling variable\",\"Migrada desde factura legacy. Factura histórica importada\",\"Precio no competitivo / recorte de presupuesto\",\"Mala experiencia de soporte\"}",
+        "most_common_freqs": [
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0434783,
+          0.0434783,
+          0.0391304
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "original_issue_date",
+        "n_distinct": -0.282609,
+        "most_common_vals": "{2026-05-01,2026-06-01,2026-07-01,2026-08-01,2026-09-01,2026-02-01,2026-03-01,2026-04-01,2026-10-01,2026-01-01,2026-11-01,2025-12-01,2025-05-27,2025-07-02,2025-09-01,2025-11-01,2025-11-28,2026-12-01,2025-05-23,2025-07-01,2025-07-08,2025-08-02,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
+        "most_common_freqs": [
+          0.0652174,
+          0.0652174,
+          0.0608696,
+          0.0608696,
+          0.0608696,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0478261,
+          0.0391304,
+          0.0347826,
+          0.0304348,
+          0.0173913,
+          0.0130435,
+          0.0130435,
+          0.0130435,
+          0.0130435,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{2025-02-01,2025-03-01,2025-03-04,2025-03-11,2025-03-12,2025-03-29,2025-04-04,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-29,2025-06-02,2025-06-15,2025-06-29,2025-07-15,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-27,2025-08-29,2025-09-29,2025-09-30,2025-10-01,2025-10-29,2025-10-31,2025-11-29,2025-11-30,2025-12-15,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "payment_method",
+        "n_distinct": 1,
+        "most_common_vals": "{CREDITO}",
+        "most_common_freqs": [
+          0.995652
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "pdf_url",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "related_invoice_id",
+        "n_distinct": -0.0826087,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": "{0010feb5-d8e1-42dd-8652-da3725a76125,039161e6-169b-4855-b58d-201a8a634971,13e8d8dc-f0c5-4c65-b898-69e36da4a541,26a0d9f9-b9b1-452e-acb7-c7bf3c4e8e28,32512668-fc04-4ab2-9200-b6c7aa07bd10,367a5dce-72da-448c-a0c7-c69c62994e30,479ddc18-c843-4958-870e-c9cc5832b0d0,4ea100bf-4ecb-4b92-8ce6-9d992fde8719,4eb3c6e6-1108-49be-8be2-7b84044a554f,52aec59e-2296-4cd1-a560-389ba1b82d1f,676b23dd-ae36-433b-a73f-e4ad9effc5e1,83831a00-ebe4-4c75-b642-acddb587d0db,8c2a4530-f4c4-43ea-95ca-ff062cab1ef9,9913c33c-f2d3-4fcc-8e37-52d4b9a20026,aa5c9ed4-1fdc-4452-8429-c426c1c73ce7,c04d8551-2ae5-4775-a5a8-db7e904ece01,c6752f0d-2e7a-4e27-95cb-4820e44be832,d795eefe-5739-40c4-8d08-4efaa72df959,fac90e7b-cddc-4454-b72c-84f549be2cb3}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "requires_references_for_billing",
+        "n_distinct": 2,
+        "most_common_vals": "{f,t}",
+        "most_common_freqs": [
+          0.904348,
+          0.0956522
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "scheduled_at",
+        "n_distinct": -0.286957,
+        "most_common_vals": "{2026-05-01,2026-06-01,2026-07-01,2026-08-01,2026-09-01,2026-02-01,2026-03-01,2026-04-01,2026-10-01,2026-01-01,2026-11-01,2025-12-01,2025-05-27,2025-07-02,2025-09-01,2025-11-01,2025-12-03,2026-12-01,2025-05-23,2025-07-08,2025-08-02,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
+        "most_common_freqs": [
+          0.0652174,
+          0.0652174,
+          0.0608696,
+          0.0608696,
+          0.0608696,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0565217,
+          0.0478261,
+          0.0391304,
+          0.0347826,
+          0.0304348,
+          0.0173913,
+          0.0130435,
+          0.0130435,
+          0.0130435,
+          0.0130435,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{2025-02-01,2025-03-01,2025-03-04,2025-03-11,2025-03-12,2025-03-29,2025-04-04,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-29,2025-06-02,2025-06-15,2025-06-29,2025-07-01,2025-07-15,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-27,2025-08-29,2025-09-29,2025-09-30,2025-10-01,2025-10-15,2025-10-29,2025-10-31,2025-11-29,2025-11-30,2025-12-15,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "sent_at",
+        "n_distinct": 3,
+        "most_common_vals": "{\"2025-10-23 17:15:22.952454+00\"}",
+        "most_common_freqs": [
+          0.0304348
+        ],
+        "histogram_bounds": "{\"2025-10-23 17:16:43.502383+00\",\"2026-01-15 19:09:57.983162+00\"}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "split_from_invoice_id",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "split_reason",
+        "n_distinct": 0,
+        "most_common_vals": null,
+        "most_common_freqs": null,
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "status",
+        "n_distinct": 6,
+        "most_common_vals": "{\"Por Emitir\",Pagada,Vencida,Cancelada,Consolidada}",
+        "most_common_freqs": [
+          0.813043,
+          0.1,
+          0.0478261,
+          0.0217391,
+          0.0130435
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "system_currency",
+        "n_distinct": 1,
+        "most_common_vals": "{USD}",
+        "most_common_freqs": [
+          1
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "tax_rate",
+        "n_distinct": 2,
+        "most_common_vals": "{0.19000000000000000000,0.18000000000000000000}",
+        "most_common_freqs": [
+          0.991304,
+          0.00869565
+        ],
+        "histogram_bounds": null
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "total_invoice_currency",
+        "n_distinct": -0.165217,
+        "most_common_vals": "{5950,15.76036,116.920000,238,595,834.666666666666666633280000000000000000,1001.900000000000000000000000000000000000,3506.65,20032.00,-417.458333333333333366730000000000000000,1502.85,-834.666666666666666633280000000000000000,135.460000,4007.60,4207.98,0.000000000000000000000000000000000000,160.88799999999998,13623.119999999999,2755.23}",
+        "most_common_freqs": [
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.0347826,
+          0.026087,
+          0.026087,
+          0.0217391,
+          0.0173913,
+          0.0130435,
+          0.00869565
+        ],
+        "histogram_bounds": "{160.88800000000003,1000.00,2571775.64,2581902.54,2608632,2621849.65,2632928.55,2644479.88,2646524.30,2649801.56,6420892.52,6524259.49,6644484,6941531.80,8367519.51,8890661.36,8930563.25,9475031.09,11636644.67}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "total_system_currency",
+        "n_distinct": -0.134783,
+        "most_common_vals": "{1001.90,15.76036,200.38,500.95,3506.65,297.50,4737.66,-417.46,41.73,1502.85,-41.73,3.28,1.37,4007.60,4207.98,1001.60,41.75,2755.23}",
+        "most_common_freqs": [
+          0.0869565,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0478261,
+          0.0478261,
+          0.0434783,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.0304348,
+          0.026087,
+          0.026087,
+          0.026087,
+          0.0217391,
+          0.00869565,
+          0.00869565
+        ],
+        "histogram_bounds": "{1.34,116.920000,135.460000,250.48,2243.54,5788.98,5951.29,5978.34,7305.85,7955.09,7982.14,8525.17,10040.04}"
+      },
+      {
+        "schemaname": "public",
+        "tablename": "invoices",
+        "attname": "vat",
+        "n_distinct": -0.165217,
+        "most_common_vals": "{32.00,950,0.22,1.333333333333333333280000000000000000,1.900000000000000000000000000000000000,2.51636,38,95,6.65,-0.791666666666666666730000000000000000,2.85,-1.333333333333333333280000000000000000,0.26,7.60,7.98,0.000000000000000000000000000000000000,25.688,2175.12,5.23}",
+        "most_common_freqs": [
+          0.0565217,
+          0.0565217,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0521739,
+          0.0478261,
+          0.0434783,
+          0.0434783,
+          0.0391304,
+          0.0347826,
+          0.026087,
+          0.026087,
+          0.0217391,
+          0.0173913,
+          0.0130435,
+          0.00869565
+        ],
+        "histogram_bounds": "{25.688000000000002,66.5,410619.64,412236.54,416504,418614.65,420383.55,422227.88,422554.30,423077.56,1025184.52,1041688.49,1060884,1108311.80,1335990.51,1419517.36,1425888.25,1512820.09,1857951.67}"
+      }
+    ],
+    "size_info": {
+      "total_size": "464 kB",
+      "table_size": "160 kB",
+      "indexes_size": "304 kB"
+    },
+    "permissions": [
+      {
+        "grantee": "anon",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "anon",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "DELETE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "INSERT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "SELECT",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege_type": "UPDATE",
+        "is_grantable": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "DELETE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "INSERT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "REFERENCES",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "SELECT",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRIGGER",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "privilege_type": "UPDATE",
+        "is_grantable": "NO"
+      }
+    ],
+    "analysis_timestamp": "2026-01-20T01:40:33.291Z"
+  }
+}

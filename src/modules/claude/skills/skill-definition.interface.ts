@@ -33,8 +33,9 @@ export interface WidgetConfig {
 	xAxis?: string;
 	yAxis?: string;
 	columns?: string[];
+	columnLabels?: { [key: string]: string };
 	format?: {
-		[key: string]: 'currency' | 'number' | 'percentage' | 'date';
+		[key: string]: 'currency' | 'number' | 'percentage' | 'date' | 'month-year';
 	};
 }
 
