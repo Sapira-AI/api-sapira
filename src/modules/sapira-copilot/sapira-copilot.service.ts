@@ -47,7 +47,8 @@ export class SapiraCopilotService {
 				widgets,
 			};
 		} catch (error) {
-			this.logger.error('Error al enviar mensaje al copilot:', error);
+			this.logger.error('Error al enviar mensaje al copilot:');
+			this.logger.error(error);
 			throw new BadRequestException(`Error al comunicarse con el copilot: ${error.message}`);
 		}
 	}
@@ -134,7 +135,14 @@ export class SapiraCopilotService {
 	}
 
 	private buildSystemPrompt(context?: string): string {
+		const now = new Date();
+		const currentDate = now.toISOString().split('T')[0];
+		const currentYear = now.getFullYear();
+		const currentMonth = now.toLocaleString('es-ES', { month: 'long' });
+
 		let prompt = `Eres Sapira Copilot, un asistente financiero especializado en métricas SaaS y análisis de ingresos recurrentes.
+
+FECHA ACTUAL: ${currentDate} (${currentMonth} de ${currentYear})
 
 Tu objetivo es ayudar a usuarios a consultar y analizar:
 - MRR (Monthly Recurring Revenue) y ARR (Annual Recurring Revenue)
@@ -148,12 +156,12 @@ REGLAS IMPORTANTES:
 
 2. WIDGETS (Gráficos y Tablas):
    - SIEMPRE pasa include_widgets=true cuando el usuario pida:
-     * Datos históricos o series temporales (ej: "MRR últimos 12 meses", "evolución de...", "tendencia de...")
-     * Comparaciones o desgloses (ej: "MRR por compañía", "por cliente", "por segmento")
-     * Cualquier pregunta que mencione "gráfico", "tabla", "chart", "visualización", "muéstrame"
+     - Datos históricos o series temporales (ej: "MRR últimos 12 meses", "evolución de...", "tendencia de...")
+     - Comparaciones o desgloses (ej: "MRR por compañía", "por cliente", "por segmento")
+     - Cualquier pregunta que mencione "gráfico", "tabla", "chart", "visualización", "muéstrame"
    - SOLO omite widgets (include_widgets=false o sin especificar) para:
-     * Preguntas puntuales de un solo valor (ej: "MRR actual", "cuánto es el MRR de este mes")
-     * Preguntas conceptuales o de definición
+     - Preguntas puntuales de un solo valor (ej: "MRR actual", "cuánto es el MRR de este mes")
+     - Preguntas conceptuales o de definición
 
 3. Para MRR específicamente:
    - "MRR actual" o "MRR este mes" → get_mrr con mode="snapshot", include_widgets=false
@@ -163,6 +171,15 @@ REGLAS IMPORTANTES:
 4. Si el usuario pide explícitamente ver algo en gráfico/tabla DESPUÉS de ya haber mostrado datos en texto:
    - Llama la MISMA skill nuevamente con include_widgets=true
    - NO describas el gráfico, simplemente genera el widget
+
+5. FORMATO DE RESPUESTA:
+   - NO uses emojis, iconos ni símbolos decorativos
+   - NO uses formato markdown: NUNCA uses **, __, ###, ####, etc.
+   - NO uses negritas ni cursivas en ninguna parte del texto
+   - SOLO usa guiones (-) para listas o enumeraciones
+   - Mantén las respuestas limpias y profesionales
+   - Usa texto plano simple con saltos de línea para organizar la información
+   - Escribe todo en texto normal sin resaltar palabras
 
 Genera respuestas concisas en lenguaje natural que acompañen los widgets cuando los generes.`;
 

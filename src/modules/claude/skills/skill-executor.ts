@@ -103,6 +103,25 @@ export class SkillExecutor {
 			processed.date_to = toDate.toISOString().split('T')[0];
 		}
 
+		// Calcular mes/año actual si no se proporcionan (para invoice skills)
+		if (!processed.month || !processed.year) {
+			const today = new Date();
+			if (!processed.month) {
+				processed.month = today.getMonth() + 1;
+			}
+			if (!processed.year) {
+				processed.year = today.getFullYear();
+			}
+		}
+
+		// Calcular fecha límite para contratos por vencer si se proporciona days_ahead
+		if (processed.days_ahead && typeof processed.days_ahead === 'number') {
+			const today = new Date();
+			const futureDate = new Date(today);
+			futureDate.setDate(futureDate.getDate() + processed.days_ahead);
+			processed.date_to_calculated = futureDate.toISOString().split('T')[0];
+		}
+
 		return processed;
 	}
 
@@ -112,9 +131,19 @@ export class SkillExecutor {
 		const currencyMode = params.currency_mode || 'system';
 		const mrrColumnLegacy = this.getMrrColumn('legacy', currencyMode);
 		const mrrColumnRsm = this.getMrrColumn('rsm', currencyMode);
+		const cmrrColumn = this.getCmrrColumn(currencyMode);
+		const mrrColumn = this.getMrrColumnRsm(currencyMode);
+		const recognizedColumn = this.getRecognizedColumn(currencyMode);
+		const deferredColumn = this.getDeferredColumn(currencyMode);
+		const unbilledColumn = this.getUnbilledColumn(currencyMode);
 
 		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN_LEGACY\}\}/g, mrrColumnLegacy);
 		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN_RSM\}\}/g, mrrColumnRsm);
+		baseQuery = baseQuery.replace(/\{\{CMRR_COLUMN\}\}/g, cmrrColumn);
+		baseQuery = baseQuery.replace(/\{\{MRR_COLUMN\}\}/g, mrrColumn);
+		baseQuery = baseQuery.replace(/\{\{RECOGNIZED_COLUMN\}\}/g, recognizedColumn);
+		baseQuery = baseQuery.replace(/\{\{DEFERRED_COLUMN\}\}/g, deferredColumn);
+		baseQuery = baseQuery.replace(/\{\{UNBILLED_COLUMN\}\}/g, unbilledColumn);
 
 		if (params.group_by && Array.isArray(params.group_by)) {
 			const groupByColumns = params.group_by.map((col: string) => `${col},`).join(' ');
@@ -159,6 +188,71 @@ export class SkillExecutor {
 		}
 	}
 
+	private getCmrrColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'cmrr_period_system_ccy';
+			case 'contract':
+				return 'cmrr_period_contract_ccy';
+			case 'company':
+				return 'cmrr_period_ccy';
+			default:
+				return 'cmrr_period_system_ccy';
+		}
+	}
+
+	private getMrrColumnRsm(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'mrr_period_system_ccy';
+			case 'contract':
+				return 'mrr_period_contract_ccy';
+			case 'company':
+				return 'mrr_period_ccy';
+			default:
+				return 'mrr_period_system_ccy';
+		}
+	}
+
+	private getRecognizedColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'recognized_period_system_ccy';
+			case 'contract':
+				return 'recognized_period_contract_ccy';
+			case 'company':
+				return 'recognized_period_ccy';
+			default:
+				return 'recognized_period_system_ccy';
+		}
+	}
+
+	private getDeferredColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'deferred_balance_eom_system_ccy';
+			case 'contract':
+				return 'deferred_balance_eom_contract_ccy';
+			case 'company':
+				return 'deferred_balance_eom_ccy';
+			default:
+				return 'deferred_balance_eom_system_ccy';
+		}
+	}
+
+	private getUnbilledColumn(currencyMode: string): string {
+		switch (currencyMode) {
+			case 'system':
+				return 'unbilled_balance_eom_system_ccy';
+			case 'contract':
+				return 'unbilled_balance_eom_contract_ccy';
+			case 'company':
+				return 'unbilled_balance_eom_ccy';
+			default:
+				return 'unbilled_balance_eom_system_ccy';
+		}
+	}
+
 	private generateWidgets(data: any[], skill: SkillDefinition): any[] {
 		if (!skill.response.widgetConfig) {
 			return [];
@@ -167,12 +261,28 @@ export class SkillExecutor {
 		const config = skill.response.widgetConfig;
 		const widgets: any[] = [];
 
+		// Caso especial: facturas por emitir - agregar KPI con el total
+		if (skill.name === 'get_invoices_to_issue' && data.length > 0 && data[0].total_count !== undefined) {
+			const totalCount = data[0].total_count || 0;
+			const totalAmount = data[0].total_amount || 0;
+
+			widgets.push({
+				type: 'kpi',
+				title: 'Total Facturas Pendientes',
+				value: `${totalCount} facturas`,
+			});
+		}
+
 		if (config.type === 'line' || config.type === 'bar' || config.type === 'area') {
 			const xKey = config.xAxis || 'period_month';
 			const yKey = config.yAxis || 'mrr';
 
 			// Determinar el tipo correcto para el frontend
 			const widgetType = config.type === 'line' ? 'chart_line' : config.type === 'bar' ? 'chart_bar' : 'chart_line';
+
+			// Calcular rango de valores para el eje Y
+			const yValues = data.map((item) => Number(item[yKey]) || 0);
+			const maxValue = Math.max(...yValues);
 
 			widgets.push({
 				type: widgetType,
@@ -186,17 +296,74 @@ export class SkillExecutor {
 					},
 				],
 				data: data,
+				yAxisConfig: {
+					min: 0,
+					max: maxValue * 1.1,
+					formatWithThousandsSeparator: true,
+				},
 			});
 		}
 
 		if (config.type === 'table') {
 			const columns = config.columns || Object.keys(data[0] || {});
-			const rows = data.map((row) => columns.map((col) => row[col]));
+
+			// Filtrar columnas que no deben mostrarse (IDs, etc.)
+			const keepIndices: number[] = [];
+			const displayColumns: string[] = [];
+
+			columns.forEach((col, idx) => {
+				// No mostrar columnas de ID
+				const colLower = col.toLowerCase();
+				if (colLower.includes('_id') || colLower === 'id' || colLower.includes('holding') || colLower.includes('tenant')) {
+					return;
+				}
+				keepIndices.push(idx);
+				// Aplicar label si existe, sino usar el nombre de la columna
+				displayColumns.push(config.columnLabels?.[col] || col);
+			});
+
+			const rows = data.map((row) =>
+				keepIndices.map((idx) => {
+					const col = columns[idx];
+					const value = row[col];
+
+					// Formatear según el tipo especificado
+					if (config.format?.[col] === 'month-year' && value) {
+						try {
+							const date = new Date(value);
+							const month = String(date.getMonth() + 1).padStart(2, '0');
+							const year = date.getFullYear();
+							return `${month}/${year}`;
+						} catch (e) {
+							return value;
+						}
+					}
+
+					// Formatear números con separadores de miles
+					if (config.format?.[col] === 'currency' && typeof value === 'number') {
+						return new Intl.NumberFormat('en-US', {
+							style: 'currency',
+							currency: 'USD',
+							minimumFractionDigits: 2,
+							maximumFractionDigits: 2,
+						}).format(value);
+					}
+
+					if (config.format?.[col] === 'number' && typeof value === 'number') {
+						return new Intl.NumberFormat('en-US', {
+							minimumFractionDigits: 0,
+							maximumFractionDigits: 2,
+						}).format(value);
+					}
+
+					return value;
+				})
+			);
 
 			widgets.push({
 				type: 'table',
 				title: config.title || skill.name,
-				columns: columns,
+				columns: displayColumns,
 				rows: rows,
 			});
 		}
@@ -235,8 +402,15 @@ export class SkillExecutor {
 			return new Intl.NumberFormat('en-US', {
 				style: 'currency',
 				currency: 'USD',
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2,
+			}).format(value);
+		}
+
+		if (typeof value === 'number') {
+			return new Intl.NumberFormat('en-US', {
 				minimumFractionDigits: 0,
-				maximumFractionDigits: 0,
+				maximumFractionDigits: 2,
 			}).format(value);
 		}
 
