@@ -24,7 +24,10 @@ export class SkillExecutor {
 			this.logger.debug(`Query: ${query}`);
 			this.logger.debug(`Values: ${JSON.stringify(values)}`);
 
-			const results = await this.dataSource.query(query, values);
+			const results = await Promise.race([
+				this.dataSource.query(query, values),
+				new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout después de 10 segundos')), 10000)),
+			]);
 
 			this.logger.log(`Skill ${skill.name} ejecutada exitosamente. Resultados: ${results.length} filas`);
 

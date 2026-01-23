@@ -28,6 +28,7 @@ export class ClaudeService {
 		}
 		this.client = new Anthropic({
 			apiKey: apiKey || '',
+			timeout: 30000,
 		});
 	}
 
@@ -38,6 +39,10 @@ export class ClaudeService {
 		useSkills: boolean = true,
 		accessToken?: string
 	): Promise<{ response: string; conversation_id?: string; usage: any; widgets?: Widget[] }> {
+		const startTime = Date.now();
+		const MAX_TOTAL_TIME = 60000;
+		const MAX_ITERATIONS = 3;
+
 		try {
 			const messages: ClaudeMessage[] = context?.messages || [];
 			messages.push({
@@ -71,26 +76,38 @@ export class ClaudeService {
 			}
 
 			let response = await this.client.messages.create(requestParams);
+			let iteration = 0;
 
-			while (response.stop_reason === 'tool_use') {
+			while (response.stop_reason === 'tool_use' && iteration < MAX_ITERATIONS) {
+				iteration++;
+
+				const elapsedTime = Date.now() - startTime;
+				if (elapsedTime > MAX_TOTAL_TIME) {
+					this.logger.warn(`Timeout total alcanzado después de ${elapsedTime}ms`);
+					break;
+				}
+
 				const toolUseBlocks = response.content.filter((block: any) => block.type === 'tool_use');
 
-				const toolResults = [];
-				for (const toolUse of toolUseBlocks) {
-					const result = await this.executeSkill({
+				const skillPromises = toolUseBlocks.map((toolUse) =>
+					this.executeSkill({
 						skill_name: (toolUse as any).name,
 						parameters: (toolUse as any).input,
 						holding_id: holdingId,
 						access_token: accessToken,
-					});
+					}).then((result) => ({
+						toolUse,
+						result,
+					}))
+				);
 
-					console.log('🔧 ClaudeService - Skill ejecutada:', (toolUse as any).name);
-					console.log('🔧 ClaudeService - Parámetros:', (toolUse as any).input);
-					console.log('🔧 ClaudeService - Resultado:', result);
-					console.log('🔧 ClaudeService - Widgets en resultado:', (result as any).widgets);
+				const skillResults = await Promise.all(skillPromises);
+
+				const toolResults = [];
+				for (const { toolUse, result } of skillResults) {
+					this.logger.log(`Skill ejecutada: ${(toolUse as any).name}`);
 
 					if ((result as any).success && (result as any).widgets) {
-						console.log('✅ ClaudeService - Agregando widgets:', (result as any).widgets);
 						allWidgets.push(...(result as any).widgets);
 					}
 
@@ -132,8 +149,15 @@ export class ClaudeService {
 				});
 			}
 
+			if (iteration >= MAX_ITERATIONS) {
+				this.logger.warn(`Límite de iteraciones alcanzado (${MAX_ITERATIONS})`);
+			}
+
 			const textContent = response.content.find((block: any) => block.type === 'text');
 			const responseText = (textContent as any)?.text || '';
+
+			const totalTime = Date.now() - startTime;
+			this.logger.log(`Conversación completada en ${totalTime}ms con ${iteration} iteraciones`);
 
 			return {
 				response: responseText,
