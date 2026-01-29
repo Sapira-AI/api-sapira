@@ -17,6 +17,25 @@ export class BigQueryService {
 		this.initializeBigQuery();
 	}
 
+	private parseCredentials(rawCredentials: string): any {
+		let value = rawCredentials.trim();
+
+		if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+			value = value.slice(1, -1);
+		}
+
+		let parsed: any = JSON.parse(value);
+
+		// Soportar credenciales doble-serializadas, por ejemplo:
+		// "{\"type\":\"service_account\",...}"
+		if (typeof parsed === 'string') {
+			const inner = parsed.trim();
+			parsed = JSON.parse(inner);
+		}
+
+		return parsed;
+	}
+
 	private initializeBigQuery() {
 		try {
 			const credentials = this.configService.get<string>('BIGQUERY_CREDENTIALS');
@@ -28,7 +47,7 @@ export class BigQueryService {
 
 			this.logger.log(`Credenciales encontradas, longitud: ${credentials.length}`);
 
-			const credentialsJson = JSON.parse(credentials);
+			const credentialsJson = this.parseCredentials(credentials);
 
 			this.projectId = credentialsJson.project_id;
 			this.clientEmail = credentialsJson.client_email;
@@ -44,7 +63,8 @@ export class BigQueryService {
 			this.logger.log(`✓ BigQuery inicializado para proyecto: ${this.projectId}`);
 		} catch (error) {
 			this.logger.error('Error inicializando BigQuery:', error);
-			this.logger.error('Error detalle:', error.message);
+			this.logger.error('Error detalle:', error?.message);
+			this.logger.error('Sugerencia: BIGQUERY_CREDENTIALS debe ser JSON válido sin comillas extra, o un JSON escapado (doble-parse).');
 		}
 	}
 
