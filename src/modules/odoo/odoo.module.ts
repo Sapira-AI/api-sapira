@@ -11,6 +11,7 @@ import { WorkspaceModule } from '@/modules/workspaces/workspace.module';
 import { IntegrationLog } from '../../databases/postgresql/entities/integration-log.entity';
 
 import { Company } from './entities/companies.entity';
+import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
@@ -27,7 +28,7 @@ import { OdooService } from './odoo.service';
 		EventsModule,
 		ProfileModule,
 		WorkspaceModule,
-		TypeOrmModule.forFeature([Company, OdooInvoicesStg, OdooInvoiceLinesStg, OdooPartnersStg, Product, IntegrationLog]),
+		TypeOrmModule.forFeature([Company, OdooConnection, OdooInvoicesStg, OdooInvoiceLinesStg, OdooPartnersStg, Product, IntegrationLog]),
 	],
 	controllers: [OdooController],
 	providers: [OdooService, OdooProvider],
