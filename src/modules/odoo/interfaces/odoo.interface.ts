@@ -1,4 +1,4 @@
-export interface OdooConnection {
+export interface OdooConnectionConfig {
 	id: string;
 	url: string;
 	database_name: string;

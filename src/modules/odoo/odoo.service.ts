@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
 
 import { Company } from './entities/companies.entity';
+import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
@@ -15,7 +16,7 @@ import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import {
 	EstimateResult,
 	OdooCompany,
-	OdooConnection,
+	OdooConnectionConfig,
 	OdooInvoice,
 	OdooInvoiceLine,
 	OdooPartner,
@@ -41,6 +42,8 @@ import { OdooProvider } from './odoo.provider';
 export class OdooService {
 	constructor(
 		private readonly odooProvider: OdooProvider,
+		@InjectRepository(OdooConnection)
+		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooInvoicesStg)
 		private readonly invoicesStgRepository: Repository<OdooInvoicesStg>,
 		@InjectRepository(OdooInvoiceLinesStg)
@@ -208,7 +211,7 @@ export class OdooService {
 	private async getTaxDetailsForCompanies(
 		companies: OdooCompany[],
 		objectClient: any,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number
 	): Promise<Map<number, any>> {
 		// Recopilar todos los IDs de impuestos únicos de las companies
@@ -524,7 +527,7 @@ export class OdooService {
 
 	private async performInvoiceSync(
 		objectClient: XmlRpcClientHelper,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		limit: number,
 		offset: number,
@@ -624,18 +627,14 @@ export class OdooService {
 		const invoices = await this.getInvoicesData(objectClient, connection, uid, invoiceIds);
 
 		// Procesar facturas y líneas
-		const { savedInvoices, savedLines, errors } = await this.processInvoicesAndLines(
-			invoices,
-			linesData,
-			objectClient,
-			connection,
-			uid,
-			batchId,
-			syncSessionId
-		);
+		const {
+			saved_invoices: savedInvoices,
+			saved_lines: savedLines,
+			errors,
+		} = await this.processInvoicesWithLines(invoices, linesData, objectClient, connection, uid, batchId, syncSessionId);
 
 		// Sincronizar partners del lote actual
-		const savedPartners = await this.syncPartnersFromCurrentBatch(invoices, connection, uid, objectClient, syncSessionId);
+		const { partners_synced: savedPartners } = await this.syncPartnersFromCurrentBatch(invoices, connection, uid, objectClient, syncSessionId);
 
 		return {
 			success: true,
@@ -657,7 +656,7 @@ export class OdooService {
 
 	private async getInvoicesData(
 		objectClient: XmlRpcClientHelper,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		invoiceIds: number[]
 	): Promise<OdooInvoice[]> {
@@ -710,15 +709,15 @@ export class OdooService {
 		]);
 	}
 
-	private async processInvoicesAndLines(
+	private async processInvoicesWithLines(
 		invoices: OdooInvoice[],
 		linesData: any[],
 		objectClient: XmlRpcClientHelper,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		batchId: string,
 		syncSessionId?: string
-	): Promise<{ savedInvoices: number; savedLines: number; errors: number; batchId: string; syncSessionId?: string }> {
+	): Promise<{ saved_invoices: number; saved_lines: number; saved_partners: number; errors: number }> {
 		let savedInvoices = 0;
 		let savedLines = 0;
 		let errors = 0;
@@ -753,12 +752,12 @@ export class OdooService {
 			}
 		}
 
-		return { savedInvoices, savedLines, errors, batchId, syncSessionId };
+		return { saved_invoices: savedInvoices, saved_lines: savedLines, saved_partners: 0, errors: errors };
 	}
 
 	private async getInvoiceLinesData(
 		objectClient: XmlRpcClientHelper,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		lineIds: number[]
 	): Promise<OdooInvoiceLine[]> {
@@ -799,11 +798,11 @@ export class OdooService {
 
 	private async syncPartnersFromCurrentBatch(
 		invoices: OdooInvoice[],
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		objectClient: XmlRpcClientHelper,
 		syncSessionId?: string
-	): Promise<number> {
+	): Promise<{ partners_synced: number }> {
 		try {
 			const batchId = randomUUID();
 
@@ -829,7 +828,7 @@ export class OdooService {
 
 			if (uniquePartnerIds.length === 0) {
 				console.log('No hay partners para sincronizar en este lote');
-				return 0;
+				return { partners_synced: 0 };
 			}
 
 			// Obtener partners de Odoo
@@ -838,7 +837,7 @@ export class OdooService {
 
 			if (!Array.isArray(partners) || partners.length === 0) {
 				console.log('No se obtuvieron datos de partners de Odoo');
-				return 0;
+				return { partners_synced: 0 };
 			}
 
 			let savedCount = 0;
@@ -870,16 +869,16 @@ export class OdooService {
 			}
 
 			console.log(`Partners procesados: ${savedCount} nuevos, ${updatedCount} actualizados, ${errorCount} errores`);
-			return savedCount + updatedCount; // Total procesados exitosamente
+			return { partners_synced: savedCount + updatedCount };
 		} catch (error) {
 			console.error('Error en syncPartnersFromCurrentBatch:', error);
-			return 0;
+			return { partners_synced: 0 };
 		}
 	}
 
 	private async getPartnersData(
 		objectClient: XmlRpcClientHelper,
-		connection: OdooConnection,
+		connection: OdooConnectionConfig,
 		uid: number,
 		partnerIds: number[]
 	): Promise<OdooPartner[]> {
@@ -937,44 +936,37 @@ export class OdooService {
 		return uuidRegex.test(uuid);
 	}
 
-	private async getOdooConnection(connectionId: string): Promise<OdooConnection> {
-		// Por ahora usar configuración hardcodeada, pero en el futuro se puede obtener desde base de datos
-		// basado en el connectionId
+	private async getOdooConnection(connectionId: string): Promise<OdooConnectionConfig> {
+		try {
+			let dbConnection: OdooConnection | null = null;
 
-		// Configuración de producción para Aisapira
-		if (connectionId === 'aisapira_prod' || connectionId === 'default') {
-			return {
-				id: connectionId,
-				url: 'https://devops-simpliroute-simpli-odoo.odoo.com',
-				database_name: 'devops-simpliroute-simpli-odoo-main-3154763',
-				username: 'domi@aisapira.com',
-				api_key: 'f6cd0ff4a0d3954d229ac4dbbb0fc8fa4e54c477',
-				holding_id: '05583c6e-9364-4672-a610-0744324e44b4', // UUID válido para Aisapira
-			};
+			if (this.isValidUUID(connectionId)) {
+				dbConnection = await this.odooConnectionRepository.findOne({
+					where: { id: connectionId, is_active: true },
+				});
+			} else {
+				dbConnection = await this.odooConnectionRepository.findOne({
+					where: { name: connectionId, is_active: true },
+				});
+			}
+
+			if (dbConnection) {
+				console.log(`✓ Conexión Odoo encontrada en BD: ${dbConnection.name} (${dbConnection.id})`);
+				return {
+					id: dbConnection.id,
+					url: dbConnection.url,
+					database_name: dbConnection.database_name,
+					username: dbConnection.username || '',
+					api_key: dbConnection.api_key,
+					holding_id: dbConnection.holding_id,
+				};
+			}
+
+			throw new Error(`Conexión Odoo no encontrada o inactiva para connectionId: ${connectionId}`);
+		} catch (error) {
+			console.error('Error obteniendo conexión Odoo desde BD:', error);
+			throw new Error(`No se pudo obtener la conexión Odoo para connectionId: ${connectionId}. ${error.message}`);
 		}
-
-		// Configuración de desarrollo/testing (si se necesita)
-		if (connectionId === 'dev' || connectionId === 'test') {
-			return {
-				id: connectionId,
-				url: 'https://devops-simpliroute-simpli-odoo.odoo.com',
-				database_name: 'devops-simpliroute-simpli-odoo-main-3154763',
-				username: 'domi@aisapira.com',
-				api_key: 'f6cd0ff4a0d3954d229ac4dbbb0fc8fa4e54c477',
-				holding_id: '05583c6e-9364-4672-a610-0744324e44b4', // UUID válido para Aisapira
-			};
-		}
-
-		// Si no se encuentra la configuración, usar la de producción por defecto
-		console.warn(`Configuración no encontrada para connectionId: ${connectionId}, usando configuración por defecto`);
-		return {
-			id: connectionId,
-			url: 'https://devops-simpliroute-simpli-odoo.odoo.com',
-			database_name: 'devops-simpliroute-simpli-odoo-main-3154763',
-			username: 'domi@aisapira.com',
-			api_key: 'f6cd0ff4a0d3954d229ac4dbbb0fc8fa4e54c477',
-			holding_id: '05583c6e-9364-4672-a610-0744324e44b4', // UUID válido para Aisapira
-		};
 	}
 
 	/**
@@ -1326,7 +1318,7 @@ export class OdooService {
 	/**
 	 * Obtiene los detalles completos de los taxes desde Odoo
 	 */
-	private async getTaxDetails(taxIds: number[], objectClient: any, connection: OdooConnection, uid: number): Promise<Map<number, any>> {
+	private async getTaxDetails(taxIds: number[], objectClient: any, connection: OdooConnectionConfig, uid: number): Promise<Map<number, any>> {
 		const taxDetailsMap = new Map();
 
 		if (taxIds.length === 0) {
