@@ -308,3 +308,14 @@ export interface OdooProductFormatted {
 	sales_description: string | null;
 	purchase_description: string | null;
 }
+
+export interface CreateDraftInvoiceResult {
+	success: boolean;
+	message: string;
+	invoice_id: number;
+	invoice_name: string;
+	state: string;
+	amount_untaxed: number;
+	amount_tax: number;
+	amount_total: number;
+}

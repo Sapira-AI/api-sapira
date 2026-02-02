@@ -1,5 +1,5 @@
 import { Request as ExpressRequest } from 'express';
 
-import { UserDTO } from '@/modules/profiles/dtos/user.dto';
+import { UserResponseDto } from '@/modules/users/dtos/users.dto';
 
-export type AppRequest = ExpressRequest & { user?: UserDTO };
+export type AppRequest = ExpressRequest & { user?: UserResponseDto };

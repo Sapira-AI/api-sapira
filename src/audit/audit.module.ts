@@ -3,8 +3,7 @@ import { forwardRef, Global, Module } from '@nestjs/common';
 
 import { MongooseModules } from '@/databases/mongoose/database.module';
 import { EventsModule } from '@/events/events.module';
-import { ProfileModule } from '@/modules/profiles/profile.module';
-import { WorkspaceModule } from '@/modules/workspaces/workspace.module';
+import { HoldingsModule } from '@/modules/holdings/holdings.module';
 
 import { AuditConfigService } from './audit-config.service';
 import { AuditController } from './audit.controller';
@@ -19,8 +18,7 @@ import { AuditService } from './audit.service';
 			ttl: 300000, // 5 minutos por defecto
 			max: 100, // máximo número de items en cache
 		}),
-		forwardRef(() => ProfileModule),
-		forwardRef(() => WorkspaceModule),
+		forwardRef(() => HoldingsModule),
 		forwardRef(() => EventsModule),
 	],
 	controllers: [AuditController],

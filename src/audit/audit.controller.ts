@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { PipelineStage } from 'mongoose';
@@ -7,7 +7,6 @@ import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
 import { PaginatedResponseDTO } from '@/core/dto/pagination.dto';
 import { PaginationDTO } from '@/core/dto/pagination.dto';
 import { BaseResponse } from '@/core/interfaces/base/base.interface';
-import { TokenInterceptor } from '@/interceptors/token.interceptor';
 
 import { AuditService } from './audit.service';
 import { AuditFilterDTO } from './dto/audit-filter.dto';
@@ -17,7 +16,6 @@ import { Audit, AuditDocument } from './schemas/audit.schema';
 @ApiTags('Audit')
 @Controller('audit')
 @UseGuards(AzureADAuthGuard)
-@UseInterceptors(TokenInterceptor)
 @ApiBearerAuth()
 export class AuditController {
 	constructor(private readonly auditService: AuditService) {}

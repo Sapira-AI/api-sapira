@@ -1,7 +1,7 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
@@ -15,8 +15,10 @@ import { SupabaseAuthGuard } from './auth/strategies/supabase-auth.guard';
 import { eventConfig } from './core/config/event.config';
 import { MongooseModules } from './databases/mongoose/database.module';
 import { PostgreSQLDatabaseModule } from './databases/postgresql/database.module';
+import { GuardsModule } from './guards/guards.module';
 import { HealthModule } from './health/health.module';
 import { AuditInterceptorModule } from './interceptors/audit.interceptor.module';
+import { UserIdInterceptor } from './interceptors/user-id.interceptor';
 import { LoggerModule } from './logger/logger.module';
 import { RequestContextMiddleware } from './middlewares/common/request-context.middleware';
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
@@ -27,13 +29,11 @@ import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.mod
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmailModule } from './modules/email/email.module';
 import { EmailsModule } from './modules/emails/emails.module';
+import { HoldingsModule } from './modules/holdings/holdings.module';
 import { OdooModule } from './modules/odoo/odoo.module';
-import { ProfileModule } from './modules/profiles/profile.module';
-import { PromotionModule } from './modules/promotion/promotion.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
+import { UsersModule } from './modules/users/users.module';
 import { CitiesModule } from './modules/utils/cities/cities.module';
-import { MSGraphModule } from './modules/utils/msgraph/msgraph.module';
-import { WorkspaceModule } from './modules/workspaces/workspace.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 
 @Module({
@@ -69,12 +69,9 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		MongooseModules,
 		SecurityModule,
 		AuthModule,
+		GuardsModule,
 		HealthModule,
 		CitiesModule,
-		ProfileModule,
-		WorkspaceModule,
-		MSGraphModule,
-		PromotionModule,
 		AuditModule,
 		LoggerModule,
 		TelemetryModule,
@@ -82,6 +79,8 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		DevicesModule,
 		DatabaseAnalyzerModule,
 		PostgreSQLDatabaseModule,
+		HoldingsModule,
+		UsersModule,
 		OdooModule,
 		EmailModule,
 		EmailsModule,
@@ -98,6 +97,10 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		{
 			provide: APP_GUARD,
 			useClass: SupabaseAuthGuard,
+		},
+		{
+			provide: APP_INTERCEPTOR,
+			useClass: UserIdInterceptor,
 		},
 		SecurityService,
 	],

@@ -1,8 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 
 import { LoggerModule } from '@/logger/logger.module';
-import { ProfileModule } from '@/modules/profiles/profile.module';
-import { WorkspaceModule } from '@/modules/workspaces/workspace.module';
+import { HoldingsModule } from '@/modules/holdings/holdings.module';
 import { SecurityModule } from '@/security/security.module';
 import { TelemetryModule } from '@/telemetry/telemetry.module';
 
@@ -16,14 +15,7 @@ import { EventHandlerService } from './services/event-handler.service';
 import { EventsService } from './services/events.service';
 
 @Module({
-	imports: [
-		LoggerModule,
-		TelemetryModule,
-		forwardRef(() => AuditModule),
-		WorkspaceModule,
-		forwardRef(() => SecurityModule),
-		forwardRef(() => ProfileModule),
-	],
+	imports: [LoggerModule, TelemetryModule, forwardRef(() => AuditModule), HoldingsModule, forwardRef(() => SecurityModule)],
 	providers: [EventDispatcherService, EventHandlerService, EventsService, SecurityHandler, BusinessHandler],
 	controllers: [EventsController],
 	exports: [EventHandlerService, EventsService],

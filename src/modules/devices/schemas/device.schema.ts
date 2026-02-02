@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
-import { DeviceInfoDto } from '@/modules/settings/dto/security-pin-with-device.dto';
+import { DeviceInfoDto } from '@/core/dto/device-info.dto';
 
 export type DeviceDocument = Device & Document;
 

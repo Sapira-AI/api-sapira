@@ -3,8 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 
 import { AuditModule } from '@/audit/audit.module';
 import { EventsModule } from '@/events/events.module';
-import { ProfileModule } from '@/modules/profiles/profile.module';
-import { WorkspaceModule } from '@/modules/workspaces/workspace.module';
+import { HoldingsModule } from '@/modules/holdings/holdings.module';
 
 import { AuditInterceptor } from './audit.interceptor';
 import { DeviceInfoInterceptor } from './device-info.interceptor';
@@ -15,7 +14,7 @@ import { DeviceInfoInterceptor } from './device-info.interceptor';
  */
 @Global()
 @Module({
-	imports: [AuditModule, ProfileModule, EventsModule, WorkspaceModule],
+	imports: [AuditModule, EventsModule, HoldingsModule],
 	providers: [
 		{
 			provide: APP_INTERCEPTOR,

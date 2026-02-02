@@ -37,4 +37,7 @@ export class OdooPartnersStg {
 
 	@Column({ type: 'text', nullable: true })
 	integration_notes?: string;
+
+	@Column({ type: 'text', nullable: true })
+	error_message?: string;
 }

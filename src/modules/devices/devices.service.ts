@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
 
-import { DeviceInfoDto } from '@/modules/settings/dto/security-pin-with-device.dto';
+import { DeviceInfoDto } from '@/core/dto/device-info.dto';
 
 import { Device, DeviceDocument } from './schemas/device.schema';
 

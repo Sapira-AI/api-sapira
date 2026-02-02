@@ -116,6 +116,7 @@ async function bootstrap() {
 			'Accept',
 			'Authorization',
 			'X-Workspace-Id',
+			'X-Holding-Id',
 			'x-api-key',
 			'x-device-info',
 			'x-device-id',
@@ -147,7 +148,10 @@ async function bootstrap() {
 
 	const document = SwaggerModule.createDocument(app, swaggerConfig);
 	SwaggerModule.setup('api', app, document, {
-		swaggerOptions: { defaultModelsExpandDepth: -1 },
+		swaggerOptions: {
+			defaultModelsExpandDepth: -1,
+			persistAuthorization: true,
+		},
 	});
 
 	const configService: ConfigService = app.get<ConfigService>(ConfigService);

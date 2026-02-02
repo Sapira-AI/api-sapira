@@ -1,0 +1,300 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.user_holdings completado exitosamente",
+	"data": {
+		"table_name": "user_holdings",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "user_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "selected",
+				"data_type": "boolean",
+				"is_nullable": "NO",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_active",
+				"data_type": "boolean",
+				"is_nullable": "NO",
+				"column_default": "true",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "idx_user_holdings_holding_id",
+				"index_definition": "CREATE INDEX idx_user_holdings_holding_id ON public.user_holdings USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_user_holdings_one_selected_per_user",
+				"index_definition": "CREATE UNIQUE INDEX idx_user_holdings_one_selected_per_user ON public.user_holdings USING btree (user_id) WHERE (selected = true)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_user_holdings_selected",
+				"index_definition": "CREATE INDEX idx_user_holdings_selected ON public.user_holdings USING btree (user_id, selected) WHERE (selected = true)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_user_holdings_user_id",
+				"index_definition": "CREATE INDEX idx_user_holdings_user_id ON public.user_holdings USING btree (user_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "user_holdings_pkey",
+				"index_definition": "CREATE UNIQUE INDEX user_holdings_pkey ON public.user_holdings USING btree (user_id, holding_id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "fk_user_holdings_user_id",
+				"table_name": "user_holdings",
+				"column_name": "user_id",
+				"foreign_table_name": "users",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "user_holdings_holding_id_fkey",
+				"table_name": "user_holdings",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "user_holdings_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "user_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "user_holdings_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "holding_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "user_holdings",
+				"policyname": "user_holdings_access",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()) OR (user_id IN ( SELECT users.id\n   FROM users\n  WHERE (users.auth_id = auth.uid()))))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "user_holdings",
+				"policyname": "user_holdings_policy_direct",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "ALL",
+				"qual": "(user_id = get_current_user_id())",
+				"with_check": null
+			}
+		],
+		"statistics": [],
+		"size_info": {
+			"total_size": "88 kB",
+			"table_size": "8192 bytes",
+			"indexes_size": "80 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-02T14:07:12.306Z"
+	}
+}

@@ -6,7 +6,7 @@ import { tap } from 'rxjs/operators';
 
 import { AuditConfigService } from '@/audit/audit-config.service';
 import { AuditService } from '@/audit/audit.service';
-import { DeviceInfoDto } from '@/modules/settings/dto/security-pin-with-device.dto';
+import { DeviceInfoDto } from '@/core/dto/device-info.dto';
 
 /**
  * Interceptor para registrar eventos de auditoría automáticamente
