@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class InvoiceDTO {
 	@IsString()
@@ -301,4 +301,122 @@ export class GetCompaniesResponseDTO {
 
 	@ApiProperty({ description: 'Información de la conexión', type: ConnectionInfoDTO })
 	connection_info!: ConnectionInfoDTO;
+}
+
+export class InvoiceLineItemDTO {
+	@ApiProperty({ description: 'ID del producto en Odoo' })
+	@IsNumber()
+	@Type(() => Number)
+	product_id!: number;
+
+	@ApiProperty({ description: 'Descripción de la línea de factura', required: false })
+	@IsOptional()
+	@IsString()
+	name?: string;
+
+	@ApiProperty({ description: 'Cantidad', default: 1 })
+	@IsNumber()
+	@Type(() => Number)
+	quantity!: number;
+
+	@ApiProperty({ description: 'Precio unitario' })
+	@IsNumber()
+	@Type(() => Number)
+	price_unit!: number;
+
+	@ApiProperty({ description: 'IDs de impuestos a aplicar', type: [Number], required: false })
+	@IsOptional()
+	@IsArray()
+	@IsNumber({}, { each: true })
+	tax_ids?: number[];
+
+	@ApiProperty({ description: 'Descuento en porcentaje', default: 0, required: false })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	discount?: number;
+}
+
+export class CreateDraftInvoiceDTO {
+	@ApiProperty({ description: 'ID de la conexión de Odoo', required: true })
+	@IsString()
+	connection_id!: string;
+
+	@ApiProperty({ description: 'ID del partner (cliente) en Odoo', required: true })
+	@IsNumber()
+	@Type(() => Number)
+	partner_id!: number;
+
+	@ApiProperty({ description: 'Tipo de factura', enum: ['out_invoice', 'out_refund', 'in_invoice', 'in_refund'], default: 'out_invoice' })
+	@IsString()
+	move_type!: 'out_invoice' | 'out_refund' | 'in_invoice' | 'in_refund';
+
+	@ApiProperty({ description: 'Fecha de la factura (YYYY-MM-DD)', required: false })
+	@IsOptional()
+	@IsString()
+	invoice_date?: string;
+
+	@ApiProperty({ description: 'Fecha de vencimiento (YYYY-MM-DD)', required: false })
+	@IsOptional()
+	@IsString()
+	invoice_date_due?: string;
+
+	@ApiProperty({ description: 'Referencia de pago', required: false })
+	@IsOptional()
+	@IsString()
+	payment_reference?: string;
+
+	@ApiProperty({ description: 'Referencia de origen', required: false })
+	@IsOptional()
+	@IsString()
+	invoice_origin?: string;
+
+	@ApiProperty({ description: 'Notas internas', required: false })
+	@IsOptional()
+	@IsString()
+	narration?: string;
+
+	@ApiProperty({ description: 'ID de la compañía en Odoo', required: false })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	company_id?: number;
+
+	@ApiProperty({ description: 'ID del diario contable', required: false })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	journal_id?: number;
+
+	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
+	@IsArray()
+	@ValidateNested({ each: true })
+	@Type(() => InvoiceLineItemDTO)
+	invoice_line_ids!: InvoiceLineItemDTO[];
+}
+
+export class CreateDraftInvoiceResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'ID de la factura creada en Odoo' })
+	invoice_id!: number;
+
+	@ApiProperty({ description: 'Nombre/número de la factura en Odoo' })
+	invoice_name!: string;
+
+	@ApiProperty({ description: 'Estado de la factura', enum: ['draft', 'posted', 'cancel'] })
+	state!: string;
+
+	@ApiProperty({ description: 'Monto total sin impuestos' })
+	amount_untaxed!: number;
+
+	@ApiProperty({ description: 'Monto de impuestos' })
+	amount_tax!: number;
+
+	@ApiProperty({ description: 'Monto total' })
+	amount_total!: number;
 }
