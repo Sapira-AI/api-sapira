@@ -9,7 +9,6 @@ import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.
 
 import {
 	CountRecordsDTO,
-	CreateDraftInvoiceDTO,
 	GetCompaniesDTO,
 	GetCompaniesResponseDTO,
 	GetProductsDTO,
@@ -25,7 +24,6 @@ import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { Product } from './entities/products.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import {
-	CreateDraftInvoiceResult,
 	EstimateResult,
 	OdooCompany,
 	OdooConnectionConfig,
@@ -101,8 +99,6 @@ export class OdooService {
 				'search',
 				[[]], // Sin filtros, obtener todas las companies
 			]);
-
-			console.log(`📋 Encontradas ${companyIds.length} companies en Odoo`);
 
 			// Obtener detalles de las companies
 			const companies: OdooCompany[] = await objectClient.methodCall('execute_kw', [
@@ -247,8 +243,6 @@ export class OdooService {
 			return new Map();
 		}
 
-		console.log(`🏷️ Obteniendo detalles de ${taxIds.size} impuestos`);
-
 		try {
 			// Consultar detalles de todos los impuestos
 			const taxes = await objectClient.methodCall('execute_kw', [
@@ -282,15 +276,11 @@ export class OdooService {
 	 */
 	private async getSapiraCompanies(holdingId: string): Promise<SapiraCompany[]> {
 		try {
-			console.log(`🏢 Obteniendo companies de Sapira para holding: ${holdingId}`);
-
 			// Consultar companies de Sapira usando TypeORM
 			const sapiraCompanies = await this.companiesRepository.find({
 				where: { holding_id: holdingId },
 				select: ['id', 'holding_name', 'legal_name', 'odoo_integration_id', 'holding_id'],
 			});
-
-			console.log(`✅ Encontradas ${sapiraCompanies.length} companies de Sapira`);
 
 			// Mapear a la interfaz SapiraCompany
 			return sapiraCompanies.map((company) => ({
@@ -515,13 +505,10 @@ export class OdooService {
 		let uid: number;
 		try {
 			uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
-			console.log('Respuesta de autenticación:', uid);
 
 			if (!uid) {
 				throw new Error('Error de autenticación con Odoo - UID no recibido');
 			}
-
-			console.log('Autenticación exitosa, UID:', uid);
 		} catch (authError) {
 			console.error('Error durante autenticación:', authError);
 			throw new Error(`Error de autenticación con Odoo: ${authError.message}`);
@@ -639,7 +626,7 @@ export class OdooService {
 		} = await this.processInvoicesWithLines(invoices, linesData, objectClient, connection, uid, batchId, syncSessionId);
 
 		// Sincronizar partners del lote actual
-		const { partners_synced: savedPartners } = await this.syncPartnersFromCurrentBatch(invoices, connection, uid, objectClient, syncSessionId);
+		const { partners_synced: savedPartners } = await this.syncPartnersFromCurrentBatch(invoices, connection, uid, objectClient);
 
 		return {
 			success: true,
@@ -805,14 +792,10 @@ export class OdooService {
 		invoices: OdooInvoice[],
 		connection: OdooConnectionConfig,
 		uid: number,
-		objectClient: XmlRpcClientHelper,
-		syncSessionId?: string
+		objectClient: XmlRpcClientHelper
 	): Promise<{ partners_synced: number }> {
 		try {
 			const batchId = randomUUID();
-
-			console.log(syncSessionId);
-			console.log(batchId);
 
 			// Extraer IDs únicos de partners
 			const partnerIds = new Set<number>();
@@ -828,26 +811,19 @@ export class OdooService {
 
 			const uniquePartnerIds = Array.from(partnerIds);
 
-			console.log(`Partners únicos extraídos de facturas: ${uniquePartnerIds.length}`);
-			console.log(`IDs de partners: ${uniquePartnerIds.slice(0, 10).join(', ')}${uniquePartnerIds.length > 10 ? '...' : ''}`);
-
 			if (uniquePartnerIds.length === 0) {
-				console.log('No hay partners para sincronizar en este lote');
 				return { partners_synced: 0 };
 			}
 
 			// Obtener partners de Odoo
 			const partners = await this.getPartnersData(objectClient, connection, uid, uniquePartnerIds);
-			console.log(`Partners obtenidos de Odoo: ${partners?.length || 0}`);
 
 			if (!Array.isArray(partners) || partners.length === 0) {
-				console.log('No se obtuvieron datos de partners de Odoo');
 				return { partners_synced: 0 };
 			}
 
 			let savedCount = 0;
 			let updatedCount = 0;
-			let errorCount = 0;
 
 			for (const partner of partners) {
 				try {
@@ -869,11 +845,9 @@ export class OdooService {
 					}
 				} catch (partnerProcessError) {
 					console.error(`Error al procesar partner ${partner.id}:`, partnerProcessError);
-					errorCount++;
 				}
 			}
 
-			console.log(`Partners procesados: ${savedCount} nuevos, ${updatedCount} actualizados, ${errorCount} errores`);
 			return { partners_synced: savedCount + updatedCount };
 		} catch (error) {
 			console.error('Error en syncPartnersFromCurrentBatch:', error);
@@ -956,7 +930,6 @@ export class OdooService {
 			}
 
 			if (dbConnection) {
-				console.log(`✓ Conexión Odoo encontrada en BD: ${dbConnection.name} (${dbConnection.id})`);
 				return {
 					id: dbConnection.id,
 					url: dbConnection.url,
@@ -978,8 +951,6 @@ export class OdooService {
 	 * Guarda una factura en la tabla de staging
 	 */
 	private async saveInvoiceToDatabase(invoice: OdooInvoice, batchId: string, holdingId: string, syncSessionId?: string): Promise<OdooInvoicesStg> {
-		console.log(`💾 Guardando factura ${invoice.id} en odoo_invoices_stg`);
-
 		// Verificar si ya existe la factura
 		const existingInvoice = await this.invoicesStgRepository.findOne({
 			where: {
@@ -989,21 +960,14 @@ export class OdooService {
 		});
 
 		if (existingInvoice) {
-			// Actualizar factura existente
-			console.log(`🔄 Actualizando factura existente ${invoice.id}`);
 			existingInvoice.raw_data = invoice;
 			existingInvoice.sync_batch_id = batchId;
 			existingInvoice.batch_id = batchId;
 			existingInvoice.sync_session_id = syncSessionId;
 			existingInvoice.processing_status = 'processed';
 			existingInvoice.updated_at = new Date();
-
-			const saved = await this.invoicesStgRepository.save(existingInvoice);
-			console.log(`✅ Factura ${invoice.id} actualizada con ID staging: ${saved.id}`);
-			return saved;
+			return await this.invoicesStgRepository.save(existingInvoice);
 		} else {
-			// Crear nueva factura
-			console.log(`➕ Creando nueva factura ${invoice.id}`);
 			const invoiceStg = new OdooInvoicesStg();
 			invoiceStg.odoo_id = invoice.id;
 			invoiceStg.holding_id = holdingId;
@@ -1012,10 +976,7 @@ export class OdooService {
 			invoiceStg.batch_id = batchId;
 			invoiceStg.sync_session_id = syncSessionId;
 			invoiceStg.processing_status = 'processed';
-
-			const saved = await this.invoicesStgRepository.save(invoiceStg);
-			console.log(`✅ Nueva factura ${invoice.id} creada con ID staging: ${saved.id}`);
-			return saved;
+			return await this.invoicesStgRepository.save(invoiceStg);
 		}
 	}
 
@@ -1086,8 +1047,6 @@ export class OdooService {
 		const processingStatus = await this.determinePartnerProcessingStatus(partner, holdingId);
 
 		if (existingPartnerStg) {
-			// Actualizar el partner existente en staging
-			console.log(`🔄 Actualizando partner en staging: ${partner.id} (${partner.name}) - Status: ${processingStatus.status}`);
 			existingPartnerStg.raw_data = partner;
 			existingPartnerStg.sync_batch_id = batchId;
 			existingPartnerStg.processing_status = processingStatus.status;
@@ -1096,8 +1055,6 @@ export class OdooService {
 			return await this.partnersStgRepository.save(existingPartnerStg);
 		}
 
-		// Crear nuevo partner en staging
-		console.log(`➕ Creando nuevo partner en staging: ${partner.id} (${partner.name}) - Status: ${processingStatus.status}`);
 		const partnerStg = new OdooPartnersStg();
 		partnerStg.odoo_id = partner.id;
 		partnerStg.holding_id = holdingId;
@@ -1105,10 +1062,7 @@ export class OdooService {
 		partnerStg.sync_batch_id = batchId;
 		partnerStg.processing_status = processingStatus.status;
 		partnerStg.integration_notes = processingStatus.notes;
-
-		const savedPartner = await this.partnersStgRepository.save(partnerStg);
-		console.log(`✅ Partner guardado exitosamente en staging: ${partner.id}`);
-		return savedPartner;
+		return await this.partnersStgRepository.save(partnerStg);
 	}
 
 	/**
@@ -1119,19 +1073,10 @@ export class OdooService {
 		holdingId: string
 	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string }> {
 		try {
-			console.log('\n' + '═'.repeat(80));
-			console.log(`🔍 DETERMINANDO ESTADO - Partner: ${partner.id} (${partner.name})`);
-			console.log('═'.repeat(80));
-
 			const partnerVat = partner.vat ? String(partner.vat) : null;
-			console.log(`📋 VAT: ${partnerVat || 'N/A'}`);
-			console.log(`🏢 Holding ID: ${holdingId}`);
 
 			// 1. Si no hay VAT, buscar solo por odoo_partner_id
 			if (!partnerVat || partnerVat === '') {
-				console.log('\n⚠️  CASO 1: Partner sin VAT');
-				console.log('🔍 Buscando por Odoo ID + Holding...');
-
 				const existingByOdooId = await this.clientEntitiesRepository.findOne({
 					where: {
 						odoo_partner_id: partner.id,
@@ -1140,18 +1085,12 @@ export class OdooService {
 				});
 
 				if (existingByOdooId) {
-					console.log(`✅ ENCONTRADO: Cliente ID ${existingByOdooId.id}`);
-					console.log('📌 DECISIÓN: UPDATE (cliente existente sin VAT)\n');
-					console.log('═'.repeat(80) + '\n');
 					return {
 						status: 'update',
 						notes: 'Cliente existente sin VAT - marcado para actualización',
 					};
 				}
 
-				console.log('❌ NO ENCONTRADO');
-				console.log('📌 DECISIÓN: CREATE (partner nuevo sin VAT)\n');
-				console.log('═'.repeat(80) + '\n');
 				return {
 					status: 'create',
 					notes: 'Partner sin VAT - marcado para creación',
@@ -1159,11 +1098,6 @@ export class OdooService {
 			}
 
 			// 2. Buscar por VAT + Odoo ID (identificador único para clientes integrados)
-			console.log('\n🔍 NIVEL 1: Buscando por VAT + Odoo ID + Holding...');
-			console.log(`   WHERE tax_id = '${partnerVat}'`);
-			console.log(`     AND odoo_partner_id = ${partner.id}`);
-			console.log(`     AND holding_id = '${holdingId}'`);
-
 			const existingByVatAndOdooId = await this.clientEntitiesRepository.findOne({
 				where: {
 					tax_id: partnerVat,
@@ -1173,14 +1107,8 @@ export class OdooService {
 			});
 
 			if (existingByVatAndOdooId) {
-				console.log(`✅ ENCONTRADO: Cliente ID ${existingByVatAndOdooId.id}`);
-				console.log('📊 Cliente ya integrado - verificando cambios...');
-
-				// Cliente ya integrado - verificar si hay cambios
 				const hasChanges = this.hasPartnerChanges(partner, existingByVatAndOdooId);
 				if (hasChanges) {
-					console.log('📌 DECISIÓN: UPDATE (cliente con cambios)\n');
-					console.log('═'.repeat(80) + '\n');
 					return {
 						status: 'update',
 						notes: 'Cliente existente con cambios - marcado para actualización',
@@ -1193,11 +1121,6 @@ export class OdooService {
 			}
 
 			// 3. Buscar solo por VAT (para clientes creados manualmente)
-			console.log('\n❌ NO ENCONTRADO en nivel 1');
-			console.log('🔍 NIVEL 2: Buscando por VAT + Holding (clientes manuales)...');
-			console.log(`   WHERE tax_id = '${partnerVat}'`);
-			console.log(`     AND holding_id = '${holdingId}'`);
-
 			const existingByVat = await this.clientEntitiesRepository.findOne({
 				where: {
 					tax_id: partnerVat,
@@ -1206,11 +1129,6 @@ export class OdooService {
 			});
 
 			if (existingByVat) {
-				console.log(`✅ ENCONTRADO: Cliente ID ${existingByVat.id}`);
-				console.log(`📋 Cliente manual (odoo_partner_id: ${existingByVat.odoo_partner_id || 'NULL'})`);
-				console.log('🔗 Se vinculará con Odoo al actualizar');
-				console.log('📌 DECISIÓN: UPDATE (vincular cliente manual con Odoo)\n');
-				console.log('═'.repeat(80) + '\n');
 				return {
 					status: 'update',
 					notes: 'Cliente existente sin Odoo ID - marcado para vincular con Odoo',
@@ -1218,11 +1136,6 @@ export class OdooService {
 			}
 
 			// 4. Búsqueda final por odoo_partner_id (para casos donde el VAT cambió)
-			console.log('\n❌ NO ENCONTRADO en nivel 2');
-			console.log('🔍 NIVEL 3: Buscando por Odoo ID + Holding (fallback - VAT cambió)...');
-			console.log(`   WHERE odoo_partner_id = ${partner.id}`);
-			console.log(`     AND holding_id = '${holdingId}'`);
-
 			const existingByOdooId = await this.clientEntitiesRepository.findOne({
 				where: {
 					odoo_partner_id: partner.id,
@@ -1231,12 +1144,6 @@ export class OdooService {
 			});
 
 			if (existingByOdooId) {
-				console.log(`✅ ENCONTRADO: Cliente ID ${existingByOdooId.id}`);
-				console.log(`⚠️  VAT diferente en Odoo vs Sapira:`);
-				console.log(`   Odoo:   "${partnerVat}"`);
-				console.log(`   Sapira: "${existingByOdooId.tax_id || 'NULL'}"`);
-				console.log('📌 DECISIÓN: UPDATE (actualizar VAT)\n');
-				console.log('═'.repeat(80) + '\n');
 				return {
 					status: 'update',
 					notes: 'Cliente existente encontrado por Odoo ID - marcado para actualización',
@@ -1244,9 +1151,6 @@ export class OdooService {
 			}
 
 			// 5. No existe - marcar para crear
-			console.log('\n❌ NO ENCONTRADO en ningún nivel');
-			console.log('📌 DECISIÓN: CREATE (partner completamente nuevo)\n');
-			console.log('═'.repeat(80) + '\n');
 			return {
 				status: 'create',
 				notes: 'Partner nuevo - marcado para creación',
@@ -1265,10 +1169,6 @@ export class OdooService {
 	 */
 	private hasPartnerChanges(partner: OdooPartner, existingClient: any): boolean {
 		try {
-			console.log('\n' + '🔍'.repeat(40));
-			console.log(`🔍 COMPARANDO CAMBIOS - Partner Odoo ID: ${partner.id}`);
-			console.log('🔍'.repeat(40));
-
 			// Comparar campos básicos
 			const odooName = partner.name || '';
 			const odooEmail = partner.email || '';
@@ -1315,20 +1215,7 @@ export class OdooService {
 				changes.push(`   Sapira: "${clientCountry}"`);
 			}
 
-			const hasChanges = changes.length > 0;
-
-			if (hasChanges) {
-				console.log(`\n⚠️  SE ENCONTRARON ${changes.length} CAMBIO(S):\n`);
-				changes.forEach((change) => console.log(change));
-				console.log('\n✅ RESULTADO: MARCAR COMO UPDATE\n');
-			} else {
-				console.log('\n✅ NO HAY CAMBIOS - Cliente idéntico');
-				console.log('✅ RESULTADO: MARCAR COMO PROCESSED\n');
-			}
-
-			console.log('🔍'.repeat(40) + '\n');
-
-			return hasChanges;
+			return changes.length > 0;
 		} catch (error) {
 			console.error('❌ Error comparando cambios:', error);
 			return true; // En caso de error, asumir que hay cambios
@@ -1346,27 +1233,18 @@ export class OdooService {
 		}
 
 		try {
-			// Obtener configuración de conexión
 			const connection = await this.getOdooConnection(connection_id);
-
-			console.log(`🛍️ Obteniendo productos de Odoo para conexión: ${connection.url}`);
 
 			// Crear clientes XML-RPC
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
 			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
 
 			// Autenticar
-			console.log('🔐 Autenticando con Odoo...');
 			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
 
 			if (!uid) {
 				throw new Error('Falló la autenticación con Odoo');
 			}
-
-			console.log(`✅ Autenticado exitosamente. UID: ${uid}`);
-
-			// Obtener productos de Odoo (product.template)
-			console.log('🛍️ Obteniendo productos de Odoo...');
 
 			// Buscar productos con límite para evitar sobrecarga
 			const productIds = await objectClient.methodCall('execute_kw', [
@@ -1381,8 +1259,6 @@ export class OdooService {
 					offset: 0,
 				},
 			]);
-
-			console.log(`📋 Encontrados ${productIds.length} productos en Odoo`);
 
 			// Obtener detalles de los productos
 			const products: OdooProduct[] = await objectClient.methodCall('execute_kw', [
@@ -1417,11 +1293,8 @@ export class OdooService {
 				},
 			]);
 
-			console.log(`✅ Obtenidos detalles de ${products.length} productos`);
-
 			// Filtrar solo productos activos en el lado del cliente
 			const activeProducts = products.filter((product) => product.active === true);
-			console.log(`🔍 Filtrados ${activeProducts.length} productos activos de ${products.length} totales`);
 
 			// Obtener todos los tax IDs únicos de los productos
 			const allTaxIds = new Set<number>();
@@ -1443,11 +1316,8 @@ export class OdooService {
 				});
 			});
 
-			console.log(`🏷️ Obteniendo detalles de ${allTaxIds.size} taxes únicos...`);
-
 			// Obtener detalles de todos los taxes
 			const taxDetails = await this.getTaxDetails(Array.from(allTaxIds), objectClient, connection, uid);
-			console.log(`🔍 TaxDetails Map size: ${taxDetails.size}`);
 
 			// Obtener productos existentes en Sapira para mostrar mapeos actuales
 			const sapiraProducts: SapiraProduct[] = await this.getSapiraProducts(connection.holding_id);
@@ -1510,8 +1380,6 @@ export class OdooService {
 	 */
 	private async getSapiraProducts(holdingId: string): Promise<SapiraProduct[]> {
 		try {
-			console.log(`🛍️ Obteniendo productos de Sapira para holding: ${holdingId}`);
-
 			// Consultar productos de Sapira usando TypeORM (solo campos existentes)
 			const sapiraProducts = await this.productsRepository.find({
 				where: { holding_id: holdingId },
@@ -1527,8 +1395,6 @@ export class OdooService {
 					'salesforce_product_id',
 				],
 			});
-
-			console.log(`✅ Encontrados ${sapiraProducts.length} productos de Sapira`);
 
 			// Mapear a la interfaz SapiraProduct
 			return sapiraProducts.map((product) => ({
@@ -1561,8 +1427,6 @@ export class OdooService {
 		}
 
 		try {
-			console.log(`🏷️ Consultando detalles de ${taxIds.length} taxes en Odoo...`);
-
 			// Obtener detalles de los taxes
 			const taxes: OdooTax[] = await objectClient.methodCall('execute_kw', [
 				connection.database_name,
@@ -1575,8 +1439,6 @@ export class OdooService {
 					fields: ['id', 'name', 'description', 'amount', 'amount_type', 'type_tax_use', 'active'],
 				},
 			]);
-
-			console.log(`✅ Obtenidos detalles de ${taxes.length} taxes`);
 
 			// Formatear y mapear los taxes
 			taxes.forEach((tax) => {
@@ -1710,31 +1572,16 @@ export class OdooService {
 		data: StartAsyncJobDTO
 	): Promise<void> {
 		try {
-			console.log('🚀 INICIANDO PROCESAMIENTO SECUENCIAL ESTRICTO');
-
 			// 1. Primero procesar partners (independientes)
-			console.log('📋 PASO 1/3: Procesando partners...');
-			console.log(`🔄 Iniciando partners job: ${partnersJobId}`);
 			await this.processEntityAsync(partnersJobId, data, 'partners');
-			console.log('✅ PASO 1/3 COMPLETADO: Partners terminados');
-			console.log('⏳ Esperando 2 segundos antes del siguiente paso...');
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			// 2. Luego procesar facturas (para crear los registros en odoo_invoices_stg)
-			console.log('📋 PASO 2/3: Procesando facturas...');
-			console.log(`🔄 Iniciando invoices job: ${invoicesJobId}`);
 			await this.processEntityAsync(invoicesJobId, data, 'invoices');
-			console.log('✅ PASO 2/3 COMPLETADO: Facturas terminadas');
-			console.log('⏳ Esperando 2 segundos antes del siguiente paso...');
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			// 3. Finalmente procesar líneas (que referencian a las facturas)
-			console.log('📋 PASO 3/3: Procesando líneas de factura...');
-			console.log(`🔄 Iniciando invoice_lines job: ${invoiceLinesJobId}`);
 			await this.processEntityAsync(invoiceLinesJobId, data, 'invoice_lines');
-			console.log('✅ PASO 3/3 COMPLETADO: Líneas terminadas');
-
-			console.log('🎉 PROCESAMIENTO SECUENCIAL COMPLETADO EXITOSAMENTE');
 		} catch (error) {
 			console.error('❌ Error en procesamiento secuencial:', error);
 			throw error;
@@ -1745,8 +1592,6 @@ export class OdooService {
 	 * Procesa partners específicamente para un job
 	 */
 	private async processPartnersForJob(jobId: string, data: StartAsyncJobDTO): Promise<void> {
-		console.log(`📋 Procesando partners para job: ${jobId}`);
-
 		try {
 			// Obtener configuración de conexión
 			const connection = await this.getOdooConnection(data.connection_id);
@@ -1835,10 +1680,8 @@ export class OdooService {
 			}
 
 			const uniquePartnerIds = Array.from(partnerIdsSet);
-			console.log(`Partners únicos encontrados en facturas del rango de fechas: ${uniquePartnerIds.length}`);
 
 			if (uniquePartnerIds.length === 0) {
-				console.log('No se encontraron partners en las facturas del rango de fechas');
 				await this.updateJobStatus(jobId, 'completed', { progress_total: 0 });
 				return;
 			}
@@ -2313,138 +2156,6 @@ export class OdooService {
 		} catch (error) {
 			console.error('❌ Error limpiando registros procesados:', error);
 			throw new Error(`Error al limpiar registros procesados: ${error.message}`);
-		}
-	}
-
-	/**
-	 * Crea una factura en borrador en Odoo
-	 */
-	async createDraftInvoice(data: CreateDraftInvoiceDTO): Promise<CreateDraftInvoiceResult> {
-		const {
-			connection_id,
-			partner_id,
-			move_type,
-			invoice_date,
-			invoice_date_due,
-			payment_reference,
-			invoice_origin,
-			narration,
-			company_id,
-			journal_id,
-			invoice_line_ids,
-		} = data;
-
-		try {
-			console.log(`📝 Creando factura en borrador en Odoo para partner ${partner_id}`);
-
-			const connection = await this.getOdooConnection(connection_id);
-
-			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
-			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
-
-			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
-
-			if (!uid) {
-				throw new Error('Falló la autenticación con Odoo');
-			}
-
-			const invoiceData: any = {
-				partner_id: partner_id,
-				move_type: move_type || 'out_invoice',
-			};
-
-			if (invoice_date) {
-				invoiceData.invoice_date = invoice_date;
-			}
-
-			if (invoice_date_due) {
-				invoiceData.invoice_date_due = invoice_date_due;
-			}
-
-			if (payment_reference) {
-				invoiceData.payment_reference = payment_reference;
-			}
-
-			if (invoice_origin) {
-				invoiceData.invoice_origin = invoice_origin;
-			}
-
-			if (narration) {
-				invoiceData.narration = narration;
-			}
-
-			if (company_id) {
-				invoiceData.company_id = company_id;
-			}
-
-			if (journal_id) {
-				invoiceData.journal_id = journal_id;
-			}
-
-			const invoiceLines = invoice_line_ids.map((line) => {
-				const lineData: any = {
-					product_id: line.product_id,
-					quantity: line.quantity,
-					price_unit: line.price_unit,
-				};
-
-				if (line.name) {
-					lineData.name = line.name;
-				}
-
-				if (line.discount !== undefined && line.discount !== null) {
-					lineData.discount = line.discount;
-				}
-
-				if (line.tax_ids && line.tax_ids.length > 0) {
-					lineData.tax_ids = [[6, 0, line.tax_ids]];
-				}
-
-				return [0, 0, lineData];
-			});
-
-			invoiceData.invoice_line_ids = invoiceLines;
-
-			console.log(`📤 Enviando datos de factura a Odoo:`, JSON.stringify(invoiceData, null, 2));
-
-			const invoiceId = await objectClient.methodCall('execute_kw', [
-				connection.database_name,
-				uid,
-				connection.api_key,
-				'account.move',
-				'create',
-				[invoiceData],
-			]);
-
-			console.log(`✅ Factura creada con ID: ${invoiceId}`);
-
-			const createdInvoice = await objectClient.methodCall('execute_kw', [
-				connection.database_name,
-				uid,
-				connection.api_key,
-				'account.move',
-				'read',
-				[[invoiceId]],
-				{
-					fields: ['name', 'state', 'amount_untaxed', 'amount_tax', 'amount_total'],
-				},
-			]);
-
-			const invoice = createdInvoice[0];
-
-			return {
-				success: true,
-				message: `Factura en borrador creada exitosamente con ID ${invoiceId}`,
-				invoice_id: invoiceId,
-				invoice_name: invoice.name,
-				state: invoice.state,
-				amount_untaxed: invoice.amount_untaxed,
-				amount_tax: invoice.amount_tax,
-				amount_total: invoice.amount_total,
-			};
-		} catch (error) {
-			console.error('❌ Error creando factura en borrador:', error);
-			throw new Error(`Error creando factura en borrador en Odoo: ${error.message}`);
 		}
 	}
 }

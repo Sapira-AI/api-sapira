@@ -18,6 +18,10 @@ import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { Product } from './entities/products.entity';
 import { OdooConnectionController } from './odoo-connection.controller';
 import { OdooConnectionService } from './odoo-connection.service';
+import { OdooInvoicesController } from './odoo-invoices.controller';
+import { OdooInvoicesService } from './odoo-invoices.service';
+import { OdooWebhookController } from './odoo-webhook.controller';
+import { OdooWebhookService } from './odoo-webhook.service';
 import { OdooController } from './odoo.controller';
 import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
@@ -42,8 +46,8 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 			FieldMapping,
 		]),
 	],
-	controllers: [OdooController, OdooConnectionController, PartnersController],
-	providers: [OdooService, OdooConnectionService, OdooProvider, PartnersProcessorService],
+	controllers: [OdooController, OdooConnectionController, OdooInvoicesController, OdooWebhookController, PartnersController],
+	providers: [OdooService, OdooConnectionService, OdooInvoicesService, OdooWebhookService, OdooProvider, PartnersProcessorService],
 	exports: [OdooService],
 })
 export class OdooModule {}
