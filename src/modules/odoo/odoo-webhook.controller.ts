@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { Public } from '@/decorators/public.decorator';
 
 import { OdooWebhookService } from './odoo-webhook.service';
 
@@ -11,6 +12,7 @@ export class OdooWebhookController {
 	constructor(private readonly odooWebhookService: OdooWebhookService) {}
 
 	@Post()
+	@Public()
 	@ApiOperation({
 		summary: 'Webhook para recibir eventos de Odoo',
 		description:
