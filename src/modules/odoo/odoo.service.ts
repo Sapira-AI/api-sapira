@@ -4,8 +4,18 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
 
+import {
+	CountRecordsDTO,
+	GetCompaniesDTO,
+	GetCompaniesResponseDTO,
+	GetProductsDTO,
+	JobStatusResponseDTO,
+	StartAsyncJobDTO,
+	SyncInvoicesDTO,
+} from './dtos/odoo.dto';
 import { Company } from './entities/companies.entity';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
@@ -27,15 +37,6 @@ import {
 	SapiraProduct,
 	SyncResult,
 } from './interfaces/odoo.interface';
-import {
-	CountRecordsDTO,
-	GetCompaniesDTO,
-	GetCompaniesResponseDTO,
-	GetProductsDTO,
-	JobStatusResponseDTO,
-	StartAsyncJobDTO,
-	SyncInvoicesDTO,
-} from './odoo.dto';
 import { OdooProvider } from './odoo.provider';
 
 @Injectable()
@@ -55,7 +56,9 @@ export class OdooService {
 		@InjectRepository(Product)
 		private readonly productsRepository: Repository<Product>,
 		@InjectRepository(IntegrationLog)
-		private readonly integrationLogRepository: Repository<IntegrationLog>
+		private readonly integrationLogRepository: Repository<IntegrationLog>,
+		@InjectRepository(ClientEntity)
+		private readonly clientEntitiesRepository: Repository<ClientEntity>
 	) {}
 
 	/**
@@ -1069,35 +1072,265 @@ export class OdooService {
 	 * Guarda un partner en la tabla de staging
 	 */
 	private async savePartnerToDatabase(partner: OdooPartner, batchId: string, holdingId: string): Promise<OdooPartnersStg> {
-		// Verificar si el partner ya existe para evitar duplicados
-		const existingPartner = await this.partnersStgRepository.findOne({
+		// 1. Verificar si el partner ya existe en staging
+		const existingPartnerStg = await this.partnersStgRepository.findOne({
 			where: {
 				odoo_id: partner.id,
 				holding_id: holdingId,
 			},
 		});
 
-		if (existingPartner) {
-			// Actualizar el partner existente
-			console.log(`Actualizando partner existente: ${partner.id} (${partner.name})`);
-			existingPartner.raw_data = partner;
-			existingPartner.sync_batch_id = batchId;
-			existingPartner.updated_at = new Date();
-			return await this.partnersStgRepository.save(existingPartner);
+		// 2. Determinar el processing_status verificando client_entities
+		const processingStatus = await this.determinePartnerProcessingStatus(partner, holdingId);
+
+		if (existingPartnerStg) {
+			// Actualizar el partner existente en staging
+			console.log(`🔄 Actualizando partner en staging: ${partner.id} (${partner.name}) - Status: ${processingStatus.status}`);
+			existingPartnerStg.raw_data = partner;
+			existingPartnerStg.sync_batch_id = batchId;
+			existingPartnerStg.processing_status = processingStatus.status;
+			existingPartnerStg.integration_notes = processingStatus.notes;
+			existingPartnerStg.updated_at = new Date();
+			return await this.partnersStgRepository.save(existingPartnerStg);
 		}
 
-		// Crear nuevo partner
-		console.log(`Creando nuevo partner: ${partner.id} (${partner.name})`);
+		// Crear nuevo partner en staging
+		console.log(`➕ Creando nuevo partner en staging: ${partner.id} (${partner.name}) - Status: ${processingStatus.status}`);
 		const partnerStg = new OdooPartnersStg();
 		partnerStg.odoo_id = partner.id;
 		partnerStg.holding_id = holdingId;
 		partnerStg.raw_data = partner;
 		partnerStg.sync_batch_id = batchId;
-		partnerStg.processing_status = 'processed';
+		partnerStg.processing_status = processingStatus.status;
+		partnerStg.integration_notes = processingStatus.notes;
 
 		const savedPartner = await this.partnersStgRepository.save(partnerStg);
-		console.log(`Partner guardado exitosamente: ${partner.id}`);
+		console.log(`✅ Partner guardado exitosamente en staging: ${partner.id}`);
 		return savedPartner;
+	}
+
+	/**
+	 * Determina el processing_status de un partner verificando su existencia en client_entities
+	 */
+	private async determinePartnerProcessingStatus(
+		partner: OdooPartner,
+		holdingId: string
+	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string }> {
+		try {
+			console.log('\n' + '═'.repeat(80));
+			console.log(`🔍 DETERMINANDO ESTADO - Partner: ${partner.id} (${partner.name})`);
+			console.log('═'.repeat(80));
+
+			const partnerVat = partner.vat ? String(partner.vat) : null;
+			console.log(`📋 VAT: ${partnerVat || 'N/A'}`);
+			console.log(`🏢 Holding ID: ${holdingId}`);
+
+			// 1. Si no hay VAT, buscar solo por odoo_partner_id
+			if (!partnerVat || partnerVat === '') {
+				console.log('\n⚠️  CASO 1: Partner sin VAT');
+				console.log('🔍 Buscando por Odoo ID + Holding...');
+
+				const existingByOdooId = await this.clientEntitiesRepository.findOne({
+					where: {
+						odoo_partner_id: partner.id,
+						holding_id: holdingId,
+					},
+				});
+
+				if (existingByOdooId) {
+					console.log(`✅ ENCONTRADO: Cliente ID ${existingByOdooId.id}`);
+					console.log('📌 DECISIÓN: UPDATE (cliente existente sin VAT)\n');
+					console.log('═'.repeat(80) + '\n');
+					return {
+						status: 'update',
+						notes: 'Cliente existente sin VAT - marcado para actualización',
+					};
+				}
+
+				console.log('❌ NO ENCONTRADO');
+				console.log('📌 DECISIÓN: CREATE (partner nuevo sin VAT)\n');
+				console.log('═'.repeat(80) + '\n');
+				return {
+					status: 'create',
+					notes: 'Partner sin VAT - marcado para creación',
+				};
+			}
+
+			// 2. Buscar por VAT + Odoo ID (identificador único para clientes integrados)
+			console.log('\n🔍 NIVEL 1: Buscando por VAT + Odoo ID + Holding...');
+			console.log(`   WHERE tax_id = '${partnerVat}'`);
+			console.log(`     AND odoo_partner_id = ${partner.id}`);
+			console.log(`     AND holding_id = '${holdingId}'`);
+
+			const existingByVatAndOdooId = await this.clientEntitiesRepository.findOne({
+				where: {
+					tax_id: partnerVat,
+					holding_id: holdingId,
+					odoo_partner_id: partner.id,
+				},
+			});
+
+			if (existingByVatAndOdooId) {
+				console.log(`✅ ENCONTRADO: Cliente ID ${existingByVatAndOdooId.id}`);
+				console.log('📊 Cliente ya integrado - verificando cambios...');
+
+				// Cliente ya integrado - verificar si hay cambios
+				const hasChanges = this.hasPartnerChanges(partner, existingByVatAndOdooId);
+				if (hasChanges) {
+					console.log('📌 DECISIÓN: UPDATE (cliente con cambios)\n');
+					console.log('═'.repeat(80) + '\n');
+					return {
+						status: 'update',
+						notes: 'Cliente existente con cambios - marcado para actualización',
+					};
+				}
+				return {
+					status: 'processed',
+					notes: 'Cliente idéntico al existente - marcado como procesado',
+				};
+			}
+
+			// 3. Buscar solo por VAT (para clientes creados manualmente)
+			console.log('\n❌ NO ENCONTRADO en nivel 1');
+			console.log('🔍 NIVEL 2: Buscando por VAT + Holding (clientes manuales)...');
+			console.log(`   WHERE tax_id = '${partnerVat}'`);
+			console.log(`     AND holding_id = '${holdingId}'`);
+
+			const existingByVat = await this.clientEntitiesRepository.findOne({
+				where: {
+					tax_id: partnerVat,
+					holding_id: holdingId,
+				},
+			});
+
+			if (existingByVat) {
+				console.log(`✅ ENCONTRADO: Cliente ID ${existingByVat.id}`);
+				console.log(`📋 Cliente manual (odoo_partner_id: ${existingByVat.odoo_partner_id || 'NULL'})`);
+				console.log('🔗 Se vinculará con Odoo al actualizar');
+				console.log('📌 DECISIÓN: UPDATE (vincular cliente manual con Odoo)\n');
+				console.log('═'.repeat(80) + '\n');
+				return {
+					status: 'update',
+					notes: 'Cliente existente sin Odoo ID - marcado para vincular con Odoo',
+				};
+			}
+
+			// 4. Búsqueda final por odoo_partner_id (para casos donde el VAT cambió)
+			console.log('\n❌ NO ENCONTRADO en nivel 2');
+			console.log('🔍 NIVEL 3: Buscando por Odoo ID + Holding (fallback - VAT cambió)...');
+			console.log(`   WHERE odoo_partner_id = ${partner.id}`);
+			console.log(`     AND holding_id = '${holdingId}'`);
+
+			const existingByOdooId = await this.clientEntitiesRepository.findOne({
+				where: {
+					odoo_partner_id: partner.id,
+					holding_id: holdingId,
+				},
+			});
+
+			if (existingByOdooId) {
+				console.log(`✅ ENCONTRADO: Cliente ID ${existingByOdooId.id}`);
+				console.log(`⚠️  VAT diferente en Odoo vs Sapira:`);
+				console.log(`   Odoo:   "${partnerVat}"`);
+				console.log(`   Sapira: "${existingByOdooId.tax_id || 'NULL'}"`);
+				console.log('📌 DECISIÓN: UPDATE (actualizar VAT)\n');
+				console.log('═'.repeat(80) + '\n');
+				return {
+					status: 'update',
+					notes: 'Cliente existente encontrado por Odoo ID - marcado para actualización',
+				};
+			}
+
+			// 5. No existe - marcar para crear
+			console.log('\n❌ NO ENCONTRADO en ningún nivel');
+			console.log('📌 DECISIÓN: CREATE (partner completamente nuevo)\n');
+			console.log('═'.repeat(80) + '\n');
+			return {
+				status: 'create',
+				notes: 'Partner nuevo - marcado para creación',
+			};
+		} catch (error) {
+			console.error(`Error determinando processing_status para partner ${partner.id}:`, error);
+			return {
+				status: 'create',
+				notes: `Error en determinación de estado: ${error.message}`,
+			};
+		}
+	}
+
+	/**
+	 * Verifica si hay cambios entre el partner de Odoo y el cliente existente
+	 */
+	private hasPartnerChanges(partner: OdooPartner, existingClient: any): boolean {
+		try {
+			console.log('\n' + '🔍'.repeat(40));
+			console.log(`🔍 COMPARANDO CAMBIOS - Partner Odoo ID: ${partner.id}`);
+			console.log('🔍'.repeat(40));
+
+			// Comparar campos básicos
+			const odooName = partner.name || '';
+			const odooEmail = partner.email || '';
+			const odooPhone = partner.phone || '';
+			const odooStreet = partner.street || '';
+			const odooCountry = Array.isArray(partner.country_id) ? partner.country_id[1] : '';
+
+			const clientName = existingClient.legal_name || '';
+			const clientEmail = existingClient.email || '';
+			const clientPhone = existingClient.phone || '';
+			const clientAddress = existingClient.legal_address || '';
+			const clientCountry = existingClient.country || '';
+
+			const changes: string[] = [];
+
+			// Comparar y registrar cada campo
+			if (odooName !== clientName) {
+				changes.push(`📝 NOMBRE cambió:`);
+				changes.push(`   Odoo:   "${odooName}"`);
+				changes.push(`   Sapira: "${clientName}"`);
+			}
+
+			if (odooEmail !== clientEmail) {
+				changes.push(`📧 EMAIL cambió:`);
+				changes.push(`   Odoo:   "${odooEmail}"`);
+				changes.push(`   Sapira: "${clientEmail}"`);
+			}
+
+			if (odooPhone !== clientPhone) {
+				changes.push(`📞 TELÉFONO cambió:`);
+				changes.push(`   Odoo:   "${odooPhone}"`);
+				changes.push(`   Sapira: "${clientPhone}"`);
+			}
+
+			if (odooStreet !== clientAddress) {
+				changes.push(`🏠 DIRECCIÓN cambió:`);
+				changes.push(`   Odoo:   "${odooStreet}"`);
+				changes.push(`   Sapira: "${clientAddress}"`);
+			}
+
+			if (odooCountry !== clientCountry) {
+				changes.push(`🌍 PAÍS cambió:`);
+				changes.push(`   Odoo:   "${odooCountry}"`);
+				changes.push(`   Sapira: "${clientCountry}"`);
+			}
+
+			const hasChanges = changes.length > 0;
+
+			if (hasChanges) {
+				console.log(`\n⚠️  SE ENCONTRARON ${changes.length} CAMBIO(S):\n`);
+				changes.forEach((change) => console.log(change));
+				console.log('\n✅ RESULTADO: MARCAR COMO UPDATE\n');
+			} else {
+				console.log('\n✅ NO HAY CAMBIOS - Cliente idéntico');
+				console.log('✅ RESULTADO: MARCAR COMO PROCESSED\n');
+			}
+
+			console.log('🔍'.repeat(40) + '\n');
+
+			return hasChanges;
+		} catch (error) {
+			console.error('❌ Error comparando cambios:', error);
+			return true; // En caso de error, asumir que hay cambios
+		}
 	}
 
 	/**
@@ -2046,6 +2279,38 @@ export class OdooService {
 			console.log(`✅ Job actualizado, filas afectadas:`, result.affected);
 		} catch (error) {
 			console.error('❌ Error actualizando estado del job:', error);
+		}
+	}
+
+	/**
+	 * Limpia registros procesados de la tabla staging
+	 */
+	async cleanProcessedPartners(holdingId: string): Promise<{ success: boolean; message: string; deleted_count: number }> {
+		try {
+			console.log(`🧹 Iniciando limpieza de registros procesados para holding: ${holdingId}`);
+
+			if (!holdingId) {
+				throw new Error('holding_id es requerido');
+			}
+
+			// Eliminar registros con processing_status = 'processed'
+			const result = await this.partnersStgRepository.delete({
+				holding_id: holdingId,
+				processing_status: 'processed',
+			});
+
+			const deletedCount = result.affected || 0;
+
+			console.log(`✅ Limpieza completada. Registros eliminados: ${deletedCount}`);
+
+			return {
+				success: true,
+				message: `Se eliminaron ${deletedCount} registros procesados exitosamente`,
+				deleted_count: deletedCount,
+			};
+		} catch (error) {
+			console.error('❌ Error limpiando registros procesados:', error);
+			throw new Error(`Error al limpiar registros procesados: ${error.message}`);
 		}
 	}
 }

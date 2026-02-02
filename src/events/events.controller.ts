@@ -1,11 +1,10 @@
-import { Body, Controller, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiExcludeController, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { v4 as uuid } from 'uuid';
 
 import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
 import { BaseEvent, EventStatus, EventType } from '@/core/interfaces/events/event.interface';
-import { TokenInterceptor } from '@/interceptors/token.interceptor';
 
 import { ClientErrorDTO } from './dtos/client-error.dto';
 import { EventsService } from './services/events.service';
@@ -14,7 +13,6 @@ import { EventsService } from './services/events.service';
 @ApiTags('Events')
 @Controller('events')
 @UseGuards(AzureADAuthGuard)
-@UseInterceptors(TokenInterceptor)
 @ApiBearerAuth()
 export class EventsController {
 	constructor(private readonly eventsService: EventsService) {}

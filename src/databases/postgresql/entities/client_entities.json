@@ -1,0 +1,481 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.client_entities completado exitosamente",
+	"data": {
+		"table_name": "client_entities",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "tax_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "country",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_address",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "email",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "phone",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "economic_activity",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_number",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "odoo_partner_id",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "client_entities_pkey",
+				"index_definition": "CREATE UNIQUE INDEX client_entities_pkey ON public.client_entities USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "56 kB"
+			},
+			{
+				"index_name": "idx_client_entities_client_number",
+				"index_definition": "CREATE INDEX idx_client_entities_client_number ON public.client_entities USING btree (client_number)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "56 kB"
+			},
+			{
+				"index_name": "idx_client_entities_holding_id",
+				"index_definition": "CREATE INDEX idx_client_entities_holding_id ON public.client_entities USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_client_entities_odoo_partner_holding",
+				"index_definition": "CREATE UNIQUE INDEX idx_client_entities_odoo_partner_holding ON public.client_entities USING btree (odoo_partner_id, holding_id) WHERE (odoo_partner_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "56 kB"
+			},
+			{
+				"index_name": "idx_client_entities_odoo_partner_id",
+				"index_definition": "CREATE INDEX idx_client_entities_odoo_partner_id ON public.client_entities USING btree (odoo_partner_id) WHERE (odoo_partner_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "40 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "client_entities_client_id_fkey",
+				"table_name": "client_entities",
+				"column_name": "client_id",
+				"foreign_table_name": "clients",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "fk_client_entities_holding_id",
+				"table_name": "client_entities",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "client_entities_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"policyname": "holding_access_client_entities",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "ALL",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "client_id",
+				"n_distinct": -0.840565,
+				"most_common_vals": "{3bf9812d-3c78-4958-a5d2-fe51a4936d0b,3ee3db04-3e01-46a9-ac62-f205390126c9,f42fbdae-4cd0-4b47-a5c6-0f2713cdc8f3,004d12e5-d89c-4263-b270-33d660fc8fba,02ee06e5-87bd-42a2-a482-3c7642b109fd,6a2c635e-95b1-401d-a89c-20a4c9cb20ef,7c226f27-baeb-4ac3-bf3a-de4863c5bb53,bd8ddf50-d40b-4d27-bbf5-bf640a8ab039,c8c7d008-9a19-4079-8143-754da3a02611,03ce682d-bfd0-41b9-8ded-bb5eb1f69ee0,06e89558-f798-4b3b-8703-b9cc79e2274b,15ff6e70-cab6-4ea2-a7ed-0715388a7586,175e41af-2231-4e02-bebd-9a6077f054bb,1a5ca494-3d43-4afe-bbf6-cc4baad5c8a5,1aa1112a-914a-4b93-bc57-0bfb8a60c8de,1d3c437b-5956-479a-bf3c-0db9c0e2b35f,1dfd3901-a815-47ca-bf4e-97cdaf697548,1ffbe164-821c-4530-8236-5a2521864a26,210a830d-af57-4bee-acd1-692854255bde,2246b0f1-c190-483f-8996-c27f056a3aa9,25c9978d-2c70-4148-8793-bdf029b36519,2674bb3b-da48-4c04-9388-6db0144ae183,267e48d8-275f-4dd6-97bd-4c50a1ff2114,39fd928d-e8ff-40d6-b9bc-eb7b744478eb,3b8f61ad-b404-4e27-b972-674022e14825,40b9c77b-e9d3-41d2-98d8-271b5546cf62,448ce94e-2a40-4386-86ad-53d6fe17c46b,49578ed2-3bf0-4702-a3e3-2d3f37a3efff,4afca7ad-3b4a-4a01-951e-fdce29a5a5d6,4ccdfed9-ff67-4d3e-87fb-85fff1154453,4da3c615-fe94-4c83-adbd-d2c915d71250,574f2975-934b-4e76-90c4-401036f1f756,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,5fdb4f79-6a28-462a-8896-15ccc9ba11c7,6902de78-af58-4e1f-891e-51b0feecb44e,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6da36ef1-c8c5-4198-81a9-6e62fba430ab,70a572ad-592f-4961-bebe-e9ed7d09addc,71cba87e-34f4-4be2-88e5-54cfdc78cafc,721e7386-d99e-4daa-9ca6-c3dd9e4bc061,72c27f93-2d0c-4fc0-944d-a0ab3832d583,736e896a-017f-4fd6-a8dd-2bb27f353efd,77e9c168-284d-46aa-916b-8f15668ca1db,783bb083-224f-475e-9291-5bb761a9e65f,7b59a777-54d6-4fee-9649-819110ad2d67,7bc2200d-e558-4339-9682-71ae06912481,7cf3c909-7c23-4889-85a1-4dbfaf6b60c2,848abc92-ddb1-422a-9d11-5e4fd3d0b50e,86c6eab7-1fb4-4147-9f1f-79a6a93881b0,86cf1f25-9a7e-4b1c-ae7e-7faf71830d4a,947f4565-75fa-4fb5-a314-23f3faf79dbd,971367b4-9ac8-44f5-8ae3-c8119513dcb9,99346d45-3b80-4dc1-a749-a62e4f392613,99498c01-65a9-4d2b-bedd-2167fc8c3fa0,9c57abc4-a5d9-4a21-ba40-0827eec8db5c,9cf0e4c3-2bae-483b-afa4-5c34d7af80a4,9e7c5f5b-3bc8-466e-8fde-3f7e8afe3697,9ee538f7-3a43-4627-b4ae-875e6eb33d28,a17230c1-4e03-46d0-8f47-2ee4af7428a2,b10d4797-b6cd-487c-8652-c074067bf531,b2c1f5dc-17ad-427a-a587-2ec69a85f381,bb114c6c-3b42-4356-8139-5995050c3eaa,bb239073-1689-449a-9459-5089cca30b43,c74a89fd-53a1-46e8-a513-a3e80a1aea3e,c7d10b8c-dbb6-4a6d-b763-ac99e96c9055,c8549b96-777f-4f5d-b9c1-41913e1d1fcf,ccd79b24-7740-4d37-a958-a2320da85241,ce842e79-8387-46af-bc70-d59e59c646c4,cf4ab321-49b9-489c-aa6c-32c6f154d9b0,d392af1a-494c-4848-a15d-7e026716df05,d51fce80-58b9-4d3b-a314-3dfe505b57ae,d89f5952-bdd7-4cc8-b56a-20ea61c578db,d9b69de7-de46-458b-9fbe-b929a590b454,dc5d6da9-ef0c-43c5-8305-254866973aec,e1ed0e4f-12a0-4627-b97d-06692376386d,e28dd001-4b35-4352-9ad7-32a688043a92,e3eea7b8-61dc-420b-80a1-e835be520803,eaa1c1c3-97ca-458d-8e58-4f00766d3005,eb1b2b6f-7fb5-489c-9b16-090c741493cd,eb508f65-a20c-438c-a809-e8023a4c8c36,ec8f97cc-8f53-461d-a5e4-563cde5d693a,ee417b73-7d31-40c9-9871-34dfef8c963e,f14dca58-66d4-49b6-a998-746dbc5378f9,f14f94ed-d99a-4cd7-8470-e5db6be94a3a,f2293cab-0935-4214-9136-2a3a0d6e0b63,f5c69ca2-b16f-408a-91c8-3acb227d3dc9,f61dad6b-e6e3-421c-82ad-19d4ef9840dc}",
+				"most_common_freqs": [
+					0.00908174, 0.00504541, 0.00403633, 0.00302725, 0.00302725, 0.00302725, 0.00302725, 0.00302725, 0.00302725, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,0447360c-7138-4a0f-b55d-c5d157203a05,0715aa66-c1e7-47c7-8f1e-038f5d6193d7,0a06b888-7c9b-46b6-8c69-0b1cbb8bdb42,0e1dee80-33d6-4451-bb1b-e5ef42359dfa,108688b0-a3a5-4cca-98fa-a6e92f661800,126e5f3a-269e-4c7f-b478-dedeee1af6c4,14462043-714b-41b7-82f3-11eb903972fb,1797ad79-cb4c-4e75-a623-a9839da55745,199fb788-cfa6-4a91-977e-e8e37c593cd5,1b88fa7e-3d76-4b9a-b881-1fe3926fb2f5,1d1f094b-78a0-472f-8df4-ad5a530f7cf4,2116a770-8a87-4829-bfb1-a7e13eb2c56a,24144881-e912-4551-9522-cb6a62c26477,25a956df-e80b-46cc-ae60-fa8605468322,278b36bf-200b-43c0-93fe-91b4a4db7bd5,29e83b50-d824-4a41-90c4-dc5e9c3e523c,2be4ae80-bc9a-4dab-b2e5-d0f06f754a26,2e8f30db-13d5-45a1-ae25-a5f748dc4038,3099b976-939e-4b50-8ee6-a45ff09260df,31cecea1-5cc9-4b9d-a9bf-3950ad723108,33726b69-610c-42b6-bb95-39186b623497,3654959f-188c-49a5-98b4-f4938d3ddd38,3c574bae-66be-44c7-8420-54b249a864d4,3e798349-2350-4496-8f68-367a59768d1d,41838697-5205-4bb1-a25d-8d5d96c6b4c9,44ac422a-297b-423d-a2f6-0978882bc926,47d6cda6-8de0-4756-9703-42f9879e12c6,48bc9d59-27f8-4d39-aae2-11de9d4a2f1b,4c660dbf-63a3-44a7-a3c0-535ab9e4a456,4e46039b-d82f-4a10-97da-bd673691c757,4f33ee4c-9796-4151-b7d4-3a7c463ad826,53587eaf-e7df-452c-aa04-b3f72a48f196,571a62c6-4c41-4fd4-93fe-74b3e115751b,5a1aafb3-4c43-4007-9bb7-93db8670d972,5c4434b1-bb55-41f0-b692-b7727d5196a5,5df83a22-3e9e-4b7e-9503-eb34c0b97ea7,5fc83a72-cee4-4827-bb70-4290b675f6a6,6240a6ea-c484-43ea-817e-301a5922c881,6604300f-114c-4975-a046-ad7449677203,691f5b0f-c3a9-4832-a71e-f2e5874e2a24,6b20034f-351d-4742-8551-8f88467c353a,6c722c45-65c5-45f3-90f7-c426394c065e,6fb274bf-0390-4957-b890-d1206ba676ae,7167b690-06d2-4e4e-8c52-e694982be71b,7331244b-508d-4c01-a95f-d73d61954928,767ca477-353a-45bd-8f1b-e798056ef78e,78fa69b0-cf43-4165-b326-d25f0303054b,7b37fa47-b818-4178-8eb3-739c0a1a44dd,7e176953-3ce6-4b99-8160-1d47d080e60a,80ca6fee-a873-4dac-9eef-628b5b529bfa,8368ee33-f1ac-4425-8310-2e884cb90099,850b65b3-09e3-497f-9b07-0c8c27bad4d0,881fe8b7-df9d-4977-827c-1529e5b8583e,8b4f8600-10da-4985-acd6-b45dba4a0a9c,8d5b2da5-aa9b-4e1d-8ad1-f61464e2089c,8f060a90-7da1-49cd-9f18-5c56426f6ce6,92b978e3-5b1c-4008-a5c4-23cf45eed9fe,9609b2c7-eb71-4799-ba82-61aed671432d,97ff0ce8-06c3-48a6-b96f-9d77b73cef61,9a8fd970-5689-4dd9-932d-ba049d376313,9d9dc232-f06c-48cf-8563-4d54d2ab2768,9f2e02ae-4a6b-42ca-99f0-3f59ad6e7097,a1109111-9f87-4913-8d4c-0fc118fc5b1a,a4d3b625-01cd-4842-bf9f-48c463e0fde7,a7dfa569-8f7a-416a-8d07-fe305b5face6,aa0713b5-e308-40cb-a56e-10159bd4d691,ad208635-d28d-4dd0-9a5c-d3b3a634683b,ae50050d-a05a-4df6-9288-6bc611c93d8d,b1136370-107b-4b0d-b1d9-63436098febe,b32db40c-04bc-4c00-b182-cd3a3884549b,b542d025-2783-4b56-8fa4-0e79656554c3,b8558457-e7a0-4aee-9190-90e809dc86e0,ba9176d0-5aeb-4a8e-a6a3-164cfab7093b,bbe86252-47c9-4e47-90b5-f4a79092d5ce,be800be6-48e1-4866-8ae9-88f40a6147ec,c0fcb9ba-f3e4-4f1a-ab8c-47ff4075108a,c263fcdb-a403-4476-b216-ec25d3826a4c,c58bc54e-2e32-4f03-b244-e1a8f3839a3a,c6f00e27-f8f7-4e4c-91c4-73c2694790e8,cb6c4c08-05c2-43f9-96ed-61d98fdc7724,ce3814e8-112b-4fcb-b344-7b9125f66d08,d09c8a9e-5733-4e34-911a-692eae9a0516,d2703248-704c-463a-8253-72e97194bb2c,d5ed366d-ea02-480f-90b0-155f3fcca237,d8b62ff4-81c2-42af-a88d-56cd8f4f4b44,da210a8a-bd3c-41a0-81d2-e26edb1a8fc0,dbd63b05-47b5-4277-8dcc-71d59c57d81c,de9ee6da-30db-4745-9dc9-096cea7eff1c,e172cd9f-5cfe-4c97-a861-4efa577d3a8e,e54af38f-ec5a-4ec4-90b6-5bbe30282ad7,e6f50e16-90b2-48b7-8896-f309a14c897e,ea23c667-d460-4123-b12a-6c4f4fb319ea,ecf134ce-6d52-4f67-b955-16fde3d47fc4,ef6ea428-de60-490d-85e0-0d04fa7f2017,f23c37b3-cb91-40c0-94ce-585c375d8ad3,f4441cee-5c61-4401-82d4-28b8dc0aa64d,f712a813-63ee-4b40-84d8-6e38f15db16c,fab374fa-136d-4a4f-8e7b-a4077ab971f3,fc4c7c5d-b756-4549-b418-039e30e72cb1,ffa41d76-829a-439c-a74d-5fe30cb2ae6f}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "client_number",
+				"n_distinct": -0.85671,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{0015w00002Ar1eEAAR,0015w00002DlEVwAAN,0015w00002i5V34AAE,0015w00002Mgn3aAAB,0015w00002oLfg7AAC,0015w00002scLksAAE,0015w00002T6RHlAAN,0015w00002TWHCmAAP,0015w00002YVAw2AAH,001RO00000at7iTYAQ,001RO00000bTPNaYAO,001RO00000EbjNtYAJ,001RO00000fIyF5YAK,001RO00000gLOSYYA4,001RO00000J8kSZYAZ,001RO00000KvjcuYAB,001RO00000MqtdJYAR,001RO00000PJ9ShYAL,001RO00000QP5aDYAT,001RO00000SFf7aYAD,001RO00000XRN2LYAX,001RO00000ZMk06YAD,10498,11217,11724,12337,12934,13269,13964,14165,14703,15117,15735,15765,15807,15835,15872,15887,15918,15950,15969,15992,16007,16039,16067,16095,16108,16117,16129,16149,16166,16195,16203,16217,16230,16247,3557,3619,3647,3666,3685,3925,3955,3972,4059,4189,4203,4237,4359,4464,4499,4592,4718,4754,4790,5122,5339,5791,5975,6038,6111,6185,6271,6319,6346,6430,6744,6795,6931,7043,7136,7191,7268,7410,7438,8366,8416,8810,9138,9304,9913}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "country",
+				"n_distinct": 30,
+				"most_common_vals": "{Chile,Mexico,Colombia,Peru,Uruguay,Perú,México,Argentina,Ecuador,Panama,\"Costa Rica\",\"Dominican Republic\",El Salvador,Guatemala,Honduras,Paraguay,Brasil,CL,Costa Rica,\"El Salvador\",España,Nicaragua,\"Republica Dominicana\"}",
+				"most_common_freqs": [
+					0.321897, 0.165489, 0.0857719, 0.0716448, 0.0544904, 0.0191726, 0.0181635, 0.00706357, 0.00605449, 0.00504541, 0.00403633,
+					0.00302725, 0.00302725, 0.00302725, 0.00302725, 0.00302725, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{Alemania,\"Emiratos Arabes\",\"Estados Unidos\",Panamá,\"Puerto Rico\",UY,Venezuela}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "economic_activity",
+				"n_distinct": 17,
+				"most_common_vals": "{\"Consumo Masivo\",\"Food & Beverage\",Transporte,Shipping,E-Commerce,Servicios,\"Industria manufacturera\",Other,Retail,\"food & beverages\",Technology}",
+				"most_common_freqs": [
+					0.0232089, 0.0131181, 0.0100908, 0.00908174, 0.00706357, 0.00706357, 0.00605449, 0.00302725, 0.00302725, 0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{Apparel,Chemicals,\"Comunicación y Telecomunicación\",\"professional training & coaching\",Transportation,transportation/trucking/railroad}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "email",
+				"n_distinct": -0.672048,
+				"most_common_vals": "{false,evildosola@winpack.cl,gerencia@aocsa.com.mx,lindley.facturas@arcacontal.com,maritza.escalona@rfsmobility.com,planta1590@gmail.com,razzeto@razzeto.com.pe,robertol.garcia@arcacontal.com}",
+				"most_common_freqs": [0.0110999, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816],
+				"histogram_bounds": "{890802586@factureinbox.co,abuenavibrafresh@gmail.com,administracion@andamiosamarillos.com,administracion@dysa.com.uy,administracion@jureka.mx,administracion@mysison.com,admin@ninjahubs.cl,afigueroa@meximares.com,airarrazabal@enadhe.cl,almacen@dermaexpress.com.mx,anamorales@izca.com.mx,aolivares@multiaceros.cl,arnulfo.gonzalez@cavasautto.com,azorrilla@verbenaflores.com,braloydespachos@gmail.com,ccarmona@masvida.info,cesar.velasquez@proconsumo.hn,christian.barrientos@invpacificosur.cl,cobranza@sejoma.com.mx,compras@artesapanaderia.com,contabilidad02.pe@itsanet.com,contabilidad@demarka.cl,contabilidad@hoffens.com,contabilidad@mascotasbichos.com,contabilidadsoluclab@gmail.com,contactogimak@gmail.com,contacto@omnicorp.com.ar,contadora@epex.com.co,copecrecepcion@copec.cl,csakata@drimer.com.pe,cynthia.paypay@stgperu.com,darrow@darrow.com.co,diana.pedraza@multistock.com.pe,direcciongfs@gmail.com,dominique.fonseca@algramo.com,dte_20112273922@paperless.pe,eduardo.gallego@walterlund.cl,efrainb@corporacionunionf.com,erick.cisneros@swagelok-mx.com,facturacioncedis@petco.com.mx,facturacion@grupocapitalpacifico.com,factura.electronica@homesentry.net,facturasips@goleman.com.co,facturas@tusmascotas.cl,fecompras@brightcell-logistics.com,fernanda@omegacargo.cl,finanzas@amigales.cl,fproveedores@commerk.com.co,fsoto@envasa.cl,gerardo.enero@antalis.com,gerencia@fuerzalogistica.co,german@e-mov.cl,glopez@joacamar.com.uy,grupopagoproveedores@gourmet.cl,hernan.felix@grupodalvi.com.mx,hugo.mihovilovic@antalis.com,imunoz@vctchile.com,intercambios@cfe.rondanet.com,ivonne.gonzalez@dafiti.cl,jbcaamalp@bepensa.com,jcordovag@bancoripley.com,jiriarte@uwinegroup.cl,jo.mexico@moderna.com,jose.bustamante@elogistic.cl,jquilodran@safe-energy.cl,jvaldebenito@limatco.cl,kevin@urbanmarketingmx.com,laura.acevedo@novaventa.com,liz.tavera@ygo.com.mx,losboldos@losboldos.cl,luisg.chavez@alesso.com.mx,manuel@agroservicioscapurro.cl,mario.avila@mepiel.com.mx,mbermejo@solucorp.com,mgiovanettim@gmail.com,mireya.garcia@globalcourier.cl,nadia.pozo@mandame.cl,nsanchezd@alicorp.com.pe,oscar.sanmartin@frigosorno.cl,pablo.rojahelis@santafespa.cl,paola.valenzuela@orizon.cl,pcarrasco@seagarden.cl,petsparadisecorporativo@gmail.com,proveedores@avinal.com.co,proveedores@laberlin.cl,pschilling@worldfood.cl,recepcion@axteroid.com,redpostalpobladosas@gmail.com,rfernandez@blueroom.mx,roberto.gonzalez@tlock.mx,rosa.perez@dbschenker.com,safecar@runa-dte.cl,sendya.cl@gmail.com,sistemas@redesluma.com,spavez@elvolcan.cl,tirarrazabal@quimatic.cl,ununez@arion.com.pe,vic.delatorrev@gmail.com,waynechile@wayne.com,yflores@dentswiss.cl,zmendez@grupodokka.com}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "holding_id",
+				"n_distinct": 3,
+				"most_common_vals": "{5652e95e-bb99-48f5-aa1c-13c8c2638fc6,f6e3cb81-8b4a-451e-8402-573e47688d45,05583c6e-9364-4672-a610-0744324e44b4}",
+				"most_common_freqs": [0.892028, 0.0938446, 0.0141271],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{000bbda3-a5d9-4b37-a5d3-a583395b12db,02dbd6d3-9694-411d-9fcd-df6fec7b4724,055fd88b-621b-496a-b56c-23f791450353,0667b61a-4263-4932-abaa-c5eb2c3a39f0,09edf1c1-60bc-4578-88d2-e0ebba465658,0c5b2f9a-9c1d-4de9-b934-b6265947dbc7,0fa7fbcd-4086-458c-8faf-a984c1f1e2ac,13cec0e4-8b71-4201-b577-88126afe8c2b,1619db55-463e-43f2-b8aa-ef428aec27ad,18a9daec-4067-41c9-958a-f95d06142e5b,1c2c660a-747d-499b-ad01-6c30948118f2,1e174eca-50b4-41b6-8c70-ab9487b2f24c,20230d61-7677-4f7c-bcc2-477c0fd12464,22a26506-c4ea-4ef3-8f61-e6176aa735f1,266d5be5-47e6-4215-930f-9f9fbbfa1fcf,297e88f6-0088-4f62-b485-0ca8c95479ee,2b8975ce-d31d-4dcd-94fc-d6ca61636848,2e431db3-32f2-4e4a-b5a0-de19fa0883e1,30bba7bf-95be-4766-8369-29fbb42fcee3,338265a1-1f5b-4796-a71c-745e97a316b1,34ab2276-f40d-4796-92b7-a9677b9fd701,36d3f1b6-a438-478a-8489-1f30bc76c255,3924b47e-3a82-4c0f-8a46-67e39f0f891c,3bd3bbf8-a23d-4560-b2c5-bc7d9e701d72,3f600530-1781-4010-9af1-cbb0a3f51bdc,42c9b75d-92fb-49fe-a8f7-4dad6c6d5258,44b4ab96-b236-4706-9d3f-b031a1f96d3c,485b5387-1658-4d84-a5ec-1c190db03c0d,4b11912a-c984-4e33-8de8-f7c102be3c34,4edf5bef-df4b-42d9-8700-c75376c2d06b,51a18a1f-acac-40e6-b26c-b723b5f5f25d,5319c34d-354a-4ad7-a3c9-97cc195975f8,5588f3bb-6af4-4dee-82c5-cc47c5c40c21,58043b29-19d1-44f6-8e3b-cd5cd4e15131,5bc3d912-b22a-4191-b970-f209304c2f05,60960029-c761-4f77-aef5-ef5e2b79b5ca,633308b3-324c-4282-a49d-1a8a985c51c2,655cd0e8-2f50-4ca9-ad47-c5ab2bbb4aab,6801b1e9-d3e8-4722-9b1f-cf70d1183555,69bc68ce-4f8a-4783-9238-a7ac8577efc7,6c299ec4-9f96-4cff-b60a-ac3d66ce3879,6d5b287e-2fec-4aa7-b63b-4d05c7d83f83,6f3d7aec-7f45-4517-8529-4c5343484909,727e00b6-5649-42a0-b41a-6180db2aa1b1,73a93500-6055-4bd4-940f-d7b75df6a876,758d63b1-cd7f-45b0-be89-f1f9c76d0959,774f4362-730a-4192-bdbf-38f10d482489,78cde3fa-5efb-4843-ba61-3562ff1b3709,7c3d8ccc-8a0e-4cc0-97ed-234b2b36af5f,801c170d-954f-4fa7-b634-7340d56f96ac,82f9cc9f-3539-4c23-8c6c-0691db2c05fa,8663c6c7-6528-461d-b5a0-6436f53af05d,892dcaa2-775e-4e6c-88dd-839e78e72656,8b6063bd-5345-4413-8495-a2e230b0abdc,8df8c38d-c79c-472f-8c39-8130f29f1503,9154fd4d-21b3-44ff-8658-3ec481b6b5a4,93136181-3c89-4295-88c3-9388ad4ca51b,95ee0d08-d68e-4acb-8c22-c5683ac2e0d6,9763166e-8672-4c79-87e8-80fb2337010a,9a7dd02c-ee57-452d-8733-9af2f0fd7538,9c49d1d8-3604-4c91-b25f-6c10d8ae782a,9eaac75f-bda4-40ee-bba7-91ed58484c1e,a1587d6a-b092-4e7b-b497-a8a9e1e53ee4,a4f956e6-a5c8-41c4-8030-4927ac36f2fd,a6b86c29-6a67-48a8-b258-ab9c293f5c58,a96df761-34f1-43a2-9e11-12010fa3e295,ac4028d1-916e-48ed-97d4-6fda9209855b,ae08df22-725e-4630-bf4c-d2b55a56195a,b144ea96-4f4b-483b-aec4-e0da06e8ef4c,b2ef1de6-2167-4401-b350-d8e868440ddb,b443d7b9-7c52-468a-a2e2-bb1b3191b1cb,b5c4e84a-3fa7-4b1e-8725-a1f77bd55a57,b7e3c86d-4a89-4c4b-a615-da6eff420bfc,b9cb7853-410e-4736-b0b7-d29f1ba5a858,bb7e6bd1-f8c3-452a-a4bb-cddc7ea2f3ec,bdf43a00-05ff-44d6-856c-179364da0ee4,c005c13b-c5ad-40fe-9f5b-008274b2c7f0,c1cb6fcb-8f90-49bc-a3cd-a674ff7e9eeb,c3d31c46-8a7e-4ef0-8db7-f969d9ce8c16,c6bb1995-61d7-449f-97a3-6e6dff42d816,c9e7a5d5-7ba2-43dd-99ae-ae9ce6beeae9,cd085208-1030-4c23-86e0-e27599ace1fe,ce3e1bf5-5b77-4648-b60a-d50f1bdbf7a2,d0e9b311-bc0e-49a9-8597-e17a7ba17369,d2061eeb-7024-49d6-a9ce-548fd0ea5dfb,d5276c29-7d90-4151-b238-dee28a68fca7,d7cb6f1a-28c7-4ee8-b798-ec647f2e7778,daaa95b4-c9bb-4fd5-a024-a0d0093c78cf,dd85ba76-1332-49ce-85a0-a14b7b3be064,df647e1f-a699-4963-9af6-a90956167d30,e14ee5ab-947c-406d-a729-b149452f60dd,e476b181-b90a-4127-9a04-38cfcd108044,e8c0779e-07ec-43a3-b8b9-1d111c8fd3ce,ead9c1ee-944c-4840-b615-a18431136206,ee3c42e8-1ae7-4534-b03b-8a0f11ccd7c1,f1baa539-69e6-48e3-a55f-1acf97f255d4,f4a002bf-6bb8-494c-8693-6c005ba2a3e2,f6eebf27-8c8a-44ec-a984-bbeb7fd03c94,f8fbb199-56e0-44cc-9e66-7eca98293e9b,fd8fdd82-0abe-4da7-9091-abadaa2ce412,ffda716b-96f4-4659-bf06-09a6d9cb933e}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "legal_address",
+				"n_distinct": -0.756811,
+				"most_common_vals": "{\"Av. Apoquindo 3000, Las Condes, Santiago, Chile\",\"Av. Ejército 146\",\"03100 México\",\"Av. Alonso de Molina 1611, Santiago de Surco\",\"Av. Miraflores 9153 - Renca, Santiago, Metropolitana, Chile\",\"AV. PRIMAVERA 970 URB.CHACARILLA DEL ESTANQUE INT. 5 PISO 5, EDIFICIOGERENS LIMA-LIMA-SANTIAGO DE SURCO\",\"Av. Universidad Anáhuac 46, Lomas Anáhuac\",\"Calle Orión Norte s/n, Col. La Vista Country Club\",\"Carabelas 235 piso 9\",\"Jr. Medrano Silva 165 - Barranco\"}",
+				"most_common_freqs": [
+					0.00302725, 0.00302725, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{\"03822 Ecuador\",\"11230 México\",\"15 DE SEPTIEMBRE 12 - 12, 54607 Tepotzotlán, México, México\",\"45019 México\",\"66278 Ciudad de México, México\",\"ADOLFO Adolfo Kachele 365, Pucon, de la Araucania, Chile\",\"Alcalde Guzman 0180, 8700000 Santiago, Metropolitana, Chile\",\"AMERICA SUR 443, 64000 Nuevo León, México\",\"Antonia lopez de bello 743 local 132, Recoleta, santiago, Metropolitana, Chile\",\"Arauco 237, Santiago, Metropolitana, Chile\",\"Asunción 1220, montevideo, Montevideo, Uruguay\",\"AV ACAPULCO 770, 66477 San Nicolás de los Garza, Nuevo León, México\",\"AV. Américo Vespucio Oriente 1353, Pudahuel, Metropolitana, Chile\",\"Av Artesanos 3663, 44300 Jalisco, México\",\"av concon-reñaca 4000 oficina 909, Concón, Valparaíso, Chile\",\"avda. las industrias 1245 los angeles, Los angeles, del BíoBio, Chile\",\"Av. del Pinar Nro. 110 · Urbanizacion: Chacarilla del Estanque (Oficina 606), Lima, Lima, Perú\",\"Av. El Salto 1979, Recoleta, Metropolitana, Chile\",\"Avenida Apoquindo 2930, Oficina 201, Santiago, Metropolitana, Chile\",\"AVENIDA DOCTOR R MICHEL 552, 44467 Jalisco, México\",\"Avenida General Artigas Km. 19,2, 90100 La Paz, Canelones, Uruguay\",\"AVENIDA LA LLAVE 2046, 45618 Jalisco, México\",\"Avenida Providencia 1208, Oficina 1603, Santiago, Chile\",\"Av. España 1690\",\"Av. Guardia Civil N° 1321, Lima, Lima, Perú\",\"Av. Jacinto Canek 739, Mérida. Yucatan\",\"AV. Jorge Alessandri Rodriguez 12489, San Bernardo Santiago, Metropolitana, Chile\",\"AV.LAS PARCELAS 7950, Santiago, Metropolitana, Chile\",\"AV. LOS EUCALIPTOS NRO. S/N URB. HUERTOS DE SANTA GENOVEVA (ESQUINA CON AV LOS CEIBOS), Lima, Lima, Peru\",\"AV. MARINA NACIONAL 180 ANÁHUAC I SECCIÓN\",\"Av. Paseo de la Reforma 389, Piso 12, Cuauhtémoc, CDMX, México\",\"AV. PRESIDENTE RIESCO 5561, Santiago, Metropolitana, Chile\",\"Av Providencia 1234\",\"AV SAN IGNACIO LOYOLA 1080 LT R SAN BERNARDO, Santiago, Metropolitana, Chile\",\"AV. TEPEYAC No. 4800 PRADOS TEPEYAC\",\"Av. Vitacura 2808, of 501, las condes, Santiago, Metropolitana, Chile\",\"Barrio edificio atrio piso 26 oficina 4, Panamá, 7185 Panamá\",\"BLVD CARLOS SALINAS DE GORTARI KM 11 5 SN, 66600 Nuevo León, México\",\"BOSQUES DE LAS CAOBAS 230/7, 54753 Cuautitlán Izcalli, México, México\",\"CAL. 3 INT. 2 MZA. D LOTE 16 URBANIZACION SANTA RAQUEL II ETAPA ATE, Lima, Lima, Peru\",\"Calle 1 25, 28075 Colima, México\",\"CALLE 6 SUR N 43 A 200 OF 405, MEDELLÍN, Antioquia, Colombia\",\"CALLE AV DEL BOSQUE 1300 - 1, 45590 México\",\"Calle Dr. roberto Michel 544, 44467 Guadalajara, Jalisco, México\",\"Calle Leonardo Arrieta 1493 Urb Elio, Lima, Lima, Peru\",\"CALLE MORELOS SUR 905, 67350 Nuevo León, México\",\"CALLE PROLONGACION PETEN 897, 03320 México\",\"CALLE TAMESIS 158, 64345 Nuevo León, México\",\"CAL. SALAVERRY Nro 184 MIRAFLORES, Lima, Lima, Perú\",\"CALZADA MARIANO ESCOBEDO 510 - PISO 8 801 INTERIOR A, 11590 Ciudad de México (MX), México\",\"Camino a Lonquén 10707, Maipú, Santiago, Chile\",\"CAMINO INTERNACIONAL 2825, Viña del mar, Valparaíso, Chile\",\"Camino vecinal Ruta 1 km. 50.500, Libertad, San José, Uruguay\",\"Carlos A. Lopez 7794, 12300 Montevideo, Montevideo, Uruguay\",\"carretera a lagos de moreno 251, 37669 Guanajuato, Guanajuato, México\",\"Caupolican 9241 BD C, Quilicura, Santiago, Metropolitana, Chile\",\"centeno 377, 08400 México\",\"Chiloe 1221 depto 1005 Stgo, Santiago, Metropolitana, Chile\",\"CL 127 B BIS 45 40, 11001000 Bogotá D.C., Bogotá, Colombia\",\"CL 49 SUR 45A 300 OF 1005, 11111 MEDELLÍN, Antioquia, Colombia\",\"CL 77 B 57 103 LC 1 CENTRO EMPRESARIAL GREEN TOWERS, 11111 BARRANQUILLA, Atlántico, Colombia\",\"C. Las Begonias 415, 15046 Lima, Lima, Perú\",\"CORONEL AGUSTÍN LÓPEZ DE ALCÁZAR 546, INDEPENDENCIA, Santiago, Metropolitana, Chile\",\"CR 32 A 10 220, 11111 YUMBO, Valle del Cauca, Colombia\",\"CR 50 127 SUR 61 OF 602, 11111 CALDAS, Antioquia, Colombia\",\"CRA 43 A 25A 45, Bogotá D.C., Bogotá, Colombia\",\"CUEVAS 1339 1345, SANTIAGO, Santiago, Metropolitana, Chile\",\"DIEZ DE JULIO 262, Santiago, Metropolitana, Chile\",\"DR. JOSE ELEUTERIO GONZALEZ 2815, 64320 Nuevo León, México\",\"El Golf No 150 Piso 8A, Los condes, Metropolitana, Chile\",\"FELIPE SANGUINETTI 2641, montevideo, Montevideo, Uruguay\",\"GARRIDO 13711, LO BARNECHEA, Santiago, Metropolitana, Chile\",\"Hacienda Altamira 107, 67169 México\",\"Inca 2227 esquina Amézaga, 11800 Montevideo, Montevideo, Uruguay\",\"JM INFANTE 1098 PROVIDENCIA, Providencia, Metropolitana, Chile\",\"Jose Olaya Nro. 160 P.J. San Gabriel Sect V bajo, Lima, Lima, Perú\",\"JUAN GUTEMBERG 452, Antofagasta, Antofagasta, Chile\",\"Km 25 Via a Daule, Guayaquil, Ecuador\",\"la montaña 1393 Lampa, Lampa, Metropolitana, Chile\",\"LAS CHACRAS DE SAN LUIS P/19, Santiago, Metropolitana, Chile\",\"Lerdo de Tejada 21 - 1, 90740 Zacatelco, Tlaxcala, México\",\"LO ECHEVERS 550, Santiago, Chile\",\"LOS MAITENES ORIENTE 1295, Santiago, Metropolitana, Chile\",\"LUGAR CONDOMINIO INDUSTRIAL LA NUBIA KM 1 5 VIA CALI CANDELARIA, CANDELARIA, Valle del Cauca, Colombia\",\"Manuel A. Matta 1055\",\"martinez de aldunante 3475 lt 3A-4, Punta Arena, Magallanes, Chile\",\"Moneda 812, Santiago Santiago, Metropolitana, Chile\",\"Padre Mariano N° 391, Santiago, Metropolitana, Chile\",\"PAR INDUSTRIAL LA FLORIA BG 9, 111111 COTA, Cundinamarca, Colombia\",\"Paysandu, Paysandu, Paysandú, Uruguay\",\"pilcomayo 8503 pudahuel, Santiago, Metropolitana, Chile\",\"PORTUGAL 1163, Santiago, Metropolitana, Chile\",\"RINCON 711, 11000 MONTEVIDEO, Montevideo, Uruguay\",\"Ronda de la Comunicación s/n- Edificio Oeste 1, 4A\",\"Ruta PY 01 Km 12,5, Barcequillo, ciudad de San Lorenzo, Barcequillo, Paraguay\",\"San Francisco 918, Santiago, Metropolitana, Chile\",\"SAN RAFAEL 211, 54130 México, México\",\"segunda avenida 1411 - San Miguel., Santiago, Metropolitana, Chile\",\"URB. CHACARILLA DEL ESTANQUE VI ETAPA. JR PASEO DEL BOSQUE 500. INT 301, Lima, Lima, Perú\",\"VENUSTIANO CARRANZA PTE 350, 81200 Sinaloa, México\",\"ZENTENO 1372, Santiago, Metropolitana, Chile\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "legal_name",
+				"n_distinct": -0.954591,
+				"most_common_vals": "{\"DISTRIBUIDORA LIVERPOOL S.A. DE C.V.\",\"AC LOGISTICA DEL PERU S.A.C.\",\"ALCO CONSULTING SA\",\"Avicola Nacional S.A.\",\"AVON COSMETICS MANUFACTURING\",\"BANCO AZTECA SA INSTITUCION DE BANCA MULTIPLE\",\"BRIGHTCELL LOGISTICS CHILE LIMITADA\",\"BUSCALIBRE S.A.\",\"CELLSTAR CHILE S A\",\"COMERCIAL PEUMO LTDA\",\"COMPANIA GENERAL DE ELECTRICIDAD S.A.\",\"CORPORACION DE COMPAÑIAS AGROINDUSTRIALES CCA DE RESPONSABILIDAD LIMITADA\",\"DISTRIBUIDORA NEGOCIEMOS PHARMA SAS\",\"Droguería Proconsumo\",\"EMBOTELLADORA ANDINA S A\",\"GESTION DE SERVICIOS AMBIENTALES S.A.C\",\"Investigaciones y Estudios Superiores S.C.\",\"LOGYTECH MOBILE SAS\",\"MANANTIAL S A\",\"Mas Vida S.A\",\"PACKSYS MEXICO\",\"PARAGUAY REFRESCOS S.A\",\"PASAR EXPRESS SAS\",\"PHARMA PLUS SA DE CV\",\"PLUSPETROL PERU CORPORATION S.A.\",\"REDONDOS S A\",\"REX ADHESIVOS SPA\",\"SOUZA CRUZ LTDA\",\"UNILEVER DE MEXICO\",\"Universidad de Ingeniería y Tecnología\"}",
+				"most_common_freqs": [
+					0.00302725, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{\"99MINUTOS COLOMBIA S.A.S.\",\"ACIET - Asociación Colombiana de Instituciones de Educación Superior con Formación Técnica Profesional Tecnologica y Universitaria\",\"AGENCIAS MOTTA\",\"Aguas Río Blanco SpA\",ALESSO,\"ALINOVA CHILE SPA\",\"AMA LOGISTICA & DISTRIBUCION SPA\",AOCSA,\"ARME S.A.S\",\"AVICOLA SAN AGUSTIN S.R.L.\",\"BAZAR LA IBERICA S.A.\",\"BIGFOOT CHILE SPA\",\"Bosch&cia S.A.\",\"BUSCALIBRE COLOMBIA S.A.S.\",\"CARNES WAGYU ARGENTINAS SA\",\"CENTRAL EXCHANGUE S.A.C.\",\"CHOCOLATES DEL MUNDO SPA\",\"CLICK-ON S.A.\",\"COM E INVERSIONES AVI LTDA\",\"COMERCIAL E INDUSTRIAL CALPER SPA\",\"COMERCIALIZADORA DH LTDA\",\"Comercial Porvenir SpA\",\"CONDE MERCANTIL COMERCIO DE FRIOS LTDA EPP\",\"Corporacion Arion SAC\",\"CORREA GULARTE KATIA SIBANA\",\"D2 LOGISTICA LTDA\",\"DELMITA S.A.\",\"DIKEN INTERNATIONAL\",\"DISTRIBUCION Y LOGISTICA GIR IZCA\",\"DISTRIBUIDORA FERREACEROS S A S\",\"Distribuidora Sanchez 4G SPA\",\"D & N COURIER S.A.C.\",DULCICENTRO,\"Edeal SA\",\"EMPAQUETADOS EL TRECE S.A.S\",\"ENVASADORAS DE AGUAS EN MEXICO\",\"EXTRUIDOS BOLSA POLIETILENO\",\"FARMACIA GLORIA DE COATZACOALCOS\",\"FINVIVIR PLATAFORMA DIGITAL\",\"FRIGORIFICO CENTENARIO S.A.\",\"FUND ARTURO LOPEZ PEREZ\",\"GBT LOGISTICS SPA\",\"GLOBAL VEU\",\"GRIFE TRANSPORTES S.A.\",\"GRUPO ZORRO ABARROTERO\",\"HERNANDEZ Y ORREGO COMPUTACION LTDA\",\"ID LOGISTICS CHILE S.A.\",\"IMPORTADORA DILACO S.A\",\"IMPROVE QUALITY REDUCE COST SAVE LIFE AUDITORES S.A.S\",\"Instituto Profesional del Comercio (ESCS)\",Intralogística,\"INVERSIONES PECUARIAS LURIN S A\",\"JOACAMAR LTDA.\",\"KITCHEN CENTER SAC\",\"LABREZZA S.A.\",\"LA TABACALERA, S.A.\",\"Link Logistica\",\"LOGISTICA PATAGONIA S.A\",\"Louis & Lewis\",\"Maderas Selectas de Chihuahua\",\"MARIO ALBERTO ROBLES ESPINOSA\",\"MAXIS DISTRIBUIDORA DE ALIMENTOS LTDA\",\"MERIMAT DEL SUR S.R.L.\",\"Mongroup EIRL\",\"M & V TRANSPORTE E LOGISTICA LTDA\",\"NINJA HUBS SPA\",\"OMAR VEGA RUIZ\",\"Oxy Net S.A\",\"Pepsico Internacional Mexico\",\"PET SUPLET SAS\",\"POLYSISTEMAS CORP SOCIEDAD ANONIMA CERRADA\",\"Procesamiento y venta de productos cárneos.\",\"PRODUCTOS DE CALIDAD FORT CARBON\",\"PUENTE PACIFIC LIMITADA\",\"RECICLAGEM INDUSTRIA E COMERCIO DE SUB PRODUTOS DE ANIMAIS DO MATO GROSSO LTDA\",\"RESITER S.A.\",\"ROYAL CANIN MEXICO\",\"SANTAFE SPA\",\"Servicios alimenticios Hendaya SAC\",\"SG COMERCIAL GROUP\",\"Skynet México\",\"SOCIEDAD COMERCIAL RANCHILLO LIMITADA\",\"SOFRUCO ALIMENTOS LIMITADA\",\"SOMOS NUDOS\",\"Stark Perú SAC\",\"SUPPLAG SPA\",\"Telefónica IOT y Big Data Tech Chile SPA\",\"TOPGROUP COLOMBIA S.A.S\",\"Transportes andina refrescos Ltda.\",\"TRANSPORTES MASTER TRANS LIMITADA\",\"UES SA\",\"Universidad Autónoma de Guadalajara\",\"Universidad de Ibagué\",\"Universidad del Valle de México\",\"Universidad Particular de Especialidades Espíritu Santo\",\"Universidad Técnica Federico Santa María\",\"VENUS PERUANA S.A.C.\",\"VIGATEC S A\",\"Wayne Chile SpA\",\"Wurth del Uruguay SA\",\"Zoom International Services SA\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "odoo_partner_id",
+				"n_distinct": -0.695257,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{472,514,539,3583,3625,3649,3662,3681,3912,3931,3957,3971,4026,4166,4192,4211,4237,4345,4437,4476,4504,4592,4716,4741,4777,4944,5122,5307,5638,5907,5983,6057,6111,6184,6236,6303,6326,6346,6404,6734,6770,6835,6887,6996,7063,7118,7173,7229,7342,7411,7433,8236,8377,8537,8812,9118,9270,9543,10406,10761,11217,11517,12139,12605,13090,13332,13964,14121,14499,14818,15259,15735,15757,15803,15816,15849,15872,15884,15908,15929,15956,15970,15992,16002,16018,16052,16070,16095,16105,16113,16121,16132,16149,16163,16190,16199,16206,16218,16230,16244,16253}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "phone",
+				"n_distinct": -0.314833,
+				"most_common_vals": "{false}",
+				"most_common_freqs": [0.375378],
+				"histogram_bounds": "{\"+1 415 555 0198\",+4930123456,5116307000,51924686587,51932458654,51940328440,51945873015,51959766371,51969487188,51972186441,51981059459,51983281725,51989031028,51993464481,51996212442,51997521755,+5212345678,5215537373717,5218441205321,522282287578,523314483844,523336190566,524425718440,+525512345678,525530131615,525543235002,525552141726,\"+52 55 6789 4321\",525578122048,525591852600,528110659758,528119424189,528132559929,529999406170,\"+54 9 11 6234 7788\",56222338466,56223338608,56223807206,56224134029,56224836000,56226569751,56227317600,56228107400,56228968300,56229474000,56412788194,56642254240,56932551302,56934860318,56940047615,56941284694,56942056008,56942770393,56951781610,56954192415,56957098037,56961331206,56964465571,56966287888,56966476722,56968486157,56977351681,\"+56 9 7812 3456\",56979797980,56982098677,56984055498,56985616361,56986492839,56987485837,56988181736,56991565260,56992289215,56993349173,56994787280,56999642040,573003624037,573017428251,573046164384,573103491693,573112146151,573125445026,573134749735,573152873445,573174376515,573185768924,573197816280,573213119128,573228179933,576024358337,59822023585,59822164838,59823378888,59823640000,59825087777,59826288366,59829160200,59846235520,59891001401,59892234059,59898152566,59899590658}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entities",
+				"attname": "tax_id",
+				"n_distinct": -0.953582,
+				"most_common_vals": "{IES870531FU5,20221084684,20304177552,20507850091,20545990998,20605957375,30-69549623,30-71223334-1,33.009.911/0001-39,76023713-2,76.123.456-7,76357700-7,76411321-7,80003400-7,8019995253766,85037900-9,91144000-8,96670170-6,96711590-8,ACM040507RY2,BAI0205236Y8,DLI931201MI9,#Nicola,PIM001026NF2,PME101027F37,UME651115N48}",
+				"most_common_freqs": [
+					0.00302725, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816,
+					0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816, 0.00201816
+				],
+				"histogram_bounds": "{0,0614-021008-105-2,10097831713,1140361117549,150730060015,190096467001,2010100263,20159475191,20255945860,20452614767,20517088227,20545323002,20600132386,20602279902,20606968150,210001310011,210250030012,212053400018,214216470016,216946080010,219110110017,27-35855303-1,30-65480863-1,30-71120895-6,30-71586862-4,30-71847457-0,3101868708,33717152269,44.988.586/0001-10,6140000,71540100,76013800-2,76054636-4,76131414-9,76193188-1,76244670-7,76309299-2,76375763-3,76435650-0,76525585-6,76624425-4,76740134-5,76792649-9,76879605-K,77039579-8,77096968-9,77145256-6,77176344-8,77235177-1,77326471-6,77483830-9,77643148-6,77826764-0,78023030-4,78293000-1,79675760-4,80008802-6,8050107523,81698900,830124236-5,84634200-1,860.029.924-7,86383300-0,890200499-9,8909116251,9001296665,9004350288,9007362720,9011551589,901383190-2,90684000-6,93320000-0,96568740-8,96687010-9,96835880-4,96955880-7,99520000-7,AFR240923NB2,BAP830609AJ2,CCM660128HR9,cus_EziQ7k93leaoXk,cus_PRmFbGclKQ5W6S,cus_TKxAUHAebIkPPF,CVR981030480,DNA230511DF4,EDI000503GI2,FOL810907CJ4,GME070103AS4,HERJ021202AD4,ISA730903BB7,LOG140507475,MFE141114989,OOSJ910716MR3,PJV9111142T7,PTA1908265U0,SCA070119MQ3,SKYMX123456789,TABF730427E31,TVE060408JL4,VERO940919PK6,ZAP180801J68}"
+			}
+		],
+		"size_info": {
+			"total_size": "496 kB",
+			"table_size": "232 kB",
+			"indexes_size": "264 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-02T11:18:28.798Z"
+	}
+}

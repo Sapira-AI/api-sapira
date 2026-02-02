@@ -116,6 +116,7 @@ async function bootstrap() {
 			'Accept',
 			'Authorization',
 			'X-Workspace-Id',
+			'X-Holding-Id',
 			'x-api-key',
 			'x-device-info',
 			'x-device-id',

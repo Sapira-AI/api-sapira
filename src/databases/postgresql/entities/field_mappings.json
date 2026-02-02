@@ -1,0 +1,477 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.field_mappings completado exitosamente",
+	"data": {
+		"table_name": "field_mappings",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "source_model",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "target_table",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "mapping_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "mapping_config",
+				"data_type": "jsonb",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_active",
+				"data_type": "boolean",
+				"is_nullable": "YES",
+				"column_default": "true",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_by",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "updated_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "mapping_type",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'simple'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "secondary_source_model",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "secondary_target_table",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "transformation_type",
+				"data_type": "USER-DEFINED",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "transformation_config",
+				"data_type": "jsonb",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+				"index_definition": "CREATE UNIQUE INDEX field_mappings_holding_id_source_model_target_table_is_acti_key ON public.field_mappings USING btree (holding_id, source_model, target_table, is_active)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "field_mappings_pkey",
+				"index_definition": "CREATE UNIQUE INDEX field_mappings_pkey ON public.field_mappings USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_active",
+				"index_definition": "CREATE INDEX idx_field_mappings_active ON public.field_mappings USING btree (is_active) WHERE (is_active = true)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_hierarchical",
+				"index_definition": "CREATE INDEX idx_field_mappings_hierarchical ON public.field_mappings USING btree (holding_id, source_model, secondary_source_model, is_active) WHERE (mapping_type = 'hierarchical'::text)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_holding_id",
+				"index_definition": "CREATE INDEX idx_field_mappings_holding_id ON public.field_mappings USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_mapping_type",
+				"index_definition": "CREATE INDEX idx_field_mappings_mapping_type ON public.field_mappings USING btree (mapping_type)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_source_model",
+				"index_definition": "CREATE INDEX idx_field_mappings_source_model ON public.field_mappings USING btree (source_model)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_field_mappings_target_table",
+				"index_definition": "CREATE INDEX idx_field_mappings_target_table ON public.field_mappings USING btree (target_table)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "unique_field_mapping",
+				"index_definition": "CREATE UNIQUE INDEX unique_field_mapping ON public.field_mappings USING btree (holding_id, mapping_type, source_model, target_table)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "field_mappings_created_by_fkey",
+				"table_name": "field_mappings",
+				"column_name": "created_by",
+				"foreign_table_name": "users",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "field_mappings_holding_id_fkey",
+				"table_name": "field_mappings",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "field_mappings_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "holding_id",
+				"is_deferrable": "YES",
+				"initially_deferred": "YES"
+			},
+			{
+				"constraint_name": "unique_field_mapping",
+				"constraint_type": "UNIQUE",
+				"column_name": "holding_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "source_model",
+				"is_deferrable": "YES",
+				"initially_deferred": "YES"
+			},
+			{
+				"constraint_name": "unique_field_mapping",
+				"constraint_type": "UNIQUE",
+				"column_name": "mapping_type",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "unique_field_mapping",
+				"constraint_type": "UNIQUE",
+				"column_name": "source_model",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "target_table",
+				"is_deferrable": "YES",
+				"initially_deferred": "YES"
+			},
+			{
+				"constraint_name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "is_active",
+				"is_deferrable": "YES",
+				"initially_deferred": "YES"
+			},
+			{
+				"constraint_name": "unique_field_mapping",
+				"constraint_type": "UNIQUE",
+				"column_name": "target_table",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "update_field_mappings_updated_at",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "field_mappings",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION update_updated_at_column()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "field_mappings",
+				"policyname": "Users can manage mappings for their holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "ALL",
+				"qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "field_mappings",
+				"policyname": "Users can view mappings from their holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+				"with_check": null
+			}
+		],
+		"statistics": [],
+		"size_info": {
+			"total_size": "160 kB",
+			"table_size": "8192 bytes",
+			"indexes_size": "152 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-02T11:19:26.002Z"
+	}
+}

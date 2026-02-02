@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -11,7 +11,7 @@ import {
 	JobStatusResponseDTO,
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
-} from './odoo.dto';
+} from './dtos/odoo.dto';
 import { OdooService } from './odoo.service';
 
 @ApiTags('Odoo')
@@ -157,5 +157,26 @@ export class OdooController {
 	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
 	async syncInvoices(@Body() syncData: SyncInvoicesDTO): Promise<any> {
 		return await this.odooService.syncInvoices(syncData);
+	}
+
+	@Post('partners/clean-processed')
+	@ApiOperation({
+		summary: 'Limpiar registros procesados de staging',
+		description: 'Elimina todos los registros con processing_status = "processed" de la tabla odoo_partners_stg para el holding especificado',
+	})
+	@ApiOkResponse({
+		description: 'Registros eliminados exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				success: { type: 'boolean' },
+				message: { type: 'string' },
+				deleted_count: { type: 'number' },
+			},
+		},
+	})
+	@ApiBadRequestResponse({ description: 'Error al eliminar registros' })
+	async cleanProcessedPartners(@Headers('x-holding-id') holdingId: string) {
+		return await this.odooService.cleanProcessedPartners(holdingId);
 	}
 }

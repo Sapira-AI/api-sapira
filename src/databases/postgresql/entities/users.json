@@ -1,0 +1,447 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.users completado exitosamente",
+	"data": {
+		"table_name": "users",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "email",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "role_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "status",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'Pendiente'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "last_access",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "auth_provider",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "auth_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_super_admin",
+				"data_type": "boolean",
+				"is_nullable": "YES",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "idx_users_auth_id",
+				"index_definition": "CREATE INDEX idx_users_auth_id ON public.users USING btree (auth_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_users_role_id",
+				"index_definition": "CREATE INDEX idx_users_role_id ON public.users USING btree (role_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "users_email_key",
+				"index_definition": "CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "users_pkey",
+				"index_definition": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "users_pkey",
+				"index_definition": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "users_role_id_fkey",
+				"table_name": "users",
+				"column_name": "role_id",
+				"foreign_table_name": "roles",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "users_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "users_email_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "email",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"policyname": "users_delete_v2",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(rls_is_super_admin() OR (rls_is_holding_admin() AND rls_can_see_user(id)))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"policyname": "users_insert_v2",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(rls_is_super_admin() OR rls_is_holding_admin())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"policyname": "users_select_v2",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "rls_can_see_user(id)",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"policyname": "users_update_v2",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(rls_is_super_admin() OR (rls_is_holding_admin() AND rls_can_see_user(id)))",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "auth_id",
+				"n_distinct": -0.9,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{1ea8c8d1-edc2-4424-b4b3-45de02b98106,4978c1bb-4ced-4579-8770-061d3b42c0ce,4f5e117a-f6b2-499b-a6bb-9fd6eb26fb49,5a97a296-9216-4200-a0a4-416ac304f98e,759d09b3-cc7f-41b2-a3a1-35c544d66a01,803371e3-396b-40ea-b2e2-2f10fc6461e1,9fca1688-5ac3-4c38-8744-d97572e78f01,a312b07e-1ef0-4027-a39f-423266cf43e4,ebc649cb-3f0f-42e4-9ef4-b6a7e84606c5}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "auth_provider",
+				"n_distinct": -0.2,
+				"most_common_vals": "{google,email}",
+				"most_common_freqs": [0.5, 0.2],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "created_at",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{\"2025-06-18 20:13:31.271797\",\"2025-06-28 15:51:26.814218\",\"2025-09-30 18:25:35.648524\",\"2025-11-03 11:19:14.842379\",\"2025-11-10 11:34:20.079683\",\"2025-11-10 15:47:40.096652\",\"2025-11-27 18:41:20.877684\",\"2025-11-29 00:59:17.244303\",\"2025-12-16 21:54:25.34227\",\"2026-01-08 18:01:37.344854\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "email",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{alfredo@aisapira.com,dersatto@gmail.com,domi@aisapira.com,dominiquezamorag@gmail.com,leon.montero@blixter.cl,lrmontero@gmail.com,overmartinez@gmail.com,sapira.simpliroute@gmail.com,sapira@u-planner.com,sebastian@aisapira.com}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{1dedf14a-ba51-4b93-9c74-7f869e17d4dc,58351f6f-8ef4-4ce5-a1ed-0ef968f702da,8b238c27-b7cb-47df-93ac-5c350327c5cc,a15303a6-275e-4ab6-a09b-dee064bc8b43,afe09d93-23ce-4a42-a1a1-8e1c05fc8ae5,b2fe4032-b188-4d23-86ec-0a87418b55e7,c505bc12-945d-443b-ae41-79817be69e0b,cf81aa5f-09f1-4e43-9b57-56ad8ed9b49d,e0e04d0d-e308-4fec-99b1-d93b495f86db,fa447396-9ac5-433d-b648-e0ef7c0a1a50}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "is_super_admin",
+				"n_distinct": -0.2,
+				"most_common_vals": "{f,t}",
+				"most_common_freqs": [0.8, 0.2],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "last_access",
+				"n_distinct": -0.6,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{\"2025-10-30 15:56:25.48946\",\"2025-11-10 12:30:06.133339\",\"2025-11-19 21:18:22.072573\",\"2025-11-20 03:43:53.51681\",\"2025-11-20 13:37:33.530252\",\"2025-11-21 08:10:43.574324\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "name",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{\"Alfredo Gutierrez\",\"Dominique Zamora\",\"Domi RamaDev\",\"Jorge Osorio\",\"Leon Montero\",\"León Montero\",\"Over Martinez\",Sapira,\"Sapira Simpli SimpliRoute\",\"Sebastian Alamos\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "role_id",
+				"n_distinct": -0.4,
+				"most_common_vals": "{8629d9cd-9384-4088-b81e-1ed43c3f4737,642d0788-2606-4958-950b-f58524d27263}",
+				"most_common_freqs": [0.6, 0.2],
+				"histogram_bounds": "{43a7361c-3189-41d8-abca-75702726ae50,bc0ab23f-7c45-48cb-9e53-35c1790eea2c}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "users",
+				"attname": "status",
+				"n_distinct": -0.2,
+				"most_common_vals": "{Activo,Pendiente}",
+				"most_common_freqs": [0.7, 0.3],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "80 kB",
+			"table_size": "8192 bytes",
+			"indexes_size": "72 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-02T09:37:04.290Z"
+	}
+}

@@ -25,7 +25,7 @@ import { SecurityViolationType } from '@/core/interfaces/security/security.types
 import { SecurityUtils } from '@/core/utils/security.utils';
 import { EventsService } from '@/events/services/events.service';
 import { AppLoggerService } from '@/logger/app-logger.service';
-import { UserDTO } from '@/modules/profiles/dtos/user.dto';
+import { UserResponseDto } from '@/modules/users/dtos/users.dto';
 import { DeviceInfo, UserUtils } from '@/security/utils/user.utils';
 
 import { RISK_THRESHOLDS } from './constants/security.constants';
@@ -47,7 +47,7 @@ export class SecurityController {
 	@Get('points')
 	@ApiOperation({ summary: 'Consulta los puntos de seguridad acumulados por una IP' })
 	@ApiResponse({ status: 200, description: 'Puntos consultados correctamente' })
-	async checkIpPoints(@Query('ip') ip: string, @Req() req: Request & { user?: UserDTO }) {
+	async checkIpPoints(@Query('ip') ip: string, @Req() req: Request & { user?: UserResponseDto }) {
 		// Validar IP
 		const ipValidation = SecurityUtils.validateAndNormalizeIp(ip, {
 			throwOnInvalid: true,
@@ -107,7 +107,7 @@ export class SecurityController {
 	@ApiQuery({ name: 'ip', description: 'IP a verificar' })
 	async checkIp(
 		@Query('ip') ip: string,
-		@Req() req: Request & { user?: UserDTO }
+		@Req() req: Request & { user?: UserResponseDto }
 	): Promise<{
 		ip: string;
 		points: number;
@@ -172,7 +172,7 @@ export class SecurityController {
 	@ApiQuery({ name: 'ip', description: 'IP a verificar' })
 	async checkIpPointsNew(
 		@Query('ip') ip: string,
-		@Req() req: Request & { user?: UserDTO }
+		@Req() req: Request & { user?: UserResponseDto }
 	): Promise<{
 		ip: string;
 		points: number;
@@ -232,8 +232,8 @@ export class SecurityController {
 		};
 	}
 
-	private normalizeUserId(req: Request & { user?: UserDTO }): string {
-		return req.user?.extension_oid || 'anonymous';
+	private normalizeUserId(req: Request & { user?: UserResponseDto }): string {
+		return (req.user as any)?.extension_oid || req.user?.id || 'anonymous';
 	}
 
 	private calculateRiskLevel(points: number): 'HIGH' | 'MEDIUM' | 'LOW' {
@@ -314,7 +314,7 @@ export class SecurityController {
 	})
 	@ApiResponse({ status: 400, description: 'Tipo de violación inválido o datos incorrectos' })
 	@ApiResponse({ status: 500, description: 'Error interno del servidor' })
-	async simulateViolation(@Body() input: SimulateViolationDto, @Req() req: Request & { user?: UserDTO }) {
+	async simulateViolation(@Body() input: SimulateViolationDto, @Req() req: Request & { user?: UserResponseDto }) {
 		console.log('=== SIMULATE VIOLATION START ===');
 		console.log('Input received:', JSON.stringify(input, null, 2));
 
@@ -550,7 +550,7 @@ export class SecurityController {
 	}
 
 	@Get('my-ip')
-	async getMyIp(@Req() req: Request & { user?: UserDTO }) {
+	async getMyIp(@Req() req: Request & { user?: UserResponseDto }) {
 		const clientIp = (req as any).ip || (req as any).socket?.remoteAddress || req.headers['x-forwarded-for'];
 		return { ip: clientIp };
 	}

@@ -1,4 +1,4 @@
-import { DeviceInfoDto } from '@/modules/settings/dto/security-pin-with-device.dto';
+import { DeviceInfoDto } from '@/core/dto/device-info.dto';
 
 declare global {
 	namespace Express {
