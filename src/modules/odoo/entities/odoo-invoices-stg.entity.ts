@@ -29,6 +29,9 @@ export class OdooInvoicesStg {
 	@Column({ type: 'text', nullable: true })
 	integration_notes?: string;
 
+	@Column({ type: 'text', nullable: true })
+	error_message?: string;
+
 	@CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
 	created_at!: Date;
 

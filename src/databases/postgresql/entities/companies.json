@@ -1,0 +1,627 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.companies completado exitosamente",
+	"data": {
+		"table_name": "companies",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_name",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "tax_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "country",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "currency",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_address",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "representative_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "website",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "email",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "phone",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "invoice_prefix",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "contract_prefix",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "tax_rate",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "logo_url",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "odoo_integration_id",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "companies_pkey",
+				"index_definition": "CREATE UNIQUE INDEX companies_pkey ON public.companies USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_companies_odoo_integration_id",
+				"index_definition": "CREATE INDEX idx_companies_odoo_integration_id ON public.companies USING btree (odoo_integration_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "unique_odoo_integration_id",
+				"index_definition": "CREATE UNIQUE INDEX unique_odoo_integration_id ON public.companies USING btree (odoo_integration_id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "companies_holding_fk",
+				"table_name": "companies",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "SET NULL"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "companies_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "unique_odoo_integration_id",
+				"constraint_type": "UNIQUE",
+				"column_name": "odoo_integration_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "trigger_sync_contracts_company_currency",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "companies",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION sync_contracts_company_currency()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "companies_admin_delete",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "companies_admin_insert",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "companies_admin_update",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "companies_holding_isolation",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "tenant_isolation_delete_companies",
+				"permissive": "PERMISSIVE",
+				"roles": "{authenticated}",
+				"cmd": "DELETE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "tenant_isolation_insert_companies",
+				"permissive": "PERMISSIVE",
+				"roles": "{authenticated}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "tenant_isolation_select_companies_current_holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"policyname": "tenant_isolation_update_companies",
+				"permissive": "PERMISSIVE",
+				"roles": "{authenticated}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "contract_prefix",
+				"n_distinct": -0.4,
+				"most_common_vals": "{CTR-,\"\",CTR-MX}",
+				"most_common_freqs": [0.25, 0.1, 0.1],
+				"histogram_bounds": "{CTR-AR,CTR-CL,CTR-CO-,CTR-PE-,CTR-US}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "country",
+				"n_distinct": -0.5,
+				"most_common_vals": "{Chile,Colombia,\"Estados Unidos\",Argentina,México,Perú}",
+				"most_common_freqs": [0.2, 0.15, 0.15, 0.1, 0.1, 0.1],
+				"histogram_bounds": "{Brasil,Mexico,Peru,Uruguay}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "created_at",
+				"n_distinct": -0.65,
+				"most_common_vals": "{\"2025-11-03 11:29:43.531359\"}",
+				"most_common_freqs": [0.4],
+				"histogram_bounds": "{\"2025-06-25 23:06:57.107578\",\"2025-06-25 23:09:10.671261\",\"2025-06-28 15:59:21.939459\",\"2025-07-04 18:47:25.05899\",\"2025-07-04 18:49:38.798683\",\"2025-07-04 18:50:08.466923\",\"2025-07-04 18:50:39.789468\",\"2025-07-29 14:17:05.111896\",\"2025-07-29 14:21:38.191755\",\"2025-08-04 17:25:14.090389\",\"2025-09-16 19:32:25.881242\",\"2025-12-16 17:44:10.423852\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "currency",
+				"n_distinct": -0.4,
+				"most_common_vals": "{USD,CLP,COP,MXN,PEN}",
+				"most_common_freqs": [0.25, 0.15, 0.15, 0.15, 0.15],
+				"histogram_bounds": "{ARS,BRL,UYU}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "email",
+				"n_distinct": -0.45,
+				"most_common_vals": "{facturacion@simplit-solutions.com,finanzas@u-planner.com}",
+				"most_common_freqs": [0.4, 0.25],
+				"histogram_bounds": "{\"\",hankaargentina@hanka.com,hankachile@hanka.com,hankacolombia@hanka.com,hankamex@hanka.com,hankaperu@hanka.com,hankaus@hanka.com}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "holding_id",
+				"n_distinct": -0.15,
+				"most_common_vals": "{5652e95e-bb99-48f5-aa1c-13c8c2638fc6,05583c6e-9364-4672-a610-0744324e44b4,f6e3cb81-8b4a-451e-8402-573e47688d45}",
+				"most_common_freqs": [0.4, 0.35, 0.25],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "holding_name",
+				"n_distinct": -0.2,
+				"most_common_vals": "{SimpliRoute,\"Hanka Robotics \",uPlanner}",
+				"most_common_freqs": [0.4, 0.3, 0.25],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{110bb57b-1be0-4a20-a1cb-18dd822794d7,13f307ee-0ede-45dd-bda9-c1209a35a997,373c1b3b-5f91-4a4d-a28a-a146d0af6961,4453fc7e-af8d-40f0-a65a-eda4cfa2f974,5c83a77b-325f-441b-b830-357210aa3178,602b41a0-0970-4b0c-8f8c-748c6b89f54d,67c72819-8b69-4511-ac85-de8a2f4ece67,695f1e89-6299-4942-bc35-fb85c1a417c2,6cef394d-f14d-40d7-9188-dbbf4917f6a4,6d959e67-8b16-4a36-a4a8-f2a2214cbdb3,8c9e0ed2-2d8b-454a-b243-c0c3c4125b58,9ad40f1c-a873-4316-8f0c-9391b54bf06b,a80574f5-9c6f-42f7-afca-11cee02a126e,b537ca88-8197-49c6-b3e8-beee842b6eed,bb0caa69-162e-4b9e-8e54-9aff347abf1f,c6c147ac-4d48-4230-9da4-1626e257b7a6,c7056e2d-f79e-4203-8efa-ddf1879eb367,e836870e-e594-4837-91fa-aa4d48ad4766,e95adedd-237d-44b2-bae5-be1f88ffa340,fae8212b-28f4-4071-9c86-1c9a775297b7}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "invoice_prefix",
+				"n_distinct": -0.4,
+				"most_common_vals": "{FAC-,\"\",FAC-MX}",
+				"most_common_freqs": [0.25, 0.1, 0.1],
+				"histogram_bounds": "{FAC-ARG,FAC-CL,FAC-CO-,FAC-PE-,FAC-US}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "legal_address",
+				"n_distinct": -0.8,
+				"most_common_vals": "{\"\"}",
+				"most_common_freqs": [0.25],
+				"histogram_bounds": "{\"1049-C El Monte Avenue, Ste C #532, Mountain View -  California\",\"Aniceto Ortega 817 - A, Colonia Del Valle, Alcaldia Benito Juarez - Ciudad de Mexico\",\"Avenida 18 de Julio 1296, apartamento 401 - Montevideo\",\"Av Insurgentes Norte 1000\",\"Av Las Condes 1234\",\"Av. Paulista, nº 1765, Andar 7 e 13, Conj. 72 e 132 - Bairro: Bela Vista - São Paulo\",\"AV. PRIMAVERA 517 Int 406, Urbanización Chacarilla del Estanque -  Miraflores - Lima\",\"Badajoz 100\",\"Calle Colombia 1234\",\"Carrera 18 A # 103 – 11 - Bogotá D.C\",\"Holanda N° 100, Oficina 606, Providencia - Region Metropolitana \",\"Libertador 300\",\"Montevideo 665, 5º 508 - Ciudad Autónoma de Buenos Aires (CABA)\",\"San Isidro 1234\",\"Washington 1234, New York.\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "legal_name",
+				"n_distinct": -0.85,
+				"most_common_vals": "{\"SimpliRoute S.A.S\",\"Simplit SpA\"}",
+				"most_common_freqs": [0.15, 0.1],
+				"histogram_bounds": "{\"Hanka Argentina SA\",\"Hanka Chile SpA\",\"Hanka Colombia SAS\",\"Hanka México SA de CV\",\"Hanka Perú SAC\",\"Hanka US \",\"SimpliRoute Implementação de Software de Logística LTDA\",\"SimpliRoute INC\",\"SimpliRoute S.A.C\",\"SimpliRoute S.A.P.I DE C.V\",\"TANEQ SPA\",\"U-PLANNER INC\",\"U-PLANNER PERÚ SAC\",\"U-PLANNER SA DE CV\",\"U-PLANNER SAS\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "logo_url",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "odoo_integration_id",
+				"n_distinct": -0.25,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{1,2,3,4,5}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "phone",
+				"n_distinct": -0.4,
+				"most_common_vals": "{\"\"}",
+				"most_common_freqs": [0.35],
+				"histogram_bounds": "{1122345567,+1234566789,+5112345678,+5212345678,+5460123456,+5691234567,+56991321647}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "representative_name",
+				"n_distinct": -0.75,
+				"most_common_vals": "{\"\",\"Álvaro Echeverría Solís\",\"John Dutton\"}",
+				"most_common_freqs": [0.2, 0.1, 0.1],
+				"histogram_bounds": "{\"Alejandro Cash Crosta\",\"Carlos Rodríguez Orta\",\"Francisco Montt Matte\",\"Juan Pablo Mena\",\"Juan Perez\",\"Karen Evelyn Navarro Mora\",\"Leonor Gonzalez\",\"Maria Gómez\",\"Miguel Escalante\",\"Nicolás Becerra Cardona\",\"Pablo Sylvester\",\"Sergio Cruz\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "tax_id",
+				"n_distinct": -0.95,
+				"most_common_vals": "{76.403.266-7}",
+				"most_common_freqs": [0.1],
+				"histogram_bounds": "{1122334455,12-1234567,12345678912,20202020,20601570981,20604567107,218668210015,30-0887068,30-71661797-8,32051613,50.219.325/0001-38,76044076-0,76.123.456-7,9010865560,901412306-5,HNKMX12345678,SIM190306KX9,UPL170515GY8}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "tax_rate",
+				"n_distinct": -0.35,
+				"most_common_vals": "{19,0.18,0.19,18}",
+				"most_common_freqs": [0.25, 0.1, 0.1, 0.1],
+				"histogram_bounds": "{0.21,16,22}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "companies",
+				"attname": "website",
+				"n_distinct": -0.15,
+				"most_common_vals": "{http://uplanner.com/es/,www.hanka.com,\"\"}",
+				"most_common_freqs": [0.25, 0.25, 0.2],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "96 kB",
+			"table_size": "16 kB",
+			"indexes_size": "80 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-04T11:02:53.638Z"
+	}
+}

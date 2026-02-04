@@ -1,0 +1,458 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.client_entity_clients completado exitosamente",
+	"data": {
+		"table_name": "client_entity_clients",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_entity_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_primary",
+				"data_type": "boolean",
+				"is_nullable": "NO",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "NO",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_by",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "client_entity_clients_pkey",
+				"index_definition": "CREATE UNIQUE INDEX client_entity_clients_pkey ON public.client_entity_clients USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_client_entity_clients_client",
+				"index_definition": "CREATE INDEX idx_client_entity_clients_client ON public.client_entity_clients USING btree (client_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_client_entity_clients_entity",
+				"index_definition": "CREATE INDEX idx_client_entity_clients_entity ON public.client_entity_clients USING btree (client_entity_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_client_entity_clients_holding",
+				"index_definition": "CREATE INDEX idx_client_entity_clients_holding ON public.client_entity_clients USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_client_entity_clients_primary",
+				"index_definition": "CREATE INDEX idx_client_entity_clients_primary ON public.client_entity_clients USING btree (is_primary) WHERE (is_primary = true)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "unique_entity_client",
+				"index_definition": "CREATE UNIQUE INDEX unique_entity_client ON public.client_entity_clients USING btree (client_entity_id, client_id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "40 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "client_entity_clients_client_entity_id_fkey",
+				"table_name": "client_entity_clients",
+				"column_name": "client_entity_id",
+				"foreign_table_name": "client_entities",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "client_entity_clients_client_id_fkey",
+				"table_name": "client_entity_clients",
+				"column_name": "client_id",
+				"foreign_table_name": "clients",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "client_entity_clients_holding_id_fkey",
+				"table_name": "client_entity_clients",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "client_entity_clients_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "unique_entity_client",
+				"constraint_type": "UNIQUE",
+				"column_name": "client_entity_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "unique_entity_client",
+				"constraint_type": "UNIQUE",
+				"column_name": "client_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "trg_sync_client_entity_primary_client",
+				"event_manipulation": "INSERT",
+				"event_object_table": "client_entity_clients",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION sync_client_entity_primary_client()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trg_sync_client_entity_primary_client",
+				"event_manipulation": "DELETE",
+				"event_object_table": "client_entity_clients",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION sync_client_entity_primary_client()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trg_sync_client_entity_primary_client",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "client_entity_clients",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION sync_client_entity_primary_client()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"policyname": "client_entity_clients_delete_policy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"policyname": "client_entity_clients_insert_policy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"policyname": "client_entity_clients_select_policy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"policyname": "client_entity_clients_update_policy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "client_entity_id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{00870796-bee1-4432-aa67-beb981833bcb,014bf647-6aab-40d7-82ac-7ebbc7b77dbf,0273e5f0-c094-4a06-ac5e-eb37036de793,05c32c5a-7528-47ee-9a6a-d5748476350e,08789dc6-6296-4434-8787-60ca2b01f00c,0a98cf05-9dcb-4f46-8046-63d6669d4a62,0acf0800-28f1-437f-93ed-6ecbe130959c,0cd97704-8364-4df2-b363-c04a0fc15edc,10ef31c8-4b0c-4bca-b0a4-930811fe40cf,130996bd-7097-464a-9a23-cd47f234a1b3,15b025b9-6ee5-4d51-acf0-d4fa5df06006,19448d51-23f8-426c-befe-f64cda4b0f29,1c491516-4aff-489f-b213-3f75dcac0689,1fce81af-7fd7-4a3e-b7b8-ebf0094b3605,2007db3a-99b0-4c54-b353-cb9fa967388c,236b7d8d-becc-48ca-bd6b-82aa163a99bf,23e08589-f26f-4441-9484-e6b54a6a442e,26ad3620-b749-468a-812d-9096c554aee3,28b3a815-f4cd-4ba0-936d-0f61f102ab22,2c5f953e-d12a-43be-8d0b-70a7c18ecd6e,30f816a5-ed6e-463f-b5de-23c980d427dc,3230dd58-4336-4fb0-b434-82d524f850f9,33b840c4-36bb-4f3e-b432-c5cbdef1e05c,34ab2276-f40d-4796-92b7-a9677b9fd701,373b5810-bc8d-45ec-a918-4b214adccd6b,397a6c69-6188-4d42-83b4-e194f09d80fd,3b54e0cb-f69f-4232-b168-8ee6c0973876,3f5f3a61-684a-4c3b-b089-e1b5a40c9a21,41c6be1a-7e83-45f7-ae7b-09c99cd01cf8,42c9b75d-92fb-49fe-a8f7-4dad6c6d5258,444f0583-64be-4489-a726-ec313bac2a07,44dde138-25f6-4c4f-afce-685057bc04ca,485b5387-1658-4d84-a5ec-1c190db03c0d,4a954016-7907-4f19-a7cb-e0b872578b00,4dc8a4cd-c115-4cfd-a857-b1418cded604,5372112b-04e2-4763-8a7f-638d89ccbb55,54f8286d-0825-4700-81dc-47d646e7acc9,590e7401-eec0-471c-a29f-79319f6b0abc,5b502f70-f29e-4f46-80bf-df778c295e58,60be2741-bbf1-42ab-8498-8db8b19b6951,6397bac8-7792-4c3b-a878-10691806ce6e,66356aa8-07ae-48c0-9815-41189187c601,6a59fe3f-d5c0-46e8-8613-6d70991e88bb,6c3d5e12-42f1-422f-8e08-8974ea05e4a1,6cb9a167-a95a-4b8d-b517-61ed7679b66a,6d62f87b-1242-43a3-97d4-027f5828a8dc,71b36794-6f58-4c0f-b1f8-a90613d62bb6,73559ffa-465b-49b2-83d6-0b5ee9bfdb4d,73a0b968-3567-4f48-80ff-6afd6ba380ad,774f4362-730a-4192-bdbf-38f10d482489,7819c6bc-ade9-45d8-bc66-27a4830a382c,7c77fb0d-792a-4782-8a91-da15820a7cad,7fa10dbe-e7ed-4c2e-8d7e-7b7d4707d108,8553f485-6acc-47d9-b689-8fce75ca4f3a,89d6053a-ef95-45b2-81f6-eee9780bc197,8adac65c-d9ea-4dd7-8c6c-a27138e98ddf,8cb16618-d11b-4bcf-b5e5-60686b2648e8,914d987d-8aae-4905-848b-3190b6266043,92fe6ebb-1a84-4bbb-b376-d3d5e6b0924a,95ee0d08-d68e-4acb-8c22-c5683ac2e0d6,97fd53a5-25a8-42ad-a9d9-55f547c687f9,9a83c966-0eb1-4ab2-bca9-ccfd8328d4f3,9ca3b711-564c-40f8-af73-46bcf1b8aa75,9e60421c-3e79-4d95-8c6f-834fc999954f,a029a7f0-0d0f-45b1-b813-b486cbb63349,a2608490-5cf4-4764-bdd1-59d3fcef9be0,a619e908-daa3-4767-ae89-f354d07090f4,a69f0beb-4949-4a04-8bcb-841f1393f200,ab19e189-a573-4611-a0b8-89a5ae04b69b,ad9ad571-517a-4215-8ef7-b758fd6963dc,ae82942f-6247-4a1e-9cde-0445e0bced49,afa9dad5-f6f4-4a1a-9b62-035244fa2b17,b05d1bd5-7613-42f0-b333-46b028c3b6c2,b24615a2-885b-4024-acf8-2123dcdb44f7,b429c592-8fce-4e73-a0b6-2c874a7067d5,b4686fe3-9f28-4db6-9a89-5b3f812d55fc,b64e0aaf-4e3e-4372-9c98-c6ab19edd9c2,b6666d66-ff85-4379-a6aa-add91df1d874,b81560a9-1094-4583-bc5d-11d8d1a84928,ba3f7daa-4931-4cf0-a113-28abeea2d2e2,be371f60-f76c-4804-a23d-58979034bcde,c1b6af5f-9bef-47a2-bfae-488101d3b4c1,c5493f18-c5c9-4682-ae3e-7512125a3376,c846fe77-67f0-4f3a-841f-ebd7580860f2,c940120d-e636-4d1f-bd32-17fc23851e79,ca958807-c23e-48f3-bf07-5350dd2c18c3,cd6f21f0-77ff-4d9f-9b36-60ccf485174a,d1216fe1-6f4b-440f-bc38-f1f64cb6fd25,d2cbe5c8-e72d-48e0-b3e7-34684ea4771a,d4c00ede-42d3-46f9-b879-e044664cee58,d70dbf00-a521-42e0-9655-e9780e0e8ec0,daaa95b4-c9bb-4fd5-a024-a0d0093c78cf,dc99012c-b984-4f6d-b231-903619128af4,e06814fa-e130-4469-8e04-fc71f31d6523,e3ae9112-4ab0-43b3-96bb-79b04f01cfcd,e6ed61f8-9711-416c-bf22-abedcf01ed1f,eca0de00-ed27-4b7b-996b-a15e2d3f72c7,ef1f3083-dd0b-47c6-8186-c3186e8e5925,f859ad3c-f222-4bf5-91de-f273c9bd929a,f996cdc9-9d3e-4c37-b6a0-ae31a6b156c5,feaf051c-4862-4ca1-a750-d4b35be7a8e8}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "client_id",
+				"n_distinct": -0.694215,
+				"most_common_vals": "{1eafa270-b3a4-44df-9130-00ad8218afe1,cd47eafe-f465-41d3-9b90-5efac70ba045,3ee3db04-3e01-46a9-ac62-f205390126c9,6675df1b-b6fb-499e-9ff2-f0df1a61dfab,7b06a5ff-98b6-4c27-91d0-cbdf98124cab,02ee06e5-87bd-42a2-a482-3c7642b109fd,2a1a2950-dbb5-4484-8822-e6a07c665aad,42dd61ec-bb97-49a0-9814-80b90277973c,57186d7a-957e-4e8f-9e89-4bc3428fc175,6dcd3438-5ea5-4161-a10c-9852dc814e29,7bc2200d-e558-4339-9682-71ae06912481,9ee538f7-3a43-4627-b4ae-875e6eb33d28,b7114aca-293b-4eca-b2e5-0a6c305621fb,c8c7d008-9a19-4079-8143-754da3a02611,d1fb07ba-3662-4046-af07-adc6d61c5019,d9b69de7-de46-458b-9fbe-b929a590b454,04074b7e-7e01-4d86-bc2d-6edaa85ae682,09b38716-d134-493a-9bce-272fdd2a69e1,2674bb3b-da48-4c04-9388-6db0144ae183,3ac1bade-f245-4ce3-995e-b64018fdbacd,40b9c77b-e9d3-41d2-98d8-271b5546cf62,482a25ec-d7b5-407b-8d3c-9c24e1081f6c,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,59505306-7ca4-4567-adea-9d63e52bcff3,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6c909166-e266-4763-b1ee-96e0546e6f97,6da1a480-d842-4540-ac38-8ca8a4bf4106,736e896a-017f-4fd6-a8dd-2bb27f353efd,7f138f63-fe05-48e4-9910-446f5ffe7d01,8b51eb5e-659e-41b1-a73b-6bf53659bec3,a2396093-9600-4398-b5ab-7c92a0571828,a7387cd5-a9b1-421f-ae2d-6afe28b261c6,bb239073-1689-449a-9459-5089cca30b43,bc2c49c8-d4c2-4e51-9ee6-cec4716f48d9,ca4d8d8d-dc76-44c4-8ae9-fefd35a3930e,ce6d2870-b4bf-466d-8832-876d4f615e5c,d65eb3d6-a373-428a-9761-56982fe0c6d9,fd1d2d7a-a867-4a0d-ab25-99b1f50084d4}",
+				"most_common_freqs": [
+					0.0454545, 0.0330578, 0.0289256, 0.0165289, 0.0165289, 0.0123967, 0.0123967, 0.0123967, 0.0123967, 0.0123967, 0.0123967,
+					0.0123967, 0.0123967, 0.0123967, 0.0123967, 0.0123967, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446,
+					0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446,
+					0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446, 0.00826446
+				],
+				"histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,03da8a9e-29ed-4534-b53c-8a4d02511ff0,0447360c-7138-4a0f-b55d-c5d157203a05,07cd114a-dce0-429b-b9e2-527fb1f9f864,0e1dee80-33d6-4451-bb1b-e5ef42359dfa,12e6ec72-0ced-4d57-b972-ec649c580da3,139f2e4c-9b7e-40d8-b268-781b70e2fab5,14462043-714b-41b7-82f3-11eb903972fb,1524d607-2820-4f6c-91b5-c90c2d04cad4,15443198-1e3a-459b-8935-cd518b1f114d,1b2d296c-cecc-42d2-a5f0-0e73248d7e03,1be3e821-c04d-435e-ad72-377c6d7f9452,23841ef2-6468-463d-8822-68c8f4c79ca7,24144881-e912-4551-9522-cb6a62c26477,2445f9ba-12a8-482a-a89d-613d0872600a,260f0337-9bb2-427c-b794-2abf4aa97d08,28d141e6-197b-405a-884c-ca94e4444389,2e8f30db-13d5-45a1-ae25-a5f748dc4038,325b8303-80d4-40fc-be7d-fad11144a4e1,3355e916-44e9-4844-a45a-9227b616816f,3372c307-8596-4a85-ba81-0034278617d9,35657c95-f273-4c44-bcc3-ad969686ee8d,3aafc46b-cb84-4f66-a6e0-d66638912266,3bacb018-d70f-47e6-8ca5-f0fe236c7215,3d923e88-2211-4124-b1fe-eab3c330197c,3e798349-2350-4496-8f68-367a59768d1d,3f1865ca-3f21-44ea-a093-775eb1f931bf,3f895df2-6179-4935-bbdd-e255309a3a86,3fa1dad2-f2a1-4fad-8b95-1b48c6b71a1c,49577eaa-44cc-4a2b-8226-a7df261fa342,4aa9b936-b6e3-43cd-85e1-e3553eca9bd1,4ac557a7-69fd-4c7e-9e28-de67c7aec3cb,4d376a62-8f74-4bf1-a967-1dce8b255129,4f3edb1e-7a91-4a74-a2e0-5ec356b705f3,50ca9ce9-cf98-4b92-8c73-65a1785423d0,54643648-6a39-4220-81cb-8a5735ecfcd7,5fc83a72-cee4-4827-bb70-4290b675f6a6,6420a093-c5e5-4cd6-9dc9-5b0488aa5d53,64b4b0e5-6c04-4329-9e4f-a6a6219f8c87,654d7e65-6d42-4afe-89c2-cfd710afbeb4,666e267c-d9a1-4c5e-9b4f-60df1ce27747,676722c7-6703-4d09-b746-ac7dd8780d8d,6c0b1f75-e46a-4a29-8b8a-3db4e65bfc53,6eae96ef-bd6d-4c96-ac3c-ff2aa48588f2,6fab6733-38d4-47b0-8ecf-11fec61c6d37,76480116-f385-4d2a-bfe6-286fea653c7d,7892d809-afac-4973-8d68-a6cf8636c049,79b41690-ae73-4963-b8bf-b16870ede85a,7cc8080b-c3e3-4fd2-bdbf-25bb79b4aba4,80383247-846b-410b-b751-e288e52e07df,8368ee33-f1ac-4425-8310-2e884cb90099,84271d34-05fb-4e14-a0df-2694a3a40899,84a8035e-5d43-482b-be81-ad7b989e16d5,850b65b3-09e3-497f-9b07-0c8c27bad4d0,8abda938-c050-4c17-b7e1-565fc78e7528,8e1f2459-01e3-456e-83f2-955b08d9c870,909833cd-9a2b-4cb4-9c21-f4bbb8611039,96e48842-e01a-4e28-883d-bfd76c084963,9aa4b969-24e0-4c08-afce-fb9278e294fb,9bd18f6e-176d-42eb-a203-74a22821e912,9cbd39a7-59df-450b-aa22-57d22aa52110,9eeee9db-2dd8-4653-bb76-1a56cbad01e4,9f2e02ae-4a6b-42ca-99f0-3f59ad6e7097,9fc68dc3-51aa-4055-89d0-9d9b04497e27,a04dbee6-8110-4c3d-8ac7-b13c6c10ff83,a7becf99-e339-4c9e-9c53-11ad4f60ac1e,aa0713b5-e308-40cb-a56e-10159bd4d691,ac34a7a2-3830-4cfc-a524-fbdf2bc9f720,b0fcc7d9-4079-4621-b77f-5962678b448a,b5d29f5c-d888-4b98-96d6-c2b0fee57527,bb42e567-e4c7-4d39-b657-fc733211175e,bb767351-2669-4a66-8c37-568c825c088f,bcc43221-47b3-4d23-bb34-8cd739685d05,bda23a94-ca1d-4c75-aca2-a4a5d53d8021,c1e99f78-f95b-431e-83e5-790cb5501749,c2864529-284e-45ba-abc3-eaae08ebd7bc,c29cd5ee-f6cb-44d0-a152-a2234679cf4f,c2bfa311-fa8f-4f85-a6bb-c43410eda2b3,c509e9f6-9f3e-4559-b324-b5ef4826ce89,ca9ca625-9c66-4d8e-8df9-5c86a7ba0b25,cf5464ec-adb6-47a7-93fa-72a714264da6,cf8c86d0-d0f1-4410-8864-54b0c3fd0f95,cfb92b12-8d38-48ec-af50-85cb65a54005,d8f0ee7a-d930-453c-92f2-39016b0cdd16,d8fd3938-4f5b-47a8-947a-cb86286e0361,d9814f58-2218-443d-903d-c4920247135b,dbc84088-4e3a-4e7b-83f5-1d132f2a2ade,dbd63b05-47b5-4277-8dcc-71d59c57d81c,dc33bdba-2f34-49d0-a03b-442d4dc15d69,dd2dd8ca-6e61-4123-ad30-1f46d830124b,df703b86-e50f-4e9e-8bf3-f34e4935ad33,e074793f-7cc7-4c87-86f3-9067b34612ee,e1504627-a989-41a1-9ddc-59fc93a8cb23,e6564e30-18ec-4caf-8ebd-20f191c57fcb,e8c0ea37-d3da-4a52-8996-d48e96042ef3,f41ebddc-3fba-400a-a47d-f6c4ac8b9e9e,f64596d4-5bcf-4b9c-82e1-85f784dc8121,f78cdac4-1f2b-4ec2-b1b4-043fde783a70,fc6aa054-edcb-4c91-a4e1-3e71cb0ac9af,fd1aee76-6f4a-4eb5-a2c9-a937f0cf6f54,ff1573fc-661d-4d0a-b7d1-e648513688c3}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "created_at",
+				"n_distinct": 1,
+				"most_common_vals": "{\"2026-01-26 13:32:47.59375+00\"}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "created_by",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "holding_id",
+				"n_distinct": 4,
+				"most_common_vals": "{5652e95e-bb99-48f5-aa1c-13c8c2638fc6,f6e3cb81-8b4a-451e-8402-573e47688d45,05583c6e-9364-4672-a610-0744324e44b4,cac331f5-d521-4c44-bf7c-76351d8c54f5}",
+				"most_common_freqs": [0.421488, 0.326446, 0.243802, 0.00826446],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{01a394b6-4adc-46ec-8799-fb55dd0c9e60,033eeda0-7c07-4dd2-a11e-c8d32f840f87,055a5590-3585-4179-9c69-0d3b5ce64197,08dfdbd7-f700-4c5d-99f4-630d67989bd2,0a41e61d-7380-47a7-8a33-16bb78f67dfe,0cbb1a11-c829-4fb2-9350-fb6b9c0f55d4,0ea72dc2-5e88-4670-a27d-22902cde114a,0f090822-019a-4fa5-859a-6841b5bb844f,10adc568-1cb8-41e1-9207-e2e7474da21c,12499bf8-e328-4b3a-9d79-83620348e9cf,169f4eca-3ef1-4664-989a-d52582e93ad5,19ccbccf-8df3-4ae0-b9e6-df199d8ce229,1b21b461-3221-4e7a-97d6-c59924b21a49,20b381d5-7de5-4dc7-bcaf-cf5548779cb6,231687b1-a174-4773-a5c6-3465d820ae5e,24b8030b-08ca-40e5-b8df-5e5de4a84833,26a88300-06f1-4d19-95ff-3aaf44249923,290475da-ea5d-49c5-ba86-688508fdb211,2a49cd47-21a4-412c-a794-1603c2ee32fe,2bd82026-dc94-4c66-80d6-bc995d147080,2e571da3-7bfc-4f16-8941-c1f98d896afe,2f11efb0-2eb5-4884-af5e-e1ec21327ae4,3115bf71-91e5-42a0-b7d7-86ea401df8be,37a78352-2ab1-403d-b2e2-418a0df7bba2,38cbc759-5a02-470a-9b27-6ad102950ff4,3aa62087-8d6d-4cc7-bb2b-57c279f6a222,3b144c15-f2b1-492e-bb89-aa55a6d1b62d,3c5e6cf6-3569-4f6a-8a8b-ae870eb6b515,3f7e8c48-31d0-4ec9-9e0c-a92ae969c875,41de947e-6c3c-4b7f-9c84-28b23e1df187,43daae97-6c99-4947-bdb9-956754fc0f8b,49002eac-2f5b-4fb6-8429-8f9584cbb045,4a2bd955-5a41-42f4-8bc1-f19c5c1efb23,4b07dad3-40e3-4573-9a27-be096cd984ab,4d7a57d1-2c97-4d38-9421-9dca529f5ff8,4fde48f4-d707-453f-9cad-92718641e095,5159bbae-049f-41ee-a4c3-f240a482bd8c,5337b0ec-6a79-46b7-a66b-28b4a8b1502f,56fb20e6-fdf1-4686-b3f7-e068f177e2e6,574ede7c-cbe2-496d-bdc8-acbc5b41ef2e,596a3cc9-da92-4537-b16c-f9f071eb800d,5d3043f4-dd76-41e3-b926-93d5e403ba6f,63c5dfeb-5977-42b5-84a6-a41ac6a6035c,665c318e-59bc-4a4a-aaf9-6248a8abccbd,6948e02d-a53d-402a-908d-c876b8ce8db0,6f4d0687-ab50-4345-b4f1-342212062d01,7025b47f-09ef-40a8-9b29-915cb6706359,7169dca2-adaa-4aac-ae63-bfbb09b868d2,723c8804-8cef-494d-8193-e0945b6563f0,73dd7e4d-8f05-4964-8355-cb720376672f,74eefa51-2292-4549-9c0b-b4b28890cea9,76264306-5194-41eb-9404-6c88dd8775b9,787a54ab-4fc1-4517-866a-10ccda52e8b6,7a932a78-310b-4b39-90e6-14f1a4930073,7e49d33e-75a1-4b00-8e60-a8a0bd8fc140,8130982f-9b2f-412e-b0bb-1bd266bf5215,856344bb-c2bb-4d3c-b7a9-cb8d5360f2df,874097e8-1a95-4041-b651-aa468a13339d,8a2c3bfc-f401-4109-92b1-a3ef48f821c6,8b1ab695-1e58-4fc9-86f8-8c997066353e,8f72d674-cd49-43db-804f-b5fd2ad44b65,935e3e1c-ece2-43c0-aa99-a02b9dda096f,95d96b93-6b44-4951-a446-5ff74577924c,9a67e4ce-c314-4fd4-bbc7-3a05e8811eae,a1426b43-290c-4b6b-b439-02cd8ebe8925,a3b79802-3bbd-484d-81bb-0b3ef9aab7e0,a8c9730f-a328-4cb4-9b39-226e7def6701,ac67dc36-ebea-459c-969f-e827e1a216e1,ae35fb57-38bc-47fc-ac03-46ffe8defbc3,aff1d0a6-edea-4208-af96-c4c885095dec,b05ee1a8-47c2-4bf5-b85b-917739f5a697,b1358622-5d31-419b-8833-5598e39e869d,b15f0f15-ffb7-4d03-b413-c2d918d95f1a,b397db16-fe45-4dc6-82a1-35344e03683f,bb6e2eae-9986-4efa-8859-b880d5e05871,c06fbd6e-89bf-4362-b73a-863158df34a2,c200a623-fcee-467a-83dc-0ea10616c88b,c2a28c55-10fb-4666-9090-80a73836da1c,c3d85cad-8893-40d3-ac4d-e0ec73f135e5,c7602dd3-77cf-4123-bf6f-d1be29028b11,ca54d031-412d-4edc-93ff-7cccc471e5ee,ccc96ce2-fdb4-47cb-bfa6-3444b12f790e,d3f1b77f-8fc0-4f18-9a56-3a8401087434,d6dc0ffb-9a7d-4a0c-9a4e-4ed877df2bf7,d94dfe36-d9e1-48e0-bd41-540d69e7a1c2,dc5039c4-251c-4aeb-9dcf-a8b49854c899,de10d130-dff0-467f-b849-38b25e27a811,dfd23f2b-b5b2-47aa-be6f-f85d1fb1e9eb,e3fb1044-a723-4381-a9da-89278997e574,e489381d-2a11-415f-870f-78c6804abf49,e55e49f8-27ca-4905-ae7b-f6878e49d6b3,e7cca301-ba84-496e-adc4-46874a5d47ef,e8e8e7ae-6efa-4bd6-b60f-11d0a610a768,eb32c21a-6e89-4987-8292-0b8fada96df4,eb899ac4-495f-4de0-9208-8e340a28734b,ed49b56b-0d13-427d-9e7a-382871f92fcb,eecd6d6a-5be8-4423-95d6-828f62b08c7e,f13b0769-ba2f-4ec1-8236-6afbbbe8d832,f5d65aef-bcb8-4021-828b-ae7ebc1a6a29,f85c857d-9ea7-42ae-a0e7-cff830f97b63,fb5b97fd-29d2-4394-a2ed-23a5987885d6}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "client_entity_clients",
+				"attname": "is_primary",
+				"n_distinct": 1,
+				"most_common_vals": "{t}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "176 kB",
+			"table_size": "32 kB",
+			"indexes_size": "144 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-03T11:19:11.201Z"
+	}
+}

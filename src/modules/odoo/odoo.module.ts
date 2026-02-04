@@ -16,6 +16,8 @@ import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { Product } from './entities/products.entity';
+import { InvoiceProcessingController } from './invoice-processing.controller';
+import { InvoiceProcessingService } from './invoice-processing.service';
 import { OdooConnectionController } from './odoo-connection.controller';
 import { OdooConnectionService } from './odoo-connection.service';
 import { OdooInvoicesController } from './odoo-invoices.controller';
@@ -26,6 +28,8 @@ import { OdooController } from './odoo.controller';
 import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
 import { PartnersController } from './partners.controller';
+import { FieldMappingService } from './services/field-mapping.service';
+import { FieldTransformationService } from './services/field-transformation.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
 
 @Module({
@@ -46,8 +50,25 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 			FieldMapping,
 		]),
 	],
-	controllers: [OdooController, OdooConnectionController, OdooInvoicesController, OdooWebhookController, PartnersController],
-	providers: [OdooService, OdooConnectionService, OdooInvoicesService, OdooWebhookService, OdooProvider, PartnersProcessorService],
+	controllers: [
+		OdooController,
+		OdooConnectionController,
+		OdooInvoicesController,
+		OdooWebhookController,
+		PartnersController,
+		InvoiceProcessingController,
+	],
+	providers: [
+		OdooService,
+		OdooConnectionService,
+		OdooInvoicesService,
+		OdooWebhookService,
+		OdooProvider,
+		PartnersProcessorService,
+		FieldTransformationService,
+		FieldMappingService,
+		InvoiceProcessingService,
+	],
 	exports: [OdooService],
 })
 export class OdooModule {}

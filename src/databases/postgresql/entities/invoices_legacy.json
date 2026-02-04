@@ -1,0 +1,970 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.invoices_legacy completado exitosamente",
+	"data": {
+		"table_name": "invoices_legacy",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "company_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_tax_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_client_name",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "source_type",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'integration'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "source_system",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'odoo'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "invoice_number",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "issue_date",
+				"data_type": "date",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "due_date",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "invoice_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "amount_invoice_currency",
+				"data_type": "numeric",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "total_invoice_currency",
+				"data_type": "numeric",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "vat",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 15,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "fx_contract_to_invoice",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 12,
+				"numeric_scale": 6
+			},
+			{
+				"column_name": "status",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'Enviada'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "pdf_url",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "notes",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_by",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "contract_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "reconciliation_status",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'pending'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "reconciled_invoice_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "reconciled_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_entity_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "odoo_integration_id",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "idx_invoices_legacy_client_entity_id",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_client_entity_id ON public.invoices_legacy USING btree (client_entity_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "104 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_client_id",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_client_id ON public.invoices_legacy USING btree (client_id) WHERE (client_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_client_tax_id",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_client_tax_id ON public.invoices_legacy USING btree (client_tax_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "96 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_contract_id",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_contract_id ON public.invoices_legacy USING btree (contract_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "80 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_holding",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_holding ON public.invoices_legacy USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "80 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_issue_date",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_issue_date ON public.invoices_legacy USING btree (issue_date)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "88 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_odoo_integration_id",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_odoo_integration_id ON public.invoices_legacy USING btree (odoo_integration_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "248 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_odoo_integration_unique",
+				"index_definition": "CREATE UNIQUE INDEX idx_invoices_legacy_odoo_integration_unique ON public.invoices_legacy USING btree (holding_id, odoo_integration_id) WHERE (odoo_integration_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "336 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_reconciliation_status",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_reconciliation_status ON public.invoices_legacy USING btree (reconciliation_status)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "80 kB"
+			},
+			{
+				"index_name": "idx_invoices_legacy_status",
+				"index_definition": "CREATE INDEX idx_invoices_legacy_status ON public.invoices_legacy USING btree (status)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "80 kB"
+			},
+			{
+				"index_name": "invoices_legacy_holding_invoice_number_unique",
+				"index_definition": "CREATE UNIQUE INDEX invoices_legacy_holding_invoice_number_unique ON public.invoices_legacy USING btree (holding_id, invoice_number)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "400 kB"
+			},
+			{
+				"index_name": "invoices_legacy_pkey",
+				"index_definition": "CREATE UNIQUE INDEX invoices_legacy_pkey ON public.invoices_legacy USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "272 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "fk_invoices_client_entity",
+				"table_name": "invoices_legacy",
+				"column_name": "client_entity_id",
+				"foreign_table_name": "client_entities",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "invoices_legacy_client_id_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "client_id",
+				"foreign_table_name": "clients",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "SET NULL"
+			},
+			{
+				"constraint_name": "invoices_legacy_company_id_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "company_id",
+				"foreign_table_name": "companies",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "invoices_legacy_contract_id_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "contract_id",
+				"foreign_table_name": "contracts",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "SET NULL"
+			},
+			{
+				"constraint_name": "invoices_legacy_created_by_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "created_by",
+				"foreign_table_name": "users",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "SET NULL"
+			},
+			{
+				"constraint_name": "invoices_legacy_holding_id_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "invoices_legacy_reconciled_invoice_id_fkey",
+				"table_name": "invoices_legacy",
+				"column_name": "reconciled_invoice_id",
+				"foreign_table_name": "invoices",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "SET NULL"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "invoices_legacy_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "invoices_legacy_holding_invoice_number_unique",
+				"constraint_type": "UNIQUE",
+				"column_name": "holding_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "invoices_legacy_holding_invoice_number_unique",
+				"constraint_type": "UNIQUE",
+				"column_name": "invoice_number",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "trigger_auto_populate_client_tax_id",
+				"event_manipulation": "INSERT",
+				"event_object_table": "invoices_legacy",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION auto_populate_client_tax_id_from_entity()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trigger_auto_populate_client_tax_id",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "invoices_legacy",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION auto_populate_client_tax_id_from_entity()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"policyname": "tenant_isolation_delete_invoices_legacy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"policyname": "tenant_isolation_insert_invoices_legacy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"policyname": "tenant_isolation_select_invoices_legacy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"policyname": "tenant_isolation_update_invoices_legacy",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "amount_invoice_currency",
+				"n_distinct": -0.541385,
+				"most_common_vals": "{5280.00,4488.00,760.10,95.92,4400.00,15309.03,5120.00,176.00,6160.00,4752.00,880.00,1496.00,5544.00,1053960.90,143.88,2816.00,4320.00,1000.00,3520.00,7040.00,12320.00,29920.00,7200.00,17600.00,240.00,1050.00,431.64,938.10,7920.00,8360.00,11448.00,352.00,1554.28,1760.00,2737.00,8448.00,12160.00,447216.00,484.00,629.64,1584.00,1590.00,1610.00,2508.00,2640.00,5144.40,5632.00,6445.12,7480.00,8000.00,10868.00,12376.00,13440.00,74970.00,123.83,129.43,288.35,328.67,377.78,553.32,877.72,906.30,1101.87,3760.35,5236.00,6120.00,7136.00,11968.00,14300.00,17952.00,27720.00,39600.00,52121.00,178222.72,329001.13,388546.62,454865.40,531587.16,1291618.75,1611940.20,1650000.00,2238736.95,9500000.00,475.20,743.33,788.70,791.82,814.00,1343.55,2016.00,2802.80,6303.50,22480.00,52330.00,70000.00,260605.00,261648.00,312726.00,313977.00,429000.00}",
+				"most_common_freqs": [
+					0.014527, 0.00844595, 0.00675676, 0.00658784, 0.00658784, 0.00608108, 0.00557432, 0.00489865, 0.00472973, 0.00388514, 0.00371622,
+					0.00371622, 0.00371622, 0.00371622, 0.0035473, 0.0035473, 0.0035473, 0.00320946, 0.00320946, 0.00320946, 0.00320946, 0.00320946,
+					0.00287162, 0.00287162, 0.00253378, 0.00253378, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919,
+					0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919
+				],
+				"histogram_bounds": "{5.28,140.80,214.72,289.87,359.70,428.00,475.98,566.80,800.00,936.00,1127.28,1316.35,1550.00,1843.07,2325.00,2861.42,4000.00,4800.00,5487.00,6400.00,9100.00,10981.00,12672.00,14960.00,16632.00,22000.00,30668.00,38136.42,42767.00,43606.00,48400.00,51562.00,51956.00,63295.00,78368.00,85542.00,86865.00,90676.00,102031.00,103493.00,107752.00,124133.00,129336.00,130617.00,140671.00,154610.00,158411.00,182187.00,197056.00,206147.00,208484.00,213551.00,217171.00,233463.00,243259.00,255076.00,258667.00,261378.00,276106.00,297090.00,304745.00,310320.00,313654.00,329444.00,342166.00,351320.64,363285.57,376116.00,389428.00,413623.00,422764.00,464305.00,475049.00,515261.00,564379.00,592069.65,644504.00,654588.00,682924.00,726968.00,758343.00,784912.00,856267.00,918892.80,979000.00,1055260.00,1194691.00,1303871.06,1383179.00,1624703.63,1716784.50,2014661.00,2222252.00,2450250.00,2896036.00,3473314.90,3941700.00,5430121.00,7509490.69,10652250.00,341302896.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "client_entity_id",
+				"n_distinct": -0.111993,
+				"most_common_vals": "{5de5143e-825f-4231-b7a8-9b6582b005ff,5cf7a978-8067-488a-9680-56e2ebd90f3b,3e70b80f-e76e-41b0-bc61-8f5096dde467,7c28bb42-6c59-400a-9cb1-57b7c5c6461d,fa4cc123-c761-45ae-b5a1-0cc38d816a06,00d895a2-f245-4283-b423-d6a0c7f4c9ec,b457ac69-2ff1-488e-a7f5-6ca246ab95d9,f3251c1c-b2f0-4e5d-a9d3-0eb114c7ea6c,58ea9708-8a2d-482b-ba4e-6fbf3c3689a0,67f3ebc2-ee91-40bb-913f-10079ec0c453,8f1d1336-ae32-40fc-9ebc-112e8bb377d8,cde2a0cf-ec4e-48c7-857e-8d8402218c91,00c0516d-fb77-4e56-9376-0ab44bec3256,697f01f5-7b8f-4497-9404-0ca36980c800,ff994fb0-1e57-41b7-aec5-ba0ddf1cdda7,576e12e3-f8b6-4fcf-ab0e-d408c6e5b646,99710db9-b09c-4ab7-809b-5447a712cc78,5dcceeb6-18cd-451e-b27d-77ffe002b236,d78a1ec7-9a4b-4e5e-8798-2d8e19450df1,553ac581-985d-4925-9878-b9139ad1914e,5f6a2643-46ca-4ce9-a1e9-89344f1569eb,80b1f631-45e3-49f2-90f0-b826f0c522d5,ab249544-d689-4d7a-83d2-a551297853c1,82d634e8-6740-4862-addb-973ff2c94b8d,83420e3f-fff5-463a-90b8-a79f4454d5e7,8dee47fe-2c9f-40ac-9057-593f796d2b3f,8e42e7e7-132c-42e8-b329-5bcaa90b499d,c188f037-330e-461d-9715-8bf345e38e34,fbd7a619-41a2-4872-86bb-4b9af2a6f6d2,00139748-58a5-43cc-8c5e-e0e162f15a18,6d3724d9-2c1f-49bd-afd6-f772d22c707f,7de2203e-1d21-475b-9464-c3dbb9f48637,91bd20fb-4450-4fdc-8b1e-615c618bb7bf,99521740-2a8f-4d6b-a841-d6547180832a,e7f8ad99-6ee0-49a7-940c-07b1db89b10f,0e863bec-d0d1-4ae9-a00f-8d40c382e942,30a1f072-64d7-4bab-b7bc-e01a81a6073a,3b570840-a28e-4991-8a65-e557ba369903,48e1a892-1d94-4aeb-9cce-25225493646c,4e6b15e4-24ca-40fe-9805-d57c2f832274,6c7fdca4-b4cb-4214-a429-5944a61cb2ed,6cf85155-b4d0-47b7-9f60-257a909650f4,b391f48f-9004-4488-a7e9-5515a641f12e,b5d7223d-4bc1-4000-aab7-b1800c46288d,c2ec9843-590d-4490-a535-2b7c1659628e,cd695e77-d0cd-44e1-9010-e004b465c00c,d10dde48-7350-4bce-b9a2-513f18e847fe,f446d630-069f-40f9-b5ed-c56241778394,090921d2-9425-4178-bee7-5e0d270803e5,0d88619b-6fdb-4ebc-b820-57916585aec6,0e4bd565-b497-48e9-8306-aa44b9e0b2f6,0fa9c7b5-6908-496d-85cd-ae9211c74a98,1d86a54e-e600-4c91-9e05-3f9fa8485a06,1dc58734-f124-4ddd-bc8a-47b14d817677,28b3a815-f4cd-4ba0-936d-0f61f102ab22,2fe499b9-57e3-4146-a392-910c42350196,2ff8f3fe-73f3-417c-9854-e36d92f462b7,3071079d-7bed-4bf2-ae14-3bc9fec96c49,42b21c75-632c-4882-a578-d0e1ae3d2477,4395fc1a-2cd1-4143-831f-8b0e4fc02941,45bd5b29-d20f-4861-9f58-795324329914,46ffb0a5-162f-4798-bf35-53d9cc33d3d6,5a091498-6d81-494a-a35f-d50a0d8435e6,5c681e45-fdd1-46cb-a736-c99e3c6cc4c9,5cf707d4-48c2-4510-a471-811fee9175b4,6ac66bc5-aa26-4c69-99b5-f8b71b185310,6da1053b-0e24-4e58-afe9-ace93cef43a4,877f525b-eda4-4198-be22-b0b2c66580b8,91eaa5c7-28b9-4b54-abad-b0aa82625814,9c38635c-8367-4e5b-a5e0-d1350e375b57,9e58282e-2299-4b1a-89e8-88becb4700b2,a68428b8-d5ab-4d08-939a-8c23eaa42493,b1e3bed6-c4ec-4bf9-8602-e38b5379a730,b9a910ad-9924-42ad-a8dd-b0135c99e00c,baf96183-bdc5-4e20-b63c-91fdf5202eb6,bda7626b-45fe-4983-a933-ca2a0f9eb8b9,bda82b2a-845f-4c91-b285-568a1652031c,bef7f396-4893-4b98-a23f-1be142c6a132,c2c29b04-4bc8-41cd-a12b-8778833bdeb2,d41ded25-2d5d-407f-81e3-1d4e3febf43c,d735ec38-99e8-4910-9a62-397e75f8d33d,e2eca0bc-eb71-44fa-b08f-34d77e5c5958,fa247122-e678-4dc0-9152-13cb72e61bdf,0089269b-4b7b-4db6-81aa-47e6bda9427e,05ba64e5-d9d7-490f-8fd0-1483034cd4b3,07b06c0e-cf32-43ef-b289-52cd84464e62,086aa94d-0c98-4e0f-b654-c9ebc03ab1aa,0cbb346e-b1f7-4087-99b2-d53409dd421d,0ea98cd3-3841-400b-8405-9b11be50cde8,100c7922-a13c-4ccb-acda-ca2e28bda53b,10ec8410-1b25-4d6b-ac9f-8eafeff5e1a2,12a73e06-4c28-4164-83f2-31d110e65754,134e1174-95fd-4c92-b4b8-6746616f2b6d,1387da3a-ee80-4679-83bd-0ef5e2f03b47,143c2b63-c505-46d5-9ca8-548785600474,195dcf0e-e2bf-4d14-8f00-01fc8d0a5279,1c5f0109-89df-4c4e-b217-72c6f50f110b,1e61a550-e365-46b1-af39-acb193bb7aea,23c6bcb1-191f-4500-912f-a8426b6864f6,27c07971-72e6-4645-b109-730bbd832357}",
+				"most_common_freqs": [
+					0.0128378, 0.0089527, 0.00793919, 0.00726351, 0.00523649, 0.00422297, 0.00422297, 0.00405405, 0.00371622, 0.00371622, 0.00371622,
+					0.00371622, 0.00337838, 0.00337838, 0.00337838, 0.00320946, 0.00320946, 0.00304054, 0.00304054, 0.00287162, 0.00287162,
+					0.00287162, 0.00287162, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.00253378, 0.00253378, 0.00253378,
+					0.00253378, 0.00253378, 0.00253378, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486,
+					0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703
+				],
+				"histogram_bounds": "{0133f936-2399-48c6-9241-0f88087a36c5,05a13f23-8336-4dc3-8365-1598e741308b,0b3a1bd0-3be0-4fae-ba10-4dad40fbf006,0ccc9592-148d-48ca-9add-5da8c275baed,0eff7294-d5cb-4994-afdc-634416a8271d,12a15cd8-b140-4b47-8b5f-2cabf3a4efa0,15646948-1de3-4a56-ae08-4d486fdb5a84,1ae58597-a7ce-4fb0-b6f6-21e83f5853b3,1e579d16-7a96-45ec-baec-cb6e2e5a11c1,223ded2c-9091-40bc-a88b-cfeceaed24c1,28d93d4b-7fc7-4b07-958d-d943d193b1a2,2c973161-6b40-4619-a82d-afab69fbbba3,2e827742-c2c6-4503-82ff-7f829c82d7e8,32c37872-121a-483f-b3bc-3b976aa1a2a5,34992a0a-41b1-4631-bd79-9d3af8e686f8,3835ec48-9393-4886-bd01-be4a1a2cd378,38faa404-347f-416f-9760-9e38e53e28b9,3a14ea36-e452-474f-8dec-3f09fb3e07f7,3c0389e4-241a-4da4-acd7-dda77bd57a49,3f16c8ce-5aa0-4060-82b0-e6a230046cc2,4054d706-d66f-41da-8583-de4b155c0345,43fe264e-d1f0-4ea3-80a6-eb168b5e92d4,46d9a4e1-f2c4-424a-a81a-959946eff01b,49e5d1f7-fd65-47c8-866d-8b8a9a4d8bfb,4dba3b2a-1ff5-4650-bd2b-a09330ff6691,4f06a92e-e2ab-4319-b1fc-14b048faaaac,52064c11-d879-4f2c-855f-01809fac0ad8,54eced4a-10f4-41fd-87e0-ee20d8cdc116,57455e2e-66e2-4547-9f6f-17c71e31d3ff,58441aaa-0679-4043-b362-fae3085b8abc,5a063412-993d-45f9-93ad-018143904521,5bdfab68-2fa5-4826-9128-edea0d7e24ca,5f3dfc3f-a592-4176-b6ef-36f345260148,614d0b06-1d52-4528-b844-08bc3ecff8b0,6668d78e-cb8b-47eb-a512-dbee1de9d0e6,68b418f9-466e-47df-8343-4f33b04c8fe3,6a824563-c356-4f2d-ba61-05ddcab8d30a,6bacc128-e54c-4dee-a6a1-52c8c8eb87d1,6f0c86cf-b5cf-404d-86f4-58df3fc56100,72da00b8-1ed2-4f2a-93a3-aafa47ff5f5f,75779791-5c64-4c8a-9b3b-2ace1f161a04,774794f3-8dff-40a7-b2a4-f842bdb8d15f,792a6347-e689-4d15-aedc-cd797cb5e435,7a6c9ca5-a1f9-4ca4-b0af-bfb2b17f8ddd,7d1f88b9-e4a4-43fb-a4a5-f3cb95a4650f,7de94854-d2ad-467a-abb7-93c127d38ce5,806ac2c3-aaa0-4918-b439-65665e931c8b,83b4a450-fa34-4817-b558-c1348ed4d917,851b1818-c144-4b46-ac76-6cc68add7847,87353b7b-56be-495d-abb9-eed178d8e804,8abc8649-efc8-4533-9dc0-25597c54589d,8ecd6875-1bdf-46ea-a233-16cf6b1b3e38,920ea7c4-6667-4bbf-ac97-68d4c0045422,955eb870-be9e-4730-b3c2-42feca4e97c0,970c506d-a870-4383-97bb-33d2cfc2b318,9a16bdd3-dac7-4432-a578-3d2ec3110c33,9b023309-29e6-405d-a6bf-374899ead4dd,9c55fdf3-962c-49af-80c3-73d2cb0a68fc,9f221cca-2caf-4808-a368-4eecd0aaf2b3,a08c5fee-3c0b-42ea-9800-0f8f4b799c58,a1897df8-b47a-4882-868d-1e34a7edc670,a258fafd-949c-476f-bd72-1ea9cd078dd9,a606f74e-4284-49e2-812e-283b64e25fe3,a6a8179a-de57-4131-b0d0-79fa512f009b,aa056e71-95fe-4e18-9829-ffed1af2d151,ad55c7a3-d06b-456d-95e0-9969ec15acdd,aef8eaf3-d1b6-48c2-b3da-3270ffc4c593,b106d8ec-f4c7-4e35-9c22-3f555d2858ba,b3d3af58-601f-41c6-b1da-f9619d27e6fc,b6d40076-2da1-4b34-879f-65b397105c83,b86c5afd-6a65-4d5c-937d-01d231ce55d5,ba251026-46d0-4224-ab30-03d39cd66d05,bc50e9fe-da65-413c-bee1-1ba6212c9cbd,bd9d8f6d-0ebc-4485-b9b5-72826d6d6a72,be1b14f7-fece-482b-8dd2-416e234eb5f3,c15a3405-d1e0-4ff4-a5d1-bbdf94c3e6f4,c341aee5-f774-49f7-a44d-b1d2fa1e3744,c90b30fa-6af5-43f8-a564-dd069a622da7,cbb089d6-83f6-4360-ad44-abfd5302d4c3,cd39167f-a05f-43bf-8c17-b558f275c422,cf03f4a4-eb3d-4fd9-984d-d5a7f9f1cbf6,d11e446a-013e-4bb2-abc1-67dd1e439259,d35b7943-a273-411a-8a59-c1059e46473f,d7c8b12b-37fb-4e0f-9589-f34f9d5f5e3b,dc3716d5-6c7c-4ad5-85d1-46c4381c3222,dd35d2d6-3f99-4a64-a153-2a810d2799d5,dee32943-89d4-47f8-8887-53cc071540e7,e05b2868-9cd5-4d33-8b73-dec5a502dfe6,e2c1abd6-28a6-42cb-96cf-7dc64eb4c6f0,e6dceaff-7be9-4a87-a4ab-dc8e6f677e5a,e8e880a0-db71-45d8-b733-8144175b2fc6,ebfd115a-fe3d-43e9-ac09-051a6e13840d,edb869bf-1413-48bc-9c97-ec62822b087b,ef9e073c-ee4a-4bdf-9042-26173d525415,f0d551ec-c8a6-406f-926c-80cc2c6bc315,f384306f-db95-4c0b-8e20-031a3aeb7821,f4ee428a-03ae-49a7-a56d-b79a111804b1,f704b27e-7cdf-48c3-ab1d-2ab4b98bb9ba,f8b381d7-c46e-4c2c-ad01-7e11991c5090,fcd6c6bc-80dc-4fbe-8e5a-936e8c07a4c8,ff91a0c6-ad77-489b-bfff-ca5d9934d918}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "client_id",
+				"n_distinct": 4,
+				"most_common_vals": "{2a1a2950-dbb5-4484-8822-e6a07c665aad,1eafa270-b3a4-44df-9130-00ad8218afe1}",
+				"most_common_freqs": [0.00101351, 0.000506757],
+				"histogram_bounds": "{7bc2200d-e558-4339-9682-71ae06912481,7f138f63-fe05-48e4-9910-446f5ffe7d01}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "client_tax_id",
+				"n_distinct": -0.110304,
+				"most_common_vals": "{XEXX010101000,9012779610,UME651115N48,DTM1406139U5,TLO030313JE8,55555555-5,99520000-7,96711590-8,VDE920306EX0,RCM991117RE5,76687676-5,76767891-6,77084730-3,96670170-6,3-101-095144,9001296665,CCO8605231N4,81210400-4,96568740-8,20304177552,76740134-5,96824110-9,1140361117549,76572527-5,900914881-1,96642980-1,20545323002,78030500-2,78954200-7,GAAC820814442,LOG140507475,76357700-7,77419321-9,77909790-0,85218700-K,9005669411,EVE2410031T3,20221084684,20536900170,70377400-8,77756630-K,80008802-6,8001658156,8300115364,8908025865,9007844825,91216000-9,ALE971219NX9,DVA060720S27,TDI210526AV5,1791321596001,1791411099001,20493020618,57414102616,76023713-2,76095906-5,76181207-6,76336286-8,76389383-9,76411321-7,76525585-6,76624425-4,77096968-9,77125557-4,77235177-1,77298942-3,77394296-K,77398633-9,77961510-3,8019995253766,86520500-7,8909165754,9000931991,9007276391,9007362720,9007376520,9014697482,92999000-5,96587380-5,96878980-5,990789061001,FIN870710Q40,GAV220705299,GZA9104307K6,ILE220819113,MEMR531218RH2,120182070019,160338410015,20100010217,20100055237,20601634512,20604232792,20606733021,210066450012,210163670013,76026619-1,76046889-4,76144794-7,76299574-3,76309299-2}",
+				"most_common_freqs": [
+					0.0136824, 0.0128378, 0.0089527, 0.00793919, 0.00726351, 0.00523649, 0.00523649, 0.00422297, 0.00422297, 0.00405405, 0.00371622,
+					0.00371622, 0.00371622, 0.00371622, 0.00337838, 0.00337838, 0.00337838, 0.00320946, 0.00320946, 0.00304054, 0.00304054,
+					0.00304054, 0.00287162, 0.00287162, 0.00287162, 0.00287162, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.00253378,
+					0.00253378, 0.00253378, 0.00253378, 0.00253378, 0.00253378, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486,
+					0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703
+				],
+				"histogram_bounds": "{0614-021008-105-2,140196370014,20100779740,20257070876,20505470941,20510161069,20524088810,20550100054,20601076960,20602893350,20606968150,20611713909,210182980014,210577030019,212053400018,214128140014,215396520015,217376190016,218465810018,41166841,76026828-3,76054636-4,76130385-6,76160446-5,76228541-K,76285343-4,76356782-6,76375763-3,76415174-7,76435650-0,76492599-8,76526820-6,76640675-0,76679507-2,76743593-2,76788339-0,76837955-6,76873889-0,76961555-5,77050878-9,77080258-K,77141646-2,77156579-4,77175689-1,77216695-8,77305910-1,77437175-3,77612410-9,77643148-6,77875595-5,78141230-9,78950790-2,79906790-0,8002105566,81762300-K,8300859332,83083700-0,84609600-0,85541900-9,86383300-0,88579800-4,89689900-7,9002464108,9004692306,9008001307,901347920-1,9019073995,92171000-3,94707000-2,96548020-K,96665460-0,96795980-4,96830710-K,96920980-2,96975830-K,99528050-7,AEA041220KM3,ASR201204GR7,BAI0205236Y8,BRM940216EQ6,CLC241216E22,DIS110104967,DUL1605094Z2,FGC891201742,GAS100529EX8,GME161004NA8,GVE060407U9A,IFP1605177W2,KCE9905036Y0,MER141216V43,MOPG981130MR4,OPA9405313P7,PGC171109N71,PJV9111142T7,PRO230823GPA,SCA070119MQ3,SHE130912866,SVH0004065R4,TOGO811108126,WDE140325CR1,ZAP180801J68}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "company_id",
+				"n_distinct": 8,
+				"most_common_vals": "{bb0caa69-162e-4b9e-8e54-9aff347abf1f,a80574f5-9c6f-42f7-afca-11cee02a126e,602b41a0-0970-4b0c-8f8c-748c6b89f54d,6cef394d-f14d-40d7-9188-dbbf4917f6a4,c6c147ac-4d48-4230-9da4-1626e257b7a6,e95adedd-237d-44b2-bae5-be1f88ffa340,110bb57b-1be0-4a20-a1cb-18dd822794d7}",
+				"most_common_freqs": [0.46723, 0.272297, 0.101351, 0.0900338, 0.0673986, 0.00101351, 0.000506757],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "contract_id",
+				"n_distinct": 5,
+				"most_common_vals": "{2645d4b1-4e25-41ad-a2c0-8265c358c4a2,4128c202-5619-4502-8c71-f5b2ee5b2a7f}",
+				"most_common_freqs": [0.000844595, 0.000506757],
+				"histogram_bounds": "{02d80009-6789-425e-85dc-31fb80148dae,b8940149-4a75-42c1-9fec-3f77236e82ed,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "created_at",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{\"2025-12-05 16:45:07.699896+00\",\"2025-12-18 07:47:18.811447+00\",\"2025-12-18 07:48:23.024983+00\",\"2025-12-18 07:49:29.414261+00\",\"2025-12-18 07:50:44.273563+00\",\"2025-12-18 07:51:48.170814+00\",\"2025-12-18 07:52:59.567194+00\",\"2025-12-18 07:53:54.310337+00\",\"2025-12-18 07:54:52.743547+00\",\"2025-12-18 07:55:46.815834+00\",\"2025-12-18 07:56:45.4103+00\",\"2025-12-18 07:57:44.235773+00\",\"2025-12-18 07:58:52.726079+00\",\"2025-12-18 07:59:55.769567+00\",\"2025-12-18 08:00:53.726579+00\",\"2025-12-18 08:01:52.062314+00\",\"2025-12-18 08:02:52.014579+00\",\"2025-12-18 08:03:48.131318+00\",\"2025-12-18 08:04:55.65782+00\",\"2025-12-18 08:05:55.11043+00\",\"2025-12-18 08:06:56.328649+00\",\"2025-12-18 08:07:53.903407+00\",\"2025-12-18 08:09:07.340298+00\",\"2025-12-18 08:10:05.445226+00\",\"2025-12-18 08:11:06.41731+00\",\"2025-12-18 08:12:07.686387+00\",\"2025-12-18 08:13:08.658413+00\",\"2025-12-18 08:14:11.79125+00\",\"2025-12-18 08:15:14.448311+00\",\"2025-12-18 08:16:14.318922+00\",\"2025-12-18 08:17:21.788267+00\",\"2025-12-18 08:18:22.732866+00\",\"2025-12-18 08:19:27.624203+00\",\"2025-12-18 08:20:23.393565+00\",\"2025-12-18 08:21:23.009606+00\",\"2025-12-18 08:27:12.388214+00\",\"2025-12-18 08:28:19.467238+00\",\"2025-12-18 08:29:21.94106+00\",\"2025-12-18 08:30:26.497912+00\",\"2025-12-18 08:31:39.117698+00\",\"2025-12-18 08:32:40.669623+00\",\"2025-12-18 08:33:41.601929+00\",\"2025-12-18 08:34:52.024482+00\",\"2025-12-18 08:35:56.575321+00\",\"2025-12-18 08:36:58.552975+00\",\"2025-12-18 08:38:00.044786+00\",\"2025-12-18 08:39:00.832263+00\",\"2025-12-18 08:40:03.755613+00\",\"2025-12-18 08:41:08.121248+00\",\"2025-12-18 08:42:10.437704+00\",\"2025-12-18 08:43:12.50922+00\",\"2025-12-18 08:44:11.956853+00\",\"2025-12-18 08:45:13.676999+00\",\"2025-12-18 08:46:16.248153+00\",\"2025-12-18 08:47:20.034459+00\",\"2025-12-18 08:48:21.300221+00\",\"2025-12-18 08:49:47.949007+00\",\"2025-12-18 08:51:08.256632+00\",\"2025-12-18 08:52:10.580274+00\",\"2025-12-18 08:53:08.141595+00\",\"2025-12-18 08:54:14.063505+00\",\"2025-12-18 08:55:15.834504+00\",\"2025-12-18 08:56:16.981822+00\",\"2025-12-18 08:57:25.576162+00\",\"2025-12-18 08:58:28.703894+00\",\"2025-12-18 08:59:30.458156+00\",\"2025-12-18 09:00:40.946752+00\",\"2025-12-18 09:01:45.433433+00\",\"2025-12-18 09:02:54.719584+00\",\"2025-12-18 09:09:47.13436+00\",\"2025-12-18 09:10:50.614465+00\",\"2025-12-18 09:11:54.069525+00\",\"2025-12-18 09:12:53.502295+00\",\"2025-12-18 09:13:55.311934+00\",\"2025-12-18 09:14:59.417501+00\",\"2025-12-18 09:16:03.632174+00\",\"2025-12-18 09:17:06.440503+00\",\"2025-12-18 09:18:10.9102+00\",\"2025-12-18 09:19:12.46013+00\",\"2025-12-18 09:20:15.476039+00\",\"2025-12-18 09:21:18.309648+00\",\"2025-12-18 09:22:19.52107+00\",\"2025-12-18 09:23:22.532321+00\",\"2025-12-18 09:24:23.329189+00\",\"2025-12-18 09:25:24.435096+00\",\"2025-12-18 10:19:04.880947+00\",\"2025-12-18 10:20:05.044045+00\",\"2025-12-18 10:21:08.763512+00\",\"2025-12-18 10:22:10.587855+00\",\"2025-12-18 10:23:12.625589+00\",\"2025-12-18 10:24:15.801226+00\",\"2025-12-18 10:25:15.550086+00\",\"2025-12-18 10:26:18.75598+00\",\"2025-12-18 10:27:18.394229+00\",\"2025-12-18 10:49:19.482317+00\",\"2025-12-18 11:31:11.27199+00\",\"2025-12-18 11:32:16.931079+00\",\"2026-01-14 09:36:06.453886+00\",\"2026-01-14 09:37:53.944354+00\",\"2026-01-14 09:39:51.994487+00\",\"2026-01-15 10:33:37.290883+00\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "created_by",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "due_date",
+				"n_distinct": 386,
+				"most_common_vals": "{2025-03-30,2025-12-31,2025-05-28,2025-12-01,2025-06-27,2025-10-31,2025-08-27,2025-10-01,2025-11-27,2025-12-28,2025-10-25,2025-09-24,2025-07-25,2025-10-28,2025-05-25,2025-02-27,2025-12-25,2025-06-24,2025-08-24,2025-07-28,2025-03-27,2025-11-24,2025-02-24,2025-04-25,2025-02-28,2025-09-22,2025-09-28,2025-04-28,2025-09-27,2025-09-25,2025-04-26,2025-04-30,2025-04-27,2025-09-17,2025-12-10,2025-09-12,2025-03-01,2025-05-30,2025-07-26,2025-07-31,2025-02-26,2025-06-28,2025-06-29,2025-03-28,2025-04-24,2025-06-22,2025-08-13,2025-08-31,2025-06-26,2025-10-08,2025-09-18,2025-10-26,2025-12-27,2025-05-29,2025-08-29,2025-11-26,2026-01-08,2025-03-29,2025-04-05,2025-07-01,2025-07-10,2025-12-26,2025-04-06,2025-04-29,2025-10-10,2025-10-30,2025-09-10,2025-11-28,2025-06-19,2025-08-23,2025-10-09,2025-07-24,2025-09-26,2025-11-09,2026-01-04,2025-03-02,2025-05-20,2025-06-11,2025-07-16,2025-09-16,2025-10-22,2026-01-01,2025-07-11,2025-10-16,2025-11-08,2025-12-13,2025-05-04,2025-07-15,2025-11-15,2025-02-09,2025-08-09,2025-08-14,2025-09-07,2025-09-11,2025-11-23,2026-01-09,2025-04-22,2025-05-24,2025-05-26,2025-05-31}",
+				"most_common_freqs": [
+					0.0177365, 0.0165541, 0.0157095, 0.0148649, 0.0143581, 0.0140203, 0.0130068, 0.0128378, 0.0123311, 0.0118243, 0.0111486,
+					0.0109797, 0.0108108, 0.0106419, 0.0101351, 0.00945946, 0.00945946, 0.00929054, 0.00929054, 0.00912162, 0.0089527, 0.00878378,
+					0.00861487, 0.00861487, 0.00810811, 0.00793919, 0.00777027, 0.00743243, 0.00675676, 0.00658784, 0.00641892, 0.00641892, 0.00625,
+					0.00625, 0.00625, 0.00608108, 0.00591216, 0.00574324, 0.00574324, 0.00574324, 0.00557432, 0.00557432, 0.00557432, 0.00540541,
+					0.00540541, 0.00523649, 0.00523649, 0.00523649, 0.00489865, 0.00489865, 0.00472973, 0.00472973, 0.00472973, 0.00456081,
+					0.00456081, 0.00456081, 0.00456081, 0.00439189, 0.00439189, 0.00439189, 0.00439189, 0.00439189, 0.00422297, 0.00422297,
+					0.00422297, 0.00422297, 0.00405405, 0.00405405, 0.00388514, 0.00388514, 0.00388514, 0.00371622, 0.00371622, 0.00371622,
+					0.00371622, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.00337838, 0.00337838, 0.00337838,
+					0.00337838, 0.00320946, 0.00320946, 0.00320946, 0.00304054, 0.00304054, 0.00304054, 0.00304054, 0.00304054, 0.00304054,
+					0.00304054, 0.00287162, 0.00287162, 0.00287162, 0.00287162
+				],
+				"histogram_bounds": "{2025-01-03,2025-01-29,2025-02-07,2025-02-12,2025-02-15,2025-02-18,2025-02-21,2025-02-25,2025-03-04,2025-03-08,2025-03-11,2025-03-14,2025-03-16,2025-03-19,2025-03-21,2025-03-24,2025-03-26,2025-04-04,2025-04-09,2025-04-11,2025-04-15,2025-04-17,2025-04-20,2025-04-23,2025-05-02,2025-05-06,2025-05-10,2025-05-13,2025-05-14,2025-05-16,2025-05-21,2025-05-23,2025-06-01,2025-06-05,2025-06-08,2025-06-09,2025-06-13,2025-06-15,2025-06-17,2025-06-20,2025-06-25,2025-06-30,2025-07-03,2025-07-07,2025-07-12,2025-07-17,2025-07-20,2025-07-22,2025-07-27,2025-07-29,2025-08-01,2025-08-06,2025-08-07,2025-08-10,2025-08-15,2025-08-17,2025-08-18,2025-08-20,2025-08-25,2025-08-26,2025-08-30,2025-09-04,2025-09-06,2025-09-09,2025-09-15,2025-09-19,2025-09-21,2025-10-02,2025-10-05,2025-10-12,2025-10-15,2025-10-19,2025-10-23,2025-10-27,2025-11-01,2025-11-04,2025-11-06,2025-11-11,2025-11-13,2025-11-16,2025-11-19,2025-11-21,2025-11-25,2025-11-30,2025-12-03,2025-12-06,2025-12-09,2025-12-14,2025-12-16,2025-12-18,2025-12-20,2025-12-22,2025-12-24,2026-01-02,2026-01-07,2026-01-13,2026-01-15,2026-01-17,2026-02-05,2026-02-11,2026-03-16}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "fx_contract_to_invoice",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "holding_id",
+				"n_distinct": 2,
+				"most_common_vals": "{05583c6e-9364-4672-a610-0744324e44b4,5652e95e-bb99-48f5-aa1c-13c8c2638fc6}",
+				"most_common_freqs": [0.99848, 0.00152027],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{000d9526-df22-41a6-8528-bfb4bee9728e,02ca6a33-6594-4914-9d77-0f6bfa0ab83c,0621b0ef-2048-4cb2-b331-bbf8434cf392,08baa8fb-aa98-4021-b4c3-540336ec41fd,0b164d1a-eb2c-4e02-b177-22101160b5f6,0cf7d12c-f2e1-4c06-8018-bfe1781721a3,0f22ec10-1676-4c21-ba6d-8f0d2e7b1caf,121ddd1e-bb51-489e-a6c9-ec00f76dc566,13dc6e78-8c50-40b7-9711-dbfea30734ae,16112488-44d0-4900-a4c1-d47836b21369,19092e9b-f742-41b0-8dff-c8d18cca3468,1bb01bbf-4779-4be2-9c05-7b2e84cea4de,1e05605e-7a4d-48c8-871f-e80e6a06f327,2102e443-de2d-44d5-8903-36805be9166f,23b4a307-b218-4304-bb54-e6e8ff0ac353,25ae2942-5cf9-40c0-8bbf-efd147fea809,2914d5cb-c636-4fd9-8ca1-4258d94ee46e,2ba241b9-c4b9-4057-a162-18ce4eb4ff85,2e3f0d48-bf4a-4962-ae8e-806fd573f656,30499433-62ea-4872-b679-d8e2f8fc76f3,328a45a6-8733-4679-8413-9121ffa217da,355cbed8-b116-45ae-a097-518d37291614,381ed916-6469-49cd-ae1d-c3376d607f21,3acddd8e-ff0b-4e9a-8033-d38ff0ea7e04,3d3b503d-5e8a-42fe-9123-242a3d030146,401b88aa-280a-4d35-ac5c-89e81c941eaa,428a70cb-4709-4dad-81fa-8a934d7f7bf1,44d7a44e-c4bf-4436-8704-4d3d0d2cf6c2,47bbfbc0-b343-4e8b-a0c3-367cd20a4a0f,4a4424d1-e91e-496f-b057-0a7c9ec7f8c5,4c6f6ce8-4b5e-4dd8-88f8-df4b6ee6e8b5,4e99beb9-525d-4cd6-a879-2723bcca7cf5,51419c58-8ddb-4990-a4c3-0b59465f6381,52c9c5fa-e4ad-4994-b3b4-a1593ed760aa,55aef560-79aa-40d5-ab08-531e282e96e9,58548946-8be7-4555-801c-4e78f33096c2,5ab113ae-8889-4fac-816d-beef649bbd1c,5d533e2c-cbea-4f95-8e3f-6a336f2430c8,602d56a0-2d46-49d1-a9b7-883ea3e6374d,62cc979d-952e-4164-9d89-62dda6529cc5,64c14370-d6e2-4582-9e29-52fb8f073436,66fd532d-92b1-4706-b8e4-9c84192ec942,6a2869b4-0eb6-4cef-94ec-b6b0c49b1bb8,6cf96384-e734-492d-9b25-3dc5b2aa79d9,6fe2dfcb-7d07-46c3-9110-ba179c9d0838,727a60cb-3782-42bd-95fd-b13b216d6c2a,74e6937c-f7fb-4c8d-9d62-5ac84a1dfc1d,76fff1b8-7d48-4609-8bab-08a2d036bf97,79d2af01-5701-4051-a9df-2af36e1bde0b,7c21c4c0-92b0-49b0-b025-47cfb011e0b3,7ea80a99-1721-45d7-bcf9-68128340b38c,81d6288e-c14f-4845-8ee7-046104816df0,8403d704-80cd-4dd2-90fb-89a7139f2135,8698cc0a-5f55-4569-adea-ca47e55e7428,88c42fc0-ba2b-4c6d-bd17-5815b18a9954,8c05125c-f5c2-4919-bcd3-62c393fb2c3c,8f08098a-d910-409c-9055-7ec220c54ee7,91312a92-a111-4425-91fa-dac0530d0782,93c93493-24b8-4c66-992f-7f785c2f42aa,95bc7d2c-b2ca-4df5-b40c-d4608dc37676,979d9c2f-f801-4ba1-9678-b8cee9b933b5,99eab8a2-9772-40bf-8fca-5e1d800034df,9c386040-bf82-49ab-9cc7-29cfef41d0a1,9e75d3df-2e1f-4f1f-97d9-cb980e7ee056,a106c75a-8e02-44e6-a7ed-3a3b1400ca53,a3a83a1a-db35-4ea7-bbdd-506f44dd3451,a652358b-1153-4802-bf92-b01b37358501,a8b2dab9-d4c3-43af-844d-c1c407ea874d,ab4d6850-d07f-402a-bd91-dc712e64b3f9,adc1889e-37aa-4d4f-a685-a7d58793861e,b09550e2-3d25-40a9-8a48-cae3803ba624,b379ca04-5263-4732-8e9b-f3de1ef17dd9,b6993ec8-7c20-462a-9b7b-629bb1405e77,b97b40ba-f2c8-44d2-a33f-61d416b1b653,bc71e08e-96db-460e-bfb5-83ae02c14552,bf0ce7ff-5424-4efc-aea9-66b6d6aed12a,c14771a5-4082-406c-8465-1fdef8b89056,c3b33b8b-e648-47a3-b1eb-257b0f1071fe,c5e914f0-7325-4b41-94c6-3ed5940ee6cc,c8b900cd-3cc3-406d-8389-33463e263f84,cbd7e25d-cfd6-446c-ac92-68071c269996,cddfff75-085a-448f-b4c5-17d3dd2c5b5b,d0846bf6-2de5-47fd-864e-71e72a556d10,d343116d-0153-4fad-971f-049ebff2b5f6,d59cd072-320e-418c-b6a2-d2a875605c05,d855ea19-ef70-40e6-9266-14f271832111,db6ddb45-a3ea-40b5-8aac-6a2051971141,ddf2f258-5830-488f-8fea-43bc89b7c6b6,e083137a-bb20-46fe-86e4-cfe77d50043f,e37690a0-155d-425a-a7be-af81e40db076,e5abd2aa-0ae8-40a9-97a6-a47f30630b00,e851bc15-a93d-4ec5-9af6-aca2d8f1e616,ead64a1c-1ee0-4252-a79c-9e96da906da5,ee0b7d06-ed27-460f-8830-367982d6af7f,f029675c-bc81-44d9-8cf3-d4c209a815ed,f2d33713-6236-4768-bd1f-af865db32321,f5c433ba-b521-4cda-a802-d326a96ec136,f853ad1c-2b61-437e-ab04-14eebecb8450,fa499514-4658-4954-84f0-dfd3a4a988b5,fcf710dc-b953-44ba-bd9c-f0b2416f5616,fff1c30e-3f52-4d46-bdbc-ddbeedb4413a}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "invoice_currency",
+				"n_distinct": 7,
+				"most_common_vals": "{CLP,MXN,USD,COP,PEN,UYU,UF}",
+				"most_common_freqs": [0.459628, 0.224493, 0.131419, 0.101351, 0.075, 0.00726351, 0.000844595],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "invoice_number",
+				"n_distinct": -0.998818,
+				"most_common_vals": "{F101-00003482,\"FAC 023830\",\"FAC 023856\",\"FAC 023901\",\"FAC 024381\",\"FAC 024382\",\"FAC 024660\"}",
+				"most_common_freqs": [0.000337838, 0.000337838, 0.000337838, 0.000337838, 0.000337838, 0.000337838, 0.000337838],
+				"histogram_bounds": "{A4933,A6953,A7029,\"A7099 (PO16334776)\",A7164,A7229,A7297,A7361,A7433,\"A7497 (SUB1458)\",A7567,A7633,A7697,A7767,A7839,A7920,\"A7987 (SUB1556)\",A8056,A8120,A8186,A8254,A8325,A8392,A8452,A8513,A8576,A8637,A8698,\"CXC/2025/00043 (A2307)\",\"e-FC A0002448\",\"e-FC A0002512\",\"e-FC A0002572\",\"e-FC A0002634\",\"e-FC A0002695\",\"e-FC A0002762\",F101-00003311,F101-00003373,F101-00003443,F101-00003507,F101-00003581,F101-00003656,F101-00003719,F101-00003784,F101-00003848,\"FAC 022901\",\"FAC 022968\",\"FAC 023029\",\"FAC 023097\",\"FAC 023162\",\"FAC 023228\",\"FAC 023291\",\"FAC 023358\",\"FAC 023421\",\"FAC 023486\",\"FAC 023549\",\"FAC 023614\",\"FAC 023676\",\"FAC 023738\",\"FAC 023807\",\"FAC 023879\",\"FAC 023941\",\"FAC 024006\",\"FAC 024071\",\"FAC 024138\",\"FAC 024200\",\"FAC 024264\",\"FAC 024331\",\"FAC 024396\",\"FAC 024459\",\"FAC 024521\",\"FAC 024583\",\"FAC 024645\",\"FAC 024714\",\"FAC 024781\",\"FAC 024845\",\"FAC 024912\",\"FAC 024973\",\"FAC 025033\",\"FAC 025094\",\"FAC 025154\",\"FAC 025215\",\"FAC 025279\",\"FAC 025338\",\"FAC 025400\",\"FAC 025460\",\"FAC 025521\",\"FAC 025581\",\"FAC 025641\",\"FAC 025700\",\"FAC 025759\",FE2301,FE2380,FE2449,FE2516,FE2583,FE2649,FE2719,FE2785,FE2852,FE2915,\"ND9 (FE2383)\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "issue_date",
+				"n_distinct": 348,
+				"most_common_vals": "{2025-02-28,2025-04-28,2025-12-01,2025-05-28,2025-11-01,2025-10-01,2025-09-01,2025-10-28,2025-09-25,2025-11-28,2025-08-25,2025-07-28,2025-01-28,2025-06-25,2025-04-25,2025-11-25,2025-09-28,2025-05-25,2025-07-25,2025-01-25,2025-02-25,2025-10-25,2025-06-28,2025-08-13,2025-03-31,2025-03-26,2025-08-29,2025-01-27,2025-03-27,2025-06-30,2025-08-18,2025-08-23,2025-05-30,2025-01-29,2025-01-30,2025-08-28,2025-04-30,2025-08-26,2025-03-28,2025-11-10,2025-02-27,2025-03-25,2025-05-29,2025-06-26,2025-05-23,2025-08-01,2025-09-30,2025-10-27,2025-07-01,2025-09-08,2025-11-27,2025-09-26,2025-12-09,2025-03-29,2025-03-06,2025-03-07,2025-05-27,2025-09-22,2025-04-29,2025-07-30,2025-08-19,2025-08-27,2025-09-09,2025-11-26,2025-01-31,2025-08-08,2025-08-11,2025-08-12,2025-02-26,2025-05-20,2025-11-13,2025-06-16,2025-03-30,2025-06-24,2025-07-24,2025-09-10,2025-12-02,2025-12-15,2025-03-24,2025-05-12,2025-05-26,2025-06-11,2025-07-10,2025-12-10,2025-06-01,2025-07-31,2025-08-22,2025-09-29,2025-10-16,2025-11-18,2025-12-05,2025-04-20,2025-05-13,2025-08-20,2025-10-09,2025-02-19,2025-04-04,2025-07-07,2025-07-14,2025-07-15}",
+				"most_common_freqs": [
+					0.0195946, 0.0194257, 0.0177365, 0.0153716, 0.0152027, 0.0143581, 0.0130068, 0.0126689, 0.0125, 0.0123311, 0.0121622, 0.0118243,
+					0.0116554, 0.0114865, 0.0113176, 0.010473, 0.0103041, 0.0097973, 0.00962838, 0.00945946, 0.00945946, 0.00945946, 0.00929054,
+					0.00827703, 0.00810811, 0.00793919, 0.00793919, 0.00760135, 0.00760135, 0.00743243, 0.00743243, 0.00692568, 0.00675676,
+					0.00658784, 0.00658784, 0.00658784, 0.00641892, 0.00641892, 0.00625, 0.00625, 0.00608108, 0.00608108, 0.00591216, 0.00591216,
+					0.00557432, 0.00557432, 0.00557432, 0.00557432, 0.00540541, 0.00540541, 0.00523649, 0.00506757, 0.00506757, 0.00489865,
+					0.00472973, 0.00472973, 0.00472973, 0.00472973, 0.00456081, 0.00456081, 0.00456081, 0.00439189, 0.00439189, 0.00439189,
+					0.00422297, 0.00422297, 0.00422297, 0.00422297, 0.00405405, 0.00405405, 0.00405405, 0.00388514, 0.00371622, 0.00371622,
+					0.00371622, 0.00371622, 0.00371622, 0.00371622, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.0035473, 0.00337838,
+					0.00337838, 0.00337838, 0.00337838, 0.00337838, 0.00337838, 0.00337838, 0.00320946, 0.00320946, 0.00320946, 0.00320946,
+					0.00304054, 0.00304054, 0.00304054, 0.00304054, 0.00304054
+				],
+				"histogram_bounds": "{2025-01-01,2025-01-09,2025-01-13,2025-01-15,2025-01-17,2025-01-20,2025-01-23,2025-01-26,2025-02-03,2025-02-06,2025-02-07,2025-02-11,2025-02-13,2025-02-17,2025-02-20,2025-02-22,2025-03-01,2025-03-05,2025-03-11,2025-03-14,2025-03-18,2025-03-19,2025-03-22,2025-04-01,2025-04-03,2025-04-07,2025-04-11,2025-04-13,2025-04-16,2025-04-19,2025-04-22,2025-04-23,2025-04-26,2025-04-27,2025-05-02,2025-05-06,2025-05-08,2025-05-10,2025-05-14,2025-05-16,2025-05-19,2025-05-22,2025-05-31,2025-06-04,2025-06-08,2025-06-10,2025-06-12,2025-06-17,2025-06-19,2025-06-21,2025-06-27,2025-06-29,2025-07-03,2025-07-08,2025-07-11,2025-07-17,2025-07-19,2025-07-21,2025-07-23,2025-07-26,2025-07-29,2025-08-04,2025-08-06,2025-08-10,2025-08-15,2025-08-21,2025-09-02,2025-09-05,2025-09-13,2025-09-16,2025-09-17,2025-09-18,2025-09-21,2025-09-27,2025-10-02,2025-10-06,2025-10-07,2025-10-10,2025-10-12,2025-10-14,2025-10-17,2025-10-20,2025-10-22,2025-10-24,2025-10-26,2025-10-30,2025-11-03,2025-11-04,2025-11-07,2025-11-11,2025-11-12,2025-11-16,2025-11-19,2025-11-21,2025-11-24,2025-11-30,2025-12-03,2025-12-08,2025-12-12,2025-12-16,2025-12-18}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "legal_client_name",
+				"n_distinct": -0.111655,
+				"most_common_vals": "{\"DREAM TEC SA SUCURSAL COLOMBIA\",\"UNILEVER DE MEXICO\",\"DRAGON TRADE DE MEXICO\",\"TRANSPORTES LOCK\",\"COPEC S.A.\",\"MANANTIAL S A\",\"VILLARREAL DIVISION EQUIPOS\",\"ROYAL CANIN MEXICO\",\"CELLSTAR CHILE S A\",\"JOSE MANUEL RAMOS LEON TRANSPORTES TERRESTRES EIRL\",\"LA BERLIN SPA\",\"MARYUN SEGURIDAD INDUSTRIAL LIMITADA\",\"CADENA COMERCIAL OXXO\",\"CEFA CENTRAL FARMACEUTICA\",\"TOPGROUP COLOMBIA S.A.S\",\"GASCO GLP S A\",\"REUTTER S A\",\"AMBIPAR ENVIRONMENT CHILE LIMITADA\",\"DISTRIBUCION Y LOGISTICA V&L SPA\",\"PLUSPETROL PERU CORPORATION S.A.\",\"Mafalda SA\",\"MT LOGISTICA SPA\",\"RED POSTAL POBLADO SAS\",\"SERVICIOS FINANCIEROS Y MERCADOTECNIA S A\",\"CINTHIA SELENE GARZA ACOSTA\",\"Link Logistica, S.A\",\"LOGISTICA TRANSPORTE Y SERVICIOS LTS LIMITADA\",LOGISTIFY,\"MOSAICO S A\",\"SOUTHERN TECHNOLOGY GROUP PERU S.A.C.\",\"AKUBRA SERVICIOS CORPORATIVOS LIMITADA\",\"ATIKA S A\",\"BRIGHTCELL LOGISTICS CHILE LIMITADA\",\"BUSCALIBRE COLOMBIA S.A.S.\",\"EVENT 2.0\",\"GBT LOGISTICS SPA\",ALESSO,\"AMBIPAR ENVIRONMENT PARAGUAY SA\",\"ARME S.A.S\",\"BANCO PLATA S.A., INSTITUCION DE BANCA MULTIPLE\",\"DIAZ, VAZQUEZ, ALBARRAN Y COMPAÑIA\",\"Fruteria Vidaurri, S.A. de C.V.\",\"FUND ARTURO LOPEZ PEREZ\",\"ILAN Chile SpA\",\"IMPORTADORA MULTISTOCK S.A.\",\"IMPROVE QUALITY REDUCE COST SAVE LIFE AUDITORES S.A.S\",\"LAND FAST S.A.\",\"REDONDOS S A\",\"TEXTILES 1 X 1 SAS\",\"VIDRIOS DELL ORTO S.A.\",\"AC Bebidas Ecuador ACBE CIA.LTDA\",\"AGENCIAS MOTTA\",\"AHONA LOGISTICS SPA\",\"BDEBUENO SPA\",\"BUSCALIBRE S.A.\",\"CABIFY LOGISTICS SAS\",\"CARNES NATURALES SPA\",\"CLICKEX SPA\",\"COMERCIAL GESTAPACK SPA\",\"COMERCIAL SEA GARDEN SPA\",\"COMPANIA GENERAL DE ELECTRICIDAD S.A.\",\"Del Campo por Tradición S.A.S\",\"DISTRIBUIDORA DE VINOS Y LICORES SAS\",\"Distribuidora Importadora Dipor S.A.\",\"DISTRITIENDAS DE COLOMBIA S.A.\",\"DROGUERIA GLOBAL PHARMA SPA\",\"Droguería Proconsumo\",\"FERRETERIA INDAR\",GAVASER,\"GIANGRAMA SPA\",\"GRUPO TURBOBOY S.A.S\",\"GRUPO ZORRO ABARROTERO\",\"IMPORTADORA Y COMERCIALIZADORA RESTOMARKET LIMITADA\",\"IMPORTADORA Y DISTRIBUIDORA ARQUIMED LTDA.\",\"INGOS LOGISTICA ESPECIALIZADA ACTIVA\",\"JOSE RIVERO LLAMAZALES Y COMPANIA LIMITADA\",\"LAIKA UNIVERSO PELUDO SPA\",\"LOGISTICA INDUSTRIAL S A\",\"PUNTO AZUL S.A.\",\"ROSARIO MENDOZA MACEDO\",\"SALUD DIGITAL SB S.A.\",\"SG COMERCIAL GROUP\",\"TIENDAS PERUANAS SA\",\"Transportes abc castro spa\",\"Unilever Andina Ecuador S.A.\",\"VIGATEC S A\",\"A3D CHILE S A\",\"AGRICOLA Y COMERCIAL AMANCAY S A\",\"AGROSERVICIOS CAPURRO S.P.A.\",\"Aguas Río Blanco SpA\",\"ALICORP S.A.A.\",\"ANDAMIOS Y EQUIPOS AMARILLOS\",AOCSA,\"APL LOGISTICS CHILE S A\",\"AQUI TE LO COMPRO RECICLADORA\",\"AUTOPARTES SALAV ROSHFRANS\",\"Avicola Nacional S.A.\",\"AVON COSMETICS MANUFACTURING\",\"AXAM COMERCIAL SPA\",\"BRIGHTC LOGISTICS MEXICO\"}",
+				"most_common_freqs": [
+					0.0128378, 0.0089527, 0.00793919, 0.00726351, 0.00523649, 0.00422297, 0.00422297, 0.00405405, 0.00371622, 0.00371622, 0.00371622,
+					0.00371622, 0.00337838, 0.00337838, 0.00337838, 0.00320946, 0.00320946, 0.00304054, 0.00304054, 0.00304054, 0.00287162,
+					0.00287162, 0.00287162, 0.00287162, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.0027027, 0.00253378, 0.00253378,
+					0.00253378, 0.00253378, 0.00253378, 0.00253378, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486,
+					0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703
+				],
+				"histogram_bounds": "{\"99MINUTOS COLOMBIA S.A.S.\",\"ACCUHEALTH GROUP SERVICIOS LIMITADA\",\"Agencias Mercantiles\",\"ALL MEDICAL DEVICES SPA\",\"Ana Victoria Barrios Almaras\",\"APUDEX S.A.C.\",\"ASCAI LAVANDERIA, LAVASECO Y MULTISERVICIOS LIMITADA\",\"BANCO AZTECA SA INSTITUCION DE BANCA MULTIPLE\",\"BICHOS BOUTIQUE S.A.S\",\"BIOTRENDS LABORATORIOS S A S\",\"BRIGHTCELL LOGISTICS COLOMBIA SAS\",\"BUSCALIBRE PERU S.A.C.\",\"CASO Y CIA SAC\",\"CHOCOLATES DEL MUNDO SPA\",\"CODELPA CHILE S.A.\",\"COMERCIAL ALTOS DEL VALLE LIMITADA\",\"COMERCIAL CENTRAL CHILE LIMITADA\",\"COMERCIALIZADORA DE ALIMENTOS GUSTAVO NATERO CARRILLO E.I.R.L\",\"COMERCIALIZADORA FIVE LIQUOR\",\"COMERCIALIZADORA STOCKSUR CHILE LIMITADA\",\"COMERCIAL RAMOS HERMANOS LIMITADA\",\"CONSULTING LOGISTICS GROUP S.A.C.\",\"Corporacion Ecuatoriana de Licores y Alimentos SA\",\"CURADEN CHILE SPA\",\"DERJU TRANSPORTE & LOGISTICA SPA\",\"DIPROMED S A\",\"DISTRIBUCION Y LOGISTICA DE ALIMENTOS SA DE CV\",\"DISTRIBUIDORA DE MATERIALES EN INOXIDABLE DE MEXICO\",\"DISTRIBUIDORA LIMATCO S.A.\",\"DISTRIBUIDORA Y COMERCIALIZADORA ENVASA SPA\",\"DP WORLD LOGISTICS S.R.L\",DULCICENTRO,\"ELEVA INVERSIONES S.A.S.\",\"EMPAQUETADORA DARROW S.A.S.\",\"EMPRESA SOCIAL DE COMERCIALIZACION DE PRODUCTOS SPA\",\"Equipamiento ilumi sac\",\"FABRICA DE HIELO GUERRA\",\"FARMACEUTICA ACUA-NASER S A\",FERRESANPA,FLUSISTEMAS,\"FRIGORIFICO ECOCARNES S.A.\",\"Gapa Food Mexico\",\"GESTORA DE RESIDUOS AMBIENTALES GERAM\",\"GLOBAL VEU\",\"GRUPO CRISTALERIA DEL ANGEL\",\"Heaven Agua Purificada spa\",\"Hod Foods SPA\",\"IMPORTADORA AUTOTEC S A\",\"IMPORTADORA ICOLTEX SAS\",\"INDUSTRIAL Y COMERCIAL SOLUCORP LIMITADA\",\"Insumos Profesionales de Limpieza\",\"Inversiones D&V Spa\",\"INVERSIONES PET MARKET COLOMBIA S.A.S.\",\"JOSE ALBERTO SERRANO ALTAMIRANO\",\"KITCHEN CENTER SAC\",\"LA BARRA S.A\",\"LA CASA DEL CERAMISTA LIMITADA\",\"LIVEHOME SPA\",\"LOGYTECH MOBILE SAS\",\"MADEGOM S.A.\",\"MARDUK FERRETERIA\",\"Mas agua Chile spa\",\"Maxi Mobility Peru S.a.C\",\"MICROGEO S. A.\",\"MOVING FOOD CL SPA\",\"Nestlé Chile SA\",\"OFISISTEMAS PARADIGMA\",\"PACKSYS MEXICO\",\"Pasteurizadora Rica SA\",\"PET PLUS SPA\",\"PLATAFORMA GANGABOX MEXICO\",\"PREMIUM BRANDS S.A.C\",\"PRODUCTOS AVON DE GUATEMALA S.A\",\"Productos Avon S.A. (Panama)\",\"PRODUCTOS JM VILLEGAS\",\"PROYECTOS RODIAN\",\"QUIMATIC S A\",\"REDZA SPA\",\"Sanchez Hermanos SpA\",\"SEBASTIAN SANTAMARIA RUBI\",\"SERVICIOS DE PRODUCCION Y LOGISTICA CCPA LIMITADA\",\"SERVIFRUTAS DELIVERY MX\",\"SINBA SURA S.A.C.\",\"SOC ADMINISTRADORA DE CASINOS Y SERVICIOS ALISERVICE S.A.\",\"SOCIEDAD COMERCIAL RANCHILLO LIMITADA\",\"SOCIEDAD GRIFFITHS HERMANOS LIMITADA\",\"SOLUCIONES BRIO\",\"SOLUCIONES INTELIGENTES EN TRANSPORTE\",\"SPORTMORE SPA\",\"SUPLETECH SPA\",\"Telefónica IOT y Big Data Tech Chile SPA\",\"THE WATER DEPOT\",\"Transportes andina refrescos Ltda.\",\"TRANSPORTES MANDAME SPA\",\"TRAVERS TOOL\",\"Valprik SpA\",\"VENUS PERUANA S.A.C.\",\"Viña Morandé S.A\",\"WEG CHILE SpA\",XSX,\"Zoom International Services SA\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "notes",
+				"n_distinct": 1,
+				"most_common_vals": "{\"Factura histórica importada\"}",
+				"most_common_freqs": [0.00168919],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "odoo_integration_id",
+				"n_distinct": -0.998311,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{146786,150823,151031,151412,151495,151578,151666,151798,152048,152397,152751,152962,153067,153206,153271,153480,153623,153931,154346,154483,154626,154781,154894,155079,155428,155659,155817,155905,156043,156106,156197,156364,163112,163277,163577,163772,163846,163961,164056,164200,164473,164775,165025,165297,165466,165616,165789,165958,166171,166433,166630,167037,167237,167340,167419,167638,167875,168226,168399,168505,168655,168828,168961,169049,169371,169606,169788,169857,170130,170301,170711,171199,171457,171763,171864,172054,172184,172320,172385,172807,173005,173277,173657,173738,173926,174034,174231,174291,174641,174849,175132,175361,175685,175800,175978,176087,176150,176391,176679,176839,177163}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "pdf_url",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "reconciled_at",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "reconciled_invoice_id",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "reconciliation_status",
+				"n_distinct": 3,
+				"most_common_vals": "{pending,mrr_legacy,migrated}",
+				"most_common_freqs": [0.991554, 0.00658784, 0.00185811],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "source_system",
+				"n_distinct": 2,
+				"most_common_vals": "{odoo,Odoo}",
+				"most_common_freqs": [0.998311, 0.00168919],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "source_type",
+				"n_distinct": 2,
+				"most_common_vals": "{erp_unmatched,historical_import}",
+				"most_common_freqs": [0.998311, 0.00168919],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "status",
+				"n_distinct": 2,
+				"most_common_vals": "{Enviada,Pagada}",
+				"most_common_freqs": [0.72652, 0.27348],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "total_invoice_currency",
+				"n_distinct": -0.543074,
+				"most_common_vals": "{6124.80,5206.08,117.02,881.72,5104.00,17758.47,5939.20,7145.60,175.53,5512.32,1735.36,6431.04,3266.56,5011.20,4083.20,8166.40,14291.20,34707.20,429.44,1020.80,8352.00,20416.00,176.00,526.60,1106.96,9187.20,9697.60,13508.64,1180.00,1554.28,2041.60,2737.00,9799.68,14105.60,431563.44,1006891.01,289.87,292.80,652.48,742.98,1610.00,1837.44,1876.20,2909.28,5967.50,6533.12,7476.34,8676.80,12606.88,14356.16,15590.40,86965.20,146.12,152.73,258.20,340.25,387.83,445.78,652.92,1035.71,1069.43,1300.21,3062.40,4437.21,6073.76,7099.20,8277.76,13882.88,16588.00,20824.32,32155.20,45936.00,62024.00,170263.29,314307.94,374947.49,434551.11,507846.48,1246412.09,1539950.94,1576311.00,2138754.96,9075730.00,159.58,351.07,560.74,877.13,930.67,934.35,960.52,1331.26,1585.39,2378.88,2802.80,7438.13,9440.00,26076.80,62273.00,83300.00,310120.00}",
+				"most_common_freqs": [
+					0.014527, 0.00844595, 0.00726351, 0.00675676, 0.00658784, 0.00608108, 0.00557432, 0.00472973, 0.00388514, 0.00388514, 0.00371622,
+					0.00371622, 0.0035473, 0.0035473, 0.00320946, 0.00320946, 0.00320946, 0.00320946, 0.00287162, 0.00287162, 0.00287162, 0.00287162,
+					0.00253378, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919,
+					0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919
+				],
+				"histogram_bounds": "{6.28,175.04,292.56,406.90,459.34,522.65,595.00,848.39,1000.00,1155.00,1403.40,1581.08,1904.26,2405.76,2909.60,3717.00,5104.41,5974.00,6515.60,9465.60,11669.98,13983.00,16147.20,17817.60,21436.80,32104.16,39410.60,49601.05,51506.00,55961.00,60708.00,61660.00,65942.80,91894.00,100506.00,102646.00,104630.00,113106.00,122174.00,123654.00,134650.00,153392.00,155053.00,163855.00,181978.00,186072.00,207246.00,232693.00,241364.00,246641.00,251357.00,256516.00,267629.00,279944.00,295519.00,305592.00,308383.00,311361.00,329346.00,354585.00,362970.00,369493.00,372960.00,384218.00,404293.00,412486.00,423219.00,443277.00,461583.00,489652.00,501101.00,546537.00,562043.00,594744.94,622789.00,685745.00,747124.00,772741.00,791388.00,829605.87,886007.00,915356.35,986721.00,1025781.00,1118240.00,1200114.13,1263549.49,1381125.48,1563695.00,1632899.00,1860722.00,2190262.16,2475139.00,2695831.91,3079867.12,3510525.00,4480155.00,6295130.94,8159029.00,11400024.00,406150446.00}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "invoices_legacy",
+				"attname": "vat",
+				"n_distinct": -0.518412,
+				"most_common_vals": "{0.00,844.80,718.08,121.62,21.10,704.00,2449.44,819.20,985.60,760.32,239.36,887.04,31.65,450.56,691.20,563.20,1126.40,1971.20,4787.20,140.80,1152.00,2816.00,94.96,168.86,1267.20,1337.60,2060.64,-47069.89,-15652.56,77.44,180.00,281.60,1351.68,1945.60,52.80,113.34,253.44,286.20,401.28,823.10,901.12,1031.22,1196.80,1738.88,1980.16,2150.40,11995.20,-424270.00,-99981.99,-73689.00,-71989.26,-45206.66,-23740.68,-20314.29,-14693.19,-13599.13,-7959.43,22.29,23.30,51.90,59.16,68.00,99.60,157.99,163.13,198.34,422.40,676.86,837.76,979.20,1141.76,1914.88,2288.00,2872.32,4435.20,6336.00,9903.00,-42751.68,-19159.14,85.54,133.80,141.97,142.53,146.52,241.84,362.88,1134.63,1440.00,3596.80,9943.00,13300.00,49515.00,49713.00,59418.00,59656.00,-73879.97,-50599.15,-36888.63,64.75,66.00}",
+				"most_common_freqs": [
+					0.0559122, 0.014527, 0.00844595, 0.00675676, 0.00658784, 0.00658784, 0.00608108, 0.00557432, 0.00472973, 0.00388514, 0.00371622,
+					0.00371622, 0.0035473, 0.0035473, 0.0035473, 0.00320946, 0.00320946, 0.00320946, 0.00320946, 0.00287162, 0.00287162, 0.00287162,
+					0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00236486, 0.00219595, 0.00219595, 0.00219595, 0.00219595, 0.00219595,
+					0.00219595, 0.00219595, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703,
+					0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00202703, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811,
+					0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00185811, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919,
+					0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919, 0.00168919,
+					0.00168919, 0.00168919, 0.00168919, 0.00152027, 0.00152027, 0.00152027, 0.00152027, 0.00152027
+				],
+				"histogram_bounds": "{-2277738.60,-325713.42,-153731.76,-124276.25,-90051.66,-60545.39,-51718.72,-34570.38,-23335.80,-14117.17,-3938.04,28.16,52.27,73.38,84.41,110.40,145.96,188.90,226.66,261.75,317.51,380.16,506.88,652.80,821.40,896.00,1331.20,1641.98,2027.52,2383.79,2534.40,3264.00,4730.88,6351.85,7744.00,8208.00,8865.12,9239.41,9792.00,9866.00,13238.00,14917.00,16245.00,16433.00,17194.00,19363.00,19660.00,19885.00,24066.00,24574.00,24812.00,26254.00,29056.00,29709.00,33237.00,37242.00,38772.00,39380.00,40122.00,40956.00,42731.00,44715.00,47184.00,48862.00,49238.00,51187.00,53353.00,57295.00,58463.00,59058.00,59994.00,63133.00,65679.00,67226.00,70537.00,73129.00,77089.00,79439.00,82852.00,89379.00,92336.00,99260.00,109489.00,121345.00,123951.00,128471.00,135581.00,143671.00,149301.00,163780.00,177572.00,196264.00,222921.00,257430.00,320513.00,390990.00,442437.00,625902.00,806834.00,1408798.00,64847550.00}"
+			}
+		],
+		"size_info": {
+			"total_size": "4064 kB",
+			"table_size": "1976 kB",
+			"indexes_size": "2088 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-04T11:18:34.774Z"
+	}
+}

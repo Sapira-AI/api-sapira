@@ -25,6 +25,7 @@ import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware'
 import { AgentsModule } from './modules/agents/agents.module';
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { ClaudeModule } from './modules/claude/claude.module';
+import { ClientsModule } from './modules/clients';
 import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmailModule } from './modules/email/email.module';
@@ -81,6 +82,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		PostgreSQLDatabaseModule,
 		HoldingsModule,
 		UsersModule,
+		ClientsModule,
 		OdooModule,
 		EmailModule,
 		EmailsModule,

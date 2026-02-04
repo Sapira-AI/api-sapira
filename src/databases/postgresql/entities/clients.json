@@ -2,600 +2,539 @@
   "success": true,
   "message": "Análisis de tabla public.clients completado exitosamente",
   "data": {
-    "table_name": "clients",
-    "schema_name": "public",
-    "columns": [
-      {
-        "column_name": "id",
-        "data_type": "uuid",
-        "is_nullable": "NO",
-        "column_default": "gen_random_uuid()",
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "holding_id",
-        "data_type": "uuid",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "name_commercial",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "segment",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "industry",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "market",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "status",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": "'Activo'::text",
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "portal_enabled",
-        "data_type": "boolean",
-        "is_nullable": "YES",
-        "column_default": "false",
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "client_since",
-        "data_type": "date",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "notes",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "created_at",
-        "data_type": "timestamp without time zone",
-        "is_nullable": "YES",
-        "column_default": "now()",
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "country",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "client_number",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "custom_fields",
-        "data_type": "jsonb",
-        "is_nullable": "YES",
-        "column_default": "'{}'::jsonb",
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      },
-      {
-        "column_name": "salesforce_account_id",
-        "data_type": "text",
-        "is_nullable": "YES",
-        "column_default": null,
-        "character_maximum_length": null,
-        "numeric_precision": null,
-        "numeric_scale": null
-      }
-    ],
-    "indexes": [
-      {
-        "index_name": "clients_pkey",
-        "index_definition": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)",
-        "index_type": "btree",
-        "is_unique": "YES",
-        "index_size": "16 kB"
-      },
-      {
-        "index_name": "idx_clients_client_number",
-        "index_definition": "CREATE INDEX idx_clients_client_number ON public.clients USING btree (client_number)",
-        "index_type": "btree",
-        "is_unique": "NO",
-        "index_size": "16 kB"
-      },
-      {
-        "index_name": "idx_clients_custom_fields",
-        "index_definition": "CREATE INDEX idx_clients_custom_fields ON public.clients USING gin (custom_fields)",
-        "index_type": "gin",
-        "is_unique": "NO",
-        "index_size": "24 kB"
-      },
-      {
-        "index_name": "idx_clients_holding_id",
-        "index_definition": "CREATE INDEX idx_clients_holding_id ON public.clients USING btree (holding_id)",
-        "index_type": "btree",
-        "is_unique": "NO",
-        "index_size": "16 kB"
-      },
-      {
-        "index_name": "idx_clients_salesforce_account_id",
-        "index_definition": "CREATE INDEX idx_clients_salesforce_account_id ON public.clients USING btree (salesforce_account_id) WHERE (salesforce_account_id IS NOT NULL)",
-        "index_type": "btree",
-        "is_unique": "NO",
-        "index_size": "16 kB"
-      },
-      {
-        "index_name": "idx_clients_salesforce_account_unique",
-        "index_definition": "CREATE UNIQUE INDEX idx_clients_salesforce_account_unique ON public.clients USING btree (salesforce_account_id, holding_id) WHERE (salesforce_account_id IS NOT NULL)",
-        "index_type": "btree",
-        "is_unique": "YES",
-        "index_size": "16 kB"
-      }
-    ],
-    "foreign_keys": [
-      {
-        "constraint_name": "clients_holding_id_fkey",
-        "table_name": "clients",
-        "column_name": "holding_id",
-        "foreign_table_name": "company_holdings",
-        "foreign_column_name": "id",
-        "update_rule": "NO ACTION",
-        "delete_rule": "NO ACTION"
-      }
-    ],
-    "primary_unique_keys": [
-      {
-        "constraint_name": "clients_pkey",
-        "constraint_type": "PRIMARY KEY",
-        "column_name": "id",
-        "is_deferrable": "NO",
-        "initially_deferred": "NO"
-      }
-    ],
-    "triggers": [],
-    "policies": [
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "policyname": "clients_delete_access",
-        "permissive": "PERMISSIVE",
-        "roles": "{public}",
-        "cmd": "DELETE",
-        "qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
-        "with_check": null
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "policyname": "clients_holding_isolation",
-        "permissive": "PERMISSIVE",
-        "roles": "{public}",
-        "cmd": "SELECT",
-        "qual": "(holding_id = get_current_user_holding_id())",
-        "with_check": null
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "policyname": "clients_update_access",
-        "permissive": "PERMISSIVE",
-        "roles": "{public}",
-        "cmd": "UPDATE",
-        "qual": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))",
-        "with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "policyname": "clients_write_access",
-        "permissive": "PERMISSIVE",
-        "roles": "{public}",
-        "cmd": "INSERT",
-        "qual": null,
-        "with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
-      }
-    ],
-    "statistics": [
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "client_number",
-        "n_distinct": -0.5,
-        "most_common_vals": "{001RO00000OGBsvYAH,0015w00002Ar1eEAAR,0015w00002sNQJ7AAO,001RO00000YqckCYAR}",
-        "most_common_freqs": [
-          0.0170455,
-          0.0113636,
-          0.0113636,
-          0.0113636
-        ],
-        "histogram_bounds": "{0015w00002AnfMkAAJ,0015w00002DlESxAAN,0015w00002DlEUTAA3,0015w00002DlEUvAAN,0015w00002DlEVCAA3,0015w00002DlEXgAAN,0015w00002DlEXYAA3,0015w00002DlEYNAA3,0015w00002DlEYuAAN,0015w00002EB9XbAAL,0015w00002fqXuXAAU,0015w00002g8gGoAAI,0015w00002gYyQuAAK,0015w00002h1nhpAAA,0015w00002h1tWgAAI,0015w00002hnKvyAAE,0015w00002iB99BAAS,0015w00002iC4VIAA0,0015w00002ifn6XAAQ,0015w00002J1NQAAA3,0015w00002jvjVoAAI,0015w00002lZ1JgAAK,0015w00002m30XTAAY,0015w00002MeqiJAAR,0015w00002mn8qbAAA,0015w00002n40w6AAA,0015w00002NAz6RAAT,0015w00002NSzhCAAT,0015w00002NSzNpAAL,0015w00002NUYe5AAH,0015w00002ogPw6AAE,0015w00002OXL6KAAX,0015w00002P83uaAAB,0015w00002P8CPfAAN,0015w00002pOLqbAAG,0015w00002qdfnEAAQ,0015w00002qlibhAAA,0015w00002QyC52AAF,0015w00002r8JEDAA2,0015w00002r9NGeAAM,0015w00002run8uAAA,0015w00002sc9PcAAI,0015w00002SSENpAAP,0015w00002sxuzFAAQ,0015w00002T6MaLAAV,0015w00002T6RHrAAN,0015w00002T6RK2AAN,0015w00002T6RKAAA3,0015w00002T6RMdAAN,0015w00002T6RN1AAN,0015w00002T6RNnAAN,0015w00002TwMVVAA3,0015w00002TXDfsAAH,0015w00002UEzUNAA1,0015w00002V003vAAB,0015w00002XEodEAAT,0015w00002ZJ83oAAD,0015w00002ZMAcdAAH,001RO0000028CfZYAU,001RO00000boIinYAE,001RO00000chKVSYA2,001RO00000cr3tHYAQ,001RO00000dhY9eYAE,001RO00000dsON6YAM,001RO00000dyyhKYAQ,001RO00000F51kRYAR,001RO00000fLNi3YAG,001RO00000foCheYAE,001RO00000fzXGKYA2,001RO00000gEBTFYA4,001RO00000IfmhTYAR,001RO00000J7OqgYAF,001RO00000KelRKYAZ,001RO00000O3MavYAF,001RO00000OOxQyYAL,001RO00000QP5aDYAT,001RO00000QYRQGYA5,001RO00000Rd8HZYAZ,001RO00000RhBdVYAV,001RO00000RHDsZYAX,001RO00000SCpcwYAD,001RO00000SVoWfYAL,001RO00000ZHW4NYAX,001RO00000ZM3mJYAT}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "client_since",
-        "n_distinct": 4,
-        "most_common_vals": "{2025-01-01,2025-07-01}",
-        "most_common_freqs": [
-          0.0113636,
-          0.0113636
-        ],
-        "histogram_bounds": "{2024-01-01,2024-01-24}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "country",
-        "n_distinct": -0.159091,
-        "most_common_vals": "{Chile,Colombia,Perú,México,Mexico,Argentina,Peru,\"MULTI PAIS\",Ecuador,España,\"Estados Unidos\",Guatemala,Panama}",
-        "most_common_freqs": [
-          0.153409,
-          0.113636,
-          0.0909091,
-          0.0795455,
-          0.0511364,
-          0.0284091,
-          0.0284091,
-          0.0227273,
-          0.0170455,
-          0.0170455,
-          0.0170455,
-          0.0170455,
-          0.0113636
-        ],
-        "histogram_bounds": "{Alemania,Brasil,Canadá,CL,\"Costa Rica\",El Salvador,\"Emiratos Arabes\",Honduras,MX,Nicaragua,Paraguay,\"Puerto Rico\",\"Reino Unido\",\"Republica Dominicana\",Uruguay}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "created_at",
-        "n_distinct": -0.363636,
-        "most_common_vals": "{\"2025-08-18 14:05:58.400368\",\"2025-11-03 11:46:32.57344\"}",
-        "most_common_freqs": [
-          0.414773,
-          0.232955
-        ],
-        "histogram_bounds": "{\"2025-06-27 17:30:07.932866\",\"2025-07-25 15:58:42.973833\",\"2025-07-28 22:51:01.920939\",\"2025-07-28 22:58:12.831986\",\"2025-07-29 20:20:19.452308\",\"2025-07-29 20:29:57.391119\",\"2025-08-19 14:42:04.599412\",\"2025-10-06 02:09:41.17481\",\"2025-11-19 17:47:54.265123\",\"2025-11-27 22:37:40.176937\",\"2025-11-27 22:39:14.323463\",\"2025-11-27 23:09:56.556476\",\"2025-11-28 00:19:11.083836\",\"2025-11-28 00:19:12.99484\",\"2025-11-28 00:40:20.196649\",\"2025-11-28 01:05:27.71905\",\"2025-11-28 01:05:29.550525\",\"2025-11-28 01:42:12.567172\",\"2025-11-28 01:46:42.688895\",\"2025-11-28 01:51:29.427552\",\"2025-11-28 22:42:56.030508\",\"2025-12-02 15:26:43.844081\",\"2025-12-02 15:29:14.181347\",\"2025-12-02 17:35:48.355677\",\"2025-12-04 14:55:24.665212\",\"2025-12-04 14:57:09.339075\",\"2025-12-04 14:57:44.788083\",\"2025-12-04 15:00:22.597476\",\"2025-12-04 15:01:11.901001\",\"2025-12-04 17:56:08.722606\",\"2025-12-04 18:00:18.984415\",\"2025-12-04 18:02:38.85181\",\"2025-12-04 18:04:49.315127\",\"2025-12-04 18:06:39.897572\",\"2025-12-04 18:12:22.190446\",\"2025-12-04 18:35:05.847039\",\"2025-12-04 18:45:00.750636\",\"2025-12-04 18:49:47.65575\",\"2025-12-04 18:53:11.473322\",\"2025-12-04 19:07:54.569608\",\"2025-12-04 19:09:35.253468\",\"2025-12-04 19:21:01.675226\",\"2025-12-04 19:41:29.001706\",\"2025-12-04 19:46:37.020107\",\"2025-12-04 19:54:51.300275\",\"2025-12-04 19:59:42.586115\",\"2025-12-04 20:56:33.719681\",\"2025-12-04 21:31:07.612596\",\"2025-12-04 21:49:13.973066\",\"2025-12-04 21:50:52.784071\",\"2025-12-04 21:54:53.518269\",\"2025-12-04 22:07:22.967896\",\"2025-12-05 01:57:05.540445\",\"2025-12-07 23:30:46.742306\",\"2025-12-08 20:12:54.449332\",\"2025-12-08 20:36:28.484733\",\"2025-12-08 20:48:42.941383\",\"2025-12-08 20:55:03.249955\",\"2025-12-08 20:55:14.414443\",\"2025-12-08 21:38:14.029844\",\"2025-12-09 10:41:39.01794\",\"2025-12-09 10:41:46.339994\"}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "custom_fields",
-        "n_distinct": 1,
-        "most_common_vals": "{\"{}\"}",
-        "most_common_freqs": [
-          1
-        ],
-        "histogram_bounds": null
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "holding_id",
-        "n_distinct": 4,
-        "most_common_vals": "{f6e3cb81-8b4a-451e-8402-573e47688d45,05583c6e-9364-4672-a610-0744324e44b4,5652e95e-bb99-48f5-aa1c-13c8c2638fc6,cac331f5-d521-4c44-bf7c-76351d8c54f5}",
-        "most_common_freqs": [
-          0.420455,
-          0.289773,
-          0.278409,
-          0.0113636
-        ],
-        "histogram_bounds": null
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "id",
-        "n_distinct": -1,
-        "most_common_vals": null,
-        "most_common_freqs": null,
-        "histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,02ee06e5-87bd-42a2-a482-3c7642b109fd,04074b7e-7e01-4d86-bc2d-6edaa85ae682,07cd114a-dce0-429b-b9e2-527fb1f9f864,09b38716-d134-493a-9bce-272fdd2a69e1,0a3c1c39-cbda-4fdf-88b6-5b5e6690956e,0e1dee80-33d6-4451-bb1b-e5ef42359dfa,10faba92-bb74-485c-963d-d960be1d28da,139f2e4c-9b7e-40d8-b268-781b70e2fab5,14462043-714b-41b7-82f3-11eb903972fb,1524d607-2820-4f6c-91b5-c90c2d04cad4,1b2d296c-cecc-42d2-a5f0-0e73248d7e03,1be3e821-c04d-435e-ad72-377c6d7f9452,1eafa270-b3a4-44df-9130-00ad8218afe1,23841ef2-6468-463d-8822-68c8f4c79ca7,2445f9ba-12a8-482a-a89d-613d0872600a,260f0337-9bb2-427c-b794-2abf4aa97d08,2674bb3b-da48-4c04-9388-6db0144ae183,2a1a2950-dbb5-4484-8822-e6a07c665aad,30d332aa-eaec-4def-871a-300de7c80c8b,3355e916-44e9-4844-a45a-9227b616816f,3372c307-8596-4a85-ba81-0034278617d9,390c0183-6e59-4d41-b9c3-07e959ed39e1,3aafc46b-cb84-4f66-a6e0-d66638912266,3bacb018-d70f-47e6-8ca5-f0fe236c7215,3d923e88-2211-4124-b1fe-eab3c330197c,3e798349-2350-4496-8f68-367a59768d1d,3f1865ca-3f21-44ea-a093-775eb1f931bf,3fa1dad2-f2a1-4fad-8b95-1b48c6b71a1c,40b9c77b-e9d3-41d2-98d8-271b5546cf62,435d9e62-fd48-4a3c-8365-f11c51e59476,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,4aa9b936-b6e3-43cd-85e1-e3553eca9bd1,4ac557a7-69fd-4c7e-9e28-de67c7aec3cb,4f0a7786-afe0-46a3-8265-709db1563fda,50ca9ce9-cf98-4b92-8c73-65a1785423d0,57186d7a-957e-4e8f-9e89-4bc3428fc175,59143631-f806-40fb-8c67-9efd30f6129e,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,6420a093-c5e5-4cd6-9dc9-5b0488aa5d53,666cfedb-74ca-4679-afbf-cf5ed3e54552,666e267c-d9a1-4c5e-9b4f-60df1ce27747,676722c7-6703-4d09-b746-ac7dd8780d8d,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6c909166-e266-4763-b1ee-96e0546e6f97,6cc7dc7d-2cd2-41e0-a5d9-7aca7f8380a8,6dcd3438-5ea5-4161-a10c-9852dc814e29,6fab6733-38d4-47b0-8ecf-11fec61c6d37,76480116-f385-4d2a-bfe6-286fea653c7d,7892d809-afac-4973-8d68-a6cf8636c049,79979b33-b150-415d-9d38-d9f4d2787d54,7b06a5ff-98b6-4c27-91d0-cbdf98124cab,7cc8080b-c3e3-4fd2-bdbf-25bb79b4aba4,80383247-846b-410b-b751-e288e52e07df,8368ee33-f1ac-4425-8310-2e884cb90099,84271d34-05fb-4e14-a0df-2694a3a40899,850b65b3-09e3-497f-9b07-0c8c27bad4d0,867f7e4f-c679-42f1-872f-0d4f7c63e8bb,8b3ecffc-7d2a-4cba-b255-e77fdff9be39,8e1f2459-01e3-456e-83f2-955b08d9c870,95bc4274-baba-4975-825a-d25d033ad307,96e48842-e01a-4e28-883d-bfd76c084963,9a11f270-5647-4ac8-8bd5-186d25fc7f98,9bd18f6e-176d-42eb-a203-74a22821e912,9ee538f7-3a43-4627-b4ae-875e6eb33d28,9eeee9db-2dd8-4653-bb76-1a56cbad01e4,9fc68dc3-51aa-4055-89d0-9d9b04497e27,a09032a6-38a4-4472-a33f-f83451aa9010,a7387cd5-a9b1-421f-ae2d-6afe28b261c6,a7becf99-e339-4c9e-9c53-11ad4f60ac1e,b08eb37c-d74e-4737-a73d-a9edd58c579a,b7114aca-293b-4eca-b2e5-0a6c305621fb,bb42e567-e4c7-4d39-b657-fc733211175e,bb767351-2669-4a66-8c37-568c825c088f,bc7ef056-9ea7-4c9c-bd15-a8c0911a5239,bda23a94-ca1d-4c75-aca2-a4a5d53d8021,c256f804-2ee7-423d-92f5-8b4e1b7bc9e9,c2864529-284e-45ba-abc3-eaae08ebd7bc,c2bfa311-fa8f-4f85-a6bb-c43410eda2b3,ca1865cc-800e-4100-ba14-dd82abadccdd,ca9ca625-9c66-4d8e-8df9-5c86a7ba0b25,cd47eafe-f465-41d3-9b90-5efac70ba045,cf5464ec-adb6-47a7-93fa-72a714264da6,cfb92b12-8d38-48ec-af50-85cb65a54005,d270a9fc-8d64-4742-a3e6-8e4852af6633,d65eb3d6-a373-428a-9761-56982fe0c6d9,d8fd3938-4f5b-47a8-947a-cb86286e0361,d9b69de7-de46-458b-9fbe-b929a590b454,dad9dc79-78d1-4fef-a706-bed9fe8d3c0b,db6ec304-5dd4-457a-a3a7-8ea485593013,dbd63b05-47b5-4277-8dcc-71d59c57d81c,df62ef04-4d88-4b93-87a2-4d7a66105c70,e074793f-7cc7-4c87-86f3-9067b34612ee,e1504627-a989-41a1-9ddc-59fc93a8cb23,e5b79ea5-5efd-475b-86a7-6e0462788cfc,ece59c18-9872-4c17-8abf-1d0b1f7921b7,f64596d4-5bcf-4b9c-82e1-85f784dc8121,f6512989-7695-47e1-9e70-928bc2e4ea28,fc6aa054-edcb-4c91-a4e1-3e71cb0ac9af,fd1d2d7a-a867-4a0d-ab25-99b1f50084d4,ff1573fc-661d-4d0a-b7d1-e648513688c3}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "industry",
-        "n_distinct": 13,
-        "most_common_vals": "{Educativa,Transporte,E-Commerce,Retail,Tecnología,\"Consumo Masivo\",Energia,Manufactura}",
-        "most_common_freqs": [
-          0.420455,
-          0.0340909,
-          0.0227273,
-          0.0170455,
-          0.0170455,
-          0.0113636,
-          0.0113636,
-          0.0113636
-        ],
-        "histogram_bounds": "{\"Food & Beverage\",\"food & beverages\",Salud,Shipping,Transportation}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "market",
-        "n_distinct": 6,
-        "most_common_vals": "{Latam,Internacional}",
-        "most_common_freqs": [
-          0.409091,
-          0.0340909
-        ],
-        "histogram_bounds": "{\"Latam norte\",Mixto,ROW,US}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "name_commercial",
-        "n_distinct": -0.977273,
-        "most_common_vals": "{Natura,SENDBOX,\"Zenbody Ortopedicos\"}",
-        "most_common_freqs": [
-          0.0170455,
-          0.0113636,
-          0.0113636
-        ],
-        "histogram_bounds": "{\"ACME Inc\",ADEK,\"AFE SERVICE SAC\",\"ALCO - EL Machetazo - PA\",\"Alfa comercial\",\"Alinova Chile SPA\",Antalis,\"Antrofer SC\",\"Arca Continental MX\",\"ASOCIACIÓN COLOMBIANA DE INSTITUCIONES DE EDUCACIÓN SUPERIOR CON FORMACIÓN TÉCNICA PROFESIONAL TECNOLÓGICA Y UNIVERSITARIA\",AVON,BAT,\"Brightcell Chile\",\"Bright Inc\",\"Cabify Argentina\",\"Centro de Formación Técnica La Araucanía\",CGE,Chilexpress,\"Cliente Prueba Proformas\",\"Coca Cola Paresa\",\"Colegio Mayor Nuestra Señora del Rosario\",\"Corporación Santo Tomás\",\"Corporación Unificada Nacional de Educación Superior\",\"Correos de Chile\",\"Disal - CHILE\",\"Distribuidora JF /JF Automotriz\",\"Distribuidora saro\",ECOMAS,\"EDEC Universidad\",E-deliver,Falabella,FerreAceros,\"Fundación Universitaria CEIPA\",\"Global Alimentos\",GLOBALSHIP,GOLOMAX,\"Grupo Vecar\",\"IMPORTADORA Y EXPORTADORA LOS CHOLITOS LIMITADA\",\"INPOST ESPAÑA\",\"Instituto Tecnológico de Buenos Aires\",\"Inversiones Educa S.A. \",JMI,Koandina,\"LICORES TIPICOS MEXICANOS\",\"LinoSHOPp CR\",\"Liverpool General\",LOOMIS,\"Luthor Corp.\",\"Mongroup EIRL\",Nutraline,PACKSYS,PASAR.NET,Petco,PF,\"Plastivill S.A.\",PLUSPETROL,\"Pontificia Universidad Católica del Perú\",Proconsumo,\"Puerta a Puerta Spa\",\"Red Univercom SC\",\"SALAV ROSHFRAN\",\"San Fernando\",Skynet,\"Stark Global\",\"TASA LOGISTICA\",\"Transportes Sustentable\",Tusán,\"Ultra Finishing\",\"Unilever Middle Americas\",UNIMINUTO,\"Universidad Americana UAM\",\"Universidad Anáhuac México Norte\",\"Universidad Anáhuac Puebla\",\"Universidad Autónoma de Bucaramanga\",\"Universidad Central Colombia\",\"Universidad Continental S.A.C.\",\"Universidad Cooperativa de Colombia\",\"Universidad de Ciencias Aplicadas y Ambientales\",\"Universidad de Ingeniería y Tecnología\",\"Universidad de la Sabana\",\"Universidad del Desarrollo\",\"Universidad de los Andes\",\"Universidad de Los Lagos\",\"Universidad del Sinu\",\"Universidad del Valle de Guatemala\",\"Universidad del Valle de México\",\"Universidad de Viña del Mar\",\"Universidades Insurgentes\",\"Universidad Ibague\",\"Universidad Mayor\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Peruana Cayetano Heredia\",\"Universidad Pontificia Bolivariana \",\"Universidad Privada de la Península\",\"Universidad Regional del Sureste\",\"Universidad Simón Bolivar\",\"Universidad Técnica Federico Santa María\",UTEC-TECSUP,Walmart,\"Zorro Abarrotero\"}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "notes",
-        "n_distinct": 8,
-        "most_common_vals": "{Top40,\"\"}",
-        "most_common_freqs": [
-          0.232955,
-          0.0170455
-        ],
-        "histogram_bounds": "{\"Cliente 2\",\"Cliente prueba 1\",\"Creado desde Salesforce Account 001RO00000ZvDafYAF\",P2,P3,\"Test post merga 19-nov\"}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "portal_enabled",
-        "n_distinct": 1,
-        "most_common_vals": "{f}",
-        "most_common_freqs": [
-          1
-        ],
-        "histogram_bounds": null
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "salesforce_account_id",
-        "n_distinct": -0.0511364,
-        "most_common_vals": null,
-        "most_common_freqs": null,
-        "histogram_bounds": "{0015w00002iC4VIAA0,0015w00002run8uAAA,0015w00002sNQJ7AAO,001RO00000boIinYAE,001RO00000dhY9eYAE,001RO00000dyyhKYAQ,001RO00000OOxQyYAL,001RO00000YqckCYAR,001RO00000ZHW4NYAX}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "segment",
-        "n_distinct": 11,
-        "most_common_vals": "{\"Tier 2\",Medium,Plus,Premium,Enterprise,Small,Corporate,Mid-Market}",
-        "most_common_freqs": [
-          0.414773,
-          0.130682,
-          0.0568182,
-          0.0454545,
-          0.0227273,
-          0.0227273,
-          0.0170455,
-          0.0113636
-        ],
-        "histogram_bounds": "{Startup,SuperCorporate,\"Tier 1\"}"
-      },
-      {
-        "schemaname": "public",
-        "tablename": "clients",
-        "attname": "status",
-        "n_distinct": 1,
-        "most_common_vals": "{Activo}",
-        "most_common_freqs": [
-          1
-        ],
-        "histogram_bounds": null
-      }
-    ],
-    "size_info": {
-      "total_size": "192 kB",
-      "table_size": "32 kB",
-      "indexes_size": "160 kB"
-    },
-    "permissions": [
-      {
-        "grantee": "anon",
-        "privilege_type": "DELETE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "INSERT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "REFERENCES",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "SELECT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "TRIGGER",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "TRUNCATE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "anon",
-        "privilege_type": "UPDATE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "DELETE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "INSERT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "REFERENCES",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "SELECT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "TRIGGER",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "TRUNCATE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "authenticated",
-        "privilege_type": "UPDATE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "DELETE",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "INSERT",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "REFERENCES",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "SELECT",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "TRIGGER",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "TRUNCATE",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "postgres",
-        "privilege_type": "UPDATE",
-        "is_grantable": "YES"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "DELETE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "INSERT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "REFERENCES",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "SELECT",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "TRIGGER",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "TRUNCATE",
-        "is_grantable": "NO"
-      },
-      {
-        "grantee": "service_role",
-        "privilege_type": "UPDATE",
-        "is_grantable": "NO"
-      }
-    ],
-    "analysis_timestamp": "2026-01-20T07:20:50.816Z"
+		"table_name": "clients",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "name_commercial",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "segment",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "industry",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "market",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "status",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'Activo'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "portal_enabled",
+				"data_type": "boolean",
+				"is_nullable": "YES",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_since",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "notes",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp without time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "country",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_number",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "custom_fields",
+				"data_type": "jsonb",
+				"is_nullable": "YES",
+				"column_default": "'{}'::jsonb",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "salesforce_account_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "clients_pkey",
+				"index_definition": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_clients_client_number",
+				"index_definition": "CREATE INDEX idx_clients_client_number ON public.clients USING btree (client_number)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_clients_custom_fields",
+				"index_definition": "CREATE INDEX idx_clients_custom_fields ON public.clients USING gin (custom_fields)",
+				"index_type": "gin",
+				"is_unique": "NO",
+				"index_size": "24 kB"
+			},
+			{
+				"index_name": "idx_clients_holding_id",
+				"index_definition": "CREATE INDEX idx_clients_holding_id ON public.clients USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_clients_salesforce_account_id",
+				"index_definition": "CREATE INDEX idx_clients_salesforce_account_id ON public.clients USING btree (salesforce_account_id) WHERE (salesforce_account_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "idx_clients_salesforce_account_unique",
+				"index_definition": "CREATE UNIQUE INDEX idx_clients_salesforce_account_unique ON public.clients USING btree (salesforce_account_id, holding_id) WHERE (salesforce_account_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "clients_holding_id_fkey",
+				"table_name": "clients",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "clients_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"policyname": "clients_delete_access",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"policyname": "clients_holding_isolation",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"policyname": "clients_update_access",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))",
+				"with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"policyname": "clients_write_access",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "client_number",
+				"n_distinct": -0.5,
+				"most_common_vals": "{001RO00000OGBsvYAH,0015w00002Ar1eEAAR,0015w00002sNQJ7AAO,001RO00000YqckCYAR}",
+				"most_common_freqs": [0.0170455, 0.0113636, 0.0113636, 0.0113636],
+				"histogram_bounds": "{0015w00002AnfMkAAJ,0015w00002DlESxAAN,0015w00002DlEUTAA3,0015w00002DlEUvAAN,0015w00002DlEVCAA3,0015w00002DlEXgAAN,0015w00002DlEXYAA3,0015w00002DlEYNAA3,0015w00002DlEYuAAN,0015w00002EB9XbAAL,0015w00002fqXuXAAU,0015w00002g8gGoAAI,0015w00002gYyQuAAK,0015w00002h1nhpAAA,0015w00002h1tWgAAI,0015w00002hnKvyAAE,0015w00002iB99BAAS,0015w00002iC4VIAA0,0015w00002ifn6XAAQ,0015w00002J1NQAAA3,0015w00002jvjVoAAI,0015w00002lZ1JgAAK,0015w00002m30XTAAY,0015w00002MeqiJAAR,0015w00002mn8qbAAA,0015w00002n40w6AAA,0015w00002NAz6RAAT,0015w00002NSzhCAAT,0015w00002NSzNpAAL,0015w00002NUYe5AAH,0015w00002ogPw6AAE,0015w00002OXL6KAAX,0015w00002P83uaAAB,0015w00002P8CPfAAN,0015w00002pOLqbAAG,0015w00002qdfnEAAQ,0015w00002qlibhAAA,0015w00002QyC52AAF,0015w00002r8JEDAA2,0015w00002r9NGeAAM,0015w00002run8uAAA,0015w00002sc9PcAAI,0015w00002SSENpAAP,0015w00002sxuzFAAQ,0015w00002T6MaLAAV,0015w00002T6RHrAAN,0015w00002T6RK2AAN,0015w00002T6RKAAA3,0015w00002T6RMdAAN,0015w00002T6RN1AAN,0015w00002T6RNnAAN,0015w00002TwMVVAA3,0015w00002TXDfsAAH,0015w00002UEzUNAA1,0015w00002V003vAAB,0015w00002XEodEAAT,0015w00002ZJ83oAAD,0015w00002ZMAcdAAH,001RO0000028CfZYAU,001RO00000boIinYAE,001RO00000chKVSYA2,001RO00000cr3tHYAQ,001RO00000dhY9eYAE,001RO00000dsON6YAM,001RO00000dyyhKYAQ,001RO00000F51kRYAR,001RO00000fLNi3YAG,001RO00000foCheYAE,001RO00000fzXGKYA2,001RO00000gEBTFYA4,001RO00000IfmhTYAR,001RO00000J7OqgYAF,001RO00000KelRKYAZ,001RO00000O3MavYAF,001RO00000OOxQyYAL,001RO00000QP5aDYAT,001RO00000QYRQGYA5,001RO00000Rd8HZYAZ,001RO00000RhBdVYAV,001RO00000RHDsZYAX,001RO00000SCpcwYAD,001RO00000SVoWfYAL,001RO00000ZHW4NYAX,001RO00000ZM3mJYAT}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "client_since",
+				"n_distinct": 4,
+				"most_common_vals": "{2025-01-01,2025-07-01}",
+				"most_common_freqs": [0.0113636, 0.0113636],
+				"histogram_bounds": "{2024-01-01,2024-01-24}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "country",
+				"n_distinct": -0.159091,
+				"most_common_vals": "{Chile,Colombia,Perú,México,Mexico,Argentina,Peru,\"MULTI PAIS\",Ecuador,España,\"Estados Unidos\",Guatemala,Panama}",
+				"most_common_freqs": [
+					0.153409, 0.113636, 0.0909091, 0.0795455, 0.0511364, 0.0284091, 0.0284091, 0.0227273, 0.0170455, 0.0170455, 0.0170455, 0.0170455,
+					0.0113636
+				],
+				"histogram_bounds": "{Alemania,Brasil,Canadá,CL,\"Costa Rica\",El Salvador,\"Emiratos Arabes\",Honduras,MX,Nicaragua,Paraguay,\"Puerto Rico\",\"Reino Unido\",\"Republica Dominicana\",Uruguay}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "created_at",
+				"n_distinct": -0.363636,
+				"most_common_vals": "{\"2025-08-18 14:05:58.400368\",\"2025-11-03 11:46:32.57344\"}",
+				"most_common_freqs": [0.414773, 0.232955],
+				"histogram_bounds": "{\"2025-06-27 17:30:07.932866\",\"2025-07-25 15:58:42.973833\",\"2025-07-28 22:51:01.920939\",\"2025-07-28 22:58:12.831986\",\"2025-07-29 20:20:19.452308\",\"2025-07-29 20:29:57.391119\",\"2025-08-19 14:42:04.599412\",\"2025-10-06 02:09:41.17481\",\"2025-11-19 17:47:54.265123\",\"2025-11-27 22:37:40.176937\",\"2025-11-27 22:39:14.323463\",\"2025-11-27 23:09:56.556476\",\"2025-11-28 00:19:11.083836\",\"2025-11-28 00:19:12.99484\",\"2025-11-28 00:40:20.196649\",\"2025-11-28 01:05:27.71905\",\"2025-11-28 01:05:29.550525\",\"2025-11-28 01:42:12.567172\",\"2025-11-28 01:46:42.688895\",\"2025-11-28 01:51:29.427552\",\"2025-11-28 22:42:56.030508\",\"2025-12-02 15:26:43.844081\",\"2025-12-02 15:29:14.181347\",\"2025-12-02 17:35:48.355677\",\"2025-12-04 14:55:24.665212\",\"2025-12-04 14:57:09.339075\",\"2025-12-04 14:57:44.788083\",\"2025-12-04 15:00:22.597476\",\"2025-12-04 15:01:11.901001\",\"2025-12-04 17:56:08.722606\",\"2025-12-04 18:00:18.984415\",\"2025-12-04 18:02:38.85181\",\"2025-12-04 18:04:49.315127\",\"2025-12-04 18:06:39.897572\",\"2025-12-04 18:12:22.190446\",\"2025-12-04 18:35:05.847039\",\"2025-12-04 18:45:00.750636\",\"2025-12-04 18:49:47.65575\",\"2025-12-04 18:53:11.473322\",\"2025-12-04 19:07:54.569608\",\"2025-12-04 19:09:35.253468\",\"2025-12-04 19:21:01.675226\",\"2025-12-04 19:41:29.001706\",\"2025-12-04 19:46:37.020107\",\"2025-12-04 19:54:51.300275\",\"2025-12-04 19:59:42.586115\",\"2025-12-04 20:56:33.719681\",\"2025-12-04 21:31:07.612596\",\"2025-12-04 21:49:13.973066\",\"2025-12-04 21:50:52.784071\",\"2025-12-04 21:54:53.518269\",\"2025-12-04 22:07:22.967896\",\"2025-12-05 01:57:05.540445\",\"2025-12-07 23:30:46.742306\",\"2025-12-08 20:12:54.449332\",\"2025-12-08 20:36:28.484733\",\"2025-12-08 20:48:42.941383\",\"2025-12-08 20:55:03.249955\",\"2025-12-08 20:55:14.414443\",\"2025-12-08 21:38:14.029844\",\"2025-12-09 10:41:39.01794\",\"2025-12-09 10:41:46.339994\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "custom_fields",
+				"n_distinct": 1,
+				"most_common_vals": "{\"{}\"}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "holding_id",
+				"n_distinct": 4,
+				"most_common_vals": "{f6e3cb81-8b4a-451e-8402-573e47688d45,05583c6e-9364-4672-a610-0744324e44b4,5652e95e-bb99-48f5-aa1c-13c8c2638fc6,cac331f5-d521-4c44-bf7c-76351d8c54f5}",
+				"most_common_freqs": [0.420455, 0.289773, 0.278409, 0.0113636],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,02ee06e5-87bd-42a2-a482-3c7642b109fd,04074b7e-7e01-4d86-bc2d-6edaa85ae682,07cd114a-dce0-429b-b9e2-527fb1f9f864,09b38716-d134-493a-9bce-272fdd2a69e1,0a3c1c39-cbda-4fdf-88b6-5b5e6690956e,0e1dee80-33d6-4451-bb1b-e5ef42359dfa,10faba92-bb74-485c-963d-d960be1d28da,139f2e4c-9b7e-40d8-b268-781b70e2fab5,14462043-714b-41b7-82f3-11eb903972fb,1524d607-2820-4f6c-91b5-c90c2d04cad4,1b2d296c-cecc-42d2-a5f0-0e73248d7e03,1be3e821-c04d-435e-ad72-377c6d7f9452,1eafa270-b3a4-44df-9130-00ad8218afe1,23841ef2-6468-463d-8822-68c8f4c79ca7,2445f9ba-12a8-482a-a89d-613d0872600a,260f0337-9bb2-427c-b794-2abf4aa97d08,2674bb3b-da48-4c04-9388-6db0144ae183,2a1a2950-dbb5-4484-8822-e6a07c665aad,30d332aa-eaec-4def-871a-300de7c80c8b,3355e916-44e9-4844-a45a-9227b616816f,3372c307-8596-4a85-ba81-0034278617d9,390c0183-6e59-4d41-b9c3-07e959ed39e1,3aafc46b-cb84-4f66-a6e0-d66638912266,3bacb018-d70f-47e6-8ca5-f0fe236c7215,3d923e88-2211-4124-b1fe-eab3c330197c,3e798349-2350-4496-8f68-367a59768d1d,3f1865ca-3f21-44ea-a093-775eb1f931bf,3fa1dad2-f2a1-4fad-8b95-1b48c6b71a1c,40b9c77b-e9d3-41d2-98d8-271b5546cf62,435d9e62-fd48-4a3c-8365-f11c51e59476,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,4aa9b936-b6e3-43cd-85e1-e3553eca9bd1,4ac557a7-69fd-4c7e-9e28-de67c7aec3cb,4f0a7786-afe0-46a3-8265-709db1563fda,50ca9ce9-cf98-4b92-8c73-65a1785423d0,57186d7a-957e-4e8f-9e89-4bc3428fc175,59143631-f806-40fb-8c67-9efd30f6129e,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,6420a093-c5e5-4cd6-9dc9-5b0488aa5d53,666cfedb-74ca-4679-afbf-cf5ed3e54552,666e267c-d9a1-4c5e-9b4f-60df1ce27747,676722c7-6703-4d09-b746-ac7dd8780d8d,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6c909166-e266-4763-b1ee-96e0546e6f97,6cc7dc7d-2cd2-41e0-a5d9-7aca7f8380a8,6dcd3438-5ea5-4161-a10c-9852dc814e29,6fab6733-38d4-47b0-8ecf-11fec61c6d37,76480116-f385-4d2a-bfe6-286fea653c7d,7892d809-afac-4973-8d68-a6cf8636c049,79979b33-b150-415d-9d38-d9f4d2787d54,7b06a5ff-98b6-4c27-91d0-cbdf98124cab,7cc8080b-c3e3-4fd2-bdbf-25bb79b4aba4,80383247-846b-410b-b751-e288e52e07df,8368ee33-f1ac-4425-8310-2e884cb90099,84271d34-05fb-4e14-a0df-2694a3a40899,850b65b3-09e3-497f-9b07-0c8c27bad4d0,867f7e4f-c679-42f1-872f-0d4f7c63e8bb,8b3ecffc-7d2a-4cba-b255-e77fdff9be39,8e1f2459-01e3-456e-83f2-955b08d9c870,95bc4274-baba-4975-825a-d25d033ad307,96e48842-e01a-4e28-883d-bfd76c084963,9a11f270-5647-4ac8-8bd5-186d25fc7f98,9bd18f6e-176d-42eb-a203-74a22821e912,9ee538f7-3a43-4627-b4ae-875e6eb33d28,9eeee9db-2dd8-4653-bb76-1a56cbad01e4,9fc68dc3-51aa-4055-89d0-9d9b04497e27,a09032a6-38a4-4472-a33f-f83451aa9010,a7387cd5-a9b1-421f-ae2d-6afe28b261c6,a7becf99-e339-4c9e-9c53-11ad4f60ac1e,b08eb37c-d74e-4737-a73d-a9edd58c579a,b7114aca-293b-4eca-b2e5-0a6c305621fb,bb42e567-e4c7-4d39-b657-fc733211175e,bb767351-2669-4a66-8c37-568c825c088f,bc7ef056-9ea7-4c9c-bd15-a8c0911a5239,bda23a94-ca1d-4c75-aca2-a4a5d53d8021,c256f804-2ee7-423d-92f5-8b4e1b7bc9e9,c2864529-284e-45ba-abc3-eaae08ebd7bc,c2bfa311-fa8f-4f85-a6bb-c43410eda2b3,ca1865cc-800e-4100-ba14-dd82abadccdd,ca9ca625-9c66-4d8e-8df9-5c86a7ba0b25,cd47eafe-f465-41d3-9b90-5efac70ba045,cf5464ec-adb6-47a7-93fa-72a714264da6,cfb92b12-8d38-48ec-af50-85cb65a54005,d270a9fc-8d64-4742-a3e6-8e4852af6633,d65eb3d6-a373-428a-9761-56982fe0c6d9,d8fd3938-4f5b-47a8-947a-cb86286e0361,d9b69de7-de46-458b-9fbe-b929a590b454,dad9dc79-78d1-4fef-a706-bed9fe8d3c0b,db6ec304-5dd4-457a-a3a7-8ea485593013,dbd63b05-47b5-4277-8dcc-71d59c57d81c,df62ef04-4d88-4b93-87a2-4d7a66105c70,e074793f-7cc7-4c87-86f3-9067b34612ee,e1504627-a989-41a1-9ddc-59fc93a8cb23,e5b79ea5-5efd-475b-86a7-6e0462788cfc,ece59c18-9872-4c17-8abf-1d0b1f7921b7,f64596d4-5bcf-4b9c-82e1-85f784dc8121,f6512989-7695-47e1-9e70-928bc2e4ea28,fc6aa054-edcb-4c91-a4e1-3e71cb0ac9af,fd1d2d7a-a867-4a0d-ab25-99b1f50084d4,ff1573fc-661d-4d0a-b7d1-e648513688c3}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "industry",
+				"n_distinct": 13,
+				"most_common_vals": "{Educativa,Transporte,E-Commerce,Retail,Tecnología,\"Consumo Masivo\",Energia,Manufactura}",
+				"most_common_freqs": [0.420455, 0.0340909, 0.0227273, 0.0170455, 0.0170455, 0.0113636, 0.0113636, 0.0113636],
+				"histogram_bounds": "{\"Food & Beverage\",\"food & beverages\",Salud,Shipping,Transportation}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "market",
+				"n_distinct": 6,
+				"most_common_vals": "{Latam,Internacional}",
+				"most_common_freqs": [0.409091, 0.0340909],
+				"histogram_bounds": "{\"Latam norte\",Mixto,ROW,US}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "name_commercial",
+				"n_distinct": -0.977273,
+				"most_common_vals": "{Natura,SENDBOX,\"Zenbody Ortopedicos\"}",
+				"most_common_freqs": [0.0170455, 0.0113636, 0.0113636],
+				"histogram_bounds": "{\"ACME Inc\",ADEK,\"AFE SERVICE SAC\",\"ALCO - EL Machetazo - PA\",\"Alfa comercial\",\"Alinova Chile SPA\",Antalis,\"Antrofer SC\",\"Arca Continental MX\",\"ASOCIACIÓN COLOMBIANA DE INSTITUCIONES DE EDUCACIÓN SUPERIOR CON FORMACIÓN TÉCNICA PROFESIONAL TECNOLÓGICA Y UNIVERSITARIA\",AVON,BAT,\"Brightcell Chile\",\"Bright Inc\",\"Cabify Argentina\",\"Centro de Formación Técnica La Araucanía\",CGE,Chilexpress,\"Cliente Prueba Proformas\",\"Coca Cola Paresa\",\"Colegio Mayor Nuestra Señora del Rosario\",\"Corporación Santo Tomás\",\"Corporación Unificada Nacional de Educación Superior\",\"Correos de Chile\",\"Disal - CHILE\",\"Distribuidora JF /JF Automotriz\",\"Distribuidora saro\",ECOMAS,\"EDEC Universidad\",E-deliver,Falabella,FerreAceros,\"Fundación Universitaria CEIPA\",\"Global Alimentos\",GLOBALSHIP,GOLOMAX,\"Grupo Vecar\",\"IMPORTADORA Y EXPORTADORA LOS CHOLITOS LIMITADA\",\"INPOST ESPAÑA\",\"Instituto Tecnológico de Buenos Aires\",\"Inversiones Educa S.A. \",JMI,Koandina,\"LICORES TIPICOS MEXICANOS\",\"LinoSHOPp CR\",\"Liverpool General\",LOOMIS,\"Luthor Corp.\",\"Mongroup EIRL\",Nutraline,PACKSYS,PASAR.NET,Petco,PF,\"Plastivill S.A.\",PLUSPETROL,\"Pontificia Universidad Católica del Perú\",Proconsumo,\"Puerta a Puerta Spa\",\"Red Univercom SC\",\"SALAV ROSHFRAN\",\"San Fernando\",Skynet,\"Stark Global\",\"TASA LOGISTICA\",\"Transportes Sustentable\",Tusán,\"Ultra Finishing\",\"Unilever Middle Americas\",UNIMINUTO,\"Universidad Americana UAM\",\"Universidad Anáhuac México Norte\",\"Universidad Anáhuac Puebla\",\"Universidad Autónoma de Bucaramanga\",\"Universidad Central Colombia\",\"Universidad Continental S.A.C.\",\"Universidad Cooperativa de Colombia\",\"Universidad de Ciencias Aplicadas y Ambientales\",\"Universidad de Ingeniería y Tecnología\",\"Universidad de la Sabana\",\"Universidad del Desarrollo\",\"Universidad de los Andes\",\"Universidad de Los Lagos\",\"Universidad del Sinu\",\"Universidad del Valle de Guatemala\",\"Universidad del Valle de México\",\"Universidad de Viña del Mar\",\"Universidades Insurgentes\",\"Universidad Ibague\",\"Universidad Mayor\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Peruana Cayetano Heredia\",\"Universidad Pontificia Bolivariana \",\"Universidad Privada de la Península\",\"Universidad Regional del Sureste\",\"Universidad Simón Bolivar\",\"Universidad Técnica Federico Santa María\",UTEC-TECSUP,Walmart,\"Zorro Abarrotero\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "notes",
+				"n_distinct": 8,
+				"most_common_vals": "{Top40,\"\"}",
+				"most_common_freqs": [0.232955, 0.0170455],
+				"histogram_bounds": "{\"Cliente 2\",\"Cliente prueba 1\",\"Creado desde Salesforce Account 001RO00000ZvDafYAF\",P2,P3,\"Test post merga 19-nov\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "portal_enabled",
+				"n_distinct": 1,
+				"most_common_vals": "{f}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "salesforce_account_id",
+				"n_distinct": -0.0511364,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{0015w00002iC4VIAA0,0015w00002run8uAAA,0015w00002sNQJ7AAO,001RO00000boIinYAE,001RO00000dhY9eYAE,001RO00000dyyhKYAQ,001RO00000OOxQyYAL,001RO00000YqckCYAR,001RO00000ZHW4NYAX}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "segment",
+				"n_distinct": 11,
+				"most_common_vals": "{\"Tier 2\",Medium,Plus,Premium,Enterprise,Small,Corporate,Mid-Market}",
+				"most_common_freqs": [0.414773, 0.130682, 0.0568182, 0.0454545, 0.0227273, 0.0227273, 0.0170455, 0.0113636],
+				"histogram_bounds": "{Startup,SuperCorporate,\"Tier 1\"}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "clients",
+				"attname": "status",
+				"n_distinct": 1,
+				"most_common_vals": "{Activo}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "192 kB",
+			"table_size": "32 kB",
+			"indexes_size": "160 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-03T11:12:40.104Z"
   }
 }
