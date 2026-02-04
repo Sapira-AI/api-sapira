@@ -7,10 +7,13 @@ import {
 	CountRecordsDTO,
 	CountRecordsResponseDTO,
 	GetCompaniesResponseDTO,
+	GetFieldMappingResponseDTO,
 	GetProductsDTO,
 	JobStatusResponseDTO,
 	MapCompaniesDTO,
 	MapCompaniesResponseDTO,
+	SaveFieldMappingDTO,
+	SaveFieldMappingResponseDTO,
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
 } from './dtos/odoo.dto';
@@ -223,6 +226,56 @@ export class OdooController {
 	@ApiBadRequestResponse({ description: 'Error al clasificar facturas' })
 	async classifyInvoices(@Headers('x-holding-id') holdingId: string) {
 		return await this.odooService.classifyInvoices(holdingId);
+	}
+
+	@Post('field-mappings')
+	@ApiOperation({
+		summary: 'Guardar configuración de mapeo de campos',
+		description: 'Guarda o actualiza la configuración de mapeo de campos entre Odoo y Sapira para el holding actual',
+	})
+	@ApiBody({ type: SaveFieldMappingDTO })
+	@ApiOkResponse({
+		description: 'Mapeo guardado exitosamente',
+		type: SaveFieldMappingResponseDTO,
+	})
+	@ApiBadRequestResponse({ description: 'Error al guardar mapeo' })
+	async saveFieldMapping(
+		@Headers('x-holding-id') holdingId: string,
+		@Body() saveFieldMappingDto: SaveFieldMappingDTO
+	): Promise<SaveFieldMappingResponseDTO> {
+		return await this.odooService.saveFieldMapping(holdingId, saveFieldMappingDto);
+	}
+
+	@Get('field-mappings')
+	@ApiOperation({
+		summary: 'Obtener configuración de mapeo de campos',
+		description: 'Obtiene la configuración de mapeo de campos entre Odoo y Sapira para el holding actual',
+	})
+	@ApiQuery({
+		name: 'source_model',
+		type: String,
+		required: true,
+		description: 'Modelo origen en Odoo',
+		example: 'account.move',
+	})
+	@ApiQuery({
+		name: 'target_table',
+		type: String,
+		required: true,
+		description: 'Tabla destino en Sapira',
+		example: 'invoices_legacy',
+	})
+	@ApiOkResponse({
+		description: 'Mapeo obtenido exitosamente',
+		type: GetFieldMappingResponseDTO,
+	})
+	@ApiBadRequestResponse({ description: 'Error al obtener mapeo' })
+	async getFieldMapping(
+		@Headers('x-holding-id') holdingId: string,
+		@Query('source_model') sourceModel: string,
+		@Query('target_table') targetTable: string
+	): Promise<GetFieldMappingResponseDTO> {
+		return await this.odooService.getFieldMapping(holdingId, sourceModel, targetTable);
 	}
 
 	@Post('partners/clean-processed')

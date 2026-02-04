@@ -2261,6 +2261,135 @@ export class OdooService {
 	}
 
 	/**
+	 * Guarda o actualiza la configuración de mapeo de campos
+	 */
+	async saveFieldMapping(holdingId: string, saveFieldMappingDto: any): Promise<{ success: boolean; message: string; data?: any }> {
+		try {
+			console.log(`💾 Guardando mapeo de campos para holding: ${holdingId}`);
+
+			if (!holdingId) {
+				throw new Error('holding_id es requerido');
+			}
+
+			const { source_model, target_table, mapping_config } = saveFieldMappingDto;
+
+			if (!source_model || !target_table || !mapping_config) {
+				throw new Error('source_model, target_table y mapping_config son requeridos');
+			}
+
+			// Obtener el usuario actual desde el contexto
+			const { data: publicUser } = await this.clientEntitiesRepository
+				.createQueryBuilder('users')
+				.select('users.id')
+				.where('users.holding_id = :holdingId', { holdingId })
+				.limit(1)
+				.getRawOne();
+
+			const publicUserId = publicUser?.id || null;
+
+			// Buscar mapeo existente
+			const existingMapping = await this.integrationLogRepository.query(
+				`SELECT id FROM field_mappings 
+				 WHERE holding_id = $1 
+				 AND mapping_type = 'hierarchical'
+				 AND source_model = $2 
+				 AND target_table = $3
+				 AND is_active = true
+				 LIMIT 1`,
+				[holdingId, source_model, target_table]
+			);
+
+			let result;
+
+			if (existingMapping && existingMapping.length > 0) {
+				// Actualizar mapeo existente - REEMPLAZAR completamente el mapping_config
+				console.log(`🔄 Actualizando mapeo existente con ID: ${existingMapping[0].id}`);
+				result = await this.integrationLogRepository.query(
+					`UPDATE field_mappings 
+					 SET mapping_config = $1, updated_at = NOW()
+					 WHERE id = $2
+					 RETURNING *`,
+					[JSON.stringify(mapping_config), existingMapping[0].id]
+				);
+			} else {
+				// Crear nuevo mapeo
+				console.log(`➕ Creando nuevo mapeo`);
+				result = await this.integrationLogRepository.query(
+					`INSERT INTO field_mappings 
+					 (holding_id, mapping_type, source_model, target_table, mapping_config, created_by, is_active)
+					 VALUES ($1, 'hierarchical', $2, $3, $4, $5, true)
+					 RETURNING *`,
+					[holdingId, source_model, target_table, JSON.stringify(mapping_config), publicUserId]
+				);
+			}
+
+			console.log(`✅ Mapeo guardado exitosamente`);
+
+			// Parsear mapping_config si viene como string
+			const savedMapping = result[0];
+			if (savedMapping && typeof savedMapping.mapping_config === 'string') {
+				savedMapping.mapping_config = JSON.parse(savedMapping.mapping_config);
+			}
+
+			return {
+				success: true,
+				message: 'Mapeo guardado exitosamente',
+				data: savedMapping,
+			};
+		} catch (error) {
+			console.error('❌ Error guardando mapeo de campos:', error);
+			throw new Error(`Error al guardar mapeo de campos: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Obtiene la configuración de mapeo de campos
+	 */
+	async getFieldMapping(holdingId: string, sourceModel: string, targetTable: string): Promise<{ success: boolean; data?: any }> {
+		try {
+			console.log(`📚 Obteniendo mapeo de campos para holding: ${holdingId}`);
+
+			if (!holdingId) {
+				throw new Error('holding_id es requerido');
+			}
+
+			if (!sourceModel || !targetTable) {
+				throw new Error('source_model y target_table son requeridos');
+			}
+
+			const result = await this.integrationLogRepository.query(
+				`SELECT * FROM field_mappings 
+				 WHERE holding_id = $1 
+				 AND mapping_type = 'hierarchical'
+				 AND source_model = $2 
+				 AND target_table = $3
+				 AND is_active = true
+				 ORDER BY updated_at DESC
+				 LIMIT 1`,
+				[holdingId, sourceModel, targetTable]
+			);
+
+			if (!result || result.length === 0) {
+				console.log(`⚠️ No se encontró mapeo para los parámetros especificados`);
+				return {
+					success: true,
+					data: null,
+				};
+			}
+
+			console.log(`✅ Mapeo encontrado`);
+
+			return {
+				success: true,
+				data: result[0],
+			};
+		} catch (error) {
+			console.error('❌ Error obteniendo mapeo de campos:', error);
+			throw new Error(`Error al obtener mapeo de campos: ${error.message}`);
+		}
+	}
+
+	/**
 	 * Limpia registros procesados de la tabla staging
 	 */
 	async cleanProcessedPartners(holdingId: string): Promise<{ success: boolean; message: string; deleted_count: number }> {
