@@ -9,6 +9,8 @@ import {
 	GetCompaniesResponseDTO,
 	GetProductsDTO,
 	JobStatusResponseDTO,
+	MapCompaniesDTO,
+	MapCompaniesResponseDTO,
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
 } from './dtos/odoo.dto';
@@ -48,6 +50,45 @@ export class OdooController {
 	async getCompanies(@Query('connection_id') connectionId: string, @Query('holding_id') holdingId: string): Promise<GetCompaniesResponseDTO> {
 		const result = await this.odooService.getCompanies({ connection_id: connectionId, holding_id: holdingId });
 		return result as GetCompaniesResponseDTO;
+	}
+
+	@Post('companies/map')
+	@ApiOperation({
+		summary: 'Mapear compañías de Sapira con compañías de Odoo',
+		description: 'Asigna odoo_integration_id a las compañías de Sapira. Maneja correctamente duplicados reasignando automáticamente.',
+	})
+	@ApiBody({
+		type: MapCompaniesDTO,
+		required: true,
+		description: 'Datos de mapeo de compañías',
+		examples: {
+			'map-example': {
+				summary: 'Ejemplo de mapeo de compañías',
+				value: {
+					holding_id: '05583c6e-9364-4672-a610-0744324e44b4',
+					mappings: [
+						{
+							sapira_company_id: '4453fc7e-af8d-40f0-a65a-eda4cfa2f974',
+							odoo_company_id: 1,
+							tax_rate: 19,
+						},
+						{
+							sapira_company_id: '5c83a77b-325f-441b-b830-357210aa3178',
+							odoo_company_id: 2,
+							tax_rate: 18,
+						},
+					],
+				},
+			},
+		},
+	})
+	@ApiOkResponse({
+		type: MapCompaniesResponseDTO,
+		description: 'Mapeos actualizados exitosamente',
+	})
+	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
+	async mapCompanies(@Body() mapData: MapCompaniesDTO): Promise<MapCompaniesResponseDTO> {
+		return await this.odooService.mapCompanies(mapData);
 	}
 
 	@Get('products')
@@ -157,6 +198,31 @@ export class OdooController {
 	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
 	async syncInvoices(@Body() syncData: SyncInvoicesDTO): Promise<any> {
 		return await this.odooService.syncInvoices(syncData);
+	}
+
+	@Get('invoice-processing/classify')
+	@ApiOperation({
+		summary: 'Clasificar facturas en staging',
+		description:
+			'Clasifica las facturas en staging según si necesitan crearse, actualizarse o ya están procesadas. Se puede llamar múltiples veces para reclasificar después de cambios en el mapeo.',
+	})
+	@ApiOkResponse({
+		description: 'Clasificación completada exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				success: { type: 'boolean' },
+				to_create: { type: 'number', description: 'Facturas nuevas que se crearán' },
+				to_update: { type: 'number', description: 'Facturas existentes que se actualizarán' },
+				already_processed: { type: 'number', description: 'Facturas ya procesadas sin cambios' },
+				total: { type: 'number', description: 'Total de facturas en staging' },
+				message: { type: 'string' },
+			},
+		},
+	})
+	@ApiBadRequestResponse({ description: 'Error al clasificar facturas' })
+	async classifyInvoices(@Headers('x-holding-id') holdingId: string) {
+		return await this.odooService.classifyInvoices(holdingId);
 	}
 
 	@Post('partners/clean-processed')

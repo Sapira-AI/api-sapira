@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
@@ -37,12 +37,14 @@ import {
 	SapiraProduct,
 	SyncResult,
 } from './interfaces/odoo.interface';
+import { InvoiceProcessingService } from './invoice-processing.service';
 import { OdooProvider } from './odoo.provider';
 
 @Injectable()
 export class OdooService {
 	constructor(
 		private readonly odooProvider: OdooProvider,
+		private readonly invoiceProcessingService: InvoiceProcessingService,
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooInvoicesStg)
@@ -293,6 +295,103 @@ export class OdooService {
 		} catch (error) {
 			console.error('❌ Error obteniendo companies de Sapira:', error);
 			return [];
+		}
+	}
+
+	/**
+	 * Mapea compañías de Sapira con compañías de Odoo
+	 * Maneja correctamente los duplicados reasignando el odoo_integration_id
+	 */
+	async mapCompanies(mapData: {
+		holding_id: string;
+		mappings: Array<{ sapira_company_id: string; odoo_company_id: number | null; tax_rate?: number | null }>;
+	}): Promise<{
+		success: boolean;
+		message: string;
+		updated_count: number;
+		cleared_count: number;
+	}> {
+		const { holding_id, mappings } = mapData;
+
+		try {
+			let updatedCount = 0;
+			let clearedCount = 0;
+
+			// Procesar cada mapeo en una transacción
+			await this.companiesRepository.manager.transaction(async (transactionalEntityManager) => {
+				// Primero, limpiar todos los odoo_integration_id que se van a reasignar
+				// para evitar conflictos de constraint único
+				const odooIdsToReassign = mappings.filter((m) => m.odoo_company_id !== null).map((m) => m.odoo_company_id);
+
+				if (odooIdsToReassign.length > 0) {
+					// Limpiar compañías que tienen estos odoo_integration_id pero no están en el mapeo actual
+					const companiesToClear = await transactionalEntityManager.find(Company, {
+						where: {
+							holding_id: holding_id,
+							odoo_integration_id: In(odooIdsToReassign),
+						},
+					});
+
+					for (const company of companiesToClear) {
+						// Solo limpiar si no está en el mapeo actual
+						const isInCurrentMapping = mappings.some(
+							(m) => m.sapira_company_id === company.id && m.odoo_company_id === company.odoo_integration_id
+						);
+
+						if (!isInCurrentMapping) {
+							await transactionalEntityManager.update(
+								Company,
+								{ id: company.id },
+								{
+									odoo_integration_id: null,
+									tax_rate: null,
+								}
+							);
+							clearedCount++;
+						}
+					}
+				}
+
+				// Ahora aplicar los nuevos mapeos
+				for (const mapping of mappings) {
+					const updateData: Partial<Company> = {};
+
+					if (mapping.odoo_company_id === null) {
+						// Limpiar mapeo
+						updateData.odoo_integration_id = null;
+						updateData.tax_rate = null;
+						clearedCount++;
+					} else {
+						// Asignar nuevo mapeo
+						updateData.odoo_integration_id = mapping.odoo_company_id;
+
+						// Actualizar tax_rate si se proporciona
+						if (mapping.tax_rate !== undefined && mapping.tax_rate !== null) {
+							updateData.tax_rate = mapping.tax_rate;
+						}
+						updatedCount++;
+					}
+
+					await transactionalEntityManager.update(
+						Company,
+						{
+							id: mapping.sapira_company_id,
+							holding_id: holding_id,
+						},
+						updateData
+					);
+				}
+			});
+
+			return {
+				success: true,
+				message: `Mapeos actualizados correctamente. ${updatedCount} compañías mapeadas, ${clearedCount} compañías limpiadas.`,
+				updated_count: updatedCount,
+				cleared_count: clearedCount,
+			};
+		} catch (error) {
+			console.error('❌ Error mapeando compañías:', error);
+			throw new Error(`Error al mapear compañías: ${error.message}`);
 		}
 	}
 
@@ -2124,6 +2223,40 @@ export class OdooService {
 			console.log(`✅ Job actualizado, filas afectadas:`, result.affected);
 		} catch (error) {
 			console.error('❌ Error actualizando estado del job:', error);
+		}
+	}
+
+	/**
+	 * Clasifica las facturas en staging sin procesarlas
+	 */
+	async classifyInvoices(holdingId: string): Promise<{
+		success: boolean;
+		to_create: number;
+		to_update: number;
+		already_processed: number;
+		total: number;
+		message: string;
+	}> {
+		try {
+			console.log(`📊 Clasificando facturas para holding: ${holdingId}`);
+
+			if (!holdingId) {
+				throw new Error('holding_id es requerido');
+			}
+
+			// Delegar al servicio de procesamiento de facturas
+			const classification = await this.invoiceProcessingService.classifyInvoicesPublic(holdingId);
+
+			console.log(`✅ Clasificación completada:`, classification);
+
+			return {
+				success: true,
+				...classification,
+				message: `Clasificación completada: ${classification.to_create} nuevas, ${classification.to_update} a actualizar, ${classification.already_processed} ya procesadas`,
+			};
+		} catch (error) {
+			console.error('❌ Error clasificando facturas:', error);
+			throw new Error(`Error al clasificar facturas: ${error.message}`);
 		}
 	}
 

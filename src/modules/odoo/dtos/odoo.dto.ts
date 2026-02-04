@@ -337,6 +337,50 @@ export class InvoiceLineItemDTO {
 	discount?: number;
 }
 
+export class CompanyMappingItemDTO {
+	@ApiProperty({ description: 'ID de la compañía en Sapira (UUID)' })
+	@IsString()
+	sapira_company_id!: string;
+
+	@ApiProperty({ description: 'ID de la compañía en Odoo', nullable: true })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	odoo_company_id!: number | null;
+
+	@ApiProperty({ description: 'Tasa de impuesto a aplicar', required: false, nullable: true })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	tax_rate?: number | null;
+}
+
+export class MapCompaniesDTO {
+	@ApiProperty({ description: 'ID del holding' })
+	@IsString()
+	holding_id!: string;
+
+	@ApiProperty({ description: 'Array de mapeos de compañías', type: [CompanyMappingItemDTO] })
+	@IsArray()
+	@ValidateNested({ each: true })
+	@Type(() => CompanyMappingItemDTO)
+	mappings!: CompanyMappingItemDTO[];
+}
+
+export class MapCompaniesResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'Número de compañías actualizadas' })
+	updated_count!: number;
+
+	@ApiProperty({ description: 'Número de compañías limpiadas (sin mapeo)' })
+	cleared_count!: number;
+}
+
 export class CreateDraftInvoiceDTO {
 	@ApiProperty({ description: 'ID de la conexión de Odoo', required: true })
 	@IsString()

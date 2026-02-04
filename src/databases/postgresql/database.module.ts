@@ -26,7 +26,7 @@ import { PostgreSQLDatabaseProvider } from './database.provider';
 					url: supabaseUrl,
 					entities: [__dirname + '/../../**/*.entity{.ts,.js}'],
 					synchronize: false,
-					logging: configService.get<boolean>('SUPABASE_LOGGING', false) ? ['query', 'error', 'schema', 'warn', 'info', 'log'] : false,
+					logging: configService.get<boolean>('SUPABASE_LOGGING', false) ? ['error', 'schema', 'warn', 'info', 'log'] : false,
 					ssl: {
 						rejectUnauthorized: false,
 					},
