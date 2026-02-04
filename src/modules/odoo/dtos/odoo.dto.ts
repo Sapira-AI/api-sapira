@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class InvoiceDTO {
 	@IsString()
@@ -379,6 +379,60 @@ export class MapCompaniesResponseDTO {
 
 	@ApiProperty({ description: 'Número de compañías limpiadas (sin mapeo)' })
 	cleared_count!: number;
+}
+
+export class SaveFieldMappingDTO {
+	@ApiProperty({ description: 'Modelo origen en Odoo', example: 'account.move' })
+	@IsString()
+	source_model!: string;
+
+	@ApiProperty({ description: 'Tabla destino en Sapira', example: 'invoices_legacy' })
+	@IsString()
+	target_table!: string;
+
+	@ApiProperty({ description: 'Configuración del mapeo con invoice_mappings y line_mappings' })
+	@IsNotEmpty()
+	mapping_config!: {
+		invoice_mappings: Record<string, unknown>;
+		line_mappings: Record<string, unknown>;
+		created_at?: string;
+	};
+}
+
+export class SaveFieldMappingResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'Datos del mapeo guardado', required: false })
+	data?: {
+		id: string;
+		holding_id: string;
+		mapping_type: string;
+		source_model: string;
+		target_table: string;
+		mapping_config: Record<string, unknown>;
+	};
+}
+
+export class GetFieldMappingResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Datos del mapeo', required: false })
+	data?: {
+		id: string;
+		holding_id: string;
+		mapping_type: string;
+		source_model: string;
+		target_table: string;
+		mapping_config: Record<string, unknown>;
+		is_active: boolean;
+		created_at: string;
+		updated_at: string;
+	};
 }
 
 export class CreateDraftInvoiceDTO {
