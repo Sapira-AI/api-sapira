@@ -18,9 +18,8 @@ export class OdooInvoicesService {
 	/**
 	 * Crea una factura en borrador en Odoo
 	 */
-	async createDraftInvoice(data: CreateDraftInvoiceDTO): Promise<CreateDraftInvoiceResult> {
+	async createDraftInvoice(holdingId: string, data: CreateDraftInvoiceDTO): Promise<CreateDraftInvoiceResult> {
 		const {
-			connection_id,
 			partner_id,
 			move_type,
 			invoice_date,
@@ -30,13 +29,14 @@ export class OdooInvoicesService {
 			narration,
 			company_id,
 			journal_id,
+			x_sapira_invoice_id,
 			invoice_line_ids,
 		} = data;
 
 		try {
 			console.log(`📝 Creando factura en borrador en Odoo para partner ${partner_id}`);
 
-			const connection = await this.getOdooConnection(connection_id);
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
 
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
 			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
@@ -78,6 +78,10 @@ export class OdooInvoicesService {
 
 			if (journal_id) {
 				invoiceData.journal_id = journal_id;
+			}
+
+			if (x_sapira_invoice_id) {
+				invoiceData.x_sapira_invoice_id = x_sapira_invoice_id;
 			}
 
 			const invoiceLines = invoice_line_ids.map((line) => {
@@ -148,21 +152,14 @@ export class OdooInvoicesService {
 	}
 
 	/**
-	 * Obtiene la configuración de conexión de Odoo
+	 * Obtiene la configuración de conexión de Odoo por holding_id
 	 */
-	private async getOdooConnection(connectionId: string): Promise<OdooConnectionConfig> {
+	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig> {
 		try {
-			let dbConnection: OdooConnection | null = null;
-
-			if (this.isValidUUID(connectionId)) {
-				dbConnection = await this.odooConnectionRepository.findOne({
-					where: { id: connectionId, is_active: true },
-				});
-			} else {
-				dbConnection = await this.odooConnectionRepository.findOne({
-					where: { name: connectionId, is_active: true },
-				});
-			}
+			const dbConnection = await this.odooConnectionRepository.findOne({
+				where: { holding_id: holdingId, is_active: true },
+				order: { created_at: 'DESC' },
+			});
 
 			if (dbConnection) {
 				console.log(`✓ Conexión Odoo encontrada en BD: ${dbConnection.name} (${dbConnection.id})`);
@@ -176,10 +173,10 @@ export class OdooInvoicesService {
 				};
 			}
 
-			throw new Error(`Conexión Odoo no encontrada o inactiva para connectionId: ${connectionId}`);
+			throw new Error(`Conexión Odoo no encontrada o inactiva para holding_id: ${holdingId}`);
 		} catch (error) {
 			console.error('Error obteniendo conexión Odoo desde BD:', error);
-			throw new Error(`No se pudo obtener la conexión Odoo para connectionId: ${connectionId}. ${error.message}`);
+			throw new Error(`No se pudo obtener la conexión Odoo para holding_id: ${holdingId}. ${error.message}`);
 		}
 	}
 

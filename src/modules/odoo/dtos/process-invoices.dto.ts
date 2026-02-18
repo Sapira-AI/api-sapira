@@ -248,3 +248,40 @@ export class GetSampleLinesResponseDto {
 	@ApiProperty({ description: 'Cantidad de líneas retornadas', example: 10 })
 	count: number;
 }
+export class ClassifyInvoicesResponseDto {
+	@ApiProperty({
+		description: 'Indica si la clasificación fue exitosa',
+		example: true,
+	})
+	success: boolean;
+
+	@ApiProperty({
+		description: 'Número de facturas nuevas a crear',
+		example: 50,
+	})
+	to_create: number;
+
+	@ApiProperty({
+		description: 'Número de facturas existentes a actualizar',
+		example: 30,
+	})
+	to_update: number;
+
+	@ApiProperty({
+		description: 'Número de facturas ya procesadas sin cambios',
+		example: 20,
+	})
+	already_processed: number;
+
+	@ApiProperty({
+		description: 'Total de facturas clasificadas',
+		example: 100,
+	})
+	total: number;
+
+	@ApiProperty({
+		description: 'Mensaje descriptivo del resultado',
+		example: 'Clasificación completada: 50 nuevas, 30 a actualizar, 20 ya procesadas',
+	})
+	message: string;
+}
