@@ -32,11 +32,26 @@ export interface InvoiceClassification {
 	total: number;
 }
 
+export interface JobStatus {
+	job_id: string;
+	status: 'running' | 'completed' | 'failed' | 'cancelled';
+	total_records: number;
+	records_processed: number;
+	records_success: number;
+	records_failed: number;
+	progress_percentage: number;
+	execution_time_ms?: number;
+	started_at: Date;
+	completed_at?: Date;
+	error_details?: any;
+}
+
 type InvoiceStatus = 'create' | 'update' | 'skip';
 
 @Injectable()
 export class InvoiceProcessingService {
 	private readonly logger = new Logger(InvoiceProcessingService.name);
+	private readonly jobs = new Map<string, JobStatus>();
 
 	constructor(
 		@InjectRepository(OdooInvoicesStg)
@@ -342,7 +357,7 @@ export class InvoiceProcessingService {
 	private async classifyInvoices(holdingId: string): Promise<InvoiceClassification> {
 		const invoices = await this.invoicesStgRepository.find({
 			where: { holding_id: holdingId },
-			select: ['id', 'odoo_id', 'raw_data'],
+			select: ['id', 'odoo_id', 'raw_data', 'processing_status'],
 		});
 
 		let toCreate = 0;
@@ -350,9 +365,15 @@ export class InvoiceProcessingService {
 		let alreadyProcessed = 0;
 
 		for (const invoice of invoices) {
+			// Si la factura ya está procesada exitosamente, no reclasificar
+			if (invoice.processing_status === 'processed') {
+				alreadyProcessed++;
+				continue;
+			}
+
 			const status = await this.classifySingleInvoice(invoice, holdingId);
 
-			// Actualizar el processing_status en la BD
+			// Actualizar el processing_status en la BD solo si no está procesada
 			await this.invoicesStgRepository.update(invoice.id, {
 				processing_status: status === 'skip' ? 'processed' : status,
 			});
@@ -645,5 +666,145 @@ export class InvoiceProcessingService {
 			lines: lines.map((line) => ({ raw_data: line.raw_data })),
 			count: lines.length,
 		};
+	}
+
+	/**
+	 * Inicia un trabajo asíncrono para procesar facturas
+	 */
+	async startAsyncProcessing(holdingId: string, batchSize: number = 50): Promise<string> {
+		const jobId = `proc_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+		// Crear job status inicial
+		const jobStatus: JobStatus = {
+			job_id: jobId,
+			status: 'running',
+			total_records: 0,
+			records_processed: 0,
+			records_success: 0,
+			records_failed: 0,
+			progress_percentage: 0,
+			started_at: new Date(),
+		};
+
+		this.jobs.set(jobId, jobStatus);
+
+		// Ejecutar procesamiento en background
+		this.processInvoicesAsync(jobId, holdingId, batchSize).catch((error) => {
+			this.logger.error(`Error en trabajo asíncrono ${jobId}:`, error);
+			const job = this.jobs.get(jobId);
+			if (job) {
+				job.status = 'failed';
+				job.error_details = error instanceof Error ? error.message : 'Error desconocido';
+				job.completed_at = new Date();
+			}
+		});
+
+		return jobId;
+	}
+
+	/**
+	 * Obtiene el estado de un trabajo
+	 */
+	async getJobStatus(jobId: string): Promise<JobStatus | null> {
+		return this.jobs.get(jobId) || null;
+	}
+
+	/**
+	 * Procesa facturas de forma asíncrona actualizando el estado del job
+	 */
+	private async processInvoicesAsync(jobId: string, holdingId: string, batchSize: number): Promise<void> {
+		const job = this.jobs.get(jobId);
+		if (!job) return;
+
+		try {
+			// Clasificar facturas
+			const classification = await this.classifyInvoices(holdingId);
+			const totalToProcess = classification.to_create + classification.to_update;
+
+			// Establecer el total de registros a procesar
+			job.total_records = totalToProcess;
+
+			if (totalToProcess === 0) {
+				job.status = 'completed';
+				job.progress_percentage = 100;
+				job.completed_at = new Date();
+				return;
+			}
+
+			const mappingConfig = await this.fieldMappingService.getMappingConfig(holdingId, 'account.move', 'invoices_legacy');
+
+			if (!mappingConfig) {
+				throw new Error('No se encontró configuración de mapeo para facturas');
+			}
+
+			let processedCount = 0;
+			let errorCount = 0;
+			let currentIndex = 0;
+
+			// Procesar en batches
+			while (currentIndex < totalToProcess) {
+				const invoicesBatch = await this.invoicesStgRepository.find({
+					where: {
+						holding_id: holdingId,
+						processing_status: In(['create', 'update']),
+					},
+					order: { id: 'ASC' },
+					take: batchSize,
+				});
+
+				if (invoicesBatch.length === 0) {
+					break;
+				}
+
+				// Procesar todas las facturas del batch EN PARALELO
+				const results = await Promise.allSettled(
+					invoicesBatch.map(async (invoice) => {
+						try {
+							await this.processInvoice(invoice, mappingConfig, holdingId);
+							return { success: true, invoice };
+						} catch (error) {
+							const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+							this.logger.error(`Error procesando factura ${invoice.odoo_id}:`, errorMessage);
+
+							await this.invoicesStgRepository.update(invoice.id, {
+								processing_status: 'error',
+								error_message: errorMessage,
+							});
+
+							return { success: false, invoice, error: errorMessage };
+						}
+					})
+				);
+
+				// Contar resultados
+				for (const result of results) {
+					currentIndex++;
+					if (result.status === 'fulfilled' && result.value.success) {
+						processedCount++;
+					} else {
+						errorCount++;
+					}
+				}
+
+				// Actualizar progreso del job después de cada batch
+				job.records_processed = currentIndex;
+				job.records_success = processedCount;
+				job.records_failed = errorCount;
+				job.progress_percentage = Math.round((currentIndex / totalToProcess) * 100);
+			}
+
+			// Marcar job como completado
+			job.status = 'completed';
+			job.progress_percentage = 100;
+			job.completed_at = new Date();
+			job.execution_time_ms = job.completed_at.getTime() - job.started_at.getTime();
+
+			this.logger.log(`Trabajo ${jobId} completado: ${processedCount} exitosas, ${errorCount} con errores`);
+		} catch (error) {
+			job.status = 'failed';
+			job.error_details = error instanceof Error ? error.message : 'Error desconocido';
+			job.completed_at = new Date();
+			throw error;
+		}
 	}
 }

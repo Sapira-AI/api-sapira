@@ -1,0 +1,433 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.exchange_rates completado exitosamente",
+	"data": {
+		"table_name": "exchange_rates",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "rate_date",
+				"data_type": "date",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "from_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "to_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "rate",
+				"data_type": "numeric",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 20,
+				"numeric_scale": 8
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "NO",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "source_type",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'system'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "api_source",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'system'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "is_indirect_conversion",
+				"data_type": "boolean",
+				"is_nullable": "YES",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "conversion_chain",
+				"data_type": "jsonb",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "exchange_rates_pkey",
+				"index_definition": "CREATE UNIQUE INDEX exchange_rates_pkey ON public.exchange_rates USING btree (rate_date, from_currency, to_currency)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "256 kB"
+			},
+			{
+				"index_name": "idx_exchange_rates_lookup",
+				"index_definition": "CREATE INDEX idx_exchange_rates_lookup ON public.exchange_rates USING btree (from_currency, to_currency, rate_date DESC)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "296 kB"
+			}
+		],
+		"foreign_keys": [],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "exchange_rates_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "rate_date",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "from_currency",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "to_currency",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "trigger_calculate_monthly_avg",
+				"event_manipulation": "INSERT",
+				"event_object_table": "exchange_rates",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION calculate_monthly_avg_fx()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trigger_calculate_monthly_avg",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "exchange_rates",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION calculate_monthly_avg_fx()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trigger_update_monthly_avg",
+				"event_manipulation": "INSERT",
+				"event_object_table": "exchange_rates",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION update_monthly_avg_on_rate_change()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			},
+			{
+				"trigger_name": "trigger_update_monthly_avg",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "exchange_rates",
+				"action_timing": "AFTER",
+				"action_statement": "EXECUTE FUNCTION update_monthly_avg_on_rate_change()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"policyname": "exchange_rates_select_authenticated",
+				"permissive": "PERMISSIVE",
+				"roles": "{authenticated}",
+				"cmd": "SELECT",
+				"qual": "true",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "api_source",
+				"n_distinct": 1,
+				"most_common_vals": "{system}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "conversion_chain",
+				"n_distinct": 0,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "created_at",
+				"n_distinct": 8,
+				"most_common_vals": "{\"2025-10-10 17:51:59.170131+00\",\"2025-10-10 17:56:26.715411+00\",\"2025-10-10 17:57:33.753388+00\",\"2025-10-10 17:58:21.518926+00\",\"2025-10-10 17:59:31.34932+00\",\"2025-10-10 18:01:04.695028+00\",\"2025-10-10 17:54:02.809885+00\",\"2025-10-10 17:55:02.114211+00\"}",
+				"most_common_freqs": [0.205915, 0.118846, 0.118846, 0.118846, 0.118846, 0.118846, 0.118663, 0.0811903],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "from_currency",
+				"n_distinct": 2,
+				"most_common_vals": "{USD,CLF}",
+				"most_common_freqs": [0.875276, 0.124724],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "is_indirect_conversion",
+				"n_distinct": 1,
+				"most_common_vals": "{f}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "rate",
+				"n_distinct": -0.633725,
+				"most_common_vals": "{39485.65000000,0.92100000,0.92400000,0.92500000,0.92300000,0.92200000,0.92600000,3.68600000,3.75200000,0.91400000,0.92000000,0.93100000,3.72400000,0.91300000,0.91900000,0.92900000,0.96000000,3.71800000,3.74000000,3.76100000,3.76700000,3.79300000,39.00000000,0.85400000,0.85500000,0.87900000,0.91500000,0.91600000,0.92800000,0.93200000,3.53900000,3.54000000,3.72500000,3.72700000,3.73000000,3.73600000,3.74600000,5.51300000,40.26800000,0.85200000,0.85300000,0.86000000,0.91700000,0.91800000,0.92700000,0.95300000,3.55300000,3.66400000,3.67100000,3.70000000,3.73200000,3.74200000,3.74500000,3.75500000,3.78400000,3.79400000,5.29500000,5.50000000,5.78100000,19.29900000,20.17500000,39.99600000,40.05200000,40.84100000,43.30000000,961.75000000,1064.37500000,4234.56000000,0.85700000,0.85800000,0.86400000,0.87500000,0.89600000,0.93300000,0.93500000,0.96100000,3.48100000,3.69300000,3.69400000,3.71200000,3.71500000,3.71700000,3.72300000,3.72800000,3.72900000,3.73400000,3.73500000,3.73700000,3.73900000,3.75300000,3.75700000,3.77000000,3.80400000,4.97700000,5.15000000,5.70300000,5.75300000,5.80700000,18.28800000,20.04600000}",
+				"most_common_freqs": [
+					0.00569434, 0.00367377, 0.00257164, 0.00238795, 0.00220426, 0.00183688, 0.00183688, 0.00183688, 0.00183688, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.00146951, 0.00146951, 0.00146951, 0.00146951, 0.00146951, 0.00146951, 0.00146951, 0.00146951, 0.00146951,
+					0.00146951, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582,
+					0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00128582, 0.00110213, 0.00110213, 0.00110213,
+					0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213,
+					0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213,
+					0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.00110213, 0.000918442, 0.000918442, 0.000918442, 0.000918442,
+					0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442,
+					0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442,
+					0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442, 0.000918442
+				],
+				"histogram_bounds": "{0.84300000,0.88300000,0.91000000,0.95500000,3.49400000,3.55800000,3.63300000,3.67300000,3.70800000,3.74300000,3.77100000,3.80300000,4.91100000,4.97300000,5.10900000,5.31900000,5.42100000,5.47100000,5.54100000,5.59000000,5.65100000,5.69400000,5.76800000,5.89300000,6.16700000,16.69200000,16.96800000,17.13300000,18.08700000,18.46100000,18.66800000,18.87500000,19.29800000,19.58400000,19.95300000,20.23500000,20.41200000,20.58000000,38.24800000,38.63800000,39.03100000,39.28300000,39.95700000,40.09300000,40.29000000,41.16500000,41.58100000,42.02700000,42.41000000,43.30200000,44.25000000,829.05000000,854.25000000,881.96400000,902.19500000,914.71000000,924.29200000,932.36000000,938.28000000,943.77000000,948.85000000,954.58000000,962.39000000,968.75000000,976.25000000,986.33300000,1002.75000000,1027.75000000,1056.62500000,1075.87500000,1171.33300000,1259.58300000,1343.33300000,3773.81000000,3869.12000000,3901.77000000,3922.94000000,3957.08000000,4025.40000000,4060.25000000,4103.96000000,4137.52000000,4161.03000000,4193.44000000,4265.57000000,4340.63000000,4412.71000000,36785.65000000,36993.44000000,37281.82000000,37534.36000000,37600.79000000,37883.93000000,37995.04000000,38382.05000000,38437.12000000,38899.12000000,39148.63000000,39217.41000000,39290.61000000,39643.59000000}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "rate_date",
+				"n_distinct": -0.124724,
+				"most_common_vals": "{2024-01-02,2024-01-03,2024-01-04,2024-01-05,2024-01-08,2024-01-09,2024-01-10,2024-01-11,2024-01-12,2024-01-15,2024-01-16,2024-01-17,2024-01-18,2024-01-19,2024-01-22,2024-01-23,2024-01-24,2024-01-25,2024-01-26,2024-01-29,2024-01-30,2024-01-31,2024-02-01,2024-02-02,2024-02-05,2024-02-06,2024-02-07,2024-02-08,2024-02-09,2024-02-12,2024-02-13,2024-02-14,2024-02-15,2024-02-16,2024-02-19,2024-02-20,2024-02-21,2024-02-22,2024-02-23,2024-02-26,2024-02-27,2024-02-28,2024-02-29,2024-03-01,2024-03-04,2024-03-05,2024-03-06,2024-03-07,2024-03-08,2024-03-11,2024-03-12,2024-03-13,2024-03-14,2024-03-15,2024-03-18,2024-03-19,2024-03-20,2024-03-21,2024-03-22,2024-03-25,2024-03-26,2024-03-27,2024-03-28,2024-04-01,2024-04-02,2024-04-03,2024-04-04,2024-04-05,2024-04-08,2024-04-09,2024-04-10,2024-04-11,2024-04-12,2024-04-15,2024-04-16,2024-04-17,2024-04-18,2024-04-19,2024-04-22,2024-04-23,2024-04-24,2024-04-25,2024-04-26,2024-04-29,2024-04-30,2024-05-02,2024-05-03,2024-05-06,2024-05-07,2024-05-08,2024-05-09,2024-05-10,2024-05-13,2024-05-14,2024-05-15,2024-05-16,2024-05-17,2024-05-20,2024-05-22,2024-05-23}",
+				"most_common_freqs": [
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532,
+					0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532, 0.0016532
+				],
+				"histogram_bounds": "{2024-01-01,2024-01-27,2024-02-17,2024-03-10,2024-03-30,2024-04-21,2024-05-11,2024-05-26,2024-05-31,2024-06-05,2024-06-11,2024-06-16,2024-06-22,2024-06-27,2024-07-03,2024-07-08,2024-07-13,2024-07-19,2024-07-24,2024-07-30,2024-08-04,2024-08-09,2024-08-15,2024-08-20,2024-08-26,2024-08-31,2024-09-06,2024-09-11,2024-09-17,2024-09-23,2024-09-28,2024-10-03,2024-10-09,2024-10-14,2024-10-19,2024-10-25,2024-10-30,2024-11-05,2024-11-11,2024-11-16,2024-11-21,2024-11-27,2024-12-02,2024-12-07,2024-12-13,2024-12-18,2024-12-24,2024-12-29,2025-01-05,2025-01-10,2025-01-16,2025-01-21,2025-01-27,2025-02-01,2025-02-06,2025-02-12,2025-02-17,2025-02-22,2025-02-28,2025-03-05,2025-03-11,2025-03-16,2025-03-21,2025-03-27,2025-04-01,2025-04-07,2025-04-12,2025-04-17,2025-04-23,2025-04-28,2025-05-04,2025-05-09,2025-05-15,2025-05-20,2025-05-26,2025-05-31,2025-06-05,2025-06-11,2025-06-16,2025-06-22,2025-06-27,2025-07-03,2025-07-08,2025-07-14,2025-07-19,2025-07-24,2025-07-30,2025-08-04,2025-08-10,2025-08-15,2025-08-21,2025-08-26,2025-09-01,2025-09-06,2025-09-11,2025-09-17,2025-09-23,2025-09-28,2025-10-03,2025-10-09,2025-11-09}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "source_type",
+				"n_distinct": 1,
+				"most_common_vals": "{BANCOCENTRALCHILE}",
+				"most_common_freqs": [1],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates",
+				"attname": "to_currency",
+				"n_distinct": 8,
+				"most_common_vals": "{CLP,ARG,BRL,MXN,PEN,UYU,COP,EUR}",
+				"most_common_freqs": [0.205915, 0.118846, 0.118846, 0.118846, 0.118846, 0.118846, 0.118663, 0.0811903],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "1136 kB",
+			"table_size": "544 kB",
+			"indexes_size": "592 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-19T13:51:29.460Z"
+	}
+}

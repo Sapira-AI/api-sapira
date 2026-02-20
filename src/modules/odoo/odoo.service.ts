@@ -2129,6 +2129,7 @@ export class OdooService {
 			return {
 				job_id: integrationLog.id,
 				status: integrationLog.status || 'running',
+				total_records: integrationLog.progress_total || 0,
 				records_processed: integrationLog.records_processed || 0,
 				records_success: integrationLog.records_success || 0,
 				records_failed: integrationLog.records_failed || 0,

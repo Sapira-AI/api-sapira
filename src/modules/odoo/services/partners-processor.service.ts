@@ -382,4 +382,101 @@ export class PartnersProcessorService {
 			throw error;
 		}
 	}
+
+	/**
+	 * Obtiene los conteos de partners por estado de procesamiento
+	 */
+	async getStatusCounts(holdingId: string): Promise<{
+		create: number;
+		update: number;
+		processed: number;
+		error: number;
+		null: number;
+	}> {
+		const partners = await this.partnersStgRepository.find({
+			where: { holding_id: holdingId },
+			select: ['processing_status'],
+		});
+
+		const counts = {
+			create: 0,
+			update: 0,
+			processed: 0,
+			error: 0,
+			null: 0,
+		};
+
+		partners.forEach((partner) => {
+			const status = partner.processing_status || 'null';
+			if (status in counts) {
+				counts[status]++;
+			} else {
+				counts.null++;
+			}
+		});
+
+		return counts;
+	}
+
+	/**
+	 * Obtiene partners staging con paginación y filtros
+	 */
+	async getStagingPartners(
+		holdingId: string,
+		page: number = 1,
+		limit: number = 20,
+		statusFilter?: string[]
+	): Promise<{
+		partners: OdooPartnersStg[];
+		total: number;
+		page: number;
+		totalPages: number;
+	}> {
+		const queryBuilder = this.partnersStgRepository
+			.createQueryBuilder('partner')
+			.where('partner.holding_id = :holdingId', { holdingId })
+			.orderBy('partner.created_at', 'DESC');
+
+		// Aplicar filtro de estado si existe
+		if (statusFilter && statusFilter.length > 0) {
+			queryBuilder.andWhere('partner.processing_status IN (:...statuses)', { statuses: statusFilter });
+		}
+
+		// Obtener total
+		const total = await queryBuilder.getCount();
+
+		// Aplicar paginación
+		const offset = (page - 1) * limit;
+		queryBuilder.skip(offset).take(limit);
+
+		// Obtener datos
+		const partners = await queryBuilder.getMany();
+
+		return {
+			partners,
+			total,
+			page,
+			totalPages: Math.ceil(total / limit),
+		};
+	}
+
+	/**
+	 * Limpia (elimina) partners procesados
+	 */
+	async cleanProcessedPartners(holdingId: string): Promise<{
+		deleted_count: number;
+		message: string;
+	}> {
+		const result = await this.partnersStgRepository.delete({
+			holding_id: holdingId,
+			processing_status: 'processed',
+		});
+
+		const deletedCount = result.affected || 0;
+
+		return {
+			deleted_count: deletedCount,
+			message: `Se eliminaron ${deletedCount} registros procesados`,
+		};
+	}
 }

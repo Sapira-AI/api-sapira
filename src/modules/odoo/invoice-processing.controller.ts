@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import {
+	ClassifyInvoicesResponseDto,
 	GetInvoicesQueryDto,
 	GetInvoicesResponseDto,
 	GetSampleLinesResponseDto,
@@ -117,6 +118,9 @@ export class InvoiceProcessingController {
 			},
 		},
 	})
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
 	async getStats(@Headers('x-holding-id') holdingId: string): Promise<InvoiceStatsResponseDto> {
 		return this.invoiceProcessingService.getProcessingStats(holdingId);
 	}
@@ -152,6 +156,9 @@ export class InvoiceProcessingController {
 			},
 		},
 	})
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
 	async getStatusCounts(@Headers('x-holding-id') holdingId: string): Promise<InvoiceStatusCountsResponseDto> {
 		return this.invoiceProcessingService.getStatusCounts(holdingId);
 	}
@@ -170,6 +177,9 @@ export class InvoiceProcessingController {
 	@ApiBadRequestResponse({
 		description: 'Error al obtener facturas',
 	})
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
 	async getInvoices(@Headers('x-holding-id') holdingId: string, @Query() query: GetInvoicesQueryDto): Promise<GetInvoicesResponseDto> {
 		const statusFilter = query.statusFilter ? query.statusFilter.split(',') : undefined;
 
@@ -192,5 +202,91 @@ export class InvoiceProcessingController {
 	})
 	async getSampleLines(@Headers('x-holding-id') holdingId: string): Promise<GetSampleLinesResponseDto> {
 		return this.invoiceProcessingService.getSampleLines(holdingId, 10);
+	}
+
+	@Get('classify')
+	@ApiOperation({
+		summary: 'Clasificar facturas según su estado',
+		description:
+			'Clasifica las facturas en staging según si necesitan crearse, actualizarse o ya están procesadas. ' +
+			'Actualiza el processing_status de cada factura en la base de datos.',
+	})
+	@ApiOkResponse({
+		type: ClassifyInvoicesResponseDto,
+		description: 'Clasificación completada exitosamente',
+	})
+	@ApiBadRequestResponse({
+		description: 'Error al clasificar facturas',
+	})
+	async classifyInvoices(@Headers('x-holding-id') holdingId: string): Promise<ClassifyInvoicesResponseDto> {
+		const result = await this.invoiceProcessingService.classifyInvoicesPublic(holdingId);
+
+		return {
+			success: true,
+			to_create: result.to_create,
+			to_update: result.to_update,
+			already_processed: result.already_processed,
+			total: result.total,
+			message: `Clasificación completada: ${result.to_create} nuevas, ${result.to_update} a actualizar, ${result.already_processed} ya procesadas`,
+		};
+	}
+
+	@Post('process-async')
+	@ApiOperation({
+		summary: 'Iniciar procesamiento asíncrono de facturas con seguimiento de progreso',
+		description:
+			'Inicia un trabajo asíncrono para procesar facturas desde staging a invoices_legacy. ' +
+			'Retorna un job_id que puede usarse para consultar el progreso del procesamiento.',
+	})
+	@ApiBody({
+		type: ProcessInvoicesDto,
+		description: 'Configuración del procesamiento',
+	})
+	@ApiOkResponse({
+		description: 'Trabajo asíncrono iniciado exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				job_id: { type: 'string', example: 'proc_123e4567-e89b-12d3-a456-426614174000' },
+				message: { type: 'string', example: 'Procesamiento iniciado' },
+			},
+		},
+	})
+	async startAsyncProcessing(
+		@Headers('x-holding-id') holdingId: string,
+		@Body() dto: ProcessInvoicesDto
+	): Promise<{ job_id: string; message: string }> {
+		const jobId = await this.invoiceProcessingService.startAsyncProcessing(holdingId, dto.batchSize || 50);
+
+		return {
+			job_id: jobId,
+			message: 'Procesamiento de facturas iniciado en segundo plano',
+		};
+	}
+
+	@Get('job-status/:jobId')
+	@ApiOperation({
+		summary: 'Consultar estado de un trabajo de procesamiento',
+		description: 'Retorna el estado actual de un trabajo de procesamiento de facturas.',
+	})
+	@ApiOkResponse({
+		description: 'Estado del trabajo obtenido exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				job_id: { type: 'string' },
+				status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled'] },
+				records_processed: { type: 'number' },
+				records_success: { type: 'number' },
+				records_failed: { type: 'number' },
+				progress_percentage: { type: 'number' },
+				started_at: { type: 'string', format: 'date-time' },
+				completed_at: { type: 'string', format: 'date-time' },
+				error_details: { type: 'object' },
+			},
+		},
+	})
+	async getJobStatus(@Headers('x-holding-id') holdingId: string, @Param('jobId') jobId: string): Promise<any> {
+		return this.invoiceProcessingService.getJobStatus(jobId);
 	}
 }

@@ -107,6 +107,9 @@ export class JobStatusResponseDTO {
 	@ApiProperty({ description: 'Estado del job', enum: ['running', 'completed', 'failed', 'cancelled'] })
 	status!: string;
 
+	@ApiProperty({ description: 'Total de registros a procesar' })
+	total_records!: number;
+
 	@ApiProperty({ description: 'Registros procesados' })
 	records_processed!: number;
 
@@ -436,10 +439,6 @@ export class GetFieldMappingResponseDTO {
 }
 
 export class CreateDraftInvoiceDTO {
-	@ApiProperty({ description: 'ID de la conexión de Odoo', required: true })
-	@IsString()
-	connection_id!: string;
-
 	@ApiProperty({ description: 'ID del partner (cliente) en Odoo', required: true })
 	@IsNumber()
 	@Type(() => Number)
@@ -485,6 +484,11 @@ export class CreateDraftInvoiceDTO {
 	@IsNumber()
 	@Type(() => Number)
 	journal_id?: number;
+
+	@ApiProperty({ description: 'ID de factura en Sapira ', required: false })
+	@IsOptional()
+	@IsString()
+	x_sapira_invoice_id?: string;
 
 	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
 	@IsArray()

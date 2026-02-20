@@ -1,4 +1,4 @@
-import { Body, Controller, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, HttpStatus, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -33,5 +33,58 @@ export class PartnersController {
 	})
 	async processPartners(@Body() dto: ProcessPartnersDto): Promise<ProcessPartnersResponseDto> {
 		return await this.partnersProcessorService.processPartners(dto);
+	}
+
+	@Get('status-counts')
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
+	@ApiOperation({
+		summary: 'Obtener conteos de partners por estado',
+		description: 'Retorna la cantidad de partners en cada estado de procesamiento',
+	})
+	async getStatusCounts(@Headers('x-holding-id') holdingId: string): Promise<{
+		create: number;
+		update: number;
+		processed: number;
+		error: number;
+		null: number;
+	}> {
+		return this.partnersProcessorService.getStatusCounts(holdingId);
+	}
+
+	@Get('staging')
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
+	@ApiOperation({
+		summary: 'Obtener partners staging con paginación',
+		description: 'Retorna partners de la tabla staging con paginación y filtros',
+	})
+	async getStagingPartners(
+		@Headers('x-holding-id') holdingId: string,
+		@Query('page') page?: number,
+		@Query('limit') limit?: number,
+		@Query('statusFilter') statusFilter?: string
+	): Promise<{
+		partners: any[];
+		total: number;
+		page: number;
+		totalPages: number;
+	}> {
+		const statusArray = statusFilter ? statusFilter.split(',') : undefined;
+		return this.partnersProcessorService.getStagingPartners(holdingId, page || 1, limit || 20, statusArray);
+	}
+
+	@Delete('clean-processed')
+	@ApiOperation({
+		summary: 'Limpiar partners procesados',
+		description: 'Elimina todos los partners con estado "processed" de la tabla staging',
+	})
+	async cleanProcessedPartners(@Headers('x-holding-id') holdingId: string): Promise<{
+		deleted_count: number;
+		message: string;
+	}> {
+		return this.partnersProcessorService.cleanProcessedPartners(holdingId);
 	}
 }
