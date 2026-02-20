@@ -95,7 +95,12 @@ export class ExchangeRatesService {
 
 	async syncExchangeRates(dto: SyncExchangeRatesDto): Promise<SyncExchangeRatesResponseDto> {
 		try {
-			this.logger.log(`Iniciando sincronización de tipos de cambio desde ${dto.startDate} hasta ${dto.endDate}`);
+			// Si no se proporcionan fechas, sincronizar solo el día actual por defecto
+			const today = this.dateToString(new Date());
+			const endDate = dto.endDate || today;
+			const startDate = dto.startDate || today;
+
+			this.logger.log(`Iniciando sincronización de tipos de cambio desde ${startDate} hasta ${endDate}`);
 
 			const stats = {
 				totalProcessed: 0,
@@ -115,8 +120,8 @@ export class ExchangeRatesService {
 
 					const response = await this.bancoCentralService.getSeries({
 						timeseries: mapping.code,
-						firstdate: dto.startDate,
-						lastdate: dto.endDate,
+						firstdate: startDate,
+						lastdate: endDate,
 					});
 
 					for (const obs of response.Series.Obs) {

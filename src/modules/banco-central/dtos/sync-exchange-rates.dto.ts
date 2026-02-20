@@ -1,11 +1,13 @@
 import { IsArray, IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class SyncExchangeRatesDto {
+	@IsOptional()
 	@IsDateString()
-	startDate: string;
+	startDate?: string;
 
+	@IsOptional()
 	@IsDateString()
-	endDate: string;
+	endDate?: string;
 
 	@IsOptional()
 	@IsArray()
