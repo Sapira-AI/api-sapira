@@ -79,7 +79,15 @@ export class ExchangeRatesScheduler {
 		for (let attempt = 1; attempt <= maxRetries; attempt++) {
 			try {
 				this.logger.log(`Intento ${attempt}/${maxRetries} de sincronización...`);
-				const result = await this.exchangeRatesService.syncHistoricalRates();
+
+				// Sincronizar solo el día actual para evitar modificar datos históricos ya usados en facturas
+				const today = new Date().toISOString().split('T')[0];
+
+				this.logger.log(`Sincronizando tipos de cambio del día: ${today}`);
+				const result = await this.exchangeRatesService.syncExchangeRates({
+					startDate: today,
+					endDate: today,
+				});
 
 				if (result.stats.errors > 0) {
 					this.logger.warn(`Sincronización completada con ${result.stats.errors} errores`);

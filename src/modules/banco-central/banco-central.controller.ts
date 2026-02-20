@@ -197,7 +197,8 @@ export class BancoCentralController {
 			'Incluye conversiones directas (USD/CLP, USD/COP, EUR/USD, etc.) y conversiones indirectas calculadas (CLF→CLP→USD). ' +
 			'Los datos se obtienen solo para días hábiles. Calcula automáticamente los promedios mensuales después de la sincronización. ' +
 			'Si ya existen datos para una fecha, se actualizan (upsert). ' +
-			'Parámetros: startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), currencyPairs (opcional, ej: ["USD/CLP", "EUR/USD"])',
+			'Parámetros opcionales: startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), currencyPairs (ej: ["USD/CLP", "EUR/USD"]). ' +
+			'Si no se especifican fechas, sincroniza solo el día actual por defecto.',
 	})
 	@ApiResponse({
 		status: HttpStatus.OK,
