@@ -1,0 +1,409 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.exchange_rates_monthly_avg completado exitosamente",
+	"data": {
+		"table_name": "exchange_rates_monthly_avg",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "from_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "to_currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "year",
+				"data_type": "integer",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			},
+			{
+				"column_name": "month",
+				"data_type": "integer",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			},
+			{
+				"column_name": "avg_rate",
+				"data_type": "numeric",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "min_rate",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "max_rate",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "data_points",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			},
+			{
+				"column_name": "calculated_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
+				"index_definition": "CREATE UNIQUE INDEX exchange_rates_monthly_avg_from_currency_to_currency_year_m_key ON public.exchange_rates_monthly_avg USING btree (from_currency, to_currency, year, month)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			},
+			{
+				"index_name": "exchange_rates_monthly_avg_pkey",
+				"index_definition": "CREATE UNIQUE INDEX exchange_rates_monthly_avg_pkey ON public.exchange_rates_monthly_avg USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "16 kB"
+			}
+		],
+		"foreign_keys": [],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "exchange_rates_monthly_avg_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "from_currency",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "to_currency",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "year",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
+				"constraint_type": "UNIQUE",
+				"column_name": "month",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"policyname": "exchange_rates_monthly_avg_select_authenticated",
+				"permissive": "PERMISSIVE",
+				"roles": "{authenticated}",
+				"cmd": "SELECT",
+				"qual": "true",
+				"with_check": null
+			}
+		],
+		"statistics": [
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "avg_rate",
+				"n_distinct": -0.985782,
+				"most_common_vals": "{0.917,0.927,3.701}",
+				"most_common_freqs": [0.00947867, 0.00947867, 0.00947867],
+				"histogram_bounds": "{0.853,0.860,0.887,0.902,0.920,0.925,0.932,0.954,0.966,3.545,3.601,3.659,3.712,3.733,3.739,3.750,3.770,3.781,4.913,4.974,5.134,5.369,5.519,5.551,5.563,5.762,5.778,6.038,16.781,16.808,17.097,18.096,18.678,19.039,19.449,19.688,20.232,20.301,20.539,38.2096,38.371,38.412,39.045,39.0592,39.1912,40.003,40.0949,40.2116,40.4761,40.5248,40.6400,40.828,40.946,41.2444,41.6009,41.691,42.175,42.263,43.669,816.749,849.492,884.466,907.987,922.033,926.214,932.552,937.561,941.013,951.550,959.793,960.368,963.442,967.933,979.516,999.047,1040.675,1067.480,1147.974,1255.311,1396.711,3867.503,3918.444,3926.119,4040.700,4053.975,4106.491,4135.480,4198.631,4268.848,4384.339,36750.981,36984.324,37349.913,37591.378,37849.907,38078.207,38415.854,38807.303,39146.962,39231.836,39527.188}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "calculated_at",
+				"n_distinct": 2,
+				"most_common_vals": "{\"2025-10-10 18:29:43.620863+00\",\"2025-10-14 18:53:26.63794+00\"}",
+				"most_common_freqs": [0.900474, 0.0995261],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "data_points",
+				"n_distinct": 9,
+				"most_common_vals": "{31,30,20,22,21,28,29,18,19}",
+				"most_common_freqs": [0.398104, 0.327014, 0.0758294, 0.056872, 0.0473934, 0.0379147, 0.0379147, 0.00947867, 0.00947867],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "from_currency",
+				"n_distinct": 2,
+				"most_common_vals": "{USD,CLF}",
+				"most_common_freqs": [0.796209, 0.203791],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "id",
+				"n_distinct": -1,
+				"most_common_vals": null,
+				"most_common_freqs": null,
+				"histogram_bounds": "{0022c3b8-0ea7-491b-a7a0-a1f2d107f0c7,01fbf2a5-a2d7-472c-9749-7e5d69591494,02f38fd6-f3f8-4d7e-b3a6-ce0cde569f33,0447d81f-7eea-43d5-a80f-9305d401f76e,0667baad-9b32-4838-ab70-11ea7df92067,07a9fe5c-3664-4000-84d0-4ef246e4e944,0b0d3d2f-d75d-433c-ba8f-2c82a263fcf8,0f2483a2-e2f9-48e0-a0e0-b683575e7ad5,101311ac-2b5a-4881-b4ac-2fe0159e6f33,10d007dd-e034-400d-b2d3-2911b4b23351,193e2bcf-c9e6-45eb-aed5-e76811960c0c,1f5cdf8e-a0b5-475a-8337-0cb2eb9d48cf,2083b2c2-795d-4c3d-88d5-9af2100b3962,2249efc9-488d-4532-92f0-5b30478af3da,2271e2dc-7955-43c2-b3fe-9cd084e3d4dc,23c729e2-6c22-4130-8ae8-3861f8322bbc,2b44a9ef-1eb9-4f49-a1f9-c21ee7ff3120,2ed6b2c1-5550-4afe-824e-634eeb707639,31a8b8b4-3eba-44da-b000-1e50163d212e,32d59020-271f-4e69-ae79-b568127c06ad,37fd7a10-78bb-408a-a82c-73b6fd321637,3b352e18-8b0a-40ed-8230-91463428a9ba,3f82e5da-ee4a-4e7d-bbe5-6859abef55fe,4057cee1-bd2a-408c-9f89-29169812b0ab,47443cdc-132d-40d7-b21b-1510d57a590a,493a164c-f1f6-465d-be1e-3d355518b0e8,4b89a899-2952-402e-8794-1052b90b4e0e,4c9935e7-0a8e-47f9-aefa-3c0ce4777040,50f4072d-4d87-4909-804d-0d2c161ac69f,5263da91-854b-41b0-8964-78103dfefaf1,55911b2c-8cf9-4a41-a154-84801e177c0a,597aae30-8dec-4271-acdc-c1eb67fa9021,5aba468b-4d39-4391-9040-d5265f5364eb,5dfff528-16b4-4ad4-884b-17de68da25df,5ea6dc05-0818-4fbc-88d1-c21762c28e7b,5fef1a54-b803-461e-8975-d935eccec017,614e2b03-ddc6-4514-8fd9-a7c9f06f5df6,62bc368e-59ec-4c00-b956-11384d29a8a1,647a000b-8c53-4f4b-9a6e-84cceacbffef,6601bce0-d910-449d-9e2e-10783419577c,6702d6c6-aea6-49e0-9da4-5578ca87026f,68ae0782-fc80-4d97-825b-b943bf5b79b2,6e859583-1fe0-472f-923a-ce23b87fcfe1,728adb10-db86-4113-8e9d-a0214b0b2f18,752a6098-01ad-4953-93c0-6701f49559d6,78653e1c-73f5-466d-8783-9d0317a1096a,7bf27d85-dffb-4b88-b037-522713a5c7c3,7d68f73e-c445-40b0-a5b2-3b17cd08098d,7eab1005-3d10-4394-aba5-851208104059,7f9e178f-2dbb-4d0c-960b-b45ddb2a8804,83b7e6b6-37a4-4775-a3bd-a402a223752f,85b15bda-c679-406b-a641-c3b7dd8622f6,88338294-0c6e-49ed-9d82-8b1d4ff0e2fc,88cd5243-501f-4139-85b7-ee53ec5c3024,8b400fbc-6cd5-425d-849e-4d49ff10ca64,8f28954f-0023-4540-8be4-2c91c8f75662,9029d0da-2b02-4056-8da8-91c18180b5f7,95536539-dd6e-4a96-a288-8fcd6b40c6c1,97d3e9d3-434e-4218-bb73-d7bf2e847b2f,9b4cb656-90d9-4f64-9954-c6ec7d0f9092,a03b9b02-862e-4547-9fb9-42156805513f,a0b9c356-2a51-46a0-9f4d-adda846d9af9,a3b25b50-7d23-4885-8178-c1c9711d63c4,ab98b165-ba75-4c90-8ca9-81b33da8a7e9,acb9013c-98b4-4bc8-b829-a017bfdc4d62,b0c0ac41-0df6-4155-9b42-9fdba3c6f66c,b1063f8b-ca95-420c-8c25-38faca163ce7,b1f60bcb-8339-4455-a93c-d67d8b8f26f1,b9063495-612e-4ce4-9054-0ff5a9b7fdd4,ba90607c-e0c4-4805-86e1-41c6cdb801cf,bbd69b7d-7582-4e0e-9cc0-0c6e95fbf1a5,bdcabd2e-bae1-4431-98d0-181b29ecd81a,bff2ff6a-e79e-4e4e-87bc-dbcee6f9295d,c2410705-1858-4d1e-be27-8182f89e9d8e,c3d3f6f9-58aa-4df4-8918-f473d0e9541e,c5ed41b6-756b-46ce-80a9-e98d8bc774b7,c76453ac-fee4-4747-92b3-d5d5b2d08897,c92f2c30-7af8-4fae-b9ef-903f50e4c75e,c9854894-201e-4e6c-ae8f-2111218c95eb,cae16080-8d51-40e7-877f-eed29577a85e,d120184a-7f7d-4eff-a671-86db07802b71,d49736db-abe2-4d26-8dc6-defcfc7cb158,d692d65f-9e06-4e95-ac90-d8dca2f4beaa,d80df90d-604b-4b17-9d10-d8250b696ec5,dc194b98-ff08-4e2d-8fbc-3f079a3c738b,de3e30d6-5aad-43da-8345-54c914ee67c0,df3fec64-d550-4e9f-827f-12700b7cb99d,e4071bc0-ea9b-4401-a78a-564127265967,e5a301a2-81e5-4a88-9bab-63ca6a6dea61,e74701db-1e34-4800-9515-1cbd72b8e43a,e963fb9b-54ad-4110-9f10-3f45d96084d3,eb16caa1-2f13-49eb-9042-9627555ca35b,ef640f1e-692c-4d56-adf0-d7569d728102,eff2880f-56a8-462c-9b1e-8ecc60fa4b3d,f1042e09-016f-44bb-a9dc-4f85153baa65,f534c277-65cf-415f-b3ba-c7d43f27b5ab,f6a47051-0f54-40d6-b77f-e98bae3fd3a9,f80cf5f7-4ee5-4461-bc47-05c56194423b,fbdab705-fb36-427c-b249-2e7f0098ebae,fdb3634c-a0e4-4b34-8254-7fc97cd8c7b1,ffb35863-60f2-4039-ac05-a92403a741c5}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "max_rate",
+				"n_distinct": -0.971564,
+				"most_common_vals": "{0.926,0.933,0.936,0.961,3.753,6.198}",
+				"most_common_freqs": [0.00947867, 0.00947867, 0.00947867, 0.00947867, 0.00947867, 0.00947867],
+				"histogram_bounds": "{0.860,0.872,0.880,0.908,0.927,0.941,0.973,3.537,3.590,3.686,3.721,3.752,3.771,3.783,3.809,3.831,3.886,4.993,5.204,5.467,5.596,5.652,5.711,5.744,5.879,5.979,17.066,17.193,17.367,18.745,18.845,19.373,19.830,20.046,20.664,20.767,20.831,38.3224,38.662,38.892,39.1091,39.273,39.435,40.1101,40.229,40.423,40.594,40.6008,40.6628,40.7886,41.1151,41.2912,41.6460,41.7072,41.954,42.517,42.943,43.960,825.250,856.750,893.750,931.917,948.850,950.375,954.220,954.390,956.630,968.750,976.800,983.760,985.050,987.120,996.350,1008.750,1029.000,1061.875,1191.167,1194.667,1361.333,3918.330,3954.050,3961.556,4142.160,4162.300,4185.670,4202.522,4276.442,4386.020,4423.690,4493.890,36863.940,37261.980,37571.860,37754.470,37971.420,38416.690,38647.940,39075.410,39267.070,39383.070,39597.670}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "min_rate",
+				"n_distinct": -0.966825,
+				"most_common_vals": "{0.853,0.914,0.920,3.620,3.664,3.709,3.724}",
+				"most_common_freqs": [0.00947867, 0.00947867, 0.00947867, 0.00947867, 0.00947867, 0.00947867, 0.00947867],
+				"histogram_bounds": "{0.843,0.848,0.879,0.895,0.904,0.915,0.921,0.951,3.476,3.539,3.670,3.693,3.700,3.719,3.786,4.917,5.003,5.203,5.389,5.411,5.434,5.490,5.610,5.691,5.866,16.339,16.541,16.824,17.026,18.288,18.556,18.875,19.222,19.533,19.872,20.235,37.358,38.0714,38.096,38.550,38.6410,39.000,39.455,39.841,39.975,40.1017,40.210,40.4338,40.4555,40.6012,40.7713,41.0202,41.165,41.4594,41.5317,41.7808,42.369,43.252,825.750,857.417,877.120,893.750,897.680,907.320,911.639,926.510,932.250,933.260,939.540,941.420,950.375,952.370,970.583,988.833,1029.000,1061.875,1073.375,1151.000,1295.417,3767.693,3845.594,3855.000,3888.390,3982.970,4010.000,4071.955,4112.200,4145.647,4166.290,4327.408,36733.040,37100.680,37444.940,37575.610,37914.200,38260.610,38384.410,38899.120,39133.450,39191.970,39485.650}"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "month",
+				"n_distinct": 12,
+				"most_common_vals": "{1,2,3,4,5,6,7,8,9,10,11,12}",
+				"most_common_freqs": [
+					0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0947867, 0.0521327, 0.0473934, 0.0473934
+				],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "to_currency",
+				"n_distinct": 9,
+				"most_common_vals": "{CLP,ARG,BRL,COP,EUR,MXN,PEN,USD,UYU}",
+				"most_common_freqs": [0.203791, 0.0995261, 0.0995261, 0.0995261, 0.0995261, 0.0995261, 0.0995261, 0.0995261, 0.0995261],
+				"histogram_bounds": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "exchange_rates_monthly_avg",
+				"attname": "year",
+				"n_distinct": 2,
+				"most_common_vals": "{2024,2025}",
+				"most_common_freqs": [0.56872, 0.43128],
+				"histogram_bounds": null
+			}
+		],
+		"size_info": {
+			"total_size": "88 kB",
+			"table_size": "24 kB",
+			"indexes_size": "64 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-02-19T13:53:04.245Z"
+	}
+}

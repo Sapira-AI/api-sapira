@@ -23,6 +23,7 @@ import { LoggerModule } from './logger/logger.module';
 import { RequestContextMiddleware } from './middlewares/common/request-context.middleware';
 import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware';
 import { AgentsModule } from './modules/agents/agents.module';
+import { BancoCentralModule } from './modules/banco-central/banco-central.module';
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { ClaudeModule } from './modules/claude/claude.module';
 import { ClientsModule } from './modules/clients';
@@ -92,6 +93,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		ClaudeModule,
 		SapiraCopilotModule,
 		StripeModule,
+		BancoCentralModule,
 	],
 	providers: [
 		{
