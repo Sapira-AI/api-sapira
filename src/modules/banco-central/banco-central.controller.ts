@@ -10,6 +10,7 @@ import { GetSeriesDto } from './dtos/get-series.dto';
 import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from './dtos/sync-exchange-rates.dto';
 import { SyncIndicatorsDto } from './dtos/sync-indicators.dto';
 import { BancoCentralResponse, IndicadorEconomicoData } from './interfaces/banco-central.interface';
+import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
 
 @ApiTags('Banco Central')
@@ -19,7 +20,8 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 export class BancoCentralController {
 	constructor(
 		private readonly bancoCentralService: BancoCentralService,
-		private readonly exchangeRatesService: ExchangeRatesService
+		private readonly exchangeRatesService: ExchangeRatesService,
+		private readonly notificationService: ExchangeRatesNotificationService
 	) {}
 
 	@Get('series')
@@ -338,5 +340,60 @@ export class BancoCentralController {
 		@Query('date') date: string
 	) {
 		return this.exchangeRatesService.getExchangeRateWithFallback(fromCurrency, toCurrency, date);
+	}
+
+	@Post('exchange-rates/test-notification-error')
+	@ApiOperation({
+		summary: 'Probar email de notificación de error',
+		description: 'Envía un email de prueba simulando un error en la sincronización. Útil para verificar la configuración de emails.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Email de prueba enviado exitosamente',
+	})
+	@HttpCode(HttpStatus.OK)
+	async testErrorNotification(): Promise<{ message: string }> {
+		const testError = new Error('Este es un error de prueba para verificar las notificaciones');
+		testError.stack = 'Error: Este es un error de prueba\n    at testErrorNotification (test:1:1)';
+
+		await this.notificationService.sendSyncFailureAlert(testError, 'Prueba manual desde endpoint de testing');
+
+		return {
+			message: 'Email de prueba de error enviado exitosamente. Revisa tu bandeja de entrada.',
+		};
+	}
+
+	@Post('exchange-rates/test-notification-success')
+	@ApiOperation({
+		summary: 'Probar email de notificación de éxito',
+		description: 'Envía un email de prueba simulando una sincronización exitosa. Útil para verificar la configuración de emails.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Email de prueba enviado exitosamente',
+	})
+	@HttpCode(HttpStatus.OK)
+	async testSuccessNotification(): Promise<{ message: string }> {
+		const mockResult = {
+			success: true,
+			message: 'Sincronización de prueba completada exitosamente',
+			stats: {
+				totalProcessed: 150,
+				inserted: 120,
+				updated: 30,
+				errors: 0,
+				indirectConversions: 15,
+			},
+			monthlyAveragesCalculated: {
+				periods: 12,
+				currencyPairs: 8,
+			},
+		};
+
+		await this.notificationService.sendSyncSuccessReport(mockResult, 45000);
+
+		return {
+			message: 'Email de prueba de éxito enviado exitosamente. Revisa tu bandeja de entrada.',
+		};
 	}
 }

@@ -9,8 +9,19 @@ Este módulo proporciona integración con la API del Banco Central de Chile para
 Agrega las siguientes variables a tu archivo `.env`:
 
 ```env
+# Credenciales API Banco Central
 BANCO_CENTRAL_USER=tu_email@ejemplo.com
 BANCO_CENTRAL_PASS=tu_password_aqui
+
+# Emails del Sistema (SendGrid)
+SYSTEM_EMAIL_FROM=cobranza@blixter.cl
+SYSTEM_EMAIL_FROM_NAME=Sistema Sapira - Banco Central
+
+# Sincronización Automática de Tipos de Cambio
+BANCO_CENTRAL_SYNC_ENABLED=true  # true/false - Activar/desactivar scheduler
+BANCO_CENTRAL_SYNC_HOUR=8  # Hora de ejecución diaria (0-23), default: 8 AM
+BANCO_CENTRAL_ADMIN_EMAILS=domi@aisapira.com,lrmontero@gmail.com  # Emails separados por coma
+BANCO_CENTRAL_SEND_SUCCESS_REPORT=true  # true/false - Enviar reportes diarios de éxito
 ```
 
 ### Credenciales

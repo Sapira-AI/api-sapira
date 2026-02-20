@@ -679,4 +679,59 @@ export class EmailsService {
 			throw new InternalServerErrorException('Error al enviar email');
 		}
 	}
+
+	async sendSystemEmail(to: string[], subject: string, html: string): Promise<void> {
+		if (!this.sendgridApiKey) {
+			throw new BadRequestException('Servicio de email no configurado. Contacte al administrador.');
+		}
+
+		const systemEmailFrom = this.configService.get<string>('SYSTEM_EMAIL_FROM');
+		const systemEmailFromName = this.configService.get<string>('SYSTEM_EMAIL_FROM_NAME');
+
+		if (!systemEmailFrom) {
+			throw new BadRequestException('SYSTEM_EMAIL_FROM no configurado en variables de entorno');
+		}
+
+		try {
+			const response = await fetch(`${this.sendgridApiUrl}/mail/send`, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${this.sendgridApiKey}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					personalizations: [
+						{
+							to: to.map((email) => ({ email })),
+						},
+					],
+					from: {
+						email: systemEmailFrom,
+						name: systemEmailFromName || 'Sistema Sapira',
+					},
+					subject,
+					content: [
+						{
+							type: 'text/html',
+							value: html,
+						},
+					],
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				this.logger.error('Error enviando email del sistema:', errorData);
+				throw new BadRequestException(errorData.errors?.[0]?.message || 'Error al enviar email del sistema');
+			}
+
+			this.logger.log(`✓ Email del sistema enviado a ${to.join(', ')}`);
+		} catch (error) {
+			if (error instanceof BadRequestException) {
+				throw error;
+			}
+			this.logger.error('Error enviando email del sistema:', error);
+			throw new InternalServerErrorException('Error al enviar email del sistema');
+		}
+	}
 }

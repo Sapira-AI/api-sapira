@@ -555,8 +555,40 @@ export class ExchangeRatesService {
 	}
 
 	async syncHistoricalRates(): Promise<SyncExchangeRatesResponseDto> {
-		const startDate = '2025-01-01';
+		const lastRate = await this.exchangeRateRepository
+			.createQueryBuilder('er')
+			.select('MAX(er.rate_date)', 'last_date')
+			.where('er.source_type = :sourceType', { sourceType: 'BANCOCENTRAL' })
+			.getRawOne();
+
+		let startDate: string;
+
+		if (lastRate?.last_date) {
+			const lastDate = new Date(lastRate.last_date);
+			lastDate.setDate(lastDate.getDate() + 1);
+			startDate = lastDate.toISOString().split('T')[0];
+			this.logger.log(`Sincronización incremental desde última fecha: ${startDate}`);
+		} else {
+			startDate = '2025-01-01';
+			this.logger.log('Primera sincronización, iniciando desde 2025-01-01');
+		}
+
 		const today = new Date().toISOString().split('T')[0];
+
+		if (startDate > today) {
+			this.logger.log('Ya estamos al día, no hay datos nuevos para sincronizar');
+			return {
+				success: true,
+				message: 'Ya estamos al día, no hay datos nuevos para sincronizar',
+				stats: {
+					totalProcessed: 0,
+					inserted: 0,
+					updated: 0,
+					errors: 0,
+					indirectConversions: 0,
+				},
+			};
+		}
 
 		return this.syncExchangeRates({
 			startDate,
