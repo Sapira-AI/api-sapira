@@ -28,10 +28,11 @@ export interface SkillDatabase {
 }
 
 export interface WidgetConfig {
-	type: 'line' | 'bar' | 'pie' | 'table' | 'kpi' | 'area';
+	type: 'line' | 'bar' | 'bar_stacked' | 'pie' | 'table' | 'kpi' | 'area';
 	title?: string;
 	xAxis?: string;
 	yAxis?: string;
+	seriesKey?: string; // columna que define las series en bar_stacked (e.g. 'company_name')
 	columns?: string[];
 	columnLabels?: { [key: string]: string };
 	format?: {
@@ -47,6 +48,7 @@ export interface SkillResponse {
 export interface SkillDefinition {
 	name: string;
 	description: string;
+	emptyMessage?: string; // mensaje cuando la query retorna 0 resultados
 	parameters: {
 		required: string[];
 		optional: string[];

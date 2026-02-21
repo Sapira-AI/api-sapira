@@ -4,6 +4,12 @@ import { DataSource } from 'typeorm';
 import { DynamicQueryBuilder } from './query-builder';
 import { SkillDefinition, SkillExecutionContext, SkillExecutionResult } from './skill-definition.interface';
 
+// Paleta de colores para series múltiples (bar_stacked, etc.)
+const SERIES_COLORS = [
+	'#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+	'#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
+];
+
 @Injectable()
 export class SkillExecutor {
 	private readonly logger = new Logger(SkillExecutor.name);
@@ -29,10 +35,11 @@ export class SkillExecutor {
 			this.logger.log(`Skill ${skill.name} ejecutada exitosamente. Resultados: ${results.length} filas`);
 
 			if (results.length === 0) {
+				// Sin datos: no generar widgets, usar mensaje contextual si existe
 				return {
 					success: true,
 					data: [],
-					message: 'No se encontraron datos para los criterios especificados.',
+					message: skill.emptyMessage || 'No se encontraron datos para los criterios especificados.',
 				};
 			}
 
@@ -42,22 +49,10 @@ export class SkillExecutor {
 				data: results,
 			};
 
-			console.log('🎯 SkillExecutor - Skill:', skill.name);
-			console.log('🎯 SkillExecutor - include_widgets:', params.include_widgets);
-			console.log('🎯 SkillExecutor - widgetConfig:', skill.response.widgetConfig);
-			console.log('🎯 SkillExecutor - Datos obtenidos:', results.length, 'filas');
+			this.logger.debug(`Skill: ${skill.name} | include_widgets: ${params.include_widgets}`);
 
 			if (params.include_widgets && skill.response.widgetConfig) {
-				console.log('✅ SkillExecutor - Generando widgets...');
 				response.widgets = this.generateWidgets(results, skill);
-				console.log('✅ SkillExecutor - Widgets generados:', response.widgets);
-			} else {
-				console.log(
-					'❌ SkillExecutor - NO se generan widgets. include_widgets:',
-					params.include_widgets,
-					'widgetConfig:',
-					!!skill.response.widgetConfig
-				);
 			}
 
 			return response;
@@ -86,6 +81,7 @@ export class SkillExecutor {
 			processed[paramName] = value;
 		}
 
+		// snapshot: ambas fechas al primer día del mes actual
 		if (processed.mode === 'snapshot' && !processed.date_to) {
 			const today = new Date();
 			const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -93,7 +89,8 @@ export class SkillExecutor {
 			processed.date_from = processed.date_to;
 		}
 
-		if (processed.mode === 'series' && !processed.date_from && processed.months_back) {
+		// series con months_back: calcular rango (también aplica si no hay mode pero hay months_back)
+		if (!processed.date_from && processed.months_back) {
 			const today = new Date();
 			const toDate = new Date(today.getFullYear(), today.getMonth(), 1);
 			const fromDate = new Date(toDate);
@@ -103,15 +100,21 @@ export class SkillExecutor {
 			processed.date_to = toDate.toISOString().split('T')[0];
 		}
 
-		// Calcular mes/año actual si no se proporcionan (para invoice skills)
-		if (!processed.month || !processed.year) {
+		// Cap universal: si no hay date_to definido, limitar al mes actual para evitar datos futuros
+		if (!processed.date_to && processed.mode !== 'snapshot') {
 			const today = new Date();
-			if (!processed.month) {
-				processed.month = today.getMonth() + 1;
-			}
-			if (!processed.year) {
-				processed.year = today.getFullYear();
-			}
+			const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+			processed.date_to = firstDayOfMonth.toISOString().split('T')[0];
+		}
+
+		// Calcular mes/año actual si no se proporcionan (para invoice skills)
+		if (!processed.month) {
+			const today = new Date();
+			processed.month = today.getMonth() + 1;
+		}
+		if (!processed.year) {
+			const today = new Date();
+			processed.year = today.getFullYear();
 		}
 
 		// Calcular fecha límite para contratos por vencer si se proporciona days_ahead
@@ -145,19 +148,18 @@ export class SkillExecutor {
 		baseQuery = baseQuery.replace(/\{\{DEFERRED_COLUMN\}\}/g, deferredColumn);
 		baseQuery = baseQuery.replace(/\{\{UNBILLED_COLUMN\}\}/g, unbilledColumn);
 
+		// Copiar groupBy inmutablemente para no mutar el singleton del catálogo
+		let groupBy = [...(skill.database.groupBy || [])];
+
 		if (params.group_by && Array.isArray(params.group_by)) {
 			const groupByColumns = params.group_by.map((col: string) => `${col},`).join(' ');
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', groupByColumns);
-
-			if (!skill.database.groupBy) {
-				skill.database.groupBy = [];
-			}
-			skill.database.groupBy.push(...params.group_by);
+			groupBy = [...groupBy, ...params.group_by];
 		} else {
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', '');
 		}
 
-		const modifiedSkill = { ...skill, database: { ...skill.database, baseQuery } };
+		const modifiedSkill = { ...skill, database: { ...skill.database, baseQuery, groupBy } };
 
 		return this.queryBuilder.buildQuery(modifiedSkill, params, holdingId);
 	}
@@ -261,15 +263,65 @@ export class SkillExecutor {
 		const config = skill.response.widgetConfig;
 		const widgets: any[] = [];
 
-		// Caso especial: facturas por emitir - agregar KPI con el total
+		// Caso especial: facturas por emitir — KPI con totales del CTE
 		if (skill.name === 'get_invoices_to_issue' && data.length > 0 && data[0].total_count !== undefined) {
-			const totalCount = data[0].total_count || 0;
-			const totalAmount = data[0].total_amount || 0;
-
 			widgets.push({
 				type: 'kpi',
 				title: 'Total Facturas Pendientes',
-				value: `${totalCount} facturas`,
+				value: `${data[0].total_count || 0} facturas`,
+			});
+		}
+
+		// Gráfico de barras apiladas con múltiples series (una por valor único de seriesKey)
+		if (config.type === 'bar_stacked') {
+			const xKey = config.xAxis || 'period_month';
+			const yKey = config.yAxis || 'mrr';
+			const seriesKey = config.seriesKey || 'company_name';
+
+			// Extraer series únicas preservando orden de aparición
+			const seriesNames: string[] = [];
+			data.forEach((row) => {
+				const name = String(row[seriesKey] ?? 'Sin nombre');
+				if (!seriesNames.includes(name)) seriesNames.push(name);
+			});
+
+			// Pivotar: { period_month: { Company_A: mrr, Company_B: mrr } }
+			const pivotMap: Record<string, Record<string, number>> = {};
+			const xOrder: string[] = [];
+			data.forEach((row) => {
+				const xVal = String(row[xKey] ?? '');
+				const sName = String(row[seriesKey] ?? 'Sin nombre');
+				const yVal = Number(row[yKey]) || 0;
+				if (!pivotMap[xVal]) {
+					pivotMap[xVal] = {};
+					xOrder.push(xVal);
+				}
+				// Sumar en caso de duplicados
+				pivotMap[xVal][sName] = (pivotMap[xVal][sName] || 0) + yVal;
+			});
+
+			// Construir array de datos pivotado
+			const pivotedData = xOrder.map((xVal) => {
+				const row: Record<string, any> = { [xKey]: xVal };
+				seriesNames.forEach((name) => {
+					row[name] = pivotMap[xVal][name] ?? 0;
+				});
+				return row;
+			});
+
+			// Construir array de series con colores
+			const series = seriesNames.map((name, idx) => ({
+				key: name,
+				name: name,
+				color: SERIES_COLORS[idx % SERIES_COLORS.length],
+			}));
+
+			widgets.push({
+				type: 'chart_bar_stacked',
+				title: config.title || skill.name,
+				xKey: xKey,
+				series: series,
+				data: pivotedData,
 			});
 		}
 
@@ -277,10 +329,8 @@ export class SkillExecutor {
 			const xKey = config.xAxis || 'period_month';
 			const yKey = config.yAxis || 'mrr';
 
-			// Determinar el tipo correcto para el frontend
 			const widgetType = config.type === 'line' ? 'chart_line' : config.type === 'bar' ? 'chart_bar' : 'chart_line';
 
-			// Calcular rango de valores para el eje Y
 			const yValues = data.map((item) => Number(item[yKey]) || 0);
 			const maxValue = Math.max(...yValues);
 
@@ -307,18 +357,15 @@ export class SkillExecutor {
 		if (config.type === 'table') {
 			const columns = config.columns || Object.keys(data[0] || {});
 
-			// Filtrar columnas que no deben mostrarse (IDs, etc.)
 			const keepIndices: number[] = [];
 			const displayColumns: string[] = [];
 
 			columns.forEach((col, idx) => {
-				// No mostrar columnas de ID
 				const colLower = col.toLowerCase();
 				if (colLower.includes('_id') || colLower === 'id' || colLower.includes('holding') || colLower.includes('tenant')) {
 					return;
 				}
 				keepIndices.push(idx);
-				// Aplicar label si existe, sino usar el nombre de la columna
 				displayColumns.push(config.columnLabels?.[col] || col);
 			});
 
@@ -327,7 +374,6 @@ export class SkillExecutor {
 					const col = columns[idx];
 					const value = row[col];
 
-					// Formatear según el tipo especificado
 					if (config.format?.[col] === 'month-year' && value) {
 						try {
 							const date = new Date(value);
@@ -339,7 +385,6 @@ export class SkillExecutor {
 						}
 					}
 
-					// Formatear números con separadores de miles
 					if (config.format?.[col] === 'currency' && typeof value === 'number') {
 						return new Intl.NumberFormat('en-US', {
 							style: 'currency',
@@ -376,7 +421,7 @@ export class SkillExecutor {
 			widgets.push({
 				type: 'kpi',
 				title: config.title || skill.name,
-				value: this.formatKpiValue(value, config.format),
+				value: this.formatKpiValue(value, config.format, yKey),
 			});
 		}
 
@@ -391,20 +436,38 @@ export class SkillExecutor {
 			revenue: 'Revenue',
 			churn: 'Churn',
 			active_clients: 'Clientes Activos',
+			recognized_revenue: 'Revenue Reconocido',
+			deferred_balance: 'Balance Diferido',
+			unbilled_balance: 'Balance No Facturado',
+			total_amount: 'Total',
+			billed_amount: 'Facturado',
 		};
 		return nameMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 	}
 
-	private formatKpiValue(value: any, format?: any): string {
+	private formatKpiValue(value: any, format?: Record<string, string>, yKey?: string): string {
 		if (value === null || value === undefined) return '—';
 
-		if (format?.mrr === 'currency' || format?.revenue === 'currency') {
+		// Determinar el formato según el yKey o el primer key de currency en format
+		const isCurrency =
+			(yKey && format?.[yKey] === 'currency') ||
+			Object.values(format || {}).includes('currency');
+
+		const isPercentage =
+			(yKey && format?.[yKey] === 'percentage') ||
+			Object.values(format || {}).includes('percentage');
+
+		if (isCurrency && typeof value === 'number') {
 			return new Intl.NumberFormat('en-US', {
 				style: 'currency',
 				currency: 'USD',
 				minimumFractionDigits: 2,
 				maximumFractionDigits: 2,
 			}).format(value);
+		}
+
+		if (isPercentage && typeof value === 'number') {
+			return `${value.toFixed(2)}%`;
 		}
 
 		if (typeof value === 'number') {
@@ -418,7 +481,7 @@ export class SkillExecutor {
 	}
 
 	private handleQueryError(error: any, skillName: string): SkillExecutionResult {
-		console.error(`Error al ejecutar skill ${skillName}:`, error);
+		this.logger.error(`Error al ejecutar skill ${skillName}:`, error);
 
 		if (error.code === '42P01') {
 			return {
