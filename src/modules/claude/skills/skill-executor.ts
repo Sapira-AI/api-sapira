@@ -10,6 +10,16 @@ const SERIES_COLORS = [
 	'#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
 ];
 
+// Formatear period_month a MM/YYYY para evitar problemas de agrupación por timezone
+const formatPeriodMonth = (value: any): string => {
+	if (!value) return '';
+	const date = new Date(value);
+	if (isNaN(date.getTime())) return String(value);
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const year = date.getFullYear();
+	return `${month}/${year}`;
+};
+
 @Injectable()
 export class SkillExecutor {
 	private readonly logger = new Logger(SkillExecutor.name);
@@ -147,14 +157,25 @@ export class SkillExecutor {
 		baseQuery = baseQuery.replace(/\{\{RECOGNIZED_COLUMN\}\}/g, recognizedColumn);
 		baseQuery = baseQuery.replace(/\{\{DEFERRED_COLUMN\}\}/g, deferredColumn);
 		baseQuery = baseQuery.replace(/\{\{UNBILLED_COLUMN\}\}/g, unbilledColumn);
+		baseQuery = baseQuery.replace(/\{\{CURRENCY_MODE\}\}/g, currencyMode);
 
 		// Copiar groupBy inmutablemente para no mutar el singleton del catálogo
 		let groupBy = [...(skill.database.groupBy || [])];
 
+		// Mapeo de nombres semánticos a columnas reales de la base de datos
+		const groupByColumnMap: Record<string, string> = {
+			company: 'company_name',
+			product: 'product_name',
+			currency: 'contract_currency',
+			momentum: 'momentum',
+			client: 'client_name',
+		};
+
 		if (params.group_by && Array.isArray(params.group_by)) {
-			const groupByColumns = params.group_by.map((col: string) => `${col},`).join(' ');
+			const mappedColumns = params.group_by.map((col: string) => groupByColumnMap[col] || col);
+			const groupByColumns = mappedColumns.map((col: string) => `${col},`).join(' ');
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', groupByColumns);
-			groupBy = [...groupBy, ...params.group_by];
+			groupBy = [...groupBy, ...mappedColumns];
 		} else {
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', '');
 		}
@@ -289,6 +310,89 @@ export class SkillExecutor {
 			const pivotMap: Record<string, Record<string, number>> = {};
 			const xOrder: string[] = [];
 			data.forEach((row) => {
+				// CRÍTICO: Formatear period_month a MM/YYYY para evitar agrupación incorrecta por timezone
+				const xVal = xKey === 'period_month' 
+					? formatPeriodMonth(row[xKey]) 
+					: String(row[xKey] ?? '');
+				const sName = String(row[seriesKey] ?? 'Sin nombre');
+				const yVal = Number(row[yKey]) || 0;
+				if (!pivotMap[xVal]) {
+					pivotMap[xVal] = {};
+					xOrder.push(xVal);
+				}
+				// Sumar en caso de duplicados dentro del mismo período
+				pivotMap[xVal][sName] = (pivotMap[xVal][sName] || 0) + yVal;
+			});
+
+			// Construir array de datos pivotado con cálculo de _total
+			const pivotedData = xOrder.map((xVal) => {
+				const row: Record<string, any> = { [xKey]: xVal };
+				let total = 0;
+				seriesNames.forEach((name) => {
+					const val = pivotMap[xVal][name] ?? 0;
+					row[name] = val;
+					total += val;
+				});
+				row['_total'] = total;
+				return row;
+			});
+
+			// Construir array de series con colores (barras para dimensiones, línea para total)
+			const series: Array<{ key: string; name: string; color: string; type: 'bar' | 'line' }> = seriesNames.map((name, idx) => ({
+				key: name,
+				name: name,
+				color: SERIES_COLORS[idx % SERIES_COLORS.length],
+				type: 'bar' as const,
+			}));
+
+			// Agregar serie de línea para el total
+			series.push({
+				key: '_total',
+				name: 'Total',
+				color: '#1f2937',
+				type: 'line',
+			});
+
+			widgets.push({
+				type: 'chart_bar_stacked_with_line',
+				title: config.title || skill.name,
+				xKey: xKey,
+				series: series,
+				data: pivotedData,
+			});
+		}
+
+		// Gráfico de barras horizontales (para rankings)
+		if (config.type === 'bar_horizontal') {
+			const xKey = config.xAxis || 'name';
+			const yKey = config.yAxis || 'value';
+
+			widgets.push({
+				type: 'chart_bar_horizontal',
+				title: config.title || skill.name,
+				xKey: xKey,
+				yKey: yKey,
+				data: data,
+			});
+		}
+
+		// Gráfico de barras agrupadas (para comparación por 2 dimensiones)
+		if (config.type === 'bar_grouped') {
+			const xKey = config.xAxis || 'category';
+			const seriesKey = config.seriesKey || 'group';
+			const yKey = config.yAxis || 'value';
+
+			// Extraer series únicas
+			const seriesNames: string[] = [];
+			data.forEach((row) => {
+				const name = String(row[seriesKey] ?? 'Sin nombre');
+				if (!seriesNames.includes(name)) seriesNames.push(name);
+			});
+
+			// Pivotar datos
+			const pivotMap: Record<string, Record<string, number>> = {};
+			const xOrder: string[] = [];
+			data.forEach((row) => {
 				const xVal = String(row[xKey] ?? '');
 				const sName = String(row[seriesKey] ?? 'Sin nombre');
 				const yVal = Number(row[yKey]) || 0;
@@ -296,11 +400,9 @@ export class SkillExecutor {
 					pivotMap[xVal] = {};
 					xOrder.push(xVal);
 				}
-				// Sumar en caso de duplicados
 				pivotMap[xVal][sName] = (pivotMap[xVal][sName] || 0) + yVal;
 			});
 
-			// Construir array de datos pivotado
 			const pivotedData = xOrder.map((xVal) => {
 				const row: Record<string, any> = { [xKey]: xVal };
 				seriesNames.forEach((name) => {
@@ -309,15 +411,15 @@ export class SkillExecutor {
 				return row;
 			});
 
-			// Construir array de series con colores
+			const SERIES_COLORS_GROUPED = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 			const series = seriesNames.map((name, idx) => ({
 				key: name,
 				name: name,
-				color: SERIES_COLORS[idx % SERIES_COLORS.length],
+				color: SERIES_COLORS_GROUPED[idx % SERIES_COLORS_GROUPED.length],
 			}));
 
 			widgets.push({
-				type: 'chart_bar_stacked',
+				type: 'chart_bar_grouped',
 				title: config.title || skill.name,
 				xKey: xKey,
 				series: series,
@@ -333,6 +435,20 @@ export class SkillExecutor {
 
 			const yValues = data.map((item) => Number(item[yKey]) || 0);
 			const maxValue = Math.max(...yValues);
+			const sumValues = yValues.reduce((a, b) => a + b, 0);
+
+			// No generar gráfico si todos los valores son 0
+			if (sumValues === 0) {
+				return widgets;
+			}
+
+			// Formatear period_month a MM/YYYY si es el eje X
+			const formattedData = data.map((row) => {
+				if (xKey === 'period_month' && row[xKey]) {
+					return { ...row, [xKey]: formatPeriodMonth(row[xKey]) };
+				}
+				return row;
+			});
 
 			widgets.push({
 				type: widgetType,
@@ -345,7 +461,7 @@ export class SkillExecutor {
 						color: config.type === 'line' ? '#8b5cf6' : '#3b82f6',
 					},
 				],
-				data: data,
+				data: formattedData,
 				yAxisConfig: {
 					min: 0,
 					max: maxValue * 1.1,
@@ -385,13 +501,29 @@ export class SkillExecutor {
 						}
 					}
 
-					if (config.format?.[col] === 'currency' && typeof value === 'number') {
-						return new Intl.NumberFormat('en-US', {
-							style: 'currency',
-							currency: 'USD',
-							minimumFractionDigits: 2,
-							maximumFractionDigits: 2,
-						}).format(value);
+					if (config.format?.[col] === 'date' && value) {
+						try {
+							const date = new Date(value);
+							const day = String(date.getDate()).padStart(2, '0');
+							const month = String(date.getMonth() + 1).padStart(2, '0');
+							const year = date.getFullYear();
+							return `${day}-${month}-${year}`;
+						} catch (e) {
+							return value;
+						}
+					}
+
+					if (config.format?.[col] === 'currency' && value != null) {
+						const numValue = typeof value === 'number' ? value : parseFloat(value);
+						if (!isNaN(numValue)) {
+							return new Intl.NumberFormat('en-US', {
+								style: 'currency',
+								currency: 'USD',
+								minimumFractionDigits: 2,
+								maximumFractionDigits: 2,
+							}).format(numValue);
+						}
+						return value;
 					}
 
 					if (config.format?.[col] === 'number' && typeof value === 'number') {
@@ -422,6 +554,54 @@ export class SkillExecutor {
 				type: 'kpi',
 				title: config.title || skill.name,
 				value: this.formatKpiValue(value, config.format, yKey),
+			});
+		}
+
+		// Cohort heatmap: pivota filas (cohort_month, months_since_cohort, retention_pct, cohort_size)
+		// a estructura matricial triangular para visualización tipo heatmap
+		if (config.type === 'cohort_heatmap') {
+			const cohortKey = config.xAxis || 'cohort_month';
+			const periodKey = config.seriesKey || 'months_since_cohort';
+			const valueKey = config.yAxis || 'retention_pct';
+
+			// Recolectar todos los períodos únicos ordenados
+			const periodsSet = new Set<number>();
+			data.forEach((row) => {
+				const p = Number(row[periodKey]);
+				if (!isNaN(p)) periodsSet.add(p);
+			});
+			const periods = Array.from(periodsSet).sort((a, b) => a - b);
+
+			// Recolectar todos los cohorts únicos ordenados
+			const cohortOrder: string[] = [];
+			data.forEach((row) => {
+				const c = String(row[cohortKey] ?? '');
+				if (c && !cohortOrder.includes(c)) cohortOrder.push(c);
+			});
+
+			// Construir mapa: cohort → { period → value }
+			const cohortMap: Record<string, { size: number; values: Record<number, number | null> }> = {};
+			data.forEach((row) => {
+				const c = String(row[cohortKey] ?? '');
+				const p = Number(row[periodKey]);
+				const v = row[valueKey] != null ? Number(row[valueKey]) : null;
+				const size = Number(row['cohort_size']) || 0;
+				if (!cohortMap[c]) cohortMap[c] = { size, values: {} };
+				cohortMap[c].values[p] = v;
+			});
+
+			// Construir filas de la matriz
+			const rows = cohortOrder.map((c) => ({
+				cohort: c,
+				cohortSize: cohortMap[c]?.size ?? 0,
+				values: periods.map((p) => cohortMap[c]?.values[p] ?? null),
+			}));
+
+			widgets.push({
+				type: 'chart_cohort',
+				title: config.title || skill.name,
+				periods: periods.map((p) => (p === 0 ? 'Mes 0' : `Mes ${p}`)),
+				rows,
 			});
 		}
 

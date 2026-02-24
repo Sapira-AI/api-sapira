@@ -28,11 +28,11 @@ export interface SkillDatabase {
 }
 
 export interface WidgetConfig {
-	type: 'line' | 'bar' | 'bar_stacked' | 'pie' | 'table' | 'kpi' | 'area';
+	type: 'line' | 'bar' | 'bar_stacked' | 'bar_horizontal' | 'bar_grouped' | 'pie' | 'table' | 'kpi' | 'area' | 'cohort_heatmap';
 	title?: string;
 	xAxis?: string;
 	yAxis?: string;
-	seriesKey?: string; // columna que define las series en bar_stacked (e.g. 'company_name')
+	seriesKey?: string; // columna que define las series en bar_stacked/bar_grouped (e.g. 'company_name')
 	columns?: string[];
 	columnLabels?: { [key: string]: string };
 	format?: {

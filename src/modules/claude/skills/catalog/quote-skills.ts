@@ -31,35 +31,33 @@ Usar cuando el usuario pregunte por:
 	},
 
 	database: {
-		tables: ['quotes', 'clients', 'companies'],
+		tables: ['quotes', 'quote_stages', 'clients', 'companies'],
 		baseQuery: `
 			SELECT
 				q.id as quote_id,
 				q.quote_number,
-				q.status,
-				q.created_at::date as quote_date,
-				q.valid_until,
-				q.total_system_currency,
-				q.quote_currency,
+				qs.name as stage_name,
+				q.quote_date,
+				q.total_amount,
+				q.currency as quote_currency,
 				q.client_id,
-				q.company_id,
-				cl.legal_name as client_name,
+				cl.name_commercial as client_name,
 				co.legal_name as company_name
 			FROM quotes q
+			JOIN quote_stages qs ON qs.id = q.quote_stage_id
 			LEFT JOIN clients cl ON cl.id = q.client_id
 			LEFT JOIN companies co ON co.id = q.company_id
 			WHERE {{WHERE_CLAUSE}}
-				AND q.status NOT IN ('Rechazada', 'Cancelada', 'Expirada')
 		`,
 		filters: {
 			company_id: {
-				column: 'q.company_id',
+				column: 'co.id',
 				operator: '=',
 				parameterName: 'company_id',
 			},
 		},
 		groupBy: [],
-		orderBy: ['q.total_system_currency DESC'],
+		orderBy: ['q.total_amount DESC NULLS LAST'],
 	},
 
 	response: {
@@ -67,20 +65,18 @@ Usar cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Pipeline de Cotizaciones',
-			columns: ['quote_number', 'client_name', 'company_name', 'status', 'quote_date', 'valid_until', 'total_system_currency'],
+			columns: ['quote_number', 'client_name', 'company_name', 'stage_name', 'quote_date', 'total_amount'],
 			columnLabels: {
 				quote_number: 'N° Cotización',
 				client_name: 'Cliente',
 				company_name: 'Compañía',
-				status: 'Estado',
+				stage_name: 'Estado',
 				quote_date: 'Fecha',
-				valid_until: 'Válida Hasta',
-				total_system_currency: 'Valor',
+				total_amount: 'Valor',
 			},
 			format: {
-				total_system_currency: 'currency',
+				total_amount: 'currency',
 				quote_date: 'date',
-				valid_until: 'date',
 			},
 		},
 	},

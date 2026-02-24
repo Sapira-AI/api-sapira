@@ -1,6 +1,7 @@
 import { SkillDefinition } from '../skill-definition.interface';
 
 import { CLIENT_SKILLS } from './client-skills';
+import { COHORT_SKILLS } from './cohort-skills';
 import { CMRR_MOMENTUM_SKILLS } from './cmrr-momentum-skills';
 import { CONTRACT_SKILLS } from './contract-skills';
 import { INVOICE_SKILLS } from './invoice-skills';
@@ -18,6 +19,7 @@ export const SKILLS_CATALOG: SkillDefinition[] = [
 	...CMRR_MOMENTUM_SKILLS,
 	...REVENUE_SKILLS,
 	...QUANTITY_VARIATION_SKILLS,
+	...COHORT_SKILLS,
 ];
 
 export function getSkillByName(name: string): SkillDefinition | undefined {

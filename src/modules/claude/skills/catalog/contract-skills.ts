@@ -40,13 +40,13 @@ Busca contratos que vencen en los próximos 365 días (12 meses).`,
 				c.company_id,
 				c.legal_client_name,
 				c.client_name_commercial,
-				EXTRACT(DAY FROM (c.contract_end_date - CURRENT_DATE)) as days_until_expiry
+				(c.contract_end_date::date - CURRENT_DATE) as days_until_expiry
 			FROM contracts c
 			WHERE {{WHERE_CLAUSE}}
 				AND c.status IN ('Activo', 'Firmado')
 				AND c.contract_end_date IS NOT NULL
-				AND c.contract_end_date >= CURRENT_DATE
-				AND c.contract_end_date <= CURRENT_DATE + INTERVAL '365 days'
+				AND c.contract_end_date::date >= CURRENT_DATE
+				AND c.contract_end_date::date <= CURRENT_DATE + INTERVAL '365 days'
 		`,
 		filters: {},
 		groupBy: [],
@@ -233,13 +233,13 @@ Usar esta skill cuando el usuario pregunte por:
 				c.company_id,
 				c.legal_client_name,
 				c.client_name_commercial,
-				EXTRACT(DAY FROM (c.contract_end_date - CURRENT_DATE)) as days_until_expiry
+				(c.contract_end_date::date - CURRENT_DATE) as days_until_expiry
 			FROM contracts c
 			WHERE {{WHERE_CLAUSE}}
 				AND c.status IN ('Activo', 'Firmado')
 				AND c.contract_end_date IS NOT NULL
-				AND c.contract_end_date >= CURRENT_DATE
-				AND c.contract_end_date <= CURRENT_DATE + INTERVAL '180 days'
+				AND c.contract_end_date::date >= CURRENT_DATE
+				AND c.contract_end_date::date <= CURRENT_DATE + INTERVAL '180 days'
 		`,
 		filters: {},
 		groupBy: [],
@@ -442,13 +442,13 @@ Usar cuando el usuario pregunte por:
 				c.contract_number,
 				c.status,
 				c.type,
-				c.contract_start_date,
+				c.booking_date as contract_start_date,
 				c.contract_end_date,
 				c.total_value_system_currency,
 				c.contract_currency,
 				c.legal_client_name,
 				c.company_id,
-				EXTRACT(DAY FROM (c.contract_end_date - CURRENT_DATE)) as days_until_expiry
+				(c.contract_end_date::date - CURRENT_DATE) as days_until_expiry
 			FROM contracts c
 			WHERE {{WHERE_CLAUSE}}
 				AND c.status IN ('Activo', 'Firmado')

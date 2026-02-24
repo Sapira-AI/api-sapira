@@ -34,14 +34,13 @@ Usar cuando el usuario pregunte por:
 		baseQuery: `
 			SELECT
 				cl.id as client_id,
-				cl.legal_name as client_name,
-				cl.email,
-				cl.company_id,
+				cl.name_commercial as client_name,
+				cl.segment,
 				COUNT(c.id) as active_contract_count,
 				SUM(c.total_value_system_currency) as total_contract_value,
 				MIN(c.contract_end_date) as nearest_expiry
 			FROM clients cl
-			INNER JOIN contracts c ON c.client_id = cl.id
+			INNER JOIN contracts c ON c.client_id = cl.id AND c.holding_id = cl.holding_id
 			WHERE {{WHERE_CLAUSE}}
 				AND c.status IN ('Activo', 'Firmado')
 		`,
@@ -52,7 +51,7 @@ Usar cuando el usuario pregunte por:
 				parameterName: 'company_id',
 			},
 		},
-		groupBy: ['cl.id', 'cl.legal_name', 'cl.email', 'cl.company_id'],
+		groupBy: ['cl.id', 'cl.name_commercial', 'cl.segment'],
 		orderBy: ['total_contract_value DESC'],
 	},
 
@@ -61,10 +60,10 @@ Usar cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Clientes Activos',
-			columns: ['client_name', 'email', 'active_contract_count', 'total_contract_value', 'nearest_expiry'],
+			columns: ['client_name', 'segment', 'active_contract_count', 'total_contract_value', 'nearest_expiry'],
 			columnLabels: {
 				client_name: 'Cliente',
-				email: 'Email',
+				segment: 'Segmento',
 				active_contract_count: 'Contratos Activos',
 				total_contract_value: 'Valor Total',
 				nearest_expiry: 'Próximo Vencimiento',
