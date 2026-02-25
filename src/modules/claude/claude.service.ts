@@ -28,6 +28,7 @@ export class ClaudeService {
 		}
 		this.client = new Anthropic({
 			apiKey: apiKey || '',
+			timeout: 120000, // 120 segundos de timeout para requests largos
 		});
 	}
 

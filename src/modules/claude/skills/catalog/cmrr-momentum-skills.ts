@@ -4,6 +4,10 @@ export const GET_CMRR_SKILL: SkillDefinition = {
 	name: 'get_cmrr',
 	description: `Obtiene el CMRR (Committed Monthly Recurring Revenue) para uno o múltiples períodos.
 	
+INTENT: Consultar el MRR basado en fecha de booking (firma del contrato).
+DIMENSIONES: período, compañía (opcional), producto (opcional).
+WIDGET: Gráfico de barras (eje X = período MM/YYYY, eje Y = CMRR).
+
 Usar esta skill cuando el usuario pregunte por:
 - "CMRR de este mes" o "CMRR actual" (usar mode=snapshot)
 - "CMRR últimos X meses" (usar mode=series con months_back=X)
@@ -12,7 +16,10 @@ Usar esta skill cuando el usuario pregunte por:
 - "CMRR en moneda del sistema" (usar currency_mode=system)
 - "CMRR por moneda de contrato" (usar currency_mode=contract)
 
-El CMRR ya viene calculado en la tabla revenue_schedule_monthly.`,
+El CMRR ya viene calculado en la tabla revenue_schedule_monthly.
+NOTA: Si no hay datos de CMRR, puede ser que el holding no tenga contratos con fecha de booking configurada.`,
+
+	emptyMessage: 'No hay datos de CMRR disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada, o si no hay datos de revenue_schedule_monthly cargados. Puedes intentar consultar el MRR en su lugar, que usa la fecha de inicio de servicio.',
 
 	parameters: {
 		required: [],
@@ -65,7 +72,6 @@ El CMRR ya viene calculado en la tabla revenue_schedule_monthly.`,
 		baseQuery: `
 			SELECT 
 				period_month,
-				{{GROUP_BY_COLUMNS}}
 				SUM({{CMRR_COLUMN}}) as cmrr
 			FROM revenue_schedule_monthly
 			WHERE {{WHERE_CLAUSE}} AND is_total_row = false
@@ -94,12 +100,105 @@ El CMRR ya viene calculado en la tabla revenue_schedule_monthly.`,
 	response: {
 		type: 'chart',
 		widgetConfig: {
-			type: 'line',
-			title: 'Evolución de CMRR',
+			type: 'bar',
+			title: 'Evolución de CMRR (Moneda del Sistema)',
 			xAxis: 'period_month',
 			yAxis: 'cmrr',
 			format: {
 				cmrr: 'currency',
+				period_month: 'month-year',
+			},
+		},
+	},
+};
+
+export const GET_CMRR_BY_COMPANY_SKILL: SkillDefinition = {
+	name: 'get_cmrr_by_company',
+	description: `Obtiene el CMRR (Committed Monthly Recurring Revenue) desglosado por compañía.
+	
+INTENT: Ver distribución del CMRR por compañía.
+DIMENSIONES: período, compañía.
+WIDGET: Gráfico de barras apiladas (eje X = período, series = compañías).
+
+Usar esta skill cuando el usuario pregunte por:
+- "CMRR por compañía"
+- "CMRR por empresa"
+- "Distribución del CMRR por compañía"
+- "Cuánto aporta cada compañía al CMRR"
+
+NOTA: Si no hay datos de CMRR, puede ser que el holding no tenga contratos con fecha de booking configurada.`,
+
+	emptyMessage: 'No hay datos de CMRR por compañía disponibles. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada.',
+
+	parameters: {
+		required: [],
+		optional: ['months_back', 'date_from', 'date_to', 'currency_mode', 'include_widgets'],
+		schema: {
+			months_back: {
+				type: 'integer',
+				description: 'Cantidad de meses hacia atrás desde hoy',
+				default: 6,
+			},
+			date_from: {
+				type: 'string',
+				description: 'Fecha inicio en formato YYYY-MM-DD',
+			},
+			date_to: {
+				type: 'string',
+				description: 'Fecha fin en formato YYYY-MM-DD',
+			},
+			currency_mode: {
+				type: 'string',
+				description: 'Moneda para el reporte: system (USD), contract (moneda del contrato)',
+				enum: ['system', 'contract', 'company'],
+				default: 'system',
+			},
+			include_widgets: {
+				type: 'boolean',
+				description: 'Si debe generar gráficos/tablas visuales',
+				default: true,
+			},
+		},
+	},
+
+	database: {
+		tables: ['revenue_schedule_monthly', 'companies'],
+		baseQuery: `
+			SELECT 
+				c.legal_name as company_name,
+				rsm.period_month,
+				SUM(rsm.cmrr_period_system_ccy) as cmrr
+			FROM revenue_schedule_monthly rsm
+			JOIN companies c ON c.id = rsm.company_id
+			WHERE {{WHERE_CLAUSE}} AND rsm.is_total_row = false
+		`,
+		filters: {
+			date_from: {
+				column: 'rsm.period_month',
+				operator: '>=',
+				parameterName: 'date_from',
+			},
+			date_to: {
+				column: 'rsm.period_month',
+				operator: '<=',
+				parameterName: 'date_to',
+			},
+		},
+		groupBy: ['c.legal_name', 'rsm.period_month'],
+		orderBy: ['rsm.period_month ASC', 'cmrr DESC'],
+	},
+
+	response: {
+		type: 'chart',
+		widgetConfig: {
+			type: 'bar_stacked',
+			title: 'CMRR por Compañía (Moneda del Sistema)',
+			xAxis: 'period_month',
+			yAxis: 'cmrr',
+			seriesKey: 'company_name',
+			format: {
+				cmrr: 'currency',
+				period_month: 'month-year',
 			},
 		},
 	},
@@ -120,6 +219,8 @@ Usar esta skill cuando el usuario pregunte por:
 - "Movimientos de MRR por producto" (agregar group_by=product)
 
 Los valores de momentum disponibles son: NEW, UPSELL, CROSS-SELL, DOWNSELL, CHURN, RENEWAL, REACTIVATION, BOP.`,
+
+	emptyMessage: 'No hay datos de momentum disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene movimientos de MRR registrados en ese período.',
 
 	parameters: {
 		required: [],
@@ -325,6 +426,7 @@ Muestra el desglose de momentum (NEW, UPSELL, CROSS-SELL, DOWNSELL, CHURN, RENEW
 
 export const CMRR_MOMENTUM_SKILLS = [
 	GET_CMRR_SKILL,
+	GET_CMRR_BY_COMPANY_SKILL,
 	GET_MRR_MOMENTUM_SKILL,
 	GET_MRR_MOMENTUM_BY_PRODUCT_SKILL,
 ];
