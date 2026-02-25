@@ -60,7 +60,6 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 							});
 						} catch (error) {
 							console.error('Error al guardar log en MongoDB:', error);
-							throw error;
 						}
 					},
 				}

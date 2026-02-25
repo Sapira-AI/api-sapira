@@ -4,6 +4,22 @@ import { DataSource } from 'typeorm';
 import { DynamicQueryBuilder } from './query-builder';
 import { SkillDefinition, SkillExecutionContext, SkillExecutionResult } from './skill-definition.interface';
 
+// Paleta de colores para series múltiples (bar_stacked, etc.)
+const SERIES_COLORS = [
+	'#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+	'#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
+];
+
+// Formatear period_month a MM/YYYY para evitar problemas de agrupación por timezone
+const formatPeriodMonth = (value: any): string => {
+	if (!value) return '';
+	const date = new Date(value);
+	if (isNaN(date.getTime())) return String(value);
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const year = date.getFullYear();
+	return `${month}/${year}`;
+};
+
 @Injectable()
 export class SkillExecutor {
 	private readonly logger = new Logger(SkillExecutor.name);
@@ -29,10 +45,11 @@ export class SkillExecutor {
 			this.logger.log(`Skill ${skill.name} ejecutada exitosamente. Resultados: ${results.length} filas`);
 
 			if (results.length === 0) {
+				// Sin datos: no generar widgets, usar mensaje contextual si existe
 				return {
 					success: true,
 					data: [],
-					message: 'No se encontraron datos para los criterios especificados.',
+					message: skill.emptyMessage || 'No se encontraron datos para los criterios especificados.',
 				};
 			}
 
@@ -42,22 +59,10 @@ export class SkillExecutor {
 				data: results,
 			};
 
-			console.log('🎯 SkillExecutor - Skill:', skill.name);
-			console.log('🎯 SkillExecutor - include_widgets:', params.include_widgets);
-			console.log('🎯 SkillExecutor - widgetConfig:', skill.response.widgetConfig);
-			console.log('🎯 SkillExecutor - Datos obtenidos:', results.length, 'filas');
+			this.logger.debug(`Skill: ${skill.name} | include_widgets: ${params.include_widgets}`);
 
 			if (params.include_widgets && skill.response.widgetConfig) {
-				console.log('✅ SkillExecutor - Generando widgets...');
 				response.widgets = this.generateWidgets(results, skill);
-				console.log('✅ SkillExecutor - Widgets generados:', response.widgets);
-			} else {
-				console.log(
-					'❌ SkillExecutor - NO se generan widgets. include_widgets:',
-					params.include_widgets,
-					'widgetConfig:',
-					!!skill.response.widgetConfig
-				);
 			}
 
 			return response;
@@ -86,6 +91,7 @@ export class SkillExecutor {
 			processed[paramName] = value;
 		}
 
+		// snapshot: ambas fechas al primer día del mes actual
 		if (processed.mode === 'snapshot' && !processed.date_to) {
 			const today = new Date();
 			const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -93,7 +99,8 @@ export class SkillExecutor {
 			processed.date_from = processed.date_to;
 		}
 
-		if (processed.mode === 'series' && !processed.date_from && processed.months_back) {
+		// series con months_back: calcular rango (también aplica si no hay mode pero hay months_back)
+		if (!processed.date_from && processed.months_back) {
 			const today = new Date();
 			const toDate = new Date(today.getFullYear(), today.getMonth(), 1);
 			const fromDate = new Date(toDate);
@@ -103,15 +110,21 @@ export class SkillExecutor {
 			processed.date_to = toDate.toISOString().split('T')[0];
 		}
 
-		// Calcular mes/año actual si no se proporcionan (para invoice skills)
-		if (!processed.month || !processed.year) {
+		// Cap universal: si no hay date_to definido, limitar al mes actual para evitar datos futuros
+		if (!processed.date_to && processed.mode !== 'snapshot') {
 			const today = new Date();
-			if (!processed.month) {
-				processed.month = today.getMonth() + 1;
-			}
-			if (!processed.year) {
-				processed.year = today.getFullYear();
-			}
+			const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+			processed.date_to = firstDayOfMonth.toISOString().split('T')[0];
+		}
+
+		// Calcular mes/año actual si no se proporcionan (para invoice skills)
+		if (!processed.month) {
+			const today = new Date();
+			processed.month = today.getMonth() + 1;
+		}
+		if (!processed.year) {
+			const today = new Date();
+			processed.year = today.getFullYear();
 		}
 
 		// Calcular fecha límite para contratos por vencer si se proporciona days_ahead
@@ -144,20 +157,30 @@ export class SkillExecutor {
 		baseQuery = baseQuery.replace(/\{\{RECOGNIZED_COLUMN\}\}/g, recognizedColumn);
 		baseQuery = baseQuery.replace(/\{\{DEFERRED_COLUMN\}\}/g, deferredColumn);
 		baseQuery = baseQuery.replace(/\{\{UNBILLED_COLUMN\}\}/g, unbilledColumn);
+		baseQuery = baseQuery.replace(/\{\{CURRENCY_MODE\}\}/g, currencyMode);
+
+		// Copiar groupBy inmutablemente para no mutar el singleton del catálogo
+		let groupBy = [...(skill.database.groupBy || [])];
+
+		// Mapeo de nombres semánticos a columnas reales de la base de datos
+		const groupByColumnMap: Record<string, string> = {
+			company: 'company_name',
+			product: 'product_name',
+			currency: 'contract_currency',
+			momentum: 'momentum',
+			client: 'client_name',
+		};
 
 		if (params.group_by && Array.isArray(params.group_by)) {
-			const groupByColumns = params.group_by.map((col: string) => `${col},`).join(' ');
+			const mappedColumns = params.group_by.map((col: string) => groupByColumnMap[col] || col);
+			const groupByColumns = mappedColumns.map((col: string) => `${col},`).join(' ');
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', groupByColumns);
-
-			if (!skill.database.groupBy) {
-				skill.database.groupBy = [];
-			}
-			skill.database.groupBy.push(...params.group_by);
+			groupBy = [...groupBy, ...mappedColumns];
 		} else {
 			baseQuery = baseQuery.replace('{{GROUP_BY_COLUMNS}}', '');
 		}
 
-		const modifiedSkill = { ...skill, database: { ...skill.database, baseQuery } };
+		const modifiedSkill = { ...skill, database: { ...skill.database, baseQuery, groupBy } };
 
 		return this.queryBuilder.buildQuery(modifiedSkill, params, holdingId);
 	}
@@ -261,15 +284,146 @@ export class SkillExecutor {
 		const config = skill.response.widgetConfig;
 		const widgets: any[] = [];
 
-		// Caso especial: facturas por emitir - agregar KPI con el total
+		// Caso especial: facturas por emitir — KPI con totales del CTE
 		if (skill.name === 'get_invoices_to_issue' && data.length > 0 && data[0].total_count !== undefined) {
-			const totalCount = data[0].total_count || 0;
-			const totalAmount = data[0].total_amount || 0;
-
 			widgets.push({
 				type: 'kpi',
 				title: 'Total Facturas Pendientes',
-				value: `${totalCount} facturas`,
+				value: `${data[0].total_count || 0} facturas`,
+			});
+		}
+
+		// Gráfico de barras apiladas con múltiples series (una por valor único de seriesKey)
+		if (config.type === 'bar_stacked') {
+			const xKey = config.xAxis || 'period_month';
+			const yKey = config.yAxis || 'mrr';
+			const seriesKey = config.seriesKey || 'company_name';
+
+			// Extraer series únicas preservando orden de aparición
+			const seriesNames: string[] = [];
+			data.forEach((row) => {
+				const name = String(row[seriesKey] ?? 'Sin nombre');
+				if (!seriesNames.includes(name)) seriesNames.push(name);
+			});
+
+			// Pivotar: { period_month: { Company_A: mrr, Company_B: mrr } }
+			const pivotMap: Record<string, Record<string, number>> = {};
+			const xOrder: string[] = [];
+			data.forEach((row) => {
+				// CRÍTICO: Formatear period_month a MM/YYYY para evitar agrupación incorrecta por timezone
+				const xVal = xKey === 'period_month' 
+					? formatPeriodMonth(row[xKey]) 
+					: String(row[xKey] ?? '');
+				const sName = String(row[seriesKey] ?? 'Sin nombre');
+				const yVal = Number(row[yKey]) || 0;
+				if (!pivotMap[xVal]) {
+					pivotMap[xVal] = {};
+					xOrder.push(xVal);
+				}
+				// Sumar en caso de duplicados dentro del mismo período
+				pivotMap[xVal][sName] = (pivotMap[xVal][sName] || 0) + yVal;
+			});
+
+			// Construir array de datos pivotado con cálculo de _total
+			const pivotedData = xOrder.map((xVal) => {
+				const row: Record<string, any> = { [xKey]: xVal };
+				let total = 0;
+				seriesNames.forEach((name) => {
+					const val = pivotMap[xVal][name] ?? 0;
+					row[name] = val;
+					total += val;
+				});
+				row['_total'] = total;
+				return row;
+			});
+
+			// Construir array de series con colores (barras para dimensiones, línea para total)
+			const series: Array<{ key: string; name: string; color: string; type: 'bar' | 'line' }> = seriesNames.map((name, idx) => ({
+				key: name,
+				name: name,
+				color: SERIES_COLORS[idx % SERIES_COLORS.length],
+				type: 'bar' as const,
+			}));
+
+			// Agregar serie de línea para el total
+			series.push({
+				key: '_total',
+				name: 'Total',
+				color: '#1f2937',
+				type: 'line',
+			});
+
+			widgets.push({
+				type: 'chart_bar_stacked_with_line',
+				title: config.title || skill.name,
+				xKey: xKey,
+				series: series,
+				data: pivotedData,
+			});
+		}
+
+		// Gráfico de barras horizontales (para rankings)
+		if (config.type === 'bar_horizontal') {
+			const xKey = config.xAxis || 'name';
+			const yKey = config.yAxis || 'value';
+
+			widgets.push({
+				type: 'chart_bar_horizontal',
+				title: config.title || skill.name,
+				xKey: xKey,
+				yKey: yKey,
+				data: data,
+			});
+		}
+
+		// Gráfico de barras agrupadas (para comparación por 2 dimensiones)
+		if (config.type === 'bar_grouped') {
+			const xKey = config.xAxis || 'category';
+			const seriesKey = config.seriesKey || 'group';
+			const yKey = config.yAxis || 'value';
+
+			// Extraer series únicas
+			const seriesNames: string[] = [];
+			data.forEach((row) => {
+				const name = String(row[seriesKey] ?? 'Sin nombre');
+				if (!seriesNames.includes(name)) seriesNames.push(name);
+			});
+
+			// Pivotar datos
+			const pivotMap: Record<string, Record<string, number>> = {};
+			const xOrder: string[] = [];
+			data.forEach((row) => {
+				const xVal = String(row[xKey] ?? '');
+				const sName = String(row[seriesKey] ?? 'Sin nombre');
+				const yVal = Number(row[yKey]) || 0;
+				if (!pivotMap[xVal]) {
+					pivotMap[xVal] = {};
+					xOrder.push(xVal);
+				}
+				pivotMap[xVal][sName] = (pivotMap[xVal][sName] || 0) + yVal;
+			});
+
+			const pivotedData = xOrder.map((xVal) => {
+				const row: Record<string, any> = { [xKey]: xVal };
+				seriesNames.forEach((name) => {
+					row[name] = pivotMap[xVal][name] ?? 0;
+				});
+				return row;
+			});
+
+			const SERIES_COLORS_GROUPED = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+			const series = seriesNames.map((name, idx) => ({
+				key: name,
+				name: name,
+				color: SERIES_COLORS_GROUPED[idx % SERIES_COLORS_GROUPED.length],
+			}));
+
+			widgets.push({
+				type: 'chart_bar_grouped',
+				title: config.title || skill.name,
+				xKey: xKey,
+				series: series,
+				data: pivotedData,
 			});
 		}
 
@@ -277,12 +431,24 @@ export class SkillExecutor {
 			const xKey = config.xAxis || 'period_month';
 			const yKey = config.yAxis || 'mrr';
 
-			// Determinar el tipo correcto para el frontend
 			const widgetType = config.type === 'line' ? 'chart_line' : config.type === 'bar' ? 'chart_bar' : 'chart_line';
 
-			// Calcular rango de valores para el eje Y
 			const yValues = data.map((item) => Number(item[yKey]) || 0);
 			const maxValue = Math.max(...yValues);
+			const sumValues = yValues.reduce((a, b) => a + b, 0);
+
+			// No generar gráfico si todos los valores son 0
+			if (sumValues === 0) {
+				return widgets;
+			}
+
+			// Formatear period_month a MM/YYYY si es el eje X
+			const formattedData = data.map((row) => {
+				if (xKey === 'period_month' && row[xKey]) {
+					return { ...row, [xKey]: formatPeriodMonth(row[xKey]) };
+				}
+				return row;
+			});
 
 			widgets.push({
 				type: widgetType,
@@ -295,7 +461,7 @@ export class SkillExecutor {
 						color: config.type === 'line' ? '#8b5cf6' : '#3b82f6',
 					},
 				],
-				data: data,
+				data: formattedData,
 				yAxisConfig: {
 					min: 0,
 					max: maxValue * 1.1,
@@ -307,18 +473,15 @@ export class SkillExecutor {
 		if (config.type === 'table') {
 			const columns = config.columns || Object.keys(data[0] || {});
 
-			// Filtrar columnas que no deben mostrarse (IDs, etc.)
 			const keepIndices: number[] = [];
 			const displayColumns: string[] = [];
 
 			columns.forEach((col, idx) => {
-				// No mostrar columnas de ID
 				const colLower = col.toLowerCase();
 				if (colLower.includes('_id') || colLower === 'id' || colLower.includes('holding') || colLower.includes('tenant')) {
 					return;
 				}
 				keepIndices.push(idx);
-				// Aplicar label si existe, sino usar el nombre de la columna
 				displayColumns.push(config.columnLabels?.[col] || col);
 			});
 
@@ -327,7 +490,6 @@ export class SkillExecutor {
 					const col = columns[idx];
 					const value = row[col];
 
-					// Formatear según el tipo especificado
 					if (config.format?.[col] === 'month-year' && value) {
 						try {
 							const date = new Date(value);
@@ -339,14 +501,29 @@ export class SkillExecutor {
 						}
 					}
 
-					// Formatear números con separadores de miles
-					if (config.format?.[col] === 'currency' && typeof value === 'number') {
-						return new Intl.NumberFormat('en-US', {
-							style: 'currency',
-							currency: 'USD',
-							minimumFractionDigits: 2,
-							maximumFractionDigits: 2,
-						}).format(value);
+					if (config.format?.[col] === 'date' && value) {
+						try {
+							const date = new Date(value);
+							const day = String(date.getDate()).padStart(2, '0');
+							const month = String(date.getMonth() + 1).padStart(2, '0');
+							const year = date.getFullYear();
+							return `${day}-${month}-${year}`;
+						} catch (e) {
+							return value;
+						}
+					}
+
+					if (config.format?.[col] === 'currency' && value != null) {
+						const numValue = typeof value === 'number' ? value : parseFloat(value);
+						if (!isNaN(numValue)) {
+							return new Intl.NumberFormat('en-US', {
+								style: 'currency',
+								currency: 'USD',
+								minimumFractionDigits: 2,
+								maximumFractionDigits: 2,
+							}).format(numValue);
+						}
+						return value;
 					}
 
 					if (config.format?.[col] === 'number' && typeof value === 'number') {
@@ -376,7 +553,55 @@ export class SkillExecutor {
 			widgets.push({
 				type: 'kpi',
 				title: config.title || skill.name,
-				value: this.formatKpiValue(value, config.format),
+				value: this.formatKpiValue(value, config.format, yKey),
+			});
+		}
+
+		// Cohort heatmap: pivota filas (cohort_month, months_since_cohort, retention_pct, cohort_size)
+		// a estructura matricial triangular para visualización tipo heatmap
+		if (config.type === 'cohort_heatmap') {
+			const cohortKey = config.xAxis || 'cohort_month';
+			const periodKey = config.seriesKey || 'months_since_cohort';
+			const valueKey = config.yAxis || 'retention_pct';
+
+			// Recolectar todos los períodos únicos ordenados
+			const periodsSet = new Set<number>();
+			data.forEach((row) => {
+				const p = Number(row[periodKey]);
+				if (!isNaN(p)) periodsSet.add(p);
+			});
+			const periods = Array.from(periodsSet).sort((a, b) => a - b);
+
+			// Recolectar todos los cohorts únicos ordenados
+			const cohortOrder: string[] = [];
+			data.forEach((row) => {
+				const c = String(row[cohortKey] ?? '');
+				if (c && !cohortOrder.includes(c)) cohortOrder.push(c);
+			});
+
+			// Construir mapa: cohort → { period → value }
+			const cohortMap: Record<string, { size: number; values: Record<number, number | null> }> = {};
+			data.forEach((row) => {
+				const c = String(row[cohortKey] ?? '');
+				const p = Number(row[periodKey]);
+				const v = row[valueKey] != null ? Number(row[valueKey]) : null;
+				const size = Number(row['cohort_size']) || 0;
+				if (!cohortMap[c]) cohortMap[c] = { size, values: {} };
+				cohortMap[c].values[p] = v;
+			});
+
+			// Construir filas de la matriz
+			const rows = cohortOrder.map((c) => ({
+				cohort: c,
+				cohortSize: cohortMap[c]?.size ?? 0,
+				values: periods.map((p) => cohortMap[c]?.values[p] ?? null),
+			}));
+
+			widgets.push({
+				type: 'chart_cohort',
+				title: config.title || skill.name,
+				periods: periods.map((p) => (p === 0 ? 'Mes 0' : `Mes ${p}`)),
+				rows,
 			});
 		}
 
@@ -391,20 +616,38 @@ export class SkillExecutor {
 			revenue: 'Revenue',
 			churn: 'Churn',
 			active_clients: 'Clientes Activos',
+			recognized_revenue: 'Revenue Reconocido',
+			deferred_balance: 'Balance Diferido',
+			unbilled_balance: 'Balance No Facturado',
+			total_amount: 'Total',
+			billed_amount: 'Facturado',
 		};
 		return nameMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 	}
 
-	private formatKpiValue(value: any, format?: any): string {
+	private formatKpiValue(value: any, format?: Record<string, string>, yKey?: string): string {
 		if (value === null || value === undefined) return '—';
 
-		if (format?.mrr === 'currency' || format?.revenue === 'currency') {
+		// Determinar el formato según el yKey o el primer key de currency en format
+		const isCurrency =
+			(yKey && format?.[yKey] === 'currency') ||
+			Object.values(format || {}).includes('currency');
+
+		const isPercentage =
+			(yKey && format?.[yKey] === 'percentage') ||
+			Object.values(format || {}).includes('percentage');
+
+		if (isCurrency && typeof value === 'number') {
 			return new Intl.NumberFormat('en-US', {
 				style: 'currency',
 				currency: 'USD',
 				minimumFractionDigits: 2,
 				maximumFractionDigits: 2,
 			}).format(value);
+		}
+
+		if (isPercentage && typeof value === 'number') {
+			return `${value.toFixed(2)}%`;
 		}
 
 		if (typeof value === 'number') {
@@ -418,7 +661,7 @@ export class SkillExecutor {
 	}
 
 	private handleQueryError(error: any, skillName: string): SkillExecutionResult {
-		console.error(`Error al ejecutar skill ${skillName}:`, error);
+		this.logger.error(`Error al ejecutar skill ${skillName}:`, error);
 
 		if (error.code === '42P01') {
 			return {
