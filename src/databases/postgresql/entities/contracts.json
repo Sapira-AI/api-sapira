@@ -617,13 +617,13 @@
         "action_condition": null
       },
       {
-        "trigger_name": "trigger_revenue_schedule_on_contract_activation",
+        "trigger_name": "trg_rsm_on_churn",
         "event_manipulation": "UPDATE",
         "event_object_table": "contracts",
         "action_timing": "AFTER",
-        "action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_contract_activation()",
+        "action_statement": "EXECUTE FUNCTION trigger_rsm_on_churn()",
         "action_orientation": "ROW",
-        "action_condition": "(old.status IS DISTINCT FROM new.status)"
+        "action_condition": null
       },
       {
         "trigger_name": "trigger_set_contract_company_currency",
