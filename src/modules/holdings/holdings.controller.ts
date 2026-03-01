@@ -24,7 +24,7 @@ export class HoldingsController {
 		type: [UserHoldingResponseDto],
 	})
 	async getUserHoldings(@Request() req): Promise<UserHoldingResponseDto[]> {
-		const userId = req.user?.userId;
+		const userId = req.user?.id || req.user?.sub;
 		return await this.holdingsService.getUserHoldings(userId);
 	}
 
@@ -139,7 +139,7 @@ export class HoldingsController {
 		description: 'El usuario no tiene acceso al holding especificado',
 	})
 	async updateSelectedHolding(@Request() req, @Body() dto: UpdateSelectedHoldingDto) {
-		const userId = req.user?.userId;
+		const userId = req.user?.id || req.user?.sub;
 		return await this.holdingsService.updateSelectedHolding(userId, dto.holding_id);
 	}
 }
