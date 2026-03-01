@@ -230,6 +230,42 @@
         "action_statement": "EXECUTE FUNCTION quantities_set_holding_from_contract_item()",
         "action_orientation": "ROW",
         "action_condition": null
+      },
+      {
+        "trigger_name": "trg_rsm_on_quantity_change",
+        "event_manipulation": "INSERT",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_rsm_on_quantity_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_rsm_on_quantity_change",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION trigger_rsm_on_quantity_change()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_sync_invoice_items_from_quantities",
+        "event_manipulation": "INSERT",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION sync_invoice_items_amounts_from_quantities()",
+        "action_orientation": "ROW",
+        "action_condition": null
+      },
+      {
+        "trigger_name": "trg_sync_invoice_items_from_quantities",
+        "event_manipulation": "UPDATE",
+        "event_object_table": "quantities",
+        "action_timing": "AFTER",
+        "action_statement": "EXECUTE FUNCTION sync_invoice_items_amounts_from_quantities()",
+        "action_orientation": "ROW",
+        "action_condition": null
       }
     ],
     "policies": [
@@ -553,4 +589,5 @@
       }
     ],
     "analysis_timestamp": "2026-01-20T12:30:13.234Z"
+    }
   }
