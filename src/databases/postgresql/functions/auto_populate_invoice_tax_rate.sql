@@ -1,30 +1,31 @@
 CREATE OR REPLACE FUNCTION public.auto_populate_invoice_tax_rate()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
 DECLARE
   v_company_tax_rate NUMERIC;
 BEGIN
-  -- Solo procesar si el invoice tiene company_id y tax_rate está vacío
   IF NEW.company_id IS NULL THEN
     RETURN NEW;
   END IF;
 
-  -- Si tax_rate ya está definido, no sobrescribir
   IF NEW.tax_rate IS NOT NULL THEN
     RETURN NEW;
   END IF;
 
-  -- Obtener tax_rate de la company
   SELECT tax_rate INTO v_company_tax_rate
   FROM public.companies
   WHERE id = NEW.company_id;
 
-  -- Asignar tax_rate (default 0.19 si no existe en company)
-  NEW.tax_rate := COALESCE(v_company_tax_rate, 0.19);
+  IF v_company_tax_rate IS NULL THEN
+    RAISE EXCEPTION 'TAX_RATE_NOT_CONFIGURED: La empresa no tiene configurada una tasa de impuesto (tax_rate). Configure el impuesto en la empresa antes de crear facturas.'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  NEW.tax_rate := v_company_tax_rate;
 
   RETURN NEW;
 END;
-$function$
+$$;

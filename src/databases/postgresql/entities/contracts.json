@@ -409,24 +409,6 @@
 				"character_maximum_length": null,
 				"numeric_precision": 32,
 				"numeric_scale": 0
-			},
-			{
-				"column_name": "auto_invoice",
-				"data_type": "boolean",
-				"is_nullable": "YES",
-				"column_default": "false",
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "salesforce_opportunity_id",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
 			}
 		],
 		"indexes": [
@@ -435,13 +417,6 @@
 				"index_definition": "CREATE UNIQUE INDEX contracts_pkey ON public.contracts USING btree (id)",
 				"index_type": "btree",
 				"is_unique": "YES",
-				"index_size": "16 kB"
-			},
-			{
-				"index_name": "idx_contracts_auto_invoice",
-				"index_definition": "CREATE INDEX idx_contracts_auto_invoice ON public.contracts USING btree (auto_invoice, status) WHERE (auto_invoice = true)",
-				"index_type": "btree",
-				"is_unique": "NO",
 				"index_size": "16 kB"
 			},
 			{
@@ -485,13 +460,6 @@
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "16 kB"
-			},
-			{
-				"index_name": "idx_contracts_sf_opp",
-				"index_definition": "CREATE INDEX idx_contracts_sf_opp ON public.contracts USING btree (salesforce_opportunity_id) WHERE (salesforce_opportunity_id IS NOT NULL)",
-				"index_type": "btree",
-				"is_unique": "NO",
-				"index_size": "8192 bytes"
 			},
 			{
 				"index_name": "idx_contracts_workflow_started_at",
@@ -604,15 +572,6 @@
 				"action_condition": null
 			},
 			{
-				"trigger_name": "trg_rsm_on_churn",
-				"event_manipulation": "UPDATE",
-				"event_object_table": "contracts",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION trigger_rsm_on_churn()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
 				"trigger_name": "trg_set_booking_date_on_activate",
 				"event_manipulation": "INSERT",
 				"event_object_table": "contracts",
@@ -658,13 +617,13 @@
 				"action_condition": null
 			},
 			{
-				"trigger_name": "trigger_revenue_schedule_on_contract_activation",
+				"trigger_name": "trg_rsm_on_churn",
 				"event_manipulation": "UPDATE",
 				"event_object_table": "contracts",
 				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION trigger_revenue_schedule_on_contract_activation()",
+				"action_statement": "EXECUTE FUNCTION trigger_rsm_on_churn()",
 				"action_orientation": "ROW",
-				"action_condition": "(old.status IS DISTINCT FROM new.status)"
+				"action_condition": null
 			},
 			{
 				"trigger_name": "trigger_set_contract_company_currency",
@@ -816,26 +775,17 @@
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
-				"attname": "auto_invoice",
-				"n_distinct": 2,
-				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.977444, 0.0225564],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "contracts",
 				"attname": "booking_date",
-				"n_distinct": -0.496241,
+				"n_distinct": -0.480916,
 				"most_common_vals": "{2025-01-01,2026-01-01,2022-07-01,2022-12-09,2024-01-01,2024-03-01,2025-04-01,2025-08-22,2025-12-01}",
-				"most_common_freqs": [0.428571, 0.0300752, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376],
-				"histogram_bounds": "{2018-02-01,2020-03-06,2020-11-30,2021-05-28,2021-06-30,2021-07-26,2021-08-01,2021-09-01,2021-10-01,2021-12-01,2021-12-02,2021-12-14,2021-12-16,2022-01-04,2022-03-09,2022-03-23,2022-05-02,2022-09-12,2022-11-03,2022-12-16,2023-02-01,2023-02-24,2023-06-01,2023-06-26,2023-07-01,2023-08-01,2023-08-21,2023-09-06,2023-09-19,2023-09-20,2023-10-17,2023-11-10,2024-01-30,2024-03-18,2024-04-01,2024-05-08,2024-05-25,2024-07-10,2024-07-22,2024-08-16,2024-09-01,2024-09-10,2024-10-01,2024-11-15,2024-12-01,2025-02-01,2025-03-17,2025-05-01,2025-05-06,2025-06-16,2025-09-01,2025-09-13,2025-09-19,2025-10-10,2025-11-01,2025-11-28,2025-12-31}"
+				"most_common_freqs": [0.435115, 0.0229008, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672],
+				"histogram_bounds": "{2018-02-01,2020-03-06,2020-11-30,2021-05-28,2021-06-30,2021-07-26,2021-08-01,2021-09-01,2021-10-01,2021-12-01,2021-12-02,2021-12-14,2021-12-16,2022-01-04,2022-03-09,2022-03-23,2022-05-02,2022-09-12,2022-11-03,2022-12-16,2023-02-01,2023-02-24,2023-06-01,2023-06-26,2023-07-01,2023-08-01,2023-08-21,2023-09-06,2023-09-19,2023-09-20,2023-10-17,2023-11-10,2024-01-30,2024-03-18,2024-04-01,2024-05-08,2024-05-25,2024-07-10,2024-07-22,2024-08-16,2024-09-01,2024-09-10,2024-10-01,2024-11-15,2024-12-01,2025-02-01,2025-03-17,2025-05-01,2025-05-06,2025-06-16,2025-09-13,2025-10-10,2025-11-01,2025-11-28}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "churn_date",
-				"n_distinct": -0.0150376,
+				"n_distinct": -0.0152672,
 				"most_common_vals": null,
 				"most_common_freqs": null,
 				"histogram_bounds": "{2025-03-01,2025-06-01}"
@@ -853,58 +803,58 @@
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "client_entity_id",
-				"n_distinct": -0.849624,
+				"n_distinct": -0.847328,
 				"most_common_vals": "{1c491516-4aff-489f-b213-3f75dcac0689,b4686fe3-9f28-4db6-9a89-5b3f812d55fc,eca0de00-ed27-4b7b-996b-a15e2d3f72c7,1a1a7437-c782-4108-b54d-9a8e9580b291,34ab2276-f40d-4796-92b7-a9677b9fd701,7fa10dbe-e7ed-4c2e-8d7e-7b7d4707d108,92710638-f7ff-4f26-a9db-f3aa51707a01,a45a7f9a-47a1-4500-9832-ff44dd646b18,ba7043f3-0457-41ff-bbff-ea4cd3237fde,cd6f21f0-77ff-4d9f-9b36-60ccf485174a,f859ad3c-f222-4bf5-91de-f273c9bd929a}",
 				"most_common_freqs": [
-					0.0225564, 0.0225564, 0.0225564, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376
+					0.0229008, 0.0229008, 0.0229008, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{00870796-bee1-4432-aa67-beb981833bcb,00f4441c-72f4-44c5-9d83-c0f64809c13c,014bf647-6aab-40d7-82ac-7ebbc7b77dbf,019ad0dc-ec6a-4870-9333-b3d12f825183,0273e5f0-c094-4a06-ac5e-eb37036de793,050e8daa-c4b0-4935-8ace-839472e4008e,063b9518-6290-4b66-9ca4-b21df42c9f3f,0acf0800-28f1-437f-93ed-6ecbe130959c,0b02135b-87d9-4655-b375-d2ea4732dd43,0cd97704-8364-4df2-b363-c04a0fc15edc,11f63906-6696-4b96-b22a-2a3c8b9b175a,130996bd-7097-464a-9a23-cd47f234a1b3,1387da3a-ee80-4679-83bd-0ef5e2f03b47,13d457b4-3e84-49f7-9d24-c8c3bf15edbb,1619db55-463e-43f2-b8aa-ef428aec27ad,19448d51-23f8-426c-befe-f64cda4b0f29,2007db3a-99b0-4c54-b353-cb9fa967388c,23e08589-f26f-4441-9484-e6b54a6a442e,26c01186-9118-4cc5-bb07-24d2e6c205ff,28a06ce3-d8a0-4f33-9f6f-047d2b6afc06,3365f550-7335-43ce-9f6b-d034f3dcfd54,33b840c4-36bb-4f3e-b432-c5cbdef1e05c,373b5810-bc8d-45ec-a918-4b214adccd6b,37736c47-fadb-4f32-9d56-8762a750b5cf,389f374e-29ac-4d3a-b02e-b782bd08f0e6,397a6c69-6188-4d42-83b4-e194f09d80fd,3b54e0cb-f69f-4232-b168-8ee6c0973876,3def4c60-35d3-43eb-8cba-6614c4df1f4b,3e9e268d-0f92-4a1e-9e7f-b3029b105daa,3f5f3a61-684a-4c3b-b089-e1b5a40c9a21,41c6be1a-7e83-45f7-ae7b-09c99cd01cf8,422c919a-94fd-4c29-b01b-74c84a1b0279,4309a8c7-be4b-4543-b07b-ecaf1e7f5d9e,43586c73-694d-4716-afc5-b212b15ffc86,444f0583-64be-4489-a726-ec313bac2a07,44cc7931-ce28-4de2-96e3-6549d1835c84,4a954016-7907-4f19-a7cb-e0b872578b00,4dc8a4cd-c115-4cfd-a857-b1418cded604,4fa3030c-3314-484c-909a-2ee8ef620c2a,54f8286d-0825-4700-81dc-47d646e7acc9,5658ab58-d91d-4fef-88ac-a0d1c393be17,590e7401-eec0-471c-a29f-79319f6b0abc,5a934ca1-b416-494e-9318-87979b289b26,5b502f70-f29e-4f46-80bf-df778c295e58,5d81d54f-812f-4f28-9556-7d88d52262bb,61c035e0-e3d5-432f-ad5e-f4865bd92bf6,6397bac8-7792-4c3b-a878-10691806ce6e,66356aa8-07ae-48c0-9815-41189187c601,667f626c-d652-4849-b637-808f1eb41d69,6a67c39b-1500-4756-b1cd-2e6c3742c248,6c3d5e12-42f1-422f-8e08-8974ea05e4a1,6c4ccb7b-5b09-49ac-aedd-10f8ccd78568,6cb4b3fd-edb1-4a40-8589-2b2dbf09cdf2,6cb9a167-a95a-4b8d-b517-61ed7679b66a,6d62f87b-1242-43a3-97d4-027f5828a8dc,71b36794-6f58-4c0f-b1f8-a90613d62bb6,729b0b4d-2b51-4a53-bd6a-974a8a3da250,72b336b9-c03a-4a03-bff1-382511171551,737a640d-56de-4168-8fba-8825e5231074,7598abe2-e5d7-4d68-bcab-483a772bba2c,75c8e5cf-ae03-48c6-9aec-17b718335495,7819c6bc-ade9-45d8-bc66-27a4830a382c,7c3d8ccc-8a0e-4cc0-97ed-234b2b36af5f,7c77fb0d-792a-4782-8a91-da15820a7cad,7d2939f3-344a-4533-82fe-442982e3acf8,8553f485-6acc-47d9-b689-8fce75ca4f3a,8903dd43-c8d6-4b39-a92c-70e65501f61e,892dcaa2-775e-4e6c-88dd-839e78e72656,90ea1a5a-c031-45ec-a666-63c63499bba0,914d987d-8aae-4905-848b-3190b6266043,92fe6ebb-1a84-4bbb-b376-d3d5e6b0924a,95ee0d08-d68e-4acb-8c22-c5683ac2e0d6,9996e475-7d3d-4964-aac1-98ce2d9dc545,9e60421c-3e79-4d95-8c6f-834fc999954f,9efd5d74-3477-48ee-8952-c0faeed421f4,a3e66cb7-2619-4208-ae61-2d3d193e7f78,a69f0beb-4949-4a04-8bcb-841f1393f200,ab79fbd6-a125-49a2-ba2c-75c40622de83,ada32035-c76e-43e0-be18-95322db1b9f5,ae84d474-fad7-49fc-a942-a945fbca1e1a,afa9dad5-f6f4-4a1a-9b62-035244fa2b17,b03c1b2b-f60f-4a7d-9eee-702142d917d2,b05d1bd5-7613-42f0-b333-46b028c3b6c2,b64e0aaf-4e3e-4372-9c98-c6ab19edd9c2,b661b5cf-8036-48c9-bc00-5d1d71d993bd,b6666d66-ff85-4379-a6aa-add91df1d874,b81560a9-1094-4583-bc5d-11d8d1a84928,ba3f7daa-4931-4cf0-a113-28abeea2d2e2,be371f60-f76c-4804-a23d-58979034bcde,c1b6af5f-9bef-47a2-bfae-488101d3b4c1,c1fc1308-1f4c-4a9a-bbd7-d48b16097dfa,c940120d-e636-4d1f-bd32-17fc23851e79,c96efcc3-fde5-4b38-bea7-7e45b8554691,cb015b6f-50b2-46f3-acdd-1e07773674aa,cd6b05da-b3ee-4c76-b9bf-dc777273da5e,d58c1c51-5745-4914-9131-c19c4c71a149,daaa95b4-c9bb-4fd5-a024-a0d0093c78cf,dbc5a015-88d3-4032-8a4d-322b43d173ca,de9df59b-a87c-4ac3-91fb-3e2bfbcd03b3,e3ae9112-4ab0-43b3-96bb-79b04f01cfcd,eddf5673-f90c-400a-9b86-34e391cffc10}"
+				"histogram_bounds": "{00870796-bee1-4432-aa67-beb981833bcb,00f4441c-72f4-44c5-9d83-c0f64809c13c,014bf647-6aab-40d7-82ac-7ebbc7b77dbf,0273e5f0-c094-4a06-ac5e-eb37036de793,050e8daa-c4b0-4935-8ace-839472e4008e,063b9518-6290-4b66-9ca4-b21df42c9f3f,0acf0800-28f1-437f-93ed-6ecbe130959c,0b02135b-87d9-4655-b375-d2ea4732dd43,0cd97704-8364-4df2-b363-c04a0fc15edc,11f63906-6696-4b96-b22a-2a3c8b9b175a,130996bd-7097-464a-9a23-cd47f234a1b3,1387da3a-ee80-4679-83bd-0ef5e2f03b47,13d457b4-3e84-49f7-9d24-c8c3bf15edbb,1619db55-463e-43f2-b8aa-ef428aec27ad,19448d51-23f8-426c-befe-f64cda4b0f29,2007db3a-99b0-4c54-b353-cb9fa967388c,23e08589-f26f-4441-9484-e6b54a6a442e,26c01186-9118-4cc5-bb07-24d2e6c205ff,28a06ce3-d8a0-4f33-9f6f-047d2b6afc06,3365f550-7335-43ce-9f6b-d034f3dcfd54,33b840c4-36bb-4f3e-b432-c5cbdef1e05c,373b5810-bc8d-45ec-a918-4b214adccd6b,37736c47-fadb-4f32-9d56-8762a750b5cf,389f374e-29ac-4d3a-b02e-b782bd08f0e6,397a6c69-6188-4d42-83b4-e194f09d80fd,3b54e0cb-f69f-4232-b168-8ee6c0973876,3def4c60-35d3-43eb-8cba-6614c4df1f4b,3e9e268d-0f92-4a1e-9e7f-b3029b105daa,3f5f3a61-684a-4c3b-b089-e1b5a40c9a21,41c6be1a-7e83-45f7-ae7b-09c99cd01cf8,422c919a-94fd-4c29-b01b-74c84a1b0279,4309a8c7-be4b-4543-b07b-ecaf1e7f5d9e,43586c73-694d-4716-afc5-b212b15ffc86,444f0583-64be-4489-a726-ec313bac2a07,44cc7931-ce28-4de2-96e3-6549d1835c84,4a954016-7907-4f19-a7cb-e0b872578b00,4dc8a4cd-c115-4cfd-a857-b1418cded604,4fa3030c-3314-484c-909a-2ee8ef620c2a,54f8286d-0825-4700-81dc-47d646e7acc9,5658ab58-d91d-4fef-88ac-a0d1c393be17,590e7401-eec0-471c-a29f-79319f6b0abc,5a934ca1-b416-494e-9318-87979b289b26,5b502f70-f29e-4f46-80bf-df778c295e58,5d81d54f-812f-4f28-9556-7d88d52262bb,61c035e0-e3d5-432f-ad5e-f4865bd92bf6,6397bac8-7792-4c3b-a878-10691806ce6e,66356aa8-07ae-48c0-9815-41189187c601,667f626c-d652-4849-b637-808f1eb41d69,6a67c39b-1500-4756-b1cd-2e6c3742c248,6c4ccb7b-5b09-49ac-aedd-10f8ccd78568,6cb4b3fd-edb1-4a40-8589-2b2dbf09cdf2,6cb9a167-a95a-4b8d-b517-61ed7679b66a,6d62f87b-1242-43a3-97d4-027f5828a8dc,71b36794-6f58-4c0f-b1f8-a90613d62bb6,729b0b4d-2b51-4a53-bd6a-974a8a3da250,72b336b9-c03a-4a03-bff1-382511171551,737a640d-56de-4168-8fba-8825e5231074,7598abe2-e5d7-4d68-bcab-483a772bba2c,75c8e5cf-ae03-48c6-9aec-17b718335495,7819c6bc-ade9-45d8-bc66-27a4830a382c,7c3d8ccc-8a0e-4cc0-97ed-234b2b36af5f,7c77fb0d-792a-4782-8a91-da15820a7cad,7d2939f3-344a-4533-82fe-442982e3acf8,8553f485-6acc-47d9-b689-8fce75ca4f3a,8903dd43-c8d6-4b39-a92c-70e65501f61e,892dcaa2-775e-4e6c-88dd-839e78e72656,90ea1a5a-c031-45ec-a666-63c63499bba0,914d987d-8aae-4905-848b-3190b6266043,92fe6ebb-1a84-4bbb-b376-d3d5e6b0924a,95ee0d08-d68e-4acb-8c22-c5683ac2e0d6,9996e475-7d3d-4964-aac1-98ce2d9dc545,9e60421c-3e79-4d95-8c6f-834fc999954f,9efd5d74-3477-48ee-8952-c0faeed421f4,a3e66cb7-2619-4208-ae61-2d3d193e7f78,a69f0beb-4949-4a04-8bcb-841f1393f200,ab79fbd6-a125-49a2-ba2c-75c40622de83,ada32035-c76e-43e0-be18-95322db1b9f5,ae84d474-fad7-49fc-a942-a945fbca1e1a,afa9dad5-f6f4-4a1a-9b62-035244fa2b17,b03c1b2b-f60f-4a7d-9eee-702142d917d2,b05d1bd5-7613-42f0-b333-46b028c3b6c2,b64e0aaf-4e3e-4372-9c98-c6ab19edd9c2,b661b5cf-8036-48c9-bc00-5d1d71d993bd,b6666d66-ff85-4379-a6aa-add91df1d874,b81560a9-1094-4583-bc5d-11d8d1a84928,ba3f7daa-4931-4cf0-a113-28abeea2d2e2,be371f60-f76c-4804-a23d-58979034bcde,c1b6af5f-9bef-47a2-bfae-488101d3b4c1,c1fc1308-1f4c-4a9a-bbd7-d48b16097dfa,c940120d-e636-4d1f-bd32-17fc23851e79,c96efcc3-fde5-4b38-bea7-7e45b8554691,cb015b6f-50b2-46f3-acdd-1e07773674aa,cd6b05da-b3ee-4c76-b9bf-dc777273da5e,d58c1c51-5745-4914-9131-c19c4c71a149,daaa95b4-c9bb-4fd5-a024-a0d0093c78cf,dbc5a015-88d3-4032-8a4d-322b43d173ca,de9df59b-a87c-4ac3-91fb-3e2bfbcd03b3,e3ae9112-4ab0-43b3-96bb-79b04f01cfcd,e9765105-10bb-4df8-a1cd-cafeefb658c0,eddf5673-f90c-400a-9b86-34e391cffc10}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "client_id",
-				"n_distinct": -0.593985,
+				"n_distinct": -0.59542,
 				"most_common_vals": "{7bc2200d-e558-4339-9682-71ae06912481,42dd61ec-bb97-49a0-9814-80b90277973c,6675df1b-b6fb-499e-9ff2-f0df1a61dfab,7b06a5ff-98b6-4c27-91d0-cbdf98124cab,1eafa270-b3a4-44df-9130-00ad8218afe1,28d141e6-197b-405a-884c-ca94e4444389,2a1a2950-dbb5-4484-8822-e6a07c665aad,64b4b0e5-6c04-4329-9e4f-a6a6219f8c87,9bd18f6e-176d-42eb-a203-74a22821e912,c8c7d008-9a19-4079-8143-754da3a02611,d1fb07ba-3662-4046-af07-adc6d61c5019,02ee06e5-87bd-42a2-a482-3c7642b109fd,04074b7e-7e01-4d86-bc2d-6edaa85ae682,09b38716-d134-493a-9bce-272fdd2a69e1,30d332aa-eaec-4def-871a-300de7c80c8b,3ac1bade-f245-4ce3-995e-b64018fdbacd,482a25ec-d7b5-407b-8d3c-9c24e1081f6c,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,4f0a7786-afe0-46a3-8265-709db1563fda,59505306-7ca4-4567-adea-9d63e52bcff3,6c909166-e266-4763-b1ee-96e0546e6f97,6dcd3438-5ea5-4161-a10c-9852dc814e29,78aa1c84-6a47-4539-a93e-878d7527569a,8b51eb5e-659e-41b1-a73b-6bf53659bec3,a2396093-9600-4398-b5ab-7c92a0571828,a7387cd5-a9b1-421f-ae2d-6afe28b261c6,b7114aca-293b-4eca-b2e5-0a6c305621fb,bc2c49c8-d4c2-4e51-9ee6-cec4716f48d9,ca4d8d8d-dc76-44c4-8ae9-fefd35a3930e,ca9ca625-9c66-4d8e-8df9-5c86a7ba0b25,cd47eafe-f465-41d3-9b90-5efac70ba045,ce6d2870-b4bf-466d-8832-876d4f615e5c,d65eb3d6-a373-428a-9761-56982fe0c6d9,d9b69de7-de46-458b-9fbe-b929a590b454,f41ebddc-3fba-400a-a47d-f6c4ac8b9e9e,fd1d2d7a-a867-4a0d-ab25-99b1f50084d4}",
 				"most_common_freqs": [
-					0.0526316, 0.0300752, 0.0300752, 0.0300752, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376
+					0.0458015, 0.0305344, 0.0305344, 0.0305344, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,0447360c-7138-4a0f-b55d-c5d157203a05,15232b0d-967c-40ad-b0f8-427a0daffa61,1524d607-2820-4f6c-91b5-c90c2d04cad4,24144881-e912-4551-9522-cb6a62c26477,260f0337-9bb2-427c-b794-2abf4aa97d08,2674bb3b-da48-4c04-9388-6db0144ae183,35657c95-f273-4c44-bcc3-ad969686ee8d,3aafc46b-cb84-4f66-a6e0-d66638912266,3d923e88-2211-4124-b1fe-eab3c330197c,3dd19f44-b201-49a6-afc4-8e8194581e0c,3e798349-2350-4496-8f68-367a59768d1d,3fa1dad2-f2a1-4fad-8b95-1b48c6b71a1c,40b9c77b-e9d3-41d2-98d8-271b5546cf62,4d376a62-8f74-4bf1-a967-1dce8b255129,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,5fc83a72-cee4-4827-bb70-4290b675f6a6,666e267c-d9a1-4c5e-9b4f-60df1ce27747,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6cc7dc7d-2cd2-41e0-a5d9-7aca7f8380a8,76480116-f385-4d2a-bfe6-286fea653c7d,79b41690-ae73-4963-b8bf-b16870ede85a,7f138f63-fe05-48e4-9910-446f5ffe7d01,82db1c33-1988-4310-a4a6-ba912f0850c8,8368ee33-f1ac-4425-8310-2e884cb90099,8e1f2459-01e3-456e-83f2-955b08d9c870,9a0b26a1-0c9e-462e-a804-9f4d7cb03383,9a11f270-5647-4ac8-8bd5-186d25fc7f98,9eeee9db-2dd8-4653-bb76-1a56cbad01e4,9f2e02ae-4a6b-42ca-99f0-3f59ad6e7097,9fc68dc3-51aa-4055-89d0-9d9b04497e27,a7becf99-e339-4c9e-9c53-11ad4f60ac1e,b08eb37c-d74e-4737-a73d-a9edd58c579a,bb239073-1689-449a-9459-5089cca30b43,bb42e567-e4c7-4d39-b657-fc733211175e,c1e99f78-f95b-431e-83e5-790cb5501749,c29cd5ee-f6cb-44d0-a152-a2234679cf4f,d8f0ee7a-d930-453c-92f2-39016b0cdd16,dbc84088-4e3a-4e7b-83f5-1d132f2a2ade,dbd63b05-47b5-4277-8dcc-71d59c57d81c,df62ef04-4d88-4b93-87a2-4d7a66105c70,df703b86-e50f-4e9e-8bf3-f34e4935ad33,e6564e30-18ec-4caf-8ebd-20f191c57fcb}"
+				"histogram_bounds": "{00b7f704-cb4f-4356-9f5d-f6a4eb3f828c,0447360c-7138-4a0f-b55d-c5d157203a05,15232b0d-967c-40ad-b0f8-427a0daffa61,1524d607-2820-4f6c-91b5-c90c2d04cad4,24144881-e912-4551-9522-cb6a62c26477,260f0337-9bb2-427c-b794-2abf4aa97d08,2674bb3b-da48-4c04-9388-6db0144ae183,35657c95-f273-4c44-bcc3-ad969686ee8d,3aafc46b-cb84-4f66-a6e0-d66638912266,3d923e88-2211-4124-b1fe-eab3c330197c,3dd19f44-b201-49a6-afc4-8e8194581e0c,3e798349-2350-4496-8f68-367a59768d1d,3fa1dad2-f2a1-4fad-8b95-1b48c6b71a1c,40b9c77b-e9d3-41d2-98d8-271b5546cf62,4d376a62-8f74-4bf1-a967-1dce8b255129,5fc83a72-cee4-4827-bb70-4290b675f6a6,666e267c-d9a1-4c5e-9b4f-60df1ce27747,6a33d33d-f5f3-4173-8dcf-ae4e5019ab92,6cc7dc7d-2cd2-41e0-a5d9-7aca7f8380a8,76480116-f385-4d2a-bfe6-286fea653c7d,79b41690-ae73-4963-b8bf-b16870ede85a,7f138f63-fe05-48e4-9910-446f5ffe7d01,82db1c33-1988-4310-a4a6-ba912f0850c8,8368ee33-f1ac-4425-8310-2e884cb90099,8e1f2459-01e3-456e-83f2-955b08d9c870,9a0b26a1-0c9e-462e-a804-9f4d7cb03383,9a11f270-5647-4ac8-8bd5-186d25fc7f98,9eeee9db-2dd8-4653-bb76-1a56cbad01e4,9f2e02ae-4a6b-42ca-99f0-3f59ad6e7097,9fc68dc3-51aa-4055-89d0-9d9b04497e27,a7becf99-e339-4c9e-9c53-11ad4f60ac1e,b08eb37c-d74e-4737-a73d-a9edd58c579a,bb239073-1689-449a-9459-5089cca30b43,bb42e567-e4c7-4d39-b657-fc733211175e,c1e99f78-f95b-431e-83e5-790cb5501749,c29cd5ee-f6cb-44d0-a152-a2234679cf4f,d8f0ee7a-d930-453c-92f2-39016b0cdd16,dbc84088-4e3a-4e7b-83f5-1d132f2a2ade,dbd63b05-47b5-4277-8dcc-71d59c57d81c,df62ef04-4d88-4b93-87a2-4d7a66105c70,df703b86-e50f-4e9e-8bf3-f34e4935ad33,e6564e30-18ec-4caf-8ebd-20f191c57fcb}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "client_name_commercial",
-				"n_distinct": -0.578947,
-				"most_common_vals": "{Adelco,ALICORP,\"ARCA CONTINENTAL EC\",\"ACME Inc\",Buscalibre,\"Disal - CHILE\",\"Disal Perú\",\"Redondos Alimentos Perú\",\"Universidad Continental S.A.C.\",\"Universidad de Ingeniería y Tecnología\",\"Universidad EAFIT\",\"ARCA CONTINENTAL PE\",AVON,\"Brightcell Chile\",CGE,\"Coca Cola Paresa\",\"Corporación Santo Tomás\",\"Correos de Chile\",\"Cyberdyne Systems Inc.\",Koandina,\"Logytech Colombia\",MANANTIAL,PACKSYS,\"Pepsico MX\",PF,Proconsumo,\"SALAV ROSHFRAN\",\"Stark Global\",\"TASA LOGISTICA\",\"UNILEVER MEXICO\",\"Unilever Middle Americas\",\"Universidad del Desarrollo\",\"Universidad de los Andes\",\"Universidad de Los Lagos\",\"Universidad Peruana de Ciencias Aplicadas SAC\",\"Wayne Inc.\"}",
+				"n_distinct": -0.580153,
+				"most_common_vals": "{Adelco,ALICORP,\"ARCA CONTINENTAL EC\",Buscalibre,\"Disal - CHILE\",\"Disal Perú\",\"Redondos Alimentos Perú\",\"Universidad Continental S.A.C.\",\"Universidad de Ingeniería y Tecnología\",\"Universidad EAFIT\",\"ACME Inc\",\"ARCA CONTINENTAL PE\",AVON,\"Brightcell Chile\",CGE,\"Coca Cola Paresa\",\"Corporación Santo Tomás\",\"Correos de Chile\",\"Cyberdyne Systems Inc.\",Koandina,\"Logytech Colombia\",MANANTIAL,PACKSYS,\"Pepsico MX\",PF,Proconsumo,\"SALAV ROSHFRAN\",\"Stark Global\",\"TASA LOGISTICA\",\"UNILEVER MEXICO\",\"Unilever Middle Americas\",\"Universidad del Desarrollo\",\"Universidad de los Andes\",\"Universidad de Los Lagos\",\"Universidad Peruana de Ciencias Aplicadas SAC\",\"Wayne Inc.\"}",
 				"most_common_freqs": [
-					0.0300752, 0.0300752, 0.0300752, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376
+					0.0305344, 0.0305344, 0.0305344, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{ADEK,AIEP,\"Centro de Formación Técnica La Araucanía\",\"Corporación Universitaria Iberoamericana\",\"Escuela de Comercio de Santiago\",\"Fundación Universitaria CEIPA\",\"Fundación Universitaria Maria Cano\",\"Instituto San Ignacio de Loyola\",\"Luthor Corp.\",\"NUC University\",\"Pontificia Universidad Católica del Perú\",SENDBOX,\"Servicio Nacional de Adiestramiento Industrial\",Skynet,TECSUP,UNIMINUTO,\"Universidad Americana UAM\",\"Universidad Anáhuac Mérida\",\"Universidad Anáhuac México Norte\",\"Universidad Anáhuac Puebla\",\"Universidad APEC\",\"Universidad Autónoma de Bucaramanga\",\"Universidad Autónoma de Guadalajara\",\"Universidad Cooperativa de Colombia\",\"Universidad de la Sabana\",\"Universidad de Lima\",\"Universidad del Pacífico (PE)\",\"Universidad del Sinu\",\"Universidad del Valle de Atemajac\",\"Universidad del Valle de Guatemala\",\"Universidad de Piura\",\"Universidad de Viña del Mar\",\"Universidades Insurgentes\",\"Universidad Mayor\",\"Universidad Nacional Andrés Bello\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Particular de Especialidades Espíritu Santo\",\"Universidad Privada del Norte\",\"Universidad Rey Juan Carlos (Telefónica)\",\"Universidad Simón Bolivar\"}"
+				"histogram_bounds": "{ADEK,AIEP,\"Centro de Formación Técnica La Araucanía\",\"Corporación Universitaria Iberoamericana\",\"Escuela de Comercio de Santiago\",\"Fundación Universitaria CEIPA\",\"Fundación Universitaria Maria Cano\",\"Instituto San Ignacio de Loyola\",\"Luthor Corp.\",\"NUC University\",\"Pontificia Universidad Católica del Perú\",SENDBOX,\"Servicio Nacional de Adiestramiento Industrial\",TECSUP,UNIMINUTO,\"Universidad Americana UAM\",\"Universidad Anáhuac Mérida\",\"Universidad Anáhuac México Norte\",\"Universidad Anáhuac Puebla\",\"Universidad APEC\",\"Universidad Autónoma de Bucaramanga\",\"Universidad Autónoma de Guadalajara\",\"Universidad Cooperativa de Colombia\",\"Universidad de la Sabana\",\"Universidad de Lima\",\"Universidad del Pacífico (PE)\",\"Universidad del Sinu\",\"Universidad del Valle de Atemajac\",\"Universidad del Valle de Guatemala\",\"Universidad de Piura\",\"Universidad de Viña del Mar\",\"Universidades Insurgentes\",\"Universidad Mayor\",\"Universidad Nacional Andrés Bello\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Particular de Especialidades Espíritu Santo\",\"Universidad Privada del Norte\",\"Universidad Rey Juan Carlos (Telefónica)\",\"Universidad Simón Bolivar\"}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "company_currency",
 				"n_distinct": 6,
-				"most_common_vals": "{CLP,MXN,PEN,COP,USD}",
-				"most_common_freqs": [0.488722, 0.180451, 0.157895, 0.142857, 0.0150376],
-				"histogram_bounds": null
+				"most_common_vals": "{CLP,MXN,PEN,COP}",
+				"most_common_freqs": [0.496183, 0.183206, 0.160305, 0.137405],
+				"histogram_bounds": "{ARS,USD}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "company_id",
-				"n_distinct": -0.105263,
+				"n_distinct": 13,
 				"most_common_vals": "{4453fc7e-af8d-40f0-a65a-eda4cfa2f974,e95adedd-237d-44b2-bae5-be1f88ffa340,8c9e0ed2-2d8b-454a-b243-c0c3c4125b58,110bb57b-1be0-4a20-a1cb-18dd822794d7,13f307ee-0ede-45dd-bda9-c1209a35a997,b537ca88-8197-49c6-b3e8-beee842b6eed,bb0caa69-162e-4b9e-8e54-9aff347abf1f,fae8212b-28f4-4071-9c86-1c9a775297b7,e836870e-e594-4837-91fa-aa4d48ad4766,602b41a0-0970-4b0c-8f8c-748c6b89f54d}",
-				"most_common_freqs": [0.240602, 0.218045, 0.120301, 0.0902256, 0.0902256, 0.0601504, 0.0526316, 0.037594, 0.0300752, 0.0225564],
-				"histogram_bounds": "{67c72819-8b69-4511-ac85-de8a2f4ece67,6cef394d-f14d-40d7-9188-dbbf4917f6a4,6d959e67-8b16-4a36-a4a8-f2a2214cbdb3,c6c147ac-4d48-4230-9da4-1626e257b7a6}"
+				"most_common_freqs": [0.244275, 0.221374, 0.122137, 0.0916031, 0.0916031, 0.0610687, 0.0458015, 0.0381679, 0.0305344, 0.0229008],
+				"histogram_bounds": "{67c72819-8b69-4511-ac85-de8a2f4ece67,6cef394d-f14d-40d7-9188-dbbf4917f6a4,6d959e67-8b16-4a36-a4a8-f2a2214cbdb3}"
 			},
 			{
 				"schemaname": "public",
@@ -912,47 +862,47 @@
 				"attname": "contract_currency",
 				"n_distinct": 7,
 				"most_common_vals": "{USD,CLF,MXN,PEN,COP}",
-				"most_common_freqs": [0.541353, 0.263158, 0.075188, 0.0601504, 0.0451128],
+				"most_common_freqs": [0.541985, 0.259542, 0.0763359, 0.0610687, 0.0458015],
 				"histogram_bounds": "{CLP,EUR}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "contract_end_date",
-				"n_distinct": -0.37594,
+				"n_distinct": -0.366412,
 				"most_common_vals": "{2025-12-31,2026-02-28,2027-06-30,2025-03-30,2025-09-30,2026-03-31,2026-06-30,2027-12-31}",
-				"most_common_freqs": [0.443609, 0.0225564, 0.0225564, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376],
-				"histogram_bounds": "{2024-04-30,2024-12-31,2025-03-28,2025-04-15,2025-04-16,2025-05-02,2025-07-31,2025-09-01,2025-09-18,2025-09-19,2025-11-16,2025-12-15,2026-01-11,2026-01-30,2026-01-31,2026-02-27,2026-03-30,2026-07-21,2026-07-31,2026-08-20,2026-08-31,2026-09-05,2026-10-31,2026-11-19,2026-12-31,2027-01-01,2027-02-28,2027-03-31,2027-07-31,2027-08-15,2027-08-30,2027-10-30,2027-11-13,2027-11-30,2027-12-14,2027-12-30,2028-01-09,2028-01-31,2028-03-31,2028-05-31,2028-08-31,2029-11-30}"
+				"most_common_freqs": [0.450382, 0.0229008, 0.0229008, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672],
+				"histogram_bounds": "{2024-04-30,2024-12-31,2025-03-28,2025-04-15,2025-04-16,2025-05-02,2025-07-31,2025-09-01,2025-09-18,2025-09-19,2025-11-16,2025-12-15,2026-01-11,2026-01-30,2026-01-31,2026-02-27,2026-03-30,2026-07-21,2026-07-31,2026-08-20,2026-08-31,2026-09-05,2026-11-19,2026-12-31,2027-02-28,2027-03-31,2027-07-31,2027-08-15,2027-08-30,2027-10-30,2027-11-13,2027-11-30,2027-12-14,2027-12-30,2028-01-09,2028-01-31,2028-03-31,2028-05-31,2028-08-31,2029-11-30}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "contract_number",
-				"n_distinct": -0.759399,
+				"n_distinct": -0.755725,
 				"most_common_vals": "{213,221,1014,106.1,106.2,108,1192,1212,1230,1270,1316,1358,138,1470,1576,1578,21,22,275,299,361,432,433,59,912,995,CT-2026-01,\"test 2\"}",
 				"most_common_freqs": [
-					0.0300752, 0.0300752, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376
+					0.0305344, 0.0305344, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{113,124,126,127,1317,135,137,140,141,144,145,146,147,155,156,157,160,165,166,170,172,177,179,186,187,188,189,190,193,196,197,199,200,201,202,203,206,207,208,209,212,214,215,218,219,220,222,224,225,228,231,232,233,234,236,43,4322,4333,58,58.1,CT-2026-01-TEST,CT-2026-01-TEST002,CTR-2025-53C7A8,CTR-2025-C4BA25,CTR-CL2025-293808,CTR-CL2025-742086,CTR-CL2026-A634F9,CTR-MX2025-C123C0,CTR-MX2025-FC7355,CTR-MX2026-A4063C,CTR-PE-2025-485F0F,PROFORMA-TEST-001,TEST1}"
+				"histogram_bounds": "{113,124,126,127,1317,135,137,140,141,144,145,146,147,155,156,157,160,165,166,170,172,177,179,186,187,188,189,190,193,196,197,199,200,201,202,203,206,207,208,209,212,214,215,218,219,220,222,224,225,228,231,232,233,234,236,43,4322,4333,58,58.1,CTR-2025-53C7A8,CTR-2025-C4BA25,CTR-CL2025-293808,CTR-CL2025-742086,CTR-CL2026-A634F9,CTR-MX2025-C123C0,CTR-MX2025-FC7355,CTR-MX2026-A4063C,CTR-PE-2025-485F0F,PROFORMA-TEST-001,TEST1}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "created_at",
-				"n_distinct": -0.406015,
+				"n_distinct": -0.396947,
 				"most_common_vals": "{\"2025-08-22 17:20:03.658152\",\"2025-11-07 13:32:15.166626\",\"2025-11-03 12:56:28.236361\",\"2025-08-22 17:57:56.588703\"}",
-				"most_common_freqs": [0.398496, 0.172932, 0.0300752, 0.0225564],
-				"histogram_bounds": "{\"2025-08-22 16:58:22.83441\",\"2025-10-15 16:16:12.184673\",\"2025-10-15 19:04:24.95945\",\"2025-11-02 20:23:20.369251\",\"2025-11-02 21:53:09.692096\",\"2025-11-27 21:41:56.774369\",\"2025-11-28 22:45:58.375645\",\"2025-12-05 10:59:08.573\",\"2025-12-08 13:28:27.229\",\"2025-12-08 13:28:27.806\",\"2025-12-08 13:28:28.252\",\"2025-12-08 13:28:28.54\",\"2025-12-08 13:28:29.266\",\"2025-12-08 13:28:29.645\",\"2025-12-08 13:28:30.294\",\"2025-12-08 13:28:30.832\",\"2025-12-08 13:28:31.33\",\"2025-12-08 13:28:32.457\",\"2025-12-08 13:28:33.074\",\"2025-12-08 13:28:33.472\",\"2025-12-08 13:28:33.887\",\"2025-12-08 13:28:34.3\",\"2025-12-08 13:28:34.722\",\"2025-12-08 13:28:35.122\",\"2025-12-08 13:28:35.519\",\"2025-12-08 13:28:35.975\",\"2025-12-08 13:28:36.403\",\"2025-12-08 13:28:36.807\",\"2025-12-08 13:28:37.215\",\"2025-12-08 13:28:37.629\",\"2025-12-08 13:28:38.03\",\"2025-12-08 13:28:38.431\",\"2025-12-08 13:28:39.088\",\"2025-12-08 13:28:39.494\",\"2025-12-08 13:28:40.187\",\"2025-12-09 18:36:33.453\",\"2025-12-09 18:36:34.034\",\"2025-12-11 17:05:49.843\",\"2025-12-15 15:46:00.857332\",\"2025-12-22 03:38:12.002861\",\"2025-12-29 22:28:48.65\",\"2026-01-06 10:36:46.874069\",\"2026-01-06 10:39:17.316698\",\"2026-01-12 14:50:27.158329\",\"2026-01-12 15:23:35.297179\",\"2026-01-12 15:37:41.872988\",\"2026-01-12 15:45:24.878095\",\"2026-01-12 15:48:46.14998\",\"2026-01-22 16:56:11.042872\",\"2026-01-28 16:46:26.734236\"}"
+				"most_common_freqs": [0.40458, 0.175573, 0.0305344, 0.0229008],
+				"histogram_bounds": "{\"2025-08-22 16:58:22.83441\",\"2025-10-15 16:16:12.184673\",\"2025-10-15 19:04:24.95945\",\"2025-11-02 20:23:20.369251\",\"2025-11-02 21:53:09.692096\",\"2025-11-27 21:41:56.774369\",\"2025-11-28 22:45:58.375645\",\"2025-12-05 10:59:08.573\",\"2025-12-08 13:28:27.229\",\"2025-12-08 13:28:27.806\",\"2025-12-08 13:28:28.252\",\"2025-12-08 13:28:28.54\",\"2025-12-08 13:28:29.266\",\"2025-12-08 13:28:29.645\",\"2025-12-08 13:28:30.294\",\"2025-12-08 13:28:30.832\",\"2025-12-08 13:28:31.33\",\"2025-12-08 13:28:32.457\",\"2025-12-08 13:28:33.074\",\"2025-12-08 13:28:33.472\",\"2025-12-08 13:28:33.887\",\"2025-12-08 13:28:34.3\",\"2025-12-08 13:28:34.722\",\"2025-12-08 13:28:35.122\",\"2025-12-08 13:28:35.519\",\"2025-12-08 13:28:35.975\",\"2025-12-08 13:28:36.403\",\"2025-12-08 13:28:36.807\",\"2025-12-08 13:28:37.215\",\"2025-12-08 13:28:37.629\",\"2025-12-08 13:28:38.03\",\"2025-12-08 13:28:38.431\",\"2025-12-08 13:28:39.088\",\"2025-12-08 13:28:39.494\",\"2025-12-08 13:28:40.187\",\"2025-12-09 18:36:33.453\",\"2025-12-09 18:36:34.034\",\"2025-12-11 17:05:49.843\",\"2025-12-15 15:46:00.857332\",\"2025-12-22 03:38:12.002861\",\"2025-12-29 22:28:48.65\",\"2026-01-06 10:36:46.874069\",\"2026-01-06 10:39:17.316698\",\"2026-01-12 14:50:27.158329\",\"2026-01-12 15:23:35.297179\",\"2026-01-12 15:37:41.872988\",\"2026-01-12 15:45:24.878095\",\"2026-01-12 15:48:46.14998\"}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "current_step_id",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
+				"n_distinct": 1,
+				"most_common_vals": "{c1bd0a03-28dd-4dab-ba4c-bdf89d64ced0}",
+				"most_common_freqs": [0.0152672],
 				"histogram_bounds": null
 			},
 			{
@@ -970,17 +920,17 @@
 				"attname": "from_bulk_import",
 				"n_distinct": 2,
 				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.556391, 0.443609],
+				"most_common_freqs": [0.549618, 0.450382],
 				"histogram_bounds": null
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "fx_company_confirmed_at",
-				"n_distinct": -0.0977443,
+				"n_distinct": -0.0763359,
 				"most_common_vals": null,
 				"most_common_freqs": null,
-				"histogram_bounds": "{\"2025-10-15 16:31:28.742+00\",\"2025-11-07 20:58:00.748+00\",\"2025-11-07 20:58:19.347+00\",\"2025-11-17 11:29:32.368+00\",\"2025-12-05 11:14:30.827+00\",\"2026-01-12 14:26:17.047+00\",\"2026-01-12 14:57:57.113+00\",\"2026-01-12 15:24:33.946+00\",\"2026-01-12 15:39:59.778+00\",\"2026-01-19 18:21:45.601+00\",\"2026-01-28 14:03:04.125+00\",\"2026-01-28 15:44:26.304+00\",\"2026-01-28 16:24:42.723+00\"}"
+				"histogram_bounds": "{\"2025-10-15 16:31:28.742+00\",\"2025-11-07 20:58:00.748+00\",\"2025-11-07 20:58:19.347+00\",\"2025-11-17 11:29:32.368+00\",\"2025-12-02 18:50:50.866+00\",\"2025-12-05 11:14:30.827+00\",\"2026-01-12 14:26:17.047+00\",\"2026-01-12 14:57:57.113+00\",\"2026-01-12 15:24:33.946+00\",\"2026-01-12 15:39:59.778+00\"}"
 			},
 			{
 				"schemaname": "public",
@@ -988,7 +938,7 @@
 				"attname": "fx_company_policy",
 				"n_distinct": 2,
 				"most_common_vals": "{monthly_avg}",
-				"most_common_freqs": [0.0977444],
+				"most_common_freqs": [0.0687023],
 				"histogram_bounds": null
 			},
 			{
@@ -1014,9 +964,9 @@
 				"tablename": "contracts",
 				"attname": "fx_rate_to_system",
 				"n_distinct": 11,
-				"most_common_vals": "{1.0,0.0242,40.104,4000,18.29,3.752,40.52}",
-				"most_common_freqs": [0.142857, 0.0676692, 0.0601504, 0.0451128, 0.0300752, 0.0225564, 0.0150376],
-				"histogram_bounds": "{0.9,19,20.038,960}"
+				"most_common_vals": "{1,0.0242,40.104,4000,18.29,3.752}",
+				"most_common_freqs": [0.137405, 0.0687023, 0.0610687, 0.0458015, 0.0305344, 0.0229008],
+				"histogram_bounds": "{0.9,19,20.038,40.52,960}"
 			},
 			{
 				"schemaname": "public",
@@ -1024,7 +974,7 @@
 				"attname": "holding_id",
 				"n_distinct": 3,
 				"most_common_vals": "{5652e95e-bb99-48f5-aa1c-13c8c2638fc6,f6e3cb81-8b4a-451e-8402-573e47688d45,05583c6e-9364-4672-a610-0744324e44b4}",
-				"most_common_freqs": [0.43609, 0.428571, 0.135338],
+				"most_common_freqs": [0.442748, 0.435115, 0.122137],
 				"histogram_bounds": null
 			},
 			{
@@ -1034,7 +984,7 @@
 				"n_distinct": -1,
 				"most_common_vals": null,
 				"most_common_freqs": null,
-				"histogram_bounds": "{002b51b8-fb2d-43f0-b23f-884f622b740d,02d80009-6789-425e-85dc-31fb80148dae,041e2274-827a-4b34-be85-7d29cecdd2e1,059601f4-f923-4521-892a-2b82d9200b3f,086eca51-a5f9-4c73-93e2-56c5f0599457,094c96f7-cfdc-41d5-aa27-6501e8b5cace,0959815b-edb1-4dc4-9e36-265ecc3f23b5,1071642a-24c3-47c3-992e-4daea622c4f0,14253188-c8c3-4097-862a-92c61a6b6061,179b23aa-c2ef-42dd-bf93-46123b250c29,198c0ba5-256d-42df-b886-8d9aa1fbff06,19dc67c1-15a6-40cb-abd5-338781a56b36,19eb67e3-9fd0-494b-9a8b-56b19e01552c,1acfb6a6-adad-42b8-94d4-a11a5a3abab4,1ecdc0f3-0cf9-47dc-ba65-00d2f4a690a4,22c2b3bb-d44c-44f7-adc9-b8ba3a6172d6,2645d4b1-4e25-41ad-a2c0-8265c358c4a2,26780efb-1927-4ea4-976c-0957bfd3d94d,273d7045-a20b-4c0b-9ec7-4f9177878837,2a797814-37f6-44e8-9ee0-8482e8d7f06e,2a8e109c-3956-4600-bd4c-de23515c712a,2aef9079-1c55-44fa-8bd5-7e622886cb77,2c49ebd7-8b43-455f-a7e8-d85873bb3c12,2c4a3586-3c3f-42df-88ca-4d82d6694722,30f10f34-a712-43b3-8345-96753be24d2d,36917f83-8d7d-4a2b-b2f3-c6c855d1f75b,37809d4a-d791-419a-b42d-2395161bc951,37af6160-dd3d-4271-9129-d76d89af3cb9,37ccbd9c-8274-426e-8534-84edd6b6cefb,4128c202-5619-4502-8c71-f5b2ee5b2a7f,419d1a3b-69b5-451a-8399-28e59f4409b7,426c6c4e-3fc9-4934-8084-e238a43e115a,46883237-2a92-40f2-b399-7c44f8a4e84d,4695545f-e03f-4bfa-be6e-0708e084fa57,47d272ae-f404-4770-b91f-891e20beb89b,4814a883-6de6-404f-aa1e-9c775986387b,485f0fd7-8563-48f4-8460-f3c9aa40c153,4926f356-c859-40ba-9a61-c41363d9cdb2,53c7a8a2-aff9-48fb-a242-21028c829122,53f22a72-d0d8-4e24-ac05-06e86b1502ce,54023ce4-17c1-4104-b38e-299b66d96fb6,547708f7-4b94-4f4e-be56-bdc4df2174fb,580a2624-dd35-4e11-918e-39d1d8bbe407,5a9301f5-d289-4b65-b43b-99f4d4e9feb8,5d6322cd-932d-482e-8192-a3be73b8390b,5e1da7e9-ad0c-4f11-9747-342a662624e5,5f6bf904-7b07-4518-9669-b30255f877ec,66cc1c07-2e72-494f-9c93-2efde78b1cd4,6c17b7b6-439a-4b53-84ad-77273c9b11e8,6f211049-52e2-4331-92a1-f03885da244f,75515d6d-0d6a-4a79-bb00-d1681735f33a,7989ad26-6c17-4d02-a5c5-48cb64fd3dc5,799038b5-39d7-4e4a-b82c-8b34270cd222,7c78e122-c932-44e4-b0e7-c1acd0768dd0,7e9a5277-a76f-490c-9a95-070e99aa89e3,8126804b-87c7-4801-9093-9c153f7d148a,8288e16d-fb14-4f79-925e-5e3108b49a98,88e61d30-0fb0-4ae0-a371-08ec1e222a7a,89698ee7-fc5b-41df-b769-046dc6386714,89c92c26-44d5-4f33-a8b2-5bd35231deea,8e1c7022-d462-4a4b-86d9-1bac96c8e8b2,92ca9250-c294-4914-870d-20c7b27b62d8,9a57e54b-5763-487d-8a30-4f43a67319ee,a201aa06-fc51-469e-a2c7-0f206b8ef2a8,a4063cb8-6599-41ea-800b-0d3a262e07c5,a555ae83-0cc6-45df-9a18-8412a92b888d,a9962f27-c587-4127-a791-204e9caaaba8,aadd0316-8bb0-4bf9-abb5-d85e40bca2a2,abb0ce60-af5a-4db8-900a-6a5bef347a3c,afdba02b-0dbf-4af8-a955-188adfea3f4f,b161e580-6d35-4861-b512-01852a30fc3e,b8940149-4a75-42c1-9fec-3f77236e82ed,bbfe987b-7e74-46a6-bf31-2d8491b6cf17,bc3adab8-9e2f-48a4-b11f-b70c406ab54a,c07de7ea-fe4a-4d5e-88a5-00e1fce06794,c123c0fd-1d00-42ee-b32f-27efa404600d,c4ba252a-3270-4f20-9c62-770708826c5c,c505f1df-ae57-4d27-be30-4783ade4c703,c50ec776-1192-48c9-8936-fb3690ce3039,c7bf4fbe-d1f0-4b25-8b99-1a38e1b08d0d,c975408b-b630-48bd-a997-2645ae9a8d25,cc759f4a-4aec-42a3-ae26-fe4129ee5d55,ccf49423-631e-41d2-81ee-356ba85c9a9d,d04f5451-e0ee-4c80-95de-7dfec9943be2,d2c01025-96f9-475e-9dc8-bc9a47cde801,d51002fb-fbfa-441b-936b-3932f3a9fe6b,d618dde2-b4ea-4197-95aa-5c85e517a087,dd3802fc-60bc-446e-9049-2127948aa3cb,dfd84bff-6004-45fb-8bce-fe5d0ec819b7,e4fd6dea-7d1f-44ef-896d-6fa66221e725,e67d12ae-8f9d-4746-9d5d-6c193997c41b,e88e7f24-2db4-4906-8943-be1036d2b934,ea726b96-4299-4762-bbea-1cb96baa8c4a,ebae2819-7fa6-4fbf-9938-041ece0e5e12,efe8ad33-3d6c-4d9f-89d8-c78ccc15ff9b,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,f4927b6b-2d4b-4511-92e5-df266e070379,f51f64ad-cbee-47b2-a789-130986f67571,f84e7210-435f-4ddd-9504-db6b466dce00,fc65f808-f1ee-480e-9a1c-aa2266a79b2d,ffece0fd-b24c-459e-a9ca-7ac6de643e1d}"
+				"histogram_bounds": "{002b51b8-fb2d-43f0-b23f-884f622b740d,02d80009-6789-425e-85dc-31fb80148dae,041e2274-827a-4b34-be85-7d29cecdd2e1,059601f4-f923-4521-892a-2b82d9200b3f,086eca51-a5f9-4c73-93e2-56c5f0599457,094c96f7-cfdc-41d5-aa27-6501e8b5cace,0959815b-edb1-4dc4-9e36-265ecc3f23b5,1071642a-24c3-47c3-992e-4daea622c4f0,14253188-c8c3-4097-862a-92c61a6b6061,179b23aa-c2ef-42dd-bf93-46123b250c29,198c0ba5-256d-42df-b886-8d9aa1fbff06,19dc67c1-15a6-40cb-abd5-338781a56b36,19eb67e3-9fd0-494b-9a8b-56b19e01552c,1a07a97d-008c-4ec3-99ed-034d29449615,1ecdc0f3-0cf9-47dc-ba65-00d2f4a690a4,22c2b3bb-d44c-44f7-adc9-b8ba3a6172d6,25825d39-8bd6-4e30-b95c-53d70dfb86d3,26780efb-1927-4ea4-976c-0957bfd3d94d,273d7045-a20b-4c0b-9ec7-4f9177878837,29380864-71f8-42c0-80b4-3d3d066a96a6,2a8e109c-3956-4600-bd4c-de23515c712a,2aef9079-1c55-44fa-8bd5-7e622886cb77,2c1d7ab5-cc8e-4585-bd19-f5e9feccaccb,2c49ebd7-8b43-455f-a7e8-d85873bb3c12,30f10f34-a712-43b3-8345-96753be24d2d,3434d99e-ff6e-44c5-854c-3b25a247eb2f,36917f83-8d7d-4a2b-b2f3-c6c855d1f75b,37ccbd9c-8274-426e-8534-84edd6b6cefb,40b82552-bacf-459b-b739-ec70c17495a3,4128c202-5619-4502-8c71-f5b2ee5b2a7f,426c6c4e-3fc9-4934-8084-e238a43e115a,44703d48-842f-42fe-861b-2255adc947a1,46883237-2a92-40f2-b399-7c44f8a4e84d,4695545f-e03f-4bfa-be6e-0708e084fa57,4813ef74-674c-4cfe-8c4a-5ed925850a9a,4814a883-6de6-404f-aa1e-9c775986387b,485f0fd7-8563-48f4-8460-f3c9aa40c153,5052415e-0189-4e64-89d5-0b677c86b881,53c7a8a2-aff9-48fb-a242-21028c829122,53f22a72-d0d8-4e24-ac05-06e86b1502ce,54684352-766c-4fe1-8c3a-01afe47c1d57,547708f7-4b94-4f4e-be56-bdc4df2174fb,580a2624-dd35-4e11-918e-39d1d8bbe407,5a9301f5-d289-4b65-b43b-99f4d4e9feb8,5d6322cd-932d-482e-8192-a3be73b8390b,5e1da7e9-ad0c-4f11-9747-342a662624e5,5f6bf904-7b07-4518-9669-b30255f877ec,66cc1c07-2e72-494f-9c93-2efde78b1cd4,6c17b7b6-439a-4b53-84ad-77273c9b11e8,742086bb-f3ae-4822-9abf-a607c68fdcd8,7989ad26-6c17-4d02-a5c5-48cb64fd3dc5,799038b5-39d7-4e4a-b82c-8b34270cd222,7c78e122-c932-44e4-b0e7-c1acd0768dd0,7d940e7d-1a92-4267-81f4-e98653d77dc0,8126804b-87c7-4801-9093-9c153f7d148a,8288e16d-fb14-4f79-925e-5e3108b49a98,869258cf-f494-4c23-94bd-eb6774cdd6ba,89698ee7-fc5b-41df-b769-046dc6386714,89c92c26-44d5-4f33-a8b2-5bd35231deea,8e165978-f1e5-4007-add6-7669683072e1,92ca9250-c294-4914-870d-20c7b27b62d8,9a57e54b-5763-487d-8a30-4f43a67319ee,9aa61468-9070-4bcf-9f7b-a20982d28fd4,a201aa06-fc51-469e-a2c7-0f206b8ef2a8,a555ae83-0cc6-45df-9a18-8412a92b888d,a634f958-d95e-4331-80a3-5e3c27903dce,a9962f27-c587-4127-a791-204e9caaaba8,abb0ce60-af5a-4db8-900a-6a5bef347a3c,ae9ac848-0a3d-4355-84cd-a1d880ce0d8a,afdba02b-0dbf-4af8-a955-188adfea3f4f,b8940149-4a75-42c1-9fec-3f77236e82ed,bb23b4b1-3f03-4d53-bd27-48a029caf20c,bbfe987b-7e74-46a6-bf31-2d8491b6cf17,bc3adab8-9e2f-48a4-b11f-b70c406ab54a,c0c8587c-d4ae-4f19-b985-9983b6485a4c,c123c0fd-1d00-42ee-b32f-27efa404600d,c4ba252a-3270-4f20-9c62-770708826c5c,c50ec776-1192-48c9-8936-fb3690ce3039,c563c3dd-9d1b-4cbb-9a7b-f7cada975301,c7bf4fbe-d1f0-4b25-8b99-1a38e1b08d0d,cc759f4a-4aec-42a3-ae26-fe4129ee5d55,cc83ce50-89cc-409b-aaea-4a63bce1145b,ccf49423-631e-41d2-81ee-356ba85c9a9d,d04f5451-e0ee-4c80-95de-7dfec9943be2,d4d6c952-cd9e-4599-b8d5-4d1bbdf2ab50,d51002fb-fbfa-441b-936b-3932f3a9fe6b,d618dde2-b4ea-4197-95aa-5c85e517a087,dda6269b-7f21-4fff-ad67-9b3c49fd1582,dfd84bff-6004-45fb-8bce-fe5d0ec819b7,e4fd6dea-7d1f-44ef-896d-6fa66221e725,e7d6dc83-c094-4f81-9395-91cc40be1b15,e88e7f24-2db4-4906-8943-be1036d2b934,ea726b96-4299-4762-bbea-1cb96baa8c4a,ebae2819-7fa6-4fbf-9938-041ece0e5e12,efe8ad33-3d6c-4d9f-89d8-c78ccc15ff9b,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,f4927b6b-2d4b-4511-92e5-df266e070379,f51f64ad-cbee-47b2-a789-130986f67571,f84e7210-435f-4ddd-9504-db6b466dce00,fc65f808-f1ee-480e-9a1c-aa2266a79b2d,ffece0fd-b24c-459e-a9ca-7ac6de643e1d}"
 			},
 			{
 				"schemaname": "public",
@@ -1042,7 +992,7 @@
 				"attname": "is_legacy",
 				"n_distinct": 2,
 				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.759399, 0.240602],
+				"most_common_freqs": [0.755725, 0.244275],
 				"histogram_bounds": null
 			},
 			{
@@ -1051,7 +1001,7 @@
 				"attname": "legacy_cutoff_date",
 				"n_distinct": 1,
 				"most_common_vals": "{2025-01-01}",
-				"most_common_freqs": [0.240602],
+				"most_common_freqs": [0.244275],
 				"histogram_bounds": null
 			},
 			{
@@ -1060,7 +1010,7 @@
 				"attname": "legacy_reconciliation_pct",
 				"n_distinct": 5,
 				"most_common_vals": "{0.00,100.00}",
-				"most_common_freqs": [0.962406, 0.0150376],
+				"most_common_freqs": [0.961832, 0.0152672],
 				"histogram_bounds": "{6.21,8.33,41.67}"
 			},
 			{
@@ -1069,22 +1019,22 @@
 				"attname": "legacy_status",
 				"n_distinct": 2,
 				"most_common_vals": "{pending,activated}",
-				"most_common_freqs": [0.225564, 0.0150376],
+				"most_common_freqs": [0.229008, 0.0152672],
 				"histogram_bounds": null
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "legal_client_name",
-				"n_distinct": -0.609023,
+				"n_distinct": -0.603053,
 				"most_common_vals": "{\"ABASTECEDORA DEL COMERCIO SPA\",\"ALICORP S.A.A.\",\"BUSCALIBRE S.A.\",\"DISAL CHILE SANITARIOS PORTABLES LIMITADA\",\"GESTION DE SERVICIOS AMBIENTALES SAC\",\"REDONDOS S A\",\"Universidad Continental S.A.C.\",\"Universidad de Ingeniería y Tecnología\",\"Universidad EAFIT\",\"AC Bebidas Ecuador ACBE CIA.LTDA\",\"AC LOGISTICA DEL PERU S.A.C\",\"AUTOPARTES SALAV ROSHFRANS\",\"AVON Cosmetics Manufacturing, S.de R.L. de C.V.\",\"BRIGHTCELL LOGISTICS CHILE LIMITADA\",\"CELLSTAR CHILE S A\",\"COMPAÑÍA GENERAL DE ELECTRICIDAD S.A.\",\"Distribuidora Importadora Dipor S.A.\",\"Droguería Proconsumo\",\"EMBOTELLADORA ANDINA S A\",\"EMPRESA DE CORREOS DE CHILE\",\"Investigaciones y Estudios Superiores S.C.\",\"MANANTIAL S A\",\"MT LOGISTICA S.p.A.\",\"PACKSYS MEXICO S.A. DE C.V.\",\"PARAGUAY REFRESCOS S.A.\",\"PEPSICO INTERNACIONAL MEXICO\",\"PRODUCTOS FERNANDEZ\",\"Skynet México\",\"T Cyber Cloud Tech Chile\",\"Unilever Andina Ecuador S.A.\",\"Unilever de México, S. de R.L. de C.V.\",\"Universidad del Desarrollo\",\"Universidad de los Andes\",\"Universidad Peruana de Ciencias Aplicadas SAC\",\"Universidad Santo Tomás\"}",
 				"most_common_freqs": [
-					0.0300752, 0.0300752, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376
+					0.0305344, 0.0305344, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{\"ABITOUY S.R.L.\",\"ACME SpA\",\"AHONA LOGISTICS SPA\",\"Asociación TECSUP Nº2\",\"CFT Estatal de La Araucanía\",\"Corporación Universitaria Iberoamericana\",\"Corporación Universitaria Minuto de Dios\",\"Fundación Chile\",\"Fundacion Universitaria CEIPA\",\"Fundación Universitaria Maria Cano\",\"Instituto Profesional AIEP\",\"Instituto Profesional del Comercio (ESCS)\",\"Instituto Superior Autonomo de Occidente A.C \",\"Instituto Superior San Ignacio de Loyola\",\"Luthor España SL\",\"National college of Business & Technology company Inc.\",\"Pontificia Universidad Católica del Perú\",\"Sedex Argentina S.A.\",\"Servicio Nacional de Adiestramiento en Trabajo Industrial\",\"Skynet ARG\",\"Stark México SA de CV\",\"Stark Perú SAC\",\"Telefónica Educación Digital\",\"Universidad Americana UAM\",\"Universidad Anáhuac de Puebla\",\"Universidad APEC\",\"Universidad Autónoma de Bucaramanga \",\"Universidad Autónoma de Guadalajara\",\"Universidad Cooperativa de Colombia\",\"Universidad de la Sabana\",\"Universidad de Lima\",\"Universidad del Pacífico\",\"Universidad del Sinu\",\"Universidad del Valle de Guatemala\",\"Universidad de Piura\",\"Universidad de Viña del Mar \",\"Universidad Insurgentes\",\"Universidad Mayor\",\"Universidad Nacional Andrés Bello\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Particular de Especialidades Espíritu Santo\",\"Universidad Privada del Norte SAC\",\"Universidad Simón Bolívar\",\"Wayne Chile SpA\",\"Wayne Energy SA\"}"
+				"histogram_bounds": "{\"ACME SpA\",\"AHONA LOGISTICS SPA\",\"Asociación TECSUP Nº2\",\"CFT Estatal de La Araucanía\",\"Corporación Universitaria Iberoamericana\",\"Corporación Universitaria Minuto de Dios\",\"Fundación Chile\",\"Fundacion Universitaria CEIPA\",\"Fundación Universitaria Maria Cano\",\"Instituto Profesional AIEP\",\"Instituto Profesional del Comercio (ESCS)\",\"Instituto Superior Autonomo de Occidente A.C \",\"Instituto Superior San Ignacio de Loyola\",\"Luthor España SL\",\"National college of Business & Technology company Inc.\",\"Pontificia Universidad Católica del Perú\",\"Sedex Argentina S.A.\",\"Servicio Nacional de Adiestramiento en Trabajo Industrial\",\"Stark México SA de CV\",\"Stark Perú SAC\",\"Telefónica Educación Digital\",\"Universidad Americana UAM\",\"Universidad Anáhuac de Puebla\",\"Universidad APEC\",\"Universidad Autónoma de Bucaramanga \",\"Universidad Autónoma de Guadalajara\",\"Universidad Cooperativa de Colombia\",\"Universidad de la Sabana\",\"Universidad de Lima\",\"Universidad del Pacífico\",\"Universidad del Sinu\",\"Universidad del Valle de Guatemala\",\"Universidad de Piura\",\"Universidad de Viña del Mar \",\"Universidad Insurgentes\",\"Universidad Mayor\",\"Universidad Nacional Andrés Bello\",\"Universidad Norbert Wiener\",\"Universidad Panamericana\",\"Universidad Particular de Especialidades Espíritu Santo\",\"Universidad Privada del Norte SAC\",\"Universidad Simón Bolívar\",\"Wayne Chile SpA\",\"Wayne Energy SA\"}"
 			},
 			{
 				"schemaname": "public",
@@ -1092,7 +1042,7 @@
 				"attname": "legal_representative_id",
 				"n_distinct": 2,
 				"most_common_vals": "{1111111111}",
-				"most_common_freqs": [0.0601504],
+				"most_common_freqs": [0.0610687],
 				"histogram_bounds": null
 			},
 			{
@@ -1101,23 +1051,23 @@
 				"attname": "legal_representative_name",
 				"n_distinct": 7,
 				"most_common_vals": "{\"John Doe\"}",
-				"most_common_freqs": [0.0225564],
+				"most_common_freqs": [0.0229008],
 				"histogram_bounds": "{\"Ana Torres\",\"Carlos Ruiz\",\"Francis Underwood\",\"Luis Gutiérrez\",\"Miles Dyson\",Pochita}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "notes",
-				"n_distinct": -0.518797,
+				"n_distinct": -0.519084,
 				"most_common_vals": "{\"Top40 - Según datos planilla detalle_actual\",Top40,\"UDD uAssessment\"}",
-				"most_common_freqs": [0.233083, 0.203008, 0.0150376],
-				"histogram_bounds": "{\"ADEK U-SCORE\",\"AIEP U-PLANNING + U-RETENTION\",\"ANAHUACP uRetention\",\"ANAHUAC U-IMPROVE + U-LEARNING (RENOVACIÓN)\",\"ANAHUAC uPlanning\",\"CEIPA uRetention + uExperience\",\"CFTA uExperience + uAssessment\",\"Cot test 2\",\"EAFIT Desarrollo uAssessment\",\"EAFIT uAssessment\",\"EAFIT uBooking\",\"ECS uRetention + uExperience + uEngagement\",\"FUMC U-PLANNING + U-IMPROVE + U-RETENTION + U-EXPERIENCE + U-ENGAGEMENT\",\"IBERO uAssessment\",\"Importado desde Salesforce - 7 vhc PF+ / Sendbox / Arg (Stage SF: Ganado → Enviada)\",\"ISIL U-PLANNING\",\"Notas varias\",\"Notas varias...\",\"NUC uPlanning\",\"Prueba 5 - Fase 2\",\"Prueba 7 - Fase 2\",\"PUCP uBooking + uAssessment + uPlanning\",\"Según datos planilla detalle_actual\",\"SENATI uRetention\",\"TECSUP uExperience\",\"TEST2 - prueba variables\",\"Test 3- variables\",\"TEST MRR LEGACY ACTIVACIÓN CONTRATO\",\"Test pxq en rama invoice-legacy\",\"UAG uAssessment\",\"UAM (N) U-RETENTION\",\"UCON ANEXO MANTENIMIENTO U-BOOKING + U-RETENTION + U-FORECAST\",\"UCON ANEXO U-BOOKING + U-RETENTION + U-FORECAST\",\"UCON uPlanning\",\"UCOO Suite uPlanner\",\"UDEP uAssessment + uRetention\",\"UEES uPlanning\",\"UINSURGENTES uPlanning + uForecast\",\"ULIMA uPlanning\",\"ULL uAssessment\",\"ULL U-CLASS + U-PLANNING + U-BOOKING (RENOVACIÓN)\",\"UMAYOR uPlanning\",\"UNABCO uFaculty\",\"UNAB uAssessment\",\"UNAPEC uPlanning\",\"UNIANDES uAssessment\",\"UNIANDES uExperience\",\"UNIMINUTO uPlanning + uAssessment\",\"UNISABANA uAssessment\",\"UNISIMON uPlanning + uForecast + uBooking\",\"UNISINU uPlanning + uAssessment\",\"UNIVA uAssessment\",\"UPAN uAssessment\",\"UPC uExam + uBooking + uClass\",\"UPC uImprove\",\"UPN U-BOOKING + U-FORECAST\",\"UP Suite uPlanner\",\"URJC uExam\",\"UST Servicios uEngagement\",\"UST uAssessment\",\"UTEC uAssessment\",\"UTEC uExperience\",\"UTEC uPlanning\",\"UVG uPlanning\",\"UVM CL uAssessment\",\"UWIENER uPlanning\"}"
+				"most_common_freqs": [0.236641, 0.206107, 0.0152672],
+				"histogram_bounds": "{\"ADEK U-SCORE\",\"AIEP U-PLANNING + U-RETENTION\",\"ANAHUACP uRetention\",\"ANAHUAC U-IMPROVE + U-LEARNING (RENOVACIÓN)\",\"ANAHUAC uPlanning\",\"CEIPA uRetention + uExperience\",\"CFTA uExperience + uAssessment\",\"Cot test 2\",\"EAFIT Desarrollo uAssessment\",\"EAFIT uAssessment\",\"EAFIT uBooking\",\"ECS uRetention + uExperience + uEngagement\",\"FUMC U-PLANNING + U-IMPROVE + U-RETENTION + U-EXPERIENCE + U-ENGAGEMENT\",\"IBERO uAssessment\",\"Importado desde Salesforce - 7 vhc PF+ / Sendbox / Arg (Stage SF: Ganado → Enviada)\",\"ISIL U-PLANNING\",\"Notas varias\",\"Notas varias...\",\"NUC uPlanning\",\"Prueba 5 - Fase 2\",\"Prueba 7 - Fase 2\",\"PUCP uBooking + uAssessment + uPlanning\",\"Según datos planilla detalle_actual\",\"SENATI uRetention\",\"TECSUP uExperience\",\"TEST2 - prueba variables\",\"Test 3- variables\",\"Test pxq en rama invoice-legacy\",\"UAG uAssessment\",\"UAM (N) U-RETENTION\",\"UCON ANEXO MANTENIMIENTO U-BOOKING + U-RETENTION + U-FORECAST\",\"UCON ANEXO U-BOOKING + U-RETENTION + U-FORECAST\",\"UCON uPlanning\",\"UCOO Suite uPlanner\",\"UDEP uAssessment + uRetention\",\"UEES uPlanning\",\"UINSURGENTES uPlanning + uForecast\",\"ULIMA uPlanning\",\"ULL uAssessment\",\"ULL U-CLASS + U-PLANNING + U-BOOKING (RENOVACIÓN)\",\"UMAYOR uPlanning\",\"UNABCO uFaculty\",\"UNAB uAssessment\",\"UNAPEC uPlanning\",\"UNIANDES uAssessment\",\"UNIANDES uExperience\",\"UNIMINUTO uPlanning + uAssessment\",\"UNISABANA uAssessment\",\"UNISIMON uPlanning + uForecast + uBooking\",\"UNISINU uPlanning + uAssessment\",\"UNIVA uAssessment\",\"UPAN uAssessment\",\"UPC uExam + uBooking + uClass\",\"UPC uImprove\",\"UPN U-BOOKING + U-FORECAST\",\"UP Suite uPlanner\",\"URJC uExam\",\"UST Servicios uEngagement\",\"UST uAssessment\",\"UTEC uAssessment\",\"UTEC uExperience\",\"UTEC uPlanning\",\"UVG uPlanning\",\"UVM CL uAssessment\",\"UWIENER uPlanning\"}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "quote_id",
-				"n_distinct": -0.0676692,
+				"n_distinct": -0.0687023,
 				"most_common_vals": null,
 				"most_common_freqs": null,
 				"histogram_bounds": "{0fdf65f4-fb9f-4c5d-9408-126771b612dd,242d9d79-555e-4e9f-91e7-dadc51d922b0,4a8a0855-1114-46b0-8a6e-688e06dc019b,5234b951-28d3-45b6-bffa-ff876768ab52,75a96e9a-8b80-4c1e-a7e3-5a7a06f64e47,923e0763-995c-4ee4-a5fe-5279033db3ff,af6c0928-2c52-4205-aa69-520dda294d77,d888ace2-2f77-4b7d-b087-5bcf03fae9cf,fbb60c3e-7ee7-4b96-8581-a0a2b3c6fe52}"
@@ -1155,7 +1105,7 @@
 				"attname": "requires_multicompany_billing",
 				"n_distinct": 2,
 				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.984962, 0.0150376],
+				"most_common_freqs": [0.984733, 0.0152672],
 				"histogram_bounds": null
 			},
 			{
@@ -1164,7 +1114,7 @@
 				"attname": "requires_multicurrency_billing",
 				"n_distinct": 2,
 				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.984962, 0.0150376],
+				"most_common_freqs": [0.984733, 0.0152672],
 				"histogram_bounds": null
 			},
 			{
@@ -1173,7 +1123,7 @@
 				"attname": "requires_references_for_billing",
 				"n_distinct": 2,
 				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.804511, 0.195489],
+				"most_common_freqs": [0.832061, 0.167939],
 				"histogram_bounds": null
 			},
 			{
@@ -1182,7 +1132,7 @@
 				"attname": "status",
 				"n_distinct": 3,
 				"most_common_vals": "{Activo,\"En revisión\",Cancelado}",
-				"most_common_freqs": [0.744361, 0.240602, 0.0150376],
+				"most_common_freqs": [0.732824, 0.251908, 0.0152672],
 				"histogram_bounds": null
 			},
 			{
@@ -1200,63 +1150,63 @@
 				"attname": "term",
 				"n_distinct": 12,
 				"most_common_vals": "{12,36,24,60,48,72,31}",
-				"most_common_freqs": [0.646617, 0.12782, 0.0601504, 0.0526316, 0.0300752, 0.0225564, 0.0150376],
+				"most_common_freqs": [0.641221, 0.129771, 0.0610687, 0.0534351, 0.0305344, 0.0229008, 0.0152672],
 				"histogram_bounds": "{25,28,37,45,54}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "total_value",
-				"n_distinct": -0.691729,
-				"most_common_vals": "{1176,1622.4,22800,30000,95604,137376,145044,891.6,1248,1308,1888,2820,2994,8316,12000,32844,33264,33633.6,36000,40260,72230.4,139392,285319,673992,899640,2569464,4665044.4}",
+				"n_distinct": -0.694656,
+				"most_common_vals": "{1176,1622.4,30000,95604,137376,145044,891.6,1248,1308,1888,2820,2994,8316,12000,22800,32844,33264,33633.6,36000,40260,72230.4,139392,285319,673992,899640,2569464,4665044.4}",
 				"most_common_freqs": [
-					0.0300752, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0225564, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376,
-					0.0150376, 0.0150376, 0.0150376, 0.0150376, 0.0150376
+					0.0305344, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0229008, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672,
+					0.0152672, 0.0152672, 0.0152672, 0.0152672, 0.0152672
 				],
-				"histogram_bounds": "{118.79999999999998,957.6,1080,1151.04,1260,2880,2918,3852,3985,4200,6768,9600,11052,16104,20500,24000,25324,44016,45828,48000,49200,55248,67500,70008,72000,94990,95086,108000,109058,109980,113112,114048,140256,150012,167052,188732,189454,199512,208440,208872,209164,218876,223308,237024,240000,262280,294024,299734,299968,306384,361450,383772,392970,394350,494964,708600,762792,1395000,96650004,100840320,712003248,767309367,800192820,1097774436,1282500000}"
+				"histogram_bounds": "{957.6,1080,1260,2880,2918,3852,3985,4200,6768,8850,9600,11052,16104,20500,24000,25324,44016,45828,48000,49200,55248,67500,70008,72000,94990,95086,108000,109058,109980,113112,114048,140256,150012,167052,188732,189454,199512,208440,208872,209164,218876,223308,237024,240000,262280,294024,299734,299968,306384,361450,383772,392970,394350,494964,708600,762792,1395000,96650004,100840320,712003248,767309367,800192820,1097774436,1282500000}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "total_value_system_currency",
-				"n_distinct": -0.691729,
+				"n_distinct": -0.687023,
 				"most_common_vals": "{12000,30000,48595}",
-				"most_common_freqs": [0.0150376, 0.0150376, 0.0150376],
-				"histogram_bounds": "{2.93,236.92,1151.04,4200,6076.759062,8316,11052,11977.24,20500,22800.00,24000,24163,25324,32844,33264,33634,36000,36614,36843,36850,38658,40260,43313,44016,45828,48000,49188,49200,50531,51570,54050,55248,67041,67500,70008,72000,72230,73421,78000,94990,95086,95604,105042,108000,109980,113112,114048,115500,116529,117024,121176,123719,139392,140256,140485,150012,154481,159822,167052,178001,188732,189454,191827,199512,200048,208440,208872,209164,218876,223308,237024,255060,262280,271425,274444,285319.2,294024,299734,299968,306384,320625,361450,383772,392970,394350,494964,645838,708600,762792}"
+				"most_common_freqs": [0.0152672, 0.0152672, 0.0152672],
+				"histogram_bounds": "{4200,6076.759062,8316,11052,11350,11977.24,20500,24000,24163,25324,32844,33264,33634,36000,36614,36843,36850,38658,40260,43313,44016,45828,48000,49188,49200,50531,51570,54050,55248,67041,67500,70008,72000,72230,73421,78000,94990,95086,95604,105042,108000,109980,113112,114048,115500,116529,117024,121176,123719,139392,140256,140485,150012,154481,159822,167052,178001,188732,189454,191827,199512,200048,208440,208872,209164,218876,223308,237024,255060,262280,271425,274444,285319.2,294024,299734,299968,306384,320625,361450,383772,392970,394350,486240,494964,645838,708600,762792}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "type",
-				"n_distinct": 9,
-				"most_common_vals": "{CONTRATO,RECURRENTE,O.C.,Suscripción,\"Nuevo Cliente\",Servicios,ANEXO}",
-				"most_common_freqs": [0.353383, 0.203008, 0.0601504, 0.037594, 0.0225564, 0.0225564, 0.0150376],
-				"histogram_bounds": "{Histórico,NewBusiness}"
+				"n_distinct": 8,
+				"most_common_vals": "{CONTRATO,RECURRENTE,O.C.,Suscripción,\"Nuevo Cliente\",ANEXO,Servicios}",
+				"most_common_freqs": [0.358779, 0.206107, 0.0610687, 0.0381679, 0.0229008, 0.0152672, 0.0152672],
+				"histogram_bounds": null
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "workflow_completed_at",
-				"n_distinct": -0.0676692,
+				"n_distinct": -0.0458015,
 				"most_common_vals": null,
 				"most_common_freqs": null,
-				"histogram_bounds": "{\"2025-10-15 16:32:57.929316+00\",\"2025-10-15 20:00:11.177482+00\",\"2026-01-12 14:26:38.378491+00\",\"2026-01-12 14:58:47.970076+00\",\"2026-01-12 15:24:58.6313+00\",\"2026-01-12 15:40:10.826262+00\",\"2026-01-28 14:03:15.842489+00\",\"2026-01-28 15:45:43.26412+00\",\"2026-01-28 16:25:06.119592+00\"}"
+				"histogram_bounds": "{\"2025-10-15 16:32:57.929316+00\",\"2025-10-15 20:00:11.177482+00\",\"2026-01-12 14:26:38.378491+00\",\"2026-01-12 14:58:47.970076+00\",\"2026-01-12 15:24:58.6313+00\",\"2026-01-12 15:40:10.826262+00\"}"
 			},
 			{
 				"schemaname": "public",
 				"tablename": "contracts",
 				"attname": "workflow_started_at",
-				"n_distinct": -0.398496,
+				"n_distinct": -0.389313,
 				"most_common_vals": "{\"2025-08-22 17:20:03.658152+00\",\"2025-11-07 13:32:15.166626+00\",\"2025-11-03 12:56:28.236361+00\",\"2025-08-22 17:57:56.588703+00\"}",
-				"most_common_freqs": [0.398496, 0.172932, 0.0300752, 0.0225564],
-				"histogram_bounds": "{\"2025-08-22 16:58:22.83441+00\",\"2025-10-15 16:16:11.664+00\",\"2025-10-15 19:04:24.574+00\",\"2025-11-02 20:23:20.058+00\",\"2025-11-02 21:53:09.199+00\",\"2025-11-27 21:41:56.462+00\",\"2025-11-28 22:45:58.375645+00\",\"2025-12-05 10:59:08.662254+00\",\"2025-12-08 13:28:27.573729+00\",\"2025-12-08 13:28:28.127797+00\",\"2025-12-08 13:28:28.576372+00\",\"2025-12-08 13:28:28.864316+00\",\"2025-12-08 13:28:29.586475+00\",\"2025-12-08 13:28:30.148811+00\",\"2025-12-08 13:28:30.625238+00\",\"2025-12-08 13:28:31.15064+00\",\"2025-12-08 13:28:31.649557+00\",\"2025-12-08 13:28:32.782189+00\",\"2025-12-08 13:28:33.392658+00\",\"2025-12-08 13:28:33.791409+00\",\"2025-12-08 13:28:34.211398+00\",\"2025-12-08 13:28:34.629413+00\",\"2025-12-08 13:28:35.04131+00\",\"2025-12-08 13:28:35.444827+00\",\"2025-12-08 13:28:35.845585+00\",\"2025-12-08 13:28:36.296265+00\",\"2025-12-08 13:28:36.725225+00\",\"2025-12-08 13:28:37.128562+00\",\"2025-12-08 13:28:37.538923+00\",\"2025-12-08 13:28:37.949219+00\",\"2025-12-08 13:28:38.355111+00\",\"2025-12-08 13:28:38.753365+00\",\"2025-12-08 13:28:39.426142+00\",\"2025-12-08 13:28:39.814905+00\",\"2025-12-08 13:28:40.505476+00\",\"2025-12-09 18:36:33.715471+00\",\"2025-12-09 18:36:34.245532+00\",\"2025-12-11 17:05:50.062117+00\",\"2025-12-22 03:38:12.811+00\",\"2025-12-29 22:28:48.781042+00\",\"2026-01-06 10:36:46.874069+00\",\"2026-01-06 10:39:17.316698+00\",\"2026-01-12 14:50:27.158329+00\",\"2026-01-12 15:23:34.985+00\",\"2026-01-12 15:37:41.547+00\",\"2026-01-12 15:45:24.878095+00\",\"2026-01-12 15:48:46.14998+00\",\"2026-01-28 14:02:38.645+00\",\"2026-01-28 16:46:26.734236+00\"}"
+				"most_common_freqs": [0.40458, 0.175573, 0.0305344, 0.0229008],
+				"histogram_bounds": "{\"2025-08-22 16:58:22.83441+00\",\"2025-10-15 16:16:11.664+00\",\"2025-10-15 19:04:24.574+00\",\"2025-11-02 20:23:20.058+00\",\"2025-11-02 21:53:09.199+00\",\"2025-11-27 21:41:56.462+00\",\"2025-11-28 22:45:58.375645+00\",\"2025-12-05 10:59:08.662254+00\",\"2025-12-08 13:28:27.573729+00\",\"2025-12-08 13:28:28.127797+00\",\"2025-12-08 13:28:28.576372+00\",\"2025-12-08 13:28:28.864316+00\",\"2025-12-08 13:28:29.586475+00\",\"2025-12-08 13:28:30.148811+00\",\"2025-12-08 13:28:30.625238+00\",\"2025-12-08 13:28:31.15064+00\",\"2025-12-08 13:28:31.649557+00\",\"2025-12-08 13:28:32.782189+00\",\"2025-12-08 13:28:33.392658+00\",\"2025-12-08 13:28:33.791409+00\",\"2025-12-08 13:28:34.211398+00\",\"2025-12-08 13:28:34.629413+00\",\"2025-12-08 13:28:35.04131+00\",\"2025-12-08 13:28:35.444827+00\",\"2025-12-08 13:28:35.845585+00\",\"2025-12-08 13:28:36.296265+00\",\"2025-12-08 13:28:36.725225+00\",\"2025-12-08 13:28:37.128562+00\",\"2025-12-08 13:28:37.538923+00\",\"2025-12-08 13:28:37.949219+00\",\"2025-12-08 13:28:38.355111+00\",\"2025-12-08 13:28:38.753365+00\",\"2025-12-08 13:28:39.426142+00\",\"2025-12-08 13:28:39.814905+00\",\"2025-12-08 13:28:40.505476+00\",\"2025-12-09 18:36:33.715471+00\",\"2025-12-09 18:36:34.245532+00\",\"2025-12-11 17:05:50.062117+00\",\"2025-12-22 03:38:12.811+00\",\"2025-12-29 22:28:48.781042+00\",\"2026-01-06 10:36:46.874069+00\",\"2026-01-06 10:39:17.316698+00\",\"2026-01-12 14:50:27.158329+00\",\"2026-01-12 15:23:34.985+00\",\"2026-01-12 15:37:41.547+00\",\"2026-01-12 15:45:24.878095+00\",\"2026-01-12 15:48:46.14998+00\"}"
 			}
 		],
 		"size_info": {
-			"total_size": "368 kB",
+			"total_size": "344 kB",
 			"table_size": "144 kB",
-			"indexes_size": "224 kB"
+			"indexes_size": "200 kB"
 		},
 		"permissions": [
 			{
@@ -1400,6 +1350,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-01T03:15:33.573Z"
+		"analysis_timestamp": "2026-01-20T05:01:44.122Z"
 	}
 }

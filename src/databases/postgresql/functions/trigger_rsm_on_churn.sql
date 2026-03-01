@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION public.trigger_rsm_on_churn()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
 DECLARE
   v_churn_period date;
 BEGIN
@@ -23,4 +23,4 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$;
+$$;

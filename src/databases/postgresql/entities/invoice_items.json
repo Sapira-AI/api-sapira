@@ -455,33 +455,6 @@
 				"action_condition": null
 			},
 			{
-				"trigger_name": "trg_invoice_item_change",
-				"event_manipulation": "INSERT",
-				"event_object_table": "invoice_items",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_invoice_contract()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
-				"trigger_name": "trg_invoice_item_change",
-				"event_manipulation": "DELETE",
-				"event_object_table": "invoice_items",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_invoice_contract()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
-				"trigger_name": "trg_invoice_item_change",
-				"event_manipulation": "UPDATE",
-				"event_object_table": "invoice_items",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION refresh_revenue_schedule_for_invoice_contract()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
 				"trigger_name": "trigger_auto_populate_invoice_item_fields",
 				"event_manipulation": "INSERT",
 				"event_object_table": "invoice_items",
