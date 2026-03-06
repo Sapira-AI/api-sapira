@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION public.trigger_rsm_on_invoice_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_enabled boolean := false;
   v_contract_id uuid;
@@ -61,4 +61,4 @@ BEGIN
 
   RETURN COALESCE(NEW, OLD);
 END;
-$$;
+$function$

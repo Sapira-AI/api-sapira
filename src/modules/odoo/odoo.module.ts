@@ -22,12 +22,13 @@ import { OdooConnectionController } from './odoo-connection.controller';
 import { OdooConnectionService } from './odoo-connection.service';
 import { OdooInvoicesController } from './odoo-invoices.controller';
 import { OdooInvoicesService } from './odoo-invoices.service';
+import { OdooPartnersController } from './odoo-partners.controller';
+import { OdooPartnersService } from './odoo-partners.service';
 import { OdooWebhookController } from './odoo-webhook.controller';
 import { OdooWebhookService } from './odoo-webhook.service';
 import { OdooController } from './odoo.controller';
 import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
-import { PartnersController } from './partners.controller';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
@@ -55,7 +56,7 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 		OdooConnectionController,
 		OdooInvoicesController,
 		OdooWebhookController,
-		PartnersController,
+		OdooPartnersController,
 		InvoiceProcessingController,
 	],
 	providers: [
@@ -63,12 +64,13 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 		OdooConnectionService,
 		OdooInvoicesService,
 		OdooWebhookService,
+		OdooPartnersService,
 		OdooProvider,
 		PartnersProcessorService,
 		FieldTransformationService,
 		FieldMappingService,
 		InvoiceProcessingService,
 	],
-	exports: [OdooService],
+	exports: [OdooService, OdooInvoicesService, OdooConnectionService],
 })
 export class OdooModule {}

@@ -194,7 +194,72 @@ export class ExchangeRatesNotificationService {
 			await this.emailsService.sendSystemEmail(this.adminEmails, subject, html);
 			this.logger.log(`✓ Alerta de error enviada a ${this.adminEmails.join(', ')}`);
 		} catch (emailError) {
-			this.logger.error('Error enviando alerta de fallo por email:', emailError);
+			this.logger.error('❌ Error enviando alerta de fallo por email:', {
+				message: emailError?.message || 'Sin mensaje de error',
+				name: emailError?.name || 'Error desconocido',
+				stack: emailError?.stack || 'Sin stack trace',
+				fullError: JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)),
+			});
+
+			try {
+				const errorSubject = `🚨 CRÍTICO: Fallo en Sistema de Emails - ${new Date().toLocaleString('es-CL')}`;
+				const errorHtml = `
+					<!DOCTYPE html>
+					<html>
+					<head>
+						<meta charset="UTF-8">
+						<style>
+							body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+							.container { max-width: 600px; margin: 0 auto; padding: 20px; }
+							.header { background-color: #dc3545; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
+							.content { background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; }
+							.error-box { background-color: #fff3cd; border-left: 4px solid #dc3545; padding: 15px; margin: 15px 0; }
+							pre { background-color: #f1f3f5; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 11px; }
+						</style>
+					</head>
+					<body>
+						<div class="container">
+							<div class="header">
+								<h2 style="margin: 0;">🚨 FALLO CRÍTICO: Sistema de Emails No Funciona</h2>
+							</div>
+							<div class="content">
+								<p><strong>⚠️ El sistema de emails de Sapira no está funcionando correctamente.</strong></p>
+								<p>Se intentó enviar una alerta de error pero falló el envío.</p>
+								
+								<div class="error-box">
+									<p><strong>Tipo de error:</strong> ${emailError?.name || 'Error desconocido'}</p>
+									<p><strong>Mensaje:</strong> ${emailError?.message || 'Sin mensaje'}</p>
+									<p><strong>Contexto:</strong> Intentando enviar alerta de sincronización de tipos de cambio</p>
+									
+									${emailError?.stack ? `<p><strong>Stack trace:</strong></p><pre>${emailError.stack}</pre>` : ''}
+									
+									<p><strong>Error completo:</strong></p>
+									<pre>${JSON.stringify(emailError, Object.getOwnPropertyNames(emailError), 2)}</pre>
+								</div>
+								
+								<h3>Verificaciones necesarias:</h3>
+								<ul>
+									<li>✓ Verificar variable SENDGRID_API_KEY en .env</li>
+									<li>✓ Verificar variable SYSTEM_EMAIL_FROM en .env</li>
+									<li>✓ Verificar variable BANCO_CENTRAL_ADMIN_EMAILS en .env</li>
+									<li>✓ Verificar que el dominio esté verificado en SendGrid</li>
+									<li>✓ Verificar que la API key de SendGrid sea válida</li>
+									<li>✓ Revisar logs del servidor para más detalles</li>
+								</ul>
+							</div>
+						</div>
+					</body>
+					</html>
+				`;
+
+				await this.emailsService.sendSystemEmail(this.adminEmails, errorSubject, errorHtml);
+				this.logger.log('✓ Alerta de fallo de email enviada exitosamente');
+			} catch (secondaryError) {
+				this.logger.error('❌ CRÍTICO: No se pudo enviar ni siquiera la alerta de fallo de email:', {
+					message: secondaryError?.message || 'Sin mensaje',
+					stack: secondaryError?.stack || 'Sin stack trace',
+				});
+			}
 		}
 	}
 

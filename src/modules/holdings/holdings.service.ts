@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { User } from '../users/entities/user.entity';
+
 import { UserHoldingResponseDto } from './dtos/holdings.dto';
 import { CompanyHolding } from './entities/company-holding.entity';
 import { UserHolding } from './entities/user-holding.entity';
@@ -12,15 +14,32 @@ export class HoldingsService {
 		@InjectRepository(CompanyHolding)
 		private readonly companyHoldingRepository: Repository<CompanyHolding>,
 		@InjectRepository(UserHolding)
-		private readonly userHoldingRepository: Repository<UserHolding>
+		private readonly userHoldingRepository: Repository<UserHolding>,
+		@InjectRepository(User)
+		private readonly userRepository: Repository<User>
 	) {}
 
-	async getUserHoldings(userId: string): Promise<UserHoldingResponseDto[]> {
+	async getUserHoldings(authId: string): Promise<UserHoldingResponseDto[]> {
+		// Primero buscar el usuario por auth_id
+		const user = await this.userRepository.findOne({
+			where: { auth_id: authId },
+		});
+
+		if (!user) {
+			console.log(`❌ [HoldingsService] Usuario no encontrado con auth_id: ${authId}`);
+			return [];
+		}
+
+		console.log(`✅ [HoldingsService] Usuario encontrado: ${user.id} (${user.email})`);
+
+		// Ahora buscar los holdings del usuario usando el id de la tabla users
 		const userHoldings = await this.userHoldingRepository.find({
-			where: { user_id: userId },
+			where: { user_id: user.id },
 			relations: ['holding'],
 			order: { created_at: 'DESC' },
 		});
+
+		console.log(`📊 [HoldingsService] Holdings encontrados: ${userHoldings.length}`);
 
 		if (!userHoldings || userHoldings.length === 0) {
 			return [];
@@ -95,10 +114,19 @@ export class HoldingsService {
 		};
 	}
 
-	async updateSelectedHolding(userId: string, holdingId: string): Promise<{ success: boolean; message: string }> {
+	async updateSelectedHolding(authId: string, holdingId: string): Promise<{ success: boolean; message: string }> {
+		// Primero buscar el usuario por auth_id
+		const user = await this.userRepository.findOne({
+			where: { auth_id: authId },
+		});
+
+		if (!user) {
+			throw new NotFoundException(`Usuario no encontrado con auth_id: ${authId}`);
+		}
+
 		// Verificar que el usuario tiene acceso a este holding
 		const userHolding = await this.userHoldingRepository.findOne({
-			where: { user_id: userId, holding_id: holdingId },
+			where: { user_id: user.id, holding_id: holdingId },
 		});
 
 		if (!userHolding) {
@@ -106,10 +134,12 @@ export class HoldingsService {
 		}
 
 		// Desmarcar todos los holdings del usuario como no seleccionados
-		await this.userHoldingRepository.update({ user_id: userId }, { selected: false });
+		await this.userHoldingRepository.update({ user_id: user.id }, { selected: false });
 
 		// Marcar el holding especificado como seleccionado
-		await this.userHoldingRepository.update({ user_id: userId, holding_id: holdingId }, { selected: true });
+		await this.userHoldingRepository.update({ user_id: user.id, holding_id: holdingId }, { selected: true });
+
+		console.log(`✅ [HoldingsService] Holding ${holdingId} seleccionado para usuario ${user.id} (${user.email})`);
 
 		return {
 			success: true,

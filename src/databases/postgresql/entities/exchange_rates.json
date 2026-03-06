@@ -100,7 +100,7 @@
 				"index_definition": "CREATE INDEX idx_exchange_rates_lookup ON public.exchange_rates USING btree (from_currency, to_currency, rate_date DESC)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "296 kB"
+				"index_size": "312 kB"
 			}
 		],
 		"foreign_keys": [],
@@ -127,44 +127,7 @@
 				"initially_deferred": "NO"
 			}
 		],
-		"triggers": [
-			{
-				"trigger_name": "trigger_calculate_monthly_avg",
-				"event_manipulation": "INSERT",
-				"event_object_table": "exchange_rates",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION calculate_monthly_avg_fx()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
-				"trigger_name": "trigger_calculate_monthly_avg",
-				"event_manipulation": "UPDATE",
-				"event_object_table": "exchange_rates",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION calculate_monthly_avg_fx()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
-				"trigger_name": "trigger_update_monthly_avg",
-				"event_manipulation": "INSERT",
-				"event_object_table": "exchange_rates",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION update_monthly_avg_on_rate_change()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			},
-			{
-				"trigger_name": "trigger_update_monthly_avg",
-				"event_manipulation": "UPDATE",
-				"event_object_table": "exchange_rates",
-				"action_timing": "AFTER",
-				"action_statement": "EXECUTE FUNCTION update_monthly_avg_on_rate_change()",
-				"action_orientation": "ROW",
-				"action_condition": null
-			}
-		],
+		"triggers": [],
 		"policies": [
 			{
 				"schemaname": "public",
@@ -282,9 +245,9 @@
 			}
 		],
 		"size_info": {
-			"total_size": "1136 kB",
-			"table_size": "544 kB",
-			"indexes_size": "592 kB"
+			"total_size": "1200 kB",
+			"table_size": "592 kB",
+			"indexes_size": "608 kB"
 		},
 		"permissions": [
 			{
@@ -428,6 +391,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-02-19T13:51:29.460Z"
+		"analysis_timestamp": "2026-03-05T15:22:38.552Z"
 	}
 }

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
+import { isGenericExportVat } from '../constants/generic-vats.constant';
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from '../dtos/process-partners.dto';
 import { OdooPartnersStg } from '../entities/odoo-partners-stg.entity';
 
@@ -53,10 +54,12 @@ export class PartnersProcessorService {
 			this.logger.log(`🔧 Total de campos a mapear: ${Object.keys(mappings).length}`);
 
 			// Obtener partners a procesar
+			// Solo procesamos: 'create' (nuevos), 'update' (con cambios), 'error' (reintentos)
+			// Excluimos: 'processed' (ya integrados exitosamente)
 			const queryBuilder = this.partnersStgRepository
 				.createQueryBuilder('partner')
 				.where('partner.holding_id = :holdingId', { holdingId: dto.holding_id })
-				.andWhere('partner.processing_status IN (:...statuses)', { statuses: ['create', 'update', 'processed'] })
+				.andWhere('partner.processing_status IN (:...statuses)', { statuses: ['create', 'update', 'error'] })
 				.orderBy('partner.created_at', 'DESC');
 
 			// Si se especificaron IDs específicos, filtrar por ellos
@@ -201,10 +204,20 @@ export class PartnersProcessorService {
 
 							throw dbError;
 						}
-					} else if (partner.processing_status === 'update') {
-						this.logger.log('\n🔄 OPERACIÓN: UPDATE');
+					} else if (partner.processing_status === 'update' || partner.processing_status === 'error') {
+						if (partner.processing_status === 'error') {
+							this.logger.log('\n🔄 OPERACIÓN: RETRY (reintento de error)');
+							this.logger.log(`⚠️ Error previo: ${partner.error_message || 'No especificado'}`);
+						} else {
+							this.logger.log('\n🔄 OPERACIÓN: UPDATE');
+						}
 						const partnerVat = String(partner.raw_data?.vat || '');
+						const isGenericVat = isGenericExportVat(partnerVat);
 						this.logger.log(`🔍 Buscando cliente existente con VAT: ${partnerVat || 'N/A'} y Odoo ID: ${partner.odoo_id}`);
+
+						if (isGenericVat) {
+							this.logger.log(`⚠️ VAT genérico detectado: ${partnerVat}. Solo se buscará por VAT + Odoo ID.`);
+						}
 
 						let existingClient = null;
 
@@ -218,8 +231,9 @@ export class PartnersProcessorService {
 								},
 							});
 
-							// Si no se encuentra, buscar por VAT solamente (para clientes creados manualmente)
-							if (!existingClient) {
+							// IMPORTANTE: Si es VAT genérico, NO buscar solo por VAT
+							// Los VATs genéricos pueden estar asociados a múltiples clientes
+							if (!existingClient && !isGenericVat) {
 								this.logger.log('🔍 No encontrado con Odoo ID, buscando solo por VAT (cliente manual)...');
 								existingClient = await this.clientEntitiesRepository.findOne({
 									where: {
@@ -233,10 +247,88 @@ export class PartnersProcessorService {
 										`✅ Cliente manual encontrado: ID=${existingClient.id}, se vinculará con Odoo ID ${partner.odoo_id}`
 									);
 								}
+							} else if (!existingClient && isGenericVat) {
+								this.logger.log(
+									`⚠️ VAT genérico ${partnerVat}: No se encontró con Odoo ID ${partner.odoo_id}. No se buscará solo por VAT.`
+								);
 							}
 						}
 
 						// Si no hay VAT o no se encontró por VAT, buscar solo por odoo_partner_id + holding_id
+						if (!existingClient) {
+							this.logger.log('🔍 Buscando por Odoo ID + Holding ID...');
+							existingClient = await this.clientEntitiesRepository.findOne({
+								where: {
+									odoo_partner_id: partner.odoo_id,
+									holding_id: dto.holding_id,
+								},
+							});
+
+							if (existingClient) {
+								this.logger.log(`✅ Cliente encontrado por Odoo ID: ID=${existingClient.id}`);
+							}
+						}
+
+						// Si es un reintento de error y no existe el cliente, tratarlo como CREATE
+						if (!existingClient && partner.processing_status === 'error') {
+							this.logger.log('⚠️ Partner con error no encontrado en BD. Cambiando a operación CREATE...');
+
+							// Ejecutar lógica de CREATE
+							this.logger.log('\n🆕 OPERACIÓN: CREATE (desde error)');
+							this.logger.log('💾 Insertando nuevo cliente en la base de datos...');
+
+							try {
+								const savedEntity = await this.clientEntitiesRepository.save(dataWithOdooId);
+								this.logger.log('✅ ÉXITO: Cliente creado correctamente');
+								this.logger.log(`🆔 ID generado: ${savedEntity.id}`);
+								this.logger.log('📊 Respuesta de BD:');
+								this.logger.log(JSON.stringify(savedEntity, null, 2));
+
+								// Actualizar estado en staging a 'processed'
+								await this.partnersStgRepository.update(partner.id, {
+									processing_status: 'processed',
+									last_integrated_at: new Date(),
+									integration_notes: `Cliente creado exitosamente desde reintento - ID: ${savedEntity.id}`,
+									error_message: null,
+								});
+								this.logger.log('✅ Estado actualizado en staging: processed');
+
+								successCount++;
+								results.push({
+									odoo_id: partner.odoo_id,
+									status: 'success',
+									action: 'create',
+									staging_id: partner.id,
+									client_id: savedEntity.id,
+								});
+								continue;
+							} catch (dbError) {
+								this.logger.error('❌ ERROR EN BD AL CREAR:');
+								this.logger.error(`Mensaje: ${dbError.message}`);
+								this.logger.error(`Código: ${dbError.code}`);
+								this.logger.error(`Detalle: ${dbError.detail || 'N/A'}`);
+								this.logger.error('Stack trace:', dbError.stack);
+
+								// Guardar error en staging
+								const errorMessage = `${dbError.name}: ${dbError.message}`;
+								await this.partnersStgRepository.update(partner.id, {
+									processing_status: 'error',
+									error_message: errorMessage,
+									last_integrated_at: new Date(),
+									integration_notes: `Error al crear cliente desde reintento: ${dbError.message}`,
+								});
+
+								errorCount++;
+								results.push({
+									odoo_id: partner.odoo_id,
+									status: 'error',
+									error: errorMessage,
+									staging_id: partner.id,
+								});
+								continue;
+							}
+						}
+
 						if (!existingClient) {
 							this.logger.log('🔍 Buscando por Odoo ID + Holding ID...');
 							existingClient = await this.clientEntitiesRepository.findOne({
