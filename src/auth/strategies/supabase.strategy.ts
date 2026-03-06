@@ -37,16 +37,30 @@ export class SupabaseStrategy extends PassportStrategy(Strategy, 'supabase') {
 
 	async validate(payload: any): Promise<SupabaseUser> {
 		try {
+			console.log('🔐 [SupabaseStrategy] Validating payload:', JSON.stringify(payload, null, 2));
+
 			// Validar que el payload tenga la estructura esperada de Supabase
 			if (!payload.sub || !payload.aud || payload.aud !== 'authenticated') {
+				console.error('❌ [SupabaseStrategy] Invalid token structure:', {
+					hasSub: !!payload.sub,
+					hasAud: !!payload.aud,
+					aud: payload.aud,
+				});
 				throw new UnauthorizedException('Token inválido');
 			}
 
 			// Verificar que el token no haya expirado
 			const currentTime = Math.floor(Date.now() / 1000);
 			if (payload.exp && payload.exp < currentTime) {
+				console.error('❌ [SupabaseStrategy] Token expired:', {
+					exp: payload.exp,
+					currentTime,
+					diff: currentTime - payload.exp,
+				});
 				throw new UnauthorizedException('Token expirado');
 			}
+
+			console.log('✅ [SupabaseStrategy] Token validated successfully for user:', payload.sub);
 
 			// Crear el objeto de usuario
 			const user: SupabaseUser = {

@@ -59,16 +59,6 @@ export interface TablePolicy {
 	with_check: string | null;
 }
 
-export interface TableStats {
-	schemaname: string;
-	tablename: string;
-	attname: string;
-	n_distinct: number | null;
-	most_common_vals: string[] | null;
-	most_common_freqs: number[] | null;
-	histogram_bounds: string[] | null;
-}
-
 export interface TableSize {
 	total_size: string;
 	table_size: string;
@@ -90,7 +80,6 @@ export interface TableAnalysisResult {
 	primary_unique_keys: PrimaryUniqueKey[];
 	triggers: TableTrigger[];
 	policies: TablePolicy[];
-	statistics: TableStats[];
 	size_info: TableSize;
 	permissions: TablePermission[];
 	analysis_timestamp: string;
@@ -110,14 +99,13 @@ export class DatabaseAnalyzerService {
 		try {
 			console.log(`🔍 Analizando tabla: ${schemaName}.${tableName}`);
 
-			const [columns, indexes, foreignKeys, primaryUniqueKeys, triggers, policies, statistics, sizeInfo, permissions] = await Promise.all([
+			const [columns, indexes, foreignKeys, primaryUniqueKeys, triggers, policies, sizeInfo, permissions] = await Promise.all([
 				this.getTableColumns(tableName, schemaName),
 				this.getTableIndexes(tableName, schemaName),
 				this.getForeignKeys(tableName, schemaName),
 				this.getPrimaryUniqueKeys(tableName, schemaName),
 				this.getTableTriggers(tableName, schemaName),
 				this.getTablePolicies(tableName, schemaName),
-				this.getTableStatistics(tableName, schemaName),
 				this.getTableSize(tableName, schemaName),
 				this.getTablePermissions(tableName, schemaName),
 			]);
@@ -131,7 +119,6 @@ export class DatabaseAnalyzerService {
 				primary_unique_keys: primaryUniqueKeys,
 				triggers,
 				policies,
-				statistics,
 				size_info: sizeInfo,
 				permissions,
 				analysis_timestamp: new Date().toISOString(),
@@ -282,28 +269,6 @@ export class DatabaseAnalyzerService {
 			FROM pg_policies 
 			WHERE tablename = $1
 			  AND schemaname = $2;
-		`;
-
-		return await this.dataSource.query(query, [tableName, schemaName]);
-	}
-
-	/**
-	 * Obtiene estadísticas de la tabla
-	 */
-	private async getTableStatistics(tableName: string, schemaName: string): Promise<TableStats[]> {
-		const query = `
-			SELECT 
-				schemaname,
-				tablename,
-				attname,
-				n_distinct,
-				most_common_vals,
-				most_common_freqs,
-				histogram_bounds
-			FROM pg_stats 
-			WHERE tablename = $1
-			  AND schemaname = $2
-			ORDER BY attname;
 		`;
 
 		return await this.dataSource.query(query, [tableName, schemaName]);

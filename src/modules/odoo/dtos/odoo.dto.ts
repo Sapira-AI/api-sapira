@@ -490,6 +490,12 @@ export class CreateDraftInvoiceDTO {
 	@IsString()
 	x_sapira_invoice_id?: string;
 
+	@ApiProperty({ description: 'ID de la moneda en Odoo (ej: CLP, UF, USD)', required: false })
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	currency_id?: number;
+
 	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
 	@IsArray()
 	@ValidateNested({ each: true })
