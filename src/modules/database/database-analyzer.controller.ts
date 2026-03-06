@@ -17,8 +17,7 @@ export class DatabaseAnalyzerController {
 	@Post('analyze-table')
 	@ApiOperation({
 		summary: 'Analizar tabla completa',
-		description:
-			'Obtiene información completa de una tabla: columnas, índices, llaves foráneas, triggers, políticas RLS, estadísticas, tamaño y permisos',
+		description: 'Obtiene información completa de una tabla: columnas, índices, llaves foráneas, triggers, políticas RLS, tamaño y permisos',
 	})
 	@ApiBody({ type: AnalyzeTableDTO })
 	@ApiOkResponse({
@@ -39,7 +38,6 @@ export class DatabaseAnalyzerController {
 						primary_unique_keys: { type: 'array' },
 						triggers: { type: 'array' },
 						policies: { type: 'array' },
-						statistics: { type: 'array' },
 						size_info: { type: 'object' },
 						permissions: { type: 'array' },
 						analysis_timestamp: { type: 'string' },

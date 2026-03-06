@@ -32,6 +32,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { EmailModule } from './modules/email/email.module';
 import { EmailsModule } from './modules/emails/emails.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
 import { StripeModule } from './modules/stripe/stripe.module';
@@ -83,6 +84,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		DatabaseAnalyzerModule,
 		PostgreSQLDatabaseModule,
 		HoldingsModule,
+		InvoicesModule,
 		UsersModule,
 		ClientsModule,
 		OdooModule,

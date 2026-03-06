@@ -184,8 +184,8 @@
 				"index_size": "16 kB"
 			},
 			{
-				"index_name": "unique_odoo_integration_id",
-				"index_definition": "CREATE UNIQUE INDEX unique_odoo_integration_id ON public.companies USING btree (odoo_integration_id)",
+				"index_name": "unique_odoo_integration_id_per_holding",
+				"index_definition": "CREATE UNIQUE INDEX unique_odoo_integration_id_per_holding ON public.companies USING btree (odoo_integration_id, holding_id) WHERE (odoo_integration_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "YES",
 				"index_size": "16 kB"
@@ -207,13 +207,6 @@
 				"constraint_name": "companies_pkey",
 				"constraint_type": "PRIMARY KEY",
 				"column_name": "id",
-				"is_deferrable": "NO",
-				"initially_deferred": "NO"
-			},
-			{
-				"constraint_name": "unique_odoo_integration_id",
-				"constraint_type": "UNIQUE",
-				"column_name": "odoo_integration_id",
 				"is_deferrable": "NO",
 				"initially_deferred": "NO"
 			}
@@ -622,6 +615,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-02-04T11:02:53.638Z"
+		"analysis_timestamp": "2026-03-06T08:45:04.316Z"
 	}
 }

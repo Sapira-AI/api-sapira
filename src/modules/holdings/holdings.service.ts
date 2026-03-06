@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { User } from '../users/entities/user.entity';
+
 import { UserHoldingResponseDto } from './dtos/holdings.dto';
 import { CompanyHolding } from './entities/company-holding.entity';
 import { UserHolding } from './entities/user-holding.entity';
@@ -12,15 +14,32 @@ export class HoldingsService {
 		@InjectRepository(CompanyHolding)
 		private readonly companyHoldingRepository: Repository<CompanyHolding>,
 		@InjectRepository(UserHolding)
-		private readonly userHoldingRepository: Repository<UserHolding>
+		private readonly userHoldingRepository: Repository<UserHolding>,
+		@InjectRepository(User)
+		private readonly userRepository: Repository<User>
 	) {}
 
-	async getUserHoldings(userId: string): Promise<UserHoldingResponseDto[]> {
+	async getUserHoldings(authId: string): Promise<UserHoldingResponseDto[]> {
+		// Primero buscar el usuario por auth_id
+		const user = await this.userRepository.findOne({
+			where: { auth_id: authId },
+		});
+
+		if (!user) {
+			console.log(`❌ [HoldingsService] Usuario no encontrado con auth_id: ${authId}`);
+			return [];
+		}
+
+		console.log(`✅ [HoldingsService] Usuario encontrado: ${user.id} (${user.email})`);
+
+		// Ahora buscar los holdings del usuario usando el id de la tabla users
 		const userHoldings = await this.userHoldingRepository.find({
-			where: { user_id: userId },
+			where: { user_id: user.id },
 			relations: ['holding'],
 			order: { created_at: 'DESC' },
 		});
+
+		console.log(`📊 [HoldingsService] Holdings encontrados: ${userHoldings.length}`);
 
 		if (!userHoldings || userHoldings.length === 0) {
 			return [];

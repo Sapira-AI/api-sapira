@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION public.auto_populate_invoice_tax_rate()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_company_tax_rate NUMERIC;
 BEGIN
@@ -28,4 +28,4 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$function$
