@@ -114,10 +114,19 @@ export class HoldingsService {
 		};
 	}
 
-	async updateSelectedHolding(userId: string, holdingId: string): Promise<{ success: boolean; message: string }> {
+	async updateSelectedHolding(authId: string, holdingId: string): Promise<{ success: boolean; message: string }> {
+		// Primero buscar el usuario por auth_id
+		const user = await this.userRepository.findOne({
+			where: { auth_id: authId },
+		});
+
+		if (!user) {
+			throw new NotFoundException(`Usuario no encontrado con auth_id: ${authId}`);
+		}
+
 		// Verificar que el usuario tiene acceso a este holding
 		const userHolding = await this.userHoldingRepository.findOne({
-			where: { user_id: userId, holding_id: holdingId },
+			where: { user_id: user.id, holding_id: holdingId },
 		});
 
 		if (!userHolding) {
@@ -125,10 +134,12 @@ export class HoldingsService {
 		}
 
 		// Desmarcar todos los holdings del usuario como no seleccionados
-		await this.userHoldingRepository.update({ user_id: userId }, { selected: false });
+		await this.userHoldingRepository.update({ user_id: user.id }, { selected: false });
 
 		// Marcar el holding especificado como seleccionado
-		await this.userHoldingRepository.update({ user_id: userId, holding_id: holdingId }, { selected: true });
+		await this.userHoldingRepository.update({ user_id: user.id, holding_id: holdingId }, { selected: true });
+
+		console.log(`✅ [HoldingsService] Holding ${holdingId} seleccionado para usuario ${user.id} (${user.email})`);
 
 		return {
 			success: true,

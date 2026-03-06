@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
+import { isGenericExportVat } from './constants/generic-vats.constant';
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
@@ -225,6 +226,7 @@ export class OdooPartnersService {
 	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string }> {
 		try {
 			const partnerVat = partner.vat ? String(partner.vat) : null;
+			const isGenericVat = isGenericExportVat(partnerVat);
 
 			// 1. Si no hay VAT, buscar solo por odoo_partner_id
 			if (!partnerVat || partnerVat === '') {
@@ -262,17 +264,32 @@ export class OdooPartnersService {
 				if (hasChanges) {
 					return {
 						status: 'update',
-						notes: 'Cliente existente con cambios - marcado para actualización',
+						notes: isGenericVat
+							? `Cliente existente con VAT genérico (${partnerVat}) - marcado para actualización`
+							: 'Cliente existente con cambios - marcado para actualización',
 					};
 				}
 
 				return {
 					status: 'processed',
-					notes: 'Cliente existente sin cambios - ya procesado',
+					notes: isGenericVat
+						? `Cliente existente con VAT genérico (${partnerVat}) sin cambios - ya procesado`
+						: 'Cliente existente sin cambios - ya procesado',
 				};
 			}
 
-			// 3. Buscar solo por VAT (puede ser un cliente creado manualmente en Sapira)
+			// 3. IMPORTANTE: Si es VAT genérico, NO buscar solo por VAT
+			// Los VATs genéricos pueden estar asociados a múltiples clientes
+			if (isGenericVat) {
+				this.logger.log(`⚠️ VAT genérico detectado: ${partnerVat}. No se buscará solo por VAT. Partner marcado para creación.`);
+				return {
+					status: 'create',
+					notes: `Partner nuevo con VAT genérico de exportación (${partnerVat}) - marcado para creación`,
+				};
+			}
+
+			// 4. Buscar solo por VAT (puede ser un cliente creado manualmente en Sapira)
+			// Solo para VATs NO genéricos
 			const existingByVat = await this.clientEntitiesRepository.findOne({
 				where: {
 					tax_id: partnerVat,
@@ -287,7 +304,7 @@ export class OdooPartnersService {
 				};
 			}
 
-			// 4. No existe, marcar para creación
+			// 5. No existe, marcar para creación
 			return {
 				status: 'create',
 				notes: 'Partner nuevo - marcado para creación',
