@@ -6,6 +6,7 @@ import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
+import { areValuesEqual } from './utils/value-comparison.util';
 
 export interface ProcessInvoicesResult {
 	success: boolean;
@@ -76,7 +77,15 @@ export class InvoiceProcessingService {
 			this.logger.log(`  - Ya procesadas sin cambios (saltar): ${classification.already_processed}`);
 			this.logger.log(`  - Total: ${classification.total}`);
 
-			const totalToProcess = classification.to_create + classification.to_update;
+			// Contar facturas con error para incluirlas en el procesamiento
+			const errorInvoices = await this.invoicesStgRepository.count({
+				where: {
+					holding_id: holdingId,
+					processing_status: 'error',
+				},
+			});
+
+			const totalToProcess = classification.to_create + classification.to_update + errorInvoices;
 
 			if (totalToProcess === 0) {
 				this.logger.log('No hay facturas nuevas o con cambios para procesar');
@@ -88,7 +97,7 @@ export class InvoiceProcessingService {
 				};
 			}
 
-			this.logger.log(`Total de facturas a procesar: ${totalToProcess}`);
+			this.logger.log(`Total de facturas a procesar: ${totalToProcess} (${errorInvoices} con errores previos)`);
 
 			const mappingConfig = await this.fieldMappingService.getMappingConfig(holdingId, 'account.move', 'invoices_legacy');
 
@@ -103,11 +112,11 @@ export class InvoiceProcessingService {
 			for (let offset = 0; offset < totalToProcess; offset += batchSize) {
 				this.logger.log(`Obteniendo lote de facturas: offset=${offset}, batchSize=${batchSize}`);
 
-				// Obtener solo facturas que necesitan procesamiento (create o update)
+				// Obtener facturas que necesitan procesamiento (create, update o error)
 				const invoicesBatch = await this.invoicesStgRepository.find({
 					where: {
 						holding_id: holdingId,
-						processing_status: In(['create', 'update']),
+						processing_status: In(['create', 'update', 'error']),
 					},
 					order: { id: 'ASC' },
 					take: batchSize,
@@ -125,10 +134,17 @@ export class InvoiceProcessingService {
 							status: 'success',
 						});
 
+						// Log especial para facturas que estaban en error
+						if (invoice.processing_status === 'error') {
+							this.logger.log(`✅ Factura ${invoice.odoo_id} reprocesada exitosamente (estaba en error)`);
+						}
+
 						// Marcar como procesada y limpiar error
 						await this.invoicesStgRepository.update(invoice.id, {
 							processing_status: 'processed',
 							error_message: null,
+							integration_notes:
+								invoice.processing_status === 'error' ? 'Reprocesada exitosamente después de error' : 'Procesada exitosamente',
 						});
 					} catch (error) {
 						errorCount++;
@@ -336,7 +352,7 @@ export class InvoiceProcessingService {
 
 			const existingValue = existingData[key];
 
-			if (!this.areValuesEqual(newValue, existingValue)) {
+			if (!areValuesEqual(newValue, existingValue)) {
 				return true;
 			}
 		}
@@ -349,6 +365,16 @@ export class InvoiceProcessingService {
 	 */
 	async classifyInvoicesPublic(holdingId: string): Promise<InvoiceClassification> {
 		return this.classifyInvoices(holdingId);
+	}
+
+	/**
+	 * Clasifica una sola factura (método público para uso en OdooService durante sincronización)
+	 */
+	async classifySingleInvoicePublic(
+		invoice: OdooInvoicesStg,
+		holdingId: string
+	): Promise<{ status: InvoiceStatus; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
+		return this.classifySingleInvoice(invoice, holdingId);
 	}
 
 	/**
@@ -371,7 +397,8 @@ export class InvoiceProcessingService {
 				continue;
 			}
 
-			const status = await this.classifySingleInvoice(invoice, holdingId);
+			const result = await this.classifySingleInvoice(invoice, holdingId);
+			const status = result.status;
 
 			// Actualizar el processing_status en la BD solo si no está procesada
 			await this.invoicesStgRepository.update(invoice.id, {
@@ -394,7 +421,10 @@ export class InvoiceProcessingService {
 	/**
 	 * Clasifica una sola factura comparando con invoices_legacy
 	 */
-	private async classifySingleInvoice(invoice: OdooInvoicesStg, holdingId: string): Promise<InvoiceStatus> {
+	private async classifySingleInvoice(
+		invoice: OdooInvoicesStg,
+		holdingId: string
+	): Promise<{ status: InvoiceStatus; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
 		const odooIntegrationId = invoice.odoo_id;
 
 		// Buscar factura existente por odoo_integration_id (el criterio correcto)
@@ -405,26 +435,40 @@ export class InvoiceProcessingService {
 
 		// Si no existe, es nueva
 		if (!existing || existing.length === 0) {
-			return 'create';
+			return { status: 'create' };
 		}
 
 		// Si existe, comparar campos mapeados para detectar cambios
-		const hasChanges = await this.compareInvoiceFields(invoice, existing[0], holdingId);
+		const { hasChanges, changes } = await this.compareInvoiceFields(invoice, existing[0], holdingId);
 
-		return hasChanges ? 'update' : 'skip';
+		// Si hay cambios, guardarlos en integration_notes (solo si la factura ya tiene ID en staging)
+		if (hasChanges && changes.length > 0 && invoice.id) {
+			await this.invoicesStgRepository.update(invoice.id, {
+				integration_notes: JSON.stringify({ changes }),
+			});
+		} else if (hasChanges && changes.length > 0 && !invoice.id) {
+			// Si no tiene ID, los cambios se guardarán después cuando se persista la factura
+		}
+
+		const status = hasChanges ? 'update' : 'skip';
+
+		return { status, changes: hasChanges ? changes : undefined };
 	}
 
 	/**
 	 * Compara los campos mapeados de una factura en staging con la factura existente en legacy
 	 */
-	private async compareInvoiceFields(invoiceStg: OdooInvoicesStg, invoiceLegacy: any, holdingId: string): Promise<boolean> {
+	private async compareInvoiceFields(
+		invoiceStg: OdooInvoicesStg,
+		invoiceLegacy: any,
+		holdingId: string
+	): Promise<{ hasChanges: boolean; changes: Array<{ field: string; odoo_value: any; db_value: any }> }> {
 		try {
 			// Obtener la configuración de mapeo
 			const mappingConfig = await this.fieldMappingService.getMappingConfig(holdingId, 'account.move', 'invoices_legacy');
 
 			if (!mappingConfig || !mappingConfig.invoice_mappings) {
-				// Si no hay mapeo, asumir que hay cambios
-				return true;
+				return { hasChanges: true, changes: [] };
 			}
 
 			// Aplicar mapeo a los datos de staging para obtener los valores transformados
@@ -435,7 +479,9 @@ export class InvoiceProcessingService {
 				holdingId
 			);
 
-			// Comparar cada campo mapeado
+			// Comparar cada campo mapeado y capturar cambios
+			const changes: Array<{ field: string; odoo_value: any; db_value: any }> = [];
+
 			for (const [fieldKey, mappedValue] of Object.entries(mappedData)) {
 				// Saltar campos que no se deben comparar
 				if (
@@ -444,7 +490,8 @@ export class InvoiceProcessingService {
 					fieldKey === 'updated_at' ||
 					fieldKey === 'holding_id' ||
 					fieldKey === 'odoo_integration_id' ||
-					fieldKey === 'source_type'
+					fieldKey === 'source_type' ||
+					fieldKey === 'status' // Odoo usa códigos (paid, draft) vs Sapira usa texto (Pagada, Borrador)
 				) {
 					continue;
 				}
@@ -452,70 +499,21 @@ export class InvoiceProcessingService {
 				const legacyValue = invoiceLegacy[fieldKey];
 
 				// Comparar valores normalizados
-				if (!this.areValuesEqual(mappedValue, legacyValue)) {
-					this.logger.debug(`Campo '${fieldKey}' cambió: legacy='${legacyValue}' -> staging='${mappedValue}'`);
-					return true;
+				if (!areValuesEqual(mappedValue, legacyValue)) {
+					changes.push({
+						field: fieldKey,
+						odoo_value: mappedValue,
+						db_value: legacyValue,
+					});
 				}
 			}
 
-			// No hay cambios
-			return false;
+			return { hasChanges: changes.length > 0, changes };
 		} catch (error) {
-			this.logger.error('Error comparando campos de factura:', error);
-			// En caso de error, asumir que hay cambios para no perder actualizaciones
-			return true;
+			console.error(`❌ [CLASSIFY] Error comparando campos:`, error);
+			// En caso de error, asumir que hay cambios
+			return { hasChanges: true, changes: [] };
 		}
-	}
-
-	/**
-	 * Compara dos valores normalizando tipos y formatos
-	 */
-	private areValuesEqual(value1: any, value2: any): boolean {
-		// Ambos null o undefined
-		if (value1 == null && value2 == null) {
-			return true;
-		}
-
-		// Uno null y otro no
-		if (value1 == null || value2 == null) {
-			return false;
-		}
-
-		// Normalizar strings vacíos y null
-		const norm1 = value1 === '' ? null : value1;
-		const norm2 = value2 === '' ? null : value2;
-
-		if (norm1 == null && norm2 == null) {
-			return true;
-		}
-
-		// Comparar fechas
-		if (value1 instanceof Date || value2 instanceof Date) {
-			const date1 = new Date(value1).getTime();
-			const date2 = new Date(value2).getTime();
-			return date1 === date2;
-		}
-
-		// Comparar números (incluyendo strings que son números)
-		const num1 = Number(value1);
-		const num2 = Number(value2);
-		if (!isNaN(num1) && !isNaN(num2)) {
-			// Comparar con tolerancia para decimales
-			return Math.abs(num1 - num2) < 0.01;
-		}
-
-		// Comparar objetos y arrays
-		if (typeof value1 === 'object' && typeof value2 === 'object') {
-			return JSON.stringify(value1) === JSON.stringify(value2);
-		}
-
-		// Comparar strings (case-insensitive y trimmed)
-		if (typeof value1 === 'string' && typeof value2 === 'string') {
-			return value1.trim().toLowerCase() === value2.trim().toLowerCase();
-		}
-
-		// Comparación directa
-		return value1 === value2;
 	}
 
 	private async findLegacyInvoice(odooIntegrationId: number, holdingId: string): Promise<{ id: string } | null> {

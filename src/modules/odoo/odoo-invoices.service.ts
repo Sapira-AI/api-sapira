@@ -34,8 +34,6 @@ export class OdooInvoicesService {
 		} = data;
 
 		try {
-			console.log(`📝 Creando factura en borrador en Odoo para partner ${partner_id}`);
-
 			const connection = await this.getOdooConnectionByHoldingId(holdingId);
 
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
@@ -108,8 +106,6 @@ export class OdooInvoicesService {
 
 			invoiceData.invoice_line_ids = invoiceLines;
 
-			console.log(`📤 Enviando datos de factura a Odoo:`, JSON.stringify(invoiceData, null, 2));
-
 			const invoiceId = await objectClient.methodCall('execute_kw', [
 				connection.database_name,
 				uid,
@@ -118,8 +114,6 @@ export class OdooInvoicesService {
 				'create',
 				[invoiceData],
 			]);
-
-			console.log(`✅ Factura creada con ID: ${invoiceId}`);
 
 			const createdInvoice = await objectClient.methodCall('execute_kw', [
 				connection.database_name,
@@ -162,7 +156,6 @@ export class OdooInvoicesService {
 			});
 
 			if (dbConnection) {
-				console.log(`✓ Conexión Odoo encontrada en BD: ${dbConnection.name} (${dbConnection.id})`);
 				return {
 					id: dbConnection.id,
 					url: dbConnection.url,

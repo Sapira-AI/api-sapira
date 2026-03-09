@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 
+import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 import { CreateDraftInvoiceDTO, InvoiceLineItemDTO } from '../odoo/dtos/odoo.dto';
 import { Company } from '../odoo/entities/companies.entity';
 import { Product } from '../odoo/entities/products.entity';
@@ -12,6 +13,7 @@ import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
+import { InvoiceNotificationService } from './invoice-notification.service';
 
 interface InvoiceWithRelations extends Invoice {
 	clientEntity?: ClientEntity;
@@ -39,7 +41,9 @@ export class InvoiceSchedulerService {
 		private readonly companyRepository: Repository<Company>,
 		@InjectRepository(Product)
 		private readonly productRepository: Repository<Product>,
-		private readonly odooInvoicesService: OdooInvoicesService
+		private readonly odooInvoicesService: OdooInvoicesService,
+		private readonly invoiceNotificationService: InvoiceNotificationService,
+		private readonly exchangeRatesService: ExchangeRatesService
 	) {}
 
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
@@ -150,6 +154,31 @@ export class InvoiceSchedulerService {
 				return result;
 			}
 
+			// NUEVO: Calcular montos si hay conversión de moneda
+			if (invoice.contract_currency !== invoice.invoice_currency) {
+				try {
+					await this.calculateInvoiceAmountsAtIssue(invoice);
+
+					// Recargar invoice con valores actualizados
+					invoice = await this.getInvoiceWithRelations(invoice.id);
+				} catch (error) {
+					result.status = 'skipped';
+					result.error = error.message;
+					result.details = 'No se pudo calcular tipo de cambio. Se ha enviado notificación por email.';
+					this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: ${error.message}`);
+					return result;
+				}
+			}
+
+			// Validar que montos estén calculados
+			if (!invoice.amount_invoice_currency && invoice.contract_currency !== invoice.invoice_currency) {
+				result.status = 'skipped';
+				result.error = 'Montos no calculados en moneda de facturación';
+				result.details = 'La factura requiere conversión de moneda pero los montos no están calculados';
+				this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: montos no calculados`);
+				return result;
+			}
+
 			const odooInvoiceData = await this.mapInvoiceToOdooFormat(invoice);
 
 			if (dryRun) {
@@ -165,7 +194,7 @@ export class InvoiceSchedulerService {
 
 			if (odooResponse.success && odooResponse.invoice_id) {
 				await this.invoiceRepository.update(invoice.id, {
-					status: 'Enviada a Odoo',
+					status: 'Enviada',
 					odoo_invoice_id: odooResponse.invoice_id,
 					sent_to_odoo_at: new Date(),
 				});
@@ -217,12 +246,27 @@ export class InvoiceSchedulerService {
 
 		const currencyId = this.mapCurrencyToOdooId(invoice.invoice_currency);
 
+		// Convertir fechas de forma segura (pueden venir como strings desde PostgreSQL)
+		const issueDateStr =
+			invoice.issue_date instanceof Date
+				? invoice.issue_date.toISOString().split('T')[0]
+				: invoice.issue_date
+					? String(invoice.issue_date).split('T')[0]
+					: undefined;
+
+		const dueDateStr =
+			invoice.due_date instanceof Date
+				? invoice.due_date.toISOString().split('T')[0]
+				: invoice.due_date
+					? String(invoice.due_date).split('T')[0]
+					: undefined;
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
 			move_type: 'out_invoice',
-			invoice_date: invoice.issue_date?.toISOString().split('T')[0],
-			invoice_date_due: invoice.due_date?.toISOString().split('T')[0],
+			invoice_date: issueDateStr,
+			invoice_date_due: dueDateStr,
 			payment_reference: invoice.invoice_number || undefined,
 			invoice_origin: invoice.contract_id || undefined,
 			narration: invoice.notes || undefined,
@@ -258,6 +302,117 @@ export class InvoiceSchedulerService {
 		}
 
 		return { valid: true };
+	}
+
+	async calculateInvoiceAmountsAtIssue(invoice: InvoiceWithRelations): Promise<{
+		success: boolean;
+		usedFallback: boolean;
+		exchangeRate?: number;
+		fallbackDate?: Date;
+	}> {
+		this.logger.log(`Calculando montos para factura ${invoice.invoice_number} (${invoice.id})`);
+
+		try {
+			const exchangeRateResult = await this.exchangeRatesService.getExchangeRateWithFallback(
+				invoice.contract_currency,
+				invoice.invoice_currency,
+				invoice.issue_date
+			);
+
+			const exchangeRate = exchangeRateResult.rate;
+			const isFallback = exchangeRateResult.is_fallback;
+
+			const amountInvoiceCurrency = Number(invoice.amount_contract_currency) * exchangeRate;
+
+			await this.invoiceRepository.update(invoice.id, {
+				amount_invoice_currency: amountInvoiceCurrency,
+				fx_contract_to_invoice: exchangeRate,
+			});
+
+			for (const item of invoice.items) {
+				await this.invoiceItemRepository.update(item.id, {
+					unit_price_invoice_currency: Number(item.unit_price_contract_currency) * exchangeRate,
+					subtotal_invoice_currency: Number(item.subtotal_contract_currency) * exchangeRate,
+					tax_amount_invoice_currency: item.tax_amount_contract_currency ? Number(item.tax_amount_contract_currency) * exchangeRate : null,
+					total_invoice_currency: Number(item.total_contract_currency) * exchangeRate,
+					fx_contract_to_invoice: exchangeRate,
+				});
+			}
+
+			if (isFallback) {
+				this.logger.warn(
+					`Tipo de cambio fallback usado para factura ${invoice.invoice_number}: ` +
+						`${invoice.contract_currency}/${invoice.invoice_currency} = ${exchangeRate} ` +
+						`(fecha: ${exchangeRateResult.rate_date})`
+				);
+
+				// Convertir issue_date a Date si es string
+				const requestedDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
+
+				await this.invoiceNotificationService.sendExchangeRateFallbackNotification(invoice, {
+					rate: exchangeRate,
+					requestedDate,
+					usedDate: exchangeRateResult.rate_date,
+					fromCurrency: invoice.contract_currency,
+					toCurrency: invoice.invoice_currency,
+				});
+			}
+
+			this.logger.log(
+				`✓ Montos calculados para factura ${invoice.invoice_number}: ` +
+					`${invoice.contract_currency} ${invoice.amount_contract_currency} → ` +
+					`${invoice.invoice_currency} ${amountInvoiceCurrency.toFixed(2)} (FX: ${exchangeRate})`
+			);
+
+			return {
+				success: true,
+				usedFallback: isFallback,
+				exchangeRate,
+				fallbackDate: isFallback ? exchangeRateResult.rate_date : undefined,
+			};
+		} catch (error) {
+			this.logger.error(`No se pudo obtener tipo de cambio para factura ${invoice.invoice_number}: ${error.message}`);
+
+			// Convertir issue_date a Date si es string
+			const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
+
+			await this.invoiceNotificationService.sendMissingExchangeRateNotification(
+				invoice,
+				issueDate,
+				invoice.contract_currency,
+				invoice.invoice_currency
+			);
+
+			const issueDateStr = issueDate instanceof Date ? issueDate.toISOString().split('T')[0] : String(issueDate);
+
+			throw new Error(
+				`No hay tipo de cambio disponible para ${invoice.contract_currency}/${invoice.invoice_currency} ` +
+					`en fecha ${issueDateStr}. ` +
+					`Se ha enviado notificación por correo electrónico.`
+			);
+		}
+	}
+
+	private async getInvoiceWithRelations(invoiceId: string): Promise<InvoiceWithRelations> {
+		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });
+
+		const clientEntity = await this.clientEntityRepository.findOne({
+			where: { id: invoice.client_entity_id },
+		});
+
+		const company = await this.companyRepository.findOne({
+			where: { id: invoice.company_id },
+		});
+
+		const items = await this.invoiceItemRepository.find({
+			where: { invoice_id: invoice.id },
+		});
+
+		(invoice as InvoiceWithRelations).clientEntity = clientEntity;
+		(invoice as InvoiceWithRelations).company = company;
+		(invoice as InvoiceWithRelations).items = items;
+
+		return invoice as InvoiceWithRelations;
 	}
 
 	private mapCurrencyToOdooId(currency: string): number {
