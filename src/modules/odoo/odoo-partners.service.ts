@@ -14,7 +14,9 @@ import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import { OdooConnectionConfig, OdooPartner } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
+import { FieldMappingService } from './services/field-mapping.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
+import { areValuesEqual, normalizeValue } from './utils/value-comparison.util';
 
 @Injectable()
 export class OdooPartnersService {
@@ -23,6 +25,7 @@ export class OdooPartnersService {
 	constructor(
 		private readonly odooProvider: OdooProvider,
 		private readonly partnersProcessorService: PartnersProcessorService,
+		private readonly fieldMappingService: FieldMappingService,
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooPartnersStg)
@@ -30,7 +33,7 @@ export class OdooPartnersService {
 		@InjectRepository(ClientEntity)
 		private readonly clientEntitiesRepository: Repository<ClientEntity>,
 		@InjectRepository(FieldMapping)
-		private readonly fieldMappingsRepository: Repository<FieldMapping>
+		private readonly fieldMappingRepository: Repository<FieldMapping>
 	) {}
 
 	/**
@@ -53,10 +56,6 @@ export class OdooPartnersService {
 		partner_data?: OdooPartnersStg;
 	}> {
 		try {
-			console.log('🔄 Iniciando sincronización de partner individual');
-			console.log(`📋 Holding ID: ${holdingId}`);
-			console.log(`🆔 Odoo Partner ID: ${odooPartnerId}`);
-
 			// Obtener conexión activa del holding
 			const activeConnection = await this.odooConnectionRepository.findOne({
 				where: {
@@ -69,8 +68,6 @@ export class OdooPartnersService {
 				throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
 			}
 
-			console.log(`✅ Conexión activa encontrada: ${activeConnection.name || activeConnection.database_name}`);
-
 			// Convertir a formato OdooConnectionConfig
 			const connection: OdooConnectionConfig = {
 				id: activeConnection.id,
@@ -80,7 +77,6 @@ export class OdooPartnersService {
 				api_key: activeConnection.api_key,
 				holding_id: activeConnection.holding_id,
 			};
-			console.log(`✅ Conexión configurada: ${connection.database_name}`);
 
 			// Crear clientes XML-RPC
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
@@ -88,14 +84,11 @@ export class OdooPartnersService {
 
 			// Autenticar con Odoo
 			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
-			console.log(`✅ Autenticación exitosa. UID: ${uid}`);
 
 			// Obtener datos del partner desde Odoo
-			console.log(`🔍 Obteniendo datos del partner ${odooPartnerId} desde Odoo...`);
 			const partners = await this.getPartnersData(objectClient, connection, uid, [odooPartnerId]);
 
 			if (!Array.isArray(partners) || partners.length === 0) {
-				console.log(`⚠️ Partner ${odooPartnerId} no encontrado en Odoo`);
 				return {
 					success: false,
 					message: `Partner con ID ${odooPartnerId} no encontrado en Odoo`,
@@ -104,18 +97,12 @@ export class OdooPartnersService {
 			}
 
 			const partner = partners[0];
-			console.log(`✅ Partner encontrado: ${partner.name || partner.display_name}`);
 
 			// Generar batch ID para esta sincronización
 			const batchId = randomUUID();
 
 			// Guardar partner en partners_stg
-			console.log(`💾 Guardando partner en partners_stg...`);
 			const savedPartner = await this.savePartnerToDatabase(partner, batchId, connection.holding_id);
-
-			console.log(`✅ Partner sincronizado exitosamente`);
-			console.log(`📊 Processing status: ${savedPartner.processing_status}`);
-			console.log(`📝 Notes: ${savedPartner.integration_notes}`);
 
 			return {
 				success: true,
@@ -198,11 +185,17 @@ export class OdooPartnersService {
 		// 2. Determinar el processing_status verificando client_entities
 		const processingStatus = await this.determinePartnerProcessingStatus(partner, holdingId);
 
+		// 3. Preparar integration_notes: si hay cambios, guardarlos como JSON, sino usar el mensaje de texto
+		const integrationNotes =
+			processingStatus.changes && processingStatus.changes.length > 0
+				? JSON.stringify({ changes: processingStatus.changes })
+				: processingStatus.notes;
+
 		if (existingPartnerStg) {
 			existingPartnerStg.raw_data = partner;
 			existingPartnerStg.sync_batch_id = batchId;
 			existingPartnerStg.processing_status = processingStatus.status;
-			existingPartnerStg.integration_notes = processingStatus.notes;
+			existingPartnerStg.integration_notes = integrationNotes;
 			existingPartnerStg.updated_at = new Date();
 			return await this.partnersStgRepository.save(existingPartnerStg);
 		}
@@ -213,7 +206,7 @@ export class OdooPartnersService {
 		partnerStg.raw_data = partner;
 		partnerStg.sync_batch_id = batchId;
 		partnerStg.processing_status = processingStatus.status;
-		partnerStg.integration_notes = processingStatus.notes;
+		partnerStg.integration_notes = integrationNotes;
 		return await this.partnersStgRepository.save(partnerStg);
 	}
 
@@ -223,7 +216,7 @@ export class OdooPartnersService {
 	private async determinePartnerProcessingStatus(
 		partner: OdooPartner,
 		holdingId: string
-	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string }> {
+	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
 		try {
 			const partnerVat = partner.vat ? String(partner.vat) : null;
 			const isGenericVat = isGenericExportVat(partnerVat);
@@ -260,13 +253,14 @@ export class OdooPartnersService {
 			});
 
 			if (existingByVatAndOdooId) {
-				const hasChanges = this.hasPartnerChanges(partner, existingByVatAndOdooId);
+				const { hasChanges, changes } = await this.hasPartnerChanges(partner, existingByVatAndOdooId, holdingId);
 				if (hasChanges) {
 					return {
 						status: 'update',
 						notes: isGenericVat
 							? `Cliente existente con VAT genérico (${partnerVat}) - marcado para actualización`
 							: 'Cliente existente con cambios - marcado para actualización',
+						changes, // Retornar los cambios para que se guarden en savePartnerToDatabase
 					};
 				}
 
@@ -319,19 +313,116 @@ export class OdooPartnersService {
 	}
 
 	/**
-	 * Verifica si hay cambios entre el partner de Odoo y el cliente en Sapira
+	 * Verifica si hay cambios entre el partner de Odoo y el cliente en Sapira usando mapeo dinámico
 	 */
-	private hasPartnerChanges(partner: OdooPartner, clientEntity: ClientEntity): boolean {
-		const partnerName = partner.name || partner.display_name || '';
-		const clientName = clientEntity.legal_name || '';
+	async hasPartnerChanges(
+		partner: OdooPartner,
+		clientEntity: ClientEntity,
+		holdingId: string
+	): Promise<{ hasChanges: boolean; changes: Array<{ field: string; odoo_value: any; db_value: any }> }> {
+		try {
+			// Obtener la configuración de mapeo para partners
+			const mappingConfig = await this.fieldMappingService.getMappingConfig(holdingId, 'res.partner', 'client_entities');
 
-		const partnerEmail = partner.email || '';
-		const clientEmail = clientEntity.email || '';
+			// Si no hay mapeo configurado, usar comparación básica
+			if (!mappingConfig) {
+				this.logger.warn(`⚠️ No hay mapeo configurado para partners, usando comparación básica`);
+				return this.hasPartnerChangesBasic(partner, clientEntity);
+			}
 
-		const partnerPhone = partner.phone || partner.mobile || '';
-		const clientPhone = clientEntity.phone || '';
+			// El mapeo de partners se guarda como un objeto plano, no como partner_mappings
+			// Aplicar mapeo a los datos del partner para obtener los valores transformados
+			const mappedData = await this.fieldMappingService.applyFieldMappingToData(
+				partner as Record<string, any>,
+				mappingConfig as any, // El mapeo completo
+				'client_entities',
+				holdingId
+			);
 
-		return partnerName !== clientName || partnerEmail !== clientEmail || partnerPhone !== clientPhone;
+			// Comparar cada campo mapeado y capturar cambios
+			const changes: Array<{ field: string; odoo_value: any; db_value: any }> = [];
+
+			for (const [fieldKey, mappedValue] of Object.entries(mappedData)) {
+				// Saltar campos que no se deben comparar
+				if (
+					fieldKey === 'id' ||
+					fieldKey === 'created_at' ||
+					fieldKey === 'updated_at' ||
+					fieldKey === 'holding_id' ||
+					fieldKey === 'odoo_partner_id' ||
+					fieldKey === 'client_id'
+				) {
+					continue;
+				}
+
+				const clientValue = clientEntity[fieldKey];
+
+				// Comparar valores normalizados
+				if (!areValuesEqual(mappedValue, clientValue)) {
+					this.logger.debug(`🔄 Campo '${fieldKey}' cambió: client='${clientValue}' → partner='${mappedValue}'`);
+					changes.push({
+						field: fieldKey,
+						odoo_value: mappedValue,
+						db_value: clientValue,
+					});
+				}
+			}
+
+			if (changes.length === 0) {
+				this.logger.debug(`✅ Sin cambios detectados en campos mapeados`);
+			}
+
+			return { hasChanges: changes.length > 0, changes };
+		} catch (error) {
+			this.logger.error(`❌ Error comparando campos de partner:`, error);
+			// En caso de error, usar comparación básica como fallback
+			return this.hasPartnerChangesBasic(partner, clientEntity);
+		}
+	}
+
+	/**
+	 * Comparación básica de partners (fallback cuando no hay mapeo configurado)
+	 */
+	private hasPartnerChangesBasic(
+		partner: OdooPartner,
+		clientEntity: ClientEntity
+	): { hasChanges: boolean; changes: Array<{ field: string; odoo_value: any; db_value: any }> } {
+		const changes: Array<{ field: string; odoo_value: any; db_value: any }> = [];
+
+		// Comparar nombre
+		const partnerName = partner.name || partner.display_name;
+		const clientName = clientEntity.legal_name;
+		if (normalizeValue(partnerName) !== normalizeValue(clientName)) {
+			changes.push({
+				field: 'legal_name',
+				odoo_value: partnerName,
+				db_value: clientName,
+			});
+		}
+
+		// Comparar email
+		const partnerEmail = partner.email;
+		const clientEmail = clientEntity.email;
+		if (normalizeValue(partnerEmail) !== normalizeValue(clientEmail)) {
+			changes.push({
+				field: 'email',
+				odoo_value: partnerEmail,
+				db_value: clientEmail,
+			});
+		}
+
+		// Comparar teléfono
+		const partnerPhone = partner.phone || partner.mobile;
+		const clientPhone = clientEntity.phone;
+		if (normalizeValue(partnerPhone) !== normalizeValue(clientPhone)) {
+			changes.push({
+				field: 'phone',
+				odoo_value: partnerPhone,
+				db_value: clientPhone,
+			});
+		}
+
+		return { hasChanges: changes.length > 0, changes };
 	}
 
 	/**

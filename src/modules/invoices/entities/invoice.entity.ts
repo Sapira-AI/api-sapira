@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('invoices')
 export class Invoice {
@@ -10,9 +10,6 @@ export class Invoice {
 
 	@Column({ type: 'text', nullable: true })
 	invoice_number?: string;
-
-	@Column({ type: 'date' })
-	invoice_date: Date;
 
 	@Column({ type: 'date', nullable: true })
 	issue_date?: Date;
@@ -68,9 +65,6 @@ export class Invoice {
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	sent_to_odoo_at?: Date;
 
-	@CreateDateColumn({ type: 'timestamp', default: () => 'now()' })
+	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
 	created_at: Date;
-
-	@UpdateDateColumn({ type: 'timestamp', default: () => 'now()' })
-	updated_at: Date;
 }
