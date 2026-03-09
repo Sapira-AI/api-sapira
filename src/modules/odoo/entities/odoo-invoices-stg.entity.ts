@@ -17,7 +17,7 @@ export class OdooInvoicesStg {
 	@Column({ type: 'uuid', nullable: true })
 	sync_batch_id?: string;
 
-	@Column({ type: 'text', nullable: true, default: 'pending' })
+	@Column({ type: 'text', nullable: true, default: 'create' })
 	processing_status?: string;
 
 	@Column({ type: 'uuid', nullable: true })

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 
@@ -41,7 +41,7 @@ export class InvoicesService {
 		};
 
 		// 1. Obtener facturas
-		const invoices = await this.invoiceRepository.findByIds(invoiceIds);
+		const invoices = await this.invoiceRepository.findBy({ id: In(invoiceIds) });
 
 		if (invoices.length === 0) {
 			throw new BadRequestException('No se encontraron facturas con los IDs proporcionados');
@@ -159,101 +159,52 @@ export class InvoicesService {
 		fallbackInfo?: { usedDate: string; requestedDate: string; rate: number };
 		missingInfo?: { fromCurrency: string; toCurrency: string; requestedDate: string };
 	}> {
-		try {
-			// Intentar obtener tipo de cambio
-			const exchangeRate = await this.exchangeRatesService.getExchangeRateWithFallback(
-				invoice.contract_currency,
-				newCurrency,
-				invoice.invoice_date
-			);
+		// Solo actualizar moneda, sin calcular montos
+		// Los montos se calcularán al momento de emitir la factura usando issue_date
+		if (!dryRun) {
+			// Actualizar factura - solo moneda, montos en NULL
+			await this.invoiceRepository.update(invoice.id, {
+				invoice_currency: newCurrency,
+				amount_invoice_currency: null,
+				total_invoice_currency: null,
+				vat: null,
+				fx_contract_to_invoice: null,
+			});
 
-			if (!dryRun) {
-				// Actualizar factura con FX
-				await this.invoiceRepository.update(invoice.id, {
+			// Actualizar items - solo moneda, montos en NULL
+			const items = await this.invoiceItemRepository.find({ where: { invoice_id: invoice.id } });
+
+			for (const item of items) {
+				await this.invoiceItemRepository.update(item.id, {
 					invoice_currency: newCurrency,
-					amount_invoice_currency: Number(invoice.amount_contract_currency) * exchangeRate.rate,
-					fx_contract_to_invoice: exchangeRate.rate,
-					total_invoice_currency: null, // Se calculará desde items
-					vat: null, // Se recalculará
-				});
-
-				// Actualizar items con FX
-				const items = await this.invoiceItemRepository.find({ where: { invoice_id: invoice.id } });
-
-				for (const item of items) {
-					await this.invoiceItemRepository.update(item.id, {
-						invoice_currency: newCurrency,
-						unit_price_invoice_currency: Number(item.unit_price_contract_currency) * exchangeRate.rate,
-						subtotal_invoice_currency: Number(item.subtotal_contract_currency) * exchangeRate.rate,
-						tax_amount_invoice_currency: item.tax_amount_contract_currency
-							? Number(item.tax_amount_contract_currency) * exchangeRate.rate
-							: null,
-						total_invoice_currency: Number(item.total_contract_currency) * exchangeRate.rate,
-						fx_contract_to_invoice: exchangeRate.rate,
-					});
-				}
-			}
-
-			if (exchangeRate.is_fallback) {
-				const usedDate = exchangeRate.rate_date.toISOString().split('T')[0];
-				const requestedDate = invoice.invoice_date.toISOString().split('T')[0];
-
-				this.logger.debug(`Factura ${invoice.id}: FX fallback usado (${usedDate} en lugar de ${requestedDate}), rate: ${exchangeRate.rate}`);
-
-				return {
-					type: 'FALLBACK',
-					message: `Tipo de cambio de ${usedDate} usado para factura ${invoice.invoice_number || invoice.id} (solicitado: ${requestedDate})`,
-					fallbackInfo: {
-						usedDate,
-						requestedDate,
-						rate: exchangeRate.rate,
-					},
-				};
-			}
-
-			this.logger.debug(`Factura ${invoice.id}: FX automático aplicado, rate: ${exchangeRate.rate}`);
-
-			return { type: 'AUTOMATIC' };
-		} catch (error) {
-			// No hay tipo de cambio disponible
-			this.logger.warn(`No hay tipo de cambio disponible para ${invoice.contract_currency}/${newCurrency} en ${invoice.invoice_date}`);
-
-			if (!dryRun) {
-				// Actualizar sin FX (valores en NULL)
-				await this.invoiceRepository.update(invoice.id, {
-					invoice_currency: newCurrency,
-					amount_invoice_currency: null,
+					unit_price_invoice_currency: null,
+					subtotal_invoice_currency: null,
+					tax_amount_invoice_currency: null,
 					total_invoice_currency: null,
-					vat: null,
 					fx_contract_to_invoice: null,
 				});
-
-				// Actualizar items sin FX
-				const items = await this.invoiceItemRepository.find({ where: { invoice_id: invoice.id } });
-
-				for (const item of items) {
-					await this.invoiceItemRepository.update(item.id, {
-						invoice_currency: newCurrency,
-						unit_price_invoice_currency: null,
-						subtotal_invoice_currency: null,
-						tax_amount_invoice_currency: null,
-						total_invoice_currency: null,
-						fx_contract_to_invoice: null,
-					});
-				}
 			}
-
-			const requestedDate = invoice.invoice_date.toISOString().split('T')[0];
-
-			return {
-				type: 'MISSING',
-				message: `No hay tipo de cambio disponible para ${invoice.contract_currency}/${newCurrency}. Deberá ingresar el tipo de cambio manualmente.`,
-				missingInfo: {
-					fromCurrency: invoice.contract_currency,
-					toCurrency: newCurrency,
-					requestedDate,
-				},
-			};
 		}
+
+		this.logger.debug(
+			`Factura ${invoice.id}: Moneda actualizada a ${newCurrency}. Los montos se calcularán al momento de emisión usando issue_date.`
+		);
+
+		// Convertir issue_date a string (puede venir como Date o string desde la BD)
+		const issueDateStr = invoice.issue_date
+			? invoice.issue_date instanceof Date
+				? invoice.issue_date.toISOString().split('T')[0]
+				: String(invoice.issue_date)
+			: new Date().toISOString().split('T')[0];
+
+		return {
+			type: 'MISSING',
+			message: `Moneda actualizada a ${newCurrency}. Los montos se calcularán automáticamente al emitir la factura usando el tipo de cambio de la fecha de emisión.`,
+			missingInfo: {
+				fromCurrency: invoice.contract_currency,
+				toCurrency: newCurrency,
+				requestedDate: issueDateStr,
+			},
+		};
 	}
 }

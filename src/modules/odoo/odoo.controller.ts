@@ -203,31 +203,6 @@ export class OdooController {
 		return await this.odooService.syncInvoices(syncData);
 	}
 
-	@Get('invoice-processing/classify')
-	@ApiOperation({
-		summary: 'Clasificar facturas en staging',
-		description:
-			'Clasifica las facturas en staging según si necesitan crearse, actualizarse o ya están procesadas. Se puede llamar múltiples veces para reclasificar después de cambios en el mapeo.',
-	})
-	@ApiOkResponse({
-		description: 'Clasificación completada exitosamente',
-		schema: {
-			type: 'object',
-			properties: {
-				success: { type: 'boolean' },
-				to_create: { type: 'number', description: 'Facturas nuevas que se crearán' },
-				to_update: { type: 'number', description: 'Facturas existentes que se actualizarán' },
-				already_processed: { type: 'number', description: 'Facturas ya procesadas sin cambios' },
-				total: { type: 'number', description: 'Total de facturas en staging' },
-				message: { type: 'string' },
-			},
-		},
-	})
-	@ApiBadRequestResponse({ description: 'Error al clasificar facturas' })
-	async classifyInvoices(@Headers('x-holding-id') holdingId: string) {
-		return await this.odooService.classifyInvoices(holdingId);
-	}
-
 	@Post('field-mappings')
 	@ApiOperation({
 		summary: 'Guardar configuración de mapeo de campos',

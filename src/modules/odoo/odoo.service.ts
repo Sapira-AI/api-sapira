@@ -38,13 +38,17 @@ import {
 	SyncResult,
 } from './interfaces/odoo.interface';
 import { InvoiceProcessingService } from './invoice-processing.service';
+import { OdooPartnersService } from './odoo-partners.service';
 import { OdooProvider } from './odoo.provider';
+import { FieldMappingService } from './services/field-mapping.service';
 
 @Injectable()
 export class OdooService {
 	constructor(
 		private readonly odooProvider: OdooProvider,
 		private readonly invoiceProcessingService: InvoiceProcessingService,
+		private readonly odooPartnersService: OdooPartnersService,
+		private readonly fieldMappingService: FieldMappingService,
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooInvoicesStg)
@@ -1047,34 +1051,66 @@ export class OdooService {
 	}
 
 	/**
-	 * Guarda una factura en la tabla de staging
+	 * Guarda una factura en la tabla de staging con clasificación automática
 	 */
 	private async saveInvoiceToDatabase(invoice: OdooInvoice, batchId: string, holdingId: string, syncSessionId?: string): Promise<OdooInvoicesStg> {
-		// Verificar si ya existe la factura
+		// Determinar el ID correcto: si es una línea de factura, usar move_id[0], sino usar invoice.id
+		const invoiceId = (invoice as any).move_id && Array.isArray((invoice as any).move_id) ? (invoice as any).move_id[0] : invoice.id;
+
+		// Verificar si ya existe la factura en staging
 		const existingInvoice = await this.invoicesStgRepository.findOne({
 			where: {
-				odoo_id: invoice.id,
+				odoo_id: invoiceId,
 				holding_id: holdingId,
 			},
 		});
 
+		// Preparar datos de la factura
+		const invoiceData = {
+			odoo_id: invoiceId,
+			holding_id: holdingId,
+			raw_data: invoice,
+			sync_batch_id: batchId,
+			batch_id: batchId,
+			sync_session_id: syncSessionId,
+		};
+
+		// Crear objeto temporal para clasificación
+		const tempInvoice = existingInvoice || this.invoicesStgRepository.create(invoiceData);
+		Object.assign(tempInvoice, invoiceData);
+
+		let processingStatus = 'create';
+		let integrationNotes: string | undefined;
+
+		try {
+			const result = await this.invoiceProcessingService.classifySingleInvoicePublic(tempInvoice, holdingId);
+			// Convertir 'skip' a 'processed'
+			processingStatus = result.status === 'skip' ? 'processed' : result.status;
+
+			// Si hay cambios, guardarlos en integration_notes
+			if (result.changes && result.changes.length > 0) {
+				integrationNotes = JSON.stringify({ changes: result.changes });
+			}
+		} catch (error) {
+			console.error(`❌ [SYNC] Error clasificando factura ${invoice.id}:`, error);
+			// En caso de error, usar 'create' por defecto
+			processingStatus = 'create';
+		}
+
+		// Guardar con el status correcto
 		if (existingInvoice) {
-			existingInvoice.raw_data = invoice;
-			existingInvoice.sync_batch_id = batchId;
-			existingInvoice.batch_id = batchId;
-			existingInvoice.sync_session_id = syncSessionId;
-			existingInvoice.processing_status = 'processed';
+			existingInvoice.processing_status = processingStatus;
+			if (integrationNotes) {
+				existingInvoice.integration_notes = integrationNotes;
+			}
 			existingInvoice.updated_at = new Date();
 			return await this.invoicesStgRepository.save(existingInvoice);
 		} else {
-			const invoiceStg = new OdooInvoicesStg();
-			invoiceStg.odoo_id = invoice.id;
-			invoiceStg.holding_id = holdingId;
-			invoiceStg.raw_data = invoice;
-			invoiceStg.sync_batch_id = batchId;
-			invoiceStg.batch_id = batchId;
-			invoiceStg.sync_session_id = syncSessionId;
-			invoiceStg.processing_status = 'processed';
+			const invoiceStg = this.invoicesStgRepository.create({
+				...invoiceData,
+				processing_status: processingStatus,
+				integration_notes: integrationNotes,
+			});
 			return await this.invoicesStgRepository.save(invoiceStg);
 		}
 	}
@@ -1145,11 +1181,17 @@ export class OdooService {
 		// 2. Determinar el processing_status verificando client_entities
 		const processingStatus = await this.determinePartnerProcessingStatus(partner, holdingId);
 
+		// 3. Preparar integration_notes: si hay cambios, guardarlos como JSON, sino usar el mensaje de texto
+		const integrationNotes =
+			processingStatus.changes && processingStatus.changes.length > 0
+				? JSON.stringify({ changes: processingStatus.changes })
+				: processingStatus.notes;
+
 		if (existingPartnerStg) {
 			existingPartnerStg.raw_data = partner;
 			existingPartnerStg.sync_batch_id = batchId;
 			existingPartnerStg.processing_status = processingStatus.status;
-			existingPartnerStg.integration_notes = processingStatus.notes;
+			existingPartnerStg.integration_notes = integrationNotes;
 			existingPartnerStg.updated_at = new Date();
 			return await this.partnersStgRepository.save(existingPartnerStg);
 		}
@@ -1160,7 +1202,7 @@ export class OdooService {
 		partnerStg.raw_data = partner;
 		partnerStg.sync_batch_id = batchId;
 		partnerStg.processing_status = processingStatus.status;
-		partnerStg.integration_notes = processingStatus.notes;
+		partnerStg.integration_notes = integrationNotes;
 		return await this.partnersStgRepository.save(partnerStg);
 	}
 
@@ -1170,7 +1212,7 @@ export class OdooService {
 	private async determinePartnerProcessingStatus(
 		partner: OdooPartner,
 		holdingId: string
-	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string }> {
+	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
 		try {
 			const partnerVat = partner.vat ? String(partner.vat) : null;
 
@@ -1206,11 +1248,12 @@ export class OdooService {
 			});
 
 			if (existingByVatAndOdooId) {
-				const hasChanges = this.hasPartnerChanges(partner, existingByVatAndOdooId);
+				const { hasChanges, changes } = await this.odooPartnersService.hasPartnerChanges(partner, existingByVatAndOdooId, holdingId);
 				if (hasChanges) {
 					return {
 						status: 'update',
 						notes: 'Cliente existente con cambios - marcado para actualización',
+						changes,
 					};
 				}
 				return {
@@ -1260,64 +1303,6 @@ export class OdooService {
 				status: 'create',
 				notes: `Error en determinación de estado: ${error.message}`,
 			};
-		}
-	}
-
-	/**
-	 * Verifica si hay cambios entre el partner de Odoo y el cliente existente
-	 */
-	private hasPartnerChanges(partner: OdooPartner, existingClient: any): boolean {
-		try {
-			// Comparar campos básicos
-			const odooName = partner.name || '';
-			const odooEmail = partner.email || '';
-			const odooPhone = partner.phone || '';
-			const odooStreet = partner.street || '';
-			const odooCountry = Array.isArray(partner.country_id) ? partner.country_id[1] : '';
-
-			const clientName = existingClient.legal_name || '';
-			const clientEmail = existingClient.email || '';
-			const clientPhone = existingClient.phone || '';
-			const clientAddress = existingClient.legal_address || '';
-			const clientCountry = existingClient.country || '';
-
-			const changes: string[] = [];
-
-			// Comparar y registrar cada campo
-			if (odooName !== clientName) {
-				changes.push(`📝 NOMBRE cambió:`);
-				changes.push(`   Odoo:   "${odooName}"`);
-				changes.push(`   Sapira: "${clientName}"`);
-			}
-
-			if (odooEmail !== clientEmail) {
-				changes.push(`📧 EMAIL cambió:`);
-				changes.push(`   Odoo:   "${odooEmail}"`);
-				changes.push(`   Sapira: "${clientEmail}"`);
-			}
-
-			if (odooPhone !== clientPhone) {
-				changes.push(`📞 TELÉFONO cambió:`);
-				changes.push(`   Odoo:   "${odooPhone}"`);
-				changes.push(`   Sapira: "${clientPhone}"`);
-			}
-
-			if (odooStreet !== clientAddress) {
-				changes.push(`🏠 DIRECCIÓN cambió:`);
-				changes.push(`   Odoo:   "${odooStreet}"`);
-				changes.push(`   Sapira: "${clientAddress}"`);
-			}
-
-			if (odooCountry !== clientCountry) {
-				changes.push(`🌍 PAÍS cambió:`);
-				changes.push(`   Odoo:   "${odooCountry}"`);
-				changes.push(`   Sapira: "${clientCountry}"`);
-			}
-
-			return changes.length > 0;
-		} catch (error) {
-			console.error('❌ Error comparando cambios:', error);
-			return true; // En caso de error, asumir que hay cambios
 		}
 	}
 
@@ -1752,7 +1737,7 @@ export class OdooService {
 			}
 
 			if (allInvoiceIds.length === 0) {
-				console.log('No se encontraron facturas en el rango de fechas, no hay partners para procesar');
+				console.warn('No se encontraron facturas en el rango de fechas, no hay partners para procesar');
 				return;
 			}
 
@@ -1819,8 +1804,6 @@ export class OdooService {
 					records_failed: totalErrors,
 				});
 			}
-
-			console.log(`✅ Partners procesados: ${totalProcessed}, guardados: ${totalSaved}, errores: ${totalErrors}`);
 		} catch (error) {
 			console.error(`❌ Error procesando partners para job ${jobId}:`, error);
 			throw error;
@@ -1831,8 +1814,6 @@ export class OdooService {
 	 * Procesa invoice lines específicamente para un job
 	 */
 	private async processInvoiceLinesForJob(jobId: string, data: StartAsyncJobDTO): Promise<void> {
-		console.log(`📋 Procesando invoice lines para job: ${jobId}`);
-
 		try {
 			// Obtener configuración de conexión
 			const connection = await this.getOdooConnection(data.connection_id);
@@ -1894,7 +1875,7 @@ export class OdooService {
 			}
 
 			if (allInvoiceIds.length === 0) {
-				console.log('No se encontraron facturas en el rango de fechas, no hay líneas para procesar');
+				console.warn('No se encontraron facturas en el rango de fechas, no hay líneas para procesar');
 				return;
 			}
 
@@ -1914,7 +1895,6 @@ export class OdooService {
 				[linesSearchDomain],
 			]);
 
-			console.log(`Total de líneas a procesar: ${totalLinesCount}`);
 			await this.updateJobStatus(jobId, 'running', { progress_total: totalLinesCount });
 
 			// Buscar líneas con paginación
@@ -1982,8 +1962,6 @@ export class OdooService {
 					break;
 				}
 			}
-
-			console.log(`✅ Invoice lines procesadas: ${totalProcessed}, guardadas: ${totalSaved}, errores: ${totalErrors}`);
 		} catch (error) {
 			console.error(`❌ Error procesando invoice lines para job ${jobId}:`, error);
 			throw error;
@@ -1994,8 +1972,6 @@ export class OdooService {
 	 * Procesa invoices específicamente para un job
 	 */
 	private async processInvoicesForJob(jobId: string, data: StartAsyncJobDTO): Promise<void> {
-		console.log(`📋 Procesando invoices para job: ${jobId}`);
-
 		try {
 			// Obtener configuración de conexión
 			const connection = await this.getOdooConnection(data.connection_id);
@@ -2034,7 +2010,6 @@ export class OdooService {
 				[invoicesSearchDomain],
 			]);
 
-			console.log(`Total de facturas a procesar: ${totalInvoicesCount}`);
 			await this.updateJobStatus(jobId, 'running', { progress_total: totalInvoicesCount });
 
 			// Buscar facturas con paginación
@@ -2073,7 +2048,7 @@ export class OdooService {
 						await this.saveInvoiceToDatabase(invoice, jobId, data.holding_id, jobId);
 						totalSaved++;
 					} catch (error) {
-						console.error(`Error guardando factura ${invoice.id}:`, error);
+						console.error(`❌ [SYNC] Error guardando factura ${invoice.id}:`, error);
 						totalErrors++;
 					}
 					totalProcessed++;
@@ -2093,8 +2068,6 @@ export class OdooService {
 					break;
 				}
 			}
-
-			console.log(`✅ Invoices procesadas: ${totalProcessed}, guardadas: ${totalSaved}, errores: ${totalErrors}`);
 		} catch (error) {
 			console.error(`❌ Error procesando invoices para job ${jobId}:`, error);
 			throw error;
@@ -2152,8 +2125,6 @@ export class OdooService {
 		const startTime = Date.now();
 
 		try {
-			console.log(`🚀 Iniciando proceso asíncrono para ${entityType} - job: ${jobId}`);
-
 			// Actualizar estado a 'running'
 			await this.updateJobStatus(jobId, 'running', {});
 
@@ -2175,8 +2146,6 @@ export class OdooService {
 				completed_at: new Date().toISOString(),
 				execution_time_ms: executionTime,
 			});
-
-			console.log(`✅ Proceso completado para ${entityType} - job: ${jobId} en ${executionTime}ms`);
 		} catch (error) {
 			console.error(`❌ Error procesando ${entityType} - job: ${jobId}:`, error);
 			await this.updateJobStatus(jobId, 'failed', {
@@ -2219,45 +2188,9 @@ export class OdooService {
 				Object.assign(updateData, additionalData);
 			}
 
-			console.log(`🔄 Actualizando job ${jobId} con:`, updateData);
-			const result = await this.integrationLogRepository.update(jobId, updateData);
-			console.log(`✅ Job actualizado, filas afectadas:`, result.affected);
+			await this.integrationLogRepository.update(jobId, updateData);
 		} catch (error) {
 			console.error('❌ Error actualizando estado del job:', error);
-		}
-	}
-
-	/**
-	 * Clasifica las facturas en staging sin procesarlas
-	 */
-	async classifyInvoices(holdingId: string): Promise<{
-		success: boolean;
-		to_create: number;
-		to_update: number;
-		already_processed: number;
-		total: number;
-		message: string;
-	}> {
-		try {
-			console.log(`📊 Clasificando facturas para holding: ${holdingId}`);
-
-			if (!holdingId) {
-				throw new Error('holding_id es requerido');
-			}
-
-			// Delegar al servicio de procesamiento de facturas
-			const classification = await this.invoiceProcessingService.classifyInvoicesPublic(holdingId);
-
-			console.log(`✅ Clasificación completada:`, classification);
-
-			return {
-				success: true,
-				...classification,
-				message: `Clasificación completada: ${classification.to_create} nuevas, ${classification.to_update} a actualizar, ${classification.already_processed} ya procesadas`,
-			};
-		} catch (error) {
-			console.error('❌ Error clasificando facturas:', error);
-			throw new Error(`Error al clasificar facturas: ${error.message}`);
 		}
 	}
 
@@ -2266,8 +2199,6 @@ export class OdooService {
 	 */
 	async saveFieldMapping(holdingId: string, saveFieldMappingDto: any): Promise<{ success: boolean; message: string; data?: any }> {
 		try {
-			console.log(`💾 Guardando mapeo de campos para holding: ${holdingId}`);
-
 			if (!holdingId) {
 				throw new Error('holding_id es requerido');
 			}
@@ -2304,7 +2235,7 @@ export class OdooService {
 
 			if (existingMapping && existingMapping.length > 0) {
 				// Actualizar mapeo existente - REEMPLAZAR completamente el mapping_config
-				console.log(`🔄 Actualizando mapeo existente con ID: ${existingMapping[0].id}`);
+
 				result = await this.integrationLogRepository.query(
 					`UPDATE field_mappings 
 					 SET mapping_config = $1, updated_at = NOW()
@@ -2314,7 +2245,7 @@ export class OdooService {
 				);
 			} else {
 				// Crear nuevo mapeo
-				console.log(`➕ Creando nuevo mapeo`);
+
 				result = await this.integrationLogRepository.query(
 					`INSERT INTO field_mappings 
 					 (holding_id, mapping_type, source_model, target_table, mapping_config, created_by, is_active)
@@ -2323,8 +2254,6 @@ export class OdooService {
 					[holdingId, source_model, target_table, JSON.stringify(mapping_config), publicUserId]
 				);
 			}
-
-			console.log(`✅ Mapeo guardado exitosamente`);
 
 			// Parsear mapping_config si viene como string
 			const savedMapping = result[0];
@@ -2348,8 +2277,6 @@ export class OdooService {
 	 */
 	async getFieldMapping(holdingId: string, sourceModel: string, targetTable: string): Promise<{ success: boolean; data?: any }> {
 		try {
-			console.log(`📚 Obteniendo mapeo de campos para holding: ${holdingId}`);
-
 			if (!holdingId) {
 				throw new Error('holding_id es requerido');
 			}
@@ -2371,14 +2298,11 @@ export class OdooService {
 			);
 
 			if (!result || result.length === 0) {
-				console.log(`⚠️ No se encontró mapeo para los parámetros especificados`);
 				return {
 					success: true,
 					data: null,
 				};
 			}
-
-			console.log(`✅ Mapeo encontrado`);
 
 			return {
 				success: true,
@@ -2395,8 +2319,6 @@ export class OdooService {
 	 */
 	async cleanProcessedPartners(holdingId: string): Promise<{ success: boolean; message: string; deleted_count: number }> {
 		try {
-			console.log(`🧹 Iniciando limpieza de registros procesados para holding: ${holdingId}`);
-
 			if (!holdingId) {
 				throw new Error('holding_id es requerido');
 			}
@@ -2408,8 +2330,6 @@ export class OdooService {
 			});
 
 			const deletedCount = result.affected || 0;
-
-			console.log(`✅ Limpieza completada. Registros eliminados: ${deletedCount}`);
 
 			return {
 				success: true,

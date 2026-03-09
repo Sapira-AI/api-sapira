@@ -33,22 +33,6 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 					throw error;
 				});
 
-			// Solo logear éxito si realmente tenemos un token válido
-			if (result) {
-				const [seconds, nanoseconds] = process.hrtime(startTime);
-				const duration = seconds * 1000 + nanoseconds / 1000000;
-
-				console.log('Auth Guard Validation Duration:', {
-					name: 'AuthGuardValidationDuration',
-					value: duration,
-					properties: {
-						endpoint: context.getHandler().name,
-						controller: context.getClass().name,
-						success: true,
-					},
-				});
-			}
-
 			return result;
 		} catch (error) {
 			const [seconds, nanoseconds] = process.hrtime(startTime);
@@ -110,16 +94,6 @@ export class AzureADAuthGuard extends AuthGuard('azure-ad') {
 
 			throw new UnauthorizedException('Token de autorización inválido o expirado');
 		}
-
-		console.log('Authentication Success:', {
-			name: 'AuthenticationSuccess',
-			properties: {
-				userId: user.oid,
-				endpoint,
-				controller,
-				timestamp: new Date().toISOString(),
-			},
-		});
 
 		return user;
 	}
