@@ -103,10 +103,12 @@ export class InvoiceSchedulerService {
 			.createQueryBuilder('inv')
 			.leftJoin('client_entities', 'cle', 'cle.id = inv.client_entity_id')
 			.leftJoin('companies', 'com', 'com.id = inv.company_id')
+			.leftJoin('contracts', 'con', 'con.id = inv.contract_id')
 			.where('inv.status = :status', { status: 'Por Emitir' })
 			.andWhere('inv.issue_date <= CURRENT_DATE')
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
+			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)')
 			.orderBy('inv.issue_date', 'ASC')
 			.addOrderBy('inv.created_at', 'ASC');
 
