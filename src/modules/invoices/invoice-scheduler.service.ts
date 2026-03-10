@@ -196,15 +196,16 @@ export class InvoiceSchedulerService {
 
 			if (odooResponse.success && odooResponse.invoice_id) {
 				await this.invoiceRepository.update(invoice.id, {
-					status: 'Enviada',
 					odoo_invoice_id: odooResponse.invoice_id,
 					sent_to_odoo_at: new Date(),
 				});
 
 				result.status = 'sent';
 				result.odooInvoiceId = odooResponse.invoice_id;
-				result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id}`;
-				this.logger.log(`✓ Factura ${invoice.invoice_number} enviada exitosamente (Odoo ID: ${odooResponse.invoice_id})`);
+				result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id} (mantiene estado 'Por Emitir')`;
+				this.logger.log(
+					`✓ Factura ${invoice.invoice_number} enviada exitosamente a Odoo (ID: ${odooResponse.invoice_id}) - mantiene estado 'Por Emitir'`
+				);
 			} else {
 				result.status = 'error';
 				result.error = odooResponse.message || 'Error desconocido al crear factura en Odoo';
