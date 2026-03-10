@@ -63,10 +63,20 @@ export class OdooWebhookController {
 				connection_id: payload.connection_id,
 			});
 
+			// Procesar actualización de estado de factura si viene de Odoo con state=posted
+			const statusUpdateResult = await this.odooWebhookService.processInvoiceStatusUpdate(payload);
+
 			return {
 				success: true,
 				message: 'Webhook recibido y guardado exitosamente',
 				webhook_id: webhookLog._id,
+				invoice_update: statusUpdateResult.updated
+					? {
+							updated: true,
+							invoice_id: statusUpdateResult.invoiceId,
+							message: statusUpdateResult.message,
+						}
+					: undefined,
 			};
 		} catch (error) {
 			console.error('Error procesando webhook:', error);

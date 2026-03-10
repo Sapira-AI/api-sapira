@@ -1,13 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Connection, Model } from 'mongoose';
+import { DataSource } from 'typeorm';
+
+import { Invoice } from '../invoices/entities/invoice.entity';
 
 import { OdooWebhookLog, OdooWebhookLogSchema } from './schemas/odoo-webhook.schema';
 
 @Injectable()
 export class OdooWebhookService {
+	private readonly logger = new Logger(OdooWebhookService.name);
 	private webhookLogModel: Model<any>;
 
-	constructor(@Inject('DbConnectionToken') private connection: Connection) {
+	constructor(
+		@Inject('DbConnectionToken') private connection: Connection,
+		private readonly dataSource: DataSource
+	) {
 		this.webhookLogModel = this.connection.model(OdooWebhookLog.name, OdooWebhookLogSchema);
 	}
 
@@ -94,5 +101,70 @@ export class OdooWebhookService {
 				{ new: true }
 			)
 			.exec();
+	}
+
+	/**
+	 * Procesa actualización de estado de factura cuando Odoo notifica que fue posted
+	 * Si el webhook contiene x_sapira_invoice_id y state = 'posted',
+	 * actualiza el estado de la factura en PostgreSQL a 'Emitida'
+	 */
+	async processInvoiceStatusUpdate(payload: any): Promise<{ updated: boolean; invoiceId?: string; message?: string }> {
+		try {
+			// Validar que sea una factura (account.move)
+			if (payload.model !== 'account.move' && payload._model !== 'account.move') {
+				return { updated: false, message: 'No es una factura de Odoo' };
+			}
+
+			// Extraer datos del payload (puede venir en diferentes estructuras)
+			const invoiceData = payload.payload || payload;
+			const sapiraInvoiceId = invoiceData.x_sapira_invoice_id;
+			const odooState = invoiceData.state;
+			const odooInvoiceId = invoiceData.id || invoiceData._id;
+
+			// Validar que tenga x_sapira_invoice_id y state = 'posted'
+			if (!sapiraInvoiceId) {
+				return { updated: false, message: 'No tiene x_sapira_invoice_id' };
+			}
+
+			if (odooState !== 'posted') {
+				return { updated: false, message: `Estado en Odoo es '${odooState}', no 'posted'` };
+			}
+
+			// Obtener repositorio de Invoice
+			const invoiceRepository = this.dataSource.getRepository(Invoice);
+
+			// Buscar la factura en PostgreSQL
+			const invoice = await invoiceRepository.findOne({
+				where: { id: sapiraInvoiceId },
+			});
+
+			if (!invoice) {
+				this.logger.warn(`Factura con ID ${sapiraInvoiceId} no encontrada en PostgreSQL`);
+				return { updated: false, message: `Factura ${sapiraInvoiceId} no encontrada` };
+			}
+
+			// Actualizar estado a 'Emitida'
+			await invoiceRepository.update(sapiraInvoiceId, {
+				status: 'Emitida',
+				odoo_invoice_id: odooInvoiceId,
+			});
+
+			this.logger.log(
+				`✓ Factura ${invoice.invoice_number || sapiraInvoiceId} actualizada a estado 'Emitida' ` +
+					`desde webhook de Odoo (Odoo ID: ${odooInvoiceId})`
+			);
+
+			return {
+				updated: true,
+				invoiceId: sapiraInvoiceId,
+				message: `Factura actualizada a 'Emitida'`,
+			};
+		} catch (error) {
+			this.logger.error(`Error procesando actualización de estado de factura:`, error);
+			return {
+				updated: false,
+				message: `Error: ${error.message}`,
+			};
+		}
 	}
 }
