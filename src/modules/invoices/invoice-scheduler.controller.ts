@@ -35,6 +35,7 @@ export class InvoiceSchedulerController {
 		return await this.invoiceSchedulerService.processInvoicesToSend({
 			dryRun: dto.dryRun ?? true,
 			holdingId: sanitizedHoldingId,
+			contractId: dto.contractId,
 		});
 	}
 

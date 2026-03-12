@@ -24,6 +24,7 @@ interface InvoiceWithRelations extends Invoice {
 interface ProcessOptions {
 	dryRun: boolean;
 	holdingId?: string;
+	contractId?: string;
 }
 
 @Injectable()
@@ -47,10 +48,12 @@ export class InvoiceSchedulerService {
 	) {}
 
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
-		const { dryRun, holdingId } = options;
+		const { dryRun, holdingId, contractId } = options;
 		const startTime = Date.now();
 
-		this.logger.log(`🚀 Iniciando procesamiento de facturas - DryRun: ${dryRun}, HoldingId: ${holdingId || 'todos'}`);
+		this.logger.log(
+			`🚀 Iniciando procesamiento de facturas - DryRun: ${dryRun}, HoldingId: ${holdingId || 'todos'}, ContractId: ${contractId || 'todos'}`
+		);
 
 		const results: InvoiceResultDto[] = [];
 		const summary: ProcessInvoicesSummaryDto = {
@@ -61,7 +64,7 @@ export class InvoiceSchedulerService {
 		};
 
 		try {
-			const invoices = await this.getInvoicesToSend(holdingId);
+			const invoices = await this.getInvoicesToSend(holdingId, contractId);
 			summary.total = invoices.length;
 
 			this.logger.log(`📋 Encontradas ${invoices.length} facturas para procesar`);
@@ -98,7 +101,7 @@ export class InvoiceSchedulerService {
 		}
 	}
 
-	async getInvoicesToSend(holdingId?: string): Promise<InvoiceWithRelations[]> {
+	async getInvoicesToSend(holdingId?: string, contractId?: string): Promise<InvoiceWithRelations[]> {
 		const query = this.invoiceRepository
 			.createQueryBuilder('inv')
 			.leftJoin('client_entities', 'cle', 'cle.id = inv.client_entity_id')
@@ -116,6 +119,10 @@ export class InvoiceSchedulerService {
 
 		if (holdingId) {
 			query.andWhere('inv.holding_id = :holdingId', { holdingId });
+		}
+
+		if (contractId) {
+			query.andWhere('inv.contract_id = :contractId', { contractId });
 		}
 
 		const invoices = await query.getMany();
