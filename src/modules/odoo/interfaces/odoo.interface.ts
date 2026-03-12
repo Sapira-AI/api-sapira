@@ -249,7 +249,6 @@ export interface SapiraProduct {
 	created_at: Date;
 	salesforce_product_id: string | null;
 	odoo_product_id: number | null;
-	odoo_tax_id: string | null;
 }
 
 export interface ProductsResult {
