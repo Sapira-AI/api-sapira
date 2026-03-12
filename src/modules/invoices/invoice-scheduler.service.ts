@@ -107,6 +107,7 @@ export class InvoiceSchedulerService {
 			.where('inv.status = :status', { status: 'Por Emitir' })
 			.andWhere('inv.issue_date <= CURRENT_DATE')
 			.andWhere('inv.sent_to_odoo_at IS NULL')
+			.andWhere("DATE_TRUNC('month', inv.issue_date) = DATE_TRUNC('month', CURRENT_DATE)")
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
 			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)')
