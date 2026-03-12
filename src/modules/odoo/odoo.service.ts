@@ -1492,7 +1492,6 @@ export class OdooService {
 				created_at: product.created_at,
 				salesforce_product_id: product.salesforce_product_id || null,
 				odoo_product_id: null, // Campo no existe en la tabla actual
-				odoo_tax_id: null, // Campo no existe en la tabla actual
 			}));
 		} catch (error) {
 			console.error('❌ Error obteniendo productos de Sapira:', error);

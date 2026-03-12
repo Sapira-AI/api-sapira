@@ -85,9 +85,25 @@
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
+			},
+			{
+				"column_name": "odoo_product_id",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
 			}
 		],
 		"indexes": [
+			{
+				"index_name": "idx_products_odoo_product_id",
+				"index_definition": "CREATE INDEX idx_products_odoo_product_id ON public.products USING btree (odoo_product_id) WHERE (odoo_product_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
 			{
 				"index_name": "idx_products_product_code",
 				"index_definition": "CREATE INDEX idx_products_product_code ON public.products USING btree (product_code)",
@@ -97,10 +113,10 @@
 			},
 			{
 				"index_name": "idx_products_salesforce_product_id",
-				"index_definition": "CREATE INDEX idx_products_salesforce_product_id ON public.products USING btree (salesforce_product_id) WHERE (salesforce_product_id IS NOT NULL)",
+				"index_definition": "CREATE INDEX idx_products_salesforce_product_id ON public.products USING btree (salesforce_product_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "8192 bytes"
+				"index_size": "16 kB"
 			},
 			{
 				"index_name": "products_pkey",
@@ -174,9 +190,9 @@
 			}
 		],
 		"size_info": {
-			"total_size": "88 kB",
+			"total_size": "104 kB",
 			"table_size": "16 kB",
-			"indexes_size": "72 kB"
+			"indexes_size": "88 kB"
 		},
 		"permissions": [
 			{
@@ -320,6 +336,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-06T08:58:56.391Z"
+		"analysis_timestamp": "2026-03-12T15:52:53.868Z"
 	}
 }

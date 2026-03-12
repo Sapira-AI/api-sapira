@@ -32,8 +32,4 @@ export class Product {
 	// Campo para mapear con Odoo
 	@Column({ type: 'integer', nullable: true })
 	odoo_product_id?: number;
-
-	// Campo para almacenar tax ID de Odoo
-	@Column({ type: 'text', nullable: true })
-	odoo_tax_id?: string;
 }
