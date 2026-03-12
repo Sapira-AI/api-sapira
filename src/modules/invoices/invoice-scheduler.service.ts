@@ -106,6 +106,7 @@ export class InvoiceSchedulerService {
 			.leftJoin('contracts', 'con', 'con.id = inv.contract_id')
 			.where('inv.status = :status', { status: 'Por Emitir' })
 			.andWhere('inv.issue_date <= CURRENT_DATE')
+			.andWhere('inv.sent_to_odoo_at IS NULL')
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
 			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)')
@@ -140,9 +141,17 @@ export class InvoiceSchedulerService {
 	}
 
 	async sendInvoiceToOdoo(invoice: InvoiceWithRelations, dryRun: boolean): Promise<InvoiceResultDto> {
+		// LOG INICIAL: Verificar relaciones al recibir la factura
+		this.logger.log(`🔵 INICIO sendInvoiceToOdoo - Factura ${invoice.id}`);
+		this.logger.log(`   clientEntity: ${invoice.clientEntity ? `SÍ (${invoice.clientEntity.legal_name})` : 'NO'}`);
+		this.logger.log(`   company: ${invoice.company ? `SÍ (${invoice.company.legal_name})` : 'NO'}`);
+
 		const result: InvoiceResultDto = {
 			invoiceId: invoice.id,
 			invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+			clientName: 'Sin cliente',
+			companyName: 'Sin compañía',
+			issueDate: invoice.issue_date,
 			status: 'skipped',
 		};
 
@@ -179,6 +188,31 @@ export class InvoiceSchedulerService {
 				result.details = 'La factura requiere conversión de moneda pero los montos no están calculados';
 				this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: montos no calculados`);
 				return result;
+			}
+
+			// Asignar nombres de cliente y compañía ANTES de mapear a Odoo (para que funcione en dryRun)
+			this.logger.log(
+				`📝 Asignando nombres - clientEntity: ${invoice.clientEntity ? 'existe' : 'NO EXISTE'}, company: ${invoice.company ? 'existe' : 'NO EXISTE'}`
+			);
+
+			if (invoice.clientEntity) {
+				result.clientName =
+					invoice.clientEntity.legal_name?.trim() ||
+					invoice.clientEntity.tax_id?.trim() ||
+					`Cliente ID: ${invoice.clientEntity.id.substring(0, 8)}`;
+				this.logger.log(`   ✓ clientName asignado: ${result.clientName}`);
+			} else {
+				this.logger.warn(`   ✗ clientEntity es NULL - no se puede asignar nombre`);
+			}
+
+			if (invoice.company) {
+				result.companyName =
+					invoice.company.legal_name?.trim() ||
+					invoice.company.holding_name?.trim() ||
+					`Compañía ID: ${invoice.company.id.substring(0, 8)}`;
+				this.logger.log(`   ✓ companyName asignado: ${result.companyName}`);
+			} else {
+				this.logger.warn(`   ✗ company es NULL - no se puede asignar nombre`);
 			}
 
 			const odooInvoiceData = await this.mapInvoiceToOdooFormat(invoice);
@@ -399,6 +433,10 @@ export class InvoiceSchedulerService {
 	private async getInvoiceWithRelations(invoiceId: string): Promise<InvoiceWithRelations> {
 		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });
 
+		this.logger.log(`🔍 Recargando factura ${invoiceId}`);
+		this.logger.log(`   client_entity_id: ${invoice.client_entity_id}`);
+		this.logger.log(`   company_id: ${invoice.company_id}`);
+
 		const clientEntity = await this.clientEntityRepository.findOne({
 			where: { id: invoice.client_entity_id },
 		});
@@ -406,6 +444,9 @@ export class InvoiceSchedulerService {
 		const company = await this.companyRepository.findOne({
 			where: { id: invoice.company_id },
 		});
+
+		this.logger.log(`   clientEntity encontrado: ${clientEntity ? 'SÍ' : 'NO'} - ${clientEntity?.legal_name || 'N/A'}`);
+		this.logger.log(`   company encontrada: ${company ? 'SÍ' : 'NO'} - ${company?.legal_name || 'N/A'}`);
 
 		const items = await this.invoiceItemRepository.find({
 			where: { invoice_id: invoice.id },

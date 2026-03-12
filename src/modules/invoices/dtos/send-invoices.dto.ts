@@ -27,6 +27,27 @@ export class InvoiceResultDto {
 	invoiceNumber: string;
 
 	@ApiProperty({
+		description: 'Nombre del cliente',
+		required: false,
+		example: 'Acme Corporation',
+	})
+	clientName?: string;
+
+	@ApiProperty({
+		description: 'Nombre de la compañía',
+		required: false,
+		example: 'Mi Empresa S.A.',
+	})
+	companyName?: string;
+
+	@ApiProperty({
+		description: 'Fecha de emisión de la factura',
+		required: false,
+		example: '2026-03-09',
+	})
+	issueDate?: Date;
+
+	@ApiProperty({
 		description: 'Estado del procesamiento',
 		enum: ['sent', 'error', 'skipped'],
 		example: 'sent',
