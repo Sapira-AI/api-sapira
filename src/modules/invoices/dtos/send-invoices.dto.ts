@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class SendInvoicesDto {
 	@ApiProperty({
@@ -11,6 +11,15 @@ export class SendInvoicesDto {
 	@IsOptional()
 	@IsBoolean()
 	dryRun?: boolean = true;
+
+	@ApiProperty({
+		description: 'ID del contrato para filtrar facturas (opcional)',
+		required: false,
+		example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+	})
+	@IsOptional()
+	@IsString()
+	contractId?: string;
 }
 
 export class InvoiceResultDto {
