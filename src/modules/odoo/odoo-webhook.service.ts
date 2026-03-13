@@ -4,18 +4,21 @@ import { DataSource } from 'typeorm';
 
 import { Invoice } from '../invoices/entities/invoice.entity';
 
+import { OdooInvoiceUpdateLog, OdooInvoiceUpdateLogSchema } from './schemas/odoo-invoice-update-log.schema';
 import { OdooWebhookLog, OdooWebhookLogSchema } from './schemas/odoo-webhook.schema';
 
 @Injectable()
 export class OdooWebhookService {
 	private readonly logger = new Logger(OdooWebhookService.name);
 	private webhookLogModel: Model<any>;
+	private invoiceUpdateLogModel: Model<any>;
 
 	constructor(
 		@Inject('DbConnectionToken') private connection: Connection,
 		private readonly dataSource: DataSource
 	) {
 		this.webhookLogModel = this.connection.model(OdooWebhookLog.name, OdooWebhookLogSchema);
+		this.invoiceUpdateLogModel = this.connection.model(OdooInvoiceUpdateLog.name, OdooInvoiceUpdateLogSchema);
 	}
 
 	/**
@@ -104,30 +107,171 @@ export class OdooWebhookService {
 	}
 
 	/**
-	 * Procesa actualización de estado de factura cuando Odoo notifica que fue posted
-	 * Si el webhook contiene x_sapira_invoice_id y state = 'posted',
-	 * actualiza el estado de la factura en PostgreSQL a 'Emitida'
+	 * Extrae campos relevantes del payload del webhook
 	 */
-	async processInvoiceStatusUpdate(payload: any): Promise<{ updated: boolean; invoiceId?: string; message?: string }> {
+	private extractInvoiceFields(payload: any) {
+		const invoiceData = payload.payload || payload;
+
+		return {
+			sapiraInvoiceId: invoiceData.x_sapira_invoice_id,
+			odooInvoiceId: invoiceData.id || invoiceData._id,
+			state: invoiceData.state,
+			paymentState: invoiceData.payment_state,
+			amountTax: invoiceData.amount_tax !== undefined ? Number(invoiceData.amount_tax) : undefined,
+			amountTotal: invoiceData.amount_total !== undefined ? Number(invoiceData.amount_total) : undefined,
+			amountUntaxed: invoiceData.amount_untaxed !== undefined ? Number(invoiceData.amount_untaxed) : undefined,
+			invoiceDate: invoiceData.invoice_date,
+			invoiceName: invoiceData.name,
+		};
+	}
+
+	/**
+	 * Determina el nuevo estado de la factura basado en state y payment_state
+	 */
+	private determineInvoiceStatus(state: string, paymentState: string): string | null {
+		if (state !== 'posted') {
+			return null;
+		}
+
+		if (paymentState === 'not_paid') {
+			return 'Enviada';
+		} else {
+			return 'Pagada';
+		}
+	}
+
+	/**
+	 * Detecta cambios entre la factura actual y los nuevos datos
+	 */
+	private detectChanges(
+		currentInvoice: Invoice,
+		newData: {
+			vat?: number;
+			total_invoice_currency?: number;
+			amount_invoice_currency?: number;
+			issue_date?: Date;
+			invoice_number?: string;
+			status?: string;
+			odoo_invoice_id?: number;
+		}
+	): { hasChanges: boolean; changedFields: string[]; oldValues: any; newValues: any } {
+		const changedFields: string[] = [];
+		const oldValues: any = {};
+		const newValues: any = {};
+
+		if (newData.vat !== undefined && Number(currentInvoice.vat) !== Number(newData.vat)) {
+			changedFields.push('vat');
+			oldValues.vat = currentInvoice.vat;
+			newValues.vat = newData.vat;
+		}
+
+		if (
+			newData.total_invoice_currency !== undefined &&
+			Number(currentInvoice.total_invoice_currency) !== Number(newData.total_invoice_currency)
+		) {
+			changedFields.push('total_invoice_currency');
+			oldValues.total_invoice_currency = currentInvoice.total_invoice_currency;
+			newValues.total_invoice_currency = newData.total_invoice_currency;
+		}
+
+		if (
+			newData.amount_invoice_currency !== undefined &&
+			Number(currentInvoice.amount_invoice_currency) !== Number(newData.amount_invoice_currency)
+		) {
+			changedFields.push('amount_invoice_currency');
+			oldValues.amount_invoice_currency = currentInvoice.amount_invoice_currency;
+			newValues.amount_invoice_currency = newData.amount_invoice_currency;
+		}
+
+		if (newData.issue_date !== undefined) {
+			const currentDate = currentInvoice.issue_date?.toISOString().split('T')[0];
+			const newDate = typeof newData.issue_date === 'string' ? newData.issue_date : newData.issue_date?.toISOString().split('T')[0];
+
+			if (currentDate !== newDate) {
+				changedFields.push('issue_date');
+				oldValues.issue_date = currentDate;
+				newValues.issue_date = newDate;
+			}
+		}
+
+		if (newData.invoice_number !== undefined && currentInvoice.invoice_number !== newData.invoice_number) {
+			changedFields.push('invoice_number');
+			oldValues.invoice_number = currentInvoice.invoice_number;
+			newValues.invoice_number = newData.invoice_number;
+		}
+
+		if (newData.status !== undefined && currentInvoice.status !== newData.status) {
+			changedFields.push('status');
+			oldValues.status = currentInvoice.status;
+			newValues.status = newData.status;
+		}
+
+		if (newData.odoo_invoice_id !== undefined && currentInvoice.odoo_invoice_id !== newData.odoo_invoice_id) {
+			changedFields.push('odoo_invoice_id');
+			oldValues.odoo_invoice_id = currentInvoice.odoo_invoice_id;
+			newValues.odoo_invoice_id = newData.odoo_invoice_id;
+		}
+
+		return {
+			hasChanges: changedFields.length > 0,
+			changedFields,
+			oldValues,
+			newValues,
+		};
+	}
+
+	/**
+	 * Guarda un log de actualización en MongoDB
+	 */
+	private async saveUpdateLog(data: {
+		sapiraInvoiceId: string;
+		odooInvoiceId: number;
+		holdingId?: string;
+		webhookPayload: any;
+		wasUpdated: boolean;
+		fieldsChanged?: string[];
+		oldValues?: any;
+		newValues?: any;
+		skipReason?: string;
+	}): Promise<void> {
+		const log = new this.invoiceUpdateLogModel({
+			sapira_invoice_id: data.sapiraInvoiceId,
+			odoo_invoice_id: data.odooInvoiceId,
+			holding_id: data.holdingId,
+			webhook_payload: data.webhookPayload,
+			was_updated: data.wasUpdated,
+			fields_changed: data.fieldsChanged,
+			old_values: data.oldValues,
+			new_values: data.newValues,
+			skip_reason: data.skipReason,
+		});
+
+		await log.save();
+	}
+
+	/**
+	 * Procesa actualización de estado de factura cuando Odoo notifica que fue posted
+	 * Sincroniza todos los campos relevantes y detecta cambios para evitar actualizaciones innecesarias
+	 */
+	async processInvoiceStatusUpdate(payload: any): Promise<{ updated: boolean; invoiceId?: string; message?: string; changedFields?: string[] }> {
 		try {
 			// Validar que sea una factura (account.move)
 			if (payload.model !== 'account.move' && payload._model !== 'account.move') {
 				return { updated: false, message: 'No es una factura de Odoo' };
 			}
 
-			// Extraer datos del payload (puede venir en diferentes estructuras)
-			const invoiceData = payload.payload || payload;
-			const sapiraInvoiceId = invoiceData.x_sapira_invoice_id;
-			const odooState = invoiceData.state;
-			const odooInvoiceId = invoiceData.id || invoiceData._id;
+			// Extraer campos del payload
+			const fields = this.extractInvoiceFields(payload);
 
-			// Validar que tenga x_sapira_invoice_id y state = 'posted'
-			if (!sapiraInvoiceId) {
+			// Validaciones básicas
+			if (!fields.sapiraInvoiceId) {
 				return { updated: false, message: 'No tiene x_sapira_invoice_id' };
 			}
 
-			if (odooState !== 'posted') {
-				return { updated: false, message: `Estado en Odoo es '${odooState}', no 'posted'` };
+			// Determinar el nuevo estado
+			const newStatus = this.determineInvoiceStatus(fields.state, fields.paymentState);
+			if (!newStatus) {
+				return { updated: false, message: `Estado en Odoo es '${fields.state}', no 'posted'` };
 			}
 
 			// Obtener repositorio de Invoice
@@ -135,30 +279,116 @@ export class OdooWebhookService {
 
 			// Buscar la factura en PostgreSQL
 			const invoice = await invoiceRepository.findOne({
-				where: { id: sapiraInvoiceId },
+				where: { id: fields.sapiraInvoiceId },
 			});
 
 			if (!invoice) {
-				this.logger.warn(`Factura con ID ${sapiraInvoiceId} no encontrada en PostgreSQL`);
-				return { updated: false, message: `Factura ${sapiraInvoiceId} no encontrada` };
+				this.logger.warn(`Factura con ID ${fields.sapiraInvoiceId} no encontrada en PostgreSQL`);
+
+				// Guardar log de intento fallido
+				await this.saveUpdateLog({
+					sapiraInvoiceId: fields.sapiraInvoiceId,
+					odooInvoiceId: fields.odooInvoiceId,
+					webhookPayload: payload,
+					wasUpdated: false,
+					skipReason: 'Factura no encontrada en Sapira',
+				});
+
+				return { updated: false, message: `Factura ${fields.sapiraInvoiceId} no encontrada` };
 			}
 
-			// Actualizar estado a 'Emitida'
-			await invoiceRepository.update(sapiraInvoiceId, {
-				status: 'Emitida',
-				odoo_invoice_id: odooInvoiceId,
-			});
-
-			this.logger.log(
-				`✓ Factura ${invoice.invoice_number || sapiraInvoiceId} actualizada a estado 'Emitida' ` +
-					`desde webhook de Odoo (Odoo ID: ${odooInvoiceId})`
-			);
-
-			return {
-				updated: true,
-				invoiceId: sapiraInvoiceId,
-				message: `Factura actualizada a 'Emitida'`,
+			// Preparar datos para actualizar
+			const updateData: Partial<Invoice> = {
+				status: newStatus,
+				odoo_invoice_id: fields.odooInvoiceId,
 			};
+
+			// Agregar campos opcionales si existen en el payload
+			if (fields.amountTax !== undefined) {
+				updateData.vat = fields.amountTax;
+			}
+			if (fields.amountTotal !== undefined) {
+				updateData.total_invoice_currency = fields.amountTotal;
+			}
+			if (fields.amountUntaxed !== undefined) {
+				updateData.amount_invoice_currency = fields.amountUntaxed;
+			}
+			if (fields.invoiceDate) {
+				updateData.issue_date = new Date(fields.invoiceDate);
+			}
+			if (fields.invoiceName) {
+				updateData.invoice_number = fields.invoiceName;
+			}
+
+			// Detectar cambios
+			const changeDetection = this.detectChanges(invoice, updateData);
+
+			// Decidir si actualizar
+			let shouldUpdate = false;
+			let skipReason: string | undefined;
+
+			if (newStatus === 'Pagada') {
+				// Siempre actualizar si cambia a Pagada
+				shouldUpdate = true;
+			} else if (invoice.status === 'Enviada' && newStatus === 'Enviada') {
+				// Solo actualizar si hay cambios en otros campos
+				if (changeDetection.hasChanges) {
+					shouldUpdate = true;
+				} else {
+					skipReason = 'Factura ya en estado Enviada sin cambios en campos';
+				}
+			} else {
+				// Primera vez que se envía o cambio de estado
+				shouldUpdate = true;
+			}
+
+			// Ejecutar actualización si es necesario
+			if (shouldUpdate) {
+				await invoiceRepository.update(fields.sapiraInvoiceId, updateData);
+
+				this.logger.log(
+					`✓ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} actualizada ` +
+						`a estado '${newStatus}' desde webhook de Odoo (Odoo ID: ${fields.odooInvoiceId}). ` +
+						`Campos actualizados: ${changeDetection.changedFields.join(', ')}`
+				);
+
+				// Guardar log de actualización exitosa
+				await this.saveUpdateLog({
+					sapiraInvoiceId: fields.sapiraInvoiceId,
+					odooInvoiceId: fields.odooInvoiceId,
+					holdingId: invoice.holding_id,
+					webhookPayload: payload,
+					wasUpdated: true,
+					fieldsChanged: changeDetection.changedFields,
+					oldValues: changeDetection.oldValues,
+					newValues: changeDetection.newValues,
+				});
+
+				return {
+					updated: true,
+					invoiceId: fields.sapiraInvoiceId,
+					message: `Factura actualizada a '${newStatus}'`,
+					changedFields: changeDetection.changedFields,
+				};
+			} else {
+				this.logger.log(`⊘ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} no actualizada. Razón: ${skipReason}`);
+
+				// Guardar log de actualización omitida
+				await this.saveUpdateLog({
+					sapiraInvoiceId: fields.sapiraInvoiceId,
+					odooInvoiceId: fields.odooInvoiceId,
+					holdingId: invoice.holding_id,
+					webhookPayload: payload,
+					wasUpdated: false,
+					skipReason,
+				});
+
+				return {
+					updated: false,
+					invoiceId: fields.sapiraInvoiceId,
+					message: skipReason,
+				};
+			}
 		} catch (error) {
 			this.logger.error(`Error procesando actualización de estado de factura:`, error);
 			return {
