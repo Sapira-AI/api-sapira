@@ -184,7 +184,21 @@ export class OdooWebhookService {
 		}
 
 		if (newData.issue_date !== undefined) {
-			const currentDate = currentInvoice.issue_date?.toISOString().split('T')[0];
+			// Normalizar fecha actual (puede ser Date o string)
+			let currentDate: string | undefined;
+			if (currentInvoice.issue_date) {
+				const issueDate = currentInvoice.issue_date as any;
+				if (typeof issueDate === 'string') {
+					currentDate = issueDate.split('T')[0];
+				} else if (issueDate instanceof Date) {
+					currentDate = issueDate.toISOString().split('T')[0];
+				} else {
+					// Si es otro tipo, intentar convertir a string
+					currentDate = String(issueDate).split('T')[0];
+				}
+			}
+
+			// Normalizar nueva fecha
 			const newDate = typeof newData.issue_date === 'string' ? newData.issue_date : newData.issue_date?.toISOString().split('T')[0];
 
 			if (currentDate !== newDate) {
@@ -255,22 +269,31 @@ export class OdooWebhookService {
 	 */
 	async processInvoiceStatusUpdate(payload: any): Promise<{ updated: boolean; invoiceId?: string; message?: string; changedFields?: string[] }> {
 		try {
+			this.logger.debug('=== INICIO processInvoiceStatusUpdate ===');
+			this.logger.debug(`Payload recibido: ${JSON.stringify(payload, null, 2)}`);
+
 			// Validar que sea una factura (account.move)
 			if (payload.model !== 'account.move' && payload._model !== 'account.move') {
+				this.logger.warn(`No es una factura de Odoo. Model: ${payload.model || payload._model}`);
 				return { updated: false, message: 'No es una factura de Odoo' };
 			}
 
 			// Extraer campos del payload
 			const fields = this.extractInvoiceFields(payload);
+			this.logger.debug(`Campos extraídos: ${JSON.stringify(fields, null, 2)}`);
 
 			// Validaciones básicas
 			if (!fields.sapiraInvoiceId) {
+				this.logger.warn('No tiene x_sapira_invoice_id');
 				return { updated: false, message: 'No tiene x_sapira_invoice_id' };
 			}
 
 			// Determinar el nuevo estado
 			const newStatus = this.determineInvoiceStatus(fields.state, fields.paymentState);
+			this.logger.debug(`Estado determinado: ${newStatus} (state: ${fields.state}, paymentState: ${fields.paymentState})`);
+
 			if (!newStatus) {
+				this.logger.warn(`Estado en Odoo es '${fields.state}', no 'posted'`);
 				return { updated: false, message: `Estado en Odoo es '${fields.state}', no 'posted'` };
 			}
 
@@ -278,6 +301,7 @@ export class OdooWebhookService {
 			const invoiceRepository = this.dataSource.getRepository(Invoice);
 
 			// Buscar la factura en PostgreSQL
+			this.logger.debug(`Buscando factura con ID: ${fields.sapiraInvoiceId}`);
 			const invoice = await invoiceRepository.findOne({
 				where: { id: fields.sapiraInvoiceId },
 			});
@@ -297,6 +321,8 @@ export class OdooWebhookService {
 				return { updated: false, message: `Factura ${fields.sapiraInvoiceId} no encontrada` };
 			}
 
+			this.logger.debug(`Factura encontrada: ${invoice.invoice_number || fields.sapiraInvoiceId}, Estado actual: ${invoice.status}`);
+
 			// Preparar datos para actualizar
 			const updateData: Partial<Invoice> = {
 				status: newStatus,
@@ -314,37 +340,51 @@ export class OdooWebhookService {
 				updateData.amount_invoice_currency = fields.amountUntaxed;
 			}
 			if (fields.invoiceDate) {
-				updateData.issue_date = new Date(fields.invoiceDate);
+				// Guardar la fecha como string para evitar problemas de conversión UTC
+				// PostgreSQL acepta strings en formato YYYY-MM-DD para campos de tipo date
+				updateData.issue_date = fields.invoiceDate as any;
 			}
 			if (fields.invoiceName) {
 				updateData.invoice_number = fields.invoiceName;
 			}
 
+			this.logger.debug(`Datos a actualizar: ${JSON.stringify(updateData, null, 2)}`);
+
 			// Detectar cambios
 			const changeDetection = this.detectChanges(invoice, updateData);
+			this.logger.debug(`Detección de cambios: hasChanges=${changeDetection.hasChanges}, campos=${changeDetection.changedFields.join(', ')}`);
 
 			// Decidir si actualizar
 			let shouldUpdate = false;
 			let skipReason: string | undefined;
 
+			this.logger.debug(`Evaluando si actualizar: Estado actual='${invoice.status}', Nuevo estado='${newStatus}'`);
+
 			if (newStatus === 'Pagada') {
 				// Siempre actualizar si cambia a Pagada
 				shouldUpdate = true;
+				this.logger.debug('Decisión: ACTUALIZAR (cambio a Pagada)');
 			} else if (invoice.status === 'Enviada' && newStatus === 'Enviada') {
 				// Solo actualizar si hay cambios en otros campos
 				if (changeDetection.hasChanges) {
 					shouldUpdate = true;
+					this.logger.debug('Decisión: ACTUALIZAR (ya Enviada pero hay cambios en campos)');
 				} else {
 					skipReason = 'Factura ya en estado Enviada sin cambios en campos';
+					this.logger.debug('Decisión: NO ACTUALIZAR (ya Enviada sin cambios)');
 				}
 			} else {
 				// Primera vez que se envía o cambio de estado
 				shouldUpdate = true;
+				this.logger.debug('Decisión: ACTUALIZAR (primera vez o cambio de estado)');
 			}
 
 			// Ejecutar actualización si es necesario
 			if (shouldUpdate) {
-				await invoiceRepository.update(fields.sapiraInvoiceId, updateData);
+				this.logger.debug(`Ejecutando actualización en PostgreSQL para factura ${fields.sapiraInvoiceId}`);
+
+				const updateResult = await invoiceRepository.update(fields.sapiraInvoiceId, updateData);
+				this.logger.debug(`Resultado de actualización: affected=${updateResult.affected}`);
 
 				this.logger.log(
 					`✓ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} actualizada ` +
@@ -353,6 +393,7 @@ export class OdooWebhookService {
 				);
 
 				// Guardar log de actualización exitosa
+				this.logger.debug('Guardando log de actualización exitosa en MongoDB');
 				await this.saveUpdateLog({
 					sapiraInvoiceId: fields.sapiraInvoiceId,
 					odooInvoiceId: fields.odooInvoiceId,
@@ -364,6 +405,7 @@ export class OdooWebhookService {
 					newValues: changeDetection.newValues,
 				});
 
+				this.logger.debug('=== FIN processInvoiceStatusUpdate (actualización exitosa) ===');
 				return {
 					updated: true,
 					invoiceId: fields.sapiraInvoiceId,
@@ -374,6 +416,7 @@ export class OdooWebhookService {
 				this.logger.log(`⊘ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} no actualizada. Razón: ${skipReason}`);
 
 				// Guardar log de actualización omitida
+				this.logger.debug('Guardando log de actualización omitida en MongoDB');
 				await this.saveUpdateLog({
 					sapiraInvoiceId: fields.sapiraInvoiceId,
 					odooInvoiceId: fields.odooInvoiceId,
@@ -383,6 +426,7 @@ export class OdooWebhookService {
 					skipReason,
 				});
 
+				this.logger.debug('=== FIN processInvoiceStatusUpdate (sin actualización) ===');
 				return {
 					updated: false,
 					invoiceId: fields.sapiraInvoiceId,
@@ -390,7 +434,9 @@ export class OdooWebhookService {
 				};
 			}
 		} catch (error) {
-			this.logger.error(`Error procesando actualización de estado de factura:`, error);
+			this.logger.error(`❌ Error procesando actualización de estado de factura:`, error);
+			this.logger.error(`Stack trace: ${error.stack}`);
+			this.logger.debug('=== FIN processInvoiceStatusUpdate (con error) ===');
 			return {
 				updated: false,
 				message: `Error: ${error.message}`,
