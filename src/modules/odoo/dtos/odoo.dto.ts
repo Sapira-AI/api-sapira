@@ -496,6 +496,17 @@ export class CreateDraftInvoiceDTO {
 	@Type(() => Number)
 	currency_id?: number;
 
+	@ApiProperty({
+		description: 'Modo de publicación automática',
+		enum: ['no', 'at_date', 'monthly', 'quarterly', 'yearly'],
+		default: 'no',
+		required: false,
+		example: 'at_date',
+	})
+	@IsOptional()
+	@IsString()
+	auto_post?: 'no' | 'at_date' | 'monthly' | 'quarterly' | 'yearly';
+
 	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
 	@IsArray()
 	@ValidateNested({ each: true })

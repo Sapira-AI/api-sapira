@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -39,5 +39,50 @@ export class InvoicesController {
 	@HttpCode(HttpStatus.OK)
 	async bulkUpdateCurrency(@Body() dto: BulkUpdateCurrencyDto): Promise<BulkUpdateCurrencyResponseDto> {
 		return this.invoicesService.bulkUpdateCurrency(dto);
+	}
+
+	@Patch(':id/auto-invoice')
+	@ApiOperation({
+		summary: 'Actualizar auto_invoice de una factura individual',
+		description:
+			'Actualiza el campo auto_invoice de una factura específica. Cuando auto_invoice es true, la factura se enviará a Odoo con auto_post configurado para emisión automática.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Campo auto_invoice actualizado exitosamente',
+	})
+	@ApiResponse({
+		status: HttpStatus.NOT_FOUND,
+		description: 'Factura no encontrada',
+	})
+	@HttpCode(HttpStatus.OK)
+	async updateAutoInvoice(@Param('id') invoiceId: string, @Body() body: { auto_invoice: boolean }): Promise<{ success: boolean; message: string }> {
+		await this.invoicesService.updateAutoInvoice(invoiceId, body.auto_invoice);
+		return {
+			success: true,
+			message: `auto_invoice actualizado a ${body.auto_invoice}`,
+		};
+	}
+
+	@Patch('contract/:contractId/bulk-auto-invoice')
+	@ApiOperation({
+		summary: 'Actualizar auto_invoice masivamente por contrato',
+		description: 'Actualiza el campo auto_invoice de todas las facturas "Por Emitir" que no han sido enviadas a Odoo de un contrato específico.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Facturas actualizadas exitosamente',
+	})
+	@HttpCode(HttpStatus.OK)
+	async bulkUpdateAutoInvoice(
+		@Param('contractId') contractId: string,
+		@Body() body: { auto_invoice: boolean }
+	): Promise<{ success: boolean; message: string; updated_count: number }> {
+		const count = await this.invoicesService.bulkUpdateAutoInvoiceByContract(contractId, body.auto_invoice);
+		return {
+			success: true,
+			message: `${count} facturas actualizadas`,
+			updated_count: count,
+		};
 	}
 }
