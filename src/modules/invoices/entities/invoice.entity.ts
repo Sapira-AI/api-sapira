@@ -65,6 +65,9 @@ export class Invoice {
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	sent_to_odoo_at?: Date;
 
+	@Column({ type: 'boolean', default: false, nullable: true })
+	auto_invoice?: boolean;
+
 	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
 	created_at: Date;
 }

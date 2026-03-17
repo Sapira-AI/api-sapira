@@ -306,6 +306,9 @@ export class InvoiceSchedulerService {
 					? String(invoice.due_date).split('T')[0]
 					: undefined;
 
+		// Determinar auto_post basado en el campo auto_invoice de la factura
+		const autoPost = invoice.auto_invoice ? 'at_date' : 'no';
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -317,6 +320,7 @@ export class InvoiceSchedulerService {
 			narration: invoice.notes || undefined,
 			x_sapira_invoice_id: invoice.id,
 			currency_id: currencyId,
+			auto_post: autoPost,
 			invoice_line_ids: invoiceLines,
 		};
 	}
