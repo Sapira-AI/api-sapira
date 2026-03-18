@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -206,5 +206,36 @@ export class InvoicesService {
 				requestedDate: issueDateStr,
 			},
 		};
+	}
+
+	async updateAutoInvoice(invoiceId: string, autoInvoice: boolean): Promise<void> {
+		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });
+
+		if (!invoice) {
+			throw new NotFoundException(`Factura con ID ${invoiceId} no encontrada`);
+		}
+
+		await this.invoiceRepository.update(invoiceId, {
+			auto_invoice: autoInvoice,
+		});
+
+		this.logger.log(`Factura ${invoiceId}: auto_invoice actualizado a ${autoInvoice}`);
+	}
+
+	async bulkUpdateAutoInvoiceByContract(contractId: string, autoInvoice: boolean): Promise<number> {
+		const result = await this.invoiceRepository
+			.createQueryBuilder()
+			.update(Invoice)
+			.set({ auto_invoice: autoInvoice })
+			.where('contract_id = :contractId', { contractId })
+			.andWhere('status = :status', { status: 'Por Emitir' })
+			.andWhere('sent_to_odoo_at IS NULL')
+			.execute();
+
+		const affectedCount = result.affected || 0;
+
+		this.logger.log(`Contrato ${contractId}: ${affectedCount} facturas actualizadas con auto_invoice = ${autoInvoice}`);
+
+		return affectedCount;
 	}
 }

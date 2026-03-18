@@ -30,6 +30,7 @@ export class OdooInvoicesService {
 			company_id,
 			journal_id,
 			x_sapira_invoice_id,
+			auto_post,
 			invoice_line_ids,
 		} = data;
 
@@ -80,6 +81,10 @@ export class OdooInvoicesService {
 
 			if (x_sapira_invoice_id) {
 				invoiceData.x_sapira_invoice_id = x_sapira_invoice_id;
+			}
+
+			if (auto_post) {
+				invoiceData.auto_post = auto_post;
 			}
 
 			const invoiceLines = invoice_line_ids.map((line) => {
