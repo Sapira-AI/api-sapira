@@ -1,8 +1,8 @@
 {
 	"success": true,
-	"message": "Análisis de tabla public.client_entities completado exitosamente",
+	"message": "Análisis de tabla public.stripe_customers_bigquery completado exitosamente",
 	"data": {
-		"table_name": "client_entities",
+		"table_name": "stripe_customers_bigquery",
 		"schema_name": "public",
 		"columns": [
 			{
@@ -15,79 +15,34 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "client_id",
-				"data_type": "uuid",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "legal_name",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "tax_id",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "country",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "legal_address",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "email",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "phone",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
 				"column_name": "holding_id",
 				"data_type": "uuid",
 				"is_nullable": "NO",
-				"column_default": "gen_random_uuid()",
+				"column_default": null,
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
 			},
 			{
-				"column_name": "economic_activity",
+				"column_name": "salesforce_account_id",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "stripe_customer_id",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "salesforce_account_country",
 				"data_type": "text",
 				"is_nullable": "YES",
 				"column_default": null,
@@ -96,7 +51,7 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "client_number",
+				"column_name": "client_name",
 				"data_type": "text",
 				"is_nullable": "YES",
 				"column_default": null,
@@ -105,65 +60,76 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "odoo_partner_id",
-				"data_type": "integer",
+				"column_name": "salesforce_account_segment",
+				"data_type": "text",
 				"is_nullable": "YES",
 				"column_default": null,
 				"character_maximum_length": null,
-				"numeric_precision": 32,
-				"numeric_scale": 0
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "salesforce_account_industry",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "updated_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
 			}
 		],
 		"indexes": [
 			{
-				"index_name": "client_entities_pkey",
-				"index_definition": "CREATE UNIQUE INDEX client_entities_pkey ON public.client_entities USING btree (id)",
-				"index_type": "btree",
-				"is_unique": "YES",
-				"index_size": "56 kB"
-			},
-			{
-				"index_name": "idx_client_entities_client_number",
-				"index_definition": "CREATE INDEX idx_client_entities_client_number ON public.client_entities USING btree (client_number)",
-				"index_type": "btree",
-				"is_unique": "NO",
-				"index_size": "56 kB"
-			},
-			{
-				"index_name": "idx_client_entities_holding_id",
-				"index_definition": "CREATE INDEX idx_client_entities_holding_id ON public.client_entities USING btree (holding_id)",
-				"index_type": "btree",
-				"is_unique": "NO",
-				"index_size": "16 kB"
-			},
-			{
-				"index_name": "idx_client_entities_odoo_partner_holding",
-				"index_definition": "CREATE UNIQUE INDEX idx_client_entities_odoo_partner_holding ON public.client_entities USING btree (odoo_partner_id, holding_id) WHERE (odoo_partner_id IS NOT NULL)",
-				"index_type": "btree",
-				"is_unique": "YES",
-				"index_size": "56 kB"
-			},
-			{
-				"index_name": "idx_client_entities_odoo_partner_id",
-				"index_definition": "CREATE INDEX idx_client_entities_odoo_partner_id ON public.client_entities USING btree (odoo_partner_id) WHERE (odoo_partner_id IS NOT NULL)",
+				"index_name": "idx_stripe_customers_bigquery_holding_id",
+				"index_definition": "CREATE INDEX idx_stripe_customers_bigquery_holding_id ON public.stripe_customers_bigquery USING btree (holding_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "40 kB"
+			},
+			{
+				"index_name": "idx_stripe_customers_bigquery_salesforce_account_id",
+				"index_definition": "CREATE INDEX idx_stripe_customers_bigquery_salesforce_account_id ON public.stripe_customers_bigquery USING btree (salesforce_account_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "192 kB"
+			},
+			{
+				"index_name": "idx_stripe_customers_bigquery_stripe_customer_id",
+				"index_definition": "CREATE INDEX idx_stripe_customers_bigquery_stripe_customer_id ON public.stripe_customers_bigquery USING btree (stripe_customer_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "200 kB"
+			},
+			{
+				"index_name": "stripe_customers_bigquery_pkey",
+				"index_definition": "CREATE UNIQUE INDEX stripe_customers_bigquery_pkey ON public.stripe_customers_bigquery USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "168 kB"
 			}
 		],
 		"foreign_keys": [
 			{
-				"constraint_name": "client_entities_client_id_fkey",
-				"table_name": "client_entities",
-				"column_name": "client_id",
-				"foreign_table_name": "clients",
-				"foreign_column_name": "id",
-				"update_rule": "NO ACTION",
-				"delete_rule": "CASCADE"
-			},
-			{
-				"constraint_name": "fk_client_entities_holding_id",
-				"table_name": "client_entities",
+				"constraint_name": "stripe_customers_bigquery_holding_id_fkey",
+				"table_name": "stripe_customers_bigquery",
 				"column_name": "holding_id",
 				"foreign_table_name": "company_holdings",
 				"foreign_column_name": "id",
@@ -173,30 +139,70 @@
 		],
 		"primary_unique_keys": [
 			{
-				"constraint_name": "client_entities_pkey",
+				"constraint_name": "stripe_customers_bigquery_pkey",
 				"constraint_type": "PRIMARY KEY",
 				"column_name": "id",
 				"is_deferrable": "NO",
 				"initially_deferred": "NO"
 			}
 		],
-		"triggers": [],
+		"triggers": [
+			{
+				"trigger_name": "set_stripe_customers_bigquery_updated_at",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "stripe_customers_bigquery",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION update_stripe_customers_bigquery_updated_at()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
 		"policies": [
 			{
 				"schemaname": "public",
-				"tablename": "client_entities",
-				"policyname": "holding_access_client_entities",
+				"tablename": "stripe_customers_bigquery",
+				"policyname": "Users can delete stripe customers in their holding",
 				"permissive": "PERMISSIVE",
 				"roles": "{public}",
-				"cmd": "ALL",
+				"cmd": "DELETE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "stripe_customers_bigquery",
+				"policyname": "Users can insert stripe customers for their holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "stripe_customers_bigquery",
+				"policyname": "Users can update stripe customers in their holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id = get_current_user_holding_id())",
+				"with_check": "(holding_id = get_current_user_holding_id())"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "stripe_customers_bigquery",
+				"policyname": "Users can view stripe customers in their holding",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
 				"qual": "(holding_id = get_current_user_holding_id())",
 				"with_check": null
 			}
 		],
 		"size_info": {
-			"total_size": "504 kB",
-			"table_size": "240 kB",
-			"indexes_size": "264 kB"
+			"total_size": "1224 kB",
+			"table_size": "584 kB",
+			"indexes_size": "640 kB"
 		},
 		"permissions": [
 			{
@@ -340,6 +346,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-20T07:03:20.974Z"
+		"analysis_timestamp": "2026-03-20T07:01:08.159Z"
 	}
 }

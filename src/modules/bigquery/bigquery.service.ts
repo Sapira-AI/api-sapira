@@ -1,8 +1,13 @@
 import { BigQuery } from '@google-cloud/bigquery';
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/stripe-customer-bigquery.entity';
 
 import { QueryDto } from './dtos/query.dto';
+import { SyncStripeCustomersResponseDto } from './dtos/sync-stripe-customers.dto';
 import { BigQueryResult } from './interfaces/bigquery-result.interface';
 import { ProjectInfo } from './interfaces/project-info.interface';
 
@@ -13,7 +18,11 @@ export class BigQueryService {
 	private projectId: string | null = null;
 	private clientEmail: string | null = null;
 
-	constructor(private readonly configService: ConfigService) {
+	constructor(
+		private readonly configService: ConfigService,
+		@InjectRepository(StripeCustomerBigQuery)
+		private readonly stripeCustomerRepository: Repository<StripeCustomerBigQuery>
+	) {
 		this.initializeBigQuery();
 	}
 
@@ -143,5 +152,67 @@ export class BigQueryService {
 			clientEmail: this.clientEmail || 'No configurado',
 			isConfigured: !!this.bigQueryClient,
 		};
+	}
+
+	async syncStripeCustomers(holdingId: string): Promise<SyncStripeCustomersResponseDto> {
+		if (!this.bigQueryClient) {
+			throw new BadRequestException('BigQuery no está configurado. Contacte al administrador.');
+		}
+
+		try {
+			this.logger.log(`Iniciando sincronización de clientes Stripe para holding: ${holdingId}`);
+
+			const query = 'SELECT * FROM `datawarehouse-a2e2.finance.sapira_stripe`';
+
+			const [rows] = await this.bigQueryClient.query({
+				query,
+				location: 'US',
+			});
+
+			this.logger.log(`✓ Obtenidos ${rows.length} registros desde BigQuery`);
+
+			let inserted = 0;
+			let updated = 0;
+
+			for (const row of rows) {
+				const existingRecord = await this.stripeCustomerRepository.findOne({
+					where: {
+						holding_id: holdingId,
+						salesforce_account_id: row.salesforce_account_id,
+						stripe_customer_id: row.stripe_customer_id,
+					},
+				});
+
+				const customerData: Partial<StripeCustomerBigQuery> = {
+					holding_id: holdingId,
+					salesforce_account_id: row.salesforce_account_id,
+					stripe_customer_id: row.stripe_customer_id,
+					salesforce_account_country: row.salesforce_account_country,
+					client_name: row.client_name,
+					salesforce_account_segment: row.salesforce_account_segment,
+					salesforce_account_industry: row.salesforce_account_industry,
+				};
+
+				if (existingRecord) {
+					await this.stripeCustomerRepository.update(existingRecord.id, customerData);
+					updated++;
+				} else {
+					await this.stripeCustomerRepository.save(customerData);
+					inserted++;
+				}
+			}
+
+			this.logger.log(`✓ Sincronización completada: ${inserted} insertados, ${updated} actualizados`);
+
+			return {
+				totalProcessed: rows.length,
+				inserted,
+				updated,
+				message: 'Sincronización completada exitosamente',
+			};
+		} catch (error) {
+			this.logger.error('Error sincronizando clientes Stripe:', error);
+			throw new InternalServerErrorException(`Error al sincronizar clientes Stripe: ${error.message}`);
+		}
 	}
 }

@@ -472,6 +472,33 @@
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
+			},
+			{
+				"column_name": "odoo_invoice_id",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			},
+			{
+				"column_name": "sent_to_odoo_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "subscription_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
 			}
 		],
 		"indexes": [
@@ -480,7 +507,7 @@
 				"index_definition": "CREATE INDEX idx_invoices_active_contract_period ON public.invoices USING btree (contract_id, scheduled_at, is_active) WHERE (is_active = true)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "40 kB"
+				"index_size": "112 kB"
 			},
 			{
 				"index_name": "idx_invoices_auto_invoice",
@@ -494,7 +521,7 @@
 				"index_definition": "CREATE INDEX idx_invoices_consolidated_into ON public.invoices USING btree (consolidated_into_invoice_id) WHERE (consolidated_into_invoice_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "16 kB"
+				"index_size": "8192 bytes"
 			},
 			{
 				"index_name": "idx_invoices_custom_fields",
@@ -508,18 +535,25 @@
 				"index_definition": "CREATE INDEX idx_invoices_group_id ON public.invoices USING btree (invoice_group_id) WHERE (invoice_group_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "40 kB"
+				"index_size": "88 kB"
 			},
 			{
 				"index_name": "idx_invoices_holding_id",
 				"index_definition": "CREATE INDEX idx_invoices_holding_id ON public.invoices USING btree (holding_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "16 kB"
+				"index_size": "48 kB"
 			},
 			{
 				"index_name": "idx_invoices_invoice_type",
 				"index_definition": "CREATE INDEX idx_invoices_invoice_type ON public.invoices USING btree (invoice_type)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "40 kB"
+			},
+			{
+				"index_name": "idx_invoices_odoo_invoice_id",
+				"index_definition": "CREATE INDEX idx_invoices_odoo_invoice_id ON public.invoices USING btree (odoo_invoice_id) WHERE (odoo_invoice_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "16 kB"
@@ -536,7 +570,7 @@
 				"index_definition": "CREATE INDEX idx_invoices_related_invoice_id ON public.invoices USING btree (related_invoice_id) WHERE (related_invoice_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "16 kB"
+				"index_size": "8192 bytes"
 			},
 			{
 				"index_name": "idx_invoices_requires_references",
@@ -553,11 +587,18 @@
 				"index_size": "8192 bytes"
 			},
 			{
+				"index_name": "idx_invoices_subscription_id",
+				"index_definition": "CREATE INDEX idx_invoices_subscription_id ON public.invoices USING btree (subscription_id) WHERE (subscription_id IS NOT NULL)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
 				"index_name": "invoices_pkey",
 				"index_definition": "CREATE UNIQUE INDEX invoices_pkey ON public.invoices USING btree (id)",
 				"index_type": "btree",
 				"is_unique": "YES",
-				"index_size": "40 kB"
+				"index_size": "88 kB"
 			}
 		],
 		"foreign_keys": [
@@ -650,6 +691,15 @@
 				"foreign_column_name": "id",
 				"update_rule": "NO ACTION",
 				"delete_rule": "SET NULL"
+			},
+			{
+				"constraint_name": "invoices_subscription_id_fkey",
+				"table_name": "invoices",
+				"column_name": "subscription_id",
+				"foreign_table_name": "subscriptions",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
 			}
 		],
 		"primary_unique_keys": [
@@ -826,536 +876,10 @@
 				"with_check": null
 			}
 		],
-		"statistics": [
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "amount_contract_currency",
-				"n_distinct": -0.117264,
-				"most_common_vals": "{5000.000000,20000.000000,3730000.000000,9.900000,13.244000,95.920000,116.700000,200.000000,500.000000,800.000000,833.333333,1000.000000,1554.300000,3500.000000,-416.666667,1500.000000,-833.333333,135.200000,900.000000,56.760000,4000.000000,4200.000000,0.000000,810.900000,3900.000000,2750.000000}",
-				"most_common_freqs": [
-					0.0423453, 0.0423453, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0390879, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.0260586, 0.019544, 0.019544, 0.019544, 0.0162866,
-					0.0130293, 0.0130293, 0.00651466
-				],
-				"histogram_bounds": "{55.260000,55.263840,5778.000000,5940.000000,5967.000000,7292.000000,7940.000000,7967.000000,8509.000000,10021.000000}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "amount_invoice_currency",
-				"n_distinct": -0.143322,
-				"most_common_vals": "{5000,20000,9.8999999999999983,13.244,95.9200000000000000,116.7,135.2,200,500,800,833.3333333333333333,1000.0000000000000000,1554.3,3500,3730000,-416.6666666666666667,1500,-833.3333333333333333,900,4000,4200,0.0000000000000000,810.9,3900,11448,2750}",
-				"most_common_freqs": [
-					0.0423453, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.019544, 0.019544, 0.0162866, 0.0130293,
-					0.0130293, 0.00977199, 0.00651466
-				],
-				"histogram_bounds": "{135.20000000000002,2161156.00,2169666.00,2192128,2203235.00,2212545.00,2222252.00,2223970.00,2226724.00,5395708,5482571.00,5583600,5833220.00,7031529.00,7471144.00,7504675.00,7962211.00,9778693.00}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "amount_system_currency",
-				"n_distinct": -0.114007,
-				"most_common_vals": "{1000.00,3730000,13.244,41.67,95.920000,200.000000,250.00,500.000000,1554.300000,3500.000000,4728.68,-416.666667,9.8999999999999983,800,1500.000000,-41.67,900.000000,3.27,1.37,4000.000000,4200.000000,3900.000000,0.24,19.74,2750.000000}",
-				"most_common_freqs": [
-					0.0814332, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0358306,
-					0.0325733, 0.0325733, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.0228013, 0.019544, 0.019544, 0.019544, 0.0130293, 0.00651466,
-					0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{1.34,2239.29,5778.000000,5940.000000,5967.000000,7292.000000,7940.000000,7967.000000,8509.000000,10021.000000}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "attachments",
-				"n_distinct": 1,
-				"most_common_vals": "{[]}",
-				"most_common_freqs": [1],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "auto_invoice",
-				"n_distinct": 2,
-				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.840391, 0.159609],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "client_entity_id",
-				"n_distinct": 16,
-				"most_common_vals": "{6cb9a167-a95a-4b8d-b517-61ed7679b66a,b05d1bd5-7613-42f0-b333-46b028c3b6c2,c940120d-e636-4d1f-bd32-17fc23851e79,019ad0dc-ec6a-4870-9333-b3d12f825183,19448d51-23f8-426c-befe-f64cda4b0f29,1a1a7437-c782-4108-b54d-9a8e9580b291,590e7401-eec0-471c-a29f-79319f6b0abc,6ac66bc5-aa26-4c69-99b5-f8b71b185310,6c3d5e12-42f1-422f-8e08-8974ea05e4a1,8553f485-6acc-47d9-b689-8fce75ca4f3a,397a6c69-6188-4d42-83b4-e194f09d80fd,66356aa8-07ae-48c0-9815-41189187c601,b661b5cf-8036-48c9-bc00-5d1d71d993bd,6a824563-c356-4f2d-ba61-05ddcab8d30a,13d457b4-3e84-49f7-9d24-c8c3bf15edbb}",
-				"most_common_freqs": [
-					0.188925, 0.169381, 0.120521, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0260586, 0.0228013,
-					0.0228013, 0.0130293, 0.00651466
-				],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "client_id",
-				"n_distinct": 11,
-				"most_common_vals": "{d9b69de7-de46-458b-9fbe-b929a590b454,7bc2200d-e558-4339-9682-71ae06912481,c8c7d008-9a19-4079-8143-754da3a02611,2a1a2950-dbb5-4484-8822-e6a07c665aad,7f138f63-fe05-48e4-9910-446f5ffe7d01,30d332aa-eaec-4def-871a-300de7c80c8b,5a731354-7cd5-4cc9-bba6-98ac9f94c4d8,bb239073-1689-449a-9459-5089cca30b43,491b68c4-5bcb-4a0a-bcdd-cddc2a339780,d65eb3d6-a373-428a-9761-56982fe0c6d9,1eafa270-b3a4-44df-9130-00ad8218afe1}",
-				"most_common_freqs": [
-					0.397394, 0.241042, 0.0781759, 0.0456026, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0228013, 0.0228013, 0.00977199
-				],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "client_tax_id",
-				"n_distinct": 12,
-				"most_common_vals": "{77.123.456-7,WAYMX123456789,77123456-1,1122334455,218275890010,57414102616,B12345678,MEX123456T89,SKYMX123456789,76023713-2,76357700-7}",
-				"most_common_freqs": [
-					0.188925, 0.169381, 0.0814332, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0260586, 0.0228013
-				],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "company_id",
-				"n_distinct": 9,
-				"most_common_vals": "{e836870e-e594-4837-91fa-aa4d48ad4766,602b41a0-0970-4b0c-8f8c-748c6b89f54d,bb0caa69-162e-4b9e-8e54-9aff347abf1f,e95adedd-237d-44b2-bae5-be1f88ffa340,6d959e67-8b16-4a36-a4a8-f2a2214cbdb3,a80574f5-9c6f-42f7-afca-11cee02a126e,c6c147ac-4d48-4230-9da4-1626e257b7a6,6cef394d-f14d-40d7-9188-dbbf4917f6a4,110bb57b-1be0-4a20-a1cb-18dd822794d7}",
-				"most_common_freqs": [0.270358, 0.250814, 0.237785, 0.0912052, 0.0390879, 0.0390879, 0.0390879, 0.0130293, 0.00651466],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "consolidated_into_invoice_id",
-				"n_distinct": 6,
-				"most_common_vals": "{04287d7a-f603-49bd-bb79-81e655e6e60d,12172e88-0f10-4d46-8082-0a74c6e62a31,b94c4391-c23f-466b-8b06-b13e909d73c0,d53cdcfe-98a9-426c-966e-b69213e5f53d,d54e51bf-e0f8-43b5-bb6e-5fcbfeb97d2f,d6402f90-255a-4609-a268-98dac5751f77}",
-				"most_common_freqs": [0.00977199, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "contract_currency",
-				"n_distinct": 5,
-				"most_common_vals": "{USD,CLF,MXN,COP,PEN}",
-				"most_common_freqs": [0.410423, 0.345277, 0.169381, 0.0423453, 0.0228013],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "contract_id",
-				"n_distinct": 23,
-				"most_common_vals": "{29380864-71f8-42c0-80b4-3d3d066a96a6,c123c0fd-1d00-42ee-b32f-27efa404600d,2645d4b1-4e25-41ad-a2c0-8265c358c4a2,77919f59-d49b-439e-b5d6-ebf12a2dd22b,f3855753-ad5c-42b6-acdf-c7a7c4c7af7d,05dd6701-6265-4181-a46e-b224f08b43bd,26780efb-1927-4ea4-976c-0957bfd3d94d,37af6160-dd3d-4271-9129-d76d89af3cb9,3c53c616-3789-4006-80ce-5061f1321c95,426c6c4e-3fc9-4934-8084-e238a43e115a,6f211049-52e2-4331-92a1-f03885da244f,742086bb-f3ae-4822-9abf-a607c68fdcd8,a4063cb8-6599-41ea-800b-0d3a262e07c5,a634f958-d95e-4331-80a3-5e3c27903dce,abb0ce60-af5a-4db8-900a-6a5bef347a3c,c4ba252a-3270-4f20-9c62-770708826c5c,5e1da7e9-ad0c-4f11-9747-342a662624e5,e67d12ae-8f9d-4746-9d5d-6c193997c41b,4e32e416-9189-4f9d-b701-2aedf968973a,4128c202-5619-4502-8c71-f5b2ee5b2a7f,5f6bf904-7b07-4518-9669-b30255f877ec}",
-				"most_common_freqs": [
-					0.188925, 0.169381, 0.0423453, 0.0423453, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0228013, 0.0228013, 0.0130293, 0.00977199, 0.00977199
-				],
-				"histogram_bounds": "{02d80009-6789-425e-85dc-31fb80148dae,b8940149-4a75-42c1-9fec-3f77236e82ed}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "created_at",
-				"n_distinct": -0.397394,
-				"most_common_vals": "{\"2025-11-03 14:19:45.43801\",\"2026-02-05 13:15:02.224963\",\"2025-10-15 18:14:09.79321\",\"2025-10-15 20:00:11.177482\",\"2025-12-01 20:08:20.185864\",\"2025-12-01 20:28:27.078779\",\"2025-12-01 20:54:11.920152\",\"2025-12-01 22:24:50.061509\",\"2025-12-02 18:21:18.727535\",\"2026-01-12 15:34:47.475918\",\"2026-01-12 15:40:10.826262\",\"2026-01-28 14:03:15.842489\",\"2026-01-28 15:45:43.26412\",\"2026-01-28 16:25:06.119592\",\"2026-01-28 16:48:19.554206\",\"2025-12-02 16:45:22.385437\",\"2025-12-02 18:50:45.284714\"}",
-				"most_common_freqs": [
-					0.0456026, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0325733, 0.029316
-				],
-				"histogram_bounds": "{\"2025-11-28 22:48:48.397474\",\"2025-11-28 23:32:53.675563\",\"2025-11-28 23:34:25.084916\",\"2025-11-29 13:00:09.722192\",\"2025-12-05 16:45:25.330008\",\"2025-12-05 16:53:04.74023\",\"2025-12-05 19:03:50.763795\",\"2025-12-14 21:51:53.414451\",\"2025-12-14 22:36:47.609135\",\"2025-12-14 22:47:59.482129\",\"2025-12-14 22:48:13.04822\",\"2025-12-14 22:48:25.521126\",\"2025-12-14 22:48:36.125847\",\"2025-12-17 12:55:26.380562\",\"2025-12-18 00:21:21.209462\",\"2025-12-18 00:23:13.415725\",\"2025-12-18 00:23:13.674305\",\"2025-12-18 00:23:13.913336\",\"2025-12-18 00:23:14.195432\",\"2025-12-18 00:23:14.423822\",\"2025-12-18 00:23:14.699922\",\"2025-12-18 00:23:14.934581\",\"2025-12-30 14:31:43.388236\",\"2026-01-06 10:36:47.346256\",\"2026-01-06 10:36:47.515921\",\"2026-01-06 10:36:47.898449\",\"2026-01-06 10:36:48.153266\",\"2026-01-06 10:36:48.399708\",\"2026-01-06 10:36:48.541065\",\"2026-01-06 10:36:48.689355\",\"2026-01-06 10:36:48.840652\",\"2026-01-06 10:36:48.985152\",\"2026-01-06 10:36:49.129402\",\"2026-01-06 10:36:49.270986\",\"2026-01-06 10:39:17.600654\",\"2026-01-06 10:39:17.739923\",\"2026-01-06 10:39:17.953812\",\"2026-01-06 10:39:18.169596\",\"2026-01-06 10:39:18.294011\",\"2026-01-06 10:39:18.422451\",\"2026-01-06 10:39:18.555266\",\"2026-01-06 10:39:18.673851\",\"2026-01-06 10:39:18.882475\",\"2026-01-06 10:39:19.00589\",\"2026-01-06 10:39:19.130302\",\"2026-01-06 10:39:19.257709\",\"2026-01-12 14:50:27.591899\",\"2026-01-12 14:50:27.734046\",\"2026-01-12 14:50:27.90722\",\"2026-01-12 14:50:28.044671\",\"2026-01-12 14:50:28.33188\",\"2026-01-12 14:50:28.473835\",\"2026-01-12 14:50:28.603376\",\"2026-01-12 14:50:28.728302\",\"2026-01-12 14:50:28.847255\",\"2026-01-12 14:50:28.962396\",\"2026-01-12 14:50:29.071262\",\"2026-01-12 15:48:46.709879\",\"2026-01-12 15:48:46.863766\",\"2026-01-12 15:48:47.012689\",\"2026-01-12 15:48:47.166056\",\"2026-01-12 15:48:47.293813\",\"2026-01-12 15:48:47.42186\",\"2026-01-12 15:48:47.541696\",\"2026-01-12 15:48:47.652658\",\"2026-01-12 15:48:47.781394\",\"2026-01-12 15:48:47.907287\",\"2026-01-12 15:48:48.010399\",\"2026-01-12 15:48:48.117394\",\"2026-01-12 15:54:46.278608\",\"2026-01-12 15:54:46.659935\",\"2026-01-12 15:54:46.983574\",\"2026-01-12 15:54:47.302281\",\"2026-01-12 15:54:47.635691\",\"2026-01-12 15:54:47.988898\",\"2026-01-12 15:54:48.670465\",\"2026-01-12 15:54:49.008056\",\"2026-01-12 15:54:49.410855\",\"2026-01-12 15:54:49.718526\",\"2026-01-12 15:54:50.018944\",\"2026-01-19 18:13:14.444883\",\"2026-01-19 18:37:22.383476\",\"2026-01-19 18:40:24.060432\",\"2026-01-19 18:41:06.421005\",\"2026-01-19 18:41:24.763656\",\"2026-01-19 18:41:41.291379\",\"2026-03-03 11:18:10.373269\",\"2026-03-03 11:18:16.484739\",\"2026-03-03 11:18:19.503925\",\"2026-03-03 11:18:25.112481\",\"2026-03-03 12:37:12.756525\",\"2026-03-03 12:37:17.438499\",\"2026-03-03 12:37:21.048714\",\"2026-03-03 12:37:24.399313\",\"2026-03-03 12:37:27.843537\",\"2026-03-03 12:37:31.743263\",\"2026-03-03 12:37:35.562612\",\"2026-03-03 12:37:39.456307\",\"2026-03-03 12:37:41.812699\",\"2026-03-03 12:37:44.352893\",\"2026-03-03 12:37:49.219338\"}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "custom_fields",
-				"n_distinct": 1,
-				"most_common_vals": "{\"{}\"}",
-				"most_common_freqs": [1],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "document_type",
-				"n_distinct": 2,
-				"most_common_vals": "{FACTURA,NC}",
-				"most_common_freqs": [0.967427, 0.029316],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "due_date",
-				"n_distinct": -0.270358,
-				"most_common_vals": "{2026-07-01,2026-05-01,2026-10-01,2026-02-01,2026-06-01,2026-08-01,2026-09-01,2026-03-01,2026-04-01,2026-01-01,2025-12-01,2026-05-31,2026-12-01,2025-06-26,2026-01-31,2026-03-03,2026-03-31,2026-07-31,2026-08-31,2026-11-01,2026-10-31,2025-11-01,2025-12-31,2025-08-01,2025-10-01,2026-12-31,2025-06-22,2025-08-07,2025-09-01,2025-10-30,2025-12-02,2027-01-01}",
-				"most_common_freqs": [
-					0.0651466, 0.0618892, 0.0553746, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0358306, 0.0358306, 0.029316, 0.0260586, 0.0260586,
-					0.0260586, 0.0228013, 0.0228013, 0.0228013, 0.0228013, 0.0228013, 0.0228013, 0.0228013, 0.019544, 0.0162866, 0.0162866, 0.0130293,
-					0.0130293, 0.00977199, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{2025-02-17,2025-03-01,2025-03-03,2025-03-17,2025-03-31,2025-04-03,2025-04-10,2025-04-11,2025-04-17,2025-04-28,2025-05-04,2025-05-23,2025-05-29,2025-06-01,2025-06-07,2025-06-12,2025-06-16,2025-06-28,2025-07-02,2025-07-15,2025-07-17,2025-07-29,2025-07-31,2025-08-14,2025-08-16,2025-08-20,2025-08-28,2025-08-29,2025-08-31,2025-09-10,2025-09-11,2025-09-16,2025-09-26,2025-09-28,2025-10-17,2025-10-29,2025-10-31,2025-11-16,2025-11-28,2025-11-30,2025-12-17,2025-12-29,2025-12-30,2026-01-14,2026-01-16,2026-01-28,2026-01-30,2026-02-28,2026-03-02,2026-03-30,2026-04-30}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "export_type",
-				"n_distinct": 2,
-				"most_common_vals": "{0,1}",
-				"most_common_freqs": [0.641694, 0.358306],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "fiscal_regime",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "folio_fiscal_prev",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "fx_contract_to_invoice",
-				"n_distinct": 17,
-				"most_common_vals": "{1.0}",
-				"most_common_freqs": [0.76873],
-				"histogram_bounds": "{935.74,940,940.95,941.97,948.87,964.28,975.82,977.58,38452.00,38814.00,38978.00,39149.33,39179.33,39228.00,39260.00,39666.586315263194}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "fx_contract_to_system",
-				"n_distinct": 5,
-				"most_common_vals": "{1.0,0.0242,40.52,0.05,3.752}",
-				"most_common_freqs": [0.420195, 0.0651466, 0.0586319, 0.0358306, 0.00977199],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "holding_id",
-				"n_distinct": 2,
-				"most_common_vals": "{05583c6e-9364-4672-a610-0744324e44b4,5652e95e-bb99-48f5-aa1c-13c8c2638fc6}",
-				"most_common_freqs": [0.899023, 0.100977],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "id",
-				"n_distinct": -1,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": "{0010feb5-d8e1-42dd-8652-da3725a76125,0198427f-6414-452a-9364-1348c3f7c978,039161e6-169b-4855-b58d-201a8a634971,04469d3f-12c5-4414-82b5-68e71ec8347c,0579d35d-7166-4f5e-bda4-063d801aded5,06835325-9c7c-439f-9e7f-748bed1f772d,07de1484-71cd-4f46-8c49-b0c998512dcc,0a6d50f3-c0c3-40d5-895a-e8b0e43913c9,100ecafc-4dca-4153-af19-20ab580d4c19,12172e88-0f10-4d46-8082-0a74c6e62a31,14b99e88-768a-45a9-a457-072158906d30,1ada98b9-9753-49b8-b53f-98086cee6b46,1d25a2dd-188f-483b-a462-8f1876da1f31,1f70ace6-8652-4184-88f2-18273632bfa6,219604e2-3c56-415b-89d2-792fcda9d107,22c4d56e-7588-4845-87c7-97bb902705fc,269bdefc-4e72-467c-b0c8-e4e20b8492e5,2b656afd-d395-411c-8a44-c58c4905dae0,2c93bc32-9235-4da1-b403-faebb16276a5,2fbff9a9-f3e6-4ad0-89e5-da6e40c5e5e8,32512668-fc04-4ab2-9200-b6c7aa07bd10,367a5dce-72da-448c-a0c7-c69c62994e30,376b4512-e8bd-4842-93ef-8d28afdd0243,382d60ff-5298-4204-8e43-721d734d39f6,3a56fbd0-889f-4dac-af07-ae957f6a86f1,3b06bd97-b68a-4998-b6d9-7d2e93b71e19,3dfb0c57-631b-4fdd-b826-f9c76c6d6380,40c471fa-6101-4f4e-b5a6-2bc500d0db77,41b00fc4-1e0d-4f43-8a95-f2cf8aef5efd,431cf93f-ea2f-487d-9cf9-a5ee376c762e,47b29374-99f6-468b-a214-251f38f7e088,4982fc1b-36b2-4041-95b4-6302aaf6bb7e,4c1a3157-7091-44a2-bd10-d4c7762f9e59,4eb3c6e6-1108-49be-8be2-7b84044a554f,51eb8d7f-9463-4abe-b21e-f2923683f9d2,5461f026-5a63-42f4-a966-1abb54f738c8,555a7a70-2c1c-42a2-a93b-63c97f5b567b,5aebc474-a31a-4198-9a2d-8f99a5259f4f,5c4ef8fc-8dc9-48e6-b715-719fd51c4597,5ed83cd7-10d1-4d48-8771-78dee71601ed,639856e1-c25e-4350-9d29-a188c07fab10,645df932-e7ff-4a40-93e3-a81576c51457,66617f31-18dc-44d2-8ca7-2b76146593e4,68492b86-ee9e-42db-840b-fc0613c0975d,69b8efd0-4c24-4cbb-83ab-ea0572ae7c7c,6c9ceaeb-5040-4369-aa18-2f844d396ffe,6dd57967-ac3c-4523-a611-8ec27b01c232,704ef7fa-e922-4279-90eb-f3b47ae2e992,74c5826e-90d0-4920-8a4d-7d5d754e2526,769924da-0ad3-4b3e-b9d4-00d1ab899d5e,77885219-1e65-4477-8125-3a45f4ca6561,7cae8967-d877-47e3-b343-e8fa76fec38a,7ee1788e-0ef3-410b-9d45-94e33a30c9a9,83831a00-ebe4-4c75-b642-acddb587d0db,852d3258-61ef-4f8d-83fc-bb4b47fcfce7,8ade80ff-4060-4794-888f-e87d5fdaaefb,8d6f966b-64d9-4c54-8a96-5e6f8763881e,8f59661b-6f08-4a08-a2a4-7640200363bd,91fd41c1-a2f3-45ac-92b2-ee32c6f4607e,9301e3c9-9107-4096-9167-a81e633f5a26,94900e3f-dfde-410b-9616-d7e3e309af35,98c5bec0-e42a-4a07-aa89-615e719bcc4f,9ad3ea52-2b38-4d55-b7b0-c14c2b3e73de,9ce09cad-a09e-444c-80c9-8190c466b99b,9f3c5d17-20d0-4049-a668-5d31a40ef165,a2cb0a1e-9569-4ab4-ba5e-a1bd77a50396,a7244e9f-39b0-44e9-84b3-db7a7c4816d8,ac987fe9-ca6a-4c2f-85b5-2d7f3929532f,af10dd39-932f-4f09-b293-48395ae74984,b2a8c98c-1d6e-4b10-b05e-7c8b5581c977,b3829c44-277c-4a02-84f1-414c0691584a,b447122c-b573-48d5-8cc2-1923de964249,b85fc264-c7f5-4ec8-98f8-8bcd5bcd9c36,b9851a35-8c4c-46a5-953f-69c98380fa6e,bd42748a-fca8-44d4-87e4-7ccee4eb70db,c04d8551-2ae5-4775-a5a8-db7e904ece01,c1fd1dc7-59f8-448b-9986-4c1d1b175428,c6752f0d-2e7a-4e27-95cb-4820e44be832,c80173c8-f478-44ff-8810-2fc6259e7c4e,cb6925d1-37c0-44af-9ec6-133841de0106,cfc2749d-869b-4065-ab4a-bfd48ff60e3f,d0f8b872-88ad-4c1b-93b3-18c95d715390,d4a07374-ca2e-48ea-936a-f681b8b06d3c,d54e51bf-e0f8-43b5-bb6e-5fcbfeb97d2f,d6a1bac2-b521-4668-943d-76066a180832,d9e62a93-96fd-4c8f-a9a6-c2830110e660,dedb9e43-c289-49d0-82bc-87b8493d3ce5,e04b48f3-5c89-43dd-87ad-561e6d843011,e2123c2c-8935-41a5-8ece-88e2e31adefd,e3afc33d-3fce-4686-98a3-08868c4827c2,e618c02d-4108-4d9d-b50d-0474b23c9983,ea069098-e01c-474f-8278-875e761c8f23,ed0a0736-e414-40ca-9709-c79e292d1665,edeca15b-6177-4e5e-ac25-515d8768e116,f1367c3f-6e11-43f1-bfde-3c99359ea606,f26b3bfb-72d8-4e26-ae51-913db7302a4d,f3b18d4e-cee2-44c9-bd67-31972a0b157f,f8ee12ed-72e6-4eb9-b738-019a4f745d56,fac90e7b-cddc-4454-b72c-84f549be2cb3,fd07d06e-dee6-4f23-99eb-9fd85e9d6926,fff36027-69fb-485c-aed5-4c232dc80415}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "invoice_currency",
-				"n_distinct": 6,
-				"most_common_vals": "{USD,CLF,MXN,CLP,COP,PEN}",
-				"most_common_freqs": [0.387622, 0.28013, 0.169381, 0.0912052, 0.0390879, 0.0228013],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "invoice_group_id",
-				"n_distinct": -0.931596,
-				"most_common_vals": "{5aa95b56-80f2-4cdb-9a6a-b325520cde00,0010feb5-d8e1-42dd-8652-da3725a76125,039161e6-169b-4855-b58d-201a8a634971,13e8d8dc-f0c5-4c65-b898-69e36da4a541,26a0d9f9-b9b1-452e-acb7-c7bf3c4e8e28,32512668-fc04-4ab2-9200-b6c7aa07bd10,367a5dce-72da-448c-a0c7-c69c62994e30,479ddc18-c843-4958-870e-c9cc5832b0d0,4ea100bf-4ecb-4b92-8ce6-9d992fde8719,4eb3c6e6-1108-49be-8be2-7b84044a554f,52aec59e-2296-4cd1-a560-389ba1b82d1f,676b23dd-ae36-433b-a73f-e4ad9effc5e1,83831a00-ebe4-4c75-b642-acddb587d0db,8c2a4530-f4c4-43ea-95ca-ff062cab1ef9,9913c33c-f2d3-4fcc-8e37-52d4b9a20026,aa5c9ed4-1fdc-4452-8429-c426c1c73ce7,c04d8551-2ae5-4775-a5a8-db7e904ece01,c6752f0d-2e7a-4e27-95cb-4820e44be832,fac90e7b-cddc-4454-b72c-84f549be2cb3}",
-				"most_common_freqs": [
-					0.0130293, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466,
-					0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{009121f0-e184-4be8-9dae-1d2b305d4a7f,0198427f-6414-452a-9364-1348c3f7c978,04469d3f-12c5-4414-82b5-68e71ec8347c,04e6a2d5-0dc7-4f20-bf47-b319ba6e1323,061b2e6d-8cf9-4966-a15e-4b288de3b2cc,06ed7351-5979-48e5-be1a-a89a7b0900bd,08478f15-9a37-4337-86d4-b03faff3c26c,0c924401-e572-45e5-91da-6935f621951c,11dc082b-8104-468a-b2ec-1f978cf478d9,12b989fa-f59b-48c1-b3ba-5e3fc262ee7a,1a5cb16d-3597-43af-adbc-3945c07b59bb,1cacc14a-add8-4011-8cf6-7894466cc068,1d25a2dd-188f-483b-a462-8f1876da1f31,1f74ed06-46a8-4b8c-a5e6-075740d22544,21a924f6-299c-439e-b726-a330623220aa,22c4d56e-7588-4845-87c7-97bb902705fc,2714eae8-eb1c-4a46-af29-a14deb0ff0ec,2c653fec-4c6a-43e6-9308-58378ee62082,2d223897-869c-411b-8a28-7a7f25edd2b0,30fd9a91-2070-4967-83b9-442ba00ebf02,370f5fc9-af42-4a3e-a15c-138843f40334,376b4512-e8bd-4842-93ef-8d28afdd0243,382d60ff-5298-4204-8e43-721d734d39f6,3b05267b-8273-416a-920c-6d19d525c14d,3b29acee-78e0-41b3-acbc-0a84394037e7,3ee53390-e16b-45bd-8eee-af9ab568b7bc,40e39fbd-56ae-4935-9f45-e79668cd88bb,41b00fc4-1e0d-4f43-8a95-f2cf8aef5efd,431cf93f-ea2f-487d-9cf9-a5ee376c762e,48eb93d5-c57e-4a6f-b887-e0dffac5d3c6,4982fc1b-36b2-4041-95b4-6302aaf6bb7e,4c1a3157-7091-44a2-bd10-d4c7762f9e59,506d4375-1937-400f-b1d7-327571348880,51eb8d7f-9463-4abe-b21e-f2923683f9d2,54aeef9f-b6bd-43b6-ac02-833507a225a1,55b05dbb-ed64-421b-8c94-e318fea1cb32,5aebc474-a31a-4198-9a2d-8f99a5259f4f,5c4ef8fc-8dc9-48e6-b715-719fd51c4597,5ed83cd7-10d1-4d48-8771-78dee71601ed,636c1673-8b0a-4888-9d02-af950509b794,63bf17f7-08a3-43d9-ac4e-14370880bdcc,64a7b1dc-df92-49d1-861a-90cd33140607,66617f31-18dc-44d2-8ca7-2b76146593e4,686f2149-3d6a-4f60-a8a1-392f403f8f85,6afddd24-adde-4b48-86fb-5bb10cc16a56,6c9ceaeb-5040-4369-aa18-2f844d396ffe,6dd57967-ac3c-4523-a611-8ec27b01c232,704ef7fa-e922-4279-90eb-f3b47ae2e992,74c5826e-90d0-4920-8a4d-7d5d754e2526,76b65ba9-9f6e-4344-b571-1f3f5d04fb58,77885219-1e65-4477-8125-3a45f4ca6561,796ffbd4-08b6-49b7-a709-036d10b838a3,7ee1788e-0ef3-410b-9d45-94e33a30c9a9,81717e4e-ca59-466f-acbf-d14d28dd6a69,852d3258-61ef-4f8d-83fc-bb4b47fcfce7,8b100559-0772-46d2-bddb-375cc108d9f7,8e4c63de-be15-4311-bd5c-98149965239c,90045c9f-488b-4d1b-a95e-fd7be80aae9f,91fd41c1-a2f3-45ac-92b2-ee32c6f4607e,92a74480-18aa-4acb-af19-078e0dddaa36,937c196b-ca3f-494a-a520-1b39ef7906dd,98574faf-ba50-46cd-b3ce-f7077bf4c1d0,9aa68320-5f74-4847-8e16-611b2a6b8115,9cbf1d38-46e3-4cee-8d4d-3ef3f5e8a378,9f3c5d17-20d0-4049-a668-5d31a40ef165,a2139b08-73e3-4976-8357-1cb948e4f7b3,a5a237e1-b2ba-412f-b2c2-c559e7539afd,ac4fc3fb-d9ad-47c9-90aa-c813d3d59592,ae278960-d333-4b4a-a9f5-f3d9ed510a6d,b002afe1-937d-437c-98a6-6291fa902a49,b324813d-1049-46bd-9d52-5bb41abcf5f9,b3c320e6-06db-4483-a00a-9279cd0b4b84,b7d8a3ac-1f0e-4585-8268-8629df139d80,ba88debc-ada6-4085-9107-8a07a005b903,bd42748a-fca8-44d4-87e4-7ccee4eb70db,c0f60fae-14b7-4b6d-83ba-a04b4bbbf041,c36e233c-7590-4e4b-9615-06490d8959ff,c7f49900-c049-42db-9796-da2d41dcc399,c9fdc0f2-b0c6-4234-8eec-8438d6d6c319,ce720518-f24d-4631-b5fd-64c3efabb08e,d006b67d-b6c1-41b7-b915-7a15c9f4cf4f,d13c38c5-0634-46fe-8f7f-c6866694a59c,d551b5d9-4e61-49a4-a470-6a2c342194fb,d79d3065-0e6c-40f5-b3b2-c596999769cf,dbcdc2a3-2f70-4bc5-8b04-aaf3dec773b0,dedb9e43-c289-49d0-82bc-87b8493d3ce5,dfbebe23-b53b-49eb-9163-713bccb68e1c,e194b2f3-97eb-4832-ab54-efb37b67977b,e2fdab8f-431f-4d30-b8d4-f6d03c72f363,e4a316dd-5644-453f-a15e-dc7162078fd9,e9439121-7657-49b0-a0a5-2fddcd5bce4a,ecdd3e4e-02dd-4cc1-8680-0b8dd5cdd697,ed8aa63f-e3d3-4ee7-8a6a-e9aa005b19b2,eea4e2a0-c7ad-4133-81e5-ac1c5a368234,f15483c1-b0a2-4265-8865-b44a4e2fe5b8,f26b3bfb-72d8-4e26-ae51-913db7302a4d,f3b18d4e-cee2-44c9-bd67-31972a0b157f,f95d4f51-c7ee-41a1-9b0a-0da722397c19,fb85a838-94d8-4923-9b44-28e3cd537735,fd40ffed-365d-4627-b9a3-64872e46f883,fff36027-69fb-485c-aed5-4c232dc80415}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "invoice_number",
-				"n_distinct": -0.18241,
-				"most_common_vals": "{F101-00003482,\"PEND-4322-Mes 6\"}",
-				"most_common_freqs": [0.00651466, 0.00651466],
-				"histogram_bounds": "{A4938,A4941,A4945,A4948,A4952,A4957,A4962,A4967,A4971,A4975,A4980,A7066,F101-00003595,F101-00003677,\"FAC 023129\",\"FAC 023332\",\"FAC 023598\",\"FAC 023830\",\"FAC 023856\",\"FAC 023900\",\"FAC 023901\",\"FAC 023956\",\"FAC 023957\",\"FAC 023958\",\"FAC 023959\",\"FAC 023960\",\"FAC 024146\",\"FAC 024355\",\"FAC 024381\",\"FAC 024382\",\"FAC 024423\",\"FAC 024449\",\"FAC 024660\",\"FAC 024674\",\"FAC 025738\",INV-TEST-001,\"PEND-221-Mes 1\",\"PEND-221-Mes 10\",\"PEND-221-Mes 11\",\"PEND-221-Mes 12\",\"PEND-221-Mes 2\",\"PEND-221-Mes 3\",\"PEND-221-Mes 4\",\"PEND-221-Mes 5\",\"PEND-221-Mes 6\",\"PEND-221-Mes 7\",\"PEND-221-Mes 8\",\"PEND-221-Mes 9\",\"PEND-4322-Mes 10\",\"PEND-4322-Mes 11\",\"PEND-4322-Mes 12\",\"PEND-4322-Mes 7\",\"PEND-4322-Mes 8\",\"PEND-4322-Mes 9\"}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "invoice_series",
-				"n_distinct": 1,
-				"most_common_vals": "{FAC}",
-				"most_common_freqs": [0.996743],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "invoice_type",
-				"n_distinct": 3,
-				"most_common_vals": "{Automatica,Manual,Consolidada}",
-				"most_common_freqs": [0.70684, 0.273616, 0.019544],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "is_active",
-				"n_distinct": 2,
-				"most_common_vals": "{t,f}",
-				"most_common_freqs": [0.957655, 0.0423453],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "is_legacy",
-				"n_distinct": 2,
-				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.912052, 0.0879479],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "issue_date",
-				"n_distinct": -0.260586,
-				"most_common_vals": "{2026-05-01,2026-06-01,2026-02-01,2026-03-01,2026-04-01,2026-07-01,2026-08-01,2026-09-01,2026-01-01,2026-10-01,2025-12-01,2026-11-01,2025-05-27,2025-11-01,2026-12-01,2025-07-02,2025-09-01,2025-04-11,2025-05-23,2025-07-08,2025-08-02,2025-10-01,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
-				"most_common_freqs": [
-					0.0618892, 0.0618892, 0.0586319, 0.0586319, 0.0586319, 0.0586319, 0.0586319, 0.0586319, 0.0521173, 0.0521173, 0.0390879,
-					0.0358306, 0.0228013, 0.019544, 0.0162866, 0.0130293, 0.00977199, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466,
-					0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{2025-01-28,2025-01-30,2025-02-01,2025-02-17,2025-02-28,2025-03-04,2025-03-11,2025-03-12,2025-03-17,2025-03-29,2025-04-04,2025-04-08,2025-04-17,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-17,2025-05-29,2025-06-02,2025-06-15,2025-06-17,2025-06-29,2025-07-01,2025-07-15,2025-07-17,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-17,2025-08-27,2025-08-29,2025-09-17,2025-09-29,2025-09-30,2025-10-15,2025-10-17,2025-10-29,2025-10-31,2025-11-17,2025-11-29,2025-11-30,2025-12-15,2025-12-17,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "issuer_address",
-				"n_distinct": 6,
-				"most_common_vals": "{\"Av Insurgentes Norte 1000\",\"Av Las Condes 1234\",\"Holanda N° 100, Oficina 606, Providencia - Region Metropolitana \",\"Calle Colombia 1234\",\"\",\"Washington 1234, New York.\"}",
-				"most_common_freqs": [0.208469, 0.188925, 0.0456026, 0.0423453, 0.0390879, 0.0390879],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "issuer_legal_name",
-				"n_distinct": 5,
-				"most_common_vals": "{\"Hanka México SA de CV\",\"Hanka Chile SpA\",\"Simplit SpA\",\"Hanka Colombia SAS\",\"Hanka US \"}",
-				"most_common_freqs": [0.208469, 0.188925, 0.0846906, 0.0423453, 0.0390879],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "issuer_tax_id",
-				"n_distinct": 5,
-				"most_common_vals": "{HNKMX12345678,76.123.456-7,76.403.266-7,20202020,12-1234567}",
-				"most_common_freqs": [0.208469, 0.188925, 0.0846906, 0.0423453, 0.0390879],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "legacy_invoice_id",
-				"n_distinct": -0.0879479,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": "{0d6f55db-98dc-4ad5-9262-229ea8ccfe57,0ddf2b91-3087-40e9-981e-1c750fad9a5c,13656a52-17ae-4463-91da-d4d84e4d0701,14071ac7-9f1d-4e07-a863-84834c13393e,1814c860-5737-42b7-bb77-b763834b6e69,1abea1ea-4c7c-4c71-80f2-d4a011196072,21f95508-b922-4a91-92db-19324ed17a53,2a10351f-245e-47ce-8319-a90808f57211,2bf0f3a5-2499-4ae4-ab2f-42122d404ab1,2d4b5f9f-e783-4497-b75e-62d1c6e36b22,2f949399-6724-49af-b8ce-40e443bb051f,356db0b2-3a36-46d7-a726-fba5b8da2671,3dad6ca7-c079-4678-be9b-eba528595f4d,3e95d162-d7b6-43e0-9433-1bc0c91abc66,5f1919c2-cf7a-49b7-a586-6358242f225b,6142498e-d5ac-4330-996a-3465f648a213,687693f4-cc64-46e6-8eec-f4a23d0ee8bc,697ffa44-1a83-4e79-a8eb-ab545c0cd02f,86825c56-e2a7-4e29-9bd9-6e749b64101e,ab374426-1bcd-4942-b375-bcc5e40794fb,ae527807-a53a-4ba5-b90d-855ae6034d77,c31ceed1-b91d-4abc-8b9e-9fd57c1a12d1,d7f74284-a3b7-4159-a9ee-15e9e4a9a8e5,dc185070-2eb8-4832-bdc3-bf253e30b879,e1ead287-aeb3-4ff7-bfec-d1224bef7a8f,f953d4e0-e8cf-4bfc-bc59-adddef0bceb2,f9fdd72f-c477-47e7-881d-493e11e47c42}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "legacy_source_system",
-				"n_distinct": 2,
-				"most_common_vals": "{Odoo}",
-				"most_common_freqs": [0.0325733],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "notes",
-				"n_distinct": 9,
-				"most_common_vals": "{\"CRM Pro\",\"ERP Enterprise\",\"Nuevos productos agregados\",\"SaaS Nuevo\",\"test corss-selling variable\",\"Migrada desde factura legacy. Factura histórica importada\",\"Precio no competitivo / recorte de presupuesto\",\"Mala experiencia de soporte\"}",
-				"most_common_freqs": [0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0325733, 0.0325733, 0.029316],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "original_issue_date",
-				"n_distinct": -0.260586,
-				"most_common_vals": "{2026-05-01,2026-06-01,2026-07-01,2026-08-01,2026-09-01,2026-02-01,2026-03-01,2026-04-01,2026-10-01,2026-01-01,2025-12-01,2026-11-01,2025-05-27,2025-11-01,2026-12-01,2025-07-02,2025-09-01,2025-11-28,2025-04-11,2025-05-23,2025-07-01,2025-07-08,2025-08-02,2025-10-01,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
-				"most_common_freqs": [
-					0.0651466, 0.0651466, 0.0618892, 0.0618892, 0.0618892, 0.0586319, 0.0586319, 0.0586319, 0.0553746, 0.0521173, 0.0390879,
-					0.0358306, 0.0228013, 0.019544, 0.0162866, 0.0130293, 0.00977199, 0.00977199, 0.00651466, 0.00651466, 0.00651466, 0.00651466,
-					0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{2025-01-28,2025-01-30,2025-02-01,2025-02-17,2025-03-01,2025-03-04,2025-03-11,2025-03-12,2025-03-17,2025-03-29,2025-04-04,2025-04-08,2025-04-17,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-17,2025-05-29,2025-06-02,2025-06-15,2025-06-17,2025-06-29,2025-07-15,2025-07-17,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-17,2025-08-27,2025-08-29,2025-09-17,2025-09-29,2025-09-30,2025-10-17,2025-10-29,2025-10-31,2025-11-17,2025-11-29,2025-11-30,2025-12-15,2025-12-17,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "payment_method",
-				"n_distinct": 1,
-				"most_common_vals": "{CREDITO}",
-				"most_common_freqs": [0.996743],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "pdf_url",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "related_invoice_id",
-				"n_distinct": -0.0618892,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": "{0010feb5-d8e1-42dd-8652-da3725a76125,039161e6-169b-4855-b58d-201a8a634971,13e8d8dc-f0c5-4c65-b898-69e36da4a541,26a0d9f9-b9b1-452e-acb7-c7bf3c4e8e28,32512668-fc04-4ab2-9200-b6c7aa07bd10,367a5dce-72da-448c-a0c7-c69c62994e30,479ddc18-c843-4958-870e-c9cc5832b0d0,4ea100bf-4ecb-4b92-8ce6-9d992fde8719,4eb3c6e6-1108-49be-8be2-7b84044a554f,52aec59e-2296-4cd1-a560-389ba1b82d1f,676b23dd-ae36-433b-a73f-e4ad9effc5e1,83831a00-ebe4-4c75-b642-acddb587d0db,8c2a4530-f4c4-43ea-95ca-ff062cab1ef9,9913c33c-f2d3-4fcc-8e37-52d4b9a20026,aa5c9ed4-1fdc-4452-8429-c426c1c73ce7,c04d8551-2ae5-4775-a5a8-db7e904ece01,c6752f0d-2e7a-4e27-95cb-4820e44be832,d795eefe-5739-40c4-8d08-4efaa72df959,fac90e7b-cddc-4454-b72c-84f549be2cb3}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "requires_references_for_billing",
-				"n_distinct": 2,
-				"most_common_vals": "{f,t}",
-				"most_common_freqs": [0.729642, 0.270358],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "scheduled_at",
-				"n_distinct": -0.263844,
-				"most_common_vals": "{2026-05-01,2026-06-01,2026-07-01,2026-08-01,2026-09-01,2026-02-01,2026-03-01,2026-04-01,2026-10-01,2026-01-01,2025-12-01,2026-11-01,2025-05-27,2025-11-01,2026-12-01,2025-07-02,2025-09-01,2025-12-03,2025-04-11,2025-05-23,2025-07-08,2025-08-02,2025-10-01,2025-10-02,2025-11-02,2025-12-02,2026-01-02}",
-				"most_common_freqs": [
-					0.0651466, 0.0651466, 0.0618892, 0.0618892, 0.0618892, 0.0586319, 0.0586319, 0.0586319, 0.0553746, 0.0521173, 0.0390879,
-					0.0358306, 0.0228013, 0.019544, 0.0162866, 0.0130293, 0.00977199, 0.00977199, 0.00651466, 0.00651466, 0.00651466, 0.00651466,
-					0.00651466, 0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{2025-01-28,2025-01-30,2025-02-01,2025-02-17,2025-03-01,2025-03-04,2025-03-11,2025-03-12,2025-03-17,2025-03-29,2025-04-04,2025-04-08,2025-04-17,2025-04-23,2025-04-29,2025-05-02,2025-05-08,2025-05-13,2025-05-17,2025-05-29,2025-06-02,2025-06-15,2025-06-17,2025-06-29,2025-07-01,2025-07-15,2025-07-17,2025-07-21,2025-07-29,2025-07-30,2025-08-01,2025-08-11,2025-08-12,2025-08-17,2025-08-27,2025-08-29,2025-09-17,2025-09-29,2025-09-30,2025-10-15,2025-10-17,2025-10-29,2025-10-31,2025-11-17,2025-11-29,2025-11-30,2025-12-15,2025-12-17,2025-12-29,2025-12-31,2026-01-29,2026-01-31,2026-02-28,2026-03-31}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "sent_at",
-				"n_distinct": 3,
-				"most_common_vals": "{\"2025-10-23 17:15:22.952454+00\"}",
-				"most_common_freqs": [0.0228013],
-				"histogram_bounds": "{\"2025-10-23 17:16:43.502383+00\",\"2026-01-15 19:09:57.983162+00\"}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "split_from_invoice_id",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "split_reason",
-				"n_distinct": 0,
-				"most_common_vals": null,
-				"most_common_freqs": null,
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "status",
-				"n_distinct": 7,
-				"most_common_vals": "{\"Por Emitir\",Pagada,Enviada,Vencida,Cancelada,Emitida,Consolidada}",
-				"most_common_freqs": [0.807818, 0.0749186, 0.0423453, 0.0358306, 0.0162866, 0.0130293, 0.00977199],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "system_currency",
-				"n_distinct": 1,
-				"most_common_vals": "{USD}",
-				"most_common_freqs": [1],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "tax_rate",
-				"n_distinct": 4,
-				"most_common_vals": "{0.19000000000000000000,0.16000000000000000000,0.22000000000000000000,0.18000000000000000000}",
-				"most_common_freqs": [0.90228, 0.0390879, 0.0390879, 0.019544],
-				"histogram_bounds": null
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "total_invoice_currency",
-				"n_distinct": -0.149837,
-				"most_common_vals": "{5950,9.9199999999999983,15.76036,96.1300000000000000,116.920000,238,595,801.52,834.666666666666666633280000000000000000,1001.900000000000000000000000000000000000,1554.30,3506.65,20032.00,3737087.00,-417.458333333333333366730000000000000000,1502.85,-834.666666666666666633280000000000000000,135.460000,901.71,4007.60,4207.98,0.000000000000000000000000000000000000,160.88799999999998,810.9,3907.41,13623.119999999999,2755.23}",
-				"most_common_freqs": [
-					0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0390879, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.0260586, 0.019544, 0.019544, 0.0162866, 0.0130293,
-					0.0130293, 0.0130293, 0.00977199, 0.00651466
-				],
-				"histogram_bounds": "{160.88800000000003,1000.00,2571775.64,2581902.54,2608632,2621849.65,2632928.55,2644479.88,2646524.30,2649801.56,6420892.52,6524259.49,6644484,6941531.80,8367519.51,8890661.36,8930563.25,9475031.09,11636644.67}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "total_system_currency",
-				"n_distinct": -0.130293,
-				"most_common_vals": "{1001.90,3737087.00,15.76036,95.92,200.38,500.95,1554.30,3506.65,297.50,4737.66,-417.46,9.9199999999999983,41.73,801.52,1502.85,-41.73,900.00,3.28,1.37,4007.60,4207.98,1001.60,3900.00,0.24,19.74,41.75,2755.23}",
-				"most_common_freqs": [
-					0.0651466, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0358306, 0.0358306, 0.0325733,
-					0.0325733, 0.0325733, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.0228013, 0.019544, 0.019544, 0.019544, 0.0162866, 0.0130293,
-					0.00651466, 0.00651466, 0.00651466, 0.00651466
-				],
-				"histogram_bounds": "{1.34,116.920000,135.460000,250.48,2243.54,5788.98,5951.29,5978.34,7305.85,7955.09,7982.14,8525.17,10040.04}"
-			},
-			{
-				"schemaname": "public",
-				"tablename": "invoices",
-				"attname": "vat",
-				"n_distinct": -0.143322,
-				"most_common_vals": "{0.000000000000000000000000000000000000,32.00,950,0.02,0.21,0.22,1.333333333333333333280000000000000000,1.52,1.900000000000000000000000000000000000,2.51636,38,95,7087.00,6.65,-0.791666666666666666730000000000000000,2.85,-1.333333333333333333280000000000000000,0.26,1.71,7.60,7.98,7.41,25.688,2175.12,5.23}",
-				"most_common_freqs": [
-					0.0553746, 0.0423453, 0.0423453, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879, 0.0390879,
-					0.0390879, 0.0390879, 0.0358306, 0.0325733, 0.0325733, 0.029316, 0.0260586, 0.0260586, 0.019544, 0.019544, 0.0130293, 0.0130293,
-					0.00977199, 0.00651466
-				],
-				"histogram_bounds": "{25.688000000000002,66.5,410619.64,412236.54,416504,418614.65,420383.55,422227.88,422554.30,423077.56,1025184.52,1041688.49,1060884,1108311.80,1335990.51,1419517.36,1425888.25,1512820.09,1857951.67}"
-			}
-		],
 		"size_info": {
-			"total_size": "488 kB",
-			"table_size": "160 kB",
-			"indexes_size": "328 kB"
+			"total_size": "1392 kB",
+			"table_size": "832 kB",
+			"indexes_size": "560 kB"
 		},
 		"permissions": [
 			{
@@ -1499,6 +1023,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-05T12:53:44.492Z"
+		"analysis_timestamp": "2026-03-20T06:56:38.877Z"
 	}
 }

@@ -36,6 +36,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
 import { StripeModule } from './modules/stripe/stripe.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { UsersModule } from './modules/users/users.module';
 import { CitiesModule } from './modules/utils/cities/cities.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
@@ -95,6 +96,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		ClaudeModule,
 		SapiraCopilotModule,
 		StripeModule,
+		SubscriptionsModule,
 		BancoCentralModule,
 	],
 	providers: [
