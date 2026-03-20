@@ -1,0 +1,566 @@
+{
+	"success": true,
+	"message": "Análisis de tabla public.subscription_items completado exitosamente",
+	"data": {
+		"table_name": "subscription_items",
+		"schema_name": "public",
+		"columns": [
+			{
+				"column_name": "id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": "gen_random_uuid()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "subscription_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "holding_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "external_id",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "stripe_product_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "stripe_price_id",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "product_id",
+				"data_type": "uuid",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "product_name",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "item_type",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'Digital'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "quantity",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "1",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 4
+			},
+			{
+				"column_name": "unit_price",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 6
+			},
+			{
+				"column_name": "monthly_amount",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "currency",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'USD'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "system_currency",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'USD'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "fx_to_system",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "1",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 6
+			},
+			{
+				"column_name": "unit_price_system_currency",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 6
+			},
+			{
+				"column_name": "monthly_amount_system_currency",
+				"data_type": "numeric",
+				"is_nullable": "YES",
+				"column_default": "0",
+				"character_maximum_length": null,
+				"numeric_precision": 18,
+				"numeric_scale": 2
+			},
+			{
+				"column_name": "billing_scheme",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "interval",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": "'month'::text",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "interval_count",
+				"data_type": "integer",
+				"is_nullable": "YES",
+				"column_default": "1",
+				"character_maximum_length": null,
+				"numeric_precision": 32,
+				"numeric_scale": 0
+			},
+			{
+				"column_name": "current_period_start",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "current_period_end",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "start_date",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "canceled_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "discounts",
+				"data_type": "jsonb",
+				"is_nullable": "YES",
+				"column_default": "'[]'::jsonb",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "metadata",
+				"data_type": "jsonb",
+				"is_nullable": "YES",
+				"column_default": "'{}'::jsonb",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "created_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "updated_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": "now()",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			}
+		],
+		"indexes": [
+			{
+				"index_name": "idx_subscription_items_external_id",
+				"index_definition": "CREATE INDEX idx_subscription_items_external_id ON public.subscription_items USING btree (external_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscription_items_holding_id",
+				"index_definition": "CREATE INDEX idx_subscription_items_holding_id ON public.subscription_items USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscription_items_product_id",
+				"index_definition": "CREATE INDEX idx_subscription_items_product_id ON public.subscription_items USING btree (product_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscription_items_stripe_product_id",
+				"index_definition": "CREATE INDEX idx_subscription_items_stripe_product_id ON public.subscription_items USING btree (stripe_product_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscription_items_subscription_id",
+				"index_definition": "CREATE INDEX idx_subscription_items_subscription_id ON public.subscription_items USING btree (subscription_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "subscription_items_pkey",
+				"index_definition": "CREATE UNIQUE INDEX subscription_items_pkey ON public.subscription_items USING btree (id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "uq_subscription_items_holding_external",
+				"index_definition": "CREATE UNIQUE INDEX uq_subscription_items_holding_external ON public.subscription_items USING btree (holding_id, external_id)",
+				"index_type": "btree",
+				"is_unique": "YES",
+				"index_size": "8192 bytes"
+			}
+		],
+		"foreign_keys": [
+			{
+				"constraint_name": "subscription_items_holding_id_fkey",
+				"table_name": "subscription_items",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			},
+			{
+				"constraint_name": "subscription_items_product_id_fkey",
+				"table_name": "subscription_items",
+				"column_name": "product_id",
+				"foreign_table_name": "products",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "RESTRICT"
+			},
+			{
+				"constraint_name": "subscription_items_subscription_id_fkey",
+				"table_name": "subscription_items",
+				"column_name": "subscription_id",
+				"foreign_table_name": "subscriptions",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "CASCADE"
+			}
+		],
+		"primary_unique_keys": [
+			{
+				"constraint_name": "subscription_items_pkey",
+				"constraint_type": "PRIMARY KEY",
+				"column_name": "id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "uq_subscription_items_holding_external",
+				"constraint_type": "UNIQUE",
+				"column_name": "holding_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			},
+			{
+				"constraint_name": "uq_subscription_items_holding_external",
+				"constraint_type": "UNIQUE",
+				"column_name": "external_id",
+				"is_deferrable": "NO",
+				"initially_deferred": "NO"
+			}
+		],
+		"triggers": [
+			{
+				"trigger_name": "update_subscription_items_updated_at",
+				"event_manipulation": "UPDATE",
+				"event_object_table": "subscription_items",
+				"action_timing": "BEFORE",
+				"action_statement": "EXECUTE FUNCTION update_stripe_updated_at_column()",
+				"action_orientation": "ROW",
+				"action_condition": null
+			}
+		],
+		"policies": [
+			{
+				"schemaname": "public",
+				"tablename": "subscription_items",
+				"policyname": "Users can delete their holding's subscription items",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "DELETE",
+				"qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "subscription_items",
+				"policyname": "Users can insert subscription items for their holdings",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "INSERT",
+				"qual": null,
+				"with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+			},
+			{
+				"schemaname": "public",
+				"tablename": "subscription_items",
+				"policyname": "Users can update their holding's subscription items",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "UPDATE",
+				"qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+				"with_check": null
+			},
+			{
+				"schemaname": "public",
+				"tablename": "subscription_items",
+				"policyname": "Users can view their holding's subscription items",
+				"permissive": "PERMISSIVE",
+				"roles": "{public}",
+				"cmd": "SELECT",
+				"qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+				"with_check": null
+			}
+		],
+		"size_info": {
+			"total_size": "64 kB",
+			"table_size": "0 bytes",
+			"indexes_size": "64 kB"
+		},
+		"permissions": [
+			{
+				"grantee": "anon",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "anon",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "DELETE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "INSERT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "SELECT",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege_type": "UPDATE",
+				"is_grantable": "YES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "DELETE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "INSERT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "REFERENCES",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "SELECT",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRIGGER",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "TRUNCATE",
+				"is_grantable": "NO"
+			},
+			{
+				"grantee": "service_role",
+				"privilege_type": "UPDATE",
+				"is_grantable": "NO"
+			}
+		],
+		"analysis_timestamp": "2026-03-19T16:02:34.765Z"
+	}
+}

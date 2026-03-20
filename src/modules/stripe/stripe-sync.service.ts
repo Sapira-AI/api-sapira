@@ -4,6 +4,8 @@ import Stripe from 'stripe';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
+import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
+
 import { CountStripeRecordsDto, SyncStripeDataDto } from './dtos/sync-stripe-data.dto';
 import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeCustomersStg } from './entities/stripe-customers-stg.entity';
@@ -26,6 +28,8 @@ export class StripeSyncService {
 		private readonly customersStgRepository: Repository<StripeCustomersStg>,
 		@InjectRepository(StripeInvoicesStg)
 		private readonly invoicesStgRepository: Repository<StripeInvoicesStg>,
+		@InjectRepository(IntegrationLog)
+		private readonly integrationLogRepository: Repository<IntegrationLog>,
 		private readonly connectionService: StripeConnectionService
 	) {}
 
@@ -252,7 +256,7 @@ export class StripeSyncService {
 		};
 	}
 
-	async syncInvoices(dto: SyncStripeDataDto, holdingId: string) {
+	async syncInvoices(dto: SyncStripeDataDto, holdingId: string, jobId?: string) {
 		this.logger.log(`Sincronizando facturas de Stripe para conexión: ${dto.connection_id}`);
 
 		const connection = await this.connectionService.findOne(dto.connection_id, holdingId);
@@ -273,80 +277,170 @@ export class StripeSyncService {
 			}
 		}
 
-		// Obtener todas las facturas iterando sobre páginas
-		const allInvoices: Stripe.Invoice[] = [];
+		const batchId = uuidv4();
+		const savedInvoices = [];
+		const uniqueCustomerIds = new Set<string>();
+		const uniqueSubscriptionIds = new Set<string>();
+
+		let processedCount = 0;
+		let successCount = 0;
+		let failedCount = 0;
+		let updatedCount = 0;
+		let unchangedCount = 0;
+		let createdCount = 0;
 		let hasMore = true;
 		let startingAfter: string | undefined = undefined;
+		let batchNumber = 0;
 
+		// Primero contar el total de facturas para establecer progress_total
+		if (jobId) {
+			this.logger.log('🔢 Contando total de facturas para establecer progreso...');
+			let totalInvoices = 0;
+			let countHasMore = true;
+			let countStartingAfter: string | undefined = undefined;
+
+			while (countHasMore) {
+				const countResult = await stripeClient.invoices.list({
+					...params,
+					limit: 100,
+					starting_after: countStartingAfter,
+				});
+
+				totalInvoices += countResult.data.length;
+				countHasMore = countResult.has_more;
+
+				if (countHasMore && countResult.data.length > 0) {
+					countStartingAfter = countResult.data[countResult.data.length - 1].id;
+				}
+			}
+
+			this.logger.log(`📊 Total de facturas a procesar: ${totalInvoices}`);
+
+			// Establecer progress_total en el job
+			await this.updateJobStatus(jobId, 'running', {
+				progress_total: totalInvoices,
+				records_processed: 0,
+				records_success: 0,
+				records_failed: 0,
+			});
+		}
+
+		// Procesar en batches de 100 facturas (paginación de Stripe)
 		while (hasMore) {
+			batchNumber++;
+
+			// 1. Obtener batch de facturas desde Stripe
 			const result = await stripeClient.invoices.list({
 				...params,
 				limit: 100,
 				starting_after: startingAfter,
 			});
 
-			allInvoices.push(...result.data);
-			hasMore = result.has_more;
+			this.logger.log(`📦 Batch ${batchNumber}: Obtenidas ${result.data.length} facturas desde Stripe`);
 
+			// 2. Procesar cada factura del batch actual
+			for (const invoice of result.data) {
+				try {
+					const existing = await this.invoicesStgRepository.findOne({
+						where: { stripe_id: invoice.id, holding_id: holdingId },
+					});
+
+					if (existing) {
+						// Comparar datos para detectar cambios
+						const dataChanged = this.hasDataChanged(existing.raw_data, invoice);
+
+						if (dataChanged) {
+							// Datos cambiaron: UPDATE completo
+							existing.raw_data = invoice;
+							existing.sync_batch_id = batchId;
+							existing.processing_status = 'updated';
+							await this.invoicesStgRepository.save(existing);
+							updatedCount++;
+						} else {
+							// Sin cambios: UPDATE solo metadatos (más rápido)
+							await this.invoicesStgRepository.update(existing.id, {
+								sync_batch_id: batchId,
+							});
+							unchangedCount++;
+						}
+						savedInvoices.push(existing);
+					} else {
+						// Crear nuevo registro
+						const newInvoice = this.invoicesStgRepository.create({
+							holding_id: holdingId,
+							stripe_id: invoice.id,
+							raw_data: invoice,
+							sync_batch_id: batchId,
+							processing_status: 'pending',
+							connection_id: connection.id,
+						});
+						const saved = await this.invoicesStgRepository.save(newInvoice);
+						savedInvoices.push(saved);
+						createdCount++;
+					}
+
+					// Extraer IDs de clientes y suscripciones
+					if (invoice.customer) {
+						uniqueCustomerIds.add(typeof invoice.customer === 'string' ? invoice.customer : invoice.customer.id);
+					}
+
+					// Buscar subscription ID en parent.subscription_details.subscription
+					let subscriptionId = null;
+					const parent = (invoice as any).parent;
+
+					if (parent?.subscription_details?.subscription) {
+						subscriptionId = parent.subscription_details.subscription;
+					}
+
+					// Log detallado para debugging (solo primeras 3 facturas)
+					if (processedCount < 3) {
+						this.logger.log(`[SYNC] Factura ${invoice.id}: subscription = ${subscriptionId}, parent.type = ${parent?.type}`);
+					}
+
+					if (subscriptionId) {
+						uniqueSubscriptionIds.add(typeof subscriptionId === 'string' ? subscriptionId : subscriptionId.id);
+					}
+
+					successCount++;
+				} catch (error) {
+					this.logger.error(`Error procesando factura ${invoice.id}:`, error);
+					failedCount++;
+				}
+
+				processedCount++;
+
+				// 3. Actualizar progreso cada 10 facturas o en la última
+				if (jobId && (processedCount % 10 === 0 || processedCount === result.data.length)) {
+					await this.updateJobStatus(jobId, 'running', {
+						records_processed: processedCount,
+						records_success: successCount,
+						records_failed: failedCount,
+					});
+
+					const percentage = Math.round((processedCount / (processedCount + (result.has_more ? 100 : 0))) * 100);
+					this.logger.log(
+						`📊 [FACTURAS] Progreso: ${processedCount} procesadas (${percentage}%) - Exitosas: ${successCount}, Fallidas: ${failedCount}`
+					);
+				}
+			}
+
+			// 4. Log de batch completado
+			this.logger.log(`✅ Batch ${batchNumber} completado: ${result.data.length} facturas procesadas`);
+
+			// 5. Preparar siguiente batch
+			hasMore = result.has_more;
 			if (hasMore && result.data.length > 0) {
 				startingAfter = result.data[result.data.length - 1].id;
 			}
 		}
 
-		const batchId = uuidv4();
-		const savedInvoices = [];
-		const uniqueCustomerIds = new Set<string>();
-		const uniqueSubscriptionIds = new Set<string>();
-
-		// Guardar facturas y extraer IDs
-		for (const invoice of allInvoices) {
-			const existing = await this.invoicesStgRepository.findOne({
-				where: { stripe_id: invoice.id, holding_id: holdingId },
-			});
-
-			if (existing) {
-				existing.raw_data = invoice;
-				existing.sync_batch_id = batchId;
-				existing.processing_status = 'updated';
-				await this.invoicesStgRepository.save(existing);
-				savedInvoices.push(existing);
-			} else {
-				const newInvoice = this.invoicesStgRepository.create({
-					holding_id: holdingId,
-					stripe_id: invoice.id,
-					raw_data: invoice,
-					sync_batch_id: batchId,
-					processing_status: 'pending',
-					connection_id: connection.id,
-				});
-				const saved = await this.invoicesStgRepository.save(newInvoice);
-				savedInvoices.push(saved);
-			}
-
-			// Extraer IDs de clientes y suscripciones
-			if (invoice.customer) {
-				uniqueCustomerIds.add(typeof invoice.customer === 'string' ? invoice.customer : invoice.customer.id);
-			}
-
-			// Buscar subscription ID en parent.subscription_details.subscription
-			let subscriptionId = null;
-			const parent = (invoice as any).parent;
-
-			if (parent?.subscription_details?.subscription) {
-				subscriptionId = parent.subscription_details.subscription;
-			}
-
-			// Log detallado para debugging (solo primeras 3 facturas)
-			if (allInvoices.indexOf(invoice) < 3) {
-				this.logger.log(`[SYNC] Factura ${invoice.id}: subscription = ${subscriptionId}, parent.type = ${parent?.type}`);
-			}
-
-			if (subscriptionId) {
-				uniqueSubscriptionIds.add(typeof subscriptionId === 'string' ? subscriptionId : subscriptionId.id);
-			}
-		}
-
 		await this.connectionService.updateLastSyncAt(connection.id);
+
+		// Log de estadísticas de optimización
+		this.logger.log(
+			`📊 Estadísticas de sincronización: ` +
+				`Creadas: ${createdCount}, Actualizadas: ${updatedCount}, Sin cambios: ${unchangedCount}, Fallidas: ${failedCount}`
+		);
 
 		return {
 			success: true,
@@ -359,7 +453,7 @@ export class StripeSyncService {
 		};
 	}
 
-	async syncCustomersByIds(customerIds: string[], connection: StripeConnection, holdingId: string, batchId: string) {
+	async syncCustomersByIds(customerIds: string[], connection: StripeConnection, holdingId: string, batchId: string, jobId?: string) {
 		this.logger.log(`Sincronizando ${customerIds.length} clientes por IDs`);
 
 		const stripeClient = new Stripe(connection.secret_key, {
@@ -367,6 +461,10 @@ export class StripeSyncService {
 		});
 
 		const savedCustomers = [];
+		let processedCount = 0;
+		let successCount = 0;
+		let failedCount = 0;
+
 		for (const customerId of customerIds) {
 			try {
 				const customer = await stripeClient.customers.retrieve(customerId);
@@ -376,12 +474,24 @@ export class StripeSyncService {
 				});
 
 				if (existing) {
-					existing.raw_data = customer;
-					existing.sync_batch_id = batchId;
-					existing.processing_status = 'updated';
-					await this.customersStgRepository.save(existing);
+					// Comparar datos para detectar cambios
+					const dataChanged = this.hasDataChanged(existing.raw_data, customer);
+
+					if (dataChanged) {
+						// Datos cambiaron: UPDATE completo
+						existing.raw_data = customer;
+						existing.sync_batch_id = batchId;
+						existing.processing_status = 'updated';
+						await this.customersStgRepository.save(existing);
+					} else {
+						// Sin cambios: UPDATE solo metadatos (más rápido)
+						await this.customersStgRepository.update(existing.id, {
+							sync_batch_id: batchId,
+						});
+					}
 					savedCustomers.push(existing);
 				} else {
+					// Crear nuevo registro
 					const newCustomer = this.customersStgRepository.create({
 						holding_id: holdingId,
 						stripe_id: customer.id,
@@ -393,8 +503,29 @@ export class StripeSyncService {
 					const saved = await this.customersStgRepository.save(newCustomer);
 					savedCustomers.push(saved);
 				}
+				successCount++;
 			} catch (error) {
 				this.logger.error(`Error sincronizando cliente ${customerId}:`, error);
+				failedCount++;
+			}
+
+			processedCount++;
+
+			// Log de progreso cada 10 registros o en el último
+			if (processedCount % 10 === 0 || processedCount === customerIds.length) {
+				const percentage = Math.round((processedCount / customerIds.length) * 100);
+				this.logger.log(
+					`📊 [CLIENTES] Progreso: ${processedCount}/${customerIds.length} (${percentage}%) - Exitosos: ${successCount}, Fallidos: ${failedCount}`
+				);
+			}
+
+			// Actualizar progreso del job después de cada cliente
+			if (jobId) {
+				await this.updateJobStatus(jobId, 'running', {
+					records_processed: processedCount,
+					records_success: successCount,
+					records_failed: failedCount,
+				});
 			}
 		}
 
@@ -405,7 +536,7 @@ export class StripeSyncService {
 		};
 	}
 
-	async syncSubscriptionsByIds(subscriptionIds: string[], connection: StripeConnection, holdingId: string, batchId: string) {
+	async syncSubscriptionsByIds(subscriptionIds: string[], connection: StripeConnection, holdingId: string, batchId: string, jobId?: string) {
 		this.logger.log(`Sincronizando ${subscriptionIds.length} suscripciones por IDs`);
 
 		const stripeClient = new Stripe(connection.secret_key, {
@@ -413,6 +544,10 @@ export class StripeSyncService {
 		});
 
 		const savedSubscriptions = [];
+		let processedCount = 0;
+		let successCount = 0;
+		let failedCount = 0;
+
 		for (const subscriptionId of subscriptionIds) {
 			try {
 				const subscription = await stripeClient.subscriptions.retrieve(subscriptionId);
@@ -422,12 +557,24 @@ export class StripeSyncService {
 				});
 
 				if (existing) {
-					existing.raw_data = subscription;
-					existing.sync_batch_id = batchId;
-					existing.processing_status = 'updated';
-					await this.subscriptionsStgRepository.save(existing);
+					// Comparar datos para detectar cambios
+					const dataChanged = this.hasDataChanged(existing.raw_data, subscription);
+
+					if (dataChanged) {
+						// Datos cambiaron: UPDATE completo
+						existing.raw_data = subscription;
+						existing.sync_batch_id = batchId;
+						existing.processing_status = 'updated';
+						await this.subscriptionsStgRepository.save(existing);
+					} else {
+						// Sin cambios: UPDATE solo metadatos (más rápido)
+						await this.subscriptionsStgRepository.update(existing.id, {
+							sync_batch_id: batchId,
+						});
+					}
 					savedSubscriptions.push(existing);
 				} else {
+					// Crear nuevo registro
 					const newSubscription = this.subscriptionsStgRepository.create({
 						holding_id: holdingId,
 						stripe_id: subscription.id,
@@ -439,8 +586,29 @@ export class StripeSyncService {
 					const saved = await this.subscriptionsStgRepository.save(newSubscription);
 					savedSubscriptions.push(saved);
 				}
+				successCount++;
 			} catch (error) {
 				this.logger.error(`Error sincronizando suscripción ${subscriptionId}:`, error);
+				failedCount++;
+			}
+
+			processedCount++;
+
+			// Log de progreso cada 10 registros o en el último
+			if (processedCount % 10 === 0 || processedCount === subscriptionIds.length) {
+				const percentage = Math.round((processedCount / subscriptionIds.length) * 100);
+				this.logger.log(
+					`📊 [SUSCRIPCIONES] Progreso: ${processedCount}/${subscriptionIds.length} (${percentage}%) - Exitosos: ${successCount}, Fallidos: ${failedCount}`
+				);
+			}
+
+			// Actualizar progreso del job después de cada suscripción
+			if (jobId) {
+				await this.updateJobStatus(jobId, 'running', {
+					records_processed: processedCount,
+					records_success: successCount,
+					records_failed: failedCount,
+				});
 			}
 		}
 
@@ -454,55 +622,270 @@ export class StripeSyncService {
 	async syncAll(dto: SyncStripeDataDto, holdingId: string) {
 		this.logger.log(`Iniciando sincronización completa de Stripe para conexión: ${dto.connection_id}`);
 
-		// 1. Sincronizar facturas y extraer IDs
-		const invoiceResult = await this.syncInvoices(dto, holdingId);
+		const batch_id = uuidv4();
 
-		this.logger.log(
-			`Facturas sincronizadas: ${invoiceResult.invoices_synced}, ` +
-				`Clientes únicos: ${invoiceResult.customer_ids.length}, ` +
-				`Suscripciones únicas: ${invoiceResult.subscription_ids.length}`
-		);
+		// Crear jobs de integración para tracking
+		const invoicesJob = this.integrationLogRepository.create({
+			holding_id: holdingId,
+			source_table: 'stripe.invoices',
+			target_table: 'stripe_invoices_stg',
+			status: 'running',
+			records_processed: 0,
+			records_success: 0,
+			records_failed: 0,
+			started_at: new Date(),
+			integration_type: 'stripe_invoices_sync',
+			progress_total: 0,
+			connection_id: dto.connection_id,
+			metadata: { batch_id, entity_type: 'invoices' },
+		});
 
-		// 2. Sincronizar clientes relacionados
-		let customerResult = { customers_synced: 0, message: 'Sin clientes para sincronizar' };
-		if (invoiceResult.customer_ids.length > 0) {
-			customerResult = await this.syncCustomersByIds(invoiceResult.customer_ids, invoiceResult.connection, holdingId, invoiceResult.batch_id);
-		}
+		const customersJob = this.integrationLogRepository.create({
+			holding_id: holdingId,
+			source_table: 'stripe.customers',
+			target_table: 'stripe_customers_stg',
+			status: 'running',
+			records_processed: 0,
+			records_success: 0,
+			records_failed: 0,
+			started_at: new Date(),
+			integration_type: 'stripe_customers_sync',
+			progress_total: 0,
+			connection_id: dto.connection_id,
+			metadata: { batch_id, entity_type: 'customers' },
+		});
 
-		// 3. Sincronizar suscripciones relacionadas
-		let subscriptionResult = { subscriptions_synced: 0, message: 'Sin suscripciones para sincronizar' };
-		if (invoiceResult.subscription_ids.length > 0) {
-			subscriptionResult = await this.syncSubscriptionsByIds(
-				invoiceResult.subscription_ids,
-				invoiceResult.connection,
-				holdingId,
-				invoiceResult.batch_id
-			);
-		}
+		const subscriptionsJob = this.integrationLogRepository.create({
+			holding_id: holdingId,
+			source_table: 'stripe.subscriptions',
+			target_table: 'stripe_subscriptions_stg',
+			status: 'running',
+			records_processed: 0,
+			records_success: 0,
+			records_failed: 0,
+			started_at: new Date(),
+			integration_type: 'stripe_subscriptions_sync',
+			progress_total: 0,
+			connection_id: dto.connection_id,
+			metadata: { batch_id, entity_type: 'subscriptions' },
+		});
 
-		this.logger.log(
-			`Sincronización completa finalizada: ` +
-				`${invoiceResult.invoices_synced} facturas, ` +
-				`${customerResult.customers_synced} clientes, ` +
-				`${subscriptionResult.subscriptions_synced} suscripciones`
-		);
+		const [savedInvoicesJob, savedCustomersJob, savedSubscriptionsJob] = await Promise.all([
+			this.integrationLogRepository.save(invoicesJob),
+			this.integrationLogRepository.save(customersJob),
+			this.integrationLogRepository.save(subscriptionsJob),
+		]);
 
-		return {
+		// Ejecutar sincronización en background usando setImmediate
+		setImmediate(async () => {
+			try {
+				await this.executeSyncInBackground(dto, holdingId, batch_id, savedInvoicesJob.id, savedCustomersJob.id, savedSubscriptionsJob.id);
+			} catch (error) {
+				this.logger.error('❌ Error en sincronización background:', error);
+			}
+		});
+
+		// Retornar inmediatamente con los IDs de los jobs
+		const response = {
 			success: true,
-			message: 'Sincronización completa exitosa',
-			batch_id: invoiceResult.batch_id,
-			invoices: {
-				synced: invoiceResult.invoices_synced,
-				message: invoiceResult.message,
-			},
-			customers: {
-				synced: customerResult.customers_synced,
-				message: customerResult.message,
-			},
-			subscriptions: {
-				synced: subscriptionResult.subscriptions_synced,
-				message: subscriptionResult.message,
+			message: 'Sincronización iniciada',
+			batch_id,
+			job_ids: {
+				invoices: savedInvoicesJob.id,
+				customers: savedCustomersJob.id,
+				subscriptions: savedSubscriptionsJob.id,
 			},
 		};
+
+		this.logger.log(`✅ Retornando respuesta con job_ids: ${JSON.stringify(response.job_ids)}`);
+
+		return response;
+	}
+
+	/**
+	 * Ejecuta la sincronización en background actualizando el progreso
+	 */
+	private async executeSyncInBackground(
+		dto: SyncStripeDataDto,
+		holdingId: string,
+		batch_id: string,
+		invoicesJobId: string,
+		customersJobId: string,
+		subscriptionsJobId: string
+	) {
+		this.logger.log('🚀 Iniciando sincronización en background...');
+
+		try {
+			// 1. Sincronizar facturas
+			this.logger.log('📄 Sincronizando facturas...');
+			const invoiceResult = await this.syncInvoices(dto, holdingId, invoicesJobId);
+
+			await this.updateJobStatus(invoicesJobId, 'completed', {
+				progress_total: invoiceResult.invoices_synced,
+				records_processed: invoiceResult.invoices_synced,
+				records_success: invoiceResult.invoices_synced,
+			});
+
+			this.logger.log(
+				`Facturas sincronizadas: ${invoiceResult.invoices_synced}, ` +
+					`Clientes únicos: ${invoiceResult.customer_ids.length}, ` +
+					`Suscripciones únicas: ${invoiceResult.subscription_ids.length}`
+			);
+
+			// 2. Sincronizar clientes
+			if (invoiceResult.customer_ids.length > 0) {
+				await this.updateJobStatus(customersJobId, 'running', {
+					progress_total: invoiceResult.customer_ids.length,
+				});
+
+				this.logger.log(`Sincronizando ${invoiceResult.customer_ids.length} clientes por IDs`);
+				const customerResult = await this.syncCustomersByIds(
+					invoiceResult.customer_ids,
+					invoiceResult.connection,
+					holdingId,
+					invoiceResult.batch_id,
+					customersJobId // Pasar jobId para actualización incremental
+				);
+
+				await this.updateJobStatus(customersJobId, 'completed', {
+					records_processed: customerResult.customers_synced,
+					records_success: customerResult.customers_synced,
+				});
+			} else {
+				await this.updateJobStatus(customersJobId, 'completed', {
+					progress_total: 0,
+					records_processed: 0,
+				});
+			}
+
+			// 3. Sincronizar suscripciones
+			if (invoiceResult.subscription_ids.length > 0) {
+				await this.updateJobStatus(subscriptionsJobId, 'running', {
+					progress_total: invoiceResult.subscription_ids.length,
+				});
+
+				this.logger.log(`Sincronizando ${invoiceResult.subscription_ids.length} suscripciones por IDs`);
+				const subscriptionResult = await this.syncSubscriptionsByIds(
+					invoiceResult.subscription_ids,
+					invoiceResult.connection,
+					holdingId,
+					invoiceResult.batch_id,
+					subscriptionsJobId // Pasar jobId para actualización incremental
+				);
+
+				await this.updateJobStatus(subscriptionsJobId, 'completed', {
+					records_processed: subscriptionResult.subscriptions_synced,
+					records_success: subscriptionResult.subscriptions_synced,
+				});
+			} else {
+				await this.updateJobStatus(subscriptionsJobId, 'completed', {
+					progress_total: 0,
+					records_processed: 0,
+				});
+			}
+
+			this.logger.log(
+				`Sincronización completa finalizada: ${invoiceResult.invoices_synced} facturas, ${invoiceResult.customer_ids.length} clientes, ${invoiceResult.subscription_ids.length} suscripciones`
+			);
+		} catch (error) {
+			this.logger.error('Error en sincronización background:', error);
+			await Promise.all([
+				this.updateJobStatus(invoicesJobId, 'failed', { error_details: error.message }),
+				this.updateJobStatus(customersJobId, 'failed', { error_details: error.message }),
+				this.updateJobStatus(subscriptionsJobId, 'failed', { error_details: error.message }),
+			]);
+		}
+	}
+
+	/**
+	 * Actualiza el estado de un job de integración
+	 */
+	private async updateJobStatus(jobId: string, status: string, additionalData?: any) {
+		try {
+			const updateData: any = { status };
+
+			if (status === 'completed') {
+				updateData.completed_at = new Date();
+			}
+
+			if (additionalData) {
+				Object.assign(updateData, additionalData);
+			}
+
+			await this.integrationLogRepository.update(jobId, updateData);
+		} catch (error) {
+			this.logger.error('Error actualizando estado del job:', error);
+		}
+	}
+
+	/**
+	 * Obtiene el estado de un job de integración
+	 */
+	async getJobStatus(jobId: string) {
+		try {
+			const integrationLog = await this.integrationLogRepository.findOne({
+				where: { id: jobId },
+			});
+
+			if (!integrationLog) {
+				throw new Error('Job no encontrado');
+			}
+
+			const progressPercentage = this.calculateProgressPercentage(
+				integrationLog.records_processed || 0,
+				integrationLog.progress_total || 0,
+				integrationLog.status || 'running'
+			);
+
+			const executionTime = integrationLog.completed_at
+				? new Date(integrationLog.completed_at).getTime() - new Date(integrationLog.started_at).getTime()
+				: integrationLog.execution_time_ms || null;
+
+			return {
+				job_id: integrationLog.id,
+				status: integrationLog.status || 'running',
+				total_records: integrationLog.progress_total || 0,
+				records_processed: integrationLog.records_processed || 0,
+				records_success: integrationLog.records_success || 0,
+				records_failed: integrationLog.records_failed || 0,
+				progress_percentage: progressPercentage,
+				execution_time_ms: executionTime,
+				started_at: integrationLog.started_at,
+				completed_at: integrationLog.completed_at || undefined,
+				error_details: integrationLog.error_details || undefined,
+			};
+		} catch (error) {
+			this.logger.error('Error obteniendo estado del job:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Compara dos objetos para detectar si hay cambios en los datos
+	 */
+	private hasDataChanged(oldData: any, newData: any): boolean {
+		try {
+			// Comparación por JSON stringify (rápida y efectiva)
+			return JSON.stringify(oldData) !== JSON.stringify(newData);
+		} catch (error) {
+			// Si hay error en la comparación, asumir que cambió para actualizar
+			this.logger.warn('Error comparando datos, asumiendo cambio:', error);
+			return true;
+		}
+	}
+
+	/**
+	 * Calcula el porcentaje de progreso de un job
+	 */
+	private calculateProgressPercentage(recordsProcessed: number, progressTotal: number, status: string): number {
+		if (status === 'completed') {
+			return 100;
+		}
+
+		if (!progressTotal || progressTotal === 0) {
+			return 0;
+		}
+
+		return Math.min(100, Math.round((recordsProcessed / progressTotal) * 100));
 	}
 }
