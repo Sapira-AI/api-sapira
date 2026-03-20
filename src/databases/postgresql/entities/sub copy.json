@@ -1,8 +1,8 @@
 {
 	"success": true,
-	"message": "Análisis de tabla public.subscription_items completado exitosamente",
+	"message": "Análisis de tabla public.subscriptions completado exitosamente",
 	"data": {
-		"table_name": "subscription_items",
+		"table_name": "subscriptions",
 		"schema_name": "public",
 		"columns": [
 			{
@@ -15,7 +15,7 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "subscription_id",
+				"column_name": "holding_id",
 				"data_type": "uuid",
 				"is_nullable": "NO",
 				"column_default": null,
@@ -24,9 +24,45 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "holding_id",
+				"column_name": "company_id",
 				"data_type": "uuid",
 				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_entity_id",
+				"data_type": "uuid",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "client_name_commercial",
+				"data_type": "text",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "legal_client_name",
+				"data_type": "text",
+				"is_nullable": "YES",
 				"column_default": null,
 				"character_maximum_length": null,
 				"numeric_precision": null,
@@ -42,25 +78,16 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "stripe_product_id",
+				"column_name": "source",
 				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
+				"is_nullable": "NO",
+				"column_default": "'stripe'::text",
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
 			},
 			{
-				"column_name": "stripe_price_id",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "product_id",
+				"column_name": "connection_id",
 				"data_type": "uuid",
 				"is_nullable": "YES",
 				"column_default": null,
@@ -69,7 +96,79 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "product_name",
+				"column_name": "status",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "start_date",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "canceled_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "cancel_at_period_end",
+				"data_type": "boolean",
+				"is_nullable": "YES",
+				"column_default": "false",
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "ended_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "current_period_start",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "current_period_end",
+				"data_type": "date",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "billing_cycle_anchor",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
+			},
+			{
+				"column_name": "cancellation_reason",
 				"data_type": "text",
 				"is_nullable": "YES",
 				"column_default": null,
@@ -78,31 +177,22 @@
 				"numeric_scale": null
 			},
 			{
-				"column_name": "item_type",
+				"column_name": "cancellation_comment",
 				"data_type": "text",
 				"is_nullable": "YES",
-				"column_default": "'Digital'::text",
+				"column_default": null,
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
 			},
 			{
-				"column_name": "quantity",
-				"data_type": "numeric",
-				"is_nullable": "YES",
-				"column_default": "1",
+				"column_name": "currency",
+				"data_type": "text",
+				"is_nullable": "NO",
+				"column_default": "'USD'::text",
 				"character_maximum_length": null,
-				"numeric_precision": 18,
-				"numeric_scale": 4
-			},
-			{
-				"column_name": "unit_price",
-				"data_type": "numeric",
-				"is_nullable": "YES",
-				"column_default": "0",
-				"character_maximum_length": null,
-				"numeric_precision": 18,
-				"numeric_scale": 6
+				"numeric_precision": null,
+				"numeric_scale": null
 			},
 			{
 				"column_name": "monthly_amount",
@@ -114,10 +204,10 @@
 				"numeric_scale": 2
 			},
 			{
-				"column_name": "currency",
+				"column_name": "collection_method",
 				"data_type": "text",
 				"is_nullable": "YES",
-				"column_default": "'USD'::text",
+				"column_default": "'charge_automatically'::text",
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
@@ -141,15 +231,6 @@
 				"numeric_scale": 6
 			},
 			{
-				"column_name": "unit_price_system_currency",
-				"data_type": "numeric",
-				"is_nullable": "YES",
-				"column_default": "0",
-				"character_maximum_length": null,
-				"numeric_precision": 18,
-				"numeric_scale": 6
-			},
-			{
 				"column_name": "monthly_amount_system_currency",
 				"data_type": "numeric",
 				"is_nullable": "YES",
@@ -159,73 +240,10 @@
 				"numeric_scale": 2
 			},
 			{
-				"column_name": "billing_scheme",
+				"column_name": "notes",
 				"data_type": "text",
 				"is_nullable": "YES",
 				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "interval",
-				"data_type": "text",
-				"is_nullable": "YES",
-				"column_default": "'month'::text",
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "interval_count",
-				"data_type": "integer",
-				"is_nullable": "YES",
-				"column_default": "1",
-				"character_maximum_length": null,
-				"numeric_precision": 32,
-				"numeric_scale": 0
-			},
-			{
-				"column_name": "current_period_start",
-				"data_type": "date",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "current_period_end",
-				"data_type": "date",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "start_date",
-				"data_type": "date",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "canceled_at",
-				"data_type": "timestamp with time zone",
-				"is_nullable": "YES",
-				"column_default": null,
-				"character_maximum_length": null,
-				"numeric_precision": null,
-				"numeric_scale": null
-			},
-			{
-				"column_name": "discounts",
-				"data_type": "jsonb",
-				"is_nullable": "YES",
-				"column_default": "'[]'::jsonb",
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
@@ -256,54 +274,84 @@
 				"character_maximum_length": null,
 				"numeric_precision": null,
 				"numeric_scale": null
+			},
+			{
+				"column_name": "last_synced_at",
+				"data_type": "timestamp with time zone",
+				"is_nullable": "YES",
+				"column_default": null,
+				"character_maximum_length": null,
+				"numeric_precision": null,
+				"numeric_scale": null
 			}
 		],
 		"indexes": [
 			{
-				"index_name": "idx_subscription_items_external_id",
-				"index_definition": "CREATE INDEX idx_subscription_items_external_id ON public.subscription_items USING btree (external_id)",
+				"index_name": "idx_subscriptions_client_entity_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_client_entity_id ON public.subscriptions USING btree (client_entity_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "idx_subscription_items_holding_id",
-				"index_definition": "CREATE INDEX idx_subscription_items_holding_id ON public.subscription_items USING btree (holding_id)",
+				"index_name": "idx_subscriptions_client_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_client_id ON public.subscriptions USING btree (client_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "idx_subscription_items_product_id",
-				"index_definition": "CREATE INDEX idx_subscription_items_product_id ON public.subscription_items USING btree (product_id)",
+				"index_name": "idx_subscriptions_company_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_company_id ON public.subscriptions USING btree (company_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "idx_subscription_items_stripe_product_id",
-				"index_definition": "CREATE INDEX idx_subscription_items_stripe_product_id ON public.subscription_items USING btree (stripe_product_id)",
+				"index_name": "idx_subscriptions_connection_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_connection_id ON public.subscriptions USING btree (connection_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "idx_subscription_items_subscription_id",
-				"index_definition": "CREATE INDEX idx_subscription_items_subscription_id ON public.subscription_items USING btree (subscription_id)",
+				"index_name": "idx_subscriptions_external_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_external_id ON public.subscriptions USING btree (external_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "subscription_items_pkey",
-				"index_definition": "CREATE UNIQUE INDEX subscription_items_pkey ON public.subscription_items USING btree (id)",
+				"index_name": "idx_subscriptions_holding_id",
+				"index_definition": "CREATE INDEX idx_subscriptions_holding_id ON public.subscriptions USING btree (holding_id)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscriptions_source",
+				"index_definition": "CREATE INDEX idx_subscriptions_source ON public.subscriptions USING btree (source)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "idx_subscriptions_status",
+				"index_definition": "CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status)",
+				"index_type": "btree",
+				"is_unique": "NO",
+				"index_size": "8192 bytes"
+			},
+			{
+				"index_name": "subscriptions_pkey",
+				"index_definition": "CREATE UNIQUE INDEX subscriptions_pkey ON public.subscriptions USING btree (id)",
 				"index_type": "btree",
 				"is_unique": "YES",
 				"index_size": "8192 bytes"
 			},
 			{
-				"index_name": "uq_subscription_items_holding_external",
-				"index_definition": "CREATE UNIQUE INDEX uq_subscription_items_holding_external ON public.subscription_items USING btree (holding_id, external_id)",
+				"index_name": "uq_subscriptions_holding_external",
+				"index_definition": "CREATE UNIQUE INDEX uq_subscriptions_holding_external ON public.subscriptions USING btree (holding_id, external_id)",
 				"index_type": "btree",
 				"is_unique": "YES",
 				"index_size": "8192 bytes"
@@ -311,28 +359,46 @@
 		],
 		"foreign_keys": [
 			{
-				"constraint_name": "subscription_items_holding_id_fkey",
-				"table_name": "subscription_items",
-				"column_name": "holding_id",
-				"foreign_table_name": "company_holdings",
-				"foreign_column_name": "id",
-				"update_rule": "NO ACTION",
-				"delete_rule": "CASCADE"
-			},
-			{
-				"constraint_name": "subscription_items_product_id_fkey",
-				"table_name": "subscription_items",
-				"column_name": "product_id",
-				"foreign_table_name": "products",
+				"constraint_name": "subscriptions_client_entity_id_fkey",
+				"table_name": "subscriptions",
+				"column_name": "client_entity_id",
+				"foreign_table_name": "client_entities",
 				"foreign_column_name": "id",
 				"update_rule": "NO ACTION",
 				"delete_rule": "RESTRICT"
 			},
 			{
-				"constraint_name": "subscription_items_subscription_id_fkey",
-				"table_name": "subscription_items",
-				"column_name": "subscription_id",
-				"foreign_table_name": "subscriptions",
+				"constraint_name": "subscriptions_client_id_fkey",
+				"table_name": "subscriptions",
+				"column_name": "client_id",
+				"foreign_table_name": "clients",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "RESTRICT"
+			},
+			{
+				"constraint_name": "subscriptions_company_id_fkey",
+				"table_name": "subscriptions",
+				"column_name": "company_id",
+				"foreign_table_name": "companies",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "RESTRICT"
+			},
+			{
+				"constraint_name": "subscriptions_connection_id_fkey",
+				"table_name": "subscriptions",
+				"column_name": "connection_id",
+				"foreign_table_name": "stripe_connections",
+				"foreign_column_name": "id",
+				"update_rule": "NO ACTION",
+				"delete_rule": "NO ACTION"
+			},
+			{
+				"constraint_name": "subscriptions_holding_id_fkey",
+				"table_name": "subscriptions",
+				"column_name": "holding_id",
+				"foreign_table_name": "company_holdings",
 				"foreign_column_name": "id",
 				"update_rule": "NO ACTION",
 				"delete_rule": "CASCADE"
@@ -340,21 +406,21 @@
 		],
 		"primary_unique_keys": [
 			{
-				"constraint_name": "subscription_items_pkey",
+				"constraint_name": "subscriptions_pkey",
 				"constraint_type": "PRIMARY KEY",
 				"column_name": "id",
 				"is_deferrable": "NO",
 				"initially_deferred": "NO"
 			},
 			{
-				"constraint_name": "uq_subscription_items_holding_external",
+				"constraint_name": "uq_subscriptions_holding_external",
 				"constraint_type": "UNIQUE",
 				"column_name": "holding_id",
 				"is_deferrable": "NO",
 				"initially_deferred": "NO"
 			},
 			{
-				"constraint_name": "uq_subscription_items_holding_external",
+				"constraint_name": "uq_subscriptions_holding_external",
 				"constraint_type": "UNIQUE",
 				"column_name": "external_id",
 				"is_deferrable": "NO",
@@ -363,9 +429,9 @@
 		],
 		"triggers": [
 			{
-				"trigger_name": "update_subscription_items_updated_at",
+				"trigger_name": "update_subscriptions_updated_at",
 				"event_manipulation": "UPDATE",
-				"event_object_table": "subscription_items",
+				"event_object_table": "subscriptions",
 				"action_timing": "BEFORE",
 				"action_statement": "EXECUTE FUNCTION update_stripe_updated_at_column()",
 				"action_orientation": "ROW",
@@ -375,8 +441,8 @@
 		"policies": [
 			{
 				"schemaname": "public",
-				"tablename": "subscription_items",
-				"policyname": "Users can delete their holding's subscription items",
+				"tablename": "subscriptions",
+				"policyname": "Users can delete their holding's subscriptions",
 				"permissive": "PERMISSIVE",
 				"roles": "{public}",
 				"cmd": "DELETE",
@@ -385,8 +451,8 @@
 			},
 			{
 				"schemaname": "public",
-				"tablename": "subscription_items",
-				"policyname": "Users can insert subscription items for their holdings",
+				"tablename": "subscriptions",
+				"policyname": "Users can insert subscriptions for their holdings",
 				"permissive": "PERMISSIVE",
 				"roles": "{public}",
 				"cmd": "INSERT",
@@ -395,8 +461,8 @@
 			},
 			{
 				"schemaname": "public",
-				"tablename": "subscription_items",
-				"policyname": "Users can update their holding's subscription items",
+				"tablename": "subscriptions",
+				"policyname": "Users can update their holding's subscriptions",
 				"permissive": "PERMISSIVE",
 				"roles": "{public}",
 				"cmd": "UPDATE",
@@ -405,8 +471,8 @@
 			},
 			{
 				"schemaname": "public",
-				"tablename": "subscription_items",
-				"policyname": "Users can view their holding's subscription items",
+				"tablename": "subscriptions",
+				"policyname": "Users can view their holding's subscriptions",
 				"permissive": "PERMISSIVE",
 				"roles": "{public}",
 				"cmd": "SELECT",
@@ -415,9 +481,9 @@
 			}
 		],
 		"size_info": {
-			"total_size": "64 kB",
+			"total_size": "88 kB",
 			"table_size": "0 bytes",
-			"indexes_size": "64 kB"
+			"indexes_size": "88 kB"
 		},
 		"permissions": [
 			{
@@ -561,6 +627,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-20T07:03:00.123Z"
+		"analysis_timestamp": "2026-03-20T07:02:12.545Z"
 	}
 }

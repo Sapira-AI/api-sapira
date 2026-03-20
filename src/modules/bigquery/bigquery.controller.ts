@@ -5,6 +5,7 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { BigQueryService } from './bigquery.service';
 import { QueryDto } from './dtos/query.dto';
+import { SyncStripeCustomersRequestDto, SyncStripeCustomersResponseDto } from './dtos/sync-stripe-customers.dto';
 import { BigQueryResult } from './interfaces/bigquery-result.interface';
 import { ProjectInfo } from './interfaces/project-info.interface';
 
@@ -148,5 +149,44 @@ export class BigQueryController {
 	@HttpCode(HttpStatus.OK)
 	async getTables(@Param('datasetId') datasetId: string): Promise<string[]> {
 		return this.bigQueryService.getTables(datasetId);
+	}
+
+	@Post('sync-stripe-customers')
+	@ApiOperation({
+		summary: 'Sincronizar clientes Stripe desde BigQuery a Supabase',
+		description:
+			'Consulta la tabla completa `datawarehouse-a2e2.finance.sapira_stripe` desde BigQuery y ' +
+			'persiste los datos en Supabase. Realiza un upsert inteligente basado en la combinación de ' +
+			'holding_id, salesforce_account_id y stripe_customer_id. Los registros existentes se actualizan ' +
+			'y los nuevos se insertan.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Sincronización completada exitosamente',
+		type: SyncStripeCustomersResponseDto,
+		schema: {
+			example: {
+				totalProcessed: 150,
+				inserted: 50,
+				updated: 100,
+				message: 'Sincronización completada exitosamente',
+			},
+		},
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'BigQuery no está configurado correctamente o el holdingId es inválido',
+	})
+	@ApiResponse({
+		status: HttpStatus.UNAUTHORIZED,
+		description: 'Token de autenticación inválido o no proporcionado',
+	})
+	@ApiResponse({
+		status: HttpStatus.INTERNAL_SERVER_ERROR,
+		description: 'Error interno al sincronizar datos',
+	})
+	@HttpCode(HttpStatus.OK)
+	async syncStripeCustomers(@Body() dto: SyncStripeCustomersRequestDto): Promise<SyncStripeCustomersResponseDto> {
+		return this.bigQueryService.syncStripeCustomers(dto.holdingId);
 	}
 }
