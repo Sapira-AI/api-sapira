@@ -107,4 +107,12 @@ export class CreateClientDto {
 	@IsString()
 	@IsOptional()
 	salesforce_account_id?: string;
+
+	@ApiPropertyOptional({
+		description: 'ID del cliente en Stripe',
+		example: 'cus_SkQcN8HceN8h68',
+	})
+	@IsString()
+	@IsOptional()
+	stripe_customer_id?: string;
 }

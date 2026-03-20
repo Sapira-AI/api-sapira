@@ -8,6 +8,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 	unique: true,
 	where: 'salesforce_account_id IS NOT NULL',
 })
+@Index('idx_clients_stripe_customer_id', ['stripe_customer_id'], { where: 'stripe_customer_id IS NOT NULL' })
 export class Client {
 	@PrimaryGeneratedColumn('uuid')
 	id!: string;
@@ -53,4 +54,7 @@ export class Client {
 
 	@Column({ type: 'text', nullable: true })
 	salesforce_account_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	stripe_customer_id?: string;
 }

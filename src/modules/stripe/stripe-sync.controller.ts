@@ -1,5 +1,5 @@
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
@@ -82,5 +82,40 @@ export class StripeSyncController {
 	@HttpCode(HttpStatus.OK)
 	async syncAll(@Body() dto: SyncStripeDataDto, @Headers('x-holding-id') holdingId: string) {
 		return this.stripeSyncService.syncAll(dto, holdingId);
+	}
+
+	@Get('job/:jobId/status')
+	@ApiOperation({
+		summary: 'Obtener estado de un job de sincronización',
+		description: 'Consulta el progreso y estado actual de un job de sincronización de Stripe',
+	})
+	@ApiParam({
+		name: 'jobId',
+		type: String,
+		description: 'ID del job de sincronización',
+		example: '123e4567-e89b-12d3-a456-426614174000',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Estado del job obtenido exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				job_id: { type: 'string' },
+				status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled'] },
+				total_records: { type: 'number' },
+				records_processed: { type: 'number' },
+				records_success: { type: 'number' },
+				records_failed: { type: 'number' },
+				progress_percentage: { type: 'number' },
+				execution_time_ms: { type: 'number' },
+				started_at: { type: 'string', format: 'date-time' },
+				completed_at: { type: 'string', format: 'date-time' },
+			},
+		},
+	})
+	@HttpCode(HttpStatus.OK)
+	async getJobStatus(@Param('jobId') jobId: string) {
+		return this.stripeSyncService.getJobStatus(jobId);
 	}
 }
