@@ -951,9 +951,9 @@ export class StripeSyncService {
 				sent_at: rawData.webhooks_delivered_at ? new Date(rawData.webhooks_delivered_at * 1000) : null,
 				scheduled_at: issueDate,
 				original_issue_date: issueDate,
-				invoice_type: 'Automatica',
+				invoice_type: 'Suscripción',
 				invoice_series: 'FAC',
-				document_type: 'FACTURA',
+				document_type: 'Invoice',
 				payment_method: 'CREDITO',
 				export_type: 0,
 				is_active: true,
@@ -1135,7 +1135,7 @@ export class StripeSyncService {
 	private mapStripeInvoiceStatus(stripeStatus: string): string {
 		const statusMap: Record<string, string> = {
 			paid: 'Pagada',
-			open: 'Por Emitir',
+			open: 'Emitida',
 			draft: 'Por Emitir',
 			void: 'Cancelada',
 			uncollectible: 'Vencida',
