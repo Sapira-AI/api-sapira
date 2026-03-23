@@ -507,6 +507,15 @@ export class CreateDraftInvoiceDTO {
 	@IsString()
 	auto_post?: 'no' | 'at_date' | 'monthly' | 'quarterly' | 'yearly';
 
+	@ApiProperty({
+		description: 'Si es true, la factura se emitirá automáticamente después de crearla en borrador',
+		required: false,
+		default: false,
+		example: true,
+	})
+	@IsOptional()
+	auto_invoice?: boolean;
+
 	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
 	@IsArray()
 	@ValidateNested({ each: true })

@@ -151,6 +151,58 @@ export class OdooInvoicesService {
 	}
 
 	/**
+	 * Emite/valida una factura en Odoo (cambia de draft a posted)
+	 */
+	async postInvoice(holdingId: string, invoiceId: number): Promise<{ success: boolean; message: string; state?: string }> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			// Llamar al método action_post para emitir la factura
+			await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'action_post',
+				[[invoiceId]],
+			]);
+
+			// Leer el estado actualizado de la factura
+			const updatedInvoice = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[[invoiceId]],
+				{
+					fields: ['state', 'name'],
+				},
+			]);
+
+			const invoice = updatedInvoice[0];
+
+			return {
+				success: true,
+				message: `Factura ${invoice.name} emitida exitosamente`,
+				state: invoice.state,
+			};
+		} catch (error) {
+			console.error('❌ Error emitiendo factura:', error);
+			throw new Error(`Error emitiendo factura en Odoo: ${error.message}`);
+		}
+	}
+
+	/**
 	 * Obtiene la configuración de conexión de Odoo por holding_id
 	 */
 	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig> {

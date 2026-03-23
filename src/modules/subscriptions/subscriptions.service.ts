@@ -37,7 +37,7 @@ export class SubscriptionsService {
 		}
 
 		if (search) {
-			whereConditions += ` AND (s.client_name_commercial ILIKE $${paramIndex} OR s.legal_client_name ILIKE $${paramIndex} OR s.external_id ILIKE $${paramIndex})`;
+			whereConditions += ` AND (c.name_commercial ILIKE $${paramIndex} OR ce.legal_name ILIKE $${paramIndex} OR s.external_id ILIKE $${paramIndex})`;
 			params.push(`%${search}%`);
 			paramIndex++;
 		}
@@ -45,6 +45,8 @@ export class SubscriptionsService {
 		const countQuery = `
 			SELECT COUNT(*) as total
 			FROM subscriptions s
+			LEFT JOIN clients c ON c.id = s.client_id
+			LEFT JOIN client_entities ce ON ce.id = s.client_entity_id
 			${whereConditions}
 		`;
 
@@ -59,8 +61,8 @@ export class SubscriptionsService {
 				s.status,
 				s.client_id,
 				s.client_entity_id,
-				s.client_name_commercial,
-				s.legal_client_name,
+				c.name_commercial as client_name_commercial,
+				ce.legal_name as legal_client_name,
 				s.start_date,
 				s.canceled_at,
 				s.cancel_at_period_end,
@@ -75,10 +77,12 @@ export class SubscriptionsService {
 				COUNT(DISTINCT i.id) as invoices_count,
 				COALESCE(SUM(si.unit_price * si.quantity), 0) as mrr
 			FROM subscriptions s
+			LEFT JOIN clients c ON c.id = s.client_id
+			LEFT JOIN client_entities ce ON ce.id = s.client_entity_id
 			LEFT JOIN subscription_items si ON si.subscription_id = s.id
 			LEFT JOIN invoices i ON i.subscription_id = s.id
 			${whereConditions}
-			GROUP BY s.id
+			GROUP BY s.id, c.name_commercial, ce.legal_name
 			ORDER BY s.created_at DESC
 			LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
 		`;
@@ -125,7 +129,7 @@ export class SubscriptionsService {
 					)
 				) FILTER (WHERE si.id IS NOT NULL) as items,
 				json_agg(
-					DISTINCT jsonb_build_object(
+					jsonb_build_object(
 						'id', i.id,
 						'invoice_number', i.invoice_number,
 						'status', i.status,
@@ -133,7 +137,7 @@ export class SubscriptionsService {
 						'due_date', i.due_date,
 						'total_invoice_currency', i.total_invoice_currency,
 						'invoice_currency', i.invoice_currency
-					)
+					) ORDER BY i.issue_date ASC
 				) FILTER (WHERE i.id IS NOT NULL) as invoices
 			FROM subscriptions s
 			LEFT JOIN subscription_items si ON si.subscription_id = s.id
