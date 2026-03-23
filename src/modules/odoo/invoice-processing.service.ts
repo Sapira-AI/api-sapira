@@ -759,6 +759,13 @@ export class InvoiceProcessingService {
 					invoicesBatch.map(async (invoice) => {
 						try {
 							await this.processInvoice(invoice, mappingConfig, holdingId);
+							// Marcar como procesada y limpiar error
+							await this.invoicesStgRepository.update(invoice.id, {
+								processing_status: 'processed',
+								error_message: null,
+								integration_notes:
+									invoice.processing_status === 'error' ? 'Reprocesada exitosamente después de error' : 'Procesada exitosamente',
+							});
 							return { success: true, invoice };
 						} catch (error) {
 							const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
