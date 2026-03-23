@@ -156,7 +156,7 @@
 				"index_definition": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)",
 				"index_type": "btree",
 				"is_unique": "YES",
-				"index_size": "56 kB"
+				"index_size": "80 kB"
 			},
 			{
 				"index_name": "idx_clients_client_number",
@@ -177,7 +177,7 @@
 				"index_definition": "CREATE INDEX idx_clients_holding_id ON public.clients USING btree (holding_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "16 kB"
+				"index_size": "56 kB"
 			},
 			{
 				"index_name": "idx_clients_salesforce_account_id",
@@ -198,7 +198,7 @@
 				"index_definition": "CREATE INDEX idx_clients_stripe_customer_id ON public.clients USING btree (stripe_customer_id) WHERE (stripe_customer_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "8 kB"
+				"index_size": "40 kB"
 			}
 		],
 		"foreign_keys": [
@@ -265,9 +265,9 @@
 			}
 		],
 		"size_info": {
-			"total_size": "936 kB",
+			"total_size": "1040 kB",
 			"table_size": "512 kB",
-			"indexes_size": "424 kB"
+			"indexes_size": "528 kB"
 		},
 		"permissions": [
 			{
@@ -411,6 +411,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-18T08:20:03.177Z"
+		"analysis_timestamp": "2026-03-23T08:14:38.911Z"
   }
 }
