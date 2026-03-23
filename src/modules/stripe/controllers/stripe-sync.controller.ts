@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Logger, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -11,6 +11,8 @@ import { StripeSyncService } from '../services/stripe-sync.service';
 @Controller('stripe/sync')
 @UseGuards(SupabaseAuthGuard)
 export class StripeSyncController {
+	private readonly logger = new Logger(StripeSyncController.name);
+
 	constructor(private readonly stripeSyncService: StripeSyncService) {}
 
 	@Post()
@@ -27,7 +29,21 @@ export class StripeSyncController {
 		description: 'No autorizado',
 	})
 	async syncStripeData(@Headers('x-holding-id') holdingId: string, @Body() syncRequest: SyncRequestDto): Promise<{ jobId: string }> {
-		return this.stripeSyncService.syncAll(holdingId, syncRequest.batchSize);
+		this.logger.log('═══════════════════════════════════════════════════════════════');
+		this.logger.log('🚀 INICIO: Solicitud de sincronización de Stripe desde frontend');
+		this.logger.log('═══════════════════════════════════════════════════════════════');
+		this.logger.log(`📋 Parámetros recibidos:`);
+		this.logger.log(`   - Holding ID: ${holdingId}`);
+		this.logger.log(`   - Batch Size: ${syncRequest.batchSize || 100}`);
+		this.logger.log(`   - Timestamp: ${new Date().toISOString()}`);
+
+		const result = await this.stripeSyncService.syncAll(holdingId, syncRequest.batchSize);
+
+		this.logger.log(`✅ Job de sincronización creado exitosamente`);
+		this.logger.log(`   - Job ID: ${result.jobId}`);
+		this.logger.log('═══════════════════════════════════════════════════════════════\n');
+
+		return result;
 	}
 
 	@Get(':jobId/status')
