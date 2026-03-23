@@ -148,6 +148,26 @@ export class OdooInvoicesController {
 		@Body() invoiceData: CreateDraftInvoiceDTO
 	): Promise<CreateDraftInvoiceResponseDTO> {
 		const sanitizedHoldingId = Array.isArray(holdingId) ? holdingId[0] : holdingId.split(',')[0].trim();
-		return await this.odooInvoicesService.createDraftInvoice(sanitizedHoldingId, invoiceData);
+		const draftResult = await this.odooInvoicesService.createDraftInvoice(sanitizedHoldingId, invoiceData);
+
+		// Si auto_invoice es true, emitir la factura automáticamente
+		if (invoiceData.auto_invoice && draftResult.success && draftResult.invoice_id) {
+			try {
+				const postResult = await this.odooInvoicesService.postInvoice(sanitizedHoldingId, draftResult.invoice_id);
+				return {
+					...draftResult,
+					state: postResult.state,
+					message: `${draftResult.message}. ${postResult.message}`,
+				};
+			} catch (error) {
+				// Si falla la emisión, devolver el draft creado con un warning
+				return {
+					...draftResult,
+					message: `${draftResult.message}. Advertencia: No se pudo emitir automáticamente - ${error.message}`,
+				};
+			}
+		}
+
+		return draftResult;
 	}
 }
