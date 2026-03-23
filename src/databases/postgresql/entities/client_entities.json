@@ -120,28 +120,28 @@
 				"index_definition": "CREATE UNIQUE INDEX client_entities_pkey ON public.client_entities USING btree (id)",
 				"index_type": "btree",
 				"is_unique": "YES",
-				"index_size": "56 kB"
+				"index_size": "88 kB"
 			},
 			{
 				"index_name": "idx_client_entities_client_number",
 				"index_definition": "CREATE INDEX idx_client_entities_client_number ON public.client_entities USING btree (client_number)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "56 kB"
+				"index_size": "80 kB"
 			},
 			{
 				"index_name": "idx_client_entities_holding_id",
 				"index_definition": "CREATE INDEX idx_client_entities_holding_id ON public.client_entities USING btree (holding_id)",
 				"index_type": "btree",
 				"is_unique": "NO",
-				"index_size": "16 kB"
+				"index_size": "56 kB"
 			},
 			{
 				"index_name": "idx_client_entities_odoo_partner_holding",
 				"index_definition": "CREATE UNIQUE INDEX idx_client_entities_odoo_partner_holding ON public.client_entities USING btree (odoo_partner_id, holding_id) WHERE (odoo_partner_id IS NOT NULL)",
 				"index_type": "btree",
 				"is_unique": "YES",
-				"index_size": "56 kB"
+				"index_size": "64 kB"
 			},
 			{
 				"index_name": "idx_client_entities_odoo_partner_id",
@@ -194,9 +194,9 @@
 			}
 		],
 		"size_info": {
-			"total_size": "504 kB",
-			"table_size": "240 kB",
-			"indexes_size": "264 kB"
+			"total_size": "696 kB",
+			"table_size": "328 kB",
+			"indexes_size": "368 kB"
 		},
 		"permissions": [
 			{
@@ -340,6 +340,6 @@
 				"is_grantable": "NO"
 			}
 		],
-		"analysis_timestamp": "2026-03-20T07:03:20.974Z"
+		"analysis_timestamp": "2026-03-23T08:14:15.656Z"
 	}
 }

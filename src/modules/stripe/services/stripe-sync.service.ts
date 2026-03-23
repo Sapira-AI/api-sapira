@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { SyncJobStatusDto, SyncProgressDto } from '../dto/sync-progress.dto';
 import { EntitySyncStatsDto, SyncStatsDto } from '../dto/sync-response.dto';
@@ -25,6 +25,13 @@ export class StripeSyncService {
 	) {}
 
 	async syncAll(holdingId: string, batchSize: number = 100): Promise<{ jobId: string }> {
+		this.logger.log('\n┌─────────────────────────────────────────────────────────────┐');
+		this.logger.log('│  STRIPE SYNC SERVICE - syncAll()                           │');
+		this.logger.log('└─────────────────────────────────────────────────────────────┘');
+		this.logger.log(`📝 Creando job de sincronización...`);
+		this.logger.log(`   - Holding ID: ${holdingId}`);
+		this.logger.log(`   - Batch Size: ${batchSize}`);
+
 		const job = await this.syncJobRepo.save({
 			holding_id: holdingId,
 			status: 'running',
@@ -37,8 +44,11 @@ export class StripeSyncService {
 			},
 		});
 
+		this.logger.log(`✅ Job creado con ID: ${job.id}`);
+		this.logger.log(`🚀 Iniciando ejecución asíncrona del job...\n`);
+
 		this.executeSyncJob(job.id, holdingId, batchSize).catch((error) => {
-			this.logger.error(`Error en job ${job.id}:`, error);
+			this.logger.error(`❌ Error en job ${job.id}:`, error);
 		});
 
 		return { jobId: job.id };
@@ -70,7 +80,14 @@ export class StripeSyncService {
 	}
 
 	private async executeSyncJob(jobId: string, holdingId: string, batchSize: number): Promise<void> {
-		this.logger.log(`Ejecutando job ${jobId} para holding ${holdingId}`);
+		const startTime = Date.now();
+		this.logger.log('\n╔═════════════════════════════════════════════════════════════╗');
+		this.logger.log('║  EJECUTANDO JOB DE SINCRONIZACIÓN                           ║');
+		this.logger.log('╚═════════════════════════════════════════════════════════════╝');
+		this.logger.log(`🆔 Job ID: ${jobId}`);
+		this.logger.log(`🏢 Holding ID: ${holdingId}`);
+		this.logger.log(`📦 Batch Size: ${batchSize}`);
+		this.logger.log(`⏰ Inicio: ${new Date().toISOString()}\n`);
 
 		const stats: EntitySyncStatsDto = {
 			customers: this.initStats(),
@@ -83,7 +100,9 @@ export class StripeSyncService {
 		const errors: string[] = [];
 
 		try {
-			this.logger.log('Fase 0: Validando clientes contra BigQuery...');
+			this.logger.log('\n┌─────────────────────────────────────────────────────────────┐');
+			this.logger.log('│  FASE 0: VALIDACIÓN DE CLIENTES CONTRA BIGQUERY            │');
+			this.logger.log('└─────────────────────────────────────────────────────────────┘');
 			const customersToValidate = await this.customersStgRepo
 				.createQueryBuilder('c')
 				.where('c.holding_id = :holdingId', { holdingId })
@@ -99,42 +118,38 @@ export class StripeSyncService {
 					await this.markCustomerAsInvalid(customer.id, 'Cliente no válido - sin Salesforce ID en BigQuery');
 					await this.markRelatedRecordsAsInvalid(customer.stripe_id);
 					invalidCount++;
+				} else {
+					// Si el cliente es válido pero tiene integration_notes de inválido anterior, limpiarlas
+					if (customer.integration_notes === 'Cliente no valido') {
+						await this.customersStgRepo.update(customer.id, {
+							integration_notes: null,
+						});
+						this.logger.debug(`Cliente ${customer.stripe_id} ahora es válido - limpiando integration_notes`);
+					}
 				}
 			}
 
-			this.logger.log(`Validación completada. ${invalidCount} clientes marcados como inválidos`);
+			this.logger.log(`\n✅ Validación completada:`);
+			this.logger.log(`   - Total validados: ${customersToValidate.length}`);
+			this.logger.log(`   - Marcados como inválidos: ${invalidCount}`);
+			this.logger.log(`   - Válidos: ${customersToValidate.length - invalidCount}\n`);
 
-			this.logger.log(`📊 Contando registros para sincronizar...`);
+			this.logger.log('┌─────────────────────────────────────────────────────────────┐');
+			this.logger.log('│  CONTANDO REGISTROS PARA SINCRONIZAR                       │');
+			this.logger.log('└─────────────────────────────────────────────────────────────┘');
 
-			const customerCount = await this.customersStgRepo.count({
-				where: {
-					holding_id: holdingId,
-					processing_status: In(['to_create', 'to_update', 'error']) as any,
-				},
-			});
-			this.logger.log(`📊 Clientes a sincronizar (count simple): ${customerCount}`);
-
-			// Verificar con query builder también
-			const customerCountQB = await this.customersStgRepo
+			// Contar clientes a sincronizar (Fase 0 ya limpió integration_notes de clientes válidos)
+			const customerCount = await this.customersStgRepo
 				.createQueryBuilder('c')
 				.where('c.holding_id = :holdingId', { holdingId })
 				.andWhere("c.processing_status IN ('to_create', 'to_update', 'error')")
 				.getCount();
-			this.logger.log(`📊 Clientes a sincronizar (query builder sin filtro integration_notes): ${customerCountQB}`);
-
-			const customerCountQBFiltered = await this.customersStgRepo
-				.createQueryBuilder('c')
-				.where('c.holding_id = :holdingId', { holdingId })
-				.andWhere("c.processing_status IN ('to_create', 'to_update', 'error')")
-				.andWhere("(c.integration_notes IS NULL OR c.integration_notes != 'Cliente no valido')")
-				.getCount();
-			this.logger.log(`📊 Clientes a sincronizar (query builder CON filtro integration_notes): ${customerCountQBFiltered}`);
+			this.logger.log(`📊 Clientes a sincronizar: ${customerCount}`);
 
 			const subscriptionCount = await this.subscriptionsStgRepo
 				.createQueryBuilder('s')
 				.where('s.holding_id = :holdingId', { holdingId })
 				.andWhere("s.processing_status IN ('to_create', 'to_update', 'error')")
-				.andWhere("(s.integration_notes IS NULL OR s.integration_notes != 'Cliente no valido')")
 				.getCount();
 			this.logger.log(`📊 Suscripciones a sincronizar: ${subscriptionCount}`);
 
@@ -142,7 +157,6 @@ export class StripeSyncService {
 				.createQueryBuilder('i')
 				.where('i.holding_id = :holdingId', { holdingId })
 				.andWhere("i.processing_status IN ('to_create', 'to_update', 'error')")
-				.andWhere("(i.integration_notes IS NULL OR i.integration_notes != 'Cliente no valido')")
 				.getCount();
 			this.logger.log(`📊 Facturas a sincronizar: ${invoiceCount}`);
 
@@ -154,8 +168,18 @@ export class StripeSyncService {
 				overallProgress: 0,
 			});
 
-			this.logger.log(`🚀 Paso 1: Sincronizando clientes (total: ${customerCount})...`);
+			this.logger.log('\n╔═════════════════════════════════════════════════════════════╗');
+			this.logger.log('║  FASE 1: SINCRONIZACIÓN DE CLIENTES                        ║');
+			this.logger.log('╚═════════════════════════════════════════════════════════════╝');
+			this.logger.log(`📊 Total a sincronizar: ${customerCount}`);
+			const customersStartTime = Date.now();
 			stats.customers = await this.syncCustomers(holdingId, batchSize, jobId, customerCount);
+			const customersEndTime = Date.now();
+			this.logger.log(`\n✅ Fase 1 completada en ${((customersEndTime - customersStartTime) / 1000).toFixed(2)}s`);
+			this.logger.log(`   - Creados: ${stats.customers.created}`);
+			this.logger.log(`   - Actualizados: ${stats.customers.updated}`);
+			this.logger.log(`   - Omitidos: ${stats.customers.skipped}`);
+			this.logger.log(`   - Errores: ${stats.customers.errors}`);
 
 			await this.updateJobProgress(jobId, {
 				customers: { total: customerCount, processed: customerCount },
@@ -165,8 +189,14 @@ export class StripeSyncService {
 				overallProgress: 33,
 			});
 
-			this.logger.log('Paso 2: Sincronizando suscripciones...');
+			this.logger.log('\n╔═════════════════════════════════════════════════════════════╗');
+			this.logger.log('║  FASE 2: SINCRONIZACIÓN DE SUSCRIPCIONES                   ║');
+			this.logger.log('╚═════════════════════════════════════════════════════════════╝');
+			this.logger.log(`📊 Total a sincronizar: ${subscriptionCount}`);
+			const subscriptionsStartTime = Date.now();
 			const subscriptionResult = await this.syncSubscriptions(holdingId, batchSize, jobId, subscriptionCount);
+			const subscriptionsEndTime = Date.now();
+			this.logger.log(`\n✅ Fase 2 completada en ${((subscriptionsEndTime - subscriptionsStartTime) / 1000).toFixed(2)}s`);
 			stats.subscriptions = subscriptionResult.subscriptions;
 			stats.subscriptionItems = subscriptionResult.subscriptionItems;
 
@@ -178,8 +208,14 @@ export class StripeSyncService {
 				overallProgress: 66,
 			});
 
-			this.logger.log('Paso 3: Sincronizando facturas...');
+			this.logger.log('\n╔═════════════════════════════════════════════════════════════╗');
+			this.logger.log('║  FASE 3: SINCRONIZACIÓN DE FACTURAS                        ║');
+			this.logger.log('╚═════════════════════════════════════════════════════════════╝');
+			this.logger.log(`📊 Total a sincronizar: ${invoiceCount}`);
+			const invoicesStartTime = Date.now();
 			const invoiceResult = await this.syncInvoices(holdingId, batchSize, jobId, invoiceCount);
+			const invoicesEndTime = Date.now();
+			this.logger.log(`\n✅ Fase 3 completada en ${((invoicesEndTime - invoicesStartTime) / 1000).toFixed(2)}s`);
 			stats.invoices = invoiceResult.invoices;
 			stats.invoiceItems = invoiceResult.invoiceItems;
 
@@ -191,7 +227,20 @@ export class StripeSyncService {
 				overallProgress: 100,
 			});
 
-			this.logger.log('Sincronización completada exitosamente');
+			const endTime = Date.now();
+			const totalTime = ((endTime - startTime) / 1000).toFixed(2);
+
+			this.logger.log('\n╔═════════════════════════════════════════════════════════════╗');
+			this.logger.log('║  ✅ SINCRONIZACIÓN COMPLETADA EXITOSAMENTE                 ║');
+			this.logger.log('╚═════════════════════════════════════════════════════════════╝');
+			this.logger.log(`⏱️  Tiempo total: ${totalTime}s`);
+			this.logger.log(`📊 Resumen de estadísticas:`);
+			this.logger.log(
+				`   Clientes: ${stats.customers.created} creados, ${stats.customers.updated} actualizados, ${stats.customers.errors} errores`
+			);
+			this.logger.log(`   Suscripciones: ${stats.subscriptions.created} creadas, ${stats.subscriptions.updated} actualizadas`);
+			this.logger.log(`   Facturas: ${stats.invoices.created} creadas, ${stats.invoices.updated} actualizadas`);
+			this.logger.log(`🏁 Finalizando job ${jobId}\n`);
 
 			await this.syncJobRepo.update(jobId, {
 				status: 'completed',
@@ -200,7 +249,15 @@ export class StripeSyncService {
 				completed_at: new Date(),
 			});
 		} catch (error) {
-			this.logger.error('Error durante la sincronización', error);
+			const endTime = Date.now();
+			const totalTime = ((endTime - startTime) / 1000).toFixed(2);
+
+			this.logger.error('\n╔═════════════════════════════════════════════════════════════╗');
+			this.logger.error('║  ❌ ERROR DURANTE LA SINCRONIZACIÓN                        ║');
+			this.logger.error('╚═════════════════════════════════════════════════════════════╝');
+			this.logger.error(`⏱️  Tiempo hasta el error: ${totalTime}s`);
+			this.logger.error(`❌ Error: ${error.message}`);
+			this.logger.error(`📍 Stack trace:`, error.stack);
 			errors.push(error.message);
 
 			await this.syncJobRepo.update(jobId, {
@@ -220,7 +277,6 @@ export class StripeSyncService {
 	private async syncCustomers(holdingId: string, batchSize: number, jobId?: string, total?: number): Promise<SyncStatsDto> {
 		const stats = this.initStats();
 		const chunkSize = batchSize || 200;
-		let offset = 0;
 		let hasMore = true;
 		let totalProcessedSoFar = 0;
 
@@ -228,15 +284,15 @@ export class StripeSyncService {
 
 		try {
 			while (hasMore) {
-				this.logger.debug(`🔎 Buscando clientes - offset: ${offset}, chunkSize: ${chunkSize}`);
+				this.logger.debug(
+					`🔎 Buscando clientes - chunkSize: ${chunkSize} (siempre desde el inicio porque los procesados salen de la consulta)`
+				);
 
 				const queryBuilder = this.customersStgRepo
 					.createQueryBuilder('c')
 					.where('c.holding_id = :holdingId', { holdingId })
 					.andWhere("c.processing_status IN ('to_create', 'to_update', 'error')")
-					.andWhere("(c.integration_notes IS NULL OR c.integration_notes != 'Cliente no valido')")
 					.orderBy('c.created_at', 'ASC')
-					.skip(offset)
 					.take(chunkSize);
 
 				const sql = queryBuilder.getSql();
@@ -248,12 +304,12 @@ export class StripeSyncService {
 				this.logger.log(`📊 Clientes encontrados en este chunk: ${customers.length}`);
 
 				if (customers.length === 0) {
-					this.logger.warn(`⚠️ No se encontraron clientes en offset ${offset}. Deteniendo sincronización.`);
+					this.logger.warn(`⚠️ No se encontraron más clientes para procesar. Deteniendo sincronización.`);
 					hasMore = false;
 					break;
 				}
 
-				this.logger.log(`✅ Procesando chunk de ${customers.length} clientes (offset: ${offset})...`);
+				this.logger.log(`✅ Procesando chunk de ${customers.length} clientes...`);
 
 				for (const customer of customers) {
 					this.logger.debug(`🔄 Procesando cliente: ${customer.stripe_id}`);
@@ -295,7 +351,6 @@ export class StripeSyncService {
 							customers: {
 								total,
 								processed: totalProcessedSoFar,
-								current: `Chunk ${Math.floor(offset / chunkSize) + 1}`,
 							},
 						});
 					}
@@ -303,8 +358,6 @@ export class StripeSyncService {
 
 				if (customers.length < chunkSize) {
 					hasMore = false;
-				} else {
-					offset += chunkSize;
 				}
 			}
 
@@ -367,92 +420,155 @@ export class StripeSyncService {
 		holdingId: string
 	): Promise<{ success: boolean; action?: 'create' | 'update' | 'no_change'; error?: string }> {
 		try {
+			this.logger.debug(`\n  ┌─── Procesando cliente: ${customer.stripe_id}`);
 			const rawData = customer.raw_data as any;
 
-			// Obtener datos de BigQuery para crear/actualizar el client
+			// PASO 1: Obtener datos de stripe_customers_bigquery
+			this.logger.debug(`  │ PASO 1: Consultando BigQuery...`);
 			const bigQueryData = await this.customersStgRepo.query(
-				`SELECT client_name, salesforce_account_segment, salesforce_account_industry, salesforce_account_country 
+				`SELECT salesforce_account_id, client_name, salesforce_account_segment, salesforce_account_industry, salesforce_account_country 
 				 FROM stripe_customers_bigquery 
 				 WHERE stripe_customer_id = $1 AND holding_id = $2`,
 				[customer.stripe_id, holdingId]
 			);
 
-			let clientId: string | null = null;
-
-			// Si hay datos de BigQuery, buscar o crear el client
-			if (bigQueryData && bigQueryData.length > 0) {
-				const bqData = bigQueryData[0];
-
-				// Buscar client existente por nombre comercial
-				const existingClientRecord = await this.customersStgRepo.query(
-					`SELECT id FROM clients WHERE name_commercial = $1 AND holding_id = $2`,
-					[bqData.client_name, holdingId]
-				);
-
-				if (existingClientRecord && existingClientRecord.length > 0) {
-					clientId = existingClientRecord[0].id;
-				} else {
-					// Crear nuevo client
-					const newClient = await this.customersStgRepo.query(
-						`INSERT INTO clients (holding_id, name_commercial, segment, industry, status) 
-						 VALUES ($1, $2, $3, $4, 'Activo') RETURNING id`,
-						[holdingId, bqData.client_name, bqData.salesforce_account_segment, bqData.salesforce_account_industry]
-					);
-					clientId = newClient[0].id;
-				}
+			if (!bigQueryData || bigQueryData.length === 0) {
+				this.logger.error(`  │ ❌ Cliente ${customer.stripe_id} no encontrado en BigQuery`);
+				this.logger.debug(`  └─── ERROR\n`);
+				return { success: false, error: 'Cliente no encontrado en BigQuery' };
 			}
 
-			this.logger.debug(`Buscando client_entity para stripe_id: ${customer.stripe_id}`);
-			const existingClient = await this.customersStgRepo.query(
+			const bqData = bigQueryData[0];
+			const salesforceAccountId = bqData.salesforce_account_id;
+			this.logger.debug(`  │ ✅ BigQuery: salesforce_account_id = ${salesforceAccountId || 'NULL'}`);
+
+			if (!salesforceAccountId || salesforceAccountId === '') {
+				this.logger.debug(`  │ ⚠️  Sin salesforce_account_id - creará client_entity sin relación`);
+			}
+
+			// PASO 2: Buscar client_id en tabla clients usando salesforce_account_id
+			this.logger.debug(`  │ PASO 2: Buscando client por salesforce_account_id...`);
+			const clientRecord = await this.customersStgRepo.query(`SELECT id FROM clients WHERE salesforce_account_id = $1 AND holding_id = $2`, [
+				salesforceAccountId,
+				holdingId,
+			]);
+
+			let clientId: string | null = null;
+			if (!clientRecord || clientRecord.length === 0) {
+				this.logger.debug(`  │ ⚠️  Client NO encontrado - client_entity quedará sin relación`);
+			} else {
+				clientId = clientRecord[0].id;
+				this.logger.debug(`  │ ✅ Client encontrado: ${clientId}`);
+			}
+
+			// PASO 3: Buscar o crear client_entity
+			this.logger.debug(`  │ PASO 3: Buscando client_entity existente...`);
+			const existingClientEntity = await this.customersStgRepo.query(
 				`SELECT id, legal_name, email, client_number, client_id FROM client_entities WHERE tax_id = $1 AND holding_id = $2`,
 				[customer.stripe_id, holdingId]
 			);
-			this.logger.debug(`Client_entity encontrado: ${existingClient && existingClient.length > 0 ? 'SI' : 'NO'}`);
 
-			const clientData = {
+			const clientEntityData = {
 				client_id: clientId,
-				legal_name: rawData.email || '',
+				legal_name: rawData.email || bqData.client_name || '',
 				tax_id: customer.stripe_id,
-				country: bigQueryData && bigQueryData.length > 0 ? bigQueryData[0].salesforce_account_country : '',
+				country: bqData.salesforce_account_country || '',
 				email: rawData.email || '',
 				client_number: customer.stripe_id,
 				holding_id: holdingId,
 			};
 
-			if (existingClient && existingClient.length > 0) {
-				const existing = existingClient[0];
+			let clientEntityId: string;
+			let action: 'create' | 'update' | 'no_change' = 'no_change';
+
+			if (existingClientEntity && existingClientEntity.length > 0) {
+				const existing = existingClientEntity[0];
+				clientEntityId = existing.id;
 				const fieldsToCompare = ['legal_name', 'email', 'client_number', 'client_id'];
 
-				if (this.hasChanges(clientData, existing, fieldsToCompare)) {
-					this.logger.debug(`Actualizando client_entity ${existing.id}`);
+				if (this.hasChanges(clientEntityData, existing, fieldsToCompare)) {
+					this.logger.debug(`  │ 🔄 Actualizando client_entity ${clientEntityId}`);
 					await this.customersStgRepo.query(
 						`UPDATE client_entities SET legal_name = $1, email = $2, client_number = $3, client_id = $4, country = $5 WHERE id = $6`,
-						[clientData.legal_name, clientData.email, clientData.client_number, clientData.client_id, clientData.country, existing.id]
+						[
+							clientEntityData.legal_name,
+							clientEntityData.email,
+							clientEntityData.client_number,
+							clientEntityData.client_id,
+							clientEntityData.country,
+							clientEntityId,
+						]
 					);
-					return { success: true, action: 'update' };
+					action = 'update';
 				} else {
-					return { success: true, action: 'no_change' };
+					this.logger.debug(`  │ ℹ️  Sin cambios en client_entity`);
 				}
 			} else {
-				this.logger.debug(`Creando nuevo client_entity para stripe_id: ${customer.stripe_id}`);
-				await this.customersStgRepo.query(
-					`INSERT INTO client_entities (client_id, legal_name, tax_id, country, email, client_number, holding_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				this.logger.debug(`  │ ➕ Creando nuevo client_entity`);
+				const result = await this.customersStgRepo.query(
+					`INSERT INTO client_entities (client_id, legal_name, tax_id, country, email, client_number, holding_id) 
+					 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 					[
-						clientData.client_id,
-						clientData.legal_name,
-						clientData.tax_id,
-						clientData.country,
-						clientData.email,
-						clientData.client_number,
-						clientData.holding_id,
+						clientEntityData.client_id,
+						clientEntityData.legal_name,
+						clientEntityData.tax_id,
+						clientEntityData.country,
+						clientEntityData.email,
+						clientEntityData.client_number,
+						clientEntityData.holding_id,
 					]
 				);
-				this.logger.debug(`Client_entity creado exitosamente`);
-				return { success: true, action: 'create' };
+				clientEntityId = result[0].id;
+				this.logger.debug(`  │ ✅ Client_entity creado: ${clientEntityId}`);
+				action = 'create';
 			}
+
+			// PASO 4: Crear o actualizar relación en client_entity_clients
+			this.logger.debug(`  │ PASO 4: Gestionando relación client_entity_clients...`);
+			if (clientId) {
+				await this.syncClientEntityRelation(clientEntityId, clientId, holdingId);
+				this.logger.debug(`  │ ✅ Relación creada/verificada`);
+			} else {
+				this.logger.debug(`  │ ⏭️  Sin client_id - omitiendo relación`);
+			}
+
+			this.logger.debug(`  └─── ✅ Completado: action=${action}\n`);
+			return { success: true, action };
 		} catch (error) {
-			this.logger.error('Error en syncCustomerToDestination', error);
+			this.logger.error(`  └─── ❌ ERROR: ${error.message}\n`);
 			return { success: false, error: error.message };
+		}
+	}
+
+	private async syncClientEntityRelation(clientEntityId: string, clientId: string, holdingId: string): Promise<void> {
+		try {
+			// Buscar si ya existe la relación
+			const existingRelation = await this.customersStgRepo.query(
+				`SELECT id FROM client_entity_clients WHERE client_entity_id = $1 AND client_id = $2`,
+				[clientEntityId, clientId]
+			);
+
+			if (existingRelation && existingRelation.length > 0) {
+				this.logger.debug(`Relación client_entity_clients ya existe para client_entity_id: ${clientEntityId}, client_id: ${clientId}`);
+				return;
+			}
+
+			// Crear nueva relación
+			this.logger.debug(`Creando relación en client_entity_clients: client_entity_id=${clientEntityId}, client_id=${clientId}`);
+			await this.customersStgRepo.query(
+				`INSERT INTO client_entity_clients (client_entity_id, client_id, holding_id, is_primary) 
+				 VALUES ($1, $2, $3, $4)`,
+				[clientEntityId, clientId, holdingId, true]
+			);
+			this.logger.debug(`Relación client_entity_clients creada exitosamente`);
+		} catch (error) {
+			// Si el error es por constraint de unique, no es un error crítico
+			if (error.code === '23505') {
+				this.logger.debug(`Relación client_entity_clients ya existe (unique constraint)`);
+			} else {
+				this.logger.error(`Error creando relación client_entity_clients`, error);
+				throw error;
+			}
 		}
 	}
 
@@ -482,7 +598,6 @@ export class StripeSyncService {
 		const subscriptionStats = this.initStats();
 		const itemStats = this.initStats();
 		const chunkSize = batchSize || 200;
-		let offset = 0;
 		let hasMore = true;
 		let totalProcessedSoFar = 0;
 
@@ -490,7 +605,7 @@ export class StripeSyncService {
 
 		try {
 			while (hasMore) {
-				this.logger.debug(`🔎 Buscando suscripciones - offset: ${offset}, chunkSize: ${chunkSize}`);
+				this.logger.debug(`🔎 Buscando suscripciones - chunkSize: ${chunkSize} (siempre desde el inicio)`);
 
 				const queryBuilder = this.subscriptionsStgRepo
 					.createQueryBuilder('s')
@@ -498,7 +613,6 @@ export class StripeSyncService {
 					.andWhere("s.processing_status IN ('to_create', 'to_update', 'error')")
 					.andWhere("(s.integration_notes IS NULL OR s.integration_notes != 'Cliente no valido')")
 					.orderBy('s.created_at', 'ASC')
-					.skip(offset)
 					.take(chunkSize);
 
 				const sql = queryBuilder.getSql();
@@ -510,12 +624,12 @@ export class StripeSyncService {
 				this.logger.log(`📊 Suscripciones encontradas en este chunk: ${subscriptions.length}`);
 
 				if (subscriptions.length === 0) {
-					this.logger.warn(`⚠️ No se encontraron suscripciones en offset ${offset}. Deteniendo sincronización.`);
+					this.logger.warn(`⚠️ No se encontraron más suscripciones para procesar. Deteniendo sincronización.`);
 					hasMore = false;
 					break;
 				}
 
-				this.logger.log(`Procesando chunk de ${subscriptions.length} suscripciones (offset: ${offset})...`);
+				this.logger.log(`Procesando chunk de ${subscriptions.length} suscripciones...`);
 
 				for (const subscription of subscriptions) {
 					try {
@@ -557,7 +671,6 @@ export class StripeSyncService {
 							subscriptions: {
 								total,
 								processed: totalProcessedSoFar,
-								current: `Chunk ${Math.floor(offset / chunkSize) + 1}`,
 							},
 						});
 					}
@@ -565,8 +678,6 @@ export class StripeSyncService {
 
 				if (subscriptions.length < chunkSize) {
 					hasMore = false;
-				} else {
-					offset += chunkSize;
 				}
 			}
 
@@ -793,7 +904,6 @@ export class StripeSyncService {
 		const invoiceStats = this.initStats();
 		const itemStats = this.initStats();
 		const chunkSize = batchSize || 200;
-		let offset = 0;
 		let hasMore = true;
 		let totalProcessedSoFar = 0;
 
@@ -805,7 +915,6 @@ export class StripeSyncService {
 					.andWhere("i.processing_status IN ('to_create', 'to_update', 'error')")
 					.andWhere("(i.integration_notes IS NULL OR i.integration_notes != 'Cliente no valido')")
 					.orderBy('i.created_at', 'ASC')
-					.skip(offset)
 					.take(chunkSize)
 					.getMany();
 
@@ -814,7 +923,7 @@ export class StripeSyncService {
 					break;
 				}
 
-				this.logger.log(`Procesando chunk de ${invoices.length} facturas (offset: ${offset})...`);
+				this.logger.log(`Procesando chunk de ${invoices.length} facturas...`);
 
 				for (const invoice of invoices) {
 					try {
@@ -856,7 +965,6 @@ export class StripeSyncService {
 							invoices: {
 								total,
 								processed: totalProcessedSoFar,
-								current: `Chunk ${Math.floor(offset / chunkSize) + 1}`,
 							},
 						});
 					}
@@ -864,8 +972,6 @@ export class StripeSyncService {
 
 				if (invoices.length < chunkSize) {
 					hasMore = false;
-				} else {
-					offset += chunkSize;
 				}
 			}
 
@@ -971,8 +1077,15 @@ export class StripeSyncService {
 
 				if (this.hasChanges(invoiceData, existing, fieldsToCompare)) {
 					await this.customersStgRepo.query(
-						`UPDATE invoices SET status = $1, total_invoice_currency = $2, subscription_id = $3 WHERE id = $4`,
-						[invoiceData.status, invoiceData.total_invoice_currency, subscriptionId, invoiceId]
+						`UPDATE invoices SET status = $1, total_invoice_currency = $2, subscription_id = $3, invoice_type = $4, document_type = $5 WHERE id = $6`,
+						[
+							invoiceData.status,
+							invoiceData.total_invoice_currency,
+							subscriptionId,
+							invoiceData.invoice_type,
+							invoiceData.document_type,
+							invoiceId,
+						]
 					);
 					action = 'update';
 				} else {
@@ -1027,7 +1140,7 @@ export class StripeSyncService {
 			}
 
 			const items = rawData.lines?.data || [];
-			const itemsResult = await this.syncInvoiceItems(invoiceId, items, holdingId, subscriptionId);
+			const itemsResult = await this.syncInvoiceItems(invoiceId, items, holdingId);
 
 			return {
 				success: true,
@@ -1041,12 +1154,7 @@ export class StripeSyncService {
 		}
 	}
 
-	private async syncInvoiceItems(
-		invoiceId: string,
-		items: any[],
-		holdingId: string,
-		subscriptionId: string | null
-	): Promise<{ created: number; updated: number }> {
+	private async syncInvoiceItems(invoiceId: string, items: any[], holdingId: string): Promise<{ created: number; updated: number }> {
 		let created = 0;
 		let updated = 0;
 
