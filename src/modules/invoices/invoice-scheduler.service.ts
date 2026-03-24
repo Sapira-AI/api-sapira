@@ -244,10 +244,37 @@ export class InvoiceSchedulerService {
 
 				result.status = 'sent';
 				result.odooInvoiceId = odooResponse.invoice_id;
-				result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id} (mantiene estado 'Por Emitir')`;
-				this.logger.log(
-					`✓ Factura ${invoice.invoice_number} enviada exitosamente a Odoo (ID: ${odooResponse.invoice_id}) - mantiene estado 'Por Emitir'`
-				);
+
+				// Si auto_invoice es true, emitir la factura automáticamente
+				if (invoice.auto_invoice) {
+					this.logger.log(`📝 Factura ${invoice.invoice_number} tiene auto_invoice=true, emitiendo automáticamente...`);
+
+					try {
+						const postResponse = await this.odooInvoicesService.postInvoice(invoice.holding_id, odooResponse.invoice_id);
+
+						if (postResponse.success) {
+							await this.invoiceRepository.update(invoice.id, {
+								status: 'Emitida',
+							});
+
+							result.details = `Factura creada y emitida exitosamente en Odoo con ID: ${odooResponse.invoice_id} (estado: ${postResponse.state || 'posted'})`;
+							this.logger.log(
+								`✓ Factura ${invoice.invoice_number} creada y emitida exitosamente en Odoo (ID: ${odooResponse.invoice_id}, estado: ${postResponse.state || 'posted'})`
+							);
+						} else {
+							result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postResponse.message}`;
+							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);
+						}
+					} catch (postError) {
+						result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postError.message}`;
+						this.logger.error(`✗ Error al emitir factura ${invoice.invoice_number}:`, postError);
+					}
+				} else {
+					result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id} (mantiene estado 'Por Emitir')`;
+					this.logger.log(
+						`✓ Factura ${invoice.invoice_number} enviada exitosamente a Odoo (ID: ${odooResponse.invoice_id}) - mantiene estado 'Por Emitir'`
+					);
+				}
 			} else {
 				result.status = 'error';
 				result.error = odooResponse.message || 'Error desconocido al crear factura en Odoo';
