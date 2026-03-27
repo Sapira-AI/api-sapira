@@ -548,3 +548,37 @@ export class CreateDraftInvoiceResponseDTO {
 	@ApiProperty({ description: 'Monto total' })
 	amount_total!: number;
 }
+
+export class ProductMappingItemDTO {
+	@ApiProperty({ description: 'ID del producto en Sapira' })
+	@IsString()
+	sapira_product_id!: string;
+
+	@ApiProperty({ description: 'ID del producto en Odoo' })
+	@IsNumber()
+	odoo_product_id!: number;
+
+	@ApiProperty({ description: 'IDs de impuestos de Odoo separados por comas', required: false })
+	@IsOptional()
+	@IsString()
+	odoo_tax_ids?: string;
+}
+
+export class SaveProductMappingDTO {
+	@ApiProperty({ description: 'Array de mapeos de productos', type: [ProductMappingItemDTO] })
+	@IsArray()
+	@ValidateNested({ each: true })
+	@Type(() => ProductMappingItemDTO)
+	mappings!: ProductMappingItemDTO[];
+}
+
+export class SaveProductMappingResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'Cantidad de productos actualizados' })
+	updated_count!: number;
+}

@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import Stripe from 'stripe';
+import { Repository } from 'typeorm';
+
+import { Product } from '@/modules/odoo/entities/products.entity';
 
 import { GetCustomerByIdDto } from './dtos/get-customer-by-id.dto';
 import { GetCustomersDto } from './dtos/get-customers.dto';
@@ -7,6 +11,8 @@ import { GetInvoiceByIdDto } from './dtos/get-invoice-by-id.dto';
 import { GetInvoicesDto } from './dtos/get-invoices.dto';
 import { GetSubscriptionByIdDto } from './dtos/get-subscription-by-id.dto';
 import { GetSubscriptionsDto } from './dtos/get-subscriptions.dto';
+import { GetProductsResponseDTO, SaveProductMappingDTO, SaveProductMappingResponseDTO } from './dtos/stripe-products.dto';
+import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeCustomer, StripeCustomerListResponse } from './interfaces/stripe-customer.interface';
 import { StripeInvoice, StripeInvoiceListResponse } from './interfaces/stripe-invoice.interface';
 import { StripeSubscription, StripeSubscriptionListResponse } from './interfaces/stripe-subscription.interface';
@@ -16,7 +22,13 @@ import { STRIPE_CLIENT } from './stripe.provider';
 export class StripeService {
 	private readonly logger = new Logger(StripeService.name);
 
-	constructor(@Inject(STRIPE_CLIENT) private readonly stripe: Stripe) {}
+	constructor(
+		@Inject(STRIPE_CLIENT) private readonly stripe: Stripe,
+		@InjectRepository(StripeConnection)
+		private readonly stripeConnectionRepository: Repository<StripeConnection>,
+		@InjectRepository(Product)
+		private readonly productRepository: Repository<Product>
+	) {}
 
 	async getInvoices(dto: GetInvoicesDto): Promise<StripeInvoiceListResponse> {
 		try {
@@ -206,5 +218,102 @@ export class StripeService {
 
 	async getSubscriptionsByStatus(status: string, limit: number = 10): Promise<StripeSubscriptionListResponse> {
 		return this.getSubscriptions({ status, limit });
+	}
+
+	async getProducts(holdingId: string): Promise<GetProductsResponseDTO> {
+		try {
+			this.logger.log(`Obteniendo productos de Stripe para holding: ${holdingId}`);
+
+			// 1. Obtener conexión de Stripe para el holding
+			const connection = await this.stripeConnectionRepository.findOne({
+				where: { holding_id: holdingId, is_active: true },
+			});
+
+			if (!connection) {
+				throw new NotFoundException(`No se encontró una conexión activa de Stripe para el holding ${holdingId}`);
+			}
+
+			// 2. Inicializar cliente de Stripe con API key de la conexión
+			const stripeClient = new Stripe(connection.secret_key, {
+				apiVersion: '2026-01-28.clover',
+			});
+
+			// 3. Obtener productos de Stripe
+			const stripeProducts = await stripeClient.products.list({
+				active: true,
+				limit: 100,
+			});
+
+			this.logger.log(`Se encontraron ${stripeProducts.data.length} productos en Stripe`);
+
+			// 4. Obtener productos de Sapira del holding
+			const sapiraProducts = await this.productRepository.find({
+				where: { holding_id: holdingId },
+				order: { name: 'ASC' },
+			});
+
+			this.logger.log(`Se encontraron ${sapiraProducts.length} productos en Sapira`);
+
+			// 5. Retornar ambos conjuntos de productos
+			return {
+				stripe_products: stripeProducts.data.map((product) => ({
+					id: product.id,
+					name: product.name,
+					description: product.description || undefined,
+					active: product.active,
+					default_price: typeof product.default_price === 'string' ? product.default_price : undefined,
+					metadata: product.metadata,
+				})),
+				sapira_products: sapiraProducts.map((product) => ({
+					id: product.id,
+					product_code: product.product_code,
+					name: product.name,
+					default_price: product.default_price ? Number(product.default_price) : undefined,
+					stripe_product_id: product.stripe_product_id,
+				})),
+			};
+		} catch (error) {
+			this.logger.error(`Error al obtener productos: ${error.message}`, error.stack);
+			throw error;
+		}
+	}
+
+	async mapProducts(holdingId: string, mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
+		try {
+			this.logger.log(`Mapeando ${mapData.mappings.length} productos para holding: ${holdingId}`);
+
+			let updatedCount = 0;
+
+			// Usar transacción para actualizar productos
+			await this.productRepository.manager.transaction(async (transactionalEntityManager) => {
+				for (const mapping of mapData.mappings) {
+					const product = await transactionalEntityManager.findOne(Product, {
+						where: {
+							id: mapping.sapira_product_id,
+							holding_id: holdingId,
+						},
+					});
+
+					if (product) {
+						product.stripe_product_id = mapping.stripe_product_id;
+						await transactionalEntityManager.save(Product, product);
+						updatedCount++;
+					} else {
+						this.logger.warn(`Producto ${mapping.sapira_product_id} no encontrado para holding ${holdingId}`);
+					}
+				}
+			});
+
+			this.logger.log(`Se actualizaron ${updatedCount} productos exitosamente`);
+
+			return {
+				success: true,
+				message: `Se actualizaron ${updatedCount} productos exitosamente`,
+				updated_count: updatedCount,
+			};
+		} catch (error) {
+			this.logger.error(`Error al mapear productos: ${error.message}`, error.stack);
+			throw error;
+		}
 	}
 }

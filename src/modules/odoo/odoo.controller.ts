@@ -14,6 +14,8 @@ import {
 	MapCompaniesResponseDTO,
 	SaveFieldMappingDTO,
 	SaveFieldMappingResponseDTO,
+	SaveProductMappingDTO,
+	SaveProductMappingResponseDTO,
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
 } from './dtos/odoo.dto';
@@ -101,6 +103,44 @@ export class OdooController {
 	@ApiBadRequestResponse({ description: 'Error al obtener productos' })
 	async getProducts(@Query() query: GetProductsDTO) {
 		return await this.odooService.getProducts(query);
+	}
+
+	@Post('products/map')
+	@ApiOperation({
+		summary: 'Mapear productos de Sapira con productos de Odoo',
+		description: 'Actualiza los campos odoo_product_id y odoo_tax_ids en los productos de Sapira',
+	})
+	@ApiBody({
+		type: SaveProductMappingDTO,
+		required: true,
+		description: 'Datos de mapeo de productos',
+		examples: {
+			'map-example': {
+				summary: 'Ejemplo de mapeo de productos',
+				value: {
+					mappings: [
+						{
+							sapira_product_id: '123e4567-e89b-12d3-a456-426614174000',
+							odoo_product_id: 42,
+							odoo_tax_ids: '1,2,3',
+						},
+						{
+							sapira_product_id: '223e4567-e89b-12d3-a456-426614174001',
+							odoo_product_id: 43,
+							odoo_tax_ids: '1',
+						},
+					],
+				},
+			},
+		},
+	})
+	@ApiOkResponse({
+		type: SaveProductMappingResponseDTO,
+		description: 'Mapeos actualizados exitosamente',
+	})
+	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
+	async mapProducts(@Body() mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
+		return await this.odooService.mapProducts(mapData);
 	}
 
 	@Post('count-records')
