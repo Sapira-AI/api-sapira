@@ -1500,6 +1500,68 @@ export class OdooService {
 	}
 
 	/**
+	 * Mapea productos de Sapira con productos de Odoo
+	 * Actualiza los campos odoo_product_id y odoo_tax_ids en la tabla products
+	 */
+	async mapProducts(mapData: { mappings: Array<{ sapira_product_id: string; odoo_product_id: number; odoo_tax_ids?: string }> }): Promise<{
+		success: boolean;
+		message: string;
+		updated_count: number;
+	}> {
+		const { mappings } = mapData;
+
+		if (!mappings || mappings.length === 0) {
+			return {
+				success: false,
+				message: 'No se proporcionaron mapeos para actualizar',
+				updated_count: 0,
+			};
+		}
+
+		try {
+			let updatedCount = 0;
+
+			// Usar transacción para garantizar atomicidad
+			await this.productsRepository.manager.transaction(async (transactionalEntityManager) => {
+				for (const mapping of mappings) {
+					const { sapira_product_id, odoo_product_id, odoo_tax_ids } = mapping;
+
+					// Verificar que el producto existe
+					const product = await transactionalEntityManager.findOne(Product, {
+						where: { id: sapira_product_id },
+					});
+
+					if (!product) {
+						console.warn(`⚠️ Producto ${sapira_product_id} no encontrado, omitiendo...`);
+						continue;
+					}
+
+					// Actualizar el producto con los datos de Odoo
+					await transactionalEntityManager.update(
+						Product,
+						{ id: sapira_product_id },
+						{
+							odoo_product_id,
+							odoo_tax_ids: odoo_tax_ids || null,
+						}
+					);
+
+					updatedCount++;
+				}
+			});
+
+			return {
+				success: true,
+				message: `Se actualizaron ${updatedCount} productos exitosamente`,
+				updated_count: updatedCount,
+			};
+		} catch (error) {
+			console.error('❌ Error mapeando productos:', error);
+			throw new Error(`Error al mapear productos: ${error.message}`);
+		}
+	}
+
+	/**
 	 * Obtiene los detalles completos de los taxes desde Odoo
 	 */
 	private async getTaxDetails(taxIds: number[], objectClient: any, connection: OdooConnectionConfig, uid: number): Promise<Map<number, any>> {

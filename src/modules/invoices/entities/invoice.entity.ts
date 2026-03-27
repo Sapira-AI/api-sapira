@@ -62,6 +62,9 @@ export class Invoice {
 	@Column({ type: 'integer', nullable: true })
 	odoo_invoice_id?: number;
 
+	@Column({ type: 'text', nullable: true })
+	stripe_id?: string;
+
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	sent_to_odoo_at?: Date;
 

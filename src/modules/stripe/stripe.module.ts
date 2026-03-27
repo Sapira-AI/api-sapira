@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@/auth/auth.module';
 import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
+import { Product } from '@/modules/odoo/entities/products.entity';
 
 import { StripeStagingController } from './controllers/stripe-staging.controller';
 import { StripeSyncController } from './controllers/stripe-sync.controller';
@@ -16,6 +17,8 @@ import { StripeStagingService } from './services/stripe-staging.service';
 import { StripeSyncService } from './services/stripe-sync.service';
 import { StripeConnectionController } from './stripe-connection.controller';
 import { StripeConnectionService } from './stripe-connection.service';
+import { StripeIngestionController } from './stripe-ingestion.controller';
+import { StripeIngestionService } from './stripe-ingestion.service';
 import { StripeController } from './stripe.controller';
 import { StripeProviders } from './stripe.provider';
 import { StripeService } from './stripe.service';
@@ -24,10 +27,18 @@ import { StripeService } from './stripe.service';
 	imports: [
 		ConfigModule,
 		AuthModule,
-		TypeOrmModule.forFeature([StripeConnection, StripeSubscriptionsStg, StripeCustomersStg, StripeInvoicesStg, StripeSyncJob, IntegrationLog]),
+		TypeOrmModule.forFeature([
+			StripeConnection,
+			StripeSubscriptionsStg,
+			StripeCustomersStg,
+			StripeInvoicesStg,
+			StripeSyncJob,
+			IntegrationLog,
+			Product,
+		]),
 	],
-	controllers: [StripeController, StripeConnectionController, StripeSyncController, StripeStagingController],
-	providers: [StripeService, ...StripeProviders, StripeConnectionService, StripeSyncService, StripeStagingService],
-	exports: [StripeService, StripeConnectionService, StripeSyncService, StripeStagingService],
+	controllers: [StripeController, StripeConnectionController, StripeIngestionController, StripeSyncController, StripeStagingController],
+	providers: [StripeService, ...StripeProviders, StripeConnectionService, StripeIngestionService, StripeSyncService, StripeStagingService],
+	exports: [StripeService, StripeConnectionService, StripeIngestionService, StripeSyncService, StripeStagingService],
 })
 export class StripeModule {}

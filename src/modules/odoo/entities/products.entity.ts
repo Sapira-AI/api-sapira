@@ -29,7 +29,14 @@ export class Product {
 	@Column({ type: 'text', nullable: true })
 	salesforce_product_id?: string;
 
-	// Campo para mapear con Odoo
+	// Campos para mapear con Odoo
 	@Column({ type: 'integer', nullable: true })
 	odoo_product_id?: number;
+
+	@Column({ type: 'text', nullable: true })
+	odoo_tax_ids?: string;
+
+	// Campo para mapear con Stripe
+	@Column({ type: 'text', nullable: true })
+	stripe_product_id?: string;
 }
