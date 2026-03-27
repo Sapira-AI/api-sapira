@@ -1,17 +1,17 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { CountStripeRecordsDto, SyncStripeDataDto } from './dtos/sync-stripe-data.dto';
-import { StripeSyncService } from './stripe-sync.service';
+import { StripeIngestionService } from './stripe-ingestion.service';
 
-@ApiTags('Stripe Sync')
-@Controller('stripe/sync')
+@ApiTags('Stripe Ingestion')
+@Controller('stripe/ingestion')
 @UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
-export class StripeSyncController {
-	constructor(private readonly stripeSyncService: StripeSyncService) {}
+export class StripeIngestionController {
+	constructor(private readonly stripeIngestionService: StripeIngestionService) {}
 
 	@Post('count-records')
 	@ApiOperation({
@@ -24,7 +24,7 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async countRecords(@Body() dto: CountStripeRecordsDto, @Headers('x-holding-id') holdingId: string) {
-		return this.stripeSyncService.countRecords(dto, holdingId);
+		return this.stripeIngestionService.countRecords(dto, holdingId);
 	}
 
 	@Post('subscriptions')
@@ -38,7 +38,7 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async syncSubscriptions(@Body() dto: SyncStripeDataDto, @Headers('x-holding-id') holdingId: string) {
-		return this.stripeSyncService.syncSubscriptions(dto, holdingId);
+		return this.stripeIngestionService.syncSubscriptions(dto, holdingId);
 	}
 
 	@Post('customers')
@@ -52,7 +52,7 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async syncCustomers(@Body() dto: SyncStripeDataDto, @Headers('x-holding-id') holdingId: string) {
-		return this.stripeSyncService.syncCustomers(dto, holdingId);
+		return this.stripeIngestionService.syncCustomers(dto, holdingId);
 	}
 
 	@Post('invoices')
@@ -66,7 +66,7 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async syncInvoices(@Body() dto: SyncStripeDataDto, @Headers('x-holding-id') holdingId: string) {
-		return this.stripeSyncService.syncInvoices(dto, holdingId);
+		return this.stripeIngestionService.syncInvoices(dto, holdingId);
 	}
 
 	@Post('all')
@@ -81,7 +81,7 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async syncAll(@Body() dto: SyncStripeDataDto, @Headers('x-holding-id') holdingId: string) {
-		return this.stripeSyncService.syncAll(dto, holdingId);
+		return this.stripeIngestionService.syncAll(dto, holdingId);
 	}
 
 	@Get('job/:jobId/status')
@@ -116,6 +116,36 @@ export class StripeSyncController {
 	})
 	@HttpCode(HttpStatus.OK)
 	async getJobStatus(@Param('jobId') jobId: string) {
-		return this.stripeSyncService.getJobStatus(jobId);
+		return this.stripeIngestionService.getJobStatus(jobId);
+	}
+
+	@Patch('job/:jobId/cancel')
+	@UseGuards(SupabaseAuthGuard)
+	@ApiOperation({
+		summary: 'Cancelar un job de integración',
+		description: 'Cancela un job de integración de Stripe que está en progreso',
+	})
+	@ApiParam({
+		name: 'jobId',
+		type: String,
+		description: 'ID del job a cancelar',
+		example: '123e4567-e89b-12d3-a456-426614174000',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Job cancelado exitosamente',
+		schema: {
+			type: 'object',
+			properties: {
+				success: { type: 'boolean' },
+				message: { type: 'string' },
+			},
+		},
+	})
+	@ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Job no encontrado' })
+	@ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'El job ya finalizó' })
+	@HttpCode(HttpStatus.OK)
+	async cancelJob(@Param('jobId') jobId: string, @Headers('x-holding-id') holdingId: string) {
+		return this.stripeIngestionService.cancelJob(jobId, holdingId);
 	}
 }

@@ -835,21 +835,39 @@ export class StripeSyncService {
 				const unitPrice = (item.price?.unit_amount || 0) / 100;
 				const monthlyAmount = quantity * unitPrice;
 
+				const stripeProductId = item.price?.product || null;
+				let productId = null;
+
+				if (stripeProductId) {
+					const productMapping = await this.customersStgRepo.query(
+						`SELECT id FROM products WHERE stripe_product_id = $1 AND holding_id = $2`,
+						[stripeProductId, holdingId]
+					);
+
+					if (productMapping && productMapping.length > 0) {
+						productId = productMapping[0].id;
+						this.logger.debug(`Producto mapeado encontrado: ${stripeProductId} -> ${productId}`);
+					} else {
+						this.logger.warn(`Producto sin mapear: ${stripeProductId} en subscription_item ${item.id}`);
+					}
+				}
+
 				if (existingItem && existingItem.length > 0) {
 					await this.customersStgRepo.query(
-						`UPDATE subscription_items SET quantity = $1, unit_price = $2, monthly_amount = $3, updated_at = NOW() WHERE id = $4`,
-						[quantity, unitPrice, monthlyAmount, existingItem[0].id]
+						`UPDATE subscription_items SET quantity = $1, unit_price = $2, monthly_amount = $3, product_id = $4, updated_at = NOW() WHERE id = $5`,
+						[quantity, unitPrice, monthlyAmount, productId, existingItem[0].id]
 					);
 					updated++;
 				} else {
 					await this.customersStgRepo.query(
-						`INSERT INTO subscription_items (subscription_id, holding_id, external_id, stripe_product_id, stripe_price_id, product_name, item_type, quantity, unit_price, monthly_amount, currency, system_currency, fx_to_system, unit_price_system_currency, monthly_amount_system_currency, billing_scheme, interval, interval_count, current_period_start, current_period_end, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+						`INSERT INTO subscription_items (subscription_id, holding_id, external_id, stripe_product_id, stripe_price_id, product_id, product_name, item_type, quantity, unit_price, monthly_amount, currency, system_currency, fx_to_system, unit_price_system_currency, monthly_amount_system_currency, billing_scheme, interval, interval_count, current_period_start, current_period_end, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 						[
 							subscriptionId,
 							holdingId,
 							item.id,
-							item.price?.product || null,
+							stripeProductId,
 							item.price?.id || null,
+							productId,
 							item.price?.nickname || '',
 							'Digital',
 							quantity,
@@ -1021,10 +1039,19 @@ export class StripeSyncService {
 				}
 			}
 
-			const existingInvoice = await this.customersStgRepo.query(
-				`SELECT id, status, total_invoice_currency, subscription_id FROM invoices WHERE invoice_number = $1 AND holding_id = $2`,
-				[rawData.number, holdingId]
+			// Primero buscar por stripe_id (más confiable)
+			let existingInvoice = await this.customersStgRepo.query(
+				`SELECT id, status, total_invoice_currency, subscription_id FROM invoices WHERE stripe_id = $1 AND holding_id = $2`,
+				[invoice.stripe_id, holdingId]
 			);
+
+			// Fallback: buscar por invoice_number si no tiene stripe_id
+			if ((!existingInvoice || existingInvoice.length === 0) && rawData.number) {
+				existingInvoice = await this.customersStgRepo.query(
+					`SELECT id, status, total_invoice_currency, subscription_id FROM invoices WHERE invoice_number = $1 AND holding_id = $2`,
+					[rawData.number, holdingId]
+				);
+			}
 
 			const amountInvoiceCurrency = (rawData.subtotal || 0) / 100;
 			const vat = (rawData.total_taxes?.[0]?.amount || 0) / 100;
@@ -1038,6 +1065,7 @@ export class StripeSyncService {
 				contract_id: null,
 				subscription_id: subscriptionId,
 				invoice_number: rawData.number,
+				stripe_id: invoice.stripe_id,
 				issue_date: issueDate,
 				due_date: rawData.due_date ? new Date(rawData.due_date * 1000) : null,
 				contract_currency: rawData.currency?.toUpperCase() || 'USD',
@@ -1077,13 +1105,14 @@ export class StripeSyncService {
 
 				if (this.hasChanges(invoiceData, existing, fieldsToCompare)) {
 					await this.customersStgRepo.query(
-						`UPDATE invoices SET status = $1, total_invoice_currency = $2, subscription_id = $3, invoice_type = $4, document_type = $5 WHERE id = $6`,
+						`UPDATE invoices SET status = $1, total_invoice_currency = $2, subscription_id = $3, invoice_type = $4, document_type = $5, stripe_id = $6 WHERE id = $7`,
 						[
 							invoiceData.status,
 							invoiceData.total_invoice_currency,
 							subscriptionId,
 							invoiceData.invoice_type,
 							invoiceData.document_type,
+							invoiceData.stripe_id,
 							invoiceId,
 						]
 					);
@@ -1099,13 +1128,14 @@ export class StripeSyncService {
 				}
 			} else {
 				const result = await this.customersStgRepo.query(
-					`INSERT INTO invoices (company_id, client_entity_id, contract_id, subscription_id, invoice_number, issue_date, due_date, contract_currency, amount_contract_currency, invoice_currency, fx_contract_to_invoice, amount_invoice_currency, vat, tax_rate, total_invoice_currency, system_currency, fx_contract_to_system, amount_system_currency, total_system_currency, status, notes, sent_at, scheduled_at, original_issue_date, invoice_type, invoice_series, document_type, payment_method, export_type, is_active, auto_invoice, holding_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32) RETURNING id`,
+					`INSERT INTO invoices (company_id, client_entity_id, contract_id, subscription_id, invoice_number, stripe_id, issue_date, due_date, contract_currency, amount_contract_currency, invoice_currency, fx_contract_to_invoice, amount_invoice_currency, vat, tax_rate, total_invoice_currency, system_currency, fx_contract_to_system, amount_system_currency, total_system_currency, status, notes, sent_at, scheduled_at, original_issue_date, invoice_type, invoice_series, document_type, payment_method, export_type, is_active, auto_invoice, holding_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33) RETURNING id`,
 					[
 						invoiceData.company_id,
 						invoiceData.client_entity_id,
 						invoiceData.contract_id,
 						invoiceData.subscription_id,
 						invoiceData.invoice_number,
+						invoiceData.stripe_id,
 						invoiceData.issue_date,
 						invoiceData.due_date,
 						invoiceData.contract_currency,
@@ -1181,18 +1211,36 @@ export class StripeSyncService {
 					}
 				}
 
+				const stripeProductId = item.pricing?.price_details?.product || null;
+				let productId = null;
+
+				if (stripeProductId) {
+					const productMapping = await this.customersStgRepo.query(
+						`SELECT id FROM products WHERE stripe_product_id = $1 AND holding_id = $2`,
+						[stripeProductId, holdingId]
+					);
+
+					if (productMapping && productMapping.length > 0) {
+						productId = productMapping[0].id;
+						this.logger.debug(`Producto mapeado encontrado: ${stripeProductId} -> ${productId}`);
+					} else {
+						this.logger.warn(`Producto sin mapear: ${stripeProductId} en invoice_item para factura ${invoiceId}`);
+					}
+				}
+
 				if (existingItem && existingItem.length > 0) {
 					await this.customersStgRepo.query(
-						`UPDATE invoice_items SET quantity = $1, unit_price_invoice_currency = $2, total_invoice_currency = $3, subscription_item_id = $4, updated_at = NOW() WHERE id = $5`,
-						[quantity, unitPrice, total, subscriptionItemId, existingItem[0].id]
+						`UPDATE invoice_items SET quantity = $1, unit_price_invoice_currency = $2, total_invoice_currency = $3, subscription_item_id = $4, product_id = $5, updated_at = NOW() WHERE id = $6`,
+						[quantity, unitPrice, total, subscriptionItemId, productId, existingItem[0].id]
 					);
 					updated++;
 				} else {
 					await this.customersStgRepo.query(
-						`INSERT INTO invoice_items (invoice_id, subscription_item_id, holding_id, description, quantity, unit_of_measure, discount_pct, contract_currency, unit_price_contract_currency, subtotal_contract_currency, tax_amount_contract_currency, total_contract_currency, invoice_currency, fx_contract_to_invoice, unit_price_invoice_currency, subtotal_invoice_currency, tax_amount_invoice_currency, total_invoice_currency, billing_period_start, billing_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+						`INSERT INTO invoice_items (invoice_id, subscription_item_id, product_id, holding_id, description, quantity, unit_of_measure, discount_pct, contract_currency, unit_price_contract_currency, subtotal_contract_currency, tax_amount_contract_currency, total_contract_currency, invoice_currency, fx_contract_to_invoice, unit_price_invoice_currency, subtotal_invoice_currency, tax_amount_invoice_currency, total_invoice_currency, billing_period_start, billing_period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
 						[
 							invoiceId,
 							subscriptionItemId,
+							productId,
 							holdingId,
 							item.description || '',
 							quantity,

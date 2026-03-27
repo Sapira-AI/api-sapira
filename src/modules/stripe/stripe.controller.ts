@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -9,6 +9,7 @@ import { GetInvoiceByIdDto } from './dtos/get-invoice-by-id.dto';
 import { GetInvoicesDto } from './dtos/get-invoices.dto';
 import { GetSubscriptionByIdDto } from './dtos/get-subscription-by-id.dto';
 import { GetSubscriptionsDto } from './dtos/get-subscriptions.dto';
+import { GetProductsResponseDTO, SaveProductMappingDTO, SaveProductMappingResponseDTO } from './dtos/stripe-products.dto';
 import { StripeCustomer, StripeCustomerListResponse } from './interfaces/stripe-customer.interface';
 import { StripeInvoice, StripeInvoiceListResponse } from './interfaces/stripe-invoice.interface';
 import { StripeSubscription, StripeSubscriptionListResponse } from './interfaces/stripe-subscription.interface';
@@ -158,5 +159,43 @@ export class StripeController {
 		@Query('limit') limit?: number
 	): Promise<StripeSubscriptionListResponse> {
 		return this.stripeService.getSubscriptionsByCustomer(customerId, limit);
+	}
+
+	@Get('products')
+	@ApiOperation({
+		summary: 'Obtener productos de Stripe y Sapira',
+		description: 'Retorna los productos de Stripe y los productos de Sapira para poder mapearlos.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Productos obtenidos exitosamente',
+		type: GetProductsResponseDTO,
+	})
+	@ApiResponse({
+		status: HttpStatus.NOT_FOUND,
+		description: 'No se encontró una conexión activa de Stripe',
+	})
+	@HttpCode(HttpStatus.OK)
+	async getProducts(@Headers('x-holding-id') holdingId: string): Promise<GetProductsResponseDTO> {
+		return this.stripeService.getProducts(holdingId);
+	}
+
+	@Post('products/map')
+	@ApiOperation({
+		summary: 'Guardar mapeos de productos',
+		description: 'Guarda los mapeos entre productos de Stripe y productos de Sapira.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Mapeos guardados exitosamente',
+		type: SaveProductMappingResponseDTO,
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'Datos de mapeo inválidos',
+	})
+	@HttpCode(HttpStatus.OK)
+	async mapProducts(@Headers('x-holding-id') holdingId: string, @Body() mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
+		return this.stripeService.mapProducts(holdingId, mapData);
 	}
 }
