@@ -120,7 +120,35 @@ export class SubscriptionsService {
 	async findOne(id: string, holdingId: string) {
 		const query = `
 			SELECT 
-				s.*,
+				s.id,
+				s.holding_id,
+				s.company_id,
+				s.client_id,
+				s.client_entity_id,
+				s.external_id,
+				s.source,
+				s.connection_id,
+				s.status,
+				s.start_date,
+				s.canceled_at,
+				s.cancel_at_period_end,
+				s.ended_at,
+				s.current_period_start,
+				s.current_period_end,
+				s.billing_cycle_anchor,
+				s.cancellation_reason,
+				s.cancellation_comment,
+				s.currency,
+				s.monthly_amount,
+				s.collection_method,
+				s.system_currency,
+				s.fx_to_system,
+				s.monthly_amount_system_currency,
+				s.notes,
+				s.metadata,
+				s.created_at,
+				s.updated_at,
+				s.last_synced_at,
 				json_agg(
 					DISTINCT jsonb_build_object(
 						'id', si.id,
@@ -130,7 +158,10 @@ export class SubscriptionsService {
 						'unit_price', si.unit_price,
 						'currency', si.currency,
 						'interval', si.interval,
-						'interval_count', si.interval_count
+						'interval_count', si.interval_count,
+						'item_type', si.item_type,
+						'monthly_amount', si.monthly_amount,
+						'stripe_price_id', si.stripe_price_id
 					)
 				) FILTER (WHERE si.id IS NOT NULL) as items,
 				json_agg(
@@ -140,6 +171,7 @@ export class SubscriptionsService {
 						'status', i.status,
 						'issue_date', i.issue_date,
 						'due_date', i.due_date,
+						'amount_invoice_currency', i.amount_invoice_currency,
 						'total_invoice_currency', i.total_invoice_currency,
 						'invoice_currency', i.invoice_currency
 					) ORDER BY i.issue_date ASC
