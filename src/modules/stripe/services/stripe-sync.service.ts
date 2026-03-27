@@ -710,7 +710,7 @@ export class StripeSyncService {
 			const clientId = clientEntity[0].client_id;
 
 			const existingSubscription = await this.customersStgRepo.query(
-				`SELECT id, status, canceled_at, ended_at, monthly_amount, current_period_start, current_period_end FROM subscriptions WHERE external_id = $1 AND holding_id = $2`,
+				`SELECT id, status, canceled_at, ended_at, monthly_amount FROM subscriptions WHERE external_id = $1 AND holding_id = $2`,
 				[rawData.id, holdingId]
 			);
 
@@ -721,6 +721,10 @@ export class StripeSyncService {
 				const unitPrice = (item.price?.unit_amount || 0) / 100;
 				monthlyAmount += quantity * unitPrice;
 			}
+
+			const firstItem = items[0];
+			const currentPeriodStart = firstItem?.current_period_start ? new Date(firstItem.current_period_start * 1000) : null;
+			const currentPeriodEnd = firstItem?.current_period_end ? new Date(firstItem.current_period_end * 1000) : null;
 
 			const subscriptionData = {
 				holding_id: holdingId,
@@ -734,8 +738,8 @@ export class StripeSyncService {
 				canceled_at: rawData.canceled_at ? new Date(rawData.canceled_at * 1000) : null,
 				cancel_at_period_end: rawData.cancel_at_period_end || false,
 				ended_at: rawData.ended_at ? new Date(rawData.ended_at * 1000) : null,
-				current_period_start: rawData.current_period_start ? new Date(rawData.current_period_start * 1000) : null,
-				current_period_end: rawData.current_period_end ? new Date(rawData.current_period_end * 1000) : null,
+				current_period_start: currentPeriodStart,
+				current_period_end: currentPeriodEnd,
 				billing_cycle_anchor: rawData.billing_cycle_anchor ? new Date(rawData.billing_cycle_anchor * 1000) : null,
 				cancellation_reason: rawData.cancellation_details?.reason || null,
 				cancellation_comment: rawData.cancellation_details?.comment || null,
@@ -758,7 +762,7 @@ export class StripeSyncService {
 
 				if (this.hasChanges(subscriptionData, existing, fieldsToCompare)) {
 					await this.customersStgRepo.query(
-						`UPDATE subscriptions SET status = $1, canceled_at = $2, ended_at = $3, monthly_amount = $4, current_period_start = $5, current_period_end = $6, updated_at = NOW() WHERE id = $7`,
+						`UPDATE subscriptions SET status = $1, canceled_at = $2, ended_at = $3, monthly_amount = $4, current_period_start = $5, current_period_end = $6, last_synced_at = NOW(), updated_at = NOW() WHERE id = $7`,
 						[
 							subscriptionData.status,
 							subscriptionData.canceled_at,
@@ -771,11 +775,12 @@ export class StripeSyncService {
 					);
 					action = 'update';
 				} else {
+					await this.customersStgRepo.query(`UPDATE subscriptions SET last_synced_at = NOW() WHERE id = $1`, [subscriptionId]);
 					action = 'no_change';
 				}
 			} else {
 				const result = await this.customersStgRepo.query(
-					`INSERT INTO subscriptions (holding_id, company_id, client_id, client_entity_id, external_id, source, status, start_date, canceled_at, cancel_at_period_end, ended_at, current_period_start, current_period_end, billing_cycle_anchor, cancellation_reason, cancellation_comment, currency, monthly_amount, collection_method, system_currency, fx_to_system, monthly_amount_system_currency, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) RETURNING id`,
+					`INSERT INTO subscriptions (holding_id, company_id, client_id, client_entity_id, external_id, source, status, start_date, canceled_at, cancel_at_period_end, ended_at, current_period_start, current_period_end, billing_cycle_anchor, cancellation_reason, cancellation_comment, currency, monthly_amount, collection_method, system_currency, fx_to_system, monthly_amount_system_currency, metadata, last_synced_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW()) RETURNING id`,
 					[
 						subscriptionData.holding_id,
 						subscriptionData.company_id,
