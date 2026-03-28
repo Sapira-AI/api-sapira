@@ -1467,7 +1467,7 @@ export class OdooService {
 	 */
 	private async getSapiraProducts(holdingId: string): Promise<SapiraProduct[]> {
 		try {
-			// Consultar productos de Sapira usando TypeORM (solo campos existentes)
+			// 1. Consultar productos de Sapira usando TypeORM (solo campos existentes)
 			const sapiraProducts = await this.productsRepository.find({
 				where: { holding_id: holdingId },
 				select: [
@@ -1483,19 +1483,44 @@ export class OdooService {
 				],
 			});
 
-			// Mapear a la interfaz SapiraProduct
-			return sapiraProducts.map((product) => ({
-				id: product.id,
-				holding_id: product.holding_id || null,
-				product_code: product.product_code || null,
-				name: product.name || null,
-				is_recurring: product.is_recurring || null,
-				default_currency: product.default_currency || null,
-				default_price: product.default_price || null,
-				created_at: product.created_at,
-				salesforce_product_id: product.salesforce_product_id || null,
-				odoo_product_id: null, // Campo no existe en la tabla actual
-			}));
+			// 2. Consultar mapeos de Odoo para este holding
+			const odooMappings = await this.odooProductMappingRepository.find({
+				where: { holding_id: holdingId },
+			});
+
+			// 3. Crear un mapa de sapira_product_id -> mapeo
+			// NOTA: Como es N:N, un producto Sapira puede tener múltiples mapeos Odoo
+			// Para la UI actual que espera 1:1, tomamos el primer mapeo
+			const mappingsByProduct = odooMappings.reduce(
+				(acc, mapping) => {
+					if (!acc[mapping.sapira_product_id]) {
+						acc[mapping.sapira_product_id] = {
+							odoo_product_id: mapping.odoo_product_id,
+							odoo_tax_ids: mapping.metadata?.odoo_tax_ids || null,
+						};
+					}
+					return acc;
+				},
+				{} as Record<string, { odoo_product_id: number; odoo_tax_ids: string | null }>
+			);
+
+			// 4. Mapear productos incluyendo los mapeos de Odoo
+			return sapiraProducts.map((product) => {
+				const mapping = mappingsByProduct[product.id];
+				return {
+					id: product.id,
+					holding_id: product.holding_id || null,
+					product_code: product.product_code || null,
+					name: product.name || null,
+					is_recurring: product.is_recurring || null,
+					default_currency: product.default_currency || null,
+					default_price: product.default_price || null,
+					created_at: product.created_at,
+					salesforce_product_id: product.salesforce_product_id || null,
+					odoo_product_id: mapping?.odoo_product_id || null,
+					odoo_tax_id: mapping?.odoo_tax_ids || null,
+				};
+			});
 		} catch (error) {
 			console.error('❌ Error obteniendo productos de Sapira:', error);
 			return [];
