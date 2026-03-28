@@ -1,12 +1,11 @@
 /**
- * VATs genéricos utilizados para facturación de exportación
- * Estos VATs se usan para múltiples clientes y NO deben usarse
- * como identificador único para búsquedas.
+ * @deprecated Este array ya no se usa directamente.
+ * Los VATs genéricos ahora se almacenan en la tabla `generic_export_vats` de la base de datos.
+ * Usar el servicio `GenericVatsService` para verificar si un VAT es genérico.
  *
- * Para estos casos, siempre se debe buscar por la combinación
- * VAT + odoo_partner_id
+ * Este array se mantiene solo como referencia histórica y fallback de emergencia.
  */
-export const GENERIC_EXPORT_VATS = [
+export const GENERIC_EXPORT_VATS_FALLBACK = [
 	'5555555-5', // Chile - VAT genérico para exportación
 	'55555555', // Chile - Variante sin guión
 	'555555555', // Genérico internacional
@@ -14,20 +13,23 @@ export const GENERIC_EXPORT_VATS = [
 	'99999999-9', // Chile - VAT genérico alternativo
 	'EXPORT', // Genérico textual
 	'EXPORTACION', // Genérico textual español
-	'XEXX010101000',
+	'XEXX010101000', // México - VAT genérico para exportación
 ];
 
 /**
- * Verifica si un VAT es genérico (usado para exportaciones)
+ * @deprecated Esta función ya no se usa directamente.
+ * Usar `GenericVatsService.isGenericExportVat()` en su lugar.
+ *
+ * Función de fallback para verificar si un VAT es genérico (usado para exportaciones)
  * @param vat - VAT a verificar
  * @returns true si el VAT es genérico
  */
-export function isGenericExportVat(vat: string | null | undefined): boolean {
+export function isGenericExportVatFallback(vat: string | null | undefined): boolean {
 	if (!vat) {
 		return false;
 	}
 
 	const normalizedVat = vat.trim().toUpperCase();
 
-	return GENERIC_EXPORT_VATS.some((genericVat) => normalizedVat === genericVat.toUpperCase());
+	return GENERIC_EXPORT_VATS_FALLBACK.some((genericVat) => normalizedVat === genericVat.toUpperCase());
 }

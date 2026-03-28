@@ -7,7 +7,6 @@ import { Repository } from 'typeorm';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
-import { isGenericExportVat } from './constants/generic-vats.constant';
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
@@ -15,6 +14,7 @@ import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import { OdooConnectionConfig, OdooPartner } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
 import { FieldMappingService } from './services/field-mapping.service';
+import { GenericVatsService } from './services/generic-vats.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
 import { areValuesEqual, normalizeValue } from './utils/value-comparison.util';
 
@@ -27,6 +27,7 @@ export class OdooPartnersService {
 		@Inject(forwardRef(() => PartnersProcessorService))
 		private readonly partnersProcessorService: PartnersProcessorService,
 		private readonly fieldMappingService: FieldMappingService,
+		private readonly genericVatsService: GenericVatsService,
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooPartnersStg)
@@ -236,7 +237,7 @@ export class OdooPartnersService {
 	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
 		try {
 			const partnerVat = partner.vat ? String(partner.vat) : null;
-			const isGenericVat = isGenericExportVat(partnerVat);
+			const isGenericVat = await this.genericVatsService.isGenericExportVat(partnerVat);
 
 			this.logger.log(`\n${'='.repeat(80)}`);
 			this.logger.log(`🔍 CLASIFICANDO PARTNER: ${partner.name || partner.display_name} (ID: ${partner.id})`);

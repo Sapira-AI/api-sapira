@@ -5,7 +5,6 @@ import { Repository } from 'typeorm';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
-import { isGenericExportVat } from '../constants/generic-vats.constant';
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from '../dtos/process-partners.dto';
 import { OdooPartnersStg } from '../entities/odoo-partners-stg.entity';
 import { OdooPartnersService } from '../odoo-partners.service';
@@ -215,7 +214,9 @@ export class PartnersProcessorService {
 							this.logger.log('\n🔄 OPERACIÓN: UPDATE');
 						}
 						const partnerVat = String(partner.raw_data?.vat || '');
-						const isGenericVat = isGenericExportVat(partnerVat);
+						// Nota: Esta lógica está duplicada. Se recomienda usar classifyPartners() que usa determinePartnerProcessingStatus()
+						// que tiene la lógica unificada de clasificación con GenericVatsService
+						const isGenericVat = false; // TODO: Migrar este método para usar determinePartnerProcessingStatus
 						this.logger.log(`🔍 Buscando cliente existente con VAT: ${partnerVat || 'N/A'} y Odoo ID: ${partner.odoo_id}`);
 
 						if (isGenericVat) {

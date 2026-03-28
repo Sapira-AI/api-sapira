@@ -6,6 +6,7 @@ import { MongooseModules } from '@/databases/mongoose/database.module';
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
 import { EventsModule } from '@/events/events.module';
 
 import { IntegrationLog } from '../../databases/postgresql/entities/integration-log.entity';
@@ -32,6 +33,7 @@ import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
+import { GenericVatsService } from './services/generic-vats.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
 
 @Module({
@@ -51,6 +53,7 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 			IntegrationLog,
 			ClientEntity,
 			FieldMapping,
+			GenericExportVat,
 		]),
 	],
 	controllers: [
@@ -71,6 +74,7 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 		PartnersProcessorService,
 		FieldTransformationService,
 		FieldMappingService,
+		GenericVatsService,
 		InvoiceProcessingService,
 	],
 	exports: [OdooService, OdooInvoicesService, OdooConnectionService],
