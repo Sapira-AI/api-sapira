@@ -14,6 +14,7 @@ export const GENERIC_EXPORT_VATS = [
 	'99999999-9', // Chile - VAT genérico alternativo
 	'EXPORT', // Genérico textual
 	'EXPORTACION', // Genérico textual español
+	'XEXX010101000',
 ];
 
 /**

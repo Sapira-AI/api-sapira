@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -24,6 +24,7 @@ export class OdooPartnersService {
 
 	constructor(
 		private readonly odooProvider: OdooProvider,
+		@Inject(forwardRef(() => PartnersProcessorService))
 		private readonly partnersProcessorService: PartnersProcessorService,
 		private readonly fieldMappingService: FieldMappingService,
 		@InjectRepository(OdooConnection)
@@ -41,6 +42,21 @@ export class OdooPartnersService {
 	 */
 	async processPartners(dto: ProcessPartnersDto): Promise<ProcessPartnersResponseDto> {
 		return await this.partnersProcessorService.processPartners(dto);
+	}
+
+	/**
+	 * Clasifica partners en staging según si necesitan crearse, actualizarse o ya están procesados
+	 */
+	async classifyPartners(
+		holdingId: string,
+		mappingId: string
+	): Promise<{
+		to_create: number;
+		to_update: number;
+		already_processed: number;
+		total: number;
+	}> {
+		return await this.partnersProcessorService.classifyPartners(holdingId, mappingId);
 	}
 
 	/**
@@ -212,8 +228,9 @@ export class OdooPartnersService {
 
 	/**
 	 * Determina el processing_status de un partner verificando su existencia en client_entities
+	 * Método público para ser usado tanto en sincronización automática como en clasificación manual
 	 */
-	private async determinePartnerProcessingStatus(
+	async determinePartnerProcessingStatus(
 		partner: OdooPartner,
 		holdingId: string
 	): Promise<{ status: 'create' | 'update' | 'processed'; notes: string; changes?: Array<{ field: string; odoo_value: any; db_value: any }> }> {
@@ -221,8 +238,16 @@ export class OdooPartnersService {
 			const partnerVat = partner.vat ? String(partner.vat) : null;
 			const isGenericVat = isGenericExportVat(partnerVat);
 
+			this.logger.log(`\n${'='.repeat(80)}`);
+			this.logger.log(`🔍 CLASIFICANDO PARTNER: ${partner.name || partner.display_name} (ID: ${partner.id})`);
+			this.logger.log(`   VAT: ${partnerVat || 'Sin VAT'}`);
+			this.logger.log(`   Es VAT genérico: ${isGenericVat ? 'SÍ' : 'NO'}`);
+			this.logger.log(`   Holding ID: ${holdingId}`);
+
 			// 1. Si no hay VAT, buscar solo por odoo_partner_id
 			if (!partnerVat || partnerVat === '') {
+				this.logger.log(`   ➡️ Flujo: SIN VAT - Buscando por odoo_partner_id`);
+
 				const existingByOdooId = await this.clientEntitiesRepository.findOne({
 					where: {
 						odoo_partner_id: partner.id,
@@ -230,13 +255,19 @@ export class OdooPartnersService {
 					},
 				});
 
+				this.logger.log(`   🔎 Búsqueda por odoo_partner_id: ${existingByOdooId ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+
 				if (existingByOdooId) {
+					this.logger.log(`   ✅ RESULTADO: UPDATE - Cliente existente sin VAT`);
+					this.logger.log(`${'='.repeat(80)}\n`);
 					return {
 						status: 'update',
 						notes: 'Cliente existente sin VAT - marcado para actualización',
 					};
 				}
 
+				this.logger.log(`   ✅ RESULTADO: CREATE - Partner sin VAT no existe`);
+				this.logger.log(`${'='.repeat(80)}\n`);
 				return {
 					status: 'create',
 					notes: 'Partner sin VAT - marcado para creación',
@@ -244,6 +275,7 @@ export class OdooPartnersService {
 			}
 
 			// 2. Buscar por VAT + Odoo ID (identificador único para clientes integrados)
+			this.logger.log(`   ➡️ Flujo: CON VAT - Búsqueda 1: Por VAT + odoo_partner_id`);
 			const existingByVatAndOdooId = await this.clientEntitiesRepository.findOne({
 				where: {
 					tax_id: partnerVat,
@@ -252,18 +284,27 @@ export class OdooPartnersService {
 				},
 			});
 
+			this.logger.log(`   🔎 Búsqueda VAT+OdooID (${partnerVat} + ${partner.id}): ${existingByVatAndOdooId ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+
 			if (existingByVatAndOdooId) {
+				this.logger.log(`   🔄 Cliente encontrado, comparando cambios...`);
 				const { hasChanges, changes } = await this.hasPartnerChanges(partner, existingByVatAndOdooId, holdingId);
+				this.logger.log(`   📊 Cambios detectados: ${hasChanges ? 'SÍ' : 'NO'} (${changes.length} campos)`);
+
 				if (hasChanges) {
+					this.logger.log(`   ✅ RESULTADO: UPDATE - Cliente con cambios`);
+					this.logger.log(`${'='.repeat(80)}\n`);
 					return {
 						status: 'update',
 						notes: isGenericVat
 							? `Cliente existente con VAT genérico (${partnerVat}) - marcado para actualización`
 							: 'Cliente existente con cambios - marcado para actualización',
-						changes, // Retornar los cambios para que se guarden en savePartnerToDatabase
+						changes,
 					};
 				}
 
+				this.logger.log(`   ✅ RESULTADO: PROCESSED - Cliente sin cambios`);
+				this.logger.log(`${'='.repeat(80)}\n`);
 				return {
 					status: 'processed',
 					notes: isGenericVat
@@ -275,7 +316,9 @@ export class OdooPartnersService {
 			// 3. IMPORTANTE: Si es VAT genérico, NO buscar solo por VAT
 			// Los VATs genéricos pueden estar asociados a múltiples clientes
 			if (isGenericVat) {
-				this.logger.log(`⚠️ VAT genérico detectado: ${partnerVat}. No se buscará solo por VAT. Partner marcado para creación.`);
+				this.logger.log(`   ⚠️ VAT GENÉRICO - Saltando búsqueda solo por VAT`);
+				this.logger.log(`   ✅ RESULTADO: CREATE - Partner nuevo con VAT genérico`);
+				this.logger.log(`${'='.repeat(80)}\n`);
 				return {
 					status: 'create',
 					notes: `Partner nuevo con VAT genérico de exportación (${partnerVat}) - marcado para creación`,
@@ -284,6 +327,7 @@ export class OdooPartnersService {
 
 			// 4. Buscar solo por VAT (puede ser un cliente creado manualmente en Sapira)
 			// Solo para VATs NO genéricos
+			this.logger.log(`   ➡️ Flujo: Búsqueda 2: Solo por VAT (cliente manual)`);
 			const existingByVat = await this.clientEntitiesRepository.findOne({
 				where: {
 					tax_id: partnerVat,
@@ -291,7 +335,11 @@ export class OdooPartnersService {
 				},
 			});
 
+			this.logger.log(`   🔎 Búsqueda solo VAT (${partnerVat}): ${existingByVat ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+
 			if (existingByVat) {
+				this.logger.log(`   ✅ RESULTADO: UPDATE - Cliente manual encontrado por VAT`);
+				this.logger.log(`${'='.repeat(80)}\n`);
 				return {
 					status: 'update',
 					notes: 'Cliente existente en Sapira (sin odoo_partner_id) - marcado para actualización',
@@ -299,6 +347,8 @@ export class OdooPartnersService {
 			}
 
 			// 5. No existe, marcar para creación
+			this.logger.log(`   ✅ RESULTADO: CREATE - Partner nuevo (no existe en ninguna búsqueda)`);
+			this.logger.log(`${'='.repeat(80)}\n`);
 			return {
 				status: 'create',
 				notes: 'Partner nuevo - marcado para creación',
@@ -510,7 +560,8 @@ export class OdooPartnersService {
 		holdingId: string,
 		page: number = 1,
 		limit: number = 20,
-		statusFilter?: string[]
+		statusFilter?: string[],
+		searchTerm?: string
 	): Promise<{
 		partners: OdooPartnersStg[];
 		total: number;
@@ -525,6 +576,29 @@ export class OdooPartnersService {
 		// Aplicar filtro de estado si existe
 		if (statusFilter && statusFilter.length > 0) {
 			queryBuilder.andWhere('partner.processing_status IN (:...statuses)', { statuses: statusFilter });
+		}
+
+		// Aplicar búsqueda si existe
+		if (searchTerm && searchTerm.trim()) {
+			const trimmedSearch = searchTerm.trim();
+
+			// Si el término de búsqueda es un número, buscar por odoo_id exacto
+			const isNumeric = /^\d+$/.test(trimmedSearch);
+
+			if (isNumeric) {
+				queryBuilder.andWhere('partner.odoo_id = :odooId', { odooId: parseInt(trimmedSearch, 10) });
+			} else {
+				// Búsqueda parcial en nombre, display_name y email
+				queryBuilder.andWhere(
+					`(
+						partner.raw_data->>'name' ILIKE :search OR
+						partner.raw_data->>'display_name' ILIKE :search OR
+						partner.raw_data->>'email' ILIKE :search OR
+						partner.raw_data->>'email_normalized' ILIKE :search
+					)`,
+					{ search: `%${trimmedSearch}%` }
+				);
+			}
 		}
 
 		// Obtener total

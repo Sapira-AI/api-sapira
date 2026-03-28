@@ -845,12 +845,12 @@ export class StripeSyncService {
 
 				if (stripeProductId) {
 					const productMapping = await this.customersStgRepo.query(
-						`SELECT id FROM products WHERE stripe_product_id = $1 AND holding_id = $2`,
+						`SELECT sapira_product_id FROM stripe_product_mappings WHERE stripe_product_id = $1 AND holding_id = $2 LIMIT 1`,
 						[stripeProductId, holdingId]
 					);
 
 					if (productMapping && productMapping.length > 0) {
-						productId = productMapping[0].id;
+						productId = productMapping[0].sapira_product_id;
 						this.logger.debug(`Producto mapeado encontrado: ${stripeProductId} -> ${productId}`);
 					} else {
 						this.logger.warn(`Producto sin mapear: ${stripeProductId} en subscription_item ${item.id}`);
@@ -1221,12 +1221,12 @@ export class StripeSyncService {
 
 				if (stripeProductId) {
 					const productMapping = await this.customersStgRepo.query(
-						`SELECT id FROM products WHERE stripe_product_id = $1 AND holding_id = $2`,
+						`SELECT sapira_product_id FROM stripe_product_mappings WHERE stripe_product_id = $1 AND holding_id = $2 LIMIT 1`,
 						[stripeProductId, holdingId]
 					);
 
 					if (productMapping && productMapping.length > 0) {
-						productId = productMapping[0].id;
+						productId = productMapping[0].sapira_product_id;
 						this.logger.debug(`Producto mapeado encontrado: ${stripeProductId} -> ${productId}`);
 					} else {
 						this.logger.warn(`Producto sin mapear: ${stripeProductId} en invoice_item para factura ${invoiceId}`);
