@@ -3,7 +3,7 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
-import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
+import { ClassifyPartnersResponseDto, ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
 import { OdooPartnersService } from './odoo-partners.service';
 
 @ApiTags('Odoo Partners')
@@ -33,6 +33,42 @@ export class OdooPartnersController {
 	})
 	async processPartners(@Body() dto: ProcessPartnersDto): Promise<ProcessPartnersResponseDto> {
 		return await this.odooPartnersService.processPartners(dto);
+	}
+
+	@Get('classify')
+	@Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+	@Header('Pragma', 'no-cache')
+	@Header('Expires', '0')
+	@ApiOperation({
+		summary: 'Clasificar partners en staging',
+		description:
+			'Clasifica los partners de odoo_partners_stg según si necesitan crearse, actualizarse o ya están procesados. ' +
+			'Actualiza el processing_status de cada partner en la base de datos.',
+	})
+	@ApiOkResponse({
+		type: ClassifyPartnersResponseDto,
+		description: 'Clasificación completada exitosamente',
+	})
+	@ApiBadRequestResponse({
+		description: 'Error al clasificar partners',
+	})
+	@ApiHeader({
+		name: 'x-holding-id',
+		description: 'ID del holding',
+		required: true,
+		example: '5652e95e-bb99-48f5-aa1c-13c8c2638fc6',
+	})
+	async classifyPartners(@Headers('x-holding-id') holdingId: string, @Query('mapping_id') mappingId: string): Promise<ClassifyPartnersResponseDto> {
+		const result = await this.odooPartnersService.classifyPartners(holdingId, mappingId);
+
+		return {
+			success: true,
+			to_create: result.to_create,
+			to_update: result.to_update,
+			already_processed: result.already_processed,
+			total: result.total,
+			message: `Clasificación completada: ${result.to_create} nuevos, ${result.to_update} con cambios, ${result.already_processed} ya procesados`,
+		};
 	}
 
 	@Post('sync-partner')
@@ -110,7 +146,7 @@ export class OdooPartnersController {
 	@Header('Expires', '0')
 	@ApiOperation({
 		summary: 'Obtener partners staging con paginación',
-		description: 'Retorna partners de la tabla staging con paginación y filtros',
+		description: 'Retorna partners de la tabla staging con paginación, filtros y búsqueda. Búsqueda por ID (exacto), nombre o email (parcial)',
 	})
 	@ApiHeader({
 		name: 'x-holding-id',
@@ -122,7 +158,8 @@ export class OdooPartnersController {
 		@Headers('x-holding-id') holdingId: string,
 		@Query('page') page?: number,
 		@Query('limit') limit?: number,
-		@Query('statusFilter') statusFilter?: string
+		@Query('statusFilter') statusFilter?: string,
+		@Query('searchTerm') searchTerm?: string
 	): Promise<{
 		partners: any[];
 		total: number;
@@ -130,7 +167,7 @@ export class OdooPartnersController {
 		totalPages: number;
 	}> {
 		const statusArray = statusFilter ? statusFilter.split(',') : undefined;
-		return this.odooPartnersService.getStagingPartners(holdingId, page || 1, limit || 20, statusArray);
+		return this.odooPartnersService.getStagingPartners(holdingId, page || 1, limit || 20, statusArray, searchTerm);
 	}
 
 	@Delete('clean-processed')

@@ -84,7 +84,7 @@ export class FieldTransformationService {
 
 				if (!clientEntity) {
 					throw new Error(
-						`No se encontró el cliente con odoo_partner_id=${sourceValue} en la tabla client_entities. ` +
+						`No se encuentra client_entity_id para odoo_partner_id=${sourceValue}. ` +
 							`Debes sincronizar los partners/clientes desde Odoo primero.`
 					);
 				}
@@ -163,8 +163,7 @@ export class FieldTransformationService {
 			return sourceValue;
 		} catch (error) {
 			console.error(`Error en transformación ${transformationType} para valor ${sourceValue}:`, error.message);
-			// En caso de error, retornar el valor original
-			return sourceValue;
+			throw error;
 		}
 	}
 
