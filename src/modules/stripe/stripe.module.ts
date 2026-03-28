@@ -11,6 +11,7 @@ import { StripeSyncController } from './controllers/stripe-sync.controller';
 import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeCustomersStg } from './entities/stripe-customers-stg.entity';
 import { StripeInvoicesStg } from './entities/stripe-invoices-stg.entity';
+import { StripeProductMapping } from './entities/stripe-product-mapping.entity';
 import { StripeSubscriptionsStg } from './entities/stripe-subscriptions-stg.entity';
 import { StripeSyncJob } from './entities/stripe-sync-job.entity';
 import { StripeStagingService } from './services/stripe-staging.service';
@@ -35,6 +36,7 @@ import { StripeService } from './stripe.service';
 			StripeSyncJob,
 			IntegrationLog,
 			Product,
+			StripeProductMapping,
 		]),
 	],
 	controllers: [StripeController, StripeConnectionController, StripeIngestionController, StripeSyncController, StripeStagingController],

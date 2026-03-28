@@ -21,6 +21,7 @@ import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
+import { OdooProductMapping } from './entities/odoo-product-mapping.entity';
 import { Product } from './entities/products.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import {
@@ -61,6 +62,8 @@ export class OdooService {
 		private readonly companiesRepository: Repository<Company>,
 		@InjectRepository(Product)
 		private readonly productsRepository: Repository<Product>,
+		@InjectRepository(OdooProductMapping)
+		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
 		@InjectRepository(IntegrationLog)
 		private readonly integrationLogRepository: Repository<IntegrationLog>,
 		@InjectRepository(ClientEntity)
@@ -1501,9 +1504,13 @@ export class OdooService {
 
 	/**
 	 * Mapea productos de Sapira con productos de Odoo
-	 * Actualiza los campos odoo_product_id y odoo_tax_ids en la tabla products
+	 * Crea/actualiza registros en la tabla odoo_product_mappings
 	 */
-	async mapProducts(mapData: { mappings: Array<{ sapira_product_id: string; odoo_product_id: number; odoo_tax_ids?: string }> }): Promise<{
+	async mapProducts(
+		holdingId: string,
+		mapData: { mappings: Array<{ sapira_product_id: string; odoo_product_id: number; odoo_tax_ids?: string }> },
+		userId?: string
+	): Promise<{
 		success: boolean;
 		message: string;
 		updated_count: number;
@@ -1519,41 +1526,63 @@ export class OdooService {
 		}
 
 		try {
+			let createdCount = 0;
 			let updatedCount = 0;
+			let notFoundCount = 0;
 
-			// Usar transacción para garantizar atomicidad
-			await this.productsRepository.manager.transaction(async (transactionalEntityManager) => {
+			await this.odooProductMappingRepository.manager.transaction(async (transactionalEntityManager) => {
 				for (const mapping of mappings) {
 					const { sapira_product_id, odoo_product_id, odoo_tax_ids } = mapping;
 
-					// Verificar que el producto existe
 					const product = await transactionalEntityManager.findOne(Product, {
-						where: { id: sapira_product_id },
+						where: {
+							id: sapira_product_id,
+							holding_id: holdingId,
+						},
 					});
 
 					if (!product) {
-						console.warn(`⚠️ Producto ${sapira_product_id} no encontrado, omitiendo...`);
+						notFoundCount++;
+						console.warn(`⚠️ Producto ${sapira_product_id} no encontrado para holding ${holdingId}, omitiendo...`);
 						continue;
 					}
 
-					// Actualizar el producto con los datos de Odoo
-					await transactionalEntityManager.update(
-						Product,
-						{ id: sapira_product_id },
-						{
-							odoo_product_id,
-							odoo_tax_ids: odoo_tax_ids || null,
-						}
-					);
+					const existingMapping = await transactionalEntityManager.findOne(OdooProductMapping, {
+						where: {
+							holding_id: holdingId,
+							sapira_product_id: sapira_product_id,
+							odoo_product_id: odoo_product_id,
+						},
+					});
 
-					updatedCount++;
+					if (existingMapping) {
+						existingMapping.updated_at = new Date();
+						if (userId) {
+							existingMapping.created_by = userId;
+						}
+						if (odoo_tax_ids) {
+							existingMapping.metadata = { ...existingMapping.metadata, odoo_tax_ids };
+						}
+						await transactionalEntityManager.save(OdooProductMapping, existingMapping);
+						updatedCount++;
+					} else {
+						const newMapping = transactionalEntityManager.create(OdooProductMapping, {
+							holding_id: holdingId,
+							sapira_product_id: sapira_product_id,
+							odoo_product_id: odoo_product_id,
+							created_by: userId,
+							metadata: odoo_tax_ids ? { odoo_tax_ids } : {},
+						});
+						await transactionalEntityManager.save(OdooProductMapping, newMapping);
+						createdCount++;
+					}
 				}
 			});
 
 			return {
 				success: true,
-				message: `Se actualizaron ${updatedCount} productos exitosamente`,
-				updated_count: updatedCount,
+				message: `Se procesaron ${createdCount + updatedCount} mapeos exitosamente (${createdCount} nuevos, ${updatedCount} actualizados)`,
+				updated_count: createdCount + updatedCount,
 			};
 		} catch (error) {
 			console.error('❌ Error mapeando productos:', error);

@@ -13,6 +13,7 @@ import { GetSubscriptionByIdDto } from './dtos/get-subscription-by-id.dto';
 import { GetSubscriptionsDto } from './dtos/get-subscriptions.dto';
 import { GetProductsResponseDTO, SaveProductMappingDTO, SaveProductMappingResponseDTO } from './dtos/stripe-products.dto';
 import { StripeConnection } from './entities/stripe-connection.entity';
+import { StripeProductMapping } from './entities/stripe-product-mapping.entity';
 import { StripeCustomer, StripeCustomerListResponse } from './interfaces/stripe-customer.interface';
 import { StripeInvoice, StripeInvoiceListResponse } from './interfaces/stripe-invoice.interface';
 import { StripeSubscription, StripeSubscriptionListResponse } from './interfaces/stripe-subscription.interface';
@@ -27,7 +28,9 @@ export class StripeService {
 		@InjectRepository(StripeConnection)
 		private readonly stripeConnectionRepository: Repository<StripeConnection>,
 		@InjectRepository(Product)
-		private readonly productRepository: Repository<Product>
+		private readonly productRepository: Repository<Product>,
+		@InjectRepository(StripeProductMapping)
+		private readonly stripeProductMappingRepository: Repository<StripeProductMapping>
 	) {}
 
 	async getInvoices(dto: GetInvoicesDto): Promise<StripeInvoiceListResponse> {
@@ -254,7 +257,26 @@ export class StripeService {
 
 			this.logger.log(`Se encontraron ${sapiraProducts.length} productos en Sapira`);
 
-			// 5. Retornar ambos conjuntos de productos
+			// 5. Obtener mapeos existentes
+			const mappings = await this.stripeProductMappingRepository.find({
+				where: { holding_id: holdingId },
+			});
+
+			this.logger.log(`Se encontraron ${mappings.length} mapeos existentes`);
+
+			// 6. Crear un mapa de sapira_product_id -> array de stripe_product_ids
+			const mappingsByProduct = mappings.reduce(
+				(acc, mapping) => {
+					if (!acc[mapping.sapira_product_id]) {
+						acc[mapping.sapira_product_id] = [];
+					}
+					acc[mapping.sapira_product_id].push(mapping.stripe_product_id);
+					return acc;
+				},
+				{} as Record<string, string[]>
+			);
+
+			// 7. Retornar ambos conjuntos de productos con sus mapeos
 			return {
 				stripe_products: stripeProducts.data.map((product) => ({
 					id: product.id,
@@ -269,7 +291,7 @@ export class StripeService {
 					product_code: product.product_code,
 					name: product.name,
 					default_price: product.default_price ? Number(product.default_price) : undefined,
-					stripe_product_id: product.stripe_product_id,
+					stripe_product_mappings: mappingsByProduct[product.id] || [],
 				})),
 			};
 		} catch (error) {
@@ -278,15 +300,22 @@ export class StripeService {
 		}
 	}
 
-	async mapProducts(holdingId: string, mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
+	async mapProducts(holdingId: string, mapData: SaveProductMappingDTO, userId?: string): Promise<SaveProductMappingResponseDTO> {
 		try {
-			this.logger.log(`Mapeando ${mapData.mappings.length} productos para holding: ${holdingId}`);
+			this.logger.log(`📥 [mapProducts] Datos recibidos - Holding: ${holdingId}`);
+			this.logger.log(`📥 [mapProducts] Cantidad de mappings: ${mapData.mappings.length}`);
+			this.logger.log(`📥 [mapProducts] Mappings completos: ${JSON.stringify(mapData.mappings, null, 2)}`);
 
+			let createdCount = 0;
 			let updatedCount = 0;
+			let notFoundCount = 0;
 
-			// Usar transacción para actualizar productos
-			await this.productRepository.manager.transaction(async (transactionalEntityManager) => {
+			await this.stripeProductMappingRepository.manager.transaction(async (transactionalEntityManager) => {
 				for (const mapping of mapData.mappings) {
+					this.logger.log(
+						`🔍 [mapProducts] Procesando mapeo: Sapira ID ${mapping.sapira_product_id} -> Stripe ID ${mapping.stripe_product_id}`
+					);
+
 					const product = await transactionalEntityManager.findOne(Product, {
 						where: {
 							id: mapping.sapira_product_id,
@@ -294,25 +323,58 @@ export class StripeService {
 						},
 					});
 
-					if (product) {
-						product.stripe_product_id = mapping.stripe_product_id;
-						await transactionalEntityManager.save(Product, product);
+					if (!product) {
+						notFoundCount++;
+						this.logger.warn(`❌ [mapProducts] Producto ${mapping.sapira_product_id} NO encontrado para holding ${holdingId}`);
+						continue;
+					}
+
+					this.logger.log(`✅ [mapProducts] Producto encontrado: ${product.name || product.id}`);
+
+					const existingMapping = await transactionalEntityManager.findOne(StripeProductMapping, {
+						where: {
+							holding_id: holdingId,
+							sapira_product_id: mapping.sapira_product_id,
+							stripe_product_id: mapping.stripe_product_id,
+						},
+					});
+
+					if (existingMapping) {
+						this.logger.log(`🔄 [mapProducts] Mapeo ya existe, actualizando updated_at`);
+						existingMapping.updated_at = new Date();
+						if (userId) {
+							existingMapping.created_by = userId;
+						}
+						await transactionalEntityManager.save(StripeProductMapping, existingMapping);
 						updatedCount++;
 					} else {
-						this.logger.warn(`Producto ${mapping.sapira_product_id} no encontrado para holding ${holdingId}`);
+						this.logger.log(`➕ [mapProducts] Creando nuevo mapeo`);
+						const newMapping = transactionalEntityManager.create(StripeProductMapping, {
+							holding_id: holdingId,
+							sapira_product_id: mapping.sapira_product_id,
+							stripe_product_id: mapping.stripe_product_id,
+							created_by: userId,
+							metadata: {},
+						});
+						await transactionalEntityManager.save(StripeProductMapping, newMapping);
+						createdCount++;
 					}
+
+					this.logger.log(`💾 [mapProducts] Mapeo procesado exitosamente`);
 				}
 			});
 
-			this.logger.log(`Se actualizaron ${updatedCount} productos exitosamente`);
+			this.logger.log(
+				`✅ [mapProducts] Resumen: ${createdCount} mapeos creados, ${updatedCount} actualizados, ${notFoundCount} productos no encontrados`
+			);
 
 			return {
 				success: true,
-				message: `Se actualizaron ${updatedCount} productos exitosamente`,
-				updated_count: updatedCount,
+				message: `Se procesaron ${createdCount + updatedCount} mapeos exitosamente (${createdCount} nuevos, ${updatedCount} actualizados)`,
+				updated_count: createdCount + updatedCount,
 			};
 		} catch (error) {
-			this.logger.error(`Error al mapear productos: ${error.message}`, error.stack);
+			this.logger.error(`❌ [mapProducts] Error al mapear productos: ${error.message}`, error.stack);
 			throw error;
 		}
 	}

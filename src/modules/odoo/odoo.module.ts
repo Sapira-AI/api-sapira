@@ -15,6 +15,7 @@ import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
 import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
+import { OdooProductMapping } from './entities/odoo-product-mapping.entity';
 import { Product } from './entities/products.entity';
 import { InvoiceProcessingController } from './invoice-processing.controller';
 import { InvoiceProcessingService } from './invoice-processing.service';
@@ -46,6 +47,7 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 			OdooInvoiceLinesStg,
 			OdooPartnersStg,
 			Product,
+			OdooProductMapping,
 			IntegrationLog,
 			ClientEntity,
 			FieldMapping,

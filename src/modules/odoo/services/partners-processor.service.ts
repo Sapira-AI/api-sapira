@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -8,6 +8,7 @@ import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.enti
 import { isGenericExportVat } from '../constants/generic-vats.constant';
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from '../dtos/process-partners.dto';
 import { OdooPartnersStg } from '../entities/odoo-partners-stg.entity';
+import { OdooPartnersService } from '../odoo-partners.service';
 
 @Injectable()
 export class PartnersProcessorService {
@@ -19,7 +20,9 @@ export class PartnersProcessorService {
 		@InjectRepository(ClientEntity)
 		private readonly clientEntitiesRepository: Repository<ClientEntity>,
 		@InjectRepository(FieldMapping)
-		private readonly fieldMappingsRepository: Repository<FieldMapping>
+		private readonly fieldMappingsRepository: Repository<FieldMapping>,
+		@Inject(forwardRef(() => OdooPartnersService))
+		private readonly odooPartnersService: OdooPartnersService
 	) {}
 
 	async processPartners(dto: ProcessPartnersDto): Promise<ProcessPartnersResponseDto> {
@@ -569,6 +572,97 @@ export class PartnersProcessorService {
 		return {
 			deleted_count: deletedCount,
 			message: `Se eliminaron ${deletedCount} registros procesados`,
+		};
+	}
+
+	/**
+	 * Clasifica los partners en staging según si necesitan crearse, actualizarse o ya están procesados
+	 * Usa la lógica unificada de determinePartnerProcessingStatus que incluye:
+	 * - Búsquedas múltiples por VAT y odoo_partner_id
+	 * - Lógica de VATs genéricos de exportación
+	 * - Comparación de campos usando mapeo configurado
+	 */
+	async classifyPartners(
+		holdingId: string,
+		mappingId: string
+	): Promise<{
+		to_create: number;
+		to_update: number;
+		already_processed: number;
+		total: number;
+	}> {
+		this.logger.log('='.repeat(80));
+		this.logger.log('📊 INICIO DE CLASIFICACIÓN DE PARTNERS');
+		this.logger.log(`📋 Holding ID: ${holdingId}`);
+		this.logger.log(`🗺️  Mapping ID: ${mappingId}`);
+		this.logger.log('='.repeat(80));
+
+		// Validar que existe el mapeo
+		const mapping = await this.fieldMappingsRepository.findOne({
+			where: {
+				id: mappingId,
+				holding_id: holdingId,
+			},
+		});
+
+		if (!mapping) {
+			this.logger.error(`❌ Mapeo ${mappingId} no encontrado`);
+			throw new Error(`Mapeo ${mappingId} no encontrado`);
+		}
+
+		// Obtener todos los partners de staging
+		const partners = await this.partnersStgRepository.find({
+			where: { holding_id: holdingId },
+			select: ['id', 'odoo_id', 'raw_data', 'processing_status'],
+		});
+
+		this.logger.log(`📦 Partners encontrados: ${partners.length}`);
+
+		let toCreate = 0;
+		let toUpdate = 0;
+		let alreadyProcessed = 0;
+
+		for (const partner of partners) {
+			// Reclasificar TODOS los partners para asegurar que la clasificación sea correcta
+			// (incluso los que ya están marcados como 'processed')
+
+			// Usar el método unificado de clasificación que incluye:
+			// - Lógica de VATs genéricos de exportación
+			// - Búsquedas múltiples por VAT y odoo_partner_id
+			// - Comparación de campos usando mapeo configurado
+			const result = await this.odooPartnersService.determinePartnerProcessingStatus(partner.raw_data as any, holdingId);
+
+			const status = result.status;
+
+			// Preparar integration_notes
+			const integrationNotes = result.changes && result.changes.length > 0 ? JSON.stringify({ changes: result.changes }) : result.notes;
+
+			// Actualizar el processing_status en la BD
+			await this.partnersStgRepository.update(partner.id, {
+				processing_status: status,
+				integration_notes: integrationNotes,
+			});
+
+			if (status === 'create') toCreate++;
+			else if (status === 'update') toUpdate++;
+			else alreadyProcessed++;
+
+			this.logger.debug(`Partner ${partner.odoo_id}: ${status} - ${result.notes}`);
+		}
+
+		this.logger.log('\n' + '='.repeat(80));
+		this.logger.log('✅ CLASIFICACIÓN COMPLETADA');
+		this.logger.log(`  - Nuevos (crear): ${toCreate}`);
+		this.logger.log(`  - Con cambios (actualizar): ${toUpdate}`);
+		this.logger.log(`  - Ya procesados: ${alreadyProcessed}`);
+		this.logger.log(`  - Total: ${partners.length}`);
+		this.logger.log('='.repeat(80) + '\n');
+
+		return {
+			to_create: toCreate,
+			to_update: toUpdate,
+			already_processed: alreadyProcessed,
+			total: partners.length,
 		};
 	}
 }

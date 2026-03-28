@@ -50,10 +50,11 @@ export class SapiraProductDTO {
 	@IsOptional()
 	default_price?: number;
 
-	@ApiProperty({ description: 'ID del producto en Stripe (si ya está mapeado)', required: false })
+	@ApiProperty({ description: 'IDs de productos en Stripe mapeados a este producto', required: false, type: [String] })
 	@IsOptional()
-	@IsString()
-	stripe_product_id?: string;
+	@IsArray()
+	@IsString({ each: true })
+	stripe_product_mappings?: string[];
 }
 
 export class GetProductsResponseDTO {

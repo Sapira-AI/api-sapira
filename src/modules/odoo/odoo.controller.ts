@@ -139,8 +139,8 @@ export class OdooController {
 		description: 'Mapeos actualizados exitosamente',
 	})
 	@ApiBadRequestResponse({ description: 'Parámetros inválidos' })
-	async mapProducts(@Body() mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
-		return await this.odooService.mapProducts(mapData);
+	async mapProducts(@Headers('x-holding-id') holdingId: string, @Body() mapData: SaveProductMappingDTO): Promise<SaveProductMappingResponseDTO> {
+		return await this.odooService.mapProducts(holdingId, mapData);
 	}
 
 	@Post('count-records')
