@@ -8,6 +8,7 @@ import { EmailsModule } from '@/modules/emails/emails.module';
 import { OdooModule } from '@/modules/odoo/odoo.module';
 
 import { Company } from '../odoo/entities/companies.entity';
+import { OdooProductMapping } from '../odoo/entities/odoo-product-mapping.entity';
 import { Product } from '../odoo/entities/products.entity';
 
 import { InvoiceItem } from './entities/invoice-item.entity';
@@ -22,7 +23,7 @@ import { InvoicesService } from './invoices.service';
 @Module({
 	imports: [
 		PostgreSQLDatabaseModule,
-		TypeOrmModule.forFeature([Invoice, InvoiceItem, ClientEntity, Company, Product]),
+		TypeOrmModule.forFeature([Invoice, InvoiceItem, ClientEntity, Company, Product, OdooProductMapping]),
 		BancoCentralModule,
 		OdooModule,
 		EmailsModule,
