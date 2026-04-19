@@ -22,6 +22,7 @@ import { StripeIngestionController } from './stripe-ingestion.controller';
 import { StripeIngestionService } from './stripe-ingestion.service';
 import { StripeController } from './stripe.controller';
 import { StripeProviders } from './stripe.provider';
+import { StripeScheduler } from './stripe.scheduler';
 import { StripeService } from './stripe.service';
 
 @Module({
@@ -40,7 +41,15 @@ import { StripeService } from './stripe.service';
 		]),
 	],
 	controllers: [StripeController, StripeConnectionController, StripeIngestionController, StripeSyncController, StripeStagingController],
-	providers: [StripeService, ...StripeProviders, StripeConnectionService, StripeIngestionService, StripeSyncService, StripeStagingService],
+	providers: [
+		StripeService,
+		...StripeProviders,
+		StripeConnectionService,
+		StripeIngestionService,
+		StripeSyncService,
+		StripeStagingService,
+		StripeScheduler,
+	],
 	exports: [StripeService, StripeConnectionService, StripeIngestionService, StripeSyncService, StripeStagingService],
 })
 export class StripeModule {}

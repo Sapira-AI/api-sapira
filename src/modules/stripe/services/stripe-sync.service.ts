@@ -709,6 +709,13 @@ export class StripeSyncService {
 			const clientEntityId = clientEntity[0].id;
 			const clientId = clientEntity[0].client_id;
 
+			const clientData = await this.customersStgRepo.query(`SELECT name_commercial FROM clients WHERE id = $1`, [clientId]);
+
+			const clientEntityData = await this.customersStgRepo.query(`SELECT legal_name FROM client_entities WHERE id = $1`, [clientEntityId]);
+
+			const clientNameCommercial = clientData && clientData.length > 0 ? clientData[0].name_commercial : null;
+			const legalClientName = clientEntityData && clientEntityData.length > 0 ? clientEntityData[0].legal_name : null;
+
 			const existingSubscription = await this.customersStgRepo.query(
 				`SELECT id, status, canceled_at, ended_at, monthly_amount FROM subscriptions WHERE external_id = $1 AND holding_id = $2`,
 				[rawData.id, holdingId]
@@ -731,6 +738,8 @@ export class StripeSyncService {
 				company_id: '373c1b3b-5f91-4a4d-a28a-a146d0af6961',
 				client_id: clientId,
 				client_entity_id: clientEntityId,
+				client_name_commercial: clientNameCommercial,
+				legal_client_name: legalClientName,
 				external_id: rawData.id,
 				source: 'stripe',
 				status: rawData.status,
@@ -780,12 +789,14 @@ export class StripeSyncService {
 				}
 			} else {
 				const result = await this.customersStgRepo.query(
-					`INSERT INTO subscriptions (holding_id, company_id, client_id, client_entity_id, external_id, source, status, start_date, canceled_at, cancel_at_period_end, ended_at, current_period_start, current_period_end, billing_cycle_anchor, cancellation_reason, cancellation_comment, currency, monthly_amount, collection_method, system_currency, fx_to_system, monthly_amount_system_currency, metadata, last_synced_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW()) RETURNING id`,
+					`INSERT INTO subscriptions (holding_id, company_id, client_id, client_entity_id, client_name_commercial, legal_client_name, external_id, source, status, start_date, canceled_at, cancel_at_period_end, ended_at, current_period_start, current_period_end, billing_cycle_anchor, cancellation_reason, cancellation_comment, currency, monthly_amount, collection_method, system_currency, fx_to_system, monthly_amount_system_currency, metadata, last_synced_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW()) RETURNING id`,
 					[
 						subscriptionData.holding_id,
 						subscriptionData.company_id,
 						subscriptionData.client_id,
 						subscriptionData.client_entity_id,
+						subscriptionData.client_name_commercial,
+						subscriptionData.legal_client_name,
 						subscriptionData.external_id,
 						subscriptionData.source,
 						subscriptionData.status,
@@ -842,6 +853,7 @@ export class StripeSyncService {
 
 				const stripeProductId = item.price?.product || null;
 				let productId = null;
+				let productName = '';
 
 				if (stripeProductId) {
 					const productMapping = await this.customersStgRepo.query(
@@ -852,6 +864,13 @@ export class StripeSyncService {
 					if (productMapping && productMapping.length > 0) {
 						productId = productMapping[0].sapira_product_id;
 						this.logger.debug(`Producto mapeado encontrado: ${stripeProductId} -> ${productId}`);
+
+						const productData = await this.customersStgRepo.query(`SELECT name FROM products WHERE id = $1`, [productId]);
+
+						if (productData && productData.length > 0) {
+							productName = productData[0].name;
+							this.logger.debug(`Nombre de producto obtenido: ${productName}`);
+						}
 					} else {
 						this.logger.warn(`Producto sin mapear: ${stripeProductId} en subscription_item ${item.id}`);
 					}
@@ -859,8 +878,8 @@ export class StripeSyncService {
 
 				if (existingItem && existingItem.length > 0) {
 					await this.customersStgRepo.query(
-						`UPDATE subscription_items SET quantity = $1, unit_price = $2, monthly_amount = $3, product_id = $4, updated_at = NOW() WHERE id = $5`,
-						[quantity, unitPrice, monthlyAmount, productId, existingItem[0].id]
+						`UPDATE subscription_items SET quantity = $1, unit_price = $2, monthly_amount = $3, product_id = $4, product_name = $5, updated_at = NOW() WHERE id = $6`,
+						[quantity, unitPrice, monthlyAmount, productId, productName, existingItem[0].id]
 					);
 					updated++;
 				} else {
@@ -873,7 +892,7 @@ export class StripeSyncService {
 							stripeProductId,
 							item.price?.id || null,
 							productId,
-							item.price?.nickname || '',
+							productName,
 							'Digital',
 							quantity,
 							unitPrice,
@@ -1026,21 +1045,34 @@ export class StripeSyncService {
 			const clientEntityId = clientEntity[0].id;
 
 			let subscriptionId = null;
+			let clientId = null;
+
 			// Buscar subscription_id - puede estar en rawData.subscription o en rawData.parent.subscription_details.subscription
 			const subscriptionExternalId = rawData.subscription || rawData.parent?.subscription_details?.subscription;
 
 			if (subscriptionExternalId) {
 				this.logger.debug(`Buscando suscripción con external_id: ${subscriptionExternalId}`);
-				const subscription = await this.customersStgRepo.query(`SELECT id FROM subscriptions WHERE external_id = $1 AND holding_id = $2`, [
-					subscriptionExternalId,
-					holdingId,
-				]);
+				const subscription = await this.customersStgRepo.query(
+					`SELECT id, client_id FROM subscriptions WHERE external_id = $1 AND holding_id = $2`,
+					[subscriptionExternalId, holdingId]
+				);
 
 				if (subscription && subscription.length > 0) {
 					subscriptionId = subscription[0].id;
-					this.logger.debug(`Suscripción encontrada: ${subscriptionId}`);
+					clientId = subscription[0].client_id;
+					this.logger.debug(`Suscripción encontrada: ${subscriptionId}, client_id: ${clientId}`);
 				} else {
 					this.logger.warn(`No se encontró suscripción con external_id: ${subscriptionExternalId}`);
+				}
+			}
+
+			// Si no se encontró client_id desde subscription, obtenerlo desde client_entities
+			if (!clientId) {
+				const clientEntityData = await this.customersStgRepo.query(`SELECT client_id FROM client_entities WHERE id = $1`, [clientEntityId]);
+
+				if (clientEntityData && clientEntityData.length > 0) {
+					clientId = clientEntityData[0].client_id;
+					this.logger.debug(`client_id obtenido desde client_entities: ${clientId}`);
 				}
 			}
 
@@ -1066,6 +1098,7 @@ export class StripeSyncService {
 
 			const invoiceData = {
 				company_id: '373c1b3b-5f91-4a4d-a28a-a146d0af6961',
+				client_id: clientId,
 				client_entity_id: clientEntityId,
 				contract_id: null,
 				subscription_id: subscriptionId,
@@ -1133,9 +1166,10 @@ export class StripeSyncService {
 				}
 			} else {
 				const result = await this.customersStgRepo.query(
-					`INSERT INTO invoices (company_id, client_entity_id, contract_id, subscription_id, invoice_number, stripe_id, issue_date, due_date, contract_currency, amount_contract_currency, invoice_currency, fx_contract_to_invoice, amount_invoice_currency, vat, tax_rate, total_invoice_currency, system_currency, fx_contract_to_system, amount_system_currency, total_system_currency, status, notes, sent_at, scheduled_at, original_issue_date, invoice_type, invoice_series, document_type, payment_method, export_type, is_active, auto_invoice, holding_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33) RETURNING id`,
+					`INSERT INTO invoices (company_id, client_id, client_entity_id, contract_id, subscription_id, invoice_number, stripe_id, issue_date, due_date, contract_currency, amount_contract_currency, invoice_currency, fx_contract_to_invoice, amount_invoice_currency, vat, tax_rate, total_invoice_currency, system_currency, fx_contract_to_system, amount_system_currency, total_system_currency, status, notes, sent_at, scheduled_at, original_issue_date, invoice_type, invoice_series, document_type, payment_method, export_type, is_active, auto_invoice, holding_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING id`,
 					[
 						invoiceData.company_id,
+						invoiceData.client_id,
 						invoiceData.client_entity_id,
 						invoiceData.contract_id,
 						invoiceData.subscription_id,
