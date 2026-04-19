@@ -7,6 +7,7 @@ import { ClientEntity } from '@/databases/postgresql/entities/client-entity.enti
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 import { CreateDraftInvoiceDTO, InvoiceLineItemDTO } from '../odoo/dtos/odoo.dto';
 import { Company } from '../odoo/entities/companies.entity';
+import { OdooProductMapping } from '../odoo/entities/odoo-product-mapping.entity';
 import { Product } from '../odoo/entities/products.entity';
 import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
 
@@ -42,6 +43,8 @@ export class InvoiceSchedulerService {
 		private readonly companyRepository: Repository<Company>,
 		@InjectRepository(Product)
 		private readonly productRepository: Repository<Product>,
+		@InjectRepository(OdooProductMapping)
+		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
 		private readonly odooInvoicesService: OdooInvoicesService,
 		private readonly invoiceNotificationService: InvoiceNotificationService,
 		private readonly exchangeRatesService: ExchangeRatesService
@@ -294,17 +297,18 @@ export class InvoiceSchedulerService {
 
 		for (const item of invoice.items || []) {
 			let odooProductId = 1;
+			let taxIds = [1];
 
 			if (item.product_id) {
-				const product = await this.productRepository.findOne({
-					where: { id: item.product_id },
-				});
-				if (product?.odoo_product_id) {
-					odooProductId = product.odoo_product_id;
-				}
-			}
+				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id, item.tax_code);
+				odooProductId = mappingInfo.odooProductId;
+				taxIds = mappingInfo.odooTaxIds;
 
-			const taxIds = this.mapTaxCodeToOdooIds(item.tax_code);
+				this.logger.debug(
+					`Item factura ${invoice.invoice_number}: producto_sapira=${item.product_id}, ` +
+						`odoo_product=${odooProductId}, tax_ids=${taxIds.join(',')}, source=${mappingInfo.source}`
+				);
+			}
 
 			invoiceLines.push({
 				product_id: odooProductId,
@@ -510,6 +514,82 @@ export class InvoiceSchedulerService {
 		};
 
 		return currencyMap[currency] || 2;
+	}
+
+	private async getProductMappingInfo(
+		sapiraProductId: string,
+		holdingId: string,
+		itemTaxCode?: string
+	): Promise<{
+		odooProductId: number;
+		odooTaxIds: number[];
+		source: 'mapping' | 'product_table' | 'default';
+	}> {
+		try {
+			const mapping = await this.odooProductMappingRepository.findOne({
+				where: {
+					sapira_product_id: sapiraProductId,
+					holding_id: holdingId,
+				},
+			});
+
+			if (mapping) {
+				const odooProductId = mapping.odoo_product_id;
+				let odooTaxIds: number[] = [1];
+
+				const taxIdsString = mapping.metadata?.odoo_tax_ids;
+				if (taxIdsString && typeof taxIdsString === 'string') {
+					odooTaxIds = taxIdsString
+						.split(',')
+						.map((id) => parseInt(id.trim(), 10))
+						.filter((id) => !isNaN(id));
+					if (odooTaxIds.length === 0) {
+						odooTaxIds = [1];
+					}
+				}
+
+				this.logger.debug(`Producto ${sapiraProductId}: Usando mapeo - odoo_product_id=${odooProductId}, tax_ids=${odooTaxIds.join(',')}`);
+
+				return {
+					odooProductId,
+					odooTaxIds,
+					source: 'mapping',
+				};
+			}
+
+			const product = await this.productRepository.findOne({
+				where: { id: sapiraProductId },
+			});
+
+			if (product?.odoo_product_id) {
+				const odooTaxIds = this.mapTaxCodeToOdooIds(itemTaxCode);
+
+				this.logger.debug(
+					`Producto ${sapiraProductId}: Usando products.odoo_product_id - odoo_product_id=${product.odoo_product_id}, tax_ids=${odooTaxIds.join(',')}`
+				);
+
+				return {
+					odooProductId: product.odoo_product_id,
+					odooTaxIds,
+					source: 'product_table',
+				};
+			}
+
+			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo - usando defaults (odoo_product_id=1, tax_ids=[1])`);
+
+			return {
+				odooProductId: 1,
+				odooTaxIds: [1],
+				source: 'default',
+			};
+		} catch (error) {
+			this.logger.error(`Error obteniendo mapeo de producto ${sapiraProductId}:`, error);
+			return {
+				odooProductId: 1,
+				odooTaxIds: [1],
+				source: 'default',
+			};
+		}
 	}
 
 	private mapTaxCodeToOdooIds(taxCode: string): number[] {
