@@ -228,6 +228,46 @@ export class InvoiceSchedulerService {
 
 			const odooInvoiceData = await this.mapInvoiceToOdooFormat(invoice);
 
+			// 🔍 VALIDAR TAXES ANTES DE ENVIAR
+			const allTaxIds = odooInvoiceData.invoice_line_ids.flatMap((line) => line.tax_ids || []);
+			const uniqueTaxIds = [...new Set(allTaxIds)];
+
+			if (uniqueTaxIds.length > 0 && odooInvoiceData.company_id) {
+				try {
+					this.logger.log(`🔍 Validando ${uniqueTaxIds.length} taxes únicos para company_id ${odooInvoiceData.company_id}...`);
+
+					const validation = await this.odooInvoicesService.validateTaxesForCompany(
+						invoice.holding_id,
+						odooInvoiceData.company_id,
+						uniqueTaxIds
+					);
+
+					if (!validation.success) {
+						const invalidTaxes = validation.tax_validations.filter((v) => !v.is_valid);
+						const errorDetails = invalidTaxes
+							.map((t) => `Tax ID ${t.tax_id} (${t.name}) pertenece a compañía ${t.company_id} (${t.company_name})`)
+							.join(', ');
+
+						result.status = 'error';
+						result.error = `Taxes incompatibles con la compañía ${odooInvoiceData.company_id}`;
+						result.details = `Los siguientes taxes no son válidos: ${errorDetails}`;
+
+						this.logger.error(
+							`❌ Factura ${invoice.invoice_number} tiene taxes incompatibles:\n` +
+								`   Company ID solicitado: ${odooInvoiceData.company_id}\n` +
+								`   Taxes inválidos: ${validation.invalid_tax_ids.join(', ')}\n` +
+								`   Detalles: ${errorDetails}`
+						);
+
+						return result;
+					}
+
+					this.logger.log(`✅ Todos los taxes son válidos para company_id ${odooInvoiceData.company_id}`);
+				} catch (validationError) {
+					this.logger.warn(`⚠️ No se pudo validar taxes (continuando de todos modos): ${validationError.message}`);
+				}
+			}
+
 			if (dryRun) {
 				result.status = 'sent';
 				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${odooInvoiceData.partner_id}`;
@@ -295,18 +335,38 @@ export class InvoiceSchedulerService {
 	async mapInvoiceToOdooFormat(invoice: InvoiceWithRelations): Promise<CreateDraftInvoiceDTO> {
 		const invoiceLines: InvoiceLineItemDTO[] = [];
 
+		// Obtener tax_id por defecto de la compañía
+		const companyDefaultTaxId = invoice.company?.odoo_default_sale_tax_id;
+		const itemsToUpdate: Array<{ id: string; odoo_tax_id: number }> = [];
+
+		this.logger.debug(
+			`Factura ${invoice.invoice_number}: usando tax_id de compañía ${invoice.company?.legal_name} - ` +
+				`odoo_default_sale_tax_id=${companyDefaultTaxId || 'no configurado, usando default [1]'}`
+		);
+
 		for (const item of invoice.items || []) {
 			let odooProductId = 1;
-			let taxIds = [1];
+			let taxId: number;
+
+			// 1. Si el item ya tiene odoo_tax_id → usar ese (permite edición manual futura)
+			if (item.odoo_tax_id) {
+				taxId = item.odoo_tax_id;
+				this.logger.debug(`Item ${item.id}: usando odoo_tax_id existente=${taxId} (configurado previamente)`);
+			}
+			// 2. Si no → usar tax de compañía y guardarlo
+			else {
+				taxId = companyDefaultTaxId || 1;
+				itemsToUpdate.push({ id: item.id, odoo_tax_id: taxId });
+				this.logger.debug(`Item ${item.id}: asignando tax_id de compañía=${taxId} (se guardará en BD)`);
+			}
 
 			if (item.product_id) {
-				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id, item.tax_code);
+				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
 				odooProductId = mappingInfo.odooProductId;
-				taxIds = mappingInfo.odooTaxIds;
 
 				this.logger.debug(
 					`Item factura ${invoice.invoice_number}: producto_sapira=${item.product_id}, ` +
-						`odoo_product=${odooProductId}, tax_ids=${taxIds.join(',')}, source=${mappingInfo.source}`
+						`odoo_product=${odooProductId}, tax_id=${taxId}, source=${mappingInfo.source}`
 				);
 			}
 
@@ -316,8 +376,13 @@ export class InvoiceSchedulerService {
 				quantity: parseFloat(item.quantity?.toString() || '1'),
 				price_unit: parseFloat(item.unit_price_invoice_currency?.toString() || '0'),
 				discount: parseFloat(item.discount_pct?.toString() || '0'),
-				tax_ids: taxIds,
+				tax_ids: [taxId],
 			});
+		}
+
+		// Guardar odoo_tax_id en los items que no lo tenían
+		if (itemsToUpdate.length > 0) {
+			await this.updateInvoiceItemsTaxIds(itemsToUpdate);
 		}
 
 		const currencyId = this.mapCurrencyToOdooId(invoice.invoice_currency);
@@ -502,6 +567,17 @@ export class InvoiceSchedulerService {
 		return invoice as InvoiceWithRelations;
 	}
 
+	private async updateInvoiceItemsTaxIds(items: Array<{ id: string; odoo_tax_id: number }>): Promise<void> {
+		try {
+			for (const item of items) {
+				await this.invoiceItemRepository.update({ id: item.id }, { odoo_tax_id: item.odoo_tax_id });
+			}
+			this.logger.debug(`✅ Actualizados ${items.length} items con odoo_tax_id`);
+		} catch (error) {
+			this.logger.error('❌ Error actualizando odoo_tax_id en invoice_items:', error);
+		}
+	}
+
 	private mapCurrencyToOdooId(currency: string): number {
 		const currencyMap: Record<string, number> = {
 			USD: 2,
@@ -518,14 +594,13 @@ export class InvoiceSchedulerService {
 
 	private async getProductMappingInfo(
 		sapiraProductId: string,
-		holdingId: string,
-		itemTaxCode?: string
+		holdingId: string
 	): Promise<{
 		odooProductId: number;
-		odooTaxIds: number[];
 		source: 'mapping' | 'product_table' | 'default';
 	}> {
 		try {
+			// 1. Buscar en odoo_product_mappings
 			const mapping = await this.odooProductMappingRepository.findOne({
 				where: {
 					sapira_product_id: sapiraProductId,
@@ -534,59 +609,36 @@ export class InvoiceSchedulerService {
 			});
 
 			if (mapping) {
-				const odooProductId = mapping.odoo_product_id;
-				let odooTaxIds: number[] = [1];
-
-				const taxIdsString = mapping.metadata?.odoo_tax_ids;
-				if (taxIdsString && typeof taxIdsString === 'string') {
-					odooTaxIds = taxIdsString
-						.split(',')
-						.map((id) => parseInt(id.trim(), 10))
-						.filter((id) => !isNaN(id));
-					if (odooTaxIds.length === 0) {
-						odooTaxIds = [1];
-					}
-				}
-
-				this.logger.debug(`Producto ${sapiraProductId}: Usando mapeo - odoo_product_id=${odooProductId}, tax_ids=${odooTaxIds.join(',')}`);
-
+				this.logger.debug(`Producto ${sapiraProductId}: Usando mapeo - odoo_product_id=${mapping.odoo_product_id}`);
 				return {
-					odooProductId,
-					odooTaxIds,
+					odooProductId: mapping.odoo_product_id,
 					source: 'mapping',
 				};
 			}
 
+			// 2. Buscar en products.odoo_product_id
 			const product = await this.productRepository.findOne({
 				where: { id: sapiraProductId },
 			});
 
 			if (product?.odoo_product_id) {
-				const odooTaxIds = this.mapTaxCodeToOdooIds(itemTaxCode);
-
-				this.logger.debug(
-					`Producto ${sapiraProductId}: Usando products.odoo_product_id - odoo_product_id=${product.odoo_product_id}, tax_ids=${odooTaxIds.join(',')}`
-				);
-
+				this.logger.debug(`Producto ${sapiraProductId}: Usando products.odoo_product_id=${product.odoo_product_id}`);
 				return {
 					odooProductId: product.odoo_product_id,
-					odooTaxIds,
 					source: 'product_table',
 				};
 			}
 
-			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo - usando defaults (odoo_product_id=1, tax_ids=[1])`);
-
+			// 3. Sin mapeo: usar default
+			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo - usando default odoo_product_id=1`);
 			return {
 				odooProductId: 1,
-				odooTaxIds: [1],
 				source: 'default',
 			};
 		} catch (error) {
 			this.logger.error(`Error obteniendo mapeo de producto ${sapiraProductId}:`, error);
 			return {
 				odooProductId: 1,
-				odooTaxIds: [1],
 				source: 'default',
 			};
 		}

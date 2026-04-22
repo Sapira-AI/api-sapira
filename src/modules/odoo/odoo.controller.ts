@@ -9,6 +9,7 @@ import {
 	GetCompaniesResponseDTO,
 	GetFieldMappingResponseDTO,
 	GetProductsDTO,
+	GetTaxesResponseDTO,
 	JobStatusResponseDTO,
 	MapCompaniesDTO,
 	MapCompaniesResponseDTO,
@@ -18,7 +19,10 @@ import {
 	SaveProductMappingResponseDTO,
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
+	ValidateInvoiceDataDTO,
+	ValidateInvoiceDataResponseDTO,
 } from './dtos/odoo.dto';
+import { OdooInvoicesService } from './odoo-invoices.service';
 import { OdooService } from './odoo.service';
 
 @ApiTags('Odoo')
@@ -26,7 +30,10 @@ import { OdooService } from './odoo.service';
 @UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class OdooController {
-	constructor(private readonly odooService: OdooService) {}
+	constructor(
+		private readonly odooService: OdooService,
+		private readonly odooInvoicesService: OdooInvoicesService
+	) {}
 
 	@Get('companies')
 	@ApiOperation({
@@ -312,5 +319,67 @@ export class OdooController {
 	@ApiBadRequestResponse({ description: 'Error al eliminar registros' })
 	async cleanProcessedPartners(@Headers('x-holding-id') holdingId: string) {
 		return await this.odooService.cleanProcessedPartners(holdingId);
+	}
+
+	@Get('taxes/:companyId')
+	@ApiOperation({
+		summary: 'Obtener taxes disponibles para una compañía',
+		description: 'Consulta todos los taxes (impuestos) disponibles en Odoo para una compañía específica',
+	})
+	@ApiQuery({
+		name: 'company_id',
+		type: Number,
+		required: true,
+		description: 'ID de la compañía en Odoo',
+		example: 1,
+	})
+	@ApiOkResponse({
+		type: GetTaxesResponseDTO,
+		description: 'Taxes obtenidos exitosamente',
+	})
+	@ApiBadRequestResponse({ description: 'Error al obtener taxes' })
+	async getTaxes(@Headers('x-holding-id') holdingId: string, @Query('company_id') companyId: number): Promise<GetTaxesResponseDTO> {
+		return await this.odooInvoicesService.getTaxesForCompany(holdingId, companyId);
+	}
+
+	@Post('validate-invoice-data')
+	@ApiOperation({
+		summary: 'Validar datos de factura antes de enviar a Odoo',
+		description: 'Valida que los tax_ids de las líneas de factura pertenezcan a la compañía especificada',
+	})
+	@ApiBody({
+		type: ValidateInvoiceDataDTO,
+		required: true,
+		description: 'Datos de factura a validar',
+		examples: {
+			'validate-example': {
+				summary: 'Ejemplo de validación',
+				value: {
+					company_id: 1,
+					invoice_line_ids: [
+						{
+							product_id: 486,
+							quantity: 1,
+							price_unit: 100,
+							tax_ids: [1, 19, 40, 80, 84, 91, 116],
+						},
+					],
+				},
+			},
+		},
+	})
+	@ApiOkResponse({
+		type: ValidateInvoiceDataResponseDTO,
+		description: 'Validación completada',
+	})
+	@ApiBadRequestResponse({ description: 'Error al validar datos' })
+	async validateInvoiceData(
+		@Headers('x-holding-id') holdingId: string,
+		@Body() validateData: ValidateInvoiceDataDTO
+	): Promise<ValidateInvoiceDataResponseDTO> {
+		const allTaxIds = validateData.invoice_line_ids.flatMap((line) => line.tax_ids || []);
+		const uniqueTaxIds = [...new Set(allTaxIds)];
+
+		return await this.odooInvoicesService.validateTaxesForCompany(holdingId, validateData.company_id, uniqueTaxIds);
 	}
 }
