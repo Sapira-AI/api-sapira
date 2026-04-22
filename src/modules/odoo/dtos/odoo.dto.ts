@@ -582,3 +582,93 @@ export class SaveProductMappingResponseDTO {
 	@ApiProperty({ description: 'Cantidad de productos actualizados' })
 	updated_count!: number;
 }
+
+export class ValidateInvoiceDataDTO {
+	@ApiProperty({ description: 'ID de la compañía en Odoo' })
+	@IsNumber()
+	@Type(() => Number)
+	company_id!: number;
+
+	@ApiProperty({ description: 'Líneas de la factura con tax_ids', type: [InvoiceLineItemDTO] })
+	@IsArray()
+	@ValidateNested({ each: true })
+	@Type(() => InvoiceLineItemDTO)
+	invoice_line_ids!: InvoiceLineItemDTO[];
+}
+
+export class TaxValidationResultDTO {
+	@ApiProperty({ description: 'ID del tax en Odoo' })
+	tax_id!: number;
+
+	@ApiProperty({ description: 'Nombre del tax' })
+	name!: string;
+
+	@ApiProperty({ description: 'ID de la compañía a la que pertenece' })
+	company_id!: number;
+
+	@ApiProperty({ description: 'Nombre de la compañía' })
+	company_name!: string;
+
+	@ApiProperty({ description: 'Indica si el tax es válido para la compañía solicitada' })
+	is_valid!: boolean;
+}
+
+export class ValidateInvoiceDataResponseDTO {
+	@ApiProperty({ description: 'Indica si todos los taxes son válidos' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'ID de la compañía validada' })
+	company_id!: number;
+
+	@ApiProperty({ description: 'Resultados de validación por tax', type: [TaxValidationResultDTO] })
+	tax_validations!: TaxValidationResultDTO[];
+
+	@ApiProperty({ description: 'IDs de taxes inválidos', type: [Number] })
+	invalid_tax_ids!: number[];
+}
+
+export class OdooTaxDTO {
+	@ApiProperty({ description: 'ID del tax en Odoo' })
+	id!: number;
+
+	@ApiProperty({ description: 'Nombre del tax' })
+	name!: string;
+
+	@ApiProperty({ description: 'Nombre para mostrar' })
+	display_name!: string;
+
+	@ApiProperty({ description: 'ID de la compañía', type: [Number] })
+	company_id!: [number, string];
+
+	@ApiProperty({ description: 'Porcentaje del tax' })
+	amount!: number;
+
+	@ApiProperty({ description: 'Tipo de tax' })
+	type_tax_use!: string;
+
+	@ApiProperty({ description: 'Activo' })
+	active!: boolean;
+}
+
+export class GetTaxesResponseDTO {
+	@ApiProperty({ description: 'Indica si la operación fue exitosa' })
+	success!: boolean;
+
+	@ApiProperty({ description: 'Mensaje descriptivo del resultado' })
+	message!: string;
+
+	@ApiProperty({ description: 'ID de la compañía' })
+	company_id!: number;
+
+	@ApiProperty({ description: 'Nombre de la compañía' })
+	company_name!: string;
+
+	@ApiProperty({ description: 'Taxes disponibles', type: [OdooTaxDTO] })
+	taxes!: OdooTaxDTO[];
+
+	@ApiProperty({ description: 'Total de taxes encontrados' })
+	total!: number;
+}

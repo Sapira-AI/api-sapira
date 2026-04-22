@@ -55,4 +55,10 @@ export class Company {
 
 	@Column({ type: 'integer', nullable: true })
 	odoo_integration_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_default_sale_tax_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_default_purchase_tax_id?: number;
 }

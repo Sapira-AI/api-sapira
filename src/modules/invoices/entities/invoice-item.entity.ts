@@ -53,6 +53,9 @@ export class InvoiceItem {
 	@Column({ type: 'numeric', precision: 5, scale: 2, nullable: true, default: 0 })
 	discount_pct?: number;
 
+	@Column({ type: 'integer', nullable: true })
+	odoo_tax_id?: number;
+
 	@CreateDateColumn({ type: 'timestamp', default: () => 'now()' })
 	created_at: Date;
 

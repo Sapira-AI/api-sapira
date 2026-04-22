@@ -306,6 +306,97 @@ export class OdooService {
 	}
 
 	/**
+	 * Obtiene la configuración de conexión de Odoo por holding_id
+	 */
+	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig> {
+		try {
+			const dbConnection = await this.odooConnectionRepository.findOne({
+				where: { holding_id: holdingId, is_active: true },
+				order: { created_at: 'DESC' },
+			});
+
+			if (dbConnection) {
+				return {
+					id: dbConnection.id,
+					url: dbConnection.url,
+					database_name: dbConnection.database_name,
+					username: dbConnection.username || '',
+					api_key: dbConnection.api_key,
+					holding_id: dbConnection.holding_id,
+				};
+			}
+
+			throw new Error(`Conexión Odoo no encontrada o inactiva para holding_id: ${holdingId}`);
+		} catch (error) {
+			console.error('Error obteniendo conexión Odoo desde BD:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Obtiene los tax_ids de las compañías desde Odoo
+	 */
+	private async getOdooCompanyTaxIds(
+		holdingId: string,
+		mappings: Array<{ sapira_company_id: string; odoo_company_id: number | null }>
+	): Promise<Map<number, { sale_tax_id: number | null; purchase_tax_id: number | null }>> {
+		const taxMap = new Map<number, { sale_tax_id: number | null; purchase_tax_id: number | null }>();
+
+		try {
+			// Obtener solo los IDs de compañías que no son null
+			const odooCompanyIds = mappings.filter((m) => m.odoo_company_id !== null).map((m) => m.odoo_company_id);
+
+			if (odooCompanyIds.length === 0) {
+				return taxMap;
+			}
+
+			// Obtener conexión de Odoo
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				console.error('❌ Falló la autenticación con Odoo al obtener tax_ids');
+				return taxMap;
+			}
+
+			// Consultar las compañías en Odoo
+			const companies = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'res.company',
+				'read',
+				[odooCompanyIds],
+				{
+					fields: ['id', 'account_sale_tax_id', 'account_purchase_tax_id'],
+				},
+			]);
+
+			// Mapear los resultados
+			companies.forEach((company: any) => {
+				const saleTaxId = Array.isArray(company.account_sale_tax_id) ? company.account_sale_tax_id[0] : company.account_sale_tax_id;
+				const purchaseTaxId = Array.isArray(company.account_purchase_tax_id)
+					? company.account_purchase_tax_id[0]
+					: company.account_purchase_tax_id;
+
+				taxMap.set(company.id, {
+					sale_tax_id: typeof saleTaxId === 'number' ? saleTaxId : null,
+					purchase_tax_id: typeof purchaseTaxId === 'number' ? purchaseTaxId : null,
+				});
+			});
+
+			return taxMap;
+		} catch (error) {
+			console.error('❌ Error obteniendo tax_ids de Odoo:', error);
+			return taxMap;
+		}
+	}
+
+	/**
 	 * Mapea compañías de Sapira con compañías de Odoo
 	 * Maneja correctamente los duplicados reasignando el odoo_integration_id
 	 */
@@ -323,6 +414,9 @@ export class OdooService {
 		try {
 			let updatedCount = 0;
 			let clearedCount = 0;
+
+			// Obtener tax_ids de Odoo para las compañías que se están mapeando
+			const odooCompanyTaxMap = await this.getOdooCompanyTaxIds(holding_id, mappings);
 
 			// Procesar cada mapeo en una transacción
 			await this.companiesRepository.manager.transaction(async (transactionalEntityManager) => {
@@ -352,6 +446,8 @@ export class OdooService {
 								{
 									odoo_integration_id: null,
 									tax_rate: null,
+									odoo_default_sale_tax_id: null,
+									odoo_default_purchase_tax_id: null,
 								}
 							);
 							clearedCount++;
@@ -367,6 +463,8 @@ export class OdooService {
 						// Limpiar mapeo
 						updateData.odoo_integration_id = null;
 						updateData.tax_rate = null;
+						updateData.odoo_default_sale_tax_id = null;
+						updateData.odoo_default_purchase_tax_id = null;
 						clearedCount++;
 					} else {
 						// Asignar nuevo mapeo
@@ -376,6 +474,14 @@ export class OdooService {
 						if (mapping.tax_rate !== undefined && mapping.tax_rate !== null) {
 							updateData.tax_rate = mapping.tax_rate;
 						}
+
+						// Obtener y guardar los tax_ids de Odoo
+						const taxInfo = odooCompanyTaxMap.get(mapping.odoo_company_id);
+						if (taxInfo) {
+							updateData.odoo_default_sale_tax_id = taxInfo.sale_tax_id;
+							updateData.odoo_default_purchase_tax_id = taxInfo.purchase_tax_id;
+						}
+
 						updatedCount++;
 					}
 
