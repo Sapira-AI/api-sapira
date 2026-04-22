@@ -111,6 +111,27 @@ export class OdooInvoicesService {
 
 			invoiceData.invoice_line_ids = invoiceLines;
 
+			// 📊 LOG DETALLADO DEL PAYLOAD
+			console.log('\n🔍 ===== PAYLOAD COMPLETO PARA ODOO =====');
+			console.log(`📍 Company ID: ${invoiceData.company_id}`);
+			console.log(`👤 Partner ID: ${invoiceData.partner_id}`);
+			console.log(`📅 Invoice Date: ${invoiceData.invoice_date}`);
+			console.log(`💰 Currency ID: ${data.currency_id}`);
+			console.log(`\n📦 LÍNEAS DE FACTURA (${invoiceLines.length} items):`);
+			invoiceLines.forEach((line, index) => {
+				const lineData = line[2];
+				console.log(`  Línea ${index + 1}:`);
+				console.log(`    - Product ID: ${lineData.product_id}`);
+				console.log(`    - Name: ${lineData.name}`);
+				console.log(`    - Quantity: ${lineData.quantity}`);
+				console.log(`    - Price Unit: ${lineData.price_unit}`);
+				if (lineData.tax_ids) {
+					const taxIds = lineData.tax_ids[0][2];
+					console.log(`    - Tax IDs: [${taxIds.join(', ')}]`);
+				}
+			});
+			console.log('🔍 ======================================\n');
+
 			const invoiceId = await objectClient.methodCall('execute_kw', [
 				connection.database_name,
 				uid,
@@ -236,5 +257,148 @@ export class OdooInvoicesService {
 	private isValidUUID(uuid: string): boolean {
 		const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 		return uuidRegex.test(uuid);
+	}
+
+	/**
+	 * Obtiene los taxes disponibles para una compañía en Odoo
+	 */
+	async getTaxesForCompany(
+		holdingId: string,
+		companyId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		company_id: number;
+		company_name: string;
+		taxes: any[];
+		total: number;
+	}> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			// Obtener información de la compañía
+			const companies = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'res.company',
+				'read',
+				[[companyId]],
+				{ fields: ['name', 'display_name'] },
+			]);
+
+			const companyName = companies[0]?.name || 'Desconocida';
+
+			// Obtener taxes de la compañía
+			const taxes = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.tax',
+				'search_read',
+				[[['company_id', '=', companyId]]],
+				{
+					fields: ['id', 'name', 'display_name', 'company_id', 'amount', 'type_tax_use', 'active'],
+					order: 'name asc',
+				},
+			]);
+
+			return {
+				success: true,
+				message: `Se encontraron ${taxes.length} taxes para la compañía ${companyName}`,
+				company_id: companyId,
+				company_name: companyName,
+				taxes,
+				total: taxes.length,
+			};
+		} catch (error) {
+			console.error('❌ Error obteniendo taxes:', error);
+			throw new Error(`Error obteniendo taxes de Odoo: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Valida que los tax_ids pertenezcan a la compañía especificada
+	 */
+	async validateTaxesForCompany(
+		holdingId: string,
+		companyId: number,
+		taxIds: number[]
+	): Promise<{
+		success: boolean;
+		message: string;
+		company_id: number;
+		tax_validations: Array<{
+			tax_id: number;
+			name: string;
+			company_id: number;
+			company_name: string;
+			is_valid: boolean;
+		}>;
+		invalid_tax_ids: number[];
+	}> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			// Obtener información de todos los taxes solicitados
+			const taxes = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.tax',
+				'read',
+				[taxIds],
+				{ fields: ['id', 'name', 'company_id'] },
+			]);
+
+			const validations = taxes.map((tax) => {
+				const taxCompanyId = Array.isArray(tax.company_id) ? tax.company_id[0] : tax.company_id;
+				const taxCompanyName = Array.isArray(tax.company_id) ? tax.company_id[1] : 'Desconocida';
+
+				return {
+					tax_id: tax.id,
+					name: tax.name,
+					company_id: taxCompanyId,
+					company_name: taxCompanyName,
+					is_valid: taxCompanyId === companyId,
+				};
+			});
+
+			const invalidTaxIds = validations.filter((v) => !v.is_valid).map((v) => v.tax_id);
+
+			const success = invalidTaxIds.length === 0;
+			const message = success
+				? `Todos los taxes son válidos para la compañía ${companyId}`
+				: `Se encontraron ${invalidTaxIds.length} taxes incompatibles con la compañía ${companyId}`;
+
+			return {
+				success,
+				message,
+				company_id: companyId,
+				tax_validations: validations,
+				invalid_tax_ids: invalidTaxIds,
+			};
+		} catch (error) {
+			console.error('❌ Error validando taxes:', error);
+			throw new Error(`Error validando taxes en Odoo: ${error.message}`);
+		}
 	}
 }
