@@ -422,6 +422,10 @@ export class InvoiceSchedulerService {
 		this.logger.log(`   - invoice.notes: ${invoice.notes ? 'SÍ' : 'NO'}`);
 		this.logger.log(`   - narration final: ${narration ? `"${narration.substring(0, 100)}..."` : 'UNDEFINED'}`);
 
+		this.logger.log(`📋 Invoice Origin para Odoo:`);
+		this.logger.log(`   - contract.contract_number: ${invoice.contract?.contract_number || 'NO DEFINIDO'}`);
+		this.logger.log(`   - invoice_origin final: ${invoice.contract?.contract_number || 'UNDEFINED'}`);
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -429,7 +433,7 @@ export class InvoiceSchedulerService {
 			invoice_date: issueDateStr,
 			invoice_date_due: dueDateStr,
 			payment_reference: invoice.invoice_number || undefined,
-			invoice_origin: invoice.contract_id || undefined,
+			invoice_origin: invoice.contract?.contract_number || undefined,
 			narration: narration,
 			x_sapira_invoice_id: invoice.id,
 			currency_id: currencyId,
