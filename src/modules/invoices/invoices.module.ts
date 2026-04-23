@@ -11,6 +11,7 @@ import { Company } from '../odoo/entities/companies.entity';
 import { OdooProductMapping } from '../odoo/entities/odoo-product-mapping.entity';
 import { Product } from '../odoo/entities/products.entity';
 
+import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
@@ -23,7 +24,7 @@ import { InvoicesService } from './invoices.service';
 @Module({
 	imports: [
 		PostgreSQLDatabaseModule,
-		TypeOrmModule.forFeature([Invoice, InvoiceItem, ClientEntity, Company, Product, OdooProductMapping]),
+		TypeOrmModule.forFeature([Invoice, InvoiceItem, Contract, ClientEntity, Company, Product, OdooProductMapping]),
 		BancoCentralModule,
 		OdooModule,
 		EmailsModule,

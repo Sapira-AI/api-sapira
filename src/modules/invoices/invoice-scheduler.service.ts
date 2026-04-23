@@ -12,6 +12,7 @@ import { Product } from '../odoo/entities/products.entity';
 import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
 
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
+import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
@@ -20,6 +21,7 @@ interface InvoiceWithRelations extends Invoice {
 	clientEntity?: ClientEntity;
 	company?: Company;
 	items?: InvoiceItem[];
+	contract?: Contract;
 }
 
 interface ProcessOptions {
@@ -45,6 +47,8 @@ export class InvoiceSchedulerService {
 		private readonly productRepository: Repository<Product>,
 		@InjectRepository(OdooProductMapping)
 		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
+		@InjectRepository(Contract)
+		private readonly contractRepository: Repository<Contract>,
 		private readonly odooInvoicesService: OdooInvoicesService,
 		private readonly invoiceNotificationService: InvoiceNotificationService,
 		private readonly exchangeRatesService: ExchangeRatesService
@@ -143,9 +147,14 @@ export class InvoiceSchedulerService {
 				where: { invoice_id: invoice.id },
 			});
 
+			const contract = await this.contractRepository.findOne({
+				where: { id: invoice.contract_id },
+			});
+
 			(invoice as InvoiceWithRelations).clientEntity = clientEntity;
 			(invoice as InvoiceWithRelations).company = company;
 			(invoice as InvoiceWithRelations).items = items;
+			(invoice as InvoiceWithRelations).contract = contract;
 		}
 
 		return invoices as InvoiceWithRelations[];
@@ -405,6 +414,14 @@ export class InvoiceSchedulerService {
 		// Determinar auto_post basado en el campo auto_invoice de la factura
 		const autoPost = invoice.auto_invoice ? 'at_date' : 'no';
 
+		// Usar términos y condiciones del contrato si existen, sino usar notas de la factura
+		const narration = invoice.contract?.invoice_terms_and_conditions || invoice.notes || undefined;
+
+		this.logger.log(`📝 Narration para Odoo:`);
+		this.logger.log(`   - contract.invoice_terms_and_conditions: ${invoice.contract?.invoice_terms_and_conditions ? 'SÍ' : 'NO'}`);
+		this.logger.log(`   - invoice.notes: ${invoice.notes ? 'SÍ' : 'NO'}`);
+		this.logger.log(`   - narration final: ${narration ? `"${narration.substring(0, 100)}..."` : 'UNDEFINED'}`);
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -413,7 +430,7 @@ export class InvoiceSchedulerService {
 			invoice_date_due: dueDateStr,
 			payment_reference: invoice.invoice_number || undefined,
 			invoice_origin: invoice.contract_id || undefined,
-			narration: invoice.notes || undefined,
+			narration: narration,
 			x_sapira_invoice_id: invoice.id,
 			currency_id: currencyId,
 			auto_post: autoPost,
@@ -560,9 +577,19 @@ export class InvoiceSchedulerService {
 			where: { invoice_id: invoice.id },
 		});
 
+		const contract = await this.contractRepository.findOne({
+			where: { id: invoice.contract_id },
+		});
+
+		this.logger.log(`   contract encontrado: ${contract ? 'SÍ' : 'NO'} - ID: ${contract?.id || 'N/A'}`);
+		this.logger.log(
+			`   contract.invoice_terms_and_conditions: ${contract?.invoice_terms_and_conditions ? `SÍ (${contract.invoice_terms_and_conditions.substring(0, 50)}...)` : 'NO/VACÍO'}`
+		);
+
 		(invoice as InvoiceWithRelations).clientEntity = clientEntity;
 		(invoice as InvoiceWithRelations).company = company;
 		(invoice as InvoiceWithRelations).items = items;
+		(invoice as InvoiceWithRelations).contract = contract;
 
 		return invoice as InvoiceWithRelations;
 	}
