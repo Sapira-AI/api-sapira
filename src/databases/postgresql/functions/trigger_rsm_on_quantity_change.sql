@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION public.trigger_rsm_on_quantity_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_enabled boolean := false;
   v_contract_status text;
@@ -41,4 +41,5 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$function$
+

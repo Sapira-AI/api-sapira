@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION public.trigger_rsm_on_contract_item_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_enabled boolean := false;
   v_contract_id uuid;
@@ -31,12 +31,16 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  -- Recalcular desde el mes más temprano afectado por el cambio.
-  -- En DELETE solo existe OLD; COALESCE lo maneja automáticamente.
   v_affected_month := DATE_TRUNC('month',
-    COALESCE(
-      LEAST(NEW.start_date, OLD.start_date),
-      COALESCE(NEW.start_date, OLD.start_date)
+    LEAST(
+      COALESCE(
+        LEAST(NEW.start_date, OLD.start_date),
+        COALESCE(NEW.start_date, OLD.start_date)
+      ),
+      COALESCE(
+        LEAST(NEW.booking_date, OLD.booking_date),
+        COALESCE(NEW.booking_date, OLD.booking_date, NEW.start_date, OLD.start_date)
+      )
     )
   )::date;
 
@@ -48,4 +52,5 @@ BEGIN
 
   RETURN COALESCE(NEW, OLD);
 END;
-$$;
+$function$
+

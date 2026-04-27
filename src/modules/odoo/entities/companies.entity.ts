@@ -61,4 +61,13 @@ export class Company {
 
 	@Column({ type: 'integer', nullable: true })
 	odoo_default_purchase_tax_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_reteica_tax_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_retefuente_tax_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_reteiva_tax_id?: number;
 }

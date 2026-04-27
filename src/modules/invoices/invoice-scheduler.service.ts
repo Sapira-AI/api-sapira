@@ -281,6 +281,7 @@ export class InvoiceSchedulerService {
 				result.status = 'sent';
 				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${odooInvoiceData.partner_id}`;
 				this.logger.log(`🔍 DRY RUN - Factura ${invoice.invoice_number} (${invoice.id}) se enviaría a Odoo`);
+				console.log('📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
 				return result;
 			}
 
@@ -690,5 +691,167 @@ export class InvoiceSchedulerService {
 		}
 
 		return [1];
+	}
+
+	async debugInvoice(invoiceId: string): Promise<any> {
+		this.logger.log(`🔍 DEBUG: Analizando factura ${invoiceId}`);
+
+		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });
+
+		if (!invoice) {
+			return {
+				error: 'Factura no encontrada',
+				invoiceId,
+			};
+		}
+
+		const clientEntity = await this.clientEntityRepository.findOne({
+			where: { id: invoice.client_entity_id },
+		});
+
+		const company = await this.companyRepository.findOne({
+			where: { id: invoice.company_id },
+		});
+
+		const items = await this.invoiceItemRepository.find({
+			where: { invoice_id: invoice.id },
+		});
+
+		const contract = await this.contractRepository.findOne({
+			where: { id: invoice.contract_id },
+		});
+
+		const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
+		const today = new Date();
+		today.setHours(23, 59, 59, 999);
+
+		const checks = {
+			status_is_por_emitir: invoice.status === 'Por Emitir',
+			issue_date_lte_today: issueDate <= today,
+			sent_to_odoo_at_is_null: invoice.sent_to_odoo_at === null,
+			issue_date_same_month: this.isSameMonth(invoice.issue_date, new Date()),
+			client_entity_exists: !!clientEntity,
+			client_has_odoo_partner_id: !!clientEntity?.odoo_partner_id,
+			company_exists: !!company,
+			company_has_odoo_integration_id: !!company?.odoo_integration_id,
+			contract_exists: !!contract,
+			contract_auto_send_to_odoo: contract?.auto_send_to_odoo === true || contract?.auto_send_to_odoo === null,
+			has_items: items.length > 0,
+		};
+
+		const allChecksPassed = Object.values(checks).every((check) => check === true);
+
+		const result = {
+			invoice: {
+				id: invoice.id,
+				invoice_number: invoice.invoice_number,
+				status: invoice.status,
+				issue_date: invoice.issue_date,
+				sent_to_odoo_at: invoice.sent_to_odoo_at,
+				holding_id: invoice.holding_id,
+				contract_id: invoice.contract_id,
+				client_entity_id: invoice.client_entity_id,
+				company_id: invoice.company_id,
+			},
+			client_entity: clientEntity
+				? {
+						id: clientEntity.id,
+						legal_name: clientEntity.legal_name,
+						odoo_partner_id: clientEntity.odoo_partner_id,
+					}
+				: null,
+			company: company
+				? {
+						id: company.id,
+						legal_name: company.legal_name,
+						odoo_integration_id: company.odoo_integration_id,
+					}
+				: null,
+			contract: contract
+				? {
+						id: contract.id,
+						contract_number: contract.contract_number,
+						auto_send_to_odoo: contract.auto_send_to_odoo,
+					}
+				: null,
+			items_count: items.length,
+			checks,
+			all_checks_passed: allChecksPassed,
+			would_be_processed: allChecksPassed,
+			failed_checks: Object.entries(checks)
+				.filter(([, value]) => !value)
+				.map(([key]) => key),
+		};
+
+		this.logger.log(`📊 Resultado del debug:`);
+		this.logger.log(`   - Todos los checks pasaron: ${allChecksPassed}`);
+		this.logger.log(`   - Checks fallidos: ${result.failed_checks.join(', ') || 'ninguno'}`);
+
+		return result;
+	}
+
+	private isSameMonth(date1: Date | string, date2: Date): boolean {
+		const d1 = date1 instanceof Date ? date1 : new Date(date1);
+		const d2 = date2;
+		return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth();
+	}
+
+	async debugInvoicesToday(holdingId?: string): Promise<any> {
+		this.logger.log(`🔍 DEBUG: Analizando facturas con issue_date de hoy`);
+
+		const today = new Date();
+		const todayStr = today.toISOString().split('T')[0];
+
+		const query = this.invoiceRepository
+			.createQueryBuilder('inv')
+			.where('inv.status = :status', { status: 'Por Emitir' })
+			.andWhere('DATE(inv.issue_date) = :today', { today: todayStr });
+
+		if (holdingId) {
+			query.andWhere('inv.holding_id = :holdingId', { holdingId });
+		}
+
+		const invoices = await query.getMany();
+
+		this.logger.log(`📊 Encontradas ${invoices.length} facturas con issue_date de hoy`);
+
+		const results = [];
+		const summary = {
+			total: invoices.length,
+			would_be_processed: 0,
+			would_be_skipped: 0,
+			failed_checks_summary: {},
+		};
+
+		for (const invoice of invoices) {
+			const debugResult = await this.debugInvoice(invoice.id);
+			results.push(debugResult);
+
+			if (debugResult.would_be_processed) {
+				summary.would_be_processed++;
+			} else {
+				summary.would_be_skipped++;
+
+				debugResult.failed_checks.forEach((check) => {
+					if (!summary.failed_checks_summary[check]) {
+						summary.failed_checks_summary[check] = 0;
+					}
+					summary.failed_checks_summary[check]++;
+				});
+			}
+		}
+
+		this.logger.log(`📊 Resumen:`);
+		this.logger.log(`   - Total: ${summary.total}`);
+		this.logger.log(`   - Se procesarían: ${summary.would_be_processed}`);
+		this.logger.log(`   - Se omitirían: ${summary.would_be_skipped}`);
+		this.logger.log(`   - Checks fallidos más comunes:`, summary.failed_checks_summary);
+
+		return {
+			summary,
+			invoices: results,
+			debug_date: todayStr,
+			holding_id: holdingId || 'all',
+		};
 	}
 }

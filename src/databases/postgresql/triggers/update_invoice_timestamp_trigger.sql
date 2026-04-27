@@ -4,4 +4,4 @@ CREATE TRIGGER "update_invoice_timestamp_trigger"
 BEFORE UPDATE
 ON "public"."odoo_invoices_stg"
 FOR EACH ROW
-EXECUTE FUNCTION "public"."update_invoice_timestamp"();
+EXECUTE FUNCTION update_invoice_timestamp();

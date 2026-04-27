@@ -73,4 +73,103 @@ export class Invoice {
 
 	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
 	created_at: Date;
+
+	@Column({ type: 'uuid', nullable: true })
+	client_id?: string;
+
+	@Column({ type: 'numeric', nullable: true })
+	amount_system_currency?: number;
+
+	@Column({ type: 'numeric', nullable: true })
+	total_system_currency?: number;
+
+	@Column({ type: 'text', nullable: true })
+	pdf_url?: string;
+
+	@Column({ type: 'text', nullable: true, default: 'FAC' })
+	invoice_series?: string;
+
+	@Column({ type: 'text', nullable: true })
+	issuer_tax_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	issuer_legal_name?: string;
+
+	@Column({ type: 'text', nullable: true })
+	issuer_address?: string;
+
+	@Column({ type: 'text', nullable: true })
+	client_tax_id?: string;
+
+	@Column({ type: 'text', nullable: true, default: 'CREDITO' })
+	payment_method?: string;
+
+	@Column({ type: 'text', nullable: true })
+	fiscal_regime?: string;
+
+	@Column({ type: 'integer', nullable: true, default: 0 })
+	export_type?: number;
+
+	@Column({ type: 'text', nullable: true })
+	folio_fiscal_prev?: string;
+
+	@Column({ type: 'jsonb', nullable: true })
+	attachments?: object;
+
+	@Column({ type: 'timestamp with time zone', nullable: true })
+	sent_at?: Date;
+
+	@Column({ type: 'date' })
+	scheduled_at: Date;
+
+	@Column({ type: 'date' })
+	original_issue_date: Date;
+
+	@Column({ type: 'text', nullable: true, default: 'USD' })
+	system_currency?: string;
+
+	@Column({ type: 'numeric', nullable: true })
+	fx_contract_to_system?: number;
+
+	@Column({ type: 'boolean', nullable: true, default: false })
+	is_legacy?: boolean;
+
+	@Column({ type: 'uuid', nullable: true })
+	legacy_invoice_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	legacy_source_system?: string;
+
+	@Column({ type: 'jsonb', nullable: true })
+	custom_fields?: object;
+
+	@Column({ type: 'uuid', nullable: true })
+	related_invoice_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	invoice_group_id?: string;
+
+	@Column({ type: 'boolean', nullable: true, default: false })
+	requires_references_for_billing?: boolean;
+
+	@Column({ type: 'numeric', nullable: true })
+	tax_rate?: number;
+
+	@Column({ type: 'boolean', default: true })
+	is_active: boolean;
+
+	@Column({ type: 'uuid', nullable: true })
+	consolidated_into_invoice_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	split_from_invoice_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	split_reason?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	subscription_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	invoice_terms_and_conditions?: string;
 }

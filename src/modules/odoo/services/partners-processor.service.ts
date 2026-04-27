@@ -172,6 +172,9 @@ export class PartnersProcessorService {
 							this.logger.log('📊 Respuesta de BD:');
 							this.logger.log(JSON.stringify(savedEntity, null, 2));
 
+							// Sincronizar retenciones del partner
+							await this.syncPartnerRetentions(partner.odoo_id, savedEntity.id, dto.holding_id);
+
 							// Actualizar estado en staging a 'processed'
 							await this.partnersStgRepository.update(partner.id, {
 								processing_status: 'processed',
@@ -288,6 +291,9 @@ export class PartnersProcessorService {
 								this.logger.log('📊 Respuesta de BD:');
 								this.logger.log(JSON.stringify(savedEntity, null, 2));
 
+								// Sincronizar retenciones del partner
+								await this.syncPartnerRetentions(partner.odoo_id, savedEntity.id, dto.holding_id);
+
 								// Actualizar estado en staging a 'processed'
 								await this.partnersStgRepository.update(partner.id, {
 									processing_status: 'processed',
@@ -373,6 +379,9 @@ export class PartnersProcessorService {
 							const updatedClient = await this.clientEntitiesRepository.findOne({ where: { id: existingClient.id } });
 							this.logger.log('📋 Datos actualizados:');
 							this.logger.log(JSON.stringify(updatedClient, null, 2));
+
+							// Sincronizar retenciones del partner
+							await this.syncPartnerRetentions(partner.odoo_id, existingClient.id, dto.holding_id);
 
 							// Actualizar estado en staging a 'processed'
 							await this.partnersStgRepository.update(partner.id, {
@@ -665,5 +674,56 @@ export class PartnersProcessorService {
 			already_processed: alreadyProcessed,
 			total: partners.length,
 		};
+	}
+
+	/**
+	 * Sincroniza las retenciones fiscales de un partner desde Odoo
+	 * Se ejecuta después de crear o actualizar un partner en client_entities
+	 */
+	private async syncPartnerRetentions(odooPartnerId: number, clientId: string, holdingId: string): Promise<void> {
+		try {
+			this.logger.log(`🔄 Sincronizando retenciones para partner Odoo ID ${odooPartnerId}...`);
+
+			// Obtener conexión de Odoo
+			const connection = await this.odooPartnersService['getOdooConnectionByHoldingId'](holdingId);
+			if (!connection) {
+				this.logger.warn(`⚠️  No se encontró conexión de Odoo para holding ${holdingId}`);
+				return;
+			}
+
+			// Obtener retenciones del partner desde Odoo
+			const retentions = await this.odooPartnersService.getPartnerRetentions(odooPartnerId, connection);
+
+			if (!retentions) {
+				this.logger.debug(`ℹ️  No se encontraron retenciones para partner ${odooPartnerId}`);
+				return;
+			}
+
+			// Actualizar client_entities con las retenciones
+			await this.clientEntitiesRepository.update(clientId, {
+				odoo_fiscal_position_id: retentions.fiscal_position_id,
+				odoo_fiscal_position_name: retentions.fiscal_position_name,
+				odoo_reteica_tax_id: retentions.reteica_tax_id,
+				odoo_reteica_tax_name: retentions.reteica_tax_name,
+				odoo_reteica_tax_amount: retentions.reteica_tax_amount,
+				odoo_retefuente_tax_id: retentions.retefuente_tax_id,
+				odoo_retefuente_tax_name: retentions.retefuente_tax_name,
+				odoo_retefuente_tax_amount: retentions.retefuente_tax_amount,
+				odoo_reteiva_tax_id: retentions.reteiva_tax_id,
+				odoo_reteiva_tax_name: retentions.reteiva_tax_name,
+				odoo_reteiva_tax_amount: retentions.reteiva_tax_amount,
+			});
+
+			this.logger.log(
+				`✅ Retenciones sincronizadas: "${retentions.fiscal_position_name}" - ` +
+					`ReteICA: ${retentions.reteica_tax_id || 'N/A'}, ` +
+					`Retefuente: ${retentions.retefuente_tax_id || 'N/A'}, ` +
+					`ReteIVA: ${retentions.reteiva_tax_id || 'N/A'}`
+			);
+		} catch (error) {
+			// No lanzar el error para no bloquear la integración del partner
+			this.logger.error(`❌ Error sincronizando retenciones para partner ${odooPartnerId}: ${error.message}`);
+			this.logger.debug(`Stack trace: ${error.stack}`);
+		}
 	}
 }

@@ -61,4 +61,49 @@ export class InvoiceItem {
 
 	@UpdateDateColumn({ type: 'timestamp', default: () => 'now()' })
 	updated_at: Date;
+
+	@Column({ type: 'uuid' })
+	holding_id: string;
+
+	@Column({ type: 'text', nullable: true, default: 'UND' })
+	unit_of_measure?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	contract_item_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	contract_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	status?: string;
+
+	@Column({ type: 'date', nullable: true })
+	issue_date?: Date;
+
+	@Column({ type: 'uuid', nullable: true })
+	legacy_item_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	legacy_match_id?: string;
+
+	@Column({ type: 'jsonb', nullable: true })
+	custom_fields?: object;
+
+	@Column({ type: 'text', nullable: true })
+	fx_rate_source?: string;
+
+	@Column({ type: 'date', nullable: true })
+	fx_rate_date?: Date;
+
+	@Column({ type: 'text', nullable: true })
+	contract_currency?: string;
+
+	@Column({ type: 'date', nullable: true })
+	billing_period_start?: Date;
+
+	@Column({ type: 'date', nullable: true })
+	billing_period_end?: Date;
+
+	@Column({ type: 'uuid', nullable: true })
+	subscription_item_id?: string;
 }

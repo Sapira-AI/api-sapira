@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
+import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 
 import { CreateDraftInvoiceDTO } from './dtos/odoo.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
@@ -9,10 +11,14 @@ import { OdooProvider } from './odoo.provider';
 
 @Injectable()
 export class OdooInvoicesService {
+	private readonly logger = new Logger(OdooInvoicesService.name);
+
 	constructor(
 		private readonly odooProvider: OdooProvider,
 		@InjectRepository(OdooConnection)
-		private readonly odooConnectionRepository: Repository<OdooConnection>
+		private readonly odooConnectionRepository: Repository<OdooConnection>,
+		@InjectRepository(ClientEntity)
+		private readonly clientEntitiesRepository: Repository<ClientEntity>
 	) {}
 
 	/**
@@ -37,6 +43,30 @@ export class OdooInvoicesService {
 		try {
 			const connection = await this.getOdooConnectionByHoldingId(holdingId);
 
+			// Obtener fiscal position Y tax IDs de retenciones del cliente
+			const clientEntity = await this.clientEntitiesRepository.findOne({
+				where: {
+					odoo_partner_id: partner_id,
+					holding_id: holdingId,
+				},
+				select: [
+					'id',
+					'odoo_fiscal_position_id',
+					'odoo_fiscal_position_name',
+					'odoo_reteica_tax_id',
+					'odoo_retefuente_tax_id',
+					'odoo_reteiva_tax_id',
+				],
+			});
+
+			if (clientEntity?.odoo_fiscal_position_id) {
+				this.logger.log(
+					`✅ Cliente encontrado con posición fiscal: "${clientEntity.odoo_fiscal_position_name}" (ID: ${clientEntity.odoo_fiscal_position_id})`
+				);
+			} else {
+				this.logger.debug(`ℹ️  Cliente no tiene posición fiscal configurada (partner_id: ${partner_id})`);
+			}
+
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
 			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
 
@@ -50,6 +80,12 @@ export class OdooInvoicesService {
 				partner_id: partner_id,
 				move_type: move_type || 'out_invoice',
 			};
+
+			// Agregar fiscal position ANTES de otros campos
+			// Esto permite que Odoo procese correctamente el mapeo de impuestos
+			if (clientEntity?.odoo_fiscal_position_id) {
+				invoiceData.fiscal_position_id = clientEntity.odoo_fiscal_position_id;
+			}
 
 			if (invoice_date) {
 				invoiceData.invoice_date = invoice_date;
@@ -87,6 +123,22 @@ export class OdooInvoicesService {
 				invoiceData.auto_post = auto_post;
 			}
 
+			// Construir array de tax IDs de retenciones del cliente
+			const retentionTaxIds: number[] = [];
+			if (clientEntity?.odoo_reteica_tax_id) {
+				retentionTaxIds.push(clientEntity.odoo_reteica_tax_id);
+			}
+			if (clientEntity?.odoo_retefuente_tax_id) {
+				retentionTaxIds.push(clientEntity.odoo_retefuente_tax_id);
+			}
+			if (clientEntity?.odoo_reteiva_tax_id) {
+				retentionTaxIds.push(clientEntity.odoo_reteiva_tax_id);
+			}
+
+			if (retentionTaxIds.length > 0) {
+				this.logger.log(`📋 Retenciones a aplicar: ${retentionTaxIds.join(', ')}`);
+			}
+
 			const invoiceLines = invoice_line_ids.map((line) => {
 				const lineData: any = {
 					product_id: line.product_id,
@@ -102,8 +154,12 @@ export class OdooInvoicesService {
 					lineData.discount = line.discount;
 				}
 
-				if (line.tax_ids && line.tax_ids.length > 0) {
-					lineData.tax_ids = [[6, 0, line.tax_ids]];
+				// Combinar tax_ids del producto con retenciones del cliente
+				const productTaxIds = line.tax_ids || [];
+				const allTaxIds = [...productTaxIds, ...retentionTaxIds];
+
+				if (allTaxIds.length > 0) {
+					lineData.tax_ids = [[6, 0, allTaxIds]];
 				}
 
 				return [0, 0, lineData];
@@ -117,6 +173,12 @@ export class OdooInvoicesService {
 			console.log(`👤 Partner ID: ${invoiceData.partner_id}`);
 			console.log(`📅 Invoice Date: ${invoiceData.invoice_date}`);
 			console.log(`💰 Currency ID: ${data.currency_id}`);
+			if (invoiceData.fiscal_position_id) {
+				console.log(`🏛️  Fiscal Position ID: ${invoiceData.fiscal_position_id} (${clientEntity?.odoo_fiscal_position_name || 'N/A'})`);
+			}
+			if (retentionTaxIds.length > 0) {
+				console.log(`💼 Retenciones aplicadas a cada línea: [${retentionTaxIds.join(', ')}]`);
+			}
 			console.log(`\n📦 LÍNEAS DE FACTURA (${invoiceLines.length} items):`);
 			invoiceLines.forEach((line, index) => {
 				const lineData = line[2];

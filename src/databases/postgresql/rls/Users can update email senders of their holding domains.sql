@@ -1,0 +1,21 @@
+DROP POLICY IF EXISTS "Users can update email senders of their holding domains" ON "public"."email_sender_addresses";
+
+CREATE POLICY "Users can update email senders of their holding domains"
+ON "public"."email_sender_addresses"
+AS PERMISSIVE
+FOR UPDATE
+TO public
+USING ((domain_config_id IN ( SELECT holding_email_sender_settings.id
+   FROM holding_email_sender_settings
+  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id
+           FROM user_holdings
+          WHERE (user_holdings.user_id = ( SELECT users.id
+                   FROM users
+                  WHERE (users.auth_id = auth.uid()))))))))
+WITH CHECK ((domain_config_id IN ( SELECT holding_email_sender_settings.id
+   FROM holding_email_sender_settings
+  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id
+           FROM user_holdings
+          WHERE (user_holdings.user_id = ( SELECT users.id
+                   FROM users
+                  WHERE (users.auth_id = auth.uid()))))))));

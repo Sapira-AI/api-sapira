@@ -1,19 +1,15 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('client_entities')
-@Index('idx_client_entities_client_number', ['client_number'])
-@Index('idx_client_entities_holding_id', ['holding_id'])
-@Index('idx_client_entities_odoo_partner_id', ['odoo_partner_id'], { where: 'odoo_partner_id IS NOT NULL' })
-@Index('idx_client_entities_odoo_partner_holding', ['odoo_partner_id', 'holding_id'], {
-	unique: true,
-	where: 'odoo_partner_id IS NOT NULL',
-})
 export class ClientEntity {
 	@PrimaryGeneratedColumn('uuid')
-	id!: string;
+	id: string;
 
-	@Column({ type: 'uuid', nullable: true })
-	client_id?: string;
+	@Column({ type: 'uuid' })
+	holding_id: string;
+
+	@Column({ type: 'text' })
+	name: string;
 
 	@Column({ type: 'text', nullable: true })
 	legal_name?: string;
@@ -21,11 +17,41 @@ export class ClientEntity {
 	@Column({ type: 'text', nullable: true })
 	tax_id?: string;
 
-	@Column({ type: 'text', nullable: true })
-	country?: string;
+	@Column({ type: 'integer', nullable: true })
+	odoo_partner_id?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_fiscal_position_id?: number;
 
 	@Column({ type: 'text', nullable: true })
-	legal_address?: string;
+	odoo_fiscal_position_name?: string;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_reteica_tax_id?: number;
+
+	@Column({ type: 'text', nullable: true })
+	odoo_reteica_tax_name?: string;
+
+	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
+	odoo_reteica_tax_amount?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_retefuente_tax_id?: number;
+
+	@Column({ type: 'text', nullable: true })
+	odoo_retefuente_tax_name?: string;
+
+	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
+	odoo_retefuente_tax_amount?: number;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_reteiva_tax_id?: number;
+
+	@Column({ type: 'text', nullable: true })
+	odoo_reteiva_tax_name?: string;
+
+	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
+	odoo_reteiva_tax_amount?: number;
 
 	@Column({ type: 'text', nullable: true })
 	email?: string;
@@ -33,15 +59,30 @@ export class ClientEntity {
 	@Column({ type: 'text', nullable: true })
 	phone?: string;
 
-	@Column({ type: 'uuid', nullable: false, default: () => 'gen_random_uuid()' })
-	holding_id!: string;
+	@Column({ type: 'text', nullable: true })
+	address?: string;
 
 	@Column({ type: 'text', nullable: true })
-	economic_activity?: string;
+	country?: string;
 
 	@Column({ type: 'text', nullable: true })
-	client_number?: string;
+	city?: string;
 
-	@Column({ type: 'integer', nullable: true })
-	odoo_partner_id?: number;
+	@Column({ type: 'text', nullable: true })
+	state?: string;
+
+	@Column({ type: 'text', nullable: true })
+	zip_code?: string;
+
+	@Column({ type: 'boolean', default: true })
+	is_active: boolean;
+
+	@CreateDateColumn({ type: 'timestamp with time zone' })
+	created_at: Date;
+
+	@Column({ type: 'timestamp with time zone', nullable: true })
+	updated_at?: Date;
+
+	@Column({ type: 'jsonb', nullable: true })
+	metadata?: any;
 }
