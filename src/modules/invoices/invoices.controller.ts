@@ -5,6 +5,7 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { BulkUpdateCurrencyResponseDto } from './dtos/bulk-update-currency-response.dto';
 import { BulkUpdateCurrencyDto } from './dtos/bulk-update-currency.dto';
+import { RecalculateTaxesBatchDto, RecalculateTaxesBatchResponseDto, RecalculateTaxesResponseDto } from './dtos/recalculate-taxes.dto';
 import { InvoicesService } from './invoices.service';
 
 @ApiTags('Invoices')
@@ -84,5 +85,47 @@ export class InvoicesController {
 			message: `${count} facturas actualizadas`,
 			updated_count: count,
 		};
+	}
+
+	@Post(':id/recalculate-taxes')
+	@ApiOperation({
+		summary: 'Recalcular impuestos de una factura con retenciones de Colombia',
+		description:
+			'Recalcula los campos de impuestos (vat, tax_amount_*) de una factura aplicando las retenciones fiscales ' +
+			'de Colombia (ReteICA, Retefuente, ReteIVA) configuradas en el cliente. Solo funciona para facturas en estado "Por Emitir".',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Impuestos recalculados exitosamente',
+		type: RecalculateTaxesResponseDto,
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'Factura no válida para recálculo (debe estar en estado "Por Emitir")',
+	})
+	@ApiResponse({
+		status: HttpStatus.NOT_FOUND,
+		description: 'Factura o cliente no encontrado',
+	})
+	@HttpCode(HttpStatus.OK)
+	async recalculateTaxes(@Param('id') invoiceId: string): Promise<RecalculateTaxesResponseDto> {
+		return this.invoicesService.recalculateInvoiceTaxes(invoiceId);
+	}
+
+	@Post('recalculate-taxes-batch')
+	@ApiOperation({
+		summary: 'Recalcular impuestos de múltiples facturas en batch',
+		description:
+			'Recalcula los impuestos de múltiples facturas aplicando retenciones de Colombia. ' +
+			'Útil para actualizar todas las facturas pendientes de un contrato.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Recálculo batch completado',
+		type: RecalculateTaxesBatchResponseDto,
+	})
+	@HttpCode(HttpStatus.OK)
+	async recalculateTaxesBatch(@Body() dto: RecalculateTaxesBatchDto): Promise<RecalculateTaxesBatchResponseDto> {
+		return this.invoicesService.recalculateTaxesBatch(dto);
 	}
 }

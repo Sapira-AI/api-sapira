@@ -1,21 +1,33 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('client_entities')
 export class ClientEntity {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
 
+	@Column({ type: 'uuid', nullable: true })
+	client_id?: string;
+
 	@Column({ type: 'uuid' })
 	holding_id: string;
-
-	@Column({ type: 'text' })
-	name: string;
 
 	@Column({ type: 'text', nullable: true })
 	legal_name?: string;
 
 	@Column({ type: 'text', nullable: true })
 	tax_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	country?: string;
+
+	@Column({ type: 'text', nullable: true })
+	legal_address?: string;
+
+	@Column({ type: 'text', nullable: true })
+	email?: string;
+
+	@Column({ type: 'text', nullable: true })
+	phone?: string;
 
 	@Column({ type: 'integer', nullable: true })
 	odoo_partner_id?: number;
@@ -52,37 +64,4 @@ export class ClientEntity {
 
 	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
 	odoo_reteiva_tax_amount?: number;
-
-	@Column({ type: 'text', nullable: true })
-	email?: string;
-
-	@Column({ type: 'text', nullable: true })
-	phone?: string;
-
-	@Column({ type: 'text', nullable: true })
-	address?: string;
-
-	@Column({ type: 'text', nullable: true })
-	country?: string;
-
-	@Column({ type: 'text', nullable: true })
-	city?: string;
-
-	@Column({ type: 'text', nullable: true })
-	state?: string;
-
-	@Column({ type: 'text', nullable: true })
-	zip_code?: string;
-
-	@Column({ type: 'boolean', default: true })
-	is_active: boolean;
-
-	@CreateDateColumn({ type: 'timestamp with time zone' })
-	created_at: Date;
-
-	@Column({ type: 'timestamp with time zone', nullable: true })
-	updated_at?: Date;
-
-	@Column({ type: 'jsonb', nullable: true })
-	metadata?: any;
 }
