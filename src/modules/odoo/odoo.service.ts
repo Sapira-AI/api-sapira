@@ -339,8 +339,30 @@ export class OdooService {
 	private async getOdooCompanyTaxIds(
 		holdingId: string,
 		mappings: Array<{ sapira_company_id: string; odoo_company_id: number | null }>
-	): Promise<Map<number, { sale_tax_id: number | null; purchase_tax_id: number | null }>> {
-		const taxMap = new Map<number, { sale_tax_id: number | null; purchase_tax_id: number | null }>();
+	): Promise<
+		Map<
+			number,
+			{
+				sale_tax_id: number | null;
+				purchase_tax_id: number | null;
+				reteica_tax_id: number | null;
+				retefuente_tax_id: number | null;
+				reteiva_tax_id: number | null;
+				tax_rate: number | null;
+			}
+		>
+	> {
+		const taxMap = new Map<
+			number,
+			{
+				sale_tax_id: number | null;
+				purchase_tax_id: number | null;
+				reteica_tax_id: number | null;
+				retefuente_tax_id: number | null;
+				reteiva_tax_id: number | null;
+				tax_rate: number | null;
+			}
+		>();
 
 		try {
 			// Obtener solo los IDs de compañías que no son null
@@ -372,9 +394,51 @@ export class OdooService {
 				'read',
 				[odooCompanyIds],
 				{
-					fields: ['id', 'account_sale_tax_id', 'account_purchase_tax_id'],
+					fields: [
+						'id',
+						'account_sale_tax_id',
+						'account_purchase_tax_id',
+						'l10n_co_edi_reteica_tax_id',
+						'l10n_co_edi_retefuente_tax_id',
+						'l10n_co_edi_reteiva_tax_id',
+					],
 				},
 			]);
+
+			// Recopilar todos los tax IDs únicos para consultar sus detalles
+			const allTaxIds = new Set<number>();
+			companies.forEach((company: any) => {
+				const saleTaxId = Array.isArray(company.account_sale_tax_id) ? company.account_sale_tax_id[0] : company.account_sale_tax_id;
+				if (typeof saleTaxId === 'number') {
+					allTaxIds.add(saleTaxId);
+				}
+			});
+
+			// Consultar los detalles de los taxes para obtener el porcentaje
+			const taxDetailsMap = new Map<number, number>();
+			if (allTaxIds.size > 0) {
+				try {
+					const taxes = await objectClient.methodCall('execute_kw', [
+						connection.database_name,
+						uid,
+						connection.api_key,
+						'account.tax',
+						'read',
+						[Array.from(allTaxIds)],
+						{
+							fields: ['id', 'amount'],
+						},
+					]);
+
+					taxes.forEach((tax: any) => {
+						if (tax.amount !== undefined) {
+							taxDetailsMap.set(tax.id, tax.amount);
+						}
+					});
+				} catch (error) {
+					console.warn('⚠️ No se pudieron obtener los detalles de los taxes:', error);
+				}
+			}
 
 			// Mapear los resultados
 			companies.forEach((company: any) => {
@@ -382,10 +446,26 @@ export class OdooService {
 				const purchaseTaxId = Array.isArray(company.account_purchase_tax_id)
 					? company.account_purchase_tax_id[0]
 					: company.account_purchase_tax_id;
+				const reteicaTaxId = Array.isArray(company.l10n_co_edi_reteica_tax_id)
+					? company.l10n_co_edi_reteica_tax_id[0]
+					: company.l10n_co_edi_reteica_tax_id;
+				const retefuenteTaxId = Array.isArray(company.l10n_co_edi_retefuente_tax_id)
+					? company.l10n_co_edi_retefuente_tax_id[0]
+					: company.l10n_co_edi_retefuente_tax_id;
+				const reteivaTaxId = Array.isArray(company.l10n_co_edi_reteiva_tax_id)
+					? company.l10n_co_edi_reteiva_tax_id[0]
+					: company.l10n_co_edi_reteiva_tax_id;
+
+				// Obtener el tax_rate del tax de venta
+				const taxRate = typeof saleTaxId === 'number' ? taxDetailsMap.get(saleTaxId) || null : null;
 
 				taxMap.set(company.id, {
 					sale_tax_id: typeof saleTaxId === 'number' ? saleTaxId : null,
 					purchase_tax_id: typeof purchaseTaxId === 'number' ? purchaseTaxId : null,
+					reteica_tax_id: typeof reteicaTaxId === 'number' ? reteicaTaxId : null,
+					retefuente_tax_id: typeof retefuenteTaxId === 'number' ? retefuenteTaxId : null,
+					reteiva_tax_id: typeof reteivaTaxId === 'number' ? reteivaTaxId : null,
+					tax_rate: taxRate,
 				});
 			});
 
@@ -448,6 +528,9 @@ export class OdooService {
 									tax_rate: null,
 									odoo_default_sale_tax_id: null,
 									odoo_default_purchase_tax_id: null,
+									odoo_reteica_tax_id: null,
+									odoo_retefuente_tax_id: null,
+									odoo_reteiva_tax_id: null,
 								}
 							);
 							clearedCount++;
@@ -465,21 +548,31 @@ export class OdooService {
 						updateData.tax_rate = null;
 						updateData.odoo_default_sale_tax_id = null;
 						updateData.odoo_default_purchase_tax_id = null;
+						updateData.odoo_reteica_tax_id = null;
+						updateData.odoo_retefuente_tax_id = null;
+						updateData.odoo_reteiva_tax_id = null;
 						clearedCount++;
 					} else {
 						// Asignar nuevo mapeo
 						updateData.odoo_integration_id = mapping.odoo_company_id;
-
-						// Actualizar tax_rate si se proporciona
-						if (mapping.tax_rate !== undefined && mapping.tax_rate !== null) {
-							updateData.tax_rate = mapping.tax_rate;
-						}
 
 						// Obtener y guardar los tax_ids de Odoo
 						const taxInfo = odooCompanyTaxMap.get(mapping.odoo_company_id);
 						if (taxInfo) {
 							updateData.odoo_default_sale_tax_id = taxInfo.sale_tax_id;
 							updateData.odoo_default_purchase_tax_id = taxInfo.purchase_tax_id;
+							updateData.odoo_reteica_tax_id = taxInfo.reteica_tax_id;
+							updateData.odoo_retefuente_tax_id = taxInfo.retefuente_tax_id;
+							updateData.odoo_reteiva_tax_id = taxInfo.reteiva_tax_id;
+
+							// Actualizar tax_rate desde Odoo si no se envió manualmente
+							if (mapping.tax_rate !== undefined && mapping.tax_rate !== null) {
+								// Si se envió tax_rate manualmente, usar ese valor
+								updateData.tax_rate = mapping.tax_rate;
+							} else if (taxInfo.tax_rate !== null && taxInfo.tax_rate !== undefined) {
+								// Si no se envió, usar el tax_rate de Odoo
+								updateData.tax_rate = taxInfo.tax_rate;
+							}
 						}
 
 						updatedCount++;
@@ -1659,7 +1752,6 @@ export class OdooService {
 		try {
 			let createdCount = 0;
 			let updatedCount = 0;
-			let notFoundCount = 0;
 
 			await this.odooProductMappingRepository.manager.transaction(async (transactionalEntityManager) => {
 				for (const mapping of mappings) {
@@ -1673,7 +1765,6 @@ export class OdooService {
 					});
 
 					if (!product) {
-						notFoundCount++;
 						console.warn(`⚠️ Producto ${sapira_product_id} no encontrado para holding ${holdingId}, omitiendo...`);
 						continue;
 					}

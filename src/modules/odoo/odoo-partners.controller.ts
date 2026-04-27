@@ -4,6 +4,7 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { ClassifyPartnersResponseDto, ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
+import { SyncRetencionesResponseDto } from './dtos/sync-retenciones.dto';
 import { OdooPartnersService } from './odoo-partners.service';
 
 @ApiTags('Odoo Partners')
@@ -186,5 +187,29 @@ export class OdooPartnersController {
 		message: string;
 	}> {
 		return this.odooPartnersService.cleanProcessedPartners(holdingId);
+	}
+
+	@Post('sync-retenciones')
+	@ApiOperation({
+		summary: 'Sincronizar retenciones de partners desde Odoo',
+		description:
+			'Actualiza los campos de retenciones colombianas (ReteICA, Retefuente, ReteIVA) para todos los client_entities que tienen odoo_partner_id. ' +
+			'Consulta los partners en Odoo y actualiza los tax IDs correspondientes en la base de datos.',
+	})
+	@ApiHeader({
+		name: 'x-holding-id',
+		description: 'ID del holding',
+		required: true,
+		example: '5652e95e-bb99-48f5-aa1c-13c8c2638fc6',
+	})
+	@ApiOkResponse({
+		type: SyncRetencionesResponseDto,
+		description: 'Retenciones sincronizadas exitosamente',
+	})
+	@ApiBadRequestResponse({
+		description: 'Error al sincronizar retenciones',
+	})
+	async syncRetenciones(@Headers('x-holding-id') holdingId: string): Promise<SyncRetencionesResponseDto> {
+		return await this.odooPartnersService.syncPartnerRetenciones(holdingId);
 	}
 }

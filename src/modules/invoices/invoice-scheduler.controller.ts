@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -54,5 +54,29 @@ export class InvoiceSchedulerController {
 			scheduledHour: parseInt(process.env.INVOICE_SCHEDULER_HOUR || '9', 10),
 			isRunning: false,
 		};
+	}
+
+	@Get('debug/:invoiceId')
+	@ApiOperation({
+		summary: 'Debug de factura específica',
+		description: 'Verifica por qué una factura no está siendo procesada por el scheduler',
+	})
+	async debugInvoice(@Param('invoiceId') invoiceId: string): Promise<any> {
+		return await this.invoiceSchedulerService.debugInvoice(invoiceId);
+	}
+
+	@Get('debug-today')
+	@ApiOperation({
+		summary: 'Debug de todas las facturas de hoy',
+		description: 'Analiza todas las facturas con issue_date de hoy y muestra cuáles se procesarían y cuáles no, con sus razones',
+	})
+	@ApiHeader({
+		name: 'X-Holding-Id',
+		description: 'ID del holding (opcional, si no se envía analiza todos los holdings)',
+		required: false,
+	})
+	async debugInvoicesToday(@Headers('x-holding-id') holdingId: string | undefined): Promise<any> {
+		const sanitizedHoldingId = holdingId ? (Array.isArray(holdingId) ? holdingId[0] : holdingId.split(',')[0].trim()) : undefined;
+		return await this.invoiceSchedulerService.debugInvoicesToday(sanitizedHoldingId);
 	}
 }
