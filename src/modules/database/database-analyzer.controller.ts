@@ -6,13 +6,18 @@ import { Public } from '@/decorators/public.decorator';
 
 import { AnalyzeTableDTO, ListTablesDTO } from './database-analyzer.dto';
 import { DatabaseAnalyzerService, TableAnalysisResult } from './database-analyzer.service';
+import { GenerateAllTablesDTO, GenerateFromTableDTO } from './database-generator.dto';
+import { DatabaseGeneratorService } from './database-generator.service';
 
 @ApiTags('Database Analyzer')
 @Controller('database')
 @UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class DatabaseAnalyzerController {
-	constructor(private readonly databaseAnalyzerService: DatabaseAnalyzerService) {}
+	constructor(
+		private readonly databaseAnalyzerService: DatabaseAnalyzerService,
+		private readonly databaseGeneratorService: DatabaseGeneratorService
+	) {}
 
 	@Post('analyze-table')
 	@ApiOperation({
@@ -187,6 +192,62 @@ export class DatabaseAnalyzerController {
 				schema_name: schemaName,
 				exists,
 			},
+		};
+	}
+
+	@Post('generate-from-table')
+	@ApiOperation({
+		summary: 'Generar entidad y archivos SQL desde una tabla',
+		description: 'Genera/actualiza la entidad TypeScript y crea archivos SQL para triggers, funciones y políticas RLS de una tabla específica',
+	})
+	@ApiBody({ type: GenerateFromTableDTO })
+	@ApiOkResponse({
+		description: 'Generación completada exitosamente',
+	})
+	@ApiBadRequestResponse({ description: 'Error en la generación' })
+	@Public()
+	async generateFromTable(@Body() body: GenerateFromTableDTO) {
+		const { table_name, schema_name = 'public' } = body;
+
+		const tableExists = await this.databaseAnalyzerService.tableExists(table_name, schema_name);
+		if (!tableExists) {
+			throw new Error(`La tabla ${schema_name}.${table_name} no existe`);
+		}
+
+		const result = await this.databaseGeneratorService.generateFromTable(table_name, schema_name);
+
+		if (!result.success) {
+			throw new Error(result.error || 'Error generando archivos');
+		}
+
+		return {
+			success: true,
+			message: `Generación completada para ${schema_name}.${table_name}`,
+			data: result,
+		};
+	}
+
+	@Post('generate-all-tables')
+	@ApiOperation({
+		summary: 'Generar entidades y archivos SQL para todas las tablas',
+		description:
+			'Genera/actualiza entidades TypeScript y crea archivos SQL para triggers, funciones y políticas RLS de todas las tablas del esquema',
+	})
+	@ApiBody({ type: GenerateAllTablesDTO })
+	@ApiOkResponse({
+		description: 'Generación masiva completada',
+	})
+	@ApiBadRequestResponse({ description: 'Error en la generación masiva' })
+	@Public()
+	async generateAllTables(@Body() body: GenerateAllTablesDTO) {
+		const { schema_name = 'public' } = body;
+
+		const result = await this.databaseGeneratorService.generateAllTables(schema_name);
+
+		return {
+			success: true,
+			message: `Generación completada para ${result.total_tables} tablas (${result.successful} exitosas, ${result.failed} fallidas)`,
+			data: result,
 		};
 	}
 }

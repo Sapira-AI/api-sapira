@@ -1,27 +1,9 @@
--- ============================================================
--- FUNCIÓN: sync_invoice_items_amounts_from_quantities
--- Creada en: migración 20260226150000_sync_invoice_items_from_quantities.sql
---
--- Objetivo: Trigger AFTER INSERT OR UPDATE en quantities.
--- Actualiza invoice_items en estado "Por Emitir" cuyos
--- billing_period_start/end contienen el período del registro
--- de quantities insertado/actualizado.
---
--- Lógica de precio:
---   - Si unit_price IS NOT NULL AND quantity IS NOT NULL:
---       amount = unit_price × quantity
---   - Si solo amount: unit_price = amount, quantity = 1
---
--- Normalización tax_rate: acepta porcentaje (19) o decimal (0.19)
--- No interfiere con facturas legacy ni con revenue schedule mensual.
--- ============================================================
-
 CREATE OR REPLACE FUNCTION public.sync_invoice_items_amounts_from_quantities()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_item         RECORD;
   v_unit_price   NUMERIC;
@@ -55,7 +37,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Iterar sobre invoice_items cuyo período coincida y estén Por Emitir
+  -- Iterar sobre invoice_items cuyo período coincida y cuya invoice esté "Por Emitir"
+  -- FIX: se usa i.status (invoices) en lugar de ii.status (invoice_items.status = siempre NULL)
   FOR v_item IN
     SELECT
       ii.id,
@@ -66,7 +49,7 @@ BEGIN
     FROM public.invoice_items ii
     JOIN public.invoices i ON i.id = ii.invoice_id
     WHERE ii.contract_item_id = NEW.contract_item_id
-      AND ii.status = 'Por Emitir'
+      AND i.status = 'Por Emitir'
       AND ii.billing_period_start IS NOT NULL
       AND ii.billing_period_end   IS NOT NULL
       AND NEW.period BETWEEN ii.billing_period_start AND ii.billing_period_end
@@ -141,4 +124,5 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$function$
+

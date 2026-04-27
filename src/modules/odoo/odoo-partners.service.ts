@@ -8,6 +8,7 @@ import { ClientEntity } from '@/databases/postgresql/entities/client-entity.enti
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
+import { SyncRetencionesResponseDto } from './dtos/sync-retenciones.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
@@ -637,6 +638,506 @@ export class OdooPartnersService {
 		return {
 			deleted_count: deletedCount,
 			message: `Se eliminaron ${deletedCount} registros procesados`,
+		};
+	}
+
+	/**
+	 * Sincroniza posiciones fiscales y retenciones desde facturas recientes de Odoo
+	 */
+	async syncPartnerRetenciones(holdingId: string): Promise<SyncRetencionesResponseDto> {
+		this.logger.log(`🔄 Iniciando sincronización de posiciones fiscales y retenciones para holding ${holdingId}`);
+
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+			if (!connection) {
+				throw new Error('No se encontró una conexión activa de Odoo para este holding');
+			}
+
+			const clientsWithOdooId = await this.clientEntitiesRepository
+				.createQueryBuilder('client')
+				.select([
+					'client.id',
+					'client.holding_id',
+					'client.odoo_partner_id',
+					'client.odoo_fiscal_position_id',
+					'client.odoo_fiscal_position_name',
+					'client.odoo_reteica_tax_id',
+					'client.odoo_reteica_tax_name',
+					'client.odoo_reteica_tax_amount',
+					'client.odoo_retefuente_tax_id',
+					'client.odoo_retefuente_tax_name',
+					'client.odoo_retefuente_tax_amount',
+					'client.odoo_reteiva_tax_id',
+					'client.odoo_reteiva_tax_name',
+					'client.odoo_reteiva_tax_amount',
+				])
+				.where('client.holding_id = :holdingId', { holdingId })
+				.andWhere('client.odoo_partner_id IS NOT NULL')
+				.getMany();
+
+			if (clientsWithOdooId.length === 0) {
+				return {
+					success: true,
+					message: 'No hay client_entities con odoo_partner_id para sincronizar',
+					total_partners: 0,
+					updated_count: 0,
+					skipped_count: 0,
+					error_count: 0,
+				};
+			}
+
+			this.logger.log(`📊 Encontrados ${clientsWithOdooId.length} client_entities con odoo_partner_id`);
+
+			const partnerIds = [...new Set(clientsWithOdooId.map((c) => c.odoo_partner_id))];
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			// Obtener la factura más reciente de cada partner y sus tax IDs
+			const partnerDataMap = new Map<
+				number,
+				{
+					fiscal_position_id: number;
+					fiscal_position_name: string;
+					reteica_tax_id: number | null;
+					reteica_tax_name: string | null;
+					reteica_tax_amount: number | null;
+					retefuente_tax_id: number | null;
+					retefuente_tax_name: string | null;
+					retefuente_tax_amount: number | null;
+					reteiva_tax_id: number | null;
+					reteiva_tax_name: string | null;
+					reteiva_tax_amount: number | null;
+				} | null
+			>();
+
+			for (const partnerId of partnerIds) {
+				try {
+					// Buscar la factura más reciente del partner
+					const invoiceIds = await objectClient.methodCall('execute_kw', [
+						connection.database_name,
+						uid,
+						connection.api_key,
+						'account.move',
+						'search',
+						[
+							[
+								['partner_id', '=', partnerId],
+								['move_type', '=', 'out_invoice'],
+								['state', '=', 'posted'],
+								['fiscal_position_id', '!=', false],
+							],
+						],
+						{ limit: 1, order: 'date desc' },
+					]);
+
+					if (invoiceIds.length > 0) {
+						const invoices = await objectClient.methodCall('execute_kw', [
+							connection.database_name,
+							uid,
+							connection.api_key,
+							'account.move',
+							'read',
+							[invoiceIds],
+							{ fields: ['id', 'fiscal_position_id'] },
+						]);
+
+						if (invoices.length > 0 && invoices[0].fiscal_position_id) {
+							const fiscalPositionData = invoices[0].fiscal_position_id;
+							const fiscalPositionId = fiscalPositionData[0];
+							const fiscalPositionName = fiscalPositionData[1];
+
+							// Obtener los tax IDs de esta posición fiscal
+							const fiscalPositions = await objectClient.methodCall('execute_kw', [
+								connection.database_name,
+								uid,
+								connection.api_key,
+								'account.fiscal.position',
+								'read',
+								[[fiscalPositionId]],
+								{ fields: ['id', 'name', 'tax_ids'] },
+							]);
+
+							let reteicaTaxId: number | null = null;
+							let reteicaTaxName: string | null = null;
+							let reteicaTaxAmount: number | null = null;
+							let retefuenteTaxId: number | null = null;
+							let retefuenteTaxName: string | null = null;
+							let retefuenteTaxAmount: number | null = null;
+							let reteivaTaxId: number | null = null;
+							let reteivaTaxName: string | null = null;
+							let reteivaTaxAmount: number | null = null;
+
+							if (fiscalPositions.length > 0 && fiscalPositions[0].tax_ids && fiscalPositions[0].tax_ids.length > 0) {
+								const taxMappings = await objectClient.methodCall('execute_kw', [
+									connection.database_name,
+									uid,
+									connection.api_key,
+									'account.fiscal.position.tax',
+									'read',
+									[fiscalPositions[0].tax_ids],
+									{ fields: ['id', 'tax_dest_id'] },
+								]);
+
+								const destTaxIds = taxMappings
+									.map((mapping: any) =>
+										mapping.tax_dest_id
+											? Array.isArray(mapping.tax_dest_id)
+												? mapping.tax_dest_id[0]
+												: mapping.tax_dest_id
+											: null
+									)
+									.filter((id: number | null) => id !== null);
+
+								if (destTaxIds.length > 0) {
+									const taxes = await objectClient.methodCall('execute_kw', [
+										connection.database_name,
+										uid,
+										connection.api_key,
+										'account.tax',
+										'read',
+										[destTaxIds],
+										{ fields: ['id', 'name', 'amount', 'l10n_co_edi_type'] },
+									]);
+
+									taxes.forEach((tax: any) => {
+										const taxName = tax.name.toLowerCase();
+										const ediType = tax.l10n_co_edi_type
+											? Array.isArray(tax.l10n_co_edi_type)
+												? tax.l10n_co_edi_type[1]
+												: tax.l10n_co_edi_type
+											: '';
+
+										if (ediType === 'ReteICA' || taxName.includes('reteica') || taxName.includes('rete ica')) {
+											reteicaTaxId = tax.id;
+											reteicaTaxName = tax.name || null;
+											reteicaTaxAmount = tax.amount || null;
+										} else if (
+											ediType === 'ReteRenta' ||
+											taxName.includes('retefuente') ||
+											taxName.includes('rete fuente') ||
+											taxName.includes('rtefte')
+										) {
+											retefuenteTaxId = tax.id;
+											retefuenteTaxName = tax.name || null;
+											retefuenteTaxAmount = tax.amount || null;
+										} else if (ediType === 'ReteIVA' || taxName.includes('reteiva') || taxName.includes('rete iva')) {
+											reteivaTaxId = tax.id;
+											reteivaTaxName = tax.name || null;
+											reteivaTaxAmount = tax.amount || null;
+										}
+									});
+								}
+							}
+
+							partnerDataMap.set(partnerId, {
+								fiscal_position_id: fiscalPositionId,
+								fiscal_position_name: fiscalPositionName,
+								reteica_tax_id: reteicaTaxId,
+								reteica_tax_name: reteicaTaxName,
+								reteica_tax_amount: reteicaTaxAmount,
+								retefuente_tax_id: retefuenteTaxId,
+								retefuente_tax_name: retefuenteTaxName,
+								retefuente_tax_amount: retefuenteTaxAmount,
+								reteiva_tax_id: reteivaTaxId,
+								reteiva_tax_name: reteivaTaxName,
+								reteiva_tax_amount: reteivaTaxAmount,
+							});
+
+							this.logger.log(
+								`✅ Partner ${partnerId}: "${fiscalPositionName}" - ReteICA: ${reteicaTaxId} (${reteicaTaxAmount}%), RteFte: ${retefuenteTaxId} (${retefuenteTaxAmount}%), ReteIVA: ${reteivaTaxId} (${reteivaTaxAmount}%)`
+							);
+						} else {
+							partnerDataMap.set(partnerId, null);
+						}
+					} else {
+						partnerDataMap.set(partnerId, null);
+					}
+				} catch (error) {
+					this.logger.error(`❌ Error consultando facturas del partner ${partnerId}: ${error.message}`);
+					partnerDataMap.set(partnerId, null);
+				}
+			}
+
+			// Actualizar client_entities
+			let updatedCount = 0;
+			let skippedCount = 0;
+			let errorCount = 0;
+			const errors: Array<{ partner_id: number; error: string }> = [];
+
+			for (const client of clientsWithOdooId) {
+				try {
+					const partnerData = partnerDataMap.get(client.odoo_partner_id);
+
+					if (!partnerData) {
+						skippedCount++;
+						continue;
+					}
+
+					const hasChanges =
+						client.odoo_fiscal_position_id !== partnerData.fiscal_position_id ||
+						client.odoo_fiscal_position_name !== partnerData.fiscal_position_name ||
+						client.odoo_reteica_tax_id !== partnerData.reteica_tax_id ||
+						client.odoo_reteica_tax_name !== partnerData.reteica_tax_name ||
+						client.odoo_reteica_tax_amount !== partnerData.reteica_tax_amount ||
+						client.odoo_retefuente_tax_id !== partnerData.retefuente_tax_id ||
+						client.odoo_retefuente_tax_name !== partnerData.retefuente_tax_name ||
+						client.odoo_retefuente_tax_amount !== partnerData.retefuente_tax_amount ||
+						client.odoo_reteiva_tax_id !== partnerData.reteiva_tax_id ||
+						client.odoo_reteiva_tax_name !== partnerData.reteiva_tax_name ||
+						client.odoo_reteiva_tax_amount !== partnerData.reteiva_tax_amount;
+
+					if (!hasChanges) {
+						skippedCount++;
+						continue;
+					}
+
+					await this.clientEntitiesRepository.update(
+						{ id: client.id },
+						{
+							odoo_fiscal_position_id: partnerData.fiscal_position_id,
+							odoo_fiscal_position_name: partnerData.fiscal_position_name,
+							odoo_reteica_tax_id: partnerData.reteica_tax_id,
+							odoo_reteica_tax_name: partnerData.reteica_tax_name,
+							odoo_reteica_tax_amount: partnerData.reteica_tax_amount,
+							odoo_retefuente_tax_id: partnerData.retefuente_tax_id,
+							odoo_retefuente_tax_name: partnerData.retefuente_tax_name,
+							odoo_retefuente_tax_amount: partnerData.retefuente_tax_amount,
+							odoo_reteiva_tax_id: partnerData.reteiva_tax_id,
+							odoo_reteiva_tax_name: partnerData.reteiva_tax_name,
+							odoo_reteiva_tax_amount: partnerData.reteiva_tax_amount,
+						}
+					);
+
+					updatedCount++;
+					this.logger.log(
+						`✅ Actualizado client ${client.id}: "${partnerData.fiscal_position_name}" - ReteICA: ${partnerData.reteica_tax_id} (${partnerData.reteica_tax_amount}%), RteFte: ${partnerData.retefuente_tax_id} (${partnerData.retefuente_tax_amount}%), ReteIVA: ${partnerData.reteiva_tax_id} (${partnerData.reteiva_tax_amount}%)`
+					);
+				} catch (error) {
+					errorCount++;
+					errors.push({
+						partner_id: client.odoo_partner_id,
+						error: error.message,
+					});
+					this.logger.error(`❌ Error actualizando client_entity ${client.id}: ${error.message}`);
+				}
+			}
+
+			this.logger.log(`✅ Sincronización completada: ${updatedCount} actualizados, ${skippedCount} omitidos, ${errorCount} errores`);
+
+			return {
+				success: true,
+				message: `Sincronización completada: ${updatedCount} actualizados, ${skippedCount} omitidos, ${errorCount} errores`,
+				total_partners: clientsWithOdooId.length,
+				updated_count: updatedCount,
+				skipped_count: skippedCount,
+				error_count: errorCount,
+				errors: errors.length > 0 ? errors : undefined,
+			};
+		} catch (error) {
+			this.logger.error(`❌ Error en syncPartnerRetenciones: ${error.message}`);
+			throw error;
+		}
+	}
+
+	/**
+	 * Obtiene las retenciones fiscales de un partner desde Odoo
+	 * Busca la factura más reciente del partner y extrae su fiscal position y tax IDs
+	 */
+	async getPartnerRetentions(
+		odooPartnerId: number,
+		connection: OdooConnectionConfig
+	): Promise<{
+		fiscal_position_id: number | null;
+		fiscal_position_name: string | null;
+		reteica_tax_id: number | null;
+		reteica_tax_name: string | null;
+		reteica_tax_amount: number | null;
+		retefuente_tax_id: number | null;
+		retefuente_tax_name: string | null;
+		retefuente_tax_amount: number | null;
+		reteiva_tax_id: number | null;
+		reteiva_tax_name: string | null;
+		reteiva_tax_amount: number | null;
+	} | null> {
+		try {
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				this.logger.error('Falló la autenticación con Odoo');
+				return null;
+			}
+
+			// Buscar la factura más reciente del partner con fiscal position
+			const invoiceIds = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'search',
+				[
+					[
+						['partner_id', '=', odooPartnerId],
+						['move_type', '=', 'out_invoice'],
+						['state', '=', 'posted'],
+						['fiscal_position_id', '!=', false],
+					],
+				],
+				{ limit: 1, order: 'invoice_date desc' },
+			]);
+
+			if (invoiceIds.length === 0) {
+				this.logger.debug(`No se encontraron facturas con fiscal position para partner ${odooPartnerId}`);
+				return null;
+			}
+
+			const invoices = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[invoiceIds],
+				{ fields: ['id', 'fiscal_position_id'] },
+			]);
+
+			if (invoices.length === 0 || !invoices[0].fiscal_position_id) {
+				return null;
+			}
+
+			const fiscalPositionData = invoices[0].fiscal_position_id;
+			const fiscalPositionId = fiscalPositionData[0];
+			const fiscalPositionName = fiscalPositionData[1];
+
+			// Obtener los tax IDs de esta posición fiscal
+			const fiscalPositions = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.fiscal.position',
+				'read',
+				[[fiscalPositionId]],
+				{ fields: ['id', 'name', 'tax_ids'] },
+			]);
+
+			let reteicaTaxId: number | null = null;
+			let reteicaTaxName: string | null = null;
+			let reteicaTaxAmount: number | null = null;
+			let retefuenteTaxId: number | null = null;
+			let retefuenteTaxName: string | null = null;
+			let retefuenteTaxAmount: number | null = null;
+			let reteivaTaxId: number | null = null;
+			let reteivaTaxName: string | null = null;
+			let reteivaTaxAmount: number | null = null;
+
+			if (fiscalPositions.length > 0 && fiscalPositions[0].tax_ids && fiscalPositions[0].tax_ids.length > 0) {
+				const taxMappings = await objectClient.methodCall('execute_kw', [
+					connection.database_name,
+					uid,
+					connection.api_key,
+					'account.fiscal.position.tax',
+					'read',
+					[fiscalPositions[0].tax_ids],
+					{ fields: ['id', 'tax_dest_id'] },
+				]);
+
+				const destTaxIds = taxMappings
+					.map((mapping: any) =>
+						mapping.tax_dest_id ? (Array.isArray(mapping.tax_dest_id) ? mapping.tax_dest_id[0] : mapping.tax_dest_id) : null
+					)
+					.filter((id: number | null) => id !== null);
+
+				if (destTaxIds.length > 0) {
+					const taxes = await objectClient.methodCall('execute_kw', [
+						connection.database_name,
+						uid,
+						connection.api_key,
+						'account.tax',
+						'read',
+						[destTaxIds],
+						{ fields: ['id', 'name', 'amount', 'l10n_co_edi_type'] },
+					]);
+
+					taxes.forEach((tax: any) => {
+						const taxName = tax.name.toLowerCase();
+						const ediType = tax.l10n_co_edi_type
+							? Array.isArray(tax.l10n_co_edi_type)
+								? tax.l10n_co_edi_type[1]
+								: tax.l10n_co_edi_type
+							: '';
+
+						if (ediType === 'ReteICA' || taxName.includes('reteica') || taxName.includes('rete ica')) {
+							reteicaTaxId = tax.id;
+							reteicaTaxName = tax.name || null;
+							reteicaTaxAmount = tax.amount || null;
+						} else if (
+							ediType === 'ReteRenta' ||
+							taxName.includes('retefuente') ||
+							taxName.includes('rete fuente') ||
+							taxName.includes('rtefte')
+						) {
+							retefuenteTaxId = tax.id;
+							retefuenteTaxName = tax.name || null;
+							retefuenteTaxAmount = tax.amount || null;
+						} else if (ediType === 'ReteIVA' || taxName.includes('reteiva') || taxName.includes('rete iva')) {
+							reteivaTaxId = tax.id;
+							reteivaTaxName = tax.name || null;
+							reteivaTaxAmount = tax.amount || null;
+						}
+					});
+				}
+			}
+
+			return {
+				fiscal_position_id: fiscalPositionId,
+				fiscal_position_name: fiscalPositionName,
+				reteica_tax_id: reteicaTaxId,
+				reteica_tax_name: reteicaTaxName,
+				reteica_tax_amount: reteicaTaxAmount,
+				retefuente_tax_id: retefuenteTaxId,
+				retefuente_tax_name: retefuenteTaxName,
+				retefuente_tax_amount: retefuenteTaxAmount,
+				reteiva_tax_id: reteivaTaxId,
+				reteiva_tax_name: reteivaTaxName,
+				reteiva_tax_amount: reteivaTaxAmount,
+			};
+		} catch (error) {
+			this.logger.error(`Error obteniendo retenciones para partner ${odooPartnerId}: ${error.message}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Obtiene la conexión activa de Odoo para un holding
+	 */
+	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig | null> {
+		const connection = await this.odooConnectionRepository.findOne({
+			where: {
+				holding_id: holdingId,
+				is_active: true,
+			},
+		});
+
+		if (!connection) {
+			return null;
+		}
+
+		return {
+			id: connection.id,
+			url: connection.url,
+			database_name: connection.database_name,
+			username: connection.username,
+			api_key: connection.api_key,
+			holding_id: connection.holding_id,
 		};
 	}
 }

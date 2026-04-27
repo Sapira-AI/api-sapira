@@ -1,0 +1,28 @@
+### Test Database Generator - Tabla específica
+POST http://localhost:3000/database/generate-from-table
+Content-Type: application/json
+
+{
+  "table_name": "contracts",
+  "schema_name": "public"
+}
+
+### Test Database Generator - Todas las tablas
+POST http://localhost:3000/database/generate-all-tables
+Content-Type: application/json
+
+{
+  "schema_name": "public"
+}
+
+### Test Database Analyzer - Analizar tabla
+POST http://localhost:3000/database/analyze-table
+Content-Type: application/json
+
+{
+  "table_name": "contracts",
+  "schema_name": "public"
+}
+
+### Test Database Analyzer - Listar tablas
+GET http://localhost:3000/database/list-tables?schema_name=public

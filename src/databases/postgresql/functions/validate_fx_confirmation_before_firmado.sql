@@ -18,4 +18,5 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$;
+$function$
+
