@@ -11,6 +11,9 @@ import { EventsModule } from '@/events/events.module';
 
 import { IntegrationLog } from '../../databases/postgresql/entities/integration-log.entity';
 
+import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
+import { Invoice } from '../invoices/entities/invoice.entity';
+
 import { Company } from './entities/companies.entity';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
@@ -18,8 +21,10 @@ import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { OdooProductMapping } from './entities/odoo-product-mapping.entity';
 import { Product } from './entities/products.entity';
+import { FiscalPositionsController } from './fiscal-positions.controller';
 import { InvoiceProcessingController } from './invoice-processing.controller';
 import { InvoiceProcessingService } from './invoice-processing.service';
+import { InvoiceTaxValidatorController } from './invoice-tax-validator.controller';
 import { OdooConnectionController } from './odoo-connection.controller';
 import { OdooConnectionService } from './odoo-connection.service';
 import { OdooInvoicesController } from './odoo-invoices.controller';
@@ -33,8 +38,11 @@ import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
+import { FiscalPositionsService } from './services/fiscal-positions.service';
 import { GenericVatsService } from './services/generic-vats.service';
+import { InvoiceTaxValidatorService } from './services/invoice-tax-validator.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
+import { TaxMappingService } from './services/tax-mapping.service';
 
 @Module({
 	imports: [
@@ -54,6 +62,8 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 			ClientEntity,
 			FieldMapping,
 			GenericExportVat,
+			Invoice,
+			InvoiceItem,
 		]),
 	],
 	controllers: [
@@ -63,6 +73,8 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 		OdooWebhookController,
 		OdooPartnersController,
 		InvoiceProcessingController,
+		FiscalPositionsController,
+		InvoiceTaxValidatorController,
 	],
 	providers: [
 		OdooService,
@@ -74,9 +86,12 @@ import { PartnersProcessorService } from './services/partners-processor.service'
 		PartnersProcessorService,
 		FieldTransformationService,
 		FieldMappingService,
+		FiscalPositionsService,
+		TaxMappingService,
+		InvoiceTaxValidatorService,
 		GenericVatsService,
 		InvoiceProcessingService,
 	],
-	exports: [OdooService, OdooInvoicesService, OdooConnectionService],
+	exports: [OdooService, OdooInvoicesService, OdooConnectionService, FiscalPositionsService, TaxMappingService],
 })
 export class OdooModule {}
