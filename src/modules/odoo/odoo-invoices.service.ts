@@ -8,6 +8,7 @@ import { CreateDraftInvoiceDTO } from './dtos/odoo.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { CreateDraftInvoiceResult, OdooConnectionConfig } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
+import { TaxMappingService } from './services/tax-mapping.service';
 
 @Injectable()
 export class OdooInvoicesService {
@@ -18,7 +19,8 @@ export class OdooInvoicesService {
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(ClientEntity)
-		private readonly clientEntitiesRepository: Repository<ClientEntity>
+		private readonly clientEntitiesRepository: Repository<ClientEntity>,
+		private readonly taxMappingService: TaxMappingService
 	) {}
 
 	/**
@@ -123,47 +125,54 @@ export class OdooInvoicesService {
 				invoiceData.auto_post = auto_post;
 			}
 
-			// Construir array de tax IDs de retenciones del cliente
-			const retentionTaxIds: number[] = [];
-			if (clientEntity?.odoo_reteica_tax_id) {
-				retentionTaxIds.push(clientEntity.odoo_reteica_tax_id);
-			}
-			if (clientEntity?.odoo_retefuente_tax_id) {
-				retentionTaxIds.push(clientEntity.odoo_retefuente_tax_id);
-			}
-			if (clientEntity?.odoo_reteiva_tax_id) {
-				retentionTaxIds.push(clientEntity.odoo_reteiva_tax_id);
-			}
+			// Procesar líneas de factura con mapeo de impuestos
+			const invoiceLines = await Promise.all(
+				invoice_line_ids.map(async (line) => {
+					const lineData: any = {
+						product_id: line.product_id,
+						quantity: line.quantity,
+						price_unit: line.price_unit,
+					};
 
-			if (retentionTaxIds.length > 0) {
-				this.logger.log(`📋 Retenciones a aplicar: ${retentionTaxIds.join(', ')}`);
-			}
+					if (line.name) {
+						lineData.name = line.name;
+					}
 
-			const invoiceLines = invoice_line_ids.map((line) => {
-				const lineData: any = {
-					product_id: line.product_id,
-					quantity: line.quantity,
-					price_unit: line.price_unit,
-				};
+					if (line.discount !== undefined && line.discount !== null) {
+						lineData.discount = line.discount;
+					}
 
-				if (line.name) {
-					lineData.name = line.name;
-				}
+					// Obtener impuestos de venta del producto
+					const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(line.product_id, company_id, holdingId);
 
-				if (line.discount !== undefined && line.discount !== null) {
-					lineData.discount = line.discount;
-				}
+					let finalTaxIds: number[] = [];
 
-				// Combinar tax_ids del producto con retenciones del cliente
-				const productTaxIds = line.tax_ids || [];
-				const allTaxIds = [...productTaxIds, ...retentionTaxIds];
+					// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
+					if (clientEntity?.odoo_fiscal_position_id) {
+						const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
+							productSaleTaxIds,
+							clientEntity.odoo_fiscal_position_id,
+							holdingId
+						);
+						finalTaxIds = mappingResult.final_tax_ids;
 
-				if (allTaxIds.length > 0) {
-					lineData.tax_ids = [[6, 0, allTaxIds]];
-				}
+						this.logger.debug(
+							`📦 Producto ${line.product_id}: ${productSaleTaxIds.length} impuestos originales → ${finalTaxIds.length} impuestos finales (con mapeo)`
+						);
+					} else {
+						// Sin posición fiscal, usar impuestos del producto directamente
+						finalTaxIds = productSaleTaxIds;
+						this.logger.debug(`📦 Producto ${line.product_id}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
+					}
 
-				return [0, 0, lineData];
-			});
+					// Asignar impuestos finales a la línea
+					if (finalTaxIds.length > 0) {
+						lineData.tax_ids = [[6, 0, finalTaxIds]];
+					}
+
+					return [0, 0, lineData];
+				})
+			);
 
 			invoiceData.invoice_line_ids = invoiceLines;
 
@@ -175,9 +184,9 @@ export class OdooInvoicesService {
 			console.log(`💰 Currency ID: ${data.currency_id}`);
 			if (invoiceData.fiscal_position_id) {
 				console.log(`🏛️  Fiscal Position ID: ${invoiceData.fiscal_position_id} (${clientEntity?.odoo_fiscal_position_name || 'N/A'})`);
-			}
-			if (retentionTaxIds.length > 0) {
-				console.log(`💼 Retenciones aplicadas a cada línea: [${retentionTaxIds.join(', ')}]`);
+				console.log(`✅ Mapeo de impuestos aplicado automáticamente según posición fiscal`);
+			} else {
+				console.log(`ℹ️  Sin posición fiscal - usando impuestos de venta del producto`);
 			}
 			console.log(`\n📦 LÍNEAS DE FACTURA (${invoiceLines.length} items):`);
 			invoiceLines.forEach((line, index) => {

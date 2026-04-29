@@ -1,0 +1,181 @@
+{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "result": [
+        {
+            "id": 5241,
+            "same_vat_partner_id": false,
+            "partner_gid": 0,
+            "additional_info": false,
+            "same_company_registry_partner_id": false,
+            "opportunity_count": 1,
+            "meeting_count": 0,
+            "sale_order_count": 9,
+            "subscription_count": 4,
+            "task_count": 0,
+            "ticket_count": 0,
+            "purchase_order_count": 0,
+            "total_due": 581020.46,
+            "currency_id": {
+                "id": 8,
+                "display_name": "COP"
+            },
+            "total_invoiced": 20215164.02,
+            "supplier_invoice_count": 0,
+            "payment_token_count": 0,
+            "customer_rank": 85,
+            "sale_contract_count": 0,
+            "supplier_rank": 0,
+            "purchase_contract_count": 0,
+            "avatar_128": "1.16 Kb",
+            "image_1920": false,
+            "write_date": "2026-04-28 16:15:18",
+            "is_company": true,
+            "commercial_partner_id": {
+                "id": 5241
+            },
+            "active": true,
+            "company_id": {
+                "id": 3,
+                "display_name": "Simpliroute SAS"
+            },
+            "fiscal_country_codes": "CO",
+            "country_code": "CO",
+            "company_type": "company",
+            "name": "Avicola Nacional S.A.",
+            "parent_id": false,
+            "company_name": false,
+            "type": "contact",
+            "street": "CR 48 20 37",
+            "street2": false,
+            "country_enforce_cities": true,
+            "city_id": {
+                "id": 198,
+                "display_name": "MEDELLÍN"
+            },
+            "city": "MEDELLÍN",
+            "state_id": {
+                "id": 647,
+                "display_name": "Antioquia (CO)"
+            },
+            "zip": "111111",
+            "country_id": {
+                "id": 49,
+                "display_name": "Colombia"
+            },
+            "perform_vies_validation": false,
+            "l10n_latam_identification_type_id": {
+                "id": 17,
+                "display_name": "NIT (CO)"
+            },
+            "vat": "8909116251",
+            "vies_valid": false,
+            "l10n_mx_edi_curp": false,
+            "l10n_cl_sii_taxpayer_type": false,
+            "l10n_cl_activity_description": false,
+            "function": false,
+            "phone_blacklisted": false,
+            "mobile_blacklisted": false,
+            "phone": "+574489868",
+            "mobile": "+574489868",
+            "user_ids": [],
+            "is_blacklisted": false,
+            "email": "proveedores@avinal.com.co;facturacione@avinal.com.co;tesoreria@avinal.com.co;dora.munoz@avinal.com.co;jose.correa@avinal.com.co;alejandro.tobon@avinal.com.co;techtouch@simplit-solutions.com",
+            "website": false,
+            "title": false,
+            "active_lang_count": 6,
+            "partner_longitude": 0.0,
+            "partner_latitude": 0.0,
+            "lang": "es_CO",
+            "category_id": [
+                {
+                    "id": 1,
+                    "display_name": "Promedio",
+                    "color": 7
+                },
+                {
+                    "id": 69,
+                    "display_name": "SMB",
+                    "color": 3
+                },
+                {
+                    "id": 26,
+                    "display_name": "cambio NIT",
+                    "color": 5
+                }
+            ],
+            "child_ids": [],
+            "user_id": false,
+            "team_id": false,
+            "property_payment_term_id": {
+                "id": 4,
+                "display_name": "30 días"
+            },
+            "property_product_pricelist": {
+                "id": 90,
+                "display_name": "Tarifa recurrente USD 2024 (USD)"
+            },
+            "buyer_id": false,
+            "property_supplier_payment_term_id": false,
+            "receipt_reminder_email": false,
+            "reminder_date_before_receipt": 1,
+            "property_purchase_currency_id": false,
+            "property_account_position_id": {
+                "id": 13,
+                "display_name": "RC sin ICA"
+            },
+            "l10n_co_edi_obligation_type_ids": [
+                {
+                    "id": 45,
+                    "display_name": "O-47"
+                }
+            ],
+            "l10n_co_edi_large_taxpayer": false,
+            "l10n_co_edi_fiscal_regimen": "48",
+            "l10n_co_edi_commercial_name": false,
+            "l10n_mx_edi_addenda_is_readonly": false,
+            "l10n_mx_edi_addenda": false,
+            "l10n_mx_edi_addenda_name": false,
+            "l10n_mx_edi_addenda_doc": "<p><br></p>",
+            "l10n_mx_edi_fiscal_regime": "616",
+            "l10n_mx_edi_no_tax_breakdown": false,
+            "l10n_mx_edi_usage": false,
+            "l10n_mx_edi_payment_method_id": false,
+            "l10n_mx_edi_external_trade": false,
+            "company_registry": false,
+            "ref": false,
+            "industry_id": false,
+            "sla_ids": [],
+            "duplicated_bank_account_partners_count": 0,
+            "show_credit_limit": false,
+            "bank_ids": [],
+            "hide_peppol_fields": true,
+            "ubl_cii_format": false,
+            "peppol_eas": false,
+            "peppol_endpoint": false,
+            "property_account_receivable_id": {
+                "id": 1458,
+                "display_name": "130505 Nacionales"
+            },
+            "property_account_payable_id": {
+                "id": 1504,
+                "display_name": "220505 Nacionales"
+            },
+            "l10n_mx_nationality": "Colombiano",
+            "l10n_mx_type_of_third": "05",
+            "l10n_mx_type_of_operation": false,
+            "credit": 581020.46,
+            "days_sales_outstanding": 33.59664751786673,
+            "use_partner_credit_limit": false,
+            "credit_limit": 0.0,
+            "comment": "<p>Promedio ponderado de licencias  valor licencia 30 USD C/U<br>tesoreria@avinal.com.co;dora.munoz@avinal.com.co; jose.correa@avinal.com.co; alejandro.tobon@avinal.com.co;marisol.acevedo@avinal.com.co;facturacione@avinal.com.co;alejandra.florez@simplit-solutions.com</p>",
+            "invoice_warn": "no-message",
+            "invoice_warn_msg": false,
+            "l10n_cl_dte_email": false,
+            "segment": "Small",
+            "sr_account": "29889",
+            "sf_account": "0015w00002T6RGWAA3",
+            "display_name": "Avicola Nacional S.A."
+        }
+    ]
+}

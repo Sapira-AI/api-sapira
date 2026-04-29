@@ -10,6 +10,7 @@ import { Company } from '../odoo/entities/companies.entity';
 import { OdooProductMapping } from '../odoo/entities/odoo-product-mapping.entity';
 import { Product } from '../odoo/entities/products.entity';
 import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
+import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { Contract } from './entities/contract.entity';
@@ -51,7 +52,8 @@ export class InvoiceSchedulerService {
 		private readonly contractRepository: Repository<Contract>,
 		private readonly odooInvoicesService: OdooInvoicesService,
 		private readonly invoiceNotificationService: InvoiceNotificationService,
-		private readonly exchangeRatesService: ExchangeRatesService
+		private readonly exchangeRatesService: ExchangeRatesService,
+		private readonly taxMappingService: TaxMappingService
 	) {}
 
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
@@ -344,41 +346,57 @@ export class InvoiceSchedulerService {
 
 	async mapInvoiceToOdooFormat(invoice: InvoiceWithRelations): Promise<CreateDraftInvoiceDTO> {
 		const invoiceLines: InvoiceLineItemDTO[] = [];
+		const companyId = invoice.company?.odoo_integration_id;
 
-		// Obtener tax_id por defecto de la compañía
-		const companyDefaultTaxId = invoice.company?.odoo_default_sale_tax_id;
-		const itemsToUpdate: Array<{ id: string; odoo_tax_id: number }> = [];
-
-		this.logger.debug(
-			`Factura ${invoice.invoice_number}: usando tax_id de compañía ${invoice.company?.legal_name} - ` +
-				`odoo_default_sale_tax_id=${companyDefaultTaxId || 'no configurado, usando default [1]'}`
-		);
+		// Log de posición fiscal del cliente
+		if (invoice.clientEntity?.odoo_fiscal_position_id) {
+			this.logger.log(
+				`✅ Cliente ${invoice.clientEntity.legal_name} tiene posición fiscal: ` +
+					`"${invoice.clientEntity.odoo_fiscal_position_name}" (ID: ${invoice.clientEntity.odoo_fiscal_position_id})`
+			);
+		} else {
+			this.logger.debug(`ℹ️  Cliente ${invoice.clientEntity?.legal_name || 'N/A'} no tiene posición fiscal configurada`);
+		}
 
 		for (const item of invoice.items || []) {
 			let odooProductId = 1;
-			let taxId: number;
 
-			// 1. Si el item ya tiene odoo_tax_id → usar ese (permite edición manual futura)
-			if (item.odoo_tax_id) {
-				taxId = item.odoo_tax_id;
-				this.logger.debug(`Item ${item.id}: usando odoo_tax_id existente=${taxId} (configurado previamente)`);
-			}
-			// 2. Si no → usar tax de compañía y guardarlo
-			else {
-				taxId = companyDefaultTaxId || 1;
-				itemsToUpdate.push({ id: item.id, odoo_tax_id: taxId });
-				this.logger.debug(`Item ${item.id}: asignando tax_id de compañía=${taxId} (se guardará en BD)`);
-			}
-
+			// Obtener mapeo del producto
 			if (item.product_id) {
 				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
 				odooProductId = mappingInfo.odooProductId;
 
 				this.logger.debug(
 					`Item factura ${invoice.invoice_number}: producto_sapira=${item.product_id}, ` +
-						`odoo_product=${odooProductId}, tax_id=${taxId}, source=${mappingInfo.source}`
+						`odoo_product=${odooProductId}, source=${mappingInfo.source}`
 				);
 			}
+
+			// Obtener impuestos de venta del producto
+			const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(odooProductId, companyId, invoice.holding_id);
+
+			let finalTaxIds: number[] = [];
+
+			// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
+			if (invoice.clientEntity?.odoo_fiscal_position_id) {
+				const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
+					productSaleTaxIds,
+					invoice.clientEntity.odoo_fiscal_position_id,
+					invoice.holding_id
+				);
+				finalTaxIds = mappingResult.final_tax_ids;
+
+				this.logger.debug(
+					`📦 Producto ${odooProductId}: ${productSaleTaxIds.length} impuestos originales → ` +
+						`${finalTaxIds.length} impuestos finales (con mapeo de posición fiscal)`
+				);
+			} else {
+				// Sin posición fiscal, usar impuestos del producto directamente
+				finalTaxIds = productSaleTaxIds;
+				this.logger.debug(`📦 Producto ${odooProductId}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
+			}
+
+			this.logger.debug(`Item ${item.id}: tax_ids finales = [${finalTaxIds.join(', ')}]`);
 
 			invoiceLines.push({
 				product_id: odooProductId,
@@ -386,14 +404,12 @@ export class InvoiceSchedulerService {
 				quantity: parseFloat(item.quantity?.toString() || '1'),
 				price_unit: parseFloat(item.unit_price_invoice_currency?.toString() || '0'),
 				discount: parseFloat(item.discount_pct?.toString() || '0'),
-				tax_ids: [taxId],
+				tax_ids: finalTaxIds,
 			});
 		}
 
-		// Guardar odoo_tax_id en los items que no lo tenían
-		if (itemsToUpdate.length > 0) {
-			await this.updateInvoiceItemsTaxIds(itemsToUpdate);
-		}
+		// Log resumen
+		this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados con mapeo de impuestos`);
 
 		const currencyId = this.mapCurrencyToOdooId(invoice.invoice_currency);
 

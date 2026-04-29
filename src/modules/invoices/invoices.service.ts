@@ -344,7 +344,7 @@ export class InvoicesService {
 				const reteivaAmount = subtotal * (retentions.reteiva / 100);
 
 				// Total de impuestos (IVA - retenciones)
-				const taxAmount = iva - reteicaAmount - retefuenteAmount - reteivaAmount;
+				const taxAmount = iva + reteicaAmount + retefuenteAmount + reteivaAmount;
 
 				// Total del item
 				const total = subtotal + taxAmount;
