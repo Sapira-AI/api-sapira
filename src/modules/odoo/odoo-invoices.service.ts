@@ -38,6 +38,7 @@ export class OdooInvoicesService {
 			company_id,
 			journal_id,
 			x_sapira_invoice_id,
+			currency_id,
 			auto_post,
 			invoice_line_ids,
 		} = data;
@@ -87,6 +88,10 @@ export class OdooInvoicesService {
 			// Esto permite que Odoo procese correctamente el mapeo de impuestos
 			if (clientEntity?.odoo_fiscal_position_id) {
 				invoiceData.fiscal_position_id = clientEntity.odoo_fiscal_position_id;
+			}
+
+			if (currency_id) {
+				invoiceData.currency_id = currency_id;
 			}
 
 			if (invoice_date) {
