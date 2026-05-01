@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
+import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 import { CreateDraftInvoiceDTO, InvoiceLineItemDTO } from '../odoo/dtos/odoo.dto';
@@ -50,6 +51,8 @@ export class InvoiceSchedulerService {
 		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
 		@InjectRepository(Contract)
 		private readonly contractRepository: Repository<Contract>,
+		@InjectRepository(IntegrationLog)
+		private readonly integrationLogRepository: Repository<IntegrationLog>,
 		private readonly odooInvoicesService: OdooInvoicesService,
 		private readonly invoiceNotificationService: InvoiceNotificationService,
 		private readonly exchangeRatesService: ExchangeRatesService,
@@ -184,6 +187,20 @@ export class InvoiceSchedulerService {
 				result.error = validation.error;
 				result.details = 'Factura no cumple criterios de validación';
 				this.logger.warn(`⚠️ Factura ${invoice.id} omitida: ${validation.error}`);
+
+				// Registrar log de factura omitida
+				await this.createIntegrationLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'skipped',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					errorMessage: validation.error,
+					errorDetails: { validation_error: validation.error },
+				});
+
 				return result;
 			}
 
@@ -199,6 +216,20 @@ export class InvoiceSchedulerService {
 					result.error = error.message;
 					result.details = 'No se pudo calcular tipo de cambio. Se ha enviado notificación por email.';
 					this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: ${error.message}`);
+
+					// Registrar log de error en tipo de cambio
+					await this.createIntegrationLog({
+						holdingId: invoice.holding_id,
+						operation: 'create_draft',
+						status: 'skipped',
+						invoiceId: invoice.id,
+						invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+						clientName: result.clientName,
+						companyName: result.companyName,
+						errorMessage: error.message,
+						errorDetails: { exchange_rate_error: error.message, stack: error.stack },
+					});
+
 					return result;
 				}
 			}
@@ -209,6 +240,24 @@ export class InvoiceSchedulerService {
 				result.error = 'Montos no calculados en moneda de facturación';
 				result.details = 'La factura requiere conversión de moneda pero los montos no están calculados';
 				this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: montos no calculados`);
+
+				// Registrar log de montos no calculados
+				await this.createIntegrationLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'skipped',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					errorMessage: 'Montos no calculados en moneda de facturación',
+					errorDetails: {
+						contract_currency: invoice.contract_currency,
+						invoice_currency: invoice.invoice_currency,
+						amount_invoice_currency: invoice.amount_invoice_currency,
+					},
+				});
+
 				return result;
 			}
 
@@ -270,6 +319,24 @@ export class InvoiceSchedulerService {
 								`   Detalles: ${errorDetails}`
 						);
 
+						// Registrar log de error de taxes
+						await this.createIntegrationLog({
+							holdingId: invoice.holding_id,
+							operation: 'create_draft',
+							status: 'error',
+							invoiceId: invoice.id,
+							invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+							clientName: result.clientName,
+							companyName: result.companyName,
+							requestData: odooInvoiceData,
+							errorMessage: result.error,
+							errorDetails: {
+								invalid_taxes: invalidTaxes,
+								company_id: odooInvoiceData.company_id,
+								tax_validations: validation.tax_validations,
+							},
+						});
+
 						return result;
 					}
 
@@ -289,7 +356,9 @@ export class InvoiceSchedulerService {
 
 			this.logger.log(`📤 Enviando factura ${invoice.invoice_number} a Odoo...`);
 
+			const startTime = Date.now();
 			const odooResponse = await this.odooInvoicesService.createDraftInvoice(invoice.holding_id, odooInvoiceData);
+			const durationMs = Date.now() - startTime;
 
 			if (odooResponse.success && odooResponse.invoice_id) {
 				await this.invoiceRepository.update(invoice.id, {
@@ -300,12 +369,28 @@ export class InvoiceSchedulerService {
 				result.status = 'sent';
 				result.odooInvoiceId = odooResponse.invoice_id;
 
+				// Registrar log de envío exitoso
+				await this.createIntegrationLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'success',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					requestData: odooInvoiceData,
+					responseData: odooResponse,
+					durationMs,
+				});
+
 				// Si auto_invoice es true, emitir la factura automáticamente
 				if (invoice.auto_invoice) {
 					this.logger.log(`📝 Factura ${invoice.invoice_number} tiene auto_invoice=true, emitiendo automáticamente...`);
 
 					try {
+						const postStartTime = Date.now();
 						const postResponse = await this.odooInvoicesService.postInvoice(invoice.holding_id, odooResponse.invoice_id);
+						const postDurationMs = Date.now() - postStartTime;
 
 						if (postResponse.success) {
 							await this.invoiceRepository.update(invoice.id, {
@@ -316,13 +401,56 @@ export class InvoiceSchedulerService {
 							this.logger.log(
 								`✓ Factura ${invoice.invoice_number} creada y emitida exitosamente en Odoo (ID: ${odooResponse.invoice_id}, estado: ${postResponse.state || 'posted'})`
 							);
+
+							// Registrar log de emisión exitosa
+							await this.createIntegrationLog({
+								holdingId: invoice.holding_id,
+								operation: 'post_invoice',
+								status: 'success',
+								invoiceId: invoice.id,
+								invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+								clientName: result.clientName,
+								companyName: result.companyName,
+								requestData: { odoo_invoice_id: odooResponse.invoice_id },
+								responseData: postResponse,
+								durationMs: postDurationMs,
+							});
 						} else {
 							result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postResponse.message}`;
 							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);
+
+							// Registrar log de error en emisión
+							await this.createIntegrationLog({
+								holdingId: invoice.holding_id,
+								operation: 'post_invoice',
+								status: 'error',
+								invoiceId: invoice.id,
+								invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+								clientName: result.clientName,
+								companyName: result.companyName,
+								requestData: { odoo_invoice_id: odooResponse.invoice_id },
+								responseData: postResponse,
+								errorMessage: postResponse.message,
+								durationMs: postDurationMs,
+							});
 						}
 					} catch (postError) {
 						result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postError.message}`;
 						this.logger.error(`✗ Error al emitir factura ${invoice.invoice_number}:`, postError);
+
+						// Registrar log de excepción en emisión
+						await this.createIntegrationLog({
+							holdingId: invoice.holding_id,
+							operation: 'post_invoice',
+							status: 'error',
+							invoiceId: invoice.id,
+							invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+							clientName: result.clientName,
+							companyName: result.companyName,
+							requestData: { odoo_invoice_id: odooResponse.invoice_id },
+							errorMessage: postError.message,
+							errorDetails: { stack: postError.stack },
+						});
 					}
 				} else {
 					result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id} (mantiene estado 'Por Emitir')`;
@@ -334,11 +462,42 @@ export class InvoiceSchedulerService {
 				result.status = 'error';
 				result.error = odooResponse.message || 'Error desconocido al crear factura en Odoo';
 				this.logger.error(`✗ Error al enviar factura ${invoice.invoice_number}: ${result.error}`);
+
+				// Registrar log de error al crear factura
+				await this.createIntegrationLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'error',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					requestData: odooInvoiceData,
+					responseData: odooResponse,
+					errorMessage: result.error,
+					durationMs,
+				});
 			}
 		} catch (error) {
 			result.status = 'error';
 			result.error = error.message || 'Error inesperado';
 			this.logger.error(`✗ Excepción al procesar factura ${invoice.invoice_number}:`, error);
+
+			// Registrar log de excepción general
+			await this.createIntegrationLog({
+				holdingId: invoice.holding_id,
+				operation: 'create_draft',
+				status: 'error',
+				invoiceId: invoice.id,
+				invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+				clientName: result.clientName,
+				companyName: result.companyName,
+				errorMessage: error.message || 'Error inesperado',
+				errorDetails: {
+					stack: error.stack,
+					error_type: error.constructor.name,
+				},
+			});
 		}
 
 		return result;
@@ -869,5 +1028,42 @@ export class InvoiceSchedulerService {
 			debug_date: todayStr,
 			holding_id: holdingId || 'all',
 		};
+	}
+
+	private async createIntegrationLog(params: {
+		holdingId: string;
+		operation: string;
+		status: string;
+		invoiceId: string;
+		invoiceNumber: string;
+		clientName: string;
+		companyName: string;
+		requestData?: any;
+		responseData?: any;
+		errorMessage?: string;
+		errorDetails?: any;
+		durationMs?: number;
+	}): Promise<IntegrationLog> {
+		const log = this.integrationLogRepository.create({
+			holding_id: params.holdingId,
+			integration_type: 'odoo_invoice_send',
+			operation: params.operation,
+			status: params.status,
+			request_data: params.requestData,
+			response_data: params.responseData,
+			error_message: params.errorMessage,
+			error_details: params.errorDetails,
+			duration_ms: params.durationMs,
+			external_id: params.invoiceId,
+			source_table: 'invoices',
+			target_table: 'account.move',
+			metadata: {
+				invoice_number: params.invoiceNumber,
+				client_name: params.clientName,
+				company_name: params.companyName,
+			},
+		});
+
+		return await this.integrationLogRepository.save(log);
 	}
 }
