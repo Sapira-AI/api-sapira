@@ -7,6 +7,7 @@ import { EmailsModule } from '@/modules/emails/emails.module';
 
 import { BancoCentralController } from './banco-central.controller';
 import { BancoCentralService } from './banco-central.service';
+import { Currency } from './entities/currency.entity';
 import { ExchangeRateMonthlyAvgEntity } from './entities/exchange-rate-monthly-avg.entity';
 import { ExchangeRateEntity } from './entities/exchange-rate.entity';
 import { IndicadorEconomicoEntity } from './entities/indicador-economico.entity';
@@ -16,7 +17,7 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 
 @Module({
 	imports: [
-		TypeOrmModule.forFeature([IndicadorEconomicoEntity, ExchangeRateEntity, ExchangeRateMonthlyAvgEntity]),
+		TypeOrmModule.forFeature([IndicadorEconomicoEntity, ExchangeRateEntity, ExchangeRateMonthlyAvgEntity, Currency]),
 		ConfigModule,
 		AuthModule,
 		EmailsModule,
