@@ -813,13 +813,15 @@ export class InvoiceSchedulerService {
 	private mapCurrencyToOdooId(currency: string): number {
 		const currencyMap: Record<string, number> = {
 			USD: 2,
-			CLP: 34,
-			CLF: 158,
-			MXN: 49,
-			COP: 37,
-			PEN: 135,
+			CLP: 45,
+			CLF: 178,
+			MXN: 33,
+			COP: 8,
+			PEN: 162,
 			EUR: 1,
-			UYU: 162,
+			UYU: 46,
+			UF: 171,
+			UYI: 182,
 		};
 
 		return currencyMap[currency];

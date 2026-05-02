@@ -1,0 +1,482 @@
+{
+	"CLP": {
+		"id": 45,
+		"name": "CLP",
+		"symbol": "$",
+		"full_name": "Chilean peso"
+	},
+	"COP": {
+		"id": 8,
+		"name": "COP",
+		"symbol": "$",
+		"full_name": "Colombian peso"
+	},
+	"MXN": {
+		"id": 33,
+		"name": "MXN",
+		"symbol": "$",
+		"full_name": "Mexican peso"
+	},
+	"PEN": {
+		"id": 162,
+		"name": "PEN",
+		"symbol": "S/",
+		"full_name": "Peruvian sol"
+	},
+	"UF": {
+		"id": 171,
+		"name": "UF",
+		"symbol": "UF",
+		"full_name": false
+	},
+	"USD": {
+		"id": 2,
+		"name": "USD",
+		"symbol": "$",
+		"full_name": "United States dollar"
+	},
+	"UYI": {
+		"id": 182,
+		"name": "UYI",
+		"symbol": "UYI",
+		"full_name": "Uruguay Peso en Unidades Indexadas"
+	},
+	"UYU": {
+		"id": 46,
+		"name": "UYU",
+		"symbol": "$",
+		"full_name": "Uruguayan peso"
+	},
+	"AED": {
+		"id": 131,
+		"name": "AED",
+		"symbol": "د.إ",
+		"full_name": "United Arab Emirates dirham"
+	},
+	"AFN": {
+		"id": 47,
+		"name": "AFN",
+		"symbol": "Afs",
+		"full_name": "Afghan afghani"
+	},
+	"ALL": {
+		"id": 122,
+		"name": "ALL",
+		"symbol": "L",
+		"full_name": "Albanian lek"
+	},
+	"AMD": {
+		"id": 50,
+		"name": "AMD",
+		"symbol": "դր.",
+		"full_name": "Armenian dram"
+	},
+	"ANG": {
+		"id": 71,
+		"name": "ANG",
+		"symbol": "ƒ",
+		"full_name": "Netherlands Antillean guilder"
+	},
+	"AOA": {
+		"id": 48,
+		"name": "AOA",
+		"symbol": "Kz",
+		"full_name": "Angolan kwanza"
+	},
+	"ARS": {
+		"id": 19,
+		"name": "ARS",
+		"symbol": "$",
+		"full_name": "Argentine peso"
+	},
+	"AUD": {
+		"id": 21,
+		"name": "AUD",
+		"symbol": "$",
+		"full_name": "Australian dollar"
+	},
+	"AWG": {
+		"id": 51,
+		"name": "AWG",
+		"symbol": "Afl.",
+		"full_name": "Aruban florin"
+	},
+	"AZN": {
+		"id": 52,
+		"name": "AZN",
+		"symbol": "m",
+		"full_name": "Azerbaijani manat"
+	},
+	"BAM": {
+		"id": 63,
+		"name": "BAM",
+		"symbol": "KM",
+		"full_name": "Bosnia and Herzegovina convertible mark"
+	},
+	"BBD": {
+		"id": 56,
+		"name": "BBD",
+		"symbol": "Bds$",
+		"full_name": "Barbados dollar"
+	},
+	"BDT": {
+		"id": 55,
+		"name": "BDT",
+		"symbol": "৳",
+		"full_name": "Bangladeshi taka"
+	},
+	"BGN": {
+		"id": 26,
+		"name": "BGN",
+		"symbol": "лв",
+		"full_name": "Bulgarian lev"
+	},
+	"BHD": {
+		"id": 54,
+		"name": "BHD",
+		"symbol": "BD",
+		"full_name": "Bahraini dinar"
+	},
+	"BIF": {
+		"id": 65,
+		"name": "BIF",
+		"symbol": "FBu",
+		"full_name": "Burundian franc"
+	},
+	"BMD": {
+		"id": 60,
+		"name": "BMD",
+		"symbol": "BD$",
+		"full_name": "Bermudian dollar"
+	},
+	"BND": {
+		"id": 113,
+		"name": "BND",
+		"symbol": "$",
+		"full_name": "Brunei dollar"
+	},
+	"BOB": {
+		"id": 62,
+		"name": "BOB",
+		"symbol": "Bs.",
+		"full_name": "Boliviano"
+	},
+	"BRL": {
+		"id": 6,
+		"name": "BRL",
+		"symbol": "R$",
+		"full_name": "Brazilian real"
+	},
+	"BSD": {
+		"id": 53,
+		"name": "BSD",
+		"symbol": "B$",
+		"full_name": "Bahamian dollar"
+	},
+	"BTN": {
+		"id": 61,
+		"name": "BTN",
+		"symbol": "Nu.",
+		"full_name": "Bhutanese ngultrum"
+	},
+	"BWP": {
+		"id": 64,
+		"name": "BWP",
+		"symbol": "P",
+		"full_name": "Botswana pula"
+	},
+	"BYN": {
+		"id": 58,
+		"name": "BYN",
+		"symbol": "Br",
+		"full_name": "Belarusian ruble"
+	},
+	"BYR": {
+		"id": 57,
+		"name": "BYR",
+		"symbol": "BR",
+		"full_name": "Belarusian ruble"
+	},
+	"BZD": {
+		"id": 59,
+		"name": "BZD",
+		"symbol": "BZ$",
+		"full_name": "Belize dollar"
+	},
+	"CAD": {
+		"id": 4,
+		"name": "CAD",
+		"symbol": "$",
+		"full_name": "Canadian dollar"
+	},
+	"CDF": {
+		"id": 69,
+		"name": "CDF",
+		"symbol": "Fr",
+		"full_name": "Congolese franc"
+	},
+	"CHF": {
+		"id": 5,
+		"name": "CHF",
+		"symbol": "CHF",
+		"full_name": "Swiss franc"
+	},
+	"CLF": {
+		"id": 178,
+		"name": "CLF",
+		"symbol": "$",
+		"full_name": "Unidad de Fomento"
+	},
+	"CNH": {
+		"id": 175,
+		"name": "CNH",
+		"symbol": "¥",
+		"full_name": "Chinese yuan - Offshore"
+	},
+	"CNY": {
+		"id": 7,
+		"name": "CNY",
+		"symbol": "¥",
+		"full_name": "Chinese yuan"
+	},
+	"COU": {
+		"id": 177,
+		"name": "COU",
+		"symbol": "$",
+		"full_name": "Unidad de Valor Real"
+	},
+	"CRC": {
+		"id": 39,
+		"name": "CRC",
+		"symbol": "₡",
+		"full_name": "Costa Rican colón"
+	},
+	"CUC": {
+		"id": 179,
+		"name": "CUC",
+		"symbol": "$",
+		"full_name": "Cuban convertible peso"
+	},
+	"CUP": {
+		"id": 70,
+		"name": "CUP",
+		"symbol": "$",
+		"full_name": "Cuban peso"
+	},
+	"CVE": {
+		"id": 167,
+		"name": "CVE",
+		"symbol": "$",
+		"full_name": "Cape Verdean escudo"
+	},
+	"CYP": {
+		"id": 72,
+		"name": "CYP",
+		"symbol": "£",
+		"full_name": false
+	},
+	"CZK": {
+		"id": 9,
+		"name": "CZK",
+		"symbol": "Kč",
+		"full_name": "Czech koruna"
+	},
+	"DJF": {
+		"id": 73,
+		"name": "DJF",
+		"symbol": "Fdj",
+		"full_name": "Djiboutian franc"
+	},
+	"DKK": {
+		"id": 10,
+		"name": "DKK",
+		"symbol": "kr",
+		"full_name": "Danish krone"
+	},
+	"DOP": {
+		"id": 74,
+		"name": "DOP",
+		"symbol": "RD$",
+		"full_name": "Dominican peso"
+	},
+	"DZD": {
+		"id": 114,
+		"name": "DZD",
+		"symbol": "DA",
+		"full_name": "Algerian dinar"
+	},
+	"EGP": {
+		"id": 76,
+		"name": "EGP",
+		"symbol": "E£",
+		"full_name": "Egyptian pound"
+	},
+	"ERN": {
+		"id": 78,
+		"name": "ERN",
+		"symbol": "Nfk",
+		"full_name": "Eritrean nakfa"
+	},
+	"ETB": {
+		"id": 79,
+		"name": "ETB",
+		"symbol": "Br",
+		"full_name": "Ethiopian birr"
+	},
+	"EUR": {
+		"id": 1,
+		"name": "EUR",
+		"symbol": "€",
+		"full_name": "Euro"
+	},
+	"FJD": {
+		"id": 81,
+		"name": "FJD",
+		"symbol": "FJ$",
+		"full_name": "Fiji dollar"
+	},
+	"FKP": {
+		"id": 80,
+		"name": "FKP",
+		"symbol": "£",
+		"full_name": "Falkland Islands pound"
+	},
+	"GBP": {
+		"id": 147,
+		"name": "GBP",
+		"symbol": "£",
+		"full_name": "Pound sterling"
+	},
+	"GEL": {
+		"id": 82,
+		"name": "GEL",
+		"symbol": "ლ",
+		"full_name": "Georgian lari"
+	},
+	"GHS": {
+		"id": 115,
+		"name": "GHS",
+		"symbol": "GH¢",
+		"full_name": "Ghanaian cedi"
+	},
+	"GIP": {
+		"id": 83,
+		"name": "GIP",
+		"symbol": "£",
+		"full_name": "Gibraltar pound"
+	},
+	"GMD": {
+		"id": 116,
+		"name": "GMD",
+		"symbol": "D",
+		"full_name": "Gambian dalasi"
+	},
+	"GNF": {
+		"id": 85,
+		"name": "GNF",
+		"symbol": "FG",
+		"full_name": "Guinean franc"
+	},
+	"GTQ": {
+		"id": 170,
+		"name": "GTQ",
+		"symbol": "Q",
+		"full_name": "Guatemalan Quetzal"
+	},
+	"GYD": {
+		"id": 86,
+		"name": "GYD",
+		"symbol": "$",
+		"full_name": "Guyanese dollar"
+	},
+	"HKD": {
+		"id": 24,
+		"name": "HKD",
+		"symbol": "$",
+		"full_name": "Hong Kong dollar"
+	},
+	"HNL": {
+		"id": 44,
+		"name": "HNL",
+		"symbol": "L",
+		"full_name": "Honduran lempira"
+	},
+	"HRK": {
+		"id": 29,
+		"name": "HRK",
+		"symbol": "kn",
+		"full_name": "Croatian kuna"
+	},
+	"HTG": {
+		"id": 87,
+		"name": "HTG",
+		"symbol": "G",
+		"full_name": "Haitian gourde"
+	},
+	"HUF": {
+		"id": 11,
+		"name": "HUF",
+		"symbol": "Ft",
+		"full_name": "Hungarian forint"
+	},
+	"IDR": {
+		"id": 12,
+		"name": "IDR",
+		"symbol": "Rp",
+		"full_name": "Indonesian rupiah"
+	},
+	"ILS": {
+		"id": 91,
+		"name": "ILS",
+		"symbol": "₪",
+		"full_name": "Israeli new shekel"
+	},
+	"INR": {
+		"id": 20,
+		"name": "INR",
+		"symbol": "₹",
+		"full_name": "Indian rupee"
+	},
+	"IQD": {
+		"id": 90,
+		"name": "IQD",
+		"symbol": " ع.د",
+		"full_name": "Iraqi dinar"
+	},
+	"IRR": {
+		"id": 89,
+		"name": "IRR",
+		"symbol": "﷼",
+		"full_name": "Iranian rial"
+	},
+	"ISK": {
+		"id": 88,
+		"name": "ISK",
+		"symbol": "kr",
+		"full_name": "Icelandic króna"
+	},
+	"ITL": {
+		"id": 155,
+		"name": "ITL",
+		"symbol": "₤",
+		"full_name": false
+	},
+	"JMD": {
+		"id": 92,
+		"name": "JMD",
+		"symbol": "$",
+		"full_name": "Jamaican dollar"
+	},
+	"JOD": {
+		"id": 93,
+		"name": "JOD",
+		"symbol": " د.ا ",
+		"full_name": "Jordanian dinar"
+	},
+	"JPY": {
+		"id": 25,
+		"name": "JPY",
+		"symbol": "¥",
+		"full_name": "Japanese yen"
+	}
+}
