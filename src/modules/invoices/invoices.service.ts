@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Model } from 'mongoose';
 import { DataSource, In, Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
@@ -13,9 +15,12 @@ import {
 	BulkUpdateWarningDto,
 } from './dtos/bulk-update-currency-response.dto';
 import { BulkUpdateCurrencyDto } from './dtos/bulk-update-currency.dto';
+import { OdooSendLogsQueryDto } from './dtos/odoo-send-logs-query.dto';
+import { OdooSendLogsResponseDto } from './dtos/odoo-send-logs-response.dto';
 import { RecalculateTaxesBatchDto, RecalculateTaxesBatchResponseDto, RecalculateTaxesResponseDto } from './dtos/recalculate-taxes.dto';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
+import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
 
 @Injectable()
 export class InvoicesService {
@@ -28,6 +33,8 @@ export class InvoicesService {
 		private readonly invoiceItemRepository: Repository<InvoiceItem>,
 		@InjectRepository(ClientEntity)
 		private readonly clientEntityRepository: Repository<ClientEntity>,
+		@InjectModel(InvoiceOdooSendLog.name)
+		private readonly invoiceOdooSendLogModel: Model<InvoiceOdooSendLogDocument>,
 		private readonly exchangeRatesService: ExchangeRatesService,
 		private readonly dataSource: DataSource
 	) {}
@@ -453,5 +460,117 @@ export class InvoicesService {
 			results,
 			errors: errors.length > 0 ? errors : undefined,
 		};
+	}
+
+	async getOdooSendLogs(holdingId: string, filters: OdooSendLogsQueryDto): Promise<OdooSendLogsResponseDto> {
+		this.logger.log(`Obteniendo logs de envío a Odoo para holding: ${holdingId}`);
+
+		const query: any = { holding_id: holdingId };
+
+		if (filters.status) {
+			query.status = filters.status;
+		}
+
+		if (filters.operation) {
+			query.operation = filters.operation;
+		}
+
+		if (filters.invoice_id) {
+			query.invoice_id = filters.invoice_id;
+		}
+
+		if (filters.startDate || filters.endDate) {
+			query.createdAt = {};
+			if (filters.startDate) {
+				query.createdAt.$gte = new Date(filters.startDate);
+			}
+			if (filters.endDate) {
+				query.createdAt.$lte = new Date(filters.endDate);
+			}
+		}
+
+		const logs = await this.invoiceOdooSendLogModel.find(query).lean().exec();
+
+		return {
+			total: logs.length,
+			logs: logs.map((log: any) => ({
+				_id: log._id.toString(),
+				holding_id: log.holding_id,
+				invoice_id: log.invoice_id,
+				invoice_number: log.invoice_number,
+				odoo_invoice_id: log.odoo_invoice_id,
+				operation: log.operation,
+				status: log.status,
+				client_name: log.client_name,
+				company_name: log.company_name,
+				invoice_currency: log.invoice_currency,
+				invoice_amount: log.invoice_amount,
+				request_data: log.request_data,
+				response_data: log.response_data,
+				error_message: log.error_message,
+				error_type: log.error_type,
+				error_details: log.error_details,
+				duration_ms: log.duration_ms,
+				createdAt: log.createdAt,
+				updatedAt: log.updatedAt,
+			})),
+		};
+	}
+
+	async exportOdooSendLogsToCsv(holdingId: string, filters: OdooSendLogsQueryDto): Promise<string> {
+		this.logger.log(`Exportando logs de envío a Odoo a CSV para holding: ${holdingId}`);
+
+		const query: any = { holding_id: holdingId };
+
+		if (filters.status) {
+			query.status = filters.status;
+		}
+
+		if (filters.operation) {
+			query.operation = filters.operation;
+		}
+
+		if (filters.invoice_id) {
+			query.invoice_id = filters.invoice_id;
+		}
+
+		if (filters.startDate || filters.endDate) {
+			query.createdAt = {};
+			if (filters.startDate) {
+				query.createdAt.$gte = new Date(filters.startDate);
+			}
+			if (filters.endDate) {
+				query.createdAt.$lte = new Date(filters.endDate);
+			}
+		}
+
+		const logs = await this.invoiceOdooSendLogModel.find(query).lean().exec();
+
+		const csvRows: string[] = [];
+		csvRows.push('ID Factura,ID Odoo,Estado,Cliente,Empresa,Moneda,Monto');
+
+		for (const log of logs) {
+			const row = [
+				this.escapeCsvValue(log.invoice_id || ''),
+				this.escapeCsvValue(log.odoo_invoice_id?.toString() || ''),
+				this.escapeCsvValue(log.status || ''),
+				this.escapeCsvValue(log.client_name || ''),
+				this.escapeCsvValue(log.company_name || ''),
+				this.escapeCsvValue(log.invoice_currency || ''),
+				this.escapeCsvValue(log.invoice_amount?.toString() || ''),
+			];
+			csvRows.push(row.join(','));
+		}
+
+		return '\uFEFF' + csvRows.join('\n');
+	}
+
+	private escapeCsvValue(value: string): string {
+		if (!value) return '';
+		const stringValue = String(value);
+		if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
+			return `"${stringValue.replace(/"/g, '""')}"`;
+		}
+		return stringValue;
 	}
 }

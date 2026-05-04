@@ -42,6 +42,7 @@ import { InvoiceProcessingService } from './invoice-processing.service';
 import { OdooPartnersService } from './odoo-partners.service';
 import { OdooProvider } from './odoo.provider';
 import { FieldMappingService } from './services/field-mapping.service';
+import { OdooIntegrationLogService } from './services/odoo-integration-log.service';
 
 @Injectable()
 export class OdooService {
@@ -50,6 +51,7 @@ export class OdooService {
 		private readonly invoiceProcessingService: InvoiceProcessingService,
 		private readonly odooPartnersService: OdooPartnersService,
 		private readonly fieldMappingService: FieldMappingService,
+		private readonly odooIntegrationLogService: OdooIntegrationLogService,
 		@InjectRepository(OdooConnection)
 		private readonly odooConnectionRepository: Repository<OdooConnection>,
 		@InjectRepository(OdooInvoicesStg)
@@ -1879,7 +1881,7 @@ export class OdooService {
 			};
 
 			// 1. Crear job para Partners (Clientes)
-			const partnersLog = this.integrationLogRepository.create({
+			const partnersLog = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'res.partner',
 				target_table: 'odoo_partners_stg',
@@ -1895,7 +1897,7 @@ export class OdooService {
 			});
 
 			// 2. Crear job para Invoice Lines (Líneas de Factura)
-			const invoiceLinesLog = this.integrationLogRepository.create({
+			const invoiceLinesLog = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'account.move.line',
 				target_table: 'odoo_invoice_lines_stg',
@@ -1911,7 +1913,7 @@ export class OdooService {
 			});
 
 			// 3. Crear job para Invoices (Facturas)
-			const invoicesLog = this.integrationLogRepository.create({
+			const invoicesLog = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'account.move',
 				target_table: 'odoo_invoices_stg',
@@ -1926,18 +1928,19 @@ export class OdooService {
 				metadata: { ...baseMetadata, entity_type: 'invoices' },
 			});
 
-			// Guardar los 3 jobs
-			const [savedPartnersLog, savedInvoiceLinesLog, savedInvoicesLog] = await Promise.all([
-				this.integrationLogRepository.save(partnersLog),
-				this.integrationLogRepository.save(invoiceLinesLog),
-				this.integrationLogRepository.save(invoicesLog),
-			]);
+			const savedPartnersLog = partnersLog;
+			const savedInvoiceLinesLog = invoiceLinesLog;
+			const savedInvoicesLog = invoicesLog;
 
 			// Iniciar procesos asíncronos en secuencia para respetar dependencias de foreign keys
 			// No usar await aquí para no bloquear la respuesta HTTP
+			const partnersJobId = (savedPartnersLog._id as any).toString();
+			const invoiceLinesJobId = (savedInvoiceLinesLog._id as any).toString();
+			const invoicesJobId = (savedInvoicesLog._id as any).toString();
+
 			setImmediate(async () => {
 				try {
-					await this.processSequentialAsync(savedPartnersLog.id, savedInvoiceLinesLog.id, savedInvoicesLog.id, data);
+					await this.processSequentialAsync(partnersJobId, invoiceLinesJobId, invoicesJobId, data);
 				} catch (error) {
 					console.error('❌ Error en procesos asíncronos secuenciales:', error);
 				}
@@ -1947,9 +1950,9 @@ export class OdooService {
 				success: true,
 				message: 'Jobs de sincronización iniciados exitosamente para Partners, Invoice Lines e Invoices',
 				jobs: {
-					partners_job_id: savedPartnersLog.id,
-					invoice_lines_job_id: savedInvoiceLinesLog.id,
-					invoices_job_id: savedInvoicesLog.id,
+					partners_job_id: partnersJobId,
+					invoice_lines_job_id: invoiceLinesJobId,
+					invoices_job_id: invoicesJobId,
 				},
 			};
 		} catch (error) {
@@ -2391,39 +2394,7 @@ export class OdooService {
 	 */
 	async getJobStatus(jobId: string): Promise<JobStatusResponseDTO> {
 		try {
-			const integrationLog = await this.integrationLogRepository.findOne({
-				where: { id: jobId },
-			});
-
-			if (!integrationLog) {
-				throw new Error('Job no encontrado');
-			}
-
-			// Calcular porcentaje de progreso
-			const progressPercentage = this.calculateProgressPercentage(
-				integrationLog.records_processed || 0,
-				integrationLog.progress_total || 0,
-				integrationLog.status || 'running'
-			);
-
-			// Calcular tiempo de ejecución
-			const executionTime = integrationLog.completed_at
-				? new Date(integrationLog.completed_at).getTime() - new Date(integrationLog.started_at).getTime()
-				: integrationLog.execution_time_ms || null;
-
-			return {
-				job_id: integrationLog.id,
-				status: integrationLog.status || 'running',
-				total_records: integrationLog.progress_total || 0,
-				records_processed: integrationLog.records_processed || 0,
-				records_success: integrationLog.records_success || 0,
-				records_failed: integrationLog.records_failed || 0,
-				progress_percentage: progressPercentage,
-				execution_time_ms: executionTime,
-				started_at: integrationLog.started_at,
-				completed_at: integrationLog.completed_at || undefined,
-				error_details: integrationLog.error_details || undefined,
-			};
+			return await this.odooIntegrationLogService.getJobStatus(jobId);
 		} catch (error) {
 			console.error('❌ Error obteniendo estado del job:', error);
 			throw new Error(`Error obteniendo estado: ${error.message}`);
@@ -2500,7 +2471,7 @@ export class OdooService {
 				Object.assign(updateData, additionalData);
 			}
 
-			await this.integrationLogRepository.update(jobId, updateData);
+			await this.odooIntegrationLogService.updateLog(jobId, updateData);
 		} catch (error) {
 			console.error('❌ Error actualizando estado del job:', error);
 		}
