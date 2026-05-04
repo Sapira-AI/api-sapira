@@ -300,6 +300,291 @@ export class OdooInvoicesService {
 	}
 
 	/**
+	 * Emite electrónicamente una factura según el país de la compañía
+	 * - Chile: No requiere paso adicional (ya está emitida con action_post)
+	 * - Colombia: Ejecuta wizard "Enviar e imprimir" con DIAN
+	 * - Uruguay: Ejecuta wizard "Enviar e imprimir" con CFE
+	 */
+	async emitElectronicInvoice(
+		holdingId: string,
+		invoiceId: number,
+		companyCountry: string
+	): Promise<{
+		success: boolean;
+		message: string;
+		state: string;
+		electronic_status?: 'sent' | 'accepted' | 'rejected' | 'not_required';
+		electronic_errors?: any[];
+	}> {
+		try {
+			this.logger.log(`📄 Iniciando emisión electrónica para país: ${companyCountry}, invoice_id: ${invoiceId}`);
+
+			// Normalizar país (eliminar tildes y convertir a minúsculas)
+			const normalizedCountry = this.normalizeCountry(companyCountry);
+
+			// Chile: No requiere paso adicional, ya está emitida con action_post
+			if (normalizedCountry === 'chile') {
+				this.logger.log(`✅ Chile: Factura ya emitida electrónicamente con action_post`);
+				return {
+					success: true,
+					message: 'Factura emitida electrónicamente (Chile)',
+					state: 'posted',
+					electronic_status: 'not_required',
+				};
+			}
+
+			// Colombia: Ejecutar wizard de envío con DIAN
+			if (normalizedCountry === 'colombia') {
+				return await this.emitElectronicInvoiceColombia(holdingId, invoiceId);
+			}
+
+			// Uruguay: Ejecutar wizard de envío con CFE
+			if (normalizedCountry === 'uruguay') {
+				return await this.emitElectronicInvoiceUruguay(holdingId, invoiceId);
+			}
+
+			// Otros países: asumir que no requieren paso adicional
+			this.logger.log(`ℹ️  ${companyCountry}: Asumiendo que no requiere paso adicional de emisión electrónica`);
+			return {
+				success: true,
+				message: `Factura emitida (${companyCountry} - sin paso adicional configurado)`,
+				state: 'posted',
+				electronic_status: 'not_required',
+			};
+		} catch (error) {
+			this.logger.error(`❌ Error en emisión electrónica para ${companyCountry}:`, error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Emite electrónicamente una factura de Colombia con DIAN
+	 */
+	private async emitElectronicInvoiceColombia(
+		holdingId: string,
+		invoiceId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		state: string;
+		electronic_status: 'sent' | 'accepted' | 'rejected';
+		electronic_errors?: any[];
+	}> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			this.logger.log(`🇨🇴 Colombia: Creando wizard de envío para factura ${invoiceId}`);
+
+			// Crear wizard account.move.send con contexto de la factura
+			const wizardId = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'create',
+				[
+					{
+						move_ids: [[6, 0, [invoiceId]]],
+						checkbox_download: false,
+						checkbox_send_mail: false,
+					},
+				],
+				{
+					context: {
+						active_model: 'account.move',
+						active_ids: [invoiceId],
+						active_id: invoiceId,
+					},
+				},
+			]);
+
+			this.logger.log(`📋 Wizard creado con ID: ${wizardId}`);
+
+			// Ejecutar action_send_and_print
+			await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'action_send_and_print',
+				[[wizardId]],
+			]);
+
+			this.logger.log(`📤 Wizard ejecutado, verificando estado DIAN...`);
+
+			// Leer estado de la factura y verificar campos DIAN
+			const invoiceData = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[[invoiceId]],
+				{
+					fields: ['state', 'name', 'edi_state', 'edi_error_count', 'edi_error_message'],
+				},
+			]);
+
+			const invoice = invoiceData[0];
+
+			this.logger.log(`📊 Estado factura: ${invoice.state}, EDI state: ${invoice.edi_state || 'N/A'}`);
+
+			// Determinar estado electrónico basado en edi_state
+			let electronicStatus: 'sent' | 'accepted' | 'rejected' = 'sent';
+			const errors: any[] = [];
+
+			if (invoice.edi_state === 'sent') {
+				electronicStatus = 'accepted';
+			} else if (invoice.edi_error_count > 0 || invoice.edi_error_message) {
+				electronicStatus = 'rejected';
+				if (invoice.edi_error_message) {
+					errors.push({ message: invoice.edi_error_message });
+				}
+			}
+
+			return {
+				success: true,
+				message: `Factura ${invoice.name} enviada a DIAN - Estado: ${electronicStatus}`,
+				state: invoice.state,
+				electronic_status: electronicStatus,
+				electronic_errors: errors.length > 0 ? errors : undefined,
+			};
+		} catch (error) {
+			this.logger.error('❌ Error emitiendo factura Colombia con DIAN:', error);
+			throw new Error(`Error emitiendo factura Colombia en Odoo: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Emite electrónicamente una factura de Uruguay con CFE
+	 */
+	private async emitElectronicInvoiceUruguay(
+		holdingId: string,
+		invoiceId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		state: string;
+		electronic_status: 'sent' | 'accepted' | 'rejected';
+		electronic_errors?: any[];
+	}> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			this.logger.log(`🇺🇾 Uruguay: Creando wizard de envío para factura ${invoiceId}`);
+
+			// Crear wizard account.move.send con contexto de la factura
+			const wizardId = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'create',
+				[
+					{
+						move_ids: [[6, 0, [invoiceId]]],
+						checkbox_download: false,
+						checkbox_send_mail: false,
+					},
+				],
+				{
+					context: {
+						active_model: 'account.move',
+						active_ids: [invoiceId],
+						active_id: invoiceId,
+					},
+				},
+			]);
+
+			this.logger.log(`📋 Wizard creado con ID: ${wizardId}`);
+
+			// Ejecutar action_send_and_print
+			await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'action_send_and_print',
+				[[wizardId]],
+			]);
+
+			this.logger.log(`📤 Wizard ejecutado, verificando estado CFE...`);
+
+			// Leer estado de la factura
+			const invoiceData = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[[invoiceId]],
+				{
+					fields: ['state', 'name', 'edi_state', 'edi_error_count', 'edi_error_message'],
+				},
+			]);
+
+			const invoice = invoiceData[0];
+
+			this.logger.log(`📊 Estado factura: ${invoice.state}, EDI state: ${invoice.edi_state || 'N/A'}`);
+
+			// Determinar estado electrónico
+			let electronicStatus: 'sent' | 'accepted' | 'rejected' = 'sent';
+			const errors: any[] = [];
+
+			if (invoice.edi_state === 'sent') {
+				electronicStatus = 'accepted';
+			} else if (invoice.edi_error_count > 0 || invoice.edi_error_message) {
+				electronicStatus = 'rejected';
+				if (invoice.edi_error_message) {
+					errors.push({ message: invoice.edi_error_message });
+				}
+			}
+
+			return {
+				success: true,
+				message: `Factura ${invoice.name} enviada a DGI Uruguay - Estado: ${electronicStatus}`,
+				state: invoice.state,
+				electronic_status: electronicStatus,
+				electronic_errors: errors.length > 0 ? errors : undefined,
+			};
+		} catch (error) {
+			this.logger.error('❌ Error emitiendo factura Uruguay con CFE:', error);
+			throw new Error(`Error emitiendo factura Uruguay en Odoo: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Normaliza el nombre del país para comparaciones
+	 */
+	private normalizeCountry(country: string): string {
+		if (!country) return '';
+
+		return country
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '') // Eliminar tildes
+			.trim();
+	}
+
+	/**
 	 * Obtiene la configuración de conexión de Odoo por holding_id
 	 */
 	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig> {

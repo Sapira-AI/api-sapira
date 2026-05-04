@@ -406,16 +406,7 @@ export class InvoiceSchedulerService {
 						const postDurationMs = Date.now() - postStartTime;
 
 						if (postResponse.success) {
-							await this.invoiceRepository.update(invoice.id, {
-								status: 'Emitida',
-							});
-
-							result.details = `Factura creada y emitida exitosamente en Odoo con ID: ${odooResponse.invoice_id} (estado: ${postResponse.state || 'posted'})`;
-							this.logger.log(
-								`✓ Factura ${invoice.invoice_number} creada y emitida exitosamente en Odoo (ID: ${odooResponse.invoice_id}, estado: ${postResponse.state || 'posted'})`
-							);
-
-							// Registrar log de emisión exitosa
+							// Registrar log de post exitoso
 							await this.createOdooSendLog({
 								holdingId: invoice.holding_id,
 								operation: 'post_invoice',
@@ -430,6 +421,103 @@ export class InvoiceSchedulerService {
 								responseData: postResponse,
 								durationMs: postDurationMs,
 							});
+
+							// Paso adicional: Emisión electrónica según país
+							try {
+								const emitStartTime = Date.now();
+								const emitResponse = await this.odooInvoicesService.emitElectronicInvoice(
+									invoice.holding_id,
+									odooResponse.invoice_id,
+									invoice.company.country
+								);
+								const emitDurationMs = Date.now() - emitStartTime;
+
+								// Actualizar estado según resultado de emisión electrónica
+								if (emitResponse.success) {
+									if (emitResponse.electronic_status === 'accepted') {
+										await this.invoiceRepository.update(invoice.id, {
+											status: 'Emitida',
+										});
+										result.details = `Factura creada y emitida electrónicamente en Odoo (ID: ${odooResponse.invoice_id}, país: ${invoice.company.country}, estado: ${emitResponse.electronic_status})`;
+										this.logger.log(
+											`✓ Factura ${invoice.invoice_number} emitida electrónicamente exitosamente (${invoice.company.country})`
+										);
+									} else if (emitResponse.electronic_status === 'rejected') {
+										await this.invoiceRepository.update(invoice.id, {
+											status: 'Error Emisión Electrónica',
+										});
+										result.details = `Factura publicada en Odoo pero rechazada por entidad electrónica (${invoice.company.country}): ${emitResponse.electronic_errors?.map((e) => e.message).join(', ')}`;
+										this.logger.error(
+											`✗ Factura ${invoice.invoice_number} rechazada por entidad electrónica: ${emitResponse.electronic_errors?.map((e) => e.message).join(', ')}`
+										);
+									} else if (emitResponse.electronic_status === 'not_required') {
+										await this.invoiceRepository.update(invoice.id, {
+											status: 'Emitida',
+										});
+										result.details = `Factura creada y emitida exitosamente en Odoo (ID: ${odooResponse.invoice_id}, país: ${invoice.company.country})`;
+										this.logger.log(`✓ Factura ${invoice.invoice_number} emitida exitosamente (${invoice.company.country})`);
+									} else {
+										// Estado 'sent' - enviada pero pendiente de confirmación
+										await this.invoiceRepository.update(invoice.id, {
+											status: 'Emitida',
+										});
+										result.details = `Factura enviada a entidad electrónica (${invoice.company.country}), pendiente de confirmación`;
+										this.logger.log(
+											`⏳ Factura ${invoice.invoice_number} enviada a entidad electrónica, pendiente de confirmación`
+										);
+									}
+
+									// Registrar log de emisión electrónica
+									await this.createOdooSendLog({
+										holdingId: invoice.holding_id,
+										operation: 'emit_electronic_invoice',
+										status: emitResponse.electronic_status === 'rejected' ? 'error' : 'success',
+										invoiceId: invoice.id,
+										invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+										odooInvoiceId: odooResponse.invoice_id,
+										clientName: result.clientName,
+										companyName: result.companyName,
+										invoiceCurrency: invoice.invoice_currency,
+										requestData: {
+											odoo_invoice_id: odooResponse.invoice_id,
+											country: invoice.company.country,
+										},
+										responseData: emitResponse,
+										errorMessage: emitResponse.electronic_errors?.map((e) => e.message).join(', '),
+										errorType: emitResponse.electronic_status === 'rejected' ? 'electronic_rejection' : undefined,
+										durationMs: emitDurationMs,
+									});
+								}
+							} catch (emitError) {
+								// Error en emisión electrónica, pero la factura está publicada en Odoo
+								this.logger.error(`✗ Error en emisión electrónica para ${invoice.invoice_number}:`, emitError);
+
+								await this.invoiceRepository.update(invoice.id, {
+									status: 'Publicada - Error Emisión Electrónica',
+								});
+
+								result.details = `Factura publicada en Odoo (ID: ${odooResponse.invoice_id}) pero falló emisión electrónica: ${emitError.message}`;
+
+								// Registrar log de error en emisión electrónica
+								await this.createOdooSendLog({
+									holdingId: invoice.holding_id,
+									operation: 'emit_electronic_invoice',
+									status: 'error',
+									invoiceId: invoice.id,
+									invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+									odooInvoiceId: odooResponse.invoice_id,
+									clientName: result.clientName,
+									companyName: result.companyName,
+									invoiceCurrency: invoice.invoice_currency,
+									requestData: {
+										odoo_invoice_id: odooResponse.invoice_id,
+										country: invoice.company.country,
+									},
+									errorMessage: emitError.message,
+									errorType: 'emit_electronic_exception',
+									errorDetails: { stack: emitError.stack },
+								});
+							}
 						} else {
 							result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postResponse.message}`;
 							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);

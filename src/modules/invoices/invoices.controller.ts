@@ -1,12 +1,16 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { BulkUpdateCurrencyResponseDto } from './dtos/bulk-update-currency-response.dto';
 import { BulkUpdateCurrencyDto } from './dtos/bulk-update-currency.dto';
+import { OdooSendLogsQueryDto } from './dtos/odoo-send-logs-query.dto';
+import { OdooSendLogsResponseDto } from './dtos/odoo-send-logs-response.dto';
 import { RecalculateTaxesBatchDto, RecalculateTaxesBatchResponseDto, RecalculateTaxesResponseDto } from './dtos/recalculate-taxes.dto';
 import { InvoicesService } from './invoices.service';
+
+import type { Response } from 'express';
 
 @ApiTags('Invoices')
 @Controller('invoices')
@@ -127,5 +131,64 @@ export class InvoicesController {
 	@HttpCode(HttpStatus.OK)
 	async recalculateTaxesBatch(@Body() dto: RecalculateTaxesBatchDto): Promise<RecalculateTaxesBatchResponseDto> {
 		return this.invoicesService.recalculateTaxesBatch(dto);
+	}
+
+	@Get('odoo-sended-logs')
+	@ApiOperation({
+		summary: 'Obtener reporte de logs de envío a Odoo',
+		description:
+			'Retorna un reporte de todos los logs de envío de facturas a Odoo. ' +
+			'Filtra automáticamente por holding_id desde el header. ' +
+			'Soporta filtros opcionales por status, operation, rango de fechas e invoice_id.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Logs obtenidos exitosamente',
+		type: OdooSendLogsResponseDto,
+	})
+	@ApiResponse({
+		status: HttpStatus.UNAUTHORIZED,
+		description: 'No autenticado',
+	})
+	@HttpCode(HttpStatus.OK)
+	async getOdooSendLogs(@Headers('x-holding-id') holdingId: string, @Query() query: OdooSendLogsQueryDto): Promise<OdooSendLogsResponseDto> {
+		return this.invoicesService.getOdooSendLogs(holdingId, query);
+	}
+
+	@Get('odoo-sended-logs/export')
+	@ApiOperation({
+		summary: 'Exportar logs de envío a Odoo a CSV',
+		description:
+			'Genera un archivo CSV descargable con los logs de envío de facturas a Odoo. ' +
+			'Filtra automáticamente por holding_id desde el header. ' +
+			'Soporta los mismos filtros opcionales que el endpoint de logs JSON. ' +
+			'El archivo incluye: ID Factura, ID Odoo, Estado, Cliente, Empresa, Moneda y Monto.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'CSV generado exitosamente',
+		content: {
+			'text/csv': {
+				schema: {
+					type: 'string',
+					example: 'ID Factura,ID Odoo,Estado,Cliente,Empresa,Moneda,Monto\n123,456,success,Cliente A,Empresa B,COP,1000000',
+				},
+			},
+		},
+	})
+	@ApiResponse({
+		status: HttpStatus.UNAUTHORIZED,
+		description: 'No autenticado',
+	})
+	@HttpCode(HttpStatus.OK)
+	async exportOdooSendLogs(@Headers('x-holding-id') holdingId: string, @Query() query: OdooSendLogsQueryDto, @Res() res: Response): Promise<void> {
+		const csv = await this.invoicesService.exportOdooSendLogsToCsv(holdingId, query);
+
+		const today = new Date().toISOString().split('T')[0];
+		const filename = `odoo-invoice-logs-${holdingId}-${today}.csv`;
+
+		res.header('Content-Type', 'text/csv; charset=utf-8');
+		res.header('Content-Disposition', `attachment; filename="${filename}"`);
+		res.send(csv);
 	}
 }

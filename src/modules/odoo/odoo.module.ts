@@ -1,5 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { MongooseModules } from '@/databases/mongoose/database.module';
@@ -36,11 +37,13 @@ import { OdooWebhookService } from './odoo-webhook.service';
 import { OdooController } from './odoo.controller';
 import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
+import { OdooIntegrationLog, OdooIntegrationLogSchema } from './schemas/odoo-integration-log.schema';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
 import { FiscalPositionsService } from './services/fiscal-positions.service';
 import { GenericVatsService } from './services/generic-vats.service';
 import { InvoiceTaxValidatorService } from './services/invoice-tax-validator.service';
+import { OdooIntegrationLogService } from './services/odoo-integration-log.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
 import { TaxMappingService } from './services/tax-mapping.service';
 
@@ -50,6 +53,7 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		PostgreSQLDatabaseModule,
 		HttpModule,
 		EventsModule,
+		MongooseModule.forFeature([{ name: OdooIntegrationLog.name, schema: OdooIntegrationLogSchema }]),
 		TypeOrmModule.forFeature([
 			Company,
 			OdooConnection,
@@ -91,6 +95,7 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		InvoiceTaxValidatorService,
 		GenericVatsService,
 		InvoiceProcessingService,
+		OdooIntegrationLogService,
 	],
 	exports: [OdooService, OdooInvoicesService, OdooConnectionService, FiscalPositionsService, TaxMappingService],
 })
