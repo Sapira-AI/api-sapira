@@ -201,6 +201,9 @@ export class OdooInvoicesService {
 				console.log(`    - Name: ${lineData.name}`);
 				console.log(`    - Quantity: ${lineData.quantity}`);
 				console.log(`    - Price Unit: ${lineData.price_unit}`);
+				if (lineData.discount !== undefined && lineData.discount > 0) {
+					console.log(`    - Discount: ${lineData.discount}%`);
+				}
 				if (lineData.tax_ids) {
 					const taxIds = lineData.tax_ids[0][2];
 					console.log(`    - Tax IDs: [${taxIds.join(', ')}]`);
