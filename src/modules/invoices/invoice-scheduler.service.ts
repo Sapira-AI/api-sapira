@@ -360,7 +360,21 @@ export class InvoiceSchedulerService {
 				result.status = 'sent';
 				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${odooInvoiceData.partner_id}`;
 				this.logger.log(`🔍 DRY RUN - Factura ${invoice.invoice_number} (${invoice.id}) se enviaría a Odoo`);
-				console.log('📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
+
+				// Resumen de descuentos
+				const itemsWithDiscount = odooInvoiceData.invoice_line_ids.filter((line) => line.discount && line.discount > 0);
+				if (itemsWithDiscount.length > 0) {
+					this.logger.log(`\n💰 Resumen de descuentos:`);
+					this.logger.log(`   - ${itemsWithDiscount.length} items con descuento`);
+					itemsWithDiscount.forEach((line, index) => {
+						this.logger.log(`   - Item ${index + 1}: ${line.name} - ${line.discount}%`);
+					});
+					console.log('');
+				} else {
+					this.logger.log(`\n� Sin descuentos en esta factura\n`);
+				}
+
+				console.log('�📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
 				return result;
 			}
 
@@ -670,12 +684,20 @@ export class InvoiceSchedulerService {
 
 			this.logger.debug(`Item ${item.id}: tax_ids finales = [${finalTaxIds.join(', ')}]`);
 
+			const discount = parseFloat(item.discount_pct?.toString() || '0');
+			const quantity = parseFloat(item.quantity?.toString() || '1');
+			const priceUnit = parseFloat(item.unit_price_invoice_currency?.toString() || '0');
+
+			// Log detallado del item incluyendo descuento
+			const discountInfo = discount > 0 ? ` - Descuento: ${discount}%` : '';
+			this.logger.log(`📦 Item: ${item.description || 'Producto/Servicio'} - Precio: ${priceUnit} - Cantidad: ${quantity}${discountInfo}`);
+
 			invoiceLines.push({
 				product_id: odooProductId,
 				name: item.description || 'Producto/Servicio',
-				quantity: parseFloat(item.quantity?.toString() || '1'),
-				price_unit: parseFloat(item.unit_price_invoice_currency?.toString() || '0'),
-				discount: parseFloat(item.discount_pct?.toString() || '0'),
+				quantity,
+				price_unit: priceUnit,
+				discount,
 				tax_ids: finalTaxIds,
 			});
 		}
