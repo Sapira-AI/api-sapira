@@ -374,7 +374,7 @@ export class InvoiceSchedulerService {
 					this.logger.log(`\n� Sin descuentos en esta factura\n`);
 				}
 
-				console.log('�📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
+				console.log('� DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
 				return result;
 			}
 
@@ -458,7 +458,7 @@ export class InvoiceSchedulerService {
 										);
 									} else if (emitResponse.electronic_status === 'rejected') {
 										await this.invoiceRepository.update(invoice.id, {
-											status: 'Error Emisión Electrónica',
+											status: 'Emitida',
 										});
 										result.details = `Factura publicada en Odoo pero rechazada por entidad electrónica (${invoice.company.country}): ${emitResponse.electronic_errors?.map((e) => e.message).join(', ')}`;
 										this.logger.error(
@@ -507,7 +507,7 @@ export class InvoiceSchedulerService {
 								this.logger.error(`✗ Error en emisión electrónica para ${invoice.invoice_number}:`, emitError);
 
 								await this.invoiceRepository.update(invoice.id, {
-									status: 'Publicada - Error Emisión Electrónica',
+									status: 'Emitida',
 								});
 
 								result.details = `Factura publicada en Odoo (ID: ${odooResponse.invoice_id}) pero falló emisión electrónica: ${emitError.message}`;

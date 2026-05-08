@@ -20,7 +20,7 @@ export class InvoiceOdooSendLog {
 	@Prop({ type: Number })
 	odoo_invoice_id?: number;
 
-	@Prop({ required: true, enum: ['create_draft', 'post_invoice'], index: true })
+	@Prop({ required: true, enum: ['create_draft', 'post_invoice', 'emit_electronic_invoice'], index: true })
 	operation: string;
 
 	@Prop({ required: true, enum: ['success', 'error', 'skipped'], index: true })
