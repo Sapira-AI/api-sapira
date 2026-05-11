@@ -1,24 +1,9 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('contracts')
 export class Contract {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
-
-	@Column({ type: 'text', nullable: true })
-	invoice_terms_and_conditions?: string;
-
-	@Column({ type: 'uuid', nullable: true })
-	holding_id?: string;
-
-	@Column({ type: 'text', nullable: true })
-	contract_number?: string;
-
-	@Column({ type: 'text', nullable: true })
-	status?: string;
-
-	@Column({ type: 'boolean', nullable: true })
-	auto_send_to_odoo?: boolean;
 
 	@Column({ type: 'uuid', nullable: true })
 	client_id?: string;
@@ -30,7 +15,13 @@ export class Contract {
 	quote_id?: string;
 
 	@Column({ type: 'text', nullable: true })
+	contract_number?: string;
+
+	@Column({ type: 'text', nullable: true })
 	type?: string;
+
+	@Column({ type: 'text', nullable: true, default: 'En revisión' })
+	status?: string;
 
 	@Column({ type: 'numeric', nullable: true })
 	total_value?: number;
@@ -50,8 +41,8 @@ export class Contract {
 	@Column({ type: 'text', nullable: true })
 	notes?: string;
 
-	@Column({ type: 'timestamp without time zone', nullable: true })
-	created_at?: Date;
+	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
+	created_at: Date;
 
 	@Column({ type: 'uuid', nullable: true })
 	client_entity_id?: string;
@@ -59,10 +50,13 @@ export class Contract {
 	@Column({ type: 'boolean', nullable: true, default: false })
 	from_bulk_import?: boolean;
 
+	@Column({ type: 'uuid' })
+	holding_id: string;
+
 	@Column({ type: 'uuid', nullable: true })
 	current_step_id?: string;
 
-	@Column({ type: 'timestamp with time zone', nullable: true })
+	@Column({ type: 'timestamp with time zone', nullable: true, default: () => 'now()' })
 	workflow_started_at?: Date;
 
 	@Column({ type: 'timestamp with time zone', nullable: true })
@@ -131,10 +125,10 @@ export class Contract {
 	@Column({ type: 'text', nullable: true })
 	legacy_status?: string;
 
-	@Column({ type: 'numeric', nullable: true, default: 0 })
+	@Column({ type: 'numeric', precision: 5, scale: 2, nullable: true, default: 0 })
 	legacy_reconciliation_pct?: number;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', nullable: true, default: () => "'{}'" })
 	custom_fields?: object;
 
 	@Column({ type: 'text', nullable: true })
@@ -152,9 +146,15 @@ export class Contract {
 	@Column({ type: 'boolean', default: true })
 	group_invoices_by_period: boolean;
 
+	@Column({ type: 'boolean', default: false })
+	auto_send_to_odoo: boolean;
+
 	@Column({ type: 'text', nullable: true })
 	invoice_currency?: string;
 
 	@Column({ type: 'uuid', nullable: true })
 	churn_reason_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	invoice_terms_and_conditions?: string;
 }
