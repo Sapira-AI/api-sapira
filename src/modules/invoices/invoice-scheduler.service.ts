@@ -361,6 +361,11 @@ export class InvoiceSchedulerService {
 				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${odooInvoiceData.partner_id}`;
 				this.logger.log(`🔍 DRY RUN - Factura ${invoice.invoice_number} (${invoice.id}) se enviaría a Odoo`);
 
+				// Resumen de factura de exportación
+				if (invoice.export_type === 1) {
+					this.logger.log(`\n🌍 FACTURA DE EXPORTACIÓN - Items sin impuestos\n`);
+				}
+
 				// Resumen de descuentos
 				const itemsWithDiscount = odooInvoiceData.invoice_line_ids.filter((line) => line.discount && line.discount > 0);
 				if (itemsWithDiscount.length > 0) {
@@ -371,10 +376,10 @@ export class InvoiceSchedulerService {
 					});
 					console.log('');
 				} else {
-					this.logger.log(`\n� Sin descuentos en esta factura\n`);
+					this.logger.log(`\n💰 Sin descuentos en esta factura\n`);
 				}
 
-				console.log('� DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
+				console.log('📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
 				return result;
 			}
 
@@ -633,6 +638,12 @@ export class InvoiceSchedulerService {
 	async mapInvoiceToOdooFormat(invoice: InvoiceWithRelations): Promise<CreateDraftInvoiceDTO> {
 		const invoiceLines: InvoiceLineItemDTO[] = [];
 		const companyId = invoice.company?.odoo_integration_id;
+		const isExportInvoice = invoice.export_type === 1;
+
+		// Log de factura de exportación
+		if (isExportInvoice) {
+			this.logger.log(`🌍 FACTURA DE EXPORTACIÓN - Los items se enviarán SIN impuestos`);
+		}
 
 		// Log de posición fiscal del cliente
 		if (invoice.clientEntity?.odoo_fiscal_position_id) {
@@ -658,31 +669,38 @@ export class InvoiceSchedulerService {
 				);
 			}
 
-			// Obtener impuestos de venta del producto
-			const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(odooProductId, companyId, invoice.holding_id);
-
 			let finalTaxIds: number[] = [];
 
-			// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
-			if (invoice.clientEntity?.odoo_fiscal_position_id) {
-				const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
-					productSaleTaxIds,
-					invoice.clientEntity.odoo_fiscal_position_id,
-					invoice.holding_id
-				);
-				finalTaxIds = mappingResult.final_tax_ids;
-
-				this.logger.debug(
-					`📦 Producto ${odooProductId}: ${productSaleTaxIds.length} impuestos originales → ` +
-						`${finalTaxIds.length} impuestos finales (con mapeo de posición fiscal)`
-				);
+			// Verificar si es factura de exportación
+			if (isExportInvoice) {
+				// Facturas de exportación NO llevan impuestos
+				finalTaxIds = [];
+				this.logger.log(`🌍 Factura de exportación - Item sin impuestos: ${item.description || 'Producto/Servicio'}`);
 			} else {
-				// Sin posición fiscal, usar impuestos del producto directamente
-				finalTaxIds = productSaleTaxIds;
-				this.logger.debug(`📦 Producto ${odooProductId}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
-			}
+				// Flujo normal: obtener impuestos de venta del producto
+				const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(odooProductId, companyId, invoice.holding_id);
 
-			this.logger.debug(`Item ${item.id}: tax_ids finales = [${finalTaxIds.join(', ')}]`);
+				// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
+				if (invoice.clientEntity?.odoo_fiscal_position_id) {
+					const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
+						productSaleTaxIds,
+						invoice.clientEntity.odoo_fiscal_position_id,
+						invoice.holding_id
+					);
+					finalTaxIds = mappingResult.final_tax_ids;
+
+					this.logger.debug(
+						`📦 Producto ${odooProductId}: ${productSaleTaxIds.length} impuestos originales → ` +
+							`${finalTaxIds.length} impuestos finales (con mapeo de posición fiscal)`
+					);
+				} else {
+					// Sin posición fiscal, usar impuestos del producto directamente
+					finalTaxIds = productSaleTaxIds;
+					this.logger.debug(`📦 Producto ${odooProductId}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
+				}
+
+				this.logger.debug(`Item ${item.id}: tax_ids finales = [${finalTaxIds.join(', ')}]`);
+			}
 
 			const discount = parseFloat(item.discount_pct?.toString() || '0');
 			const quantity = parseFloat(item.quantity?.toString() || '1');
@@ -703,7 +721,11 @@ export class InvoiceSchedulerService {
 		}
 
 		// Log resumen
-		this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados con mapeo de impuestos`);
+		if (isExportInvoice) {
+			this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN - sin impuestos)`);
+		} else {
+			this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados con mapeo de impuestos`);
+		}
 
 		const currencyId = this.mapCurrencyToOdooId(invoice.invoice_currency);
 
