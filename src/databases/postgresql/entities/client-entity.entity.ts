@@ -29,6 +29,12 @@ export class ClientEntity {
 	@Column({ type: 'text', nullable: true })
 	phone?: string;
 
+	@Column({ type: 'text', nullable: true })
+	economic_activity?: string;
+
+	@Column({ type: 'text', nullable: true })
+	client_number?: string;
+
 	@Column({ type: 'integer', nullable: true })
 	odoo_partner_id?: number;
 

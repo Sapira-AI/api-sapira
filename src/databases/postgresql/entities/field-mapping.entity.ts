@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('field_mappings')
 export class FieldMapping {
@@ -9,44 +9,41 @@ export class FieldMapping {
 	holding_id: string;
 
 	@Column({ type: 'text' })
-	source_system: string;
-
-	@Column({ type: 'text', nullable: true })
-	source_model?: string;
+	source_model: string;
 
 	@Column({ type: 'text' })
-	source_field: string;
-
-	@Column({ type: 'text' })
-	target_field: string;
-
-	@Column({ type: 'text', nullable: true })
-	target_table?: string;
+	target_table: string;
 
 	@Column({ type: 'text', nullable: true })
 	mapping_name?: string;
 
-	@Column({ type: 'text', nullable: true })
-	mapping_type?: string;
-
-	@Column({ type: 'jsonb', nullable: true })
-	mapping_config?: any;
-
-	@Column({ type: 'text', nullable: true })
-	transformation_rule?: string;
-
-	@Column({ type: 'text', nullable: true })
-	default_value?: string;
+	@Column({ type: 'jsonb' })
+	mapping_config: any;
 
 	@Column({ type: 'boolean', default: true })
 	is_active: boolean;
 
-	@CreateDateColumn({ type: 'timestamp with time zone' })
+	@Column({ type: 'uuid', nullable: true })
+	created_by?: string;
+
+	@CreateDateColumn({ type: 'timestamp without time zone' })
 	created_at: Date;
 
-	@Column({ type: 'timestamp with time zone', nullable: true })
-	updated_at?: Date;
+	@UpdateDateColumn({ type: 'timestamp without time zone' })
+	updated_at: Date;
+
+	@Column({ type: 'text', nullable: true, default: 'simple' })
+	mapping_type?: string;
+
+	@Column({ type: 'text', nullable: true })
+	secondary_source_model?: string;
+
+	@Column({ type: 'text', nullable: true })
+	secondary_target_table?: string;
+
+	@Column({ type: 'text', nullable: true })
+	transformation_type?: string;
 
 	@Column({ type: 'jsonb', nullable: true })
-	metadata?: any;
+	transformation_config?: any;
 }
