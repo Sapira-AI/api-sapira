@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<EnvioDTE xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" version="1.0">
+    <SetDTE ID="SetDoc">
+        <Caratula version="1.0">
+            <RutEmisor>76403266-7</RutEmisor>
+            <RutEnvia>16358487-5</RutEnvia>
+            <RutReceptor>60803000-K</RutReceptor>
+            <FchResol>2014-08-22</FchResol>
+            <NroResol>80</NroResol>
+            <TmstFirmaEnv>2026-04-03T03:00:18</TmstFirmaEnv>
+            <SubTotDTE>
+                <TpoDTE>110</TpoDTE>
+                <NroDTE>1</NroDTE>
+            </SubTotDTE>
+        </Caratula>
+        <DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+            <Exportaciones ID="F700T110">
+            <Encabezado>
+                <IdDoc>
+                    <TipoDTE>110</TipoDTE>
+                    <Folio>700</Folio>
+                    <FchEmis>2026-04-03</FchEmis>
+                    <FmaPago>2</FmaPago>
+                    <FchVenc>2026-05-03</FchVenc>
+                </IdDoc>
+                <Emisor>
+                    <RUTEmisor>76403266-7</RUTEmisor>
+                    <RznSoc>SIMPLIT SPA</RznSoc>
+                    <GiroEmis>Servicios integrales de inform�tica</GiroEmis>
+                    <CorreoEmisor>simplitdte@simplit-solutions.com</CorreoEmisor>
+                    <Acteco>702000</Acteco>
+                    <DirOrigen>Holanda 100, oficina 606, Providencia, Santiago</DirOrigen>
+                    <CmnaOrigen>SANTIAGO</CmnaOrigen>
+                    <CdgVendedor>Carelis Rengifo</CdgVendedor>
+                </Emisor>
+                <Receptor>
+                    <RUTRecep>55555555-5</RUTRecep>
+                    <RznSocRecep>AMBIPAR ENVIRONMENT PARAGUAY SA</RznSocRecep>
+                    <Extranjero>
+                        <NumId>80008802-6</NumId>
+                        <Nacionalidad>222</Nacionalidad>
+                        <IdAdicRecep>Paraguay</IdAdicRecep>
+                    </Extranjero>
+                    <Contacto>+595 984 267368</Contacto>
+                    <CorreoRecep>facturas_proveedorespy@ambipar.com</CorreoRecep>
+                    <DirRecep>Nanawa &amp; Ballivian, Mariano Roque Alonso</DirRecep>
+                    <CmnaRecep>N-A</CmnaRecep>
+                </Receptor>
+                <Transporte>
+                    <Aduana>
+                        <CodModVenta>01</CodModVenta>
+                        <TotClauVenta>452.00</TotClauVenta>
+                    </Aduana>
+                </Transporte>
+                <Totales>
+                    <TpoMoneda>DOLAR USA</TpoMoneda>
+                    <MntExe>452.00</MntExe>
+                    <MntTotal>452.00</MntTotal>
+                </Totales>
+                <OtraMoneda>
+                    <TpoMoneda>PESO CL</TpoMoneda>
+                    <TpoCambio>915.95</TpoCambio>
+                    <MntExeOtrMnda>414009</MntExeOtrMnda>
+                    <MntTotOtrMnda>414009</MntTotOtrMnda>
+                </OtraMoneda>
+            </Encabezado>
+            <Detalle>
+                <NroLinDet>1</NroLinDet>
+                <IndExe>1</IndExe>
+                <NmbItem>Servicio Simpliroute recurrente</NmbItem>
+                <DscItem>Servicio Simpliroute recurrente
+ - 1 Meses
+03/04/2026 a 02/05/2026</DscItem>
+                <QtyItem>12.000000</QtyItem>
+                <UnmdItem>U</UnmdItem>
+                <PrcItem>40.000000</PrcItem>
+                <OtrMnda>
+                    <PrcOtrMon>36638</PrcOtrMon>
+                    <Moneda>CLP</Moneda>
+                    <FctConv>915.9491</FctConv>
+                    <DctoOtrMnda>43966</DctoOtrMnda>
+                    <MontoItemOtrMnda>395690</MontoItemOtrMnda>
+                </OtrMnda>
+                <DescuentoPct>10.00</DescuentoPct>
+                <DescuentoMonto>48</DescuentoMonto>
+                <MontoItem>432.00</MontoItem>
+            </Detalle>
+            <Detalle>
+                <NroLinDet>2</NroLinDet>
+                <IndExe>1</IndExe>
+                <NmbItem>Servicio Simpliroute recurrente</NmbItem>
+                <DscItem>SAsesoria Tecnica - 
+CheckList Camiones  - 1 Meses
+03/04/2026 a 02/05/2026</DscItem>
+                <QtyItem>1.000000</QtyItem>
+                <UnmdItem>U</UnmdItem>
+                <PrcItem>20.000000</PrcItem>
+                <OtrMnda>
+                    <PrcOtrMon>18319</PrcOtrMon>
+                    <Moneda>CLP</Moneda>
+                    <FctConv>915.9491</FctConv>
+                    <MontoItemOtrMnda>18319</MontoItemOtrMnda>
+                </OtrMnda>
+                <MontoItem>20.00</MontoItem>
+            </Detalle>
+            <TED version="1.0">
+            <DD>
+                <RE>76403266-7</RE>
+                <TD>110</TD>
+                <F>700</F>
+                <FE>2026-04-03</FE>
+                <RR>55555555-5</RR>
+                <RSR>AMBIPAR ENVIRONMENT PARAGUAY SA</RSR>
+                <MNT>452.00</MNT>
+                <IT1>Servicio Simpliroute recurrente</IT1>
+                <CAF version="1.0">
+                    <DA>
+                        <RE>76403266-7</RE>
+                        <RS>SIMPLIT SPA</RS>
+                        <TD>110</TD>
+                        <RNG>
+                            <D>676</D>
+                            <H>715</H>
+                        </RNG>
+                        <FA>2025-11-20</FA>
+                        <RSAPK>
+                            <M>qOMzF6+iP8eBAxlT4wpSPp4jZqt6fJL/OarAV+IumC3xyvaxJaTI1uWXqju3qlNt7pdFFQ7/l52EtSS84v8/Iw==</M>
+                            <E>Aw==</E>
+                        </RSAPK>
+                        <IDK>300</IDK>
+                    </DA>
+                    <FRMA algoritmo="SHA1withRSA">V1HyVQ8QrnklyYI+OqTHqndSBTM4ZU6ugGkIiengBE74e/VM2gnEZE/ydLJVB1tqWyTr8NRHZ6PtDF7OGdYhCQ==</FRMA>
+                </CAF>
+                <TSTED>2026-04-03T03:00:18</TSTED>
+            </DD>
+                <FRMT algoritmo="SHA1withRSA">AFiO0zddTYvyQ73PtUd9UmiOsCQ+JnBBYwH+Ni7nsmZffdsOvstzKCuIcBK9gVQUeVyB+xBbSg0HjZ3RUSxvaw==</FRMT>
+            </TED><TmstFirma>2026-04-03T03:00:18</TmstFirma>
+            </Exportaciones>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod><Reference URI="#F700T110"><Transforms><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>vLFzBq84RGOies0mL1SY4lShl5Y=</DigestValue></Reference></SignedInfo><SignatureValue>ZUlJ5hIiSs1NvCXGz6TKDjTlCUPncCIRsp20oQqbJNn8OU0WLmlAr/hyfmVH5GxLaulnu7Zlf/KSec1ePZ3Giu+TzoC0Zygmjz7SkPr54TnRkSXQOmW2esAIOdyAjdjxI3PvdHVg6eJ7bdGD/di3XQRxCUqOGMefZXUHpV3CrV7dTM6MZTDifEddsis/FU4KwAS1Ni0pCxmBXGg3o1w8duYQxZ6E+2vnC1MvgGDoIjl5eO40wS3ZSWOnROJueSEucNARm2ax839SRL4jGlG20Zk2g4l9sSwPmspROu61cK4oUCD85+Lyx3DMM9sxBF40OcNxgffGlMVCMrNuHDz37w==</SignatureValue><KeyInfo><KeyValue><RSAKeyValue><Modulus>rIzfEH4C/qtowenZV+vbUQ7rQbhlt6D5kO4oQd3v4oL3P/GfIqPXVSS4RN4lBsej0XQ7KCH728/BaDkMsr8H3tplGTbaov7w9LM9HqUQRtaAe5LXXt+k7unEd78Bo8dw+curIVGTTViaFdKvVzcO9wmyzOUchEsry/IsqGaGUvU9dPPsQGZntBp1y6MqJfyUym2biFW3CdGzjLcaDvxnq3tF+9LIlpQGB/8GxqnZjRDxZiJ4ESCUhWO+I+cVple4qGt/QNImgwoQjJP5VnFmMydhtSqv1TnxaX5VZYxff/UOlyhaR4itBAYxcvfB74JCOCj/xKCKKMkLUA1wVPOTFw==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue></KeyValue><X509Data><X509Certificate>
+MIIGhzCCBW+gAwIBAgIDBJ3vMA0GCSqGSIb3DQEBCwUAMIGmMQswCQYDVQQGEwJD
+TDEYMBYGA1UEChMPQWNlcHRhLmNvbSBTLkEuMUgwRgYDVQQDEz9BY2VwdGEuY29t
+IEF1dG9yaWRhZCBDZXJ0aWZpY2Fkb3JhIENsYXNlIDMgUGVyc29uYSBOYXR1cmFs
+IC0gRzQxHjAcBgkqhkiG9w0BCQEWD2luZm9AYWNlcHRhLmNvbTETMBEGA1UEBRMK
+OTY5MTkwNTAtODAeFw0yNDA5MjcxOTMyMDlaFw0yNzA5MjcxOTMyMDlaMIGSMQsw
+CQYDVQQGEwJDTDEYMBYGA1UEDBMPUEVSU09OQSBOQVRVUkFMMSgwJgYDVQQDEx9B
+TFZBUk8gUklDQVJETyBFQ0hFVkVSUklBIFNPTElTMSowKAYJKoZIhvcNAQkBFhtG
+QUNUVVJBQ0lPTkBTSU1QTElST1VURS5DT00xEzARBgNVBAUTCjE2MzU4NDg3LTUw
+ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCsjN8QfgL+q2jB6dlX69tR
+DutBuGW3oPmQ7ihB3e/igvc/8Z8io9dVJLhE3iUGx6PRdDsoIfvbz8FoOQyyvwfe
+2mUZNtqi/vD0sz0epRBG1oB7ktde36Tu6cR3vwGjx3D5y6shUZNNWJoV0q9XNw73
+CbLM5RyESyvL8iyoZoZS9T108+xAZme0GnXLoyol/JTKbZuIVbcJ0bOMtxoO/Ger
+e0X70siWlAYH/wbGqdmNEPFmIngRIJSFY74j5xWmV7ioa39A0iaDChCMk/lWcWYz
+J2G1Kq/VOfFpflVljF9/9Q6XKFpHiK0EBjFy98HvgkI4KP/EoIooyQtQDXBU85MX
+AgMBAAGjggLOMIICyjAfBgNVHSMEGDAWgBSq/b3F6TdN9plNV47BcRr568MG4zAd
+BgNVHQ4EFgQUNmow9K+QVKw4NhUDm0JXtJBnCJEwCwYDVR0PBAQDAgTwMB0GA1Ud
+JQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDARBglghkgBhvhCAQEEBAMCBaAwgfoG
+A1UdIASB8jCB7zCB7AYIKwYBBAG1awIwgd8wMQYIKwYBBQUHAgEWJWh0dHBzOi8v
+YWNnNC5hY2VwdGEuY29tL0NQUy1BY2VwdGFjb20wgakGCCsGAQUFBwICMIGcMBYW
+D0FjZXB0YS5jb20gUy5BLjADAgECGoGBRWwgdGl0dWxhciBoYSBzaWRvIHZhbGlk
+YWRvIGVuIGZvcm1hIHByZXNlbmNpYWwsIHF1ZWRhbmRvIGhhYmlsaXRhZG8gZWwg
+Q2VydGlmaWNhZG8gcGFyYSB1c28gdHJpYnV0YXJpbywgcGFnb3MsIGNvbWVyY2lv
+IHkgb3Ryb3MuMFoGA1UdEgRTMFGgGAYIKwYBBAHBAQKgDBYKOTY5MTkwNTAtOKAk
+BggrBgEFBQcIA6AYMBYMCjk2OTE5MDUwLTgGCCsGAQQBwQECgQ9pbmZvQGFjZXB0
+YS5jb20wZgYDVR0RBF8wXaAYBggrBgEEAcEBAaAMFgoxNjM1ODQ4Ny01oCQGCCsG
+AQUFBwgDoBgwFgwKMTYzNTg0ODctNQYIKwYBBAHBAQKBG0ZBQ1RVUkFDSU9OQFNJ
+TVBMSVJPVVRFLkNPTTBHBggrBgEFBQcBAQQ7MDkwNwYIKwYBBQUHMAGGK2h0dHBz
+Oi8vYWNnNC5hY2VwdGEuY29tL2FjZzQvb2NzcC9DbGFzZTMtRzQwPwYDVR0fBDgw
+NjA0oDKgMIYuaHR0cHM6Ly9hY2c0LmFjZXB0YS5jb20vYWNnNC9jcmwvQ2xhc2Uz
+LUc0LmNybDANBgkqhkiG9w0BAQsFAAOCAQEAON1CsCd5zGGv4l6n/sZG/eoKE/AT
+rHfGfjIYuCFmzmPQzlHmRfhq3SqLFGtsEM9fgeTlO4PlGR5TdztETQ9CTX9hJvsU
+vBb0K8CwUIg0RzYTH0aZvtGKPbxGKmZik3iUEgisi+aUsjl7EFaN44rt3cO1sFRs
+VbzsH0yhrQT/ECN2IGM1EcNhyZoO4nOvdx3ENi9bB0CmziVioftdSLWs2tIlC4fg
+gqZCXiicNhtYS14usatBN16c1FDEm/eegAyNo6t6ysNk7x3UzcID5j1J66L3J8b4
+lpgqKrEZy3JwDTABsoFDXeQJyvfYu+U3JPFaBNp8Tl1+NU0ZR0myCSgsYQ==</X509Certificate></X509Data></KeyInfo></Signature></DTE>
+    </SetDTE>
+
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod><Reference URI="#SetDoc"><Transforms><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>htuIbvr2AmaPjUZ2XxN5YYF0A54=</DigestValue></Reference></SignedInfo><SignatureValue>E+ZOUcp0fOITOJgjxSh7uwqnhPC/CGFAnVOhRBEdDJN3vxiGj/M9YHOCqb3HT2aPx0SJ8eZ/p+PAvEjXS3znVn/He7kEHjtdXi+MQH4O5pMYr88glDq04WtbCIn0ax0ulTw6BRZgJbj7eV08Zx6zoU2ZLjLT7QFr3AFTDIyg0+seT8bubVnV6FhZAwXPx0D378cHNjo9uNMJAWE5qei5LyDg/BzxVrEp/12Mmoab/I/ajenhJ2IYy4Ad+9sAmvzLPgXxYvfkvFCV0TDtXTl4xOxeqYsi+Muo2lRaJTyQD5vhVXAmjJ6KnJCYt3YE+vCGZ6If4EDBhXTwdQ1RqWwqrQ==</SignatureValue><KeyInfo><KeyValue><RSAKeyValue><Modulus>rIzfEH4C/qtowenZV+vbUQ7rQbhlt6D5kO4oQd3v4oL3P/GfIqPXVSS4RN4lBsej0XQ7KCH728/BaDkMsr8H3tplGTbaov7w9LM9HqUQRtaAe5LXXt+k7unEd78Bo8dw+curIVGTTViaFdKvVzcO9wmyzOUchEsry/IsqGaGUvU9dPPsQGZntBp1y6MqJfyUym2biFW3CdGzjLcaDvxnq3tF+9LIlpQGB/8GxqnZjRDxZiJ4ESCUhWO+I+cVple4qGt/QNImgwoQjJP5VnFmMydhtSqv1TnxaX5VZYxff/UOlyhaR4itBAYxcvfB74JCOCj/xKCKKMkLUA1wVPOTFw==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue></KeyValue><X509Data><X509Certificate>
+MIIGhzCCBW+gAwIBAgIDBJ3vMA0GCSqGSIb3DQEBCwUAMIGmMQswCQYDVQQGEwJD
+TDEYMBYGA1UEChMPQWNlcHRhLmNvbSBTLkEuMUgwRgYDVQQDEz9BY2VwdGEuY29t
+IEF1dG9yaWRhZCBDZXJ0aWZpY2Fkb3JhIENsYXNlIDMgUGVyc29uYSBOYXR1cmFs
+IC0gRzQxHjAcBgkqhkiG9w0BCQEWD2luZm9AYWNlcHRhLmNvbTETMBEGA1UEBRMK
+OTY5MTkwNTAtODAeFw0yNDA5MjcxOTMyMDlaFw0yNzA5MjcxOTMyMDlaMIGSMQsw
+CQYDVQQGEwJDTDEYMBYGA1UEDBMPUEVSU09OQSBOQVRVUkFMMSgwJgYDVQQDEx9B
+TFZBUk8gUklDQVJETyBFQ0hFVkVSUklBIFNPTElTMSowKAYJKoZIhvcNAQkBFhtG
+QUNUVVJBQ0lPTkBTSU1QTElST1VURS5DT00xEzARBgNVBAUTCjE2MzU4NDg3LTUw
+ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCsjN8QfgL+q2jB6dlX69tR
+DutBuGW3oPmQ7ihB3e/igvc/8Z8io9dVJLhE3iUGx6PRdDsoIfvbz8FoOQyyvwfe
+2mUZNtqi/vD0sz0epRBG1oB7ktde36Tu6cR3vwGjx3D5y6shUZNNWJoV0q9XNw73
+CbLM5RyESyvL8iyoZoZS9T108+xAZme0GnXLoyol/JTKbZuIVbcJ0bOMtxoO/Ger
+e0X70siWlAYH/wbGqdmNEPFmIngRIJSFY74j5xWmV7ioa39A0iaDChCMk/lWcWYz
+J2G1Kq/VOfFpflVljF9/9Q6XKFpHiK0EBjFy98HvgkI4KP/EoIooyQtQDXBU85MX
+AgMBAAGjggLOMIICyjAfBgNVHSMEGDAWgBSq/b3F6TdN9plNV47BcRr568MG4zAd
+BgNVHQ4EFgQUNmow9K+QVKw4NhUDm0JXtJBnCJEwCwYDVR0PBAQDAgTwMB0GA1Ud
+JQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDARBglghkgBhvhCAQEEBAMCBaAwgfoG
+A1UdIASB8jCB7zCB7AYIKwYBBAG1awIwgd8wMQYIKwYBBQUHAgEWJWh0dHBzOi8v
+YWNnNC5hY2VwdGEuY29tL0NQUy1BY2VwdGFjb20wgakGCCsGAQUFBwICMIGcMBYW
+D0FjZXB0YS5jb20gUy5BLjADAgECGoGBRWwgdGl0dWxhciBoYSBzaWRvIHZhbGlk
+YWRvIGVuIGZvcm1hIHByZXNlbmNpYWwsIHF1ZWRhbmRvIGhhYmlsaXRhZG8gZWwg
+Q2VydGlmaWNhZG8gcGFyYSB1c28gdHJpYnV0YXJpbywgcGFnb3MsIGNvbWVyY2lv
+IHkgb3Ryb3MuMFoGA1UdEgRTMFGgGAYIKwYBBAHBAQKgDBYKOTY5MTkwNTAtOKAk
+BggrBgEFBQcIA6AYMBYMCjk2OTE5MDUwLTgGCCsGAQQBwQECgQ9pbmZvQGFjZXB0
+YS5jb20wZgYDVR0RBF8wXaAYBggrBgEEAcEBAaAMFgoxNjM1ODQ4Ny01oCQGCCsG
+AQUFBwgDoBgwFgwKMTYzNTg0ODctNQYIKwYBBAHBAQKBG0ZBQ1RVUkFDSU9OQFNJ
+TVBMSVJPVVRFLkNPTTBHBggrBgEFBQcBAQQ7MDkwNwYIKwYBBQUHMAGGK2h0dHBz
+Oi8vYWNnNC5hY2VwdGEuY29tL2FjZzQvb2NzcC9DbGFzZTMtRzQwPwYDVR0fBDgw
+NjA0oDKgMIYuaHR0cHM6Ly9hY2c0LmFjZXB0YS5jb20vYWNnNC9jcmwvQ2xhc2Uz
+LUc0LmNybDANBgkqhkiG9w0BAQsFAAOCAQEAON1CsCd5zGGv4l6n/sZG/eoKE/AT
+rHfGfjIYuCFmzmPQzlHmRfhq3SqLFGtsEM9fgeTlO4PlGR5TdztETQ9CTX9hJvsU
+vBb0K8CwUIg0RzYTH0aZvtGKPbxGKmZik3iUEgisi+aUsjl7EFaN44rt3cO1sFRs
+VbzsH0yhrQT/ECN2IGM1EcNhyZoO4nOvdx3ENi9bB0CmziVioftdSLWs2tIlC4fg
+gqZCXiicNhtYS14usatBN16c1FDEm/eegAyNo6t6ysNk7x3UzcID5j1J66L3J8b4
+lpgqKrEZy3JwDTABsoFDXeQJyvfYu+U3JPFaBNp8Tl1+NU0ZR0myCSgsYQ==</X509Certificate></X509Data></KeyInfo></Signature></EnvioDTE>
