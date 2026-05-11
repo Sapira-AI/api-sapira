@@ -17,15 +17,9 @@ export class ClientEntityClient {
 	@Column({ type: 'boolean', default: false })
 	is_primary: boolean;
 
-	@Column({ type: 'uuid', nullable: true })
-	created_by?: string;
-
 	@CreateDateColumn({ type: 'timestamp with time zone' })
 	created_at: Date;
 
-	@Column({ type: 'timestamp with time zone', nullable: true })
-	updated_at?: Date;
-
-	@Column({ type: 'boolean', default: true })
-	is_active: boolean;
+	@Column({ type: 'uuid', nullable: true })
+	created_by?: string;
 }

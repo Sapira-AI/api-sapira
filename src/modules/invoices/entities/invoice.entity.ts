@@ -5,8 +5,14 @@ export class Invoice {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
 
-	@Column({ type: 'uuid' })
-	contract_id: string;
+	@Column({ type: 'uuid', nullable: true })
+	company_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	client_id?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	contract_id?: string;
 
 	@Column({ type: 'text', nullable: true })
 	invoice_number?: string;
@@ -17,65 +23,23 @@ export class Invoice {
 	@Column({ type: 'date', nullable: true })
 	due_date?: Date;
 
-	@Column({ type: 'numeric', precision: 20, scale: 2 })
-	amount_contract_currency: number;
-
-	@Column({ type: 'text' })
-	contract_currency: string;
-
-	@Column({ type: 'numeric', precision: 20, scale: 2, nullable: true })
-	amount_invoice_currency?: number;
+	@Column({ type: 'text', nullable: true })
+	contract_currency?: string;
 
 	@Column({ type: 'text', nullable: true })
 	invoice_currency?: string;
 
-	@Column({ type: 'numeric', precision: 20, scale: 8, nullable: true })
-	fx_contract_to_invoice?: number;
+	@Column({ type: 'numeric', precision: 18, scale: 6, nullable: true })
+	amount_contract_currency?: number;
 
-	@Column({ type: 'numeric', precision: 20, scale: 2, nullable: true })
-	total_invoice_currency?: number;
+	@Column({ type: 'numeric', nullable: true })
+	amount_invoice_currency?: number;
 
-	@Column({ type: 'numeric', precision: 20, scale: 2, nullable: true })
+	@Column({ type: 'numeric', nullable: true })
 	vat?: number;
 
-	@Column({ type: 'text' })
-	status: string;
-
-	@Column({ type: 'text', nullable: true })
-	invoice_type?: string;
-
-	@Column({ type: 'text', nullable: true })
-	document_type?: string;
-
-	@Column({ type: 'uuid', nullable: true })
-	holding_id?: string;
-
-	@Column({ type: 'uuid', nullable: true })
-	client_entity_id?: string;
-
-	@Column({ type: 'uuid', nullable: true })
-	company_id?: string;
-
-	@Column({ type: 'text', nullable: true })
-	notes?: string;
-
-	@Column({ type: 'integer', nullable: true })
-	odoo_invoice_id?: number;
-
-	@Column({ type: 'text', nullable: true })
-	stripe_id?: string;
-
-	@Column({ type: 'timestamp with time zone', nullable: true })
-	sent_to_odoo_at?: Date;
-
-	@Column({ type: 'boolean', default: false, nullable: true })
-	auto_invoice?: boolean;
-
-	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
-	created_at: Date;
-
-	@Column({ type: 'uuid', nullable: true })
-	client_id?: string;
+	@Column({ type: 'numeric', nullable: true })
+	total_invoice_currency?: number;
 
 	@Column({ type: 'numeric', nullable: true })
 	amount_system_currency?: number;
@@ -83,11 +47,29 @@ export class Invoice {
 	@Column({ type: 'numeric', nullable: true })
 	total_system_currency?: number;
 
+	@Column({ type: 'numeric', nullable: true })
+	fx_contract_to_invoice?: number;
+
+	@Column({ type: 'text', nullable: true })
+	status?: string;
+
 	@Column({ type: 'text', nullable: true })
 	pdf_url?: string;
 
+	@CreateDateColumn({ type: 'timestamp without time zone', default: () => 'now()' })
+	created_at: Date;
+
+	@Column({ type: 'uuid' })
+	holding_id: string;
+
+	@Column({ type: 'text', nullable: true, default: 'Automatica' })
+	invoice_type?: string;
+
 	@Column({ type: 'text', nullable: true, default: 'FAC' })
 	invoice_series?: string;
+
+	@Column({ type: 'text', nullable: true, default: 'FACTURA' })
+	document_type?: string;
 
 	@Column({ type: 'text', nullable: true })
 	issuer_tax_id?: string;
@@ -97,6 +79,9 @@ export class Invoice {
 
 	@Column({ type: 'text', nullable: true })
 	issuer_address?: string;
+
+	@Column({ type: 'uuid', nullable: true })
+	client_entity_id?: string;
 
 	@Column({ type: 'text', nullable: true })
 	client_tax_id?: string;
@@ -113,7 +98,10 @@ export class Invoice {
 	@Column({ type: 'text', nullable: true })
 	folio_fiscal_prev?: string;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'text', nullable: true })
+	notes?: string;
+
+	@Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
 	attachments?: object;
 
 	@Column({ type: 'timestamp with time zone', nullable: true })
@@ -140,7 +128,7 @@ export class Invoice {
 	@Column({ type: 'text', nullable: true })
 	legacy_source_system?: string;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', nullable: true, default: () => "'{}'" })
 	custom_fields?: object;
 
 	@Column({ type: 'uuid', nullable: true })
@@ -167,8 +155,20 @@ export class Invoice {
 	@Column({ type: 'text', nullable: true })
 	split_reason?: string;
 
+	@Column({ type: 'boolean', nullable: true, default: false })
+	auto_invoice?: boolean;
+
+	@Column({ type: 'integer', nullable: true })
+	odoo_invoice_id?: number;
+
+	@Column({ type: 'timestamp with time zone', nullable: true })
+	sent_to_odoo_at?: Date;
+
 	@Column({ type: 'uuid', nullable: true })
 	subscription_id?: string;
+
+	@Column({ type: 'text', nullable: true })
+	stripe_id?: string;
 
 	@Column({ type: 'text', nullable: true })
 	invoice_terms_and_conditions?: string;

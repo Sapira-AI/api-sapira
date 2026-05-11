@@ -47,7 +47,7 @@ export class Company {
 	@Column({ type: 'text', nullable: true })
 	logo_url?: string;
 
-	@Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+	@Column({ type: 'timestamp without time zone', default: () => 'now()' })
 	created_at!: Date;
 
 	@Column({ type: 'uuid' })
