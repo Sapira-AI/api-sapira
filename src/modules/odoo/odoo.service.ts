@@ -1881,7 +1881,7 @@ export class OdooService {
 			};
 
 			// 1. Crear job para Partners (Clientes)
-			const partnersLog = await this.odooIntegrationLogService.createLog({
+			const { batchUuid: partnersJobId } = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'res.partner',
 				target_table: 'odoo_partners_stg',
@@ -1897,7 +1897,7 @@ export class OdooService {
 			});
 
 			// 2. Crear job para Invoice Lines (Líneas de Factura)
-			const invoiceLinesLog = await this.odooIntegrationLogService.createLog({
+			const { batchUuid: invoiceLinesJobId } = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'account.move.line',
 				target_table: 'odoo_invoice_lines_stg',
@@ -1913,7 +1913,7 @@ export class OdooService {
 			});
 
 			// 3. Crear job para Invoices (Facturas)
-			const invoicesLog = await this.odooIntegrationLogService.createLog({
+			const { batchUuid: invoicesJobId } = await this.odooIntegrationLogService.createLog({
 				holding_id: data.holding_id,
 				source_table: 'account.move',
 				target_table: 'odoo_invoices_stg',
@@ -1928,15 +1928,8 @@ export class OdooService {
 				metadata: { ...baseMetadata, entity_type: 'invoices' },
 			});
 
-			const savedPartnersLog = partnersLog;
-			const savedInvoiceLinesLog = invoiceLinesLog;
-			const savedInvoicesLog = invoicesLog;
-
 			// Iniciar procesos asíncronos en secuencia para respetar dependencias de foreign keys
 			// No usar await aquí para no bloquear la respuesta HTTP
-			const partnersJobId = (savedPartnersLog._id as any).toString();
-			const invoiceLinesJobId = (savedInvoiceLinesLog._id as any).toString();
-			const invoicesJobId = (savedInvoicesLog._id as any).toString();
 
 			setImmediate(async () => {
 				try {

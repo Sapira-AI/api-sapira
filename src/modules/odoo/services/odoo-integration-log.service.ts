@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -55,10 +57,12 @@ export class OdooIntegrationLogService {
 		private readonly odooIntegrationLogModel: Model<OdooIntegrationLogDocument>
 	) {}
 
-	async createLog(dto: CreateOdooIntegrationLogDto): Promise<OdooIntegrationLogDocument> {
+	async createLog(dto: CreateOdooIntegrationLogDto): Promise<{ log: OdooIntegrationLogDocument; batchUuid: string }> {
 		try {
+			const batchUuid = randomUUID();
 			const log = new this.odooIntegrationLogModel({
 				...dto,
+				batch_uuid: batchUuid,
 				status: dto.status || 'running',
 				records_processed: dto.records_processed || 0,
 				records_success: dto.records_success || 0,
@@ -67,25 +71,26 @@ export class OdooIntegrationLogService {
 				started_at: dto.started_at || new Date(),
 			});
 
-			return await log.save();
+			const savedLog = await log.save();
+			return { log: savedLog, batchUuid };
 		} catch (error) {
 			this.logger.error('Error creando log de integración:', error);
 			throw error;
 		}
 	}
 
-	async updateLog(logId: string, dto: UpdateOdooIntegrationLogDto): Promise<OdooIntegrationLogDocument | null> {
+	async updateLog(batchUuid: string, dto: UpdateOdooIntegrationLogDto): Promise<OdooIntegrationLogDocument | null> {
 		try {
-			return await this.odooIntegrationLogModel.findByIdAndUpdate(logId, { $set: dto }, { new: true }).exec();
+			return await this.odooIntegrationLogModel.findOneAndUpdate({ batch_uuid: batchUuid }, { $set: dto }, { new: true }).exec();
 		} catch (error) {
 			this.logger.error('Error actualizando log de integración:', error);
 			throw error;
 		}
 	}
 
-	async getLogById(logId: string): Promise<OdooIntegrationLogDocument | null> {
+	async getLogById(batchUuid: string): Promise<OdooIntegrationLogDocument | null> {
 		try {
-			return await this.odooIntegrationLogModel.findById(logId).exec();
+			return await this.odooIntegrationLogModel.findOne({ batch_uuid: batchUuid }).exec();
 		} catch (error) {
 			this.logger.error('Error obteniendo log de integración:', error);
 			throw error;
@@ -111,7 +116,7 @@ export class OdooIntegrationLogService {
 				: integrationLog.execution_time_ms || null;
 
 			return {
-				job_id: (integrationLog._id as any).toString(),
+				job_id: integrationLog.batch_uuid,
 				status: integrationLog.status || 'running',
 				total_records: integrationLog.progress_total || 0,
 				records_processed: integrationLog.records_processed || 0,
@@ -129,9 +134,9 @@ export class OdooIntegrationLogService {
 		}
 	}
 
-	async cancelJob(jobId: string, holdingId: string): Promise<void> {
+	async cancelJob(batchUuid: string, holdingId: string): Promise<void> {
 		try {
-			const integrationLog = await this.odooIntegrationLogModel.findOne({ _id: jobId, holding_id: holdingId }).exec();
+			const integrationLog = await this.odooIntegrationLogModel.findOne({ batch_uuid: batchUuid, holding_id: holdingId }).exec();
 
 			if (!integrationLog) {
 				throw new Error('Job no encontrado');
@@ -141,7 +146,7 @@ export class OdooIntegrationLogService {
 				throw new Error('El job ya finalizó');
 			}
 
-			await this.updateLog(jobId, {
+			await this.updateLog(batchUuid, {
 				status: 'cancelled',
 				completed_at: new Date(),
 				error_details: { message: 'Cancelado por el usuario' },
@@ -152,9 +157,9 @@ export class OdooIntegrationLogService {
 		}
 	}
 
-	async isJobCancelled(jobId: string): Promise<boolean> {
+	async isJobCancelled(batchUuid: string): Promise<boolean> {
 		try {
-			const job = await this.odooIntegrationLogModel.findById(jobId).select('status').exec();
+			const job = await this.odooIntegrationLogModel.findOne({ batch_uuid: batchUuid }).select('status').exec();
 			return job?.status === 'cancelled';
 		} catch (error) {
 			this.logger.error('Error verificando si job está cancelado:', error);
