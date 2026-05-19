@@ -58,6 +58,9 @@ export class OdooIntegrationLog {
 
 	@Prop()
 	external_id?: string;
+
+	@Prop({ required: true, unique: true, index: true })
+	batch_uuid: string;
 }
 
 export const OdooIntegrationLogSchema = SchemaFactory.createForClass(OdooIntegrationLog);
@@ -65,3 +68,5 @@ export const OdooIntegrationLogSchema = SchemaFactory.createForClass(OdooIntegra
 OdooIntegrationLogSchema.index({ holding_id: 1, status: 1 });
 
 OdooIntegrationLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 31536000 });
+
+OdooIntegrationLogSchema.index({ batch_uuid: 1 }, { unique: true });

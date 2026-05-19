@@ -34,6 +34,7 @@ import { EmailsModule } from './modules/emails/emails.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { OdooModule } from './modules/odoo/odoo.module';
+import { SalesforceModule } from './modules/salesforce/salesforce.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
@@ -89,6 +90,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		UsersModule,
 		ClientsModule,
 		OdooModule,
+		SalesforceModule,
 		EmailModule,
 		EmailsModule,
 		BigQueryModule,
