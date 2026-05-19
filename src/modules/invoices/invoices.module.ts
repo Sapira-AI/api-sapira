@@ -16,6 +16,7 @@ import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
+import { InvoiceSchedulerInitService } from './invoice-scheduler-init.service';
 import { InvoiceSchedulerController } from './invoice-scheduler.controller';
 import { InvoiceSchedulerScheduler } from './invoice-scheduler.scheduler';
 import { InvoiceSchedulerService } from './invoice-scheduler.service';
@@ -33,7 +34,7 @@ import { InvoiceOdooSendLog, InvoiceOdooSendLogSchema } from './schemas/invoice-
 		EmailsModule,
 	],
 	controllers: [InvoicesController, InvoiceSchedulerController],
-	providers: [InvoicesService, InvoiceSchedulerService, InvoiceSchedulerScheduler, InvoiceNotificationService],
+	providers: [InvoicesService, InvoiceSchedulerService, InvoiceSchedulerScheduler, InvoiceSchedulerInitService, InvoiceNotificationService],
 	exports: [InvoicesService, InvoiceSchedulerService, InvoiceNotificationService],
 })
 export class InvoicesModule {}

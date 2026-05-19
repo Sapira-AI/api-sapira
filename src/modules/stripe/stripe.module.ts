@@ -20,6 +20,7 @@ import { StripeConnectionController } from './stripe-connection.controller';
 import { StripeConnectionService } from './stripe-connection.service';
 import { StripeIngestionController } from './stripe-ingestion.controller';
 import { StripeIngestionService } from './stripe-ingestion.service';
+import { StripeInitService } from './stripe-init.service';
 import { StripeController } from './stripe.controller';
 import { StripeProviders } from './stripe.provider';
 import { StripeScheduler } from './stripe.scheduler';
@@ -49,6 +50,7 @@ import { StripeService } from './stripe.service';
 		StripeSyncService,
 		StripeStagingService,
 		StripeScheduler,
+		StripeInitService,
 	],
 	exports: [StripeService, StripeConnectionService, StripeIngestionService, StripeSyncService, StripeStagingService],
 })
