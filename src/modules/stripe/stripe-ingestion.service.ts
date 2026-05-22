@@ -4,13 +4,12 @@ import Stripe from 'stripe';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
-import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
-
 import { CountStripeRecordsDto, SyncStripeDataDto } from './dtos/sync-stripe-data.dto';
 import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeCustomersStg } from './entities/stripe-customers-stg.entity';
 import { StripeInvoicesStg } from './entities/stripe-invoices-stg.entity';
 import { StripeSubscriptionsStg } from './entities/stripe-subscriptions-stg.entity';
+import { StripeIntegrationLogService } from './services/stripe-integration-log.service';
 import { StripeConnectionService } from './stripe-connection.service';
 import { STRIPE_CLIENT } from './stripe.provider';
 
@@ -28,9 +27,8 @@ export class StripeIngestionService {
 		private readonly customersStgRepository: Repository<StripeCustomersStg>,
 		@InjectRepository(StripeInvoicesStg)
 		private readonly invoicesStgRepository: Repository<StripeInvoicesStg>,
-		@InjectRepository(IntegrationLog)
-		private readonly integrationLogRepository: Repository<IntegrationLog>,
-		private readonly connectionService: StripeConnectionService
+		private readonly connectionService: StripeConnectionService,
+		private readonly stripeIntegrationLogService: StripeIntegrationLogService
 	) {}
 
 	async countRecords(dto: CountStripeRecordsDto, holdingId: string) {
@@ -743,62 +741,63 @@ export class StripeIngestionService {
 
 		const batch_id = uuidv4();
 
-		// Crear jobs de integración para tracking
-		const invoicesJob = this.integrationLogRepository.create({
-			holding_id: holdingId,
-			source_table: 'stripe.invoices',
-			target_table: 'stripe_invoices_stg',
-			status: 'running',
-			records_processed: 0,
-			records_success: 0,
-			records_failed: 0,
-			started_at: new Date(),
-			integration_type: 'stripe_invoices_sync',
-			progress_total: 0,
-			connection_id: dto.connection_id,
-			metadata: { batch_id, entity_type: 'invoices' },
-		});
-
-		const customersJob = this.integrationLogRepository.create({
-			holding_id: holdingId,
-			source_table: 'stripe.customers',
-			target_table: 'stripe_customers_stg',
-			status: 'running',
-			records_processed: 0,
-			records_success: 0,
-			records_failed: 0,
-			started_at: new Date(),
-			integration_type: 'stripe_customers_sync',
-			progress_total: 0,
-			connection_id: dto.connection_id,
-			metadata: { batch_id, entity_type: 'customers' },
-		});
-
-		const subscriptionsJob = this.integrationLogRepository.create({
-			holding_id: holdingId,
-			source_table: 'stripe.subscriptions',
-			target_table: 'stripe_subscriptions_stg',
-			status: 'running',
-			records_processed: 0,
-			records_success: 0,
-			records_failed: 0,
-			started_at: new Date(),
-			integration_type: 'stripe_subscriptions_sync',
-			progress_total: 0,
-			connection_id: dto.connection_id,
-			metadata: { batch_id, entity_type: 'subscriptions' },
-		});
-
-		const [savedInvoicesJob, savedCustomersJob, savedSubscriptionsJob] = await Promise.all([
-			this.integrationLogRepository.save(invoicesJob),
-			this.integrationLogRepository.save(customersJob),
-			this.integrationLogRepository.save(subscriptionsJob),
+		// Crear jobs de integración para tracking en MongoDB
+		const [invoicesJobResult, customersJobResult, subscriptionsJobResult] = await Promise.all([
+			this.stripeIntegrationLogService.createLog({
+				holding_id: holdingId,
+				source_table: 'stripe.invoices',
+				target_table: 'stripe_invoices_stg',
+				status: 'running',
+				records_processed: 0,
+				records_success: 0,
+				records_failed: 0,
+				started_at: new Date(),
+				integration_type: 'stripe_invoices_sync',
+				progress_total: 0,
+				connection_id: dto.connection_id,
+				metadata: { batch_id, entity_type: 'invoices' },
+			}),
+			this.stripeIntegrationLogService.createLog({
+				holding_id: holdingId,
+				source_table: 'stripe.customers',
+				target_table: 'stripe_customers_stg',
+				status: 'running',
+				records_processed: 0,
+				records_success: 0,
+				records_failed: 0,
+				started_at: new Date(),
+				integration_type: 'stripe_customers_sync',
+				progress_total: 0,
+				connection_id: dto.connection_id,
+				metadata: { batch_id, entity_type: 'customers' },
+			}),
+			this.stripeIntegrationLogService.createLog({
+				holding_id: holdingId,
+				source_table: 'stripe.subscriptions',
+				target_table: 'stripe_subscriptions_stg',
+				status: 'running',
+				records_processed: 0,
+				records_success: 0,
+				records_failed: 0,
+				started_at: new Date(),
+				integration_type: 'stripe_subscriptions_sync',
+				progress_total: 0,
+				connection_id: dto.connection_id,
+				metadata: { batch_id, entity_type: 'subscriptions' },
+			}),
 		]);
 
 		// Ejecutar sincronización en background usando setImmediate
 		setImmediate(async () => {
 			try {
-				await this.executeSyncInBackground(dto, holdingId, batch_id, savedInvoicesJob.id, savedCustomersJob.id, savedSubscriptionsJob.id);
+				await this.executeSyncInBackground(
+					dto,
+					holdingId,
+					batch_id,
+					invoicesJobResult.batchUuid,
+					customersJobResult.batchUuid,
+					subscriptionsJobResult.batchUuid
+				);
 			} catch (error) {
 				this.logger.error('❌ Error en sincronización background:', error);
 			}
@@ -810,9 +809,9 @@ export class StripeIngestionService {
 			message: 'Sincronización iniciada',
 			batch_id,
 			job_ids: {
-				invoices: savedInvoicesJob.id,
-				customers: savedCustomersJob.id,
-				subscriptions: savedSubscriptionsJob.id,
+				invoices: invoicesJobResult.batchUuid,
+				customers: customersJobResult.batchUuid,
+				subscriptions: subscriptionsJobResult.batchUuid,
 			},
 		};
 
@@ -979,7 +978,7 @@ export class StripeIngestionService {
 				Object.assign(updateData, additionalData);
 			}
 
-			await this.integrationLogRepository.update(jobId, updateData);
+			await this.stripeIntegrationLogService.updateLog(jobId, updateData);
 		} catch (error) {
 			this.logger.error('Error actualizando estado del job:', error);
 		}
@@ -990,37 +989,7 @@ export class StripeIngestionService {
 	 */
 	async getJobStatus(jobId: string) {
 		try {
-			const integrationLog = await this.integrationLogRepository.findOne({
-				where: { id: jobId },
-			});
-
-			if (!integrationLog) {
-				throw new Error('Job no encontrado');
-			}
-
-			const progressPercentage = this.calculateProgressPercentage(
-				integrationLog.records_processed || 0,
-				integrationLog.progress_total || 0,
-				integrationLog.status || 'running'
-			);
-
-			const executionTime = integrationLog.completed_at
-				? new Date(integrationLog.completed_at).getTime() - new Date(integrationLog.started_at).getTime()
-				: integrationLog.execution_time_ms || null;
-
-			return {
-				job_id: integrationLog.id,
-				status: integrationLog.status || 'running',
-				total_records: integrationLog.progress_total || 0,
-				records_processed: integrationLog.records_processed || 0,
-				records_success: integrationLog.records_success || 0,
-				records_failed: integrationLog.records_failed || 0,
-				progress_percentage: progressPercentage,
-				execution_time_ms: executionTime,
-				started_at: integrationLog.started_at,
-				completed_at: integrationLog.completed_at || undefined,
-				error_details: integrationLog.error_details || undefined,
-			};
+			return await this.stripeIntegrationLogService.getJobStatus(jobId);
 		} catch (error) {
 			this.logger.error('Error obteniendo estado del job:', error);
 			throw error;
@@ -1032,11 +1001,7 @@ export class StripeIngestionService {
 	 */
 	private async isJobCancelled(jobId: string): Promise<boolean> {
 		try {
-			const job = await this.integrationLogRepository.findOne({
-				where: { id: jobId },
-				select: ['status'],
-			});
-			return job?.status === 'cancelled';
+			return await this.stripeIntegrationLogService.isJobCancelled(jobId);
 		} catch (error) {
 			this.logger.error('Error verificando estado del job:', error);
 			return false;
@@ -1048,26 +1013,8 @@ export class StripeIngestionService {
 	 */
 	async cancelJob(jobId: string, holdingId: string) {
 		try {
-			const integrationLog = await this.integrationLogRepository.findOne({
-				where: { id: jobId, holding_id: holdingId },
-			});
-
-			if (!integrationLog) {
-				throw new Error('Job no encontrado');
-			}
-
-			if (integrationLog.status === 'completed' || integrationLog.status === 'failed') {
-				throw new Error('El job ya finalizó');
-			}
-
-			await this.integrationLogRepository.update(jobId, {
-				status: 'cancelled',
-				completed_at: new Date(),
-				error_details: { message: 'Cancelado por el usuario' } as any,
-			});
-
+			await this.stripeIntegrationLogService.cancelJob(jobId, holdingId);
 			this.logger.log(`Job ${jobId} cancelado por el usuario`);
-
 			return { success: true, message: 'Job cancelado exitosamente' };
 		} catch (error) {
 			this.logger.error('Error cancelando job:', error);
@@ -1087,21 +1034,6 @@ export class StripeIngestionService {
 			this.logger.warn('Error comparando datos, asumiendo cambio:', error);
 			return true;
 		}
-	}
-
-	/**
-	 * Calcula el porcentaje de progreso de un job
-	 */
-	private calculateProgressPercentage(recordsProcessed: number, progressTotal: number, status: string): number {
-		if (status === 'completed') {
-			return 100;
-		}
-
-		if (!progressTotal || progressTotal === 0) {
-			return 0;
-		}
-
-		return Math.min(100, Math.round((recordsProcessed / progressTotal) * 100));
 	}
 
 	/**

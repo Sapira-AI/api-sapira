@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@/auth/auth.module';
-import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
 import { Product } from '@/modules/odoo/entities/products.entity';
 
 import { StripeStagingController } from './controllers/stripe-staging.controller';
@@ -14,6 +14,8 @@ import { StripeInvoicesStg } from './entities/stripe-invoices-stg.entity';
 import { StripeProductMapping } from './entities/stripe-product-mapping.entity';
 import { StripeSubscriptionsStg } from './entities/stripe-subscriptions-stg.entity';
 import { StripeSyncJob } from './entities/stripe-sync-job.entity';
+import { StripeIntegrationLog, StripeIntegrationLogSchema } from './schemas/stripe-integration-log.schema';
+import { StripeIntegrationLogService } from './services/stripe-integration-log.service';
 import { StripeStagingService } from './services/stripe-staging.service';
 import { StripeSyncService } from './services/stripe-sync.service';
 import { StripeConnectionController } from './stripe-connection.controller';
@@ -36,10 +38,10 @@ import { StripeService } from './stripe.service';
 			StripeCustomersStg,
 			StripeInvoicesStg,
 			StripeSyncJob,
-			IntegrationLog,
 			Product,
 			StripeProductMapping,
 		]),
+		MongooseModule.forFeature([{ name: StripeIntegrationLog.name, schema: StripeIntegrationLogSchema }]),
 	],
 	controllers: [StripeController, StripeConnectionController, StripeIngestionController, StripeSyncController, StripeStagingController],
 	providers: [
@@ -47,6 +49,7 @@ import { StripeService } from './stripe.service';
 		...StripeProviders,
 		StripeConnectionService,
 		StripeIngestionService,
+		StripeIntegrationLogService,
 		StripeSyncService,
 		StripeStagingService,
 		StripeScheduler,

@@ -46,6 +46,32 @@ export class SalesforceService {
 			success: true,
 			message: 'Successfully connected to Salesforce',
 			instanceUrl: authData.instance_url,
+			authMethod: 'password',
+		};
+	}
+
+	async connectWithClientCredentials(clientId: string, clientSecret: string, userId: string, holdingId: string, loginUrl?: string) {
+		const authData = await this.authService.authenticateWithClientCredentials(
+			clientId,
+			clientSecret,
+			holdingId,
+			loginUrl || 'https://login.salesforce.com'
+		);
+
+		await this.authService.storeClientCredentialsConnection(
+			authData,
+			clientId,
+			clientSecret,
+			userId,
+			holdingId,
+			loginUrl || 'https://login.salesforce.com'
+		);
+
+		return {
+			success: true,
+			message: 'Successfully connected to Salesforce using Client Credentials',
+			instanceUrl: authData.instance_url,
+			authMethod: 'client_credentials',
 		};
 	}
 

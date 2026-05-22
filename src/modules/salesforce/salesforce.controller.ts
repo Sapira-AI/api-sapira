@@ -2,7 +2,10 @@ import { Body, Controller, Delete, Get, Headers, HttpStatus, Post, UseGuards } f
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { SupabaseUser } from '@/auth/strategies/supabase.strategy';
+import { GetSupabaseUser } from '@/decorators/supabase-user.decorator';
 
+import { SalesforceClientCredentialsDto } from './dtos/salesforce-client-credentials.dto';
 import { SalesforceCredentialsDto } from './dtos/salesforce-credentials.dto';
 import { SalesforceQueryDto } from './dtos/salesforce-query.dto';
 import {
@@ -25,7 +28,7 @@ export class SalesforceController {
 
 	@Post('auth')
 	@ApiOperation({
-		summary: 'Conectar a Salesforce',
+		summary: 'Conectar a Salesforce (Username-Password Flow)',
 		description: 'Autentica y establece una conexión con Salesforce usando OAuth2 password grant',
 	})
 	@ApiResponse({
@@ -39,10 +42,38 @@ export class SalesforceController {
 	})
 	async authenticate(
 		@Body() credentials: SalesforceCredentialsDto,
-		@Headers('x-user-id') userId: string,
+		@GetSupabaseUser() user: SupabaseUser,
 		@Headers('x-holding-id') holdingId: string
 	): Promise<SalesforceAuthResponseDto> {
-		return this.salesforceService.connect(credentials, userId, holdingId);
+		return this.salesforceService.connect(credentials, user.id, holdingId);
+	}
+
+	@Post('auth/client-credentials')
+	@ApiOperation({
+		summary: 'Conectar a Salesforce (Client Credentials Flow)',
+		description: 'Autentica usando Client Credentials Flow (solo Client ID + Secret)',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Conexión establecida exitosamente con Client Credentials',
+		type: SalesforceAuthResponseDto,
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'Credenciales inválidas o error de autenticación',
+	})
+	async authenticateWithClientCredentials(
+		@Body() credentials: SalesforceClientCredentialsDto,
+		@GetSupabaseUser() user: SupabaseUser,
+		@Headers('x-holding-id') holdingId: string
+	): Promise<SalesforceAuthResponseDto> {
+		return this.salesforceService.connectWithClientCredentials(
+			credentials.clientId,
+			credentials.clientSecret,
+			user.id,
+			holdingId,
+			credentials.loginUrl
+		);
 	}
 
 	@Get('connection')
