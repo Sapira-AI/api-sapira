@@ -32,6 +32,9 @@ export class SalesforceAuthResponseDto {
 
 	@ApiProperty()
 	instanceUrl?: string;
+
+	@ApiProperty({ required: false })
+	authMethod?: string;
 }
 
 export class SalesforceQueryResponseDto {

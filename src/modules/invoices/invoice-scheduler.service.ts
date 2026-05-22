@@ -759,6 +759,51 @@ export class InvoiceSchedulerService {
 		this.logger.log(`   - contract.contract_number: ${invoice.contract?.contract_number || 'NO DEFINIDO'}`);
 		this.logger.log(`   - invoice_origin final: ${invoice.contract?.contract_number || 'UNDEFINED'}`);
 
+		// Determinar si requiere detracción (Perú >= 700 PEN)
+		let l10nPeEdiOperationType: string | undefined = undefined;
+
+		const normalizedCountry = invoice.company.country
+			?.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '');
+		if (normalizedCountry === 'peru') {
+			const totalAmount = parseFloat(invoice.total_invoice_currency?.toString() || '0');
+			let requiresDetraction = false;
+
+			if (invoice.invoice_currency === 'PEN') {
+				// Factura en soles: comparar directamente
+				requiresDetraction = totalAmount >= 700;
+				this.logger.log(`🇵🇪 Perú - Factura en PEN: ${totalAmount} >= 700? ${requiresDetraction}`);
+			} else if (invoice.invoice_currency === 'USD') {
+				// Factura en dólares: convertir 700 PEN a USD
+				try {
+					const exchangeRateData = await this.exchangeRatesService.getExchangeRateWithFallback('USD', 'PEN', invoice.issue_date);
+
+					if (exchangeRateData && exchangeRateData.rate) {
+						// 700 PEN / rate = equivalente en USD
+						const threshold = 700 / exchangeRateData.rate;
+						requiresDetraction = totalAmount >= threshold;
+
+						this.logger.log(
+							`🇵🇪 Perú - Factura en USD: ${totalAmount} >= ${threshold.toFixed(2)} (700 PEN / ${exchangeRateData.rate})? ${requiresDetraction}`
+						);
+					} else {
+						this.logger.warn(`⚠️ No se pudo obtener tipo de cambio USD/PEN para ${invoice.issue_date}`);
+					}
+				} catch (error) {
+					this.logger.error(`❌ Error al obtener tipo de cambio USD/PEN: ${error.message}`);
+				}
+			} else {
+				// Otras monedas: no aplicar detracción por ahora
+				this.logger.log(`🇵🇪 Perú - Moneda ${invoice.invoice_currency} no soportada para detracción`);
+			}
+
+			if (requiresDetraction) {
+				l10nPeEdiOperationType = '1001';
+				this.logger.log(`✅ Factura sujeta a detracción - l10n_pe_edi_operation_type: "1001"`);
+			}
+		}
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -772,6 +817,7 @@ export class InvoiceSchedulerService {
 			currency_id: currencyId,
 			auto_post: autoPost,
 			invoice_line_ids: invoiceLines,
+			l10n_pe_edi_operation_type: l10nPeEdiOperationType,
 		};
 	}
 

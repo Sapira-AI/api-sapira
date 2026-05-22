@@ -3,6 +3,7 @@ export * from './salesforce.service';
 export * from './salesforce.controller';
 export * from './entities/salesforce-connection.entity';
 export * from './entities/salesforce-opportunity-cache.entity';
+export * from './dtos/salesforce-client-credentials.dto';
 export * from './dtos/salesforce-credentials.dto';
 export * from './dtos/salesforce-query.dto';
 export * from './dtos/salesforce-sync.dto';

@@ -82,6 +82,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 	}
 
 	log(message: string, userId?: string, context?: string, metadata?: any) {
+		if (!this.pinoLogger) {
+			this.logger.log(message);
+			return;
+		}
 		const baseProps = this.getBaseProperties(message, userId);
 		this.pinoLogger.info({
 			...baseProps,
@@ -92,6 +96,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 	}
 
 	error(message: string, userId?: string, trace?: string, context?: string) {
+		if (!this.pinoLogger) {
+			this.logger.error(message);
+			return;
+		}
 		const baseProps = this.getBaseProperties(message, userId);
 		this.pinoLogger.error({
 			...baseProps,
@@ -104,6 +112,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 	}
 
 	warn(message: string, userId?: string, context?: string, metadata?: any) {
+		if (!this.pinoLogger) {
+			this.logger.warn(message);
+			return;
+		}
 		const baseProps = this.getBaseProperties(message, userId);
 		this.pinoLogger.warn({
 			...baseProps,
@@ -129,6 +141,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 
 	logApi(req: any, res: any, responseTime: number) {
 		const userId = req.user?.extension_oid;
+		if (!this.pinoLogger) {
+			this.logger.log(`API ${req.method} ${req.url}`);
+			return;
+		}
 		const baseProps = this.getBaseProperties(`API ${req.method} ${req.url}`, userId);
 		this.pinoLogger.info({
 			...baseProps,
@@ -156,6 +172,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 	}
 
 	logDocument(userId: string, documentId: string, operation: string, status: 'success' | 'failure', details?: any) {
+		if (!this.pinoLogger) {
+			this.logger.log(`Document ${operation}: ${documentId}`);
+			return;
+		}
 		const baseProps = this.getBaseProperties(`Document ${operation}: ${documentId}`, userId);
 		this.pinoLogger.info({
 			...baseProps,
@@ -181,6 +201,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 		},
 		userId?: string
 	) {
+		if (!this.pinoLogger) {
+			this.logger.warn(`Security Violation: ${violation.type}`);
+			return;
+		}
 		const baseProps = this.getBaseProperties(`Security Violation: ${violation.type}`, userId);
 		this.pinoLogger.warn({
 			...baseProps,
@@ -218,6 +242,10 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 		},
 		metadata?: Record<string, any>
 	) {
+		if (!this.pinoLogger) {
+			this.logger.log(`Auth attempt by user: ${userId}`);
+			return;
+		}
 		const baseProps = this.getBaseProperties(`Auth attempt by user: ${userId}`, userId);
 		this.pinoLogger.info({
 			...baseProps,
