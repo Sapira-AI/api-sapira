@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 
+import { AppLoggerService } from '@/logger/app-logger.service';
+
 import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
 
@@ -15,15 +17,23 @@ export class ExchangeRatesScheduler {
 	constructor(
 		private readonly exchangeRatesService: ExchangeRatesService,
 		private readonly notificationService: ExchangeRatesNotificationService,
-		private readonly configService: ConfigService
+		private readonly configService: ConfigService,
+		private readonly appLogger: AppLoggerService
 	) {
 		this.syncEnabled = this.configService.get<string>('BANCO_CENTRAL_SYNC_ENABLED') !== 'false';
 		this.syncHour = parseInt(this.configService.get<string>('BANCO_CENTRAL_SYNC_HOUR') || '8', 10);
 
 		if (!this.syncEnabled) {
 			this.logger.warn('⚠️ Sincronización automática de tipos de cambio DESACTIVADA');
+			this.appLogger.warn('⚠️ Sincronización automática de tipos de cambio DESACTIVADA', 'system', 'ExchangeRatesScheduler');
 		} else {
 			this.logger.log(`✓ Sincronización automática configurada para las ${this.syncHour}:00 hrs`);
+			this.appLogger.log(
+				`✓ Sincronización automática de tipos de cambio configurada para las ${this.syncHour}:00 hrs`,
+				'system',
+				'ExchangeRatesScheduler',
+				{ syncHour: this.syncHour }
+			);
 		}
 	}
 
@@ -49,6 +59,7 @@ export class ExchangeRatesScheduler {
 		const startTime = Date.now();
 
 		this.logger.log('🚀 Iniciando sincronización automática de tipos de cambio...');
+		this.appLogger.log('🚀 Iniciando sincronización automática de tipos de cambio', 'system', 'ExchangeRatesScheduler');
 
 		try {
 			const result = await this.syncWithRetries();
@@ -59,6 +70,19 @@ export class ExchangeRatesScheduler {
 					`Procesados: ${result.stats.totalProcessed}, Insertados: ${result.stats.inserted}, ` +
 					`Actualizados: ${result.stats.updated}, Errores: ${result.stats.errors}`
 			);
+			this.appLogger.log(
+				`✓ Sincronización de tipos de cambio completada exitosamente en ${(executionTime / 1000).toFixed(2)}s`,
+				'system',
+				'ExchangeRatesScheduler',
+				{
+					executionTimeMs: executionTime,
+					executionTimeSeconds: (executionTime / 1000).toFixed(2),
+					totalProcessed: result.stats.totalProcessed,
+					inserted: result.stats.inserted,
+					updated: result.stats.updated,
+					errors: result.stats.errors,
+				}
+			);
 
 			await this.notificationService.sendSyncSuccessReport(result, executionTime);
 
@@ -66,6 +90,12 @@ export class ExchangeRatesScheduler {
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			this.logger.error(`✗ Error en sincronización automática después de ${(executionTime / 1000).toFixed(2)}s:`, error);
+			this.appLogger.error(
+				`✗ Error en sincronización automática de tipos de cambio después de ${(executionTime / 1000).toFixed(2)}s`,
+				'system',
+				error?.stack || error?.message,
+				'ExchangeRatesScheduler'
+			);
 
 			await this.notificationService.sendSyncFailureAlert(error, 'Sincronización automática diaria');
 		} finally {

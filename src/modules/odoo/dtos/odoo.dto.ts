@@ -516,6 +516,15 @@ export class CreateDraftInvoiceDTO {
 	@IsOptional()
 	auto_invoice?: boolean;
 
+	@ApiProperty({
+		description: 'Tipo de operación para Perú (detracción). Valor "1001" indica operación sujeta a detracción',
+		required: false,
+		example: '1001',
+	})
+	@IsOptional()
+	@IsString()
+	l10n_pe_edi_operation_type?: string;
+
 	@ApiProperty({ description: 'Líneas de la factura', type: [InvoiceLineItemDTO], required: true })
 	@IsArray()
 	@ValidateNested({ each: true })

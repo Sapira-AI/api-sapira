@@ -40,6 +40,7 @@ export class OdooInvoicesService {
 			x_sapira_invoice_id,
 			currency_id,
 			auto_post,
+			l10n_pe_edi_operation_type,
 			invoice_line_ids,
 		} = data;
 
@@ -130,6 +131,10 @@ export class OdooInvoicesService {
 				invoiceData.auto_post = auto_post;
 			}
 
+			if (l10n_pe_edi_operation_type) {
+				invoiceData.l10n_pe_edi_operation_type = l10n_pe_edi_operation_type;
+			}
+
 			// Procesar líneas de factura con mapeo de impuestos
 			const invoiceLines = await Promise.all(
 				invoice_line_ids.map(async (line) => {
@@ -203,6 +208,9 @@ export class OdooInvoicesService {
 			console.log(`👤 Partner ID: ${invoiceData.partner_id}`);
 			console.log(`📅 Invoice Date: ${invoiceData.invoice_date}`);
 			console.log(`💰 Currency ID: ${data.currency_id}`);
+			if (invoiceData.l10n_pe_edi_operation_type) {
+				console.log(`🇵🇪 Perú - Tipo de operación: ${invoiceData.l10n_pe_edi_operation_type} (Sujeta a detracción)`);
+			}
 			if (invoiceData.fiscal_position_id) {
 				console.log(`🏛️  Fiscal Position ID: ${invoiceData.fiscal_position_id} (${clientEntity?.odoo_fiscal_position_name || 'N/A'})`);
 				console.log(`✅ Mapeo de impuestos aplicado automáticamente según posición fiscal`);

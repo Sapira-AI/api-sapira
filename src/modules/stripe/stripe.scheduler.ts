@@ -4,6 +4,8 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AppLoggerService } from '@/logger/app-logger.service';
+
 import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeSyncService } from './services/stripe-sync.service';
 import { StripeIngestionService } from './stripe-ingestion.service';
@@ -20,15 +22,18 @@ export class StripeScheduler {
 		private readonly stripeSyncService: StripeSyncService,
 		@InjectRepository(StripeConnection)
 		private readonly connectionRepository: Repository<StripeConnection>,
-		private readonly configService: ConfigService
+		private readonly configService: ConfigService,
+		private readonly appLogger: AppLoggerService
 	) {
 		this.syncEnabled = this.configService.get<string>('STRIPE_SYNC_ENABLED') !== 'false';
 		this.syncHour = parseInt(this.configService.get<string>('STRIPE_SYNC_HOUR') || '2', 10);
 
 		if (!this.syncEnabled) {
 			this.logger.warn('⚠️ Sincronización automática de Stripe DESACTIVADA');
+			this.appLogger.warn('⚠️ Sincronización automática de Stripe DESACTIVADA', 'system', 'StripeScheduler');
 		} else {
 			this.logger.log(`✓ Sincronización automática de Stripe configurada para las ${this.syncHour}:00 hrs`);
+			this.appLogger.log(`✓ Sincronización automática de Stripe configurada para las ${this.syncHour}:00 hrs`, 'system', 'StripeScheduler');
 		}
 	}
 
@@ -54,15 +59,28 @@ export class StripeScheduler {
 		const startTime = Date.now();
 
 		this.logger.log('🚀 Iniciando sincronización automática de Stripe...');
+		this.appLogger.log('🚀 Iniciando sincronización automática de Stripe', 'system', 'StripeScheduler', { syncHour: this.syncHour });
 
 		try {
 			await this.executeFullSync();
 
 			const executionTime = Date.now() - startTime;
 			this.logger.log(`✓ Sincronización completada exitosamente en ${(executionTime / 1000).toFixed(2)}s`);
+			this.appLogger.log(
+				`✓ Sincronización de Stripe completada exitosamente en ${(executionTime / 1000).toFixed(2)}s`,
+				'system',
+				'StripeScheduler',
+				{ executionTimeMs: executionTime, executionTimeSeconds: (executionTime / 1000).toFixed(2) }
+			);
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			this.logger.error(`✗ Error en sincronización automática después de ${(executionTime / 1000).toFixed(2)}s:`, error);
+			this.appLogger.error(
+				`✗ Error en sincronización automática de Stripe después de ${(executionTime / 1000).toFixed(2)}s`,
+				'system',
+				error?.stack || error?.message,
+				'StripeScheduler'
+			);
 		} finally {
 			this.isRunning = false;
 		}

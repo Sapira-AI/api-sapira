@@ -9,31 +9,22 @@ export class StripeCustomerBigQuery {
 	holding_id: string;
 
 	@Column({ type: 'text' })
+	salesforce_account_id: string;
+
+	@Column({ type: 'text' })
 	stripe_customer_id: string;
 
 	@Column({ type: 'text', nullable: true })
-	email?: string;
-
-	@Column({ type: 'text', nullable: true })
-	name?: string;
+	salesforce_account_country?: string;
 
 	@Column({ type: 'text', nullable: true })
 	client_name?: string;
-
-	@Column({ type: 'text', nullable: true })
-	salesforce_account_id?: string;
-
-	@Column({ type: 'text', nullable: true })
-	salesforce_account_country?: string;
 
 	@Column({ type: 'text', nullable: true })
 	salesforce_account_segment?: string;
 
 	@Column({ type: 'text', nullable: true })
 	salesforce_account_industry?: string;
-
-	@Column({ type: 'jsonb', nullable: true })
-	metadata?: any;
 
 	@CreateDateColumn({ type: 'timestamp with time zone' })
 	created_at: Date;

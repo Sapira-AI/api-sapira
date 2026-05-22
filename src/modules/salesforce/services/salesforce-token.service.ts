@@ -18,6 +18,32 @@ export class SalesforceTokenService {
 	) {}
 
 	async refreshAccessToken(connection: SalesforceConnection): Promise<SalesforceAuthResponse> {
+		if (connection.username === 'client_credentials') {
+			this.logger.log(`Re-authenticating with Client Credentials for holding ${connection.holding_id}`);
+
+			const params = new URLSearchParams({
+				grant_type: 'client_credentials',
+				client_id: connection.client_id,
+				client_secret: connection.client_secret,
+			});
+
+			try {
+				const response = await firstValueFrom(
+					this.httpService.post(`${connection.login_url}/services/oauth2/token`, params.toString(), {
+						headers: {
+							'Content-Type': 'application/x-www-form-urlencoded',
+						},
+					})
+				);
+
+				this.logger.log('✅ Client Credentials re-authentication successful');
+				return response.data;
+			} catch (error: any) {
+				this.logger.error('❌ Client Credentials re-authentication failed:', error.response?.data || error.message);
+				throw new Error(`Client Credentials re-authentication failed: ${error.response?.data?.error_description || error.message}`);
+			}
+		}
+
 		if (!connection.refresh_token) {
 			throw new Error('No refresh token available');
 		}
