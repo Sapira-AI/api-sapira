@@ -77,6 +77,8 @@ export class SalesforceSoapService {
 			}
 
 			this.logger.log('✅ SOAP login successful');
+			this.logger.log(`📦 Full SOAP response: ${payload}`);
+			this.logger.log(`📋 sessionId length: ${sessionId?.length}, serverUrl: ${serverUrl}, userId: ${userId}`);
 
 			return { sessionId, serverUrl, userId };
 		} catch (error: any) {

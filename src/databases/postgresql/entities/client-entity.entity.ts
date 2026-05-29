@@ -43,31 +43,4 @@ export class ClientEntity {
 
 	@Column({ type: 'text', nullable: true })
 	odoo_fiscal_position_name?: string;
-
-	@Column({ type: 'integer', nullable: true })
-	odoo_reteica_tax_id?: number;
-
-	@Column({ type: 'text', nullable: true })
-	odoo_reteica_tax_name?: string;
-
-	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
-	odoo_reteica_tax_amount?: number;
-
-	@Column({ type: 'integer', nullable: true })
-	odoo_retefuente_tax_id?: number;
-
-	@Column({ type: 'text', nullable: true })
-	odoo_retefuente_tax_name?: string;
-
-	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
-	odoo_retefuente_tax_amount?: number;
-
-	@Column({ type: 'integer', nullable: true })
-	odoo_reteiva_tax_id?: number;
-
-	@Column({ type: 'text', nullable: true })
-	odoo_reteiva_tax_name?: string;
-
-	@Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
-	odoo_reteiva_tax_amount?: number;
 }

@@ -21,7 +21,7 @@ export class SalesforceQueryService {
 	) {}
 
 	async executeQuery(soql: string, holdingId: string): Promise<{ data: SalesforceQueryResult; tokenRefreshed: boolean }> {
-		const connection = await this.connectionRepository.findOne({
+		let connection = await this.connectionRepository.findOne({
 			where: { holding_id: holdingId, is_active: true },
 		});
 
@@ -31,44 +31,47 @@ export class SalesforceQueryService {
 
 		this.logger.log(`Executing SOQL query for holding ${holdingId}`);
 
-		let tokenRefreshed = false;
-
 		try {
-			const result = await this.executeQueryWithToken(soql, connection);
-			await this.updateLastSync(holdingId);
-			return { data: result, tokenRefreshed };
-		} catch (error: any) {
-			if (error.response?.status === 401 && connection.refresh_token) {
-				this.logger.log('Token expired, attempting refresh...');
+			const wasExpired = this.tokenService.isTokenExpired(connection);
+			const accessToken = await this.tokenService.ensureValidToken(connection);
 
-				try {
-					const authData = await this.tokenService.refreshAccessToken(connection);
-					await this.tokenService.updateTokens(holdingId, authData);
+			// Si el token fue refrescado, recargar la conexión para obtener instance_url actualizado
+			if (wasExpired) {
+				connection = await this.connectionRepository.findOne({
+					where: { holding_id: holdingId, is_active: true },
+				});
 
-					connection.access_token = authData.access_token;
-					const result = await this.executeQueryWithToken(soql, connection);
-					await this.updateLastSync(holdingId);
-
-					tokenRefreshed = true;
-					return { data: result, tokenRefreshed };
-				} catch (refreshError: any) {
-					this.logger.error('Token refresh failed, marking connection as inactive');
-					await this.connectionRepository.update({ holding_id: holdingId }, { is_active: false });
-					throw new Error('Salesforce token expired. Please reconnect.');
+				if (!connection) {
+					throw new NotFoundException('Connection lost after token refresh');
 				}
+			}
+
+			if (!connection.instance_url) {
+				throw new Error('No instance URL available. Please use "Conectar y Validar" to establish a complete connection.');
+			}
+
+			const result = await this.executeQueryWithToken(soql, connection.instance_url, accessToken);
+			await this.updateLastSync(holdingId);
+
+			return { data: result, tokenRefreshed: wasExpired };
+		} catch (error: any) {
+			if (error.response?.status === 401) {
+				this.logger.error('Authentication failed even after token refresh, marking connection as inactive');
+				await this.connectionRepository.update({ holding_id: holdingId }, { is_active: false });
+				throw new Error('Salesforce authentication failed. Please reconnect.');
 			}
 
 			throw this.handleQueryError(error);
 		}
 	}
 
-	private async executeQueryWithToken(soql: string, connection: SalesforceConnection): Promise<SalesforceQueryResult> {
-		const queryUrl = this.buildQueryUrl(connection.instance_url, soql);
+	private async executeQueryWithToken(soql: string, instanceUrl: string, accessToken: string): Promise<SalesforceQueryResult> {
+		const queryUrl = this.buildQueryUrl(instanceUrl, soql);
 
 		const response = await firstValueFrom(
 			this.httpService.get(queryUrl, {
 				headers: {
-					Authorization: `Bearer ${connection.access_token}`,
+					Authorization: `Bearer ${accessToken}`,
 					'Content-Type': 'application/json',
 				},
 			})

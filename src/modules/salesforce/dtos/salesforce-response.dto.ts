@@ -7,11 +7,14 @@ export class SalesforceConnectionResponseDto {
 	@ApiProperty()
 	holding_id: string;
 
-	@ApiProperty()
+	@ApiProperty({ required: false })
 	username: string;
 
 	@ApiProperty()
 	instance_url: string;
+
+	@ApiProperty({ enum: ['password', 'client_credentials'] })
+	auth_type: string;
 
 	@ApiProperty()
 	is_active: boolean;

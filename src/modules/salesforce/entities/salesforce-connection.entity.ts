@@ -1,5 +1,10 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
+export enum SalesforceAuthType {
+	PASSWORD = 'password',
+	CLIENT_CREDENTIALS = 'client_credentials',
+}
+
 @Entity('salesforce_connections')
 export class SalesforceConnection {
 	@PrimaryGeneratedColumn('uuid')
@@ -11,19 +16,22 @@ export class SalesforceConnection {
 	@Column({ type: 'uuid', unique: true })
 	holding_id: string;
 
-	@Column({ type: 'varchar', length: 255 })
+	@Column({ type: 'text', nullable: true })
 	username: string;
 
-	@Column({ type: 'varchar', length: 255 })
+	@Column({ type: 'text', nullable: true })
+	password: string;
+
+	@Column({ type: 'text' })
 	client_id: string;
 
-	@Column({ type: 'varchar', length: 255 })
+	@Column({ type: 'text' })
 	client_secret: string;
 
-	@Column({ type: 'varchar', length: 255 })
+	@Column({ type: 'text', nullable: true })
 	security_token: string;
 
-	@Column({ type: 'varchar', length: 255, default: 'https://login.salesforce.com' })
+	@Column({ type: 'text', default: 'https://login.salesforce.com' })
 	login_url: string;
 
 	@Column({ type: 'text', nullable: true })
@@ -32,14 +40,24 @@ export class SalesforceConnection {
 	@Column({ type: 'text', nullable: true })
 	refresh_token: string;
 
-	@Column({ type: 'varchar', length: 255, nullable: true })
+	@Column({ type: 'text', nullable: true })
 	instance_url: string;
 
-	@Column({ type: 'varchar', length: 255, nullable: true })
+	@Column({ type: 'text', nullable: true })
 	salesforce_user_id: string;
 
 	@Column({ type: 'timestamp', nullable: true })
 	token_issued_at: Date;
+
+	@Column({ type: 'timestamp', nullable: true })
+	token_expires_at: Date;
+
+	@Column({
+		type: 'enum',
+		enum: SalesforceAuthType,
+		default: SalesforceAuthType.PASSWORD,
+	})
+	auth_type: SalesforceAuthType;
 
 	@Column({ type: 'boolean', default: true })
 	is_active: boolean;

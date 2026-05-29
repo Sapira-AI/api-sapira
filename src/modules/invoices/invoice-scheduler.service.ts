@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
 import { Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 
@@ -14,12 +15,15 @@ import { Product } from '../odoo/entities/products.entity';
 import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
 import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 
+import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
+import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
+import { InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from './schemas/invoice-scheduler-job.schema';
 
 interface InvoiceWithRelations extends Invoice {
 	clientEntity?: ClientEntity;
@@ -55,10 +59,13 @@ export class InvoiceSchedulerService {
 		private readonly contractRepository: Repository<Contract>,
 		@InjectModel(InvoiceOdooSendLog.name)
 		private readonly invoiceOdooSendLogModel: Model<InvoiceOdooSendLogDocument>,
+		@InjectModel(InvoiceSchedulerJob.name)
+		private readonly invoiceSchedulerJobModel: Model<InvoiceSchedulerJobDocument>,
 		private readonly odooInvoicesService: OdooInvoicesService,
 		private readonly invoiceNotificationService: InvoiceNotificationService,
 		private readonly exchangeRatesService: ExchangeRatesService,
-		private readonly taxMappingService: TaxMappingService
+		private readonly taxMappingService: TaxMappingService,
+		private readonly schedulerGateway: InvoiceSchedulerGateway
 	) {}
 
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
@@ -1295,5 +1302,153 @@ export class InvoiceSchedulerService {
 		});
 
 		return await log.save();
+	}
+
+	async startSchedulerJob(options: ProcessOptions & { userId: string }): Promise<string> {
+		const { dryRun, holdingId, contractId, userId } = options;
+		const jobId = uuidv4();
+
+		this.logger.log(`🆕 Creando job ${jobId} - DryRun: ${dryRun}, HoldingId: ${holdingId || 'todos'}, ContractId: ${contractId || 'todos'}`);
+
+		const job = new this.invoiceSchedulerJobModel({
+			jobId,
+			holdingId: holdingId || 'all',
+			contractId,
+			dryRun,
+			status: 'pending',
+			progress: {
+				total: 0,
+				sent: 0,
+				errors: 0,
+				skipped: 0,
+				current: 0,
+			},
+			userId,
+			startedAt: new Date(),
+		});
+
+		await job.save();
+
+		setImmediate(() => {
+			this.processInvoicesAsync(jobId, options).catch((error) => {
+				this.logger.error(`❌ Error en procesamiento asíncrono del job ${jobId}:`, error);
+			});
+		});
+
+		return jobId;
+	}
+
+	private async processInvoicesAsync(jobId: string, options: ProcessOptions & { userId: string }): Promise<void> {
+		const { dryRun, holdingId, contractId, userId } = options;
+
+		try {
+			await this.invoiceSchedulerJobModel.updateOne({ jobId }, { status: 'running' });
+
+			const invoices = await this.getInvoicesToSend(holdingId, contractId);
+			const total = invoices.length;
+
+			this.logger.log(`📋 Job ${jobId}: Encontradas ${total} facturas para procesar`);
+
+			this.schedulerGateway.emitJobStarted(jobId, holdingId || 'all', userId, dryRun, total);
+
+			await this.invoiceSchedulerJobModel.updateOne(
+				{ jobId },
+				{
+					'progress.total': total,
+				}
+			);
+
+			const results: InvoiceResultDto[] = [];
+			const summary: ProcessInvoicesSummaryDto = {
+				total,
+				sent: 0,
+				errors: 0,
+				skipped: 0,
+			};
+
+			let current = 0;
+			let lastProgressEmit = Date.now();
+
+			for (const invoice of invoices) {
+				current++;
+				const result = await this.sendInvoiceToOdoo(invoice, dryRun);
+				results.push(result);
+
+				if (result.status === 'sent') {
+					summary.sent++;
+				} else if (result.status === 'error') {
+					summary.errors++;
+				} else {
+					summary.skipped++;
+				}
+
+				const now = Date.now();
+				if (now - lastProgressEmit >= 2000 || current === total) {
+					const progress: SchedulerJobProgressDto = {
+						total,
+						current,
+						sent: summary.sent,
+						errors: summary.errors,
+						skipped: summary.skipped,
+					};
+
+					await this.invoiceSchedulerJobModel.updateOne({ jobId }, { progress });
+
+					this.schedulerGateway.emitJobProgress(jobId, holdingId || 'all', userId, progress);
+					lastProgressEmit = now;
+				}
+			}
+
+			const response: ProcessInvoicesResponseDto = {
+				success: summary.errors < summary.total,
+				dryRun,
+				summary,
+				results,
+				executedAt: new Date(),
+			};
+
+			await this.invoiceSchedulerJobModel.updateOne(
+				{ jobId },
+				{
+					status: 'completed',
+					result: response,
+					completedAt: new Date(),
+				}
+			);
+
+			this.schedulerGateway.emitJobCompleted(jobId, holdingId || 'all', userId, response);
+
+			this.logger.log(
+				`✅ Job ${jobId} completado - Total: ${total}, Enviadas: ${summary.sent}, Errores: ${summary.errors}, Omitidas: ${summary.skipped}`
+			);
+		} catch (error) {
+			this.logger.error(`❌ Error en job ${jobId}:`, error);
+
+			await this.invoiceSchedulerJobModel.updateOne(
+				{ jobId },
+				{
+					status: 'failed',
+					error: error.message || 'Error desconocido',
+					completedAt: new Date(),
+				}
+			);
+
+			this.schedulerGateway.emitJobError(jobId, holdingId || 'all', userId, error.message || 'Error desconocido');
+		}
+	}
+
+	async getJobStatus(jobId: string): Promise<InvoiceSchedulerJobDocument | null> {
+		return await this.invoiceSchedulerJobModel.findOne({ jobId }).exec();
+	}
+
+	async getRecentJobs(holdingId: string, userId: string, limit: number = 10): Promise<InvoiceSchedulerJobDocument[]> {
+		return await this.invoiceSchedulerJobModel
+			.find({
+				$or: [{ holdingId }, { holdingId: 'all' }],
+				userId,
+			})
+			.sort({ createdAt: -1 })
+			.limit(limit)
+			.exec();
 	}
 }
