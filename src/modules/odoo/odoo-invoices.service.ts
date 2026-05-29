@@ -53,14 +53,7 @@ export class OdooInvoicesService {
 					odoo_partner_id: partner_id,
 					holding_id: holdingId,
 				},
-				select: [
-					'id',
-					'odoo_fiscal_position_id',
-					'odoo_fiscal_position_name',
-					'odoo_reteica_tax_id',
-					'odoo_retefuente_tax_id',
-					'odoo_reteiva_tax_id',
-				],
+				select: ['id', 'odoo_fiscal_position_id', 'odoo_fiscal_position_name'],
 			});
 
 			if (clientEntity?.odoo_fiscal_position_id) {

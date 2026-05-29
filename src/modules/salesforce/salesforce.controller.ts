@@ -76,6 +76,48 @@ export class SalesforceController {
 		);
 	}
 
+	@Post('credentials/password')
+	@ApiOperation({
+		summary: 'Guardar credenciales de Salesforce (Username-Password) sin validar',
+		description: 'Almacena las credenciales sin intentar autenticar. Útil para configurar antes de tener permisos en Salesforce.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Credenciales guardadas exitosamente',
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'Credenciales inválidas',
+	})
+	async savePasswordCredentials(
+		@Body() credentials: SalesforceCredentialsDto,
+		@GetSupabaseUser() user: SupabaseUser,
+		@Headers('x-holding-id') holdingId: string
+	): Promise<{ success: boolean; message: string }> {
+		return this.salesforceService.savePasswordCredentials(credentials, user.id, holdingId);
+	}
+
+	@Post('credentials/client-credentials')
+	@ApiOperation({
+		summary: 'Guardar credenciales de Salesforce (Client Credentials) sin validar',
+		description: 'Almacena las credenciales sin intentar autenticar. Útil para configurar antes de tener permisos en Salesforce.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Credenciales guardadas exitosamente',
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: 'Credenciales inválidas',
+	})
+	async saveClientCredentials(
+		@Body() credentials: SalesforceClientCredentialsDto,
+		@GetSupabaseUser() user: SupabaseUser,
+		@Headers('x-holding-id') holdingId: string
+	): Promise<{ success: boolean; message: string }> {
+		return this.salesforceService.saveClientCredentials(credentials.clientId, credentials.clientSecret, user.id, holdingId, credentials.loginUrl);
+	}
+
 	@Get('connection')
 	@ApiOperation({
 		summary: 'Obtener conexión activa',
@@ -92,6 +134,23 @@ export class SalesforceController {
 	})
 	async getConnection(@Headers('x-holding-id') holdingId: string): Promise<SalesforceConnectionResponseDto | null> {
 		return this.salesforceService.getConnection(holdingId);
+	}
+
+	@Post('connection/validate')
+	@ApiOperation({
+		summary: 'Validar credenciales guardadas',
+		description: 'Autentica usando las credenciales guardadas en la base de datos',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Autenticación exitosa',
+	})
+	@ApiResponse({
+		status: HttpStatus.NOT_FOUND,
+		description: 'No hay credenciales guardadas',
+	})
+	async validateConnection(@Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.validateStoredCredentials(holdingId);
 	}
 
 	@Delete('connection')
@@ -180,6 +239,32 @@ export class SalesforceController {
 	})
 	async syncAllConnections(): Promise<SalesforceSyncAllResponseDto> {
 		return this.salesforceService.syncAllConnections();
+	}
+
+	@Post('sync/complete')
+	@ApiOperation({
+		summary: 'Sincronización completa de oportunidades',
+		description: 'Sincroniza oportunidades, clientes, cotizaciones y productos desde Salesforce',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Sincronización completa exitosa',
+	})
+	async syncComplete(@Body() syncDto: any, @Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.syncOpportunitiesComplete(holdingId, syncDto.dateFrom, syncDto.dateTo);
+	}
+
+	@Post('sync/complete/all')
+	@ApiOperation({
+		summary: 'Sincronización completa para todos los holdings',
+		description: 'Sincroniza oportunidades, clientes, cotizaciones y productos para todos los holdings activos',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Sincronización completa masiva exitosa',
+	})
+	async syncCompleteAll() {
+		return this.salesforceService.syncAllConnectionsComplete();
 	}
 
 	@Post('test')
