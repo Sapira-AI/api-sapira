@@ -1,11 +1,15 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
+import { EncryptionService } from '@/common/services/encryption.service';
+
+import { SalesforceAuthType, SalesforceConnection } from '../entities/salesforce-connection.entity';
 import { SalesforceAuthResponse } from '../interfaces/salesforce.interface';
+
+import { SalesforceSoapService } from './salesforce-soap.service';
 
 @Injectable()
 export class SalesforceTokenService {
@@ -14,11 +18,27 @@ export class SalesforceTokenService {
 	constructor(
 		@InjectRepository(SalesforceConnection)
 		private readonly connectionRepository: Repository<SalesforceConnection>,
-		private readonly httpService: HttpService
+		private readonly httpService: HttpService,
+		private readonly encryptionService: EncryptionService,
+		@Inject(forwardRef(() => SalesforceSoapService))
+		private readonly soapService: SalesforceSoapService
 	) {}
 
+	async ensureValidToken(connection: SalesforceConnection): Promise<string> {
+		if (!this.isTokenExpired(connection)) {
+			return connection.access_token;
+		}
+
+		this.logger.log(`Token expired for holding ${connection.holding_id}, refreshing...`);
+		const authData = await this.refreshAccessToken(connection);
+		await this.updateTokens(connection.holding_id, authData);
+
+		return authData.access_token;
+	}
+
 	async refreshAccessToken(connection: SalesforceConnection): Promise<SalesforceAuthResponse> {
-		if (connection.username === 'client_credentials') {
+		// CLIENT CREDENTIALS: Re-autenticar con client_id/client_secret
+		if (connection.auth_type === SalesforceAuthType.CLIENT_CREDENTIALS) {
 			this.logger.log(`Re-authenticating with Client Credentials for holding ${connection.holding_id}`);
 
 			const params = new URLSearchParams({
@@ -44,37 +64,56 @@ export class SalesforceTokenService {
 			}
 		}
 
-		if (!connection.refresh_token) {
-			throw new Error('No refresh token available');
+		// PASSWORD FLOW: Re-autenticar con SOAP (no usamos refresh_token porque SOAP no lo soporta)
+		if (connection.auth_type === SalesforceAuthType.PASSWORD) {
+			if (!connection.username || !connection.password || !connection.security_token) {
+				throw new Error('No credentials available. Please use "Conectar y Validar" to establish a complete connection.');
+			}
+
+			this.logger.log(`Re-authenticating with SOAP for Password Flow, holding ${connection.holding_id}`);
+
+			const decryptedPassword = this.encryptionService.decrypt(connection.password);
+
+			try {
+				const loginResult = await this.soapService.attemptLogin(
+					connection.login_url,
+					connection.username,
+					decryptedPassword,
+					connection.security_token
+				);
+
+				this.logger.log('✅ SOAP re-authentication successful');
+
+				// Convertir resultado SOAP a formato AuthResponse
+				const instanceUrl = loginResult.serverUrl.split('/services/')[0];
+				return {
+					access_token: loginResult.sessionId,
+					instance_url: instanceUrl,
+					id: loginResult.userId,
+					token_type: 'Bearer',
+					issued_at: Date.now().toString(),
+					refresh_token: null, // SOAP no devuelve refresh_token
+				};
+			} catch (error: any) {
+				this.logger.error('❌ SOAP re-authentication failed:', error.message);
+				throw new Error(`SOAP re-authentication failed: ${error.message}`);
+			}
 		}
 
-		this.logger.log(`Refreshing token for holding ${connection.holding_id}`);
-
-		const params = new URLSearchParams({
-			grant_type: 'refresh_token',
-			client_id: connection.client_id,
-			client_secret: connection.client_secret,
-			refresh_token: connection.refresh_token,
-		});
-
-		try {
-			const response = await firstValueFrom(
-				this.httpService.post(`${connection.login_url}/services/oauth2/token`, params.toString(), {
-					headers: {
-						'Content-Type': 'application/x-www-form-urlencoded',
-					},
-				})
-			);
-
-			this.logger.log('✅ Token refreshed successfully');
-			return response.data;
-		} catch (error: any) {
-			this.logger.error('❌ Token refresh failed:', error.response?.data || error.message);
-			throw new Error(`Token refresh failed: ${error.response?.data?.error_description || error.message}`);
-		}
+		// Si llegamos aquí, el auth_type no es reconocido
+		throw new Error(`Unknown auth_type: ${connection.auth_type}`);
 	}
 
 	isTokenExpired(connection: SalesforceConnection): boolean {
+		if (!connection.access_token) {
+			return true;
+		}
+
+		if (connection.token_expires_at) {
+			const bufferTime = 5 * 60 * 1000;
+			return Date.now() >= new Date(connection.token_expires_at).getTime() - bufferTime;
+		}
+
 		if (!connection.token_issued_at) {
 			return true;
 		}
@@ -88,12 +127,18 @@ export class SalesforceTokenService {
 	async updateTokens(holdingId: string, authData: SalesforceAuthResponse): Promise<void> {
 		const updateData: any = {
 			access_token: authData.access_token,
+			instance_url: authData.instance_url,
 			token_issued_at: new Date(parseInt(authData.issued_at)),
+			token_expires_at: authData.expires_in ? new Date(Date.now() + authData.expires_in * 1000) : null,
 			last_sync_at: new Date(),
 		};
 
 		if (authData.refresh_token) {
 			updateData.refresh_token = authData.refresh_token;
+		}
+
+		if (authData.id) {
+			updateData.salesforce_user_id = authData.id;
 		}
 
 		await this.connectionRepository.update({ holding_id: holdingId }, updateData);

@@ -1,0 +1,34 @@
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+
+@Entity('client_contacts')
+export class ClientContact {
+	@PrimaryGeneratedColumn('uuid')
+	id: string;
+
+	@Column({ type: 'uuid' })
+	client_id: string;
+
+	@Column({ type: 'uuid' })
+	holding_id: string;
+
+	@Column({ type: 'text', nullable: true })
+	contact_type: string;
+
+	@Column({ type: 'text', nullable: true })
+	name: string;
+
+	@Column({ type: 'text', nullable: true })
+	position: string;
+
+	@Column({ type: 'text', nullable: true })
+	email: string;
+
+	@Column({ type: 'text', nullable: true })
+	phone: string;
+
+	@CreateDateColumn({ type: 'timestamptz' })
+	created_at: Date;
+
+	@UpdateDateColumn({ type: 'timestamptz' })
+	updated_at: Date;
+}

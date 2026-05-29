@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
-import { ProcessInvoicesResponseDto, SchedulerStatusDto, SendInvoicesDto } from './dtos/send-invoices.dto';
+import { SchedulerJobListItemDto, SchedulerJobStatusDto, StartSchedulerJobResponseDto } from './dtos/scheduler-job.dto';
+import { SchedulerStatusDto, SendInvoicesDto } from './dtos/send-invoices.dto';
 import { InvoiceSchedulerService } from './invoice-scheduler.service';
 
 @ApiTags('Invoices - Scheduler')
@@ -15,9 +16,10 @@ export class InvoiceSchedulerController {
 
 	@Post('send')
 	@ApiOperation({
-		summary: 'Enviar facturas pendientes a Odoo',
+		summary: 'Iniciar job de envío de facturas a Odoo (asíncrono)',
 		description:
-			'Procesa y envía facturas con issue_date <= hoy y status "Por Emitir" a Odoo. ' +
+			'Inicia un job asíncrono que procesa y envía facturas con issue_date <= hoy y status "Por Emitir" a Odoo. ' +
+			'Retorna inmediatamente con un jobId para consultar el progreso. ' +
 			'Por defecto ejecuta en modo dryRun para evitar envíos accidentales.',
 	})
 	@ApiHeader({
@@ -26,17 +28,29 @@ export class InvoiceSchedulerController {
 		required: false,
 	})
 	@ApiOkResponse({
-		type: ProcessInvoicesResponseDto,
-		description: 'Resultado del procesamiento de facturas',
+		type: StartSchedulerJobResponseDto,
+		description: 'Job iniciado exitosamente',
 	})
-	async sendInvoices(@Headers('x-holding-id') holdingId: string | undefined, @Body() dto: SendInvoicesDto): Promise<ProcessInvoicesResponseDto> {
+	async sendInvoices(
+		@Headers('x-holding-id') holdingId: string | undefined,
+		@Body() dto: SendInvoicesDto,
+		@Req() req: any
+	): Promise<StartSchedulerJobResponseDto> {
 		const sanitizedHoldingId = holdingId ? (Array.isArray(holdingId) ? holdingId[0] : holdingId.split(',')[0].trim()) : undefined;
+		const userId = req.user?.sub || req.user?.id || 'unknown';
 
-		return await this.invoiceSchedulerService.processInvoicesToSend({
+		const jobId = await this.invoiceSchedulerService.startSchedulerJob({
 			dryRun: dto.dryRun ?? true,
 			holdingId: sanitizedHoldingId,
 			contractId: dto.contractId,
+			userId,
 		});
+
+		return {
+			jobId,
+			message: 'Scheduler job iniciado exitosamente',
+			dryRun: dto.dryRun ?? true,
+		};
 	}
 
 	@Get('status')
@@ -78,5 +92,64 @@ export class InvoiceSchedulerController {
 	async debugInvoicesToday(@Headers('x-holding-id') holdingId: string | undefined): Promise<any> {
 		const sanitizedHoldingId = holdingId ? (Array.isArray(holdingId) ? holdingId[0] : holdingId.split(',')[0].trim()) : undefined;
 		return await this.invoiceSchedulerService.debugInvoicesToday(sanitizedHoldingId);
+	}
+
+	@Get('job/:jobId')
+	@ApiOperation({
+		summary: 'Consultar estado de un job',
+		description: 'Obtiene el estado actual de un job de scheduler, incluyendo progreso y resultado',
+	})
+	@ApiOkResponse({
+		type: SchedulerJobStatusDto,
+		description: 'Estado del job',
+	})
+	async getJobStatus(@Param('jobId') jobId: string): Promise<SchedulerJobStatusDto | null> {
+		const job = await this.invoiceSchedulerService.getJobStatus(jobId);
+
+		if (!job) {
+			return null;
+		}
+
+		return {
+			jobId: job.jobId,
+			status: job.status,
+			progress: job.progress,
+			result: job.result,
+			error: job.error,
+			dryRun: job.dryRun,
+			startedAt: job.startedAt,
+			completedAt: job.completedAt,
+		};
+	}
+
+	@Get('jobs')
+	@ApiOperation({
+		summary: 'Listar jobs recientes',
+		description: 'Obtiene los jobs recientes del usuario actual',
+	})
+	@ApiHeader({
+		name: 'X-Holding-Id',
+		description: 'ID del holding',
+		required: true,
+	})
+	@ApiOkResponse({
+		type: [SchedulerJobListItemDto],
+		description: 'Lista de jobs recientes',
+	})
+	async getRecentJobs(@Headers('x-holding-id') holdingId: string, @Req() req: any): Promise<SchedulerJobListItemDto[]> {
+		const sanitizedHoldingId = holdingId ? (Array.isArray(holdingId) ? holdingId[0] : holdingId.split(',')[0].trim()) : 'all';
+		const userId = req.user?.sub || req.user?.id || 'unknown';
+
+		const jobs = await this.invoiceSchedulerService.getRecentJobs(sanitizedHoldingId, userId, 10);
+
+		return jobs.map((job) => ({
+			jobId: job.jobId,
+			status: job.status,
+			dryRun: job.dryRun,
+			contractId: job.contractId,
+			progress: job.progress,
+			startedAt: job.startedAt,
+			completedAt: job.completedAt,
+		}));
 	}
 }
