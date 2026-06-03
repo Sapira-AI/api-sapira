@@ -14,6 +14,7 @@ import { Product } from '../odoo/entities/products.entity';
 
 import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
+import { InvoiceReference } from './entities/invoice-reference.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerInitService } from './invoice-scheduler-init.service';
@@ -29,7 +30,7 @@ import { InvoiceSchedulerJob, InvoiceSchedulerJobSchema } from './schemas/invoic
 @Module({
 	imports: [
 		PostgreSQLDatabaseModule,
-		TypeOrmModule.forFeature([Invoice, InvoiceItem, Contract, ClientEntity, Company, Product, OdooProductMapping]),
+		TypeOrmModule.forFeature([Invoice, InvoiceItem, InvoiceReference, Contract, ClientEntity, Company, Product, OdooProductMapping]),
 		MongooseModule.forFeature([
 			{ name: InvoiceOdooSendLog.name, schema: InvoiceOdooSendLogSchema },
 			{ name: InvoiceSchedulerJob.name, schema: InvoiceSchedulerJobSchema },

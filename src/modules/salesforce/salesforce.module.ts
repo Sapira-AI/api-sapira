@@ -1,5 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -28,6 +29,7 @@ import { SalesforceMappingController } from './salesforce-mapping.controller';
 import { SalesforceController } from './salesforce.controller';
 import { SalesforceScheduler } from './salesforce.scheduler';
 import { SalesforceService } from './salesforce.service';
+import { SalesforceSchedulerJob, SalesforceSchedulerJobSchema } from './schemas/salesforce-scheduler-job.schema';
 import { SalesforceAuthService } from './services/salesforce-auth.service';
 import { SalesforceMappingService } from './services/salesforce-mapping.service';
 import { SalesforceQueryService } from './services/salesforce-query.service';
@@ -41,6 +43,7 @@ import { SalesforceTypeOrmService } from './services/salesforce-typeorm.service'
 	imports: [
 		HttpModule,
 		ScheduleModule.forRoot(),
+		MongooseModule.forFeature([{ name: SalesforceSchedulerJob.name, schema: SalesforceSchedulerJobSchema }]),
 		TypeOrmModule.forFeature([
 			SalesforceConnection,
 			SalesforceOpportunityCache,

@@ -438,6 +438,36 @@ export class GetFieldMappingResponseDTO {
 	};
 }
 
+export class OdooReferenceDTO {
+	@ApiProperty({ description: 'Número del documento de origen', required: true })
+	@IsString()
+	origin_doc_number!: string;
+
+	@ApiProperty({ description: 'ID del tipo de documento de referencia en Odoo', required: true })
+	@IsNumber()
+	@Type(() => Number)
+	l10n_cl_reference_doc_type_id!: number;
+
+	@ApiProperty({ description: 'Código del documento de referencia', required: false })
+	@IsOptional()
+	@IsString()
+	reference_doc_code?: string | false;
+
+	@ApiProperty({ description: 'Razón de la referencia', required: false })
+	@IsOptional()
+	@IsString()
+	reason?: string | false;
+
+	@ApiProperty({ description: 'Fecha del documento de referencia (YYYY-MM-DD)', required: false })
+	@IsOptional()
+	@IsString()
+	date?: string;
+
+	@ApiProperty({ description: 'Tipo interno del documento de referencia', required: false })
+	@IsOptional()
+	l10n_cl_reference_doc_internal_type?: string | false;
+}
+
 export class CreateDraftInvoiceDTO {
 	@ApiProperty({ description: 'ID del partner (cliente) en Odoo', required: true })
 	@IsNumber()
@@ -530,6 +560,17 @@ export class CreateDraftInvoiceDTO {
 	@ValidateNested({ each: true })
 	@Type(() => InvoiceLineItemDTO)
 	invoice_line_ids!: InvoiceLineItemDTO[];
+
+	@ApiProperty({
+		description: 'Referencias de documentos para facturas chilenas',
+		type: [OdooReferenceDTO],
+		required: false,
+	})
+	@IsOptional()
+	@IsArray()
+	@ValidateNested({ each: true })
+	@Type(() => OdooReferenceDTO)
+	l10n_cl_reference_ids?: OdooReferenceDTO[];
 }
 
 export class CreateDraftInvoiceResponseDTO {

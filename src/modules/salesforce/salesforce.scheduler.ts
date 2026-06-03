@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
 import { Cron } from '@nestjs/schedule';
+import { Model } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 
+import { HoldingResult, JobSummary, SalesforceSchedulerJob, SalesforceSchedulerJobDocument } from './schemas/salesforce-scheduler-job.schema';
 import { SalesforceSyncCompleteService } from './services/salesforce-sync-complete.service';
 
 /**
@@ -11,7 +15,11 @@ import { SalesforceSyncCompleteService } from './services/salesforce-sync-comple
 export class SalesforceScheduler {
 	private readonly logger = new Logger(SalesforceScheduler.name);
 
-	constructor(private readonly syncCompleteService: SalesforceSyncCompleteService) {}
+	constructor(
+		private readonly syncCompleteService: SalesforceSyncCompleteService,
+		@InjectModel(SalesforceSchedulerJob.name)
+		private readonly schedulerJobModel: Model<SalesforceSchedulerJobDocument>
+	) {}
 
 	/**
 	 * Sincronización diaria a las 8:30 AM
@@ -22,7 +30,30 @@ export class SalesforceScheduler {
 		timeZone: 'America/Santiago', // Ajustar según zona horaria del servidor
 	})
 	async handleDailySync() {
+		const jobId = uuidv4();
+		const startTime = new Date();
+
 		this.logger.log('🔄 Starting daily Salesforce complete sync at 8:30 AM');
+		this.logger.log(`📝 Job ID: ${jobId}`);
+
+		// Crear registro inicial en MongoDB
+		const job = new this.schedulerJobModel({
+			jobId,
+			status: 'running',
+			startedAt: startTime,
+			summary: {
+				totalHoldings: 0,
+				successfulHoldings: 0,
+				failedHoldings: 0,
+				totalOpportunities: 0,
+				totalClients: 0,
+				totalQuotes: 0,
+				totalSellers: 0,
+			},
+			holdingResults: [],
+		});
+
+		await job.save();
 
 		try {
 			const results = await this.syncCompleteService.syncAllActiveConnectionsComplete();
@@ -30,10 +61,50 @@ export class SalesforceScheduler {
 			const successCount = results.filter((r) => r.success).length;
 			const failedCount = results.filter((r) => !r.success).length;
 
-			const totalClients = results.reduce((sum, r) => sum + (r.stats?.clientsCreated || 0), 0);
-			const totalQuotes = results.reduce((sum, r) => sum + (r.stats?.quotesCreated || 0), 0);
+			const totalClients = results.reduce((sum, r) => sum + (r.stats?.clientsCreated || 0) + (r.stats?.clientsUpdated || 0), 0);
+			const totalQuotes = results.reduce((sum, r) => sum + (r.stats?.quotesCreated || 0) + (r.stats?.quotesUpdated || 0), 0);
 			const totalOpportunities = results.reduce((sum, r) => sum + (r.stats?.opportunities || 0), 0);
 			const totalSellers = results.reduce((sum, r) => sum + (r.stats?.sellersCreated || 0), 0);
+
+			// Preparar resultados por holding para MongoDB
+			const holdingResults: HoldingResult[] = results.map((r) => ({
+				holding_id: r.holding_id,
+				success: r.success,
+				opportunities: r.stats?.opportunities || 0,
+				clientsCreated: r.stats?.clientsCreated || 0,
+				clientsUpdated: r.stats?.clientsUpdated || 0,
+				quotesCreated: r.stats?.quotesCreated || 0,
+				quotesUpdated: r.stats?.quotesUpdated || 0,
+				sellersCreated: r.stats?.sellersCreated || 0,
+				error: r.error,
+				durationSeconds: r.duration_seconds || 0,
+			}));
+
+			const completedAt = new Date();
+			const durationSeconds = (completedAt.getTime() - startTime.getTime()) / 1000;
+
+			// Preparar resumen para MongoDB
+			const summary: JobSummary = {
+				totalHoldings: results.length,
+				successfulHoldings: successCount,
+				failedHoldings: failedCount,
+				totalOpportunities,
+				totalClients,
+				totalQuotes,
+				totalSellers,
+			};
+
+			// Actualizar registro en MongoDB con resultados
+			await this.schedulerJobModel.updateOne(
+				{ jobId },
+				{
+					status: 'completed',
+					completedAt,
+					durationSeconds,
+					summary,
+					holdingResults,
+				}
+			);
 
 			this.logger.log(`✅ Daily sync completed successfully`);
 			this.logger.log(`📊 Summary:`);
@@ -62,6 +133,20 @@ export class SalesforceScheduler {
 		} catch (error: any) {
 			this.logger.error('❌ Daily sync failed with critical error:', error.message);
 			this.logger.error(error.stack);
+
+			// Actualizar registro en MongoDB con error
+			const completedAt = new Date();
+			const durationSeconds = (completedAt.getTime() - startTime.getTime()) / 1000;
+
+			await this.schedulerJobModel.updateOne(
+				{ jobId },
+				{
+					status: 'failed',
+					completedAt,
+					durationSeconds,
+					error: error.message || 'Error desconocido',
+				}
+			);
 
 			// Opcional: Enviar notificación de error crítico
 			// await this.sendCriticalErrorNotification(error);

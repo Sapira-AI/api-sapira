@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
 import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/stripe-customer-bigquery.entity';
 
 import { QueryDto } from './dtos/query.dto';
@@ -21,7 +22,9 @@ export class BigQueryService {
 	constructor(
 		private readonly configService: ConfigService,
 		@InjectRepository(StripeCustomerBigQuery)
-		private readonly stripeCustomerRepository: Repository<StripeCustomerBigQuery>
+		private readonly stripeCustomerRepository: Repository<StripeCustomerBigQuery>,
+		@InjectRepository(BigQueryConnection)
+		private readonly bigQueryConnectionRepository: Repository<BigQueryConnection>
 	) {
 		this.initializeBigQuery();
 	}
@@ -154,17 +157,68 @@ export class BigQueryService {
 		};
 	}
 
-	async syncStripeCustomers(holdingId: string): Promise<SyncStripeCustomersResponseDto> {
-		if (!this.bigQueryClient) {
-			throw new BadRequestException('BigQuery no está configurado. Contacte al administrador.');
+	async getConnectionForHolding(holdingId: string): Promise<BigQueryConnection | null> {
+		try {
+			const connection = await this.bigQueryConnectionRepository.findOne({
+				where: {
+					holding_id: holdingId,
+					is_active: true,
+				},
+				order: {
+					created_at: 'DESC',
+				},
+			});
+
+			return connection;
+		} catch (error) {
+			this.logger.error(`Error obteniendo conexión para holding ${holdingId}:`, error);
+			return null;
 		}
+	}
+
+	async getBigQueryClientForHolding(holdingId: string): Promise<BigQuery | null> {
+		const connection = await this.getConnectionForHolding(holdingId);
+
+		if (!connection) {
+			this.logger.warn(`No hay conexión de BigQuery configurada para holding: ${holdingId}`);
+			return null;
+		}
+
+		try {
+			const credentialsJson = this.parseCredentials(connection.credentials);
+
+			const client = new BigQuery({
+				projectId: connection.project_id,
+				credentials: {
+					client_email: credentialsJson.client_email,
+					private_key: credentialsJson.private_key,
+				},
+			});
+
+			this.logger.log(`✓ Cliente BigQuery inicializado para holding ${holdingId}, proyecto: ${connection.project_id}`);
+
+			return client;
+		} catch (error) {
+			this.logger.error(`Error inicializando cliente BigQuery para holding ${holdingId}:`, error);
+			return null;
+		}
+	}
+
+	async syncStripeCustomers(holdingId: string): Promise<SyncStripeCustomersResponseDto> {
+		const client = await this.getBigQueryClientForHolding(holdingId);
+
+		if (!client) {
+			throw new BadRequestException(`No hay conexión de BigQuery configurada para el holding: ${holdingId}`);
+		}
+
+		const connection = await this.getConnectionForHolding(holdingId);
 
 		try {
 			this.logger.log(`Iniciando sincronización de clientes Stripe para holding: ${holdingId}`);
 
 			const query = 'SELECT * FROM `datawarehouse-a2e2.finance.sapira_stripe`';
 
-			const [rows] = await this.bigQueryClient.query({
+			const [rows] = await client.query({
 				query,
 				location: 'US',
 			});
@@ -203,6 +257,12 @@ export class BigQueryService {
 			}
 
 			this.logger.log(`✓ Sincronización completada: ${inserted} insertados, ${updated} actualizados`);
+
+			if (connection) {
+				await this.bigQueryConnectionRepository.update(connection.id, {
+					last_sync_at: new Date(),
+				});
+			}
 
 			return {
 				totalProcessed: rows.length,
