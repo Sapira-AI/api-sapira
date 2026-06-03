@@ -38,6 +38,7 @@ import { OdooController } from './odoo.controller';
 import { OdooProvider } from './odoo.provider';
 import { OdooService } from './odoo.service';
 import { OdooIntegrationLog, OdooIntegrationLogSchema } from './schemas/odoo-integration-log.schema';
+import { DocumentTypeMappingService } from './services/document-type-mapping.service';
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
 import { FiscalPositionsService } from './services/fiscal-positions.service';
@@ -91,12 +92,13 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		FieldTransformationService,
 		FieldMappingService,
 		FiscalPositionsService,
+		DocumentTypeMappingService,
 		TaxMappingService,
 		InvoiceTaxValidatorService,
 		GenericVatsService,
 		InvoiceProcessingService,
 		OdooIntegrationLogService,
 	],
-	exports: [OdooService, OdooInvoicesService, OdooConnectionService, FiscalPositionsService, TaxMappingService],
+	exports: [OdooService, OdooInvoicesService, OdooConnectionService, FiscalPositionsService, TaxMappingService, DocumentTypeMappingService],
 })
 export class OdooModule {}

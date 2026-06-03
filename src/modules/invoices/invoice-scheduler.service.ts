@@ -8,17 +8,19 @@ import { v4 as uuidv4 } from 'uuid';
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
-import { CreateDraftInvoiceDTO, InvoiceLineItemDTO } from '../odoo/dtos/odoo.dto';
+import { CreateDraftInvoiceDTO, InvoiceLineItemDTO, OdooReferenceDTO } from '../odoo/dtos/odoo.dto';
 import { Company } from '../odoo/entities/companies.entity';
 import { OdooProductMapping } from '../odoo/entities/odoo-product-mapping.entity';
 import { Product } from '../odoo/entities/products.entity';
 import { OdooInvoicesService } from '../odoo/odoo-invoices.service';
+import { DocumentTypeMappingService } from '../odoo/services/document-type-mapping.service';
 import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
+import { InvoiceReference } from './entities/invoice-reference.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
@@ -30,6 +32,7 @@ interface InvoiceWithRelations extends Invoice {
 	company?: Company;
 	items?: InvoiceItem[];
 	contract?: Contract;
+	references?: InvoiceReference[];
 }
 
 interface ProcessOptions {
@@ -57,6 +60,8 @@ export class InvoiceSchedulerService {
 		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
 		@InjectRepository(Contract)
 		private readonly contractRepository: Repository<Contract>,
+		@InjectRepository(InvoiceReference)
+		private readonly invoiceReferenceRepository: Repository<InvoiceReference>,
 		@InjectModel(InvoiceOdooSendLog.name)
 		private readonly invoiceOdooSendLogModel: Model<InvoiceOdooSendLogDocument>,
 		@InjectModel(InvoiceSchedulerJob.name)
@@ -65,6 +70,7 @@ export class InvoiceSchedulerService {
 		private readonly invoiceNotificationService: InvoiceNotificationService,
 		private readonly exchangeRatesService: ExchangeRatesService,
 		private readonly taxMappingService: TaxMappingService,
+		private readonly documentTypeMappingService: DocumentTypeMappingService,
 		private readonly schedulerGateway: InvoiceSchedulerGateway
 	) {}
 
@@ -169,6 +175,10 @@ export class InvoiceSchedulerService {
 			(invoice as InvoiceWithRelations).company = company;
 			(invoice as InvoiceWithRelations).items = items;
 			(invoice as InvoiceWithRelations).contract = contract;
+			(invoice as InvoiceWithRelations).references = await this.invoiceReferenceRepository.find({
+				where: { invoice_id: invoice.id },
+				order: { created_at: 'ASC' },
+			});
 		}
 
 		return invoices as InvoiceWithRelations[];
@@ -811,6 +821,51 @@ export class InvoiceSchedulerService {
 			}
 		}
 
+		// Mapear referencias si existen
+		let l10nClReferenceIds: OdooReferenceDTO[] | undefined = undefined;
+
+		if (invoice.references && invoice.references.length > 0) {
+			this.logger.log(`📎 Procesando ${invoice.references.length} referencias para factura ${invoice.invoice_number}`);
+
+			const referencesPromises = invoice.references.map(async (ref) => {
+				const odooDocTypeId = await this.getOdooDocumentTypeId(invoice.holding_id, ref.document_type_code);
+
+				if (!odooDocTypeId) {
+					this.logger.warn(
+						`⚠️ Referencia omitida: documento "${ref.document_number}" ` + `con tipo "${ref.document_type_code}" no encontrado en Odoo`
+					);
+					return null;
+				}
+
+				const refDateStr = ref.reference_date
+					? ref.reference_date instanceof Date
+						? ref.reference_date.toISOString().split('T')[0]
+						: String(ref.reference_date).split('T')[0]
+					: undefined;
+
+				this.logger.log(`  ✓ Referencia: ${ref.document_number} (tipo: ${ref.document_type_code} → Odoo ID: ${odooDocTypeId})`);
+
+				return {
+					origin_doc_number: ref.document_number,
+					l10n_cl_reference_doc_type_id: odooDocTypeId,
+					reference_doc_code: ref.reference_code || (false as const),
+					reason: ref.reason || (false as const),
+					date: refDateStr,
+					l10n_cl_reference_doc_internal_type: false as const,
+				} as OdooReferenceDTO;
+			});
+
+			const mappedReferences = await Promise.all(referencesPromises);
+			l10nClReferenceIds = mappedReferences.filter((ref): ref is OdooReferenceDTO => ref !== null);
+
+			if (l10nClReferenceIds.length === 0) {
+				l10nClReferenceIds = undefined;
+				this.logger.warn(`⚠️ Ninguna referencia pudo ser mapeada para factura ${invoice.invoice_number}`);
+			} else {
+				this.logger.log(`✅ ${l10nClReferenceIds.length} referencias mapeadas correctamente`);
+			}
+		}
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -825,6 +880,7 @@ export class InvoiceSchedulerService {
 			auto_post: autoPost,
 			invoice_line_ids: invoiceLines,
 			l10n_pe_edi_operation_type: l10nPeEdiOperationType,
+			l10n_cl_reference_ids: l10nClReferenceIds,
 		};
 	}
 
@@ -1010,6 +1066,22 @@ export class InvoiceSchedulerService {
 		};
 
 		return currencyMap[currency];
+	}
+
+	/**
+	 * Obtiene el ID de Odoo para un tipo de documento consultando dinámicamente
+	 */
+	private async getOdooDocumentTypeId(holdingId: string, documentTypeCode: string): Promise<number | null> {
+		try {
+			const odooId = await this.documentTypeMappingService.getOdooDocumentTypeId(holdingId, documentTypeCode);
+			if (!odooId) {
+				this.logger.warn(`⚠️ Tipo de documento "${documentTypeCode}" no encontrado en Odoo`);
+			}
+			return odooId;
+		} catch (error) {
+			this.logger.error(`Error obteniendo ID de Odoo para tipo "${documentTypeCode}": ${error.message}`);
+			return null;
+		}
 	}
 
 	private async getProductMappingInfo(
@@ -1450,5 +1522,72 @@ export class InvoiceSchedulerService {
 			.sort({ createdAt: -1 })
 			.limit(limit)
 			.exec();
+	}
+
+	async createSystemSchedulerJob(options: ProcessOptions): Promise<string> {
+		const { dryRun, holdingId, contractId } = options;
+		const jobId = uuidv4();
+		const userId = 'system-scheduler';
+
+		this.logger.log(
+			`🆕 Creando job del sistema ${jobId} - DryRun: ${dryRun}, HoldingId: ${holdingId || 'todos'}, ContractId: ${contractId || 'todos'}`
+		);
+
+		const job = new this.invoiceSchedulerJobModel({
+			jobId,
+			holdingId: holdingId || 'all',
+			contractId,
+			dryRun,
+			status: 'running',
+			progress: {
+				total: 0,
+				sent: 0,
+				errors: 0,
+				skipped: 0,
+				current: 0,
+			},
+			userId,
+			startedAt: new Date(),
+		});
+
+		await job.save();
+
+		return jobId;
+	}
+
+	async updateSchedulerJobResult(jobId: string, result: ProcessInvoicesResponseDto): Promise<void> {
+		await this.invoiceSchedulerJobModel.updateOne(
+			{ jobId },
+			{
+				status: 'completed',
+				result,
+				progress: {
+					total: result.summary.total,
+					sent: result.summary.sent,
+					errors: result.summary.errors,
+					skipped: result.summary.skipped,
+					current: result.summary.total,
+				},
+				completedAt: new Date(),
+			}
+		);
+
+		this.logger.log(
+			`✅ Job del sistema ${jobId} completado - Total: ${result.summary.total}, Enviadas: ${result.summary.sent}, ` +
+				`Errores: ${result.summary.errors}, Omitidas: ${result.summary.skipped}`
+		);
+	}
+
+	async updateSchedulerJobError(jobId: string, error: Error): Promise<void> {
+		await this.invoiceSchedulerJobModel.updateOne(
+			{ jobId },
+			{
+				status: 'failed',
+				error: error.message || 'Error desconocido',
+				completedAt: new Date(),
+			}
+		);
+
+		this.logger.error(`❌ Job del sistema ${jobId} falló: ${error.message}`);
 	}
 }

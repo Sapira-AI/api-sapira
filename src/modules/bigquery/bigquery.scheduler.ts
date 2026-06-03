@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
 import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
 
 import { BigQueryService } from './bigquery.service';
@@ -19,6 +20,8 @@ export class BigQueryScheduler {
 		private readonly bigQueryService: BigQueryService,
 		@InjectRepository(CompanyHolding)
 		private readonly holdingRepository: Repository<CompanyHolding>,
+		@InjectRepository(BigQueryConnection)
+		private readonly bigQueryConnectionRepository: Repository<BigQueryConnection>,
 		private readonly configService: ConfigService
 	) {
 		this.syncEnabled = this.configService.get<string>('BIGQUERY_SYNC_ENABLED') !== 'false';
@@ -68,14 +71,20 @@ export class BigQueryScheduler {
 	}
 
 	private async executeFullSync(): Promise<void> {
-		const holdings = await this.holdingRepository.find();
+		const activeConnections = await this.bigQueryConnectionRepository.find({
+			where: { is_active: true },
+			relations: ['holding'],
+		});
 
-		if (holdings.length === 0) {
-			this.logger.warn('No hay holdings para sincronizar');
+		if (activeConnections.length === 0) {
+			this.logger.warn('No hay holdings con BigQuery configurado para sincronizar');
 			return;
 		}
 
-		this.logger.log(`Encontrados ${holdings.length} holding(s) para sincronizar`);
+		const holdingIds = [...new Set(activeConnections.map((conn) => conn.holding_id))];
+		const holdings = await this.holdingRepository.findByIds(holdingIds);
+
+		this.logger.log(`Encontrados ${holdings.length} holding(s) con BigQuery configurado para sincronizar`);
 
 		let totalProcessed = 0;
 		let totalInserted = 0;
@@ -103,6 +112,9 @@ export class BigQueryScheduler {
 				errors++;
 				this.logger.error(`✗ Error sincronizando holding ${holding.name}:`, error);
 				this.logger.error(`   Error detalle: ${error.message}\n`);
+				if (error.message?.includes('No hay conexión de BigQuery')) {
+					this.logger.warn(`   Holding ${holding.name} no tiene conexión de BigQuery activa`);
+				}
 			}
 		}
 

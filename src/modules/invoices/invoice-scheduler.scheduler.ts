@@ -50,14 +50,23 @@ export class InvoiceSchedulerScheduler {
 
 		this.isRunning = true;
 		const startTime = Date.now();
+		let jobId: string | null = null;
 
 		try {
 			this.logger.log('🚀 Iniciando envío automático de facturas a Odoo...');
 			this.appLogger.log('🚀 Iniciando envío automático de facturas a Odoo', 'system', 'InvoiceScheduler');
 
+			jobId = await this.invoiceSchedulerService.createSystemSchedulerJob({
+				dryRun: false,
+			});
+
+			this.logger.log(`📝 Job del sistema creado: ${jobId}`);
+
 			const result = await this.invoiceSchedulerService.processInvoicesToSend({
 				dryRun: false,
 			});
+
+			await this.invoiceSchedulerService.updateSchedulerJobResult(jobId, result);
 
 			const executionTime = Date.now() - startTime;
 			this.logger.log(
@@ -66,6 +75,7 @@ export class InvoiceSchedulerScheduler {
 					`Errores: ${result.summary.errors}, Omitidas: ${result.summary.skipped}`
 			);
 			this.appLogger.log(`✓ Envío de facturas a Odoo completado en ${(executionTime / 1000).toFixed(2)}s`, 'system', 'InvoiceScheduler', {
+				jobId,
 				executionTimeMs: executionTime,
 				executionTimeSeconds: (executionTime / 1000).toFixed(2),
 				total: result.summary.total,
@@ -77,6 +87,7 @@ export class InvoiceSchedulerScheduler {
 			if (result.summary.errors > 0) {
 				this.logger.warn(`⚠️ Se encontraron ${result.summary.errors} errores durante el envío`);
 				this.appLogger.warn(`⚠️ Se encontraron ${result.summary.errors} errores durante el envío de facturas`, 'system', 'InvoiceScheduler', {
+					jobId,
 					errorCount: result.summary.errors,
 				});
 			}
@@ -88,6 +99,10 @@ export class InvoiceSchedulerScheduler {
 				error?.stack || error?.message,
 				'InvoiceScheduler'
 			);
+
+			if (jobId) {
+				await this.invoiceSchedulerService.updateSchedulerJobError(jobId, error);
+			}
 		} finally {
 			this.isRunning = false;
 		}
