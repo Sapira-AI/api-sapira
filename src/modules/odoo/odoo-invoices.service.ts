@@ -37,6 +37,7 @@ export class OdooInvoicesService {
 			narration,
 			company_id,
 			journal_id,
+			l10n_latam_document_type_id,
 			x_sapira_invoice_id,
 			currency_id,
 			auto_post,
@@ -110,6 +111,10 @@ export class OdooInvoicesService {
 
 			if (company_id) {
 				invoiceData.company_id = company_id;
+			}
+
+			if (l10n_latam_document_type_id) {
+				invoiceData.l10n_latam_document_type_id = l10n_latam_document_type_id;
 			}
 
 			if (journal_id) {
@@ -201,6 +206,9 @@ export class OdooInvoicesService {
 			console.log(`👤 Partner ID: ${invoiceData.partner_id}`);
 			console.log(`📅 Invoice Date: ${invoiceData.invoice_date}`);
 			console.log(`💰 Currency ID: ${data.currency_id}`);
+			if (invoiceData.l10n_latam_document_type_id) {
+				console.log(`📄 Tipo de documento LATAM ID: ${invoiceData.l10n_latam_document_type_id}`);
+			}
 			if (invoiceData.l10n_pe_edi_operation_type) {
 				console.log(`🇵🇪 Perú - Tipo de operación: ${invoiceData.l10n_pe_edi_operation_type} (Sujeta a detracción)`);
 			}
