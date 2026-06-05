@@ -515,6 +515,15 @@ export class CreateDraftInvoiceDTO {
 	@Type(() => Number)
 	journal_id?: number;
 
+	@ApiProperty({
+		description: 'ID del tipo de documento latinoamericano en Odoo (requerido para países LATAM)',
+		required: false,
+	})
+	@IsOptional()
+	@IsNumber()
+	@Type(() => Number)
+	l10n_latam_document_type_id?: number;
+
 	@ApiProperty({ description: 'ID de factura en Sapira ', required: false })
 	@IsOptional()
 	@IsString()

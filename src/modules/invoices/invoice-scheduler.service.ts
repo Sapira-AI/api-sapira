@@ -866,6 +866,26 @@ export class InvoiceSchedulerService {
 			}
 		}
 
+		// Obtener tipo de documento latinoamericano
+		this.logger.log(`🔍 Consultando tipo de documento LATAM para compañía ${invoice.company.odoo_integration_id}...`);
+		let l10nLatamDocumentTypeId: number | undefined = undefined;
+		try {
+			const docType = await this.documentTypeMappingService.getDefaultDocumentTypeForInvoice(
+				invoice.holding_id,
+				invoice.company.odoo_integration_id,
+				'out_invoice'
+			);
+
+			if (docType) {
+				l10nLatamDocumentTypeId = docType.id;
+				this.logger.log(`📄 Tipo de documento LATAM: ID=${docType.id}, Código="${docType.code}", Nombre="${docType.name}"`);
+			} else {
+				this.logger.log(`ℹ️ No se requiere tipo de documento LATAM para esta compañía`);
+			}
+		} catch (error) {
+			this.logger.warn(`⚠️ Error obteniendo tipo de documento LATAM: ${error.message}`);
+		}
+
 		return {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
@@ -879,6 +899,7 @@ export class InvoiceSchedulerService {
 			currency_id: currencyId,
 			auto_post: autoPost,
 			invoice_line_ids: invoiceLines,
+			l10n_latam_document_type_id: l10nLatamDocumentTypeId,
 			l10n_pe_edi_operation_type: l10nPeEdiOperationType,
 			l10n_cl_reference_ids: l10nClReferenceIds,
 		};
