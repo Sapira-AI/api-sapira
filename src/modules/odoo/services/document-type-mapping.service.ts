@@ -11,10 +11,25 @@ interface DocumentTypeMapping {
 	name: string;
 }
 
+interface DefaultDocumentType {
+	id: number;
+	code: string;
+	name: string;
+	internal_type: string;
+}
+
+// Códigos de documento permitidos por país (basado en código fuente de Odoo)
+// Fuente: l10n_pe/models/account_move.py, l10n_cl/models/account_move.py, etc.
+const ALLOWED_INVOICE_CODES_BY_COUNTRY: Record<string, string[]> = {
+	PE: ['01', '03', '07', '08', '20', '40'], // Perú - según l10n_pe
+	// Agregar otros países según se necesiten
+};
+
 @Injectable()
 export class DocumentTypeMappingService {
 	private readonly logger = new Logger(DocumentTypeMappingService.name);
 	private cache: Map<string, Map<string, DocumentTypeMapping>> = new Map();
+	private defaultDocTypeCache: Map<string, DefaultDocumentType | null> = new Map();
 
 	constructor(
 		@InjectRepository(OdooConnection)
@@ -94,12 +109,128 @@ export class DocumentTypeMappingService {
 		}
 	}
 
+	async getDefaultDocumentTypeForInvoice(
+		holdingId: string,
+		companyId: number,
+		moveType: 'out_invoice' | 'out_refund'
+	): Promise<DefaultDocumentType | null> {
+		const cacheKey = `${holdingId}:${companyId}:${moveType}`;
+
+		if (this.defaultDocTypeCache.has(cacheKey)) {
+			return this.defaultDocTypeCache.get(cacheKey)!;
+		}
+
+		try {
+			const connection = await this.odooConnectionRepository.findOne({
+				where: { holding_id: holdingId, is_active: true },
+			});
+
+			if (!connection) {
+				throw new Error(`No se encontró conexión activa de Odoo para holding ${holdingId}`);
+			}
+
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			const company = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'res.company',
+				'read',
+				[[companyId]],
+				{ fields: ['country_id'] },
+			]);
+
+			if (!company || company.length === 0 || !company[0].country_id) {
+				this.logger.warn(`No se pudo obtener el país de la compañía ${companyId}`);
+				this.defaultDocTypeCache.set(cacheKey, null);
+				return null;
+			}
+
+			const countryId = company[0].country_id[0];
+			const internalType = moveType === 'out_refund' ? 'credit_note' : 'invoice';
+
+			// Obtener código del país para aplicar filtros específicos
+			const countryData = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'res.country',
+				'read',
+				[[countryId]],
+				{ fields: ['code'] },
+			]);
+
+			const countryCode = countryData?.[0]?.code || null;
+
+			// Construir filtros base
+			const filters: any[] = [
+				['country_id', '=', countryId],
+				['internal_type', '=', internalType],
+			];
+
+			// Agregar filtro de códigos permitidos si existe para el país (como lo hace Odoo)
+			if (countryCode && ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode]) {
+				filters.push(['code', 'in', ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode]]);
+				this.logger.debug(`Aplicando filtro de códigos para ${countryCode}: [${ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode].join(', ')}]`);
+			}
+
+			const documentTypes = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'l10n_latam.document.type',
+				'search_read',
+				[filters],
+				{
+					fields: ['id', 'code', 'name', 'internal_type', 'sequence'],
+					limit: 1,
+					order: 'sequence asc', // Igual que Odoo: _order = 'sequence, id'
+				},
+			]);
+
+			if (!documentTypes || documentTypes.length === 0) {
+				this.logger.log(`ℹ️ No se encontró tipo de documento para país ${countryId}, tipo ${internalType} (compañía ${companyId})`);
+				this.defaultDocTypeCache.set(cacheKey, null);
+				return null;
+			}
+
+			const docType: DefaultDocumentType = {
+				id: documentTypes[0].id,
+				code: documentTypes[0].code,
+				name: documentTypes[0].name,
+				internal_type: documentTypes[0].internal_type,
+			};
+
+			this.defaultDocTypeCache.set(cacheKey, docType);
+
+			this.logger.log(
+				`✅ Tipo de documento obtenido: ID=${docType.id}, Código="${docType.code}", Nombre="${docType.name}", ` +
+					`Secuencia=${documentTypes[0].sequence} (país ${countryCode}, compañía ${companyId}, tipo ${moveType})`
+			);
+
+			return docType;
+		} catch (error) {
+			this.logger.error(`Error obteniendo tipo de documento por defecto: ${error.message}`, error.stack);
+			this.defaultDocTypeCache.set(cacheKey, null);
+			return null;
+		}
+	}
+
 	clearCache(holdingId?: string): void {
 		if (holdingId) {
 			this.cache.delete(`${holdingId}`);
 			this.logger.log(`Cache limpiado para holding ${holdingId}`);
 		} else {
 			this.cache.clear();
+			this.defaultDocTypeCache.clear();
 			this.logger.log('Cache completo limpiado');
 		}
 	}

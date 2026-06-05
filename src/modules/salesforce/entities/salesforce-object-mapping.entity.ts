@@ -20,9 +20,6 @@ export class SalesforceObjectMapping {
 	@Column({ type: 'uuid' })
 	sapira_record_id: string;
 
-	@Column({ type: 'jsonb', nullable: true })
-	metadata: any;
-
 	@CreateDateColumn({ type: 'timestamptz' })
 	created_at: Date;
 
