@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('quotes')
 export class Quote {
@@ -61,7 +61,4 @@ export class Quote {
 
 	@Column({ type: 'text', nullable: true })
 	salesforce_opportunity_id: string;
-
-	@UpdateDateColumn({ type: 'timestamptz' })
-	updated_at: Date;
 }

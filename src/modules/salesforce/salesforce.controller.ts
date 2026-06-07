@@ -16,6 +16,7 @@ import {
 	SalesforceSyncResponseDto,
 	SalesforceTestConnectionResponseDto,
 } from './dtos/salesforce-response.dto';
+import { SalesforceSyncCompleteDto } from './dtos/salesforce-sync-complete.dto';
 import { SalesforceSyncDto } from './dtos/salesforce-sync.dto';
 import { SalesforceService } from './salesforce.service';
 
@@ -244,14 +245,15 @@ export class SalesforceController {
 	@Post('sync/complete')
 	@ApiOperation({
 		summary: 'Sincronización completa de oportunidades',
-		description: 'Sincroniza oportunidades, clientes, cotizaciones y productos desde Salesforce',
+		description:
+			'Sincroniza oportunidades, clientes, cotizaciones y productos desde Salesforce. Opcionalmente puede sincronizar solo oportunidades específicas enviando sus IDs.',
 	})
 	@ApiResponse({
 		status: HttpStatus.OK,
 		description: 'Sincronización completa exitosa',
 	})
-	async syncComplete(@Body() syncDto: any, @Headers('x-holding-id') holdingId: string) {
-		return this.salesforceService.syncOpportunitiesComplete(holdingId, syncDto.dateFrom, syncDto.dateTo);
+	async syncComplete(@Body() syncDto: SalesforceSyncCompleteDto, @Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.syncOpportunitiesComplete(holdingId, syncDto.dateFrom, syncDto.dateTo, syncDto.opportunityIds);
 	}
 
 	@Post('sync/complete/all')

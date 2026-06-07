@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('client_contacts')
 export class ClientContact {
@@ -25,10 +25,4 @@ export class ClientContact {
 
 	@Column({ type: 'text', nullable: true })
 	phone: string;
-
-	@CreateDateColumn({ type: 'timestamptz' })
-	created_at: Date;
-
-	@UpdateDateColumn({ type: 'timestamptz' })
-	updated_at: Date;
 }

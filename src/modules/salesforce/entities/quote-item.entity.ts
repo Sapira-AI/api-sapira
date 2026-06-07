@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('quote_items')
 export class QuoteItem {
@@ -100,10 +100,4 @@ export class QuoteItem {
 
 	@Column({ type: 'text', nullable: true, default: 'monthly' })
 	price_entry_mode: string;
-
-	@CreateDateColumn({ type: 'timestamptz' })
-	created_at: Date;
-
-	@UpdateDateColumn({ type: 'timestamptz' })
-	updated_at: Date;
 }

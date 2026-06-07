@@ -118,3 +118,46 @@ export function formatAddress(street?: string, city?: string, state?: string, po
 	const parts = [street, city, state, postalCode, country].filter(Boolean);
 	return parts.length > 0 ? parts.join(', ') : null;
 }
+
+/**
+ * Transform Salesforce boolean-like fields to actual boolean
+ * Handles: 'si', 'sí', 'yes', 'true', true
+ */
+export function transformToBoolean(value: any): boolean {
+	if (value === null || value === undefined) return false;
+	if (typeof value === 'boolean') return value;
+	return ['si', 'sí', 'yes', 'true'].includes(String(value).toLowerCase().trim());
+}
+
+/**
+ * Calculate term_months from start and end dates
+ * If dates not available, returns 12 for recurring, 1 for one-shot
+ */
+export function calculateTermMonths(startDate?: string, endDate?: string, isRecurring?: boolean): number {
+	if (startDate && endDate) {
+		const start = new Date(startDate);
+		const end = new Date(endDate);
+		const diffTime = Math.abs(end.getTime() - start.getTime());
+		const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
+		return diffMonths > 0 ? diffMonths : isRecurring ? 12 : 1;
+	}
+	return isRecurring ? 12 : 1;
+}
+
+/**
+ * Parse Salesforce date string to Date object in local timezone
+ * Evita problemas de timezone donde "2026-05-31" se muestra como "2026-05-30"
+ * @param dateStr - Fecha en formato "YYYY-MM-DD" o "YYYY-MM-DDTHH:mm:ss.sssZ"
+ * @returns Date object en zona horaria local, o null si no hay fecha
+ */
+export function parseSalesforceDate(dateStr: string | null | undefined): Date | null {
+	if (!dateStr) return null;
+
+	// Extraer solo la parte de fecha (YYYY-MM-DD)
+	const datePart = dateStr.split('T')[0];
+	const [year, month, day] = datePart.split('-').map(Number);
+
+	// Crear Date en zona horaria local (no UTC)
+	// month - 1 porque los meses en JS son 0-indexed
+	return new Date(year, month - 1, day);
+}
