@@ -258,8 +258,8 @@ export class SalesforceService {
 		};
 	}
 
-	async syncOpportunitiesComplete(holdingId: string, dateFrom?: string, dateTo?: string) {
-		return this.syncCompleteService.syncOpportunitiesComplete(holdingId, dateFrom, dateTo);
+	async syncOpportunitiesComplete(holdingId: string, dateFrom?: string, dateTo?: string, opportunityIds?: string[]) {
+		return this.syncCompleteService.syncOpportunitiesComplete(holdingId, dateFrom, dateTo, opportunityIds);
 	}
 
 	async syncAllConnectionsComplete() {

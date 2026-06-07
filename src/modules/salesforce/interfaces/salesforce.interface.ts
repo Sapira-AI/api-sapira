@@ -36,6 +36,7 @@ export interface SalesforceOpportunity {
 	IsClosed: boolean;
 	Amount?: number;
 	CurrencyIsoCode?: string;
+	Description?: string;
 	Modalidad_de_pago__c?: string;
 	Forma_de_pago__c?: string;
 	Contrato__c?: string;
@@ -56,6 +57,11 @@ export interface SalesforceOpportunity {
 		BillingCountry?: string;
 		Plazos_de_pago__c?: string;
 		Lista_de_Precio__r?: { Tipo__c?: string };
+		Per_odo_de_facturaci_n__c?: string;
+		Industry?: string;
+		Segmento__c?: string;
+		DemoCountry__c?: string;
+		Email_de_contacto_principal__c?: string;
 	};
 }
 
@@ -110,6 +116,10 @@ export interface SalesforceOpportunityLineItem {
 	Fuente_de_unidad__c?: string;
 	Fuente_Optimizaciones__c?: string;
 	Description?: string;
+	ServiceDate?: string;
+	Fecha_de_inicio__c?: string;
+	Fecha_de_Fin__c?: string;
+	Calculo_para_facturaci_n__c?: string;
 }
 
 export interface SalesforceOpportunityWithLineItems extends SalesforceOpportunity {

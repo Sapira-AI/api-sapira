@@ -34,8 +34,14 @@ export class SalesforceSyncCompleteService {
 
 	/**
 	 * Sincronización completa de oportunidades para un holding
+	 * @param opportunityIds - IDs específicos de oportunidades a sincronizar (opcional)
 	 */
-	async syncOpportunitiesComplete(holdingId: string, dateFrom?: string, dateTo?: string): Promise<SyncCompleteResponseDto> {
+	async syncOpportunitiesComplete(
+		holdingId: string,
+		dateFrom?: string,
+		dateTo?: string,
+		opportunityIds?: string[]
+	): Promise<SyncCompleteResponseDto> {
 		const startTime = new Date();
 		this.logger.log(`🔄 Starting complete sync for holding ${holdingId}`);
 
@@ -68,14 +74,21 @@ export class SalesforceSyncCompleteService {
 			this.logger.log(`📅 Sync date range: ${from} to ${to}`);
 
 			// Consultar oportunidades con line items
-			const opportunities = await this.fetchOpportunitiesWithLineItems(holdingId, from, to);
-			stats.opportunities = opportunities.length;
+			let opportunities = await this.fetchOpportunitiesWithLineItems(holdingId, from, to);
 
-			this.logger.log(`📦 Found ${opportunities.length} opportunities`);
+			// Filtrar por IDs específicos si se proporcionaron
+			if (opportunityIds && opportunityIds.length > 0) {
+				this.logger.log(`🎯 Filtering to ${opportunityIds.length} selected opportunities`);
+				opportunities = opportunities.filter((opp) => opportunityIds.includes(opp.Id));
+				this.logger.log(`✅ Filtered to ${opportunities.length} opportunities`);
+			}
+
+			stats.opportunities = opportunities.length;
+			this.logger.log(`📦 Processing ${opportunities.length} opportunities`);
 
 			// Obtener QuoteLineItems para fusionar campos custom
-			const opportunityIds = opportunities.map((opp) => opp.Id);
-			const quoteLineItemsByOpp = await this.fetchQuoteLineItems(holdingId, opportunityIds);
+			const oppIds = opportunities.map((opp) => opp.Id);
+			const quoteLineItemsByOpp = await this.fetchQuoteLineItems(holdingId, oppIds);
 
 			// Fusionar OpportunityLineItems con QuoteLineItems
 			this.mergeLineItems(opportunities, quoteLineItemsByOpp);
@@ -156,13 +169,16 @@ export class SalesforceSyncCompleteService {
 		const soql = `
 			SELECT 
 				Id, Name, AccountId, Type, CloseDate, StageName, IsWon, IsClosed,
-				Amount, CurrencyIsoCode, CreatedDate,
+				Amount, CurrencyIsoCode, CreatedDate, Description,
 				Modalidad_de_pago__c, Forma_de_pago__c, Contrato__c, 
 				Orden_de_compra__c, QuoteProjectManager__c, QuoteBillingEmail__c,
 				id_largo_oportunidad__c,
 				OwnerId, Owner.Id, Owner.Name, Owner.Email,
 				Account.Id, Account.Name, Account.BillingCountry,
 				Account.Plazos_de_pago__c, Account.Lista_de_Precio__r.Tipo__c,
+				Account.Per_odo_de_facturaci_n__c,
+				Account.Industry, Account.Segmento__c, Account.DemoCountry__c,
+				Account.Email_de_contacto_principal__c,
 				(SELECT Id, Product2Id, Product2.Id, Product2.Name, Product2.ProductCode,
 				        Quantity, UnitPrice, ListPrice, TotalPrice,
 				        Recurrencia__c, Description
@@ -264,6 +280,7 @@ export class SalesforceSyncCompleteService {
 						if (oli) {
 							// Fusionar campos custom de QLI sobre OLI
 							Object.assign(oli, {
+								Recurrencia__c: qli.Recurrencia__c, // ✅ CRÍTICO: Fusionar Recurrencia__c desde QLI
 								Fecha_de_inicio__c: qli.Fecha_de_inicio__c,
 								Fecha_de_Fin__c: qli.Fecha_de_Fin__c,
 								Calculo_para_facturaci_n__c: qli.Calculo_para_facturaci_n__c,
@@ -374,6 +391,7 @@ export class SalesforceSyncCompleteService {
 						holding_id: holdingId,
 						contact_type: 'Principal',
 						email: accountData.Email_de_contacto_principal__c,
+						phone: (accountData as any).Phone || null,
 					});
 					this.logger.log(`✅ Contacto principal creado para cliente existente ${existingClientByNumber}`);
 				}
@@ -438,7 +456,8 @@ export class SalesforceSyncCompleteService {
 				DemoCountry__c, BusinessName__c, RUT__c,
 				Email_de_contacto_principal__c, Industria_sector__c,
 				Plazos_de_pago__c, Lista_de_Precio__r.Tipo__c,
-				M_nimo_facturable_licencias__c, Per_odo_de_facturaci_n__c
+				M_nimo_facturable_licencias__c, Per_odo_de_facturaci_n__c,
+				Phone
 			FROM Account
 			WHERE Id = '${accountId}'
 			LIMIT 1
@@ -591,6 +610,10 @@ export class SalesforceSyncCompleteService {
 		holdingId: string,
 		stats: SyncCompleteStats
 	): Promise<void> {
+		this.logger.debug(
+			`🔍 Processing Opportunity ${opportunity.Id}: Name="${opportunity.Name}", CreatedDate=${opportunity.CreatedDate}, CloseDate=${opportunity.CloseDate}, Amount=${opportunity.Amount}`
+		);
+
 		// Buscar etapa de cotización
 		let stageId = await this.typeormService.getQuoteStageByName(holdingId, 'enviada');
 		if (!stageId) {
@@ -649,25 +672,38 @@ export class SalesforceSyncCompleteService {
 		const clientContactId = await this.typeormService.getPrincipalContact(clientId);
 
 		// Preparar datos de cotización
-		const quoteDate = transformers.formatDateToDDMMYYYY(opportunity.CloseDate);
-		const billingMethod = transformers.transformBillingMethod(opportunity.Forma_de_pago__c);
+		// Usar CreatedDate como quote_date primario, CloseDate como fallback
+		// Usar parseSalesforceDate para evitar problemas de timezone
+		const quoteDate = transformers.parseSalesforceDate(opportunity.CreatedDate) || transformers.parseSalesforceDate(opportunity.CloseDate);
+
+		const bookingDate = transformers.parseSalesforceDate(opportunity.CloseDate);
+
+		// Logging detallado de fechas para debugging
+		this.logger.debug(
+			`📅 Opportunity ${opportunity.Id} dates: CreatedDate=${opportunity.CreatedDate}, CloseDate=${opportunity.CloseDate}, quote_date=${quoteDate?.toLocaleDateString('es-CL')} (${quoteDate?.toISOString()}), booking_date=${bookingDate?.toLocaleDateString('es-CL')} (${bookingDate?.toISOString()})`
+		);
+
+		// Generar nota automática como en código antiguo
+		const autoNote = `Importado desde Salesforce - ${opportunity.Name} (Stage SF: ${opportunity.StageName} → Enviada)`;
+		const notes = opportunity.Description ? `${autoNote}\n\n${opportunity.Description}` : autoNote;
 
 		const quoteData = {
 			holding_id: holdingId,
 			client_id: clientId,
 			client_contact_id: clientContactId,
 			seller_id: sellerId,
+			quote_number: opportunity.id_largo_oportunidad__c || null,
 			quote_date: quoteDate,
+			booking_date: bookingDate,
 			quote_stage_id: stageId,
-			billing_method: billingMethod,
+			quote_type: opportunity.Type || 'NewBusiness',
 			payment_terms: paymentTermsValue || opportunity.Modalidad_de_pago__c || null,
-			contract_number: opportunity.Contrato__c || null,
-			purchase_order: opportunity.Orden_de_compra__c || null,
-			billing_email: opportunity.QuoteBillingEmail__c || null,
+			requires_contract_document: transformers.transformToBoolean(opportunity.Contrato__c),
+			requires_references_for_billing: transformers.transformToBoolean(opportunity.Orden_de_compra__c),
 			salesforce_opportunity_id: opportunity.Id,
-			salesforce_opportunity_name: opportunity.Name,
 			total_amount: opportunity.Amount || 0,
 			currency: opportunity.CurrencyIsoCode || 'USD',
+			notes: notes,
 		};
 
 		// Verificar si ya existe cotización
@@ -695,32 +731,109 @@ export class SalesforceSyncCompleteService {
 		const quoteItems = [];
 
 		for (const lineItem of lineItems) {
-			const productId = await this.typeormService.getObjectMapping(holdingId, 'Product2', lineItem.Product2Id);
+			// Buscar mapeo de producto Salesforce → Sapira (igual que código antiguo)
+			const productMapping = await this.typeormService.getSalesforceProductMapping(holdingId, lineItem.Product2Id);
 
-			if (!productId) {
-				this.logger.warn(`Product mapping not found for ${lineItem.Product2Id}, skipping line item`);
-				continue;
+			let productId = null;
+			let productName = lineItem.Product2?.Name || `Producto ${lineItem.Product2Id || lineItem.Id}`;
+			let isUnmappedProduct = false;
+
+			if (productMapping) {
+				// Hay mapeo: usar producto Sapira mapeado
+				productId = productMapping.sapira_product_id;
+				productName = productMapping.sapira_product_name || productName;
+			} else if (lineItem.Product2Id) {
+				// No hay mapeo: marcar como sin mapear pero NO saltar el item
+				isUnmappedProduct = true;
+				this.logger.warn(`⚠️ Product mapping not found for ${lineItem.Product2Id}, creating item with product_id = null`);
 			}
 
-			const customFields = transformers.buildCustomFields(lineItem, (opportunity as any).Account?.Lista_de_Precio__r?.Tipo__c);
+			// Construir customFields como objeto mutable
+			const baseCustomFields = transformers.buildCustomFields(lineItem, (opportunity as any).Account?.Lista_de_Precio__r?.Tipo__c);
+			const customFields = baseCustomFields ? { ...baseCustomFields } : {};
+
+			// Agregar flag de producto sin mapear en custom_fields
+			if (isUnmappedProduct) {
+				customFields.salesforce_unmapped_product = true;
+				customFields.salesforce_product_id_original = lineItem.Product2Id;
+			}
 			const discountPercentage = transformers.calculateDiscountPercentage(lineItem.ListPrice, lineItem.UnitPrice);
 			const discountType = transformers.getDiscountType(lineItem.ListPrice, lineItem.UnitPrice);
+
+			// Mapear fechas
+			const startDate = lineItem.Fecha_de_inicio__c || lineItem.ServiceDate || null;
+
+			// Determinar si es recurrente ANTES de calcular term_months
+			const isRecurring = transformers.isRecurring(lineItem.Recurrencia__c);
+
+			// Logging detallado de Recurrencia__c para debugging
+			this.logger.debug(
+				`🔍 LineItem ${lineItem.Id}: Recurrencia__c="${lineItem.Recurrencia__c}" (type: ${typeof lineItem.Recurrencia__c}, isNull: ${lineItem.Recurrencia__c === null}, isUndefined: ${lineItem.Recurrencia__c === undefined}), is_recurring=${isRecurring}`
+			);
+
+			// Calcular term_months desde fechas
+			const termMonths = transformers.calculateTermMonths(startDate, lineItem.Fecha_de_Fin__c, isRecurring);
+
+			// Calcular end_date: usar el de SF o calcularlo desde start_date + term_months
+			const endDate =
+				lineItem.Fecha_de_Fin__c ||
+				(() => {
+					if (!startDate) return null;
+					const start = new Date(startDate);
+					start.setMonth(start.getMonth() + termMonths);
+					return start.toISOString().split('T')[0];
+				})();
+
+			// Mapear item_type desde Calculo_para_facturaci_n__c (Nivel 1: Fijo, Variable, Digital)
+			const itemType = lineItem.Calculo_para_facturaci_n__c || null;
+
+			// Mapear unit_of_measure desde Unidad_facturada__c (Nivel 2: Bolsas, Mensajes, etc.)
+			const unitOfMeasure = (lineItem as any).Unidad_facturada__c || null;
+
+			// Mapear billing_method desde Opportunity.Forma_de_pago__c (Prepago→Anticipado, Postpago→Vencido)
+			const billingMethod = transformers.transformBillingMethod(opportunity.Forma_de_pago__c);
+
+			// Heredar billing_frequency del Account si está disponible
+			const billingFrequency = (opportunity as any).Account?.Per_odo_de_facturaci_n__c || opportunity.Modalidad_de_pago__c || null;
+
+			// Calcular price y final_price
+			const calculatedPrice = termMonths * (lineItem.UnitPrice || 0) * (lineItem.Quantity || 1);
+			const finalPrice = discountPercentage && discountPercentage > 0 ? calculatedPrice * (1 - discountPercentage / 100) : calculatedPrice;
+
+			// Logging detallado para debugging
+			this.logger.debug(
+				`📊 LineItem ${lineItem.Id}: product="${productName}" (mapped=${!!productMapping}), is_recurring=${isRecurring}, term_months=${termMonths}, price=${calculatedPrice}, final_price=${finalPrice}, start=${startDate}, end=${endDate}`
+			);
+
+			// Logging específico para is_recurring antes de guardar
+			this.logger.debug(
+				`💾 Guardando quote_item: is_recurring=${isRecurring} (type: ${typeof isRecurring}, value: ${JSON.stringify(isRecurring)})`
+			);
 
 			quoteItems.push({
 				quote_id: quoteId,
 				product_id: productId,
-				product_name: lineItem.Product2?.Name || 'Producto sin nombre',
+				product_name: productName,
 				holding_id: holdingId,
 				quantity: lineItem.Quantity || 1,
 				unit_price: lineItem.UnitPrice || 0,
-				price: lineItem.TotalPrice || lineItem.UnitPrice || 0,
+				price: calculatedPrice,
+				final_price: finalPrice,
 				discount_value: discountPercentage,
 				discount_type: discountType,
-				is_recurring: transformers.isRecurring(lineItem.Recurrencia__c),
-				description: lineItem.Description || null,
-				custom_fields: customFields,
+				is_recurring: isRecurring,
+				item_type: itemType,
+				unit_of_measure: unitOfMeasure,
+				term_months: termMonths,
+				custom_fields: Object.keys(customFields).length > 0 ? customFields : null,
 				salesforce_product_id: lineItem.Product2Id,
 				salesforce_line_item_id: lineItem.Id,
+				data_source: 'salesforce',
+				currency: opportunity.CurrencyIsoCode || 'USD',
+				start_date: transformers.parseSalesforceDate(startDate),
+				end_date: transformers.parseSalesforceDate(endDate),
+				billing_method: billingMethod,
+				billing_frequency: billingFrequency,
 			});
 		}
 

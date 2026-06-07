@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('sellers')
 export class Seller {
@@ -17,15 +17,9 @@ export class Seller {
 	@Column({ type: 'text', nullable: true })
 	phone: string;
 
-	@Column({ type: 'text', nullable: true })
-	salesforce_user_id: string;
-
 	@Column({ type: 'boolean', default: true })
 	is_active: boolean;
 
 	@Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
 	created_at: Date;
-
-	@UpdateDateColumn({ type: 'timestamptz' })
-	updated_at: Date;
 }

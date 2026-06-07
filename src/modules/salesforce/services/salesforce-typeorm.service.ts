@@ -13,6 +13,7 @@ import { QuoteItem } from '../entities/quote-item.entity';
 import { QuoteStage } from '../entities/quote-stage.entity';
 import { Quote } from '../entities/quote.entity';
 import { SalesforceObjectMapping } from '../entities/salesforce-object-mapping.entity';
+import { SalesforceProductMapping } from '../entities/salesforce-product-mapping.entity';
 import { Seller } from '../entities/seller.entity';
 
 @Injectable()
@@ -41,7 +42,9 @@ export class SalesforceTypeOrmService {
 		@InjectRepository(ClientEntity)
 		private readonly clientEntityRepository: Repository<ClientEntity>,
 		@InjectRepository(ClientEntityClient)
-		private readonly clientEntityClientRepository: Repository<ClientEntityClient>
+		private readonly clientEntityClientRepository: Repository<ClientEntityClient>,
+		@InjectRepository(SalesforceProductMapping)
+		private readonly salesforceProductMappingRepository: Repository<SalesforceProductMapping>
 	) {}
 
 	async ensureMasterDataValue(holdingId: string, category: string, value: string): Promise<void> {
@@ -153,7 +156,15 @@ export class SalesforceTypeOrmService {
 		if (items.length === 0) return;
 
 		try {
+			// Logging detallado de is_recurring antes de guardar
+			items.forEach((item, idx) => {
+				this.logger.debug(
+					`💾 QuoteItem ${idx + 1}: product="${item.product_name}", is_recurring=${item.is_recurring} (type: ${typeof item.is_recurring})`
+				);
+			});
+
 			await this.quoteItemRepository.save(items);
+			this.logger.log(`✅ ${items.length} quote items guardados exitosamente`);
 		} catch (error: any) {
 			this.logger.error(`Error creating quote items: ${error.message}`);
 			throw error;
@@ -196,17 +207,6 @@ export class SalesforceTypeOrmService {
 		});
 
 		return !!contact;
-	}
-
-	async getSellerBySalesforceId(holdingId: string, salesforceUserId: string): Promise<string | null> {
-		const seller = await this.sellerRepository.findOne({
-			where: {
-				holding_id: holdingId,
-				salesforce_user_id: salesforceUserId,
-			},
-		});
-
-		return seller?.id || null;
 	}
 
 	async getClientByNumber(holdingId: string, clientNumber: string): Promise<string | null> {
@@ -290,5 +290,25 @@ export class SalesforceTypeOrmService {
 		});
 
 		return contact?.id || null;
+	}
+
+	async getSalesforceProductMapping(
+		holdingId: string,
+		salesforceProductId: string
+	): Promise<{ sapira_product_id: string; sapira_product_name: string } | null> {
+		const mapping = await this.salesforceProductMappingRepository.findOne({
+			where: {
+				holding_id: holdingId,
+				salesforce_product_id: salesforceProductId,
+				is_active: true,
+			},
+		});
+
+		if (!mapping) return null;
+
+		return {
+			sapira_product_id: mapping.sapira_product_id,
+			sapira_product_name: mapping.sapira_product_name,
+		};
 	}
 }
