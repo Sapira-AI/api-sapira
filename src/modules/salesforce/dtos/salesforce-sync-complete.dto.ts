@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsOptional } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class SalesforceSyncCompleteDto {
 	@ApiPropertyOptional({
@@ -17,6 +17,16 @@ export class SalesforceSyncCompleteDto {
 	@IsOptional()
 	@IsDateString()
 	dateTo?: string;
+
+	@ApiPropertyOptional({
+		description: 'IDs específicos de oportunidades a sincronizar (opcional, si no se envía sincroniza todas)',
+		type: [String],
+		example: ['006RO00000czj8nYAA', '006RO00000d3MLkYAM'],
+	})
+	@IsOptional()
+	@IsArray()
+	@IsString({ each: true })
+	opportunityIds?: string[];
 
 	@ApiPropertyOptional({
 		description: 'Sincronizar clientes',
