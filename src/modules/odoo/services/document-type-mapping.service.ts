@@ -170,14 +170,40 @@ export class DocumentTypeMappingService {
 
 			const countryCode = countryData?.[0]?.code || null;
 
-			// Construir filtros base
+			// LOG DE DEPURACIÓN: Obtener TODOS los tipos de documento disponibles para este país
+			this.logger.log(`🔍 Consultando tipos de documento disponibles para país ${countryCode} (ID: ${countryId}), tipo ${internalType}`);
+			const allDocumentTypes = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'l10n_latam.document.type',
+				'search_read',
+				[
+					[
+						['country_id', '=', countryId],
+						['internal_type', '=', internalType],
+					],
+				],
+				{ fields: ['id', 'code', 'name', 'internal_type', 'sequence', 'report_name', 'active'] },
+			]);
+
+			this.logger.log(`📋 Tipos de documento disponibles para ${countryCode}: ${JSON.stringify(allDocumentTypes, null, 2)}`);
+
+			// VALIDACIÓN: Solo ejecutar lógica de asignación automática para Perú
+			if (countryCode !== 'PE') {
+				this.logger.log(`ℹ️ País ${countryCode} detectado. No se asignará tipo de documento automáticamente (solo se aplica para Perú)`);
+				this.defaultDocTypeCache.set(cacheKey, null);
+				return null;
+			}
+
+			// Construir filtros base para Perú
 			const filters: any[] = [
 				['country_id', '=', countryId],
 				['internal_type', '=', internalType],
 			];
 
-			// Agregar filtro de códigos permitidos si existe para el país (como lo hace Odoo)
-			if (countryCode && ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode]) {
+			// Agregar filtro de códigos permitidos para Perú
+			if (ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode]) {
 				filters.push(['code', 'in', ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode]]);
 				this.logger.debug(`Aplicando filtro de códigos para ${countryCode}: [${ALLOWED_INVOICE_CODES_BY_COUNTRY[countryCode].join(', ')}]`);
 			}
@@ -195,6 +221,7 @@ export class DocumentTypeMappingService {
 					order: 'sequence asc', // Igual que Odoo: _order = 'sequence, id'
 				},
 			]);
+			this.logger.log(`📋 documentTypes ${countryCode}: ${JSON.stringify(documentTypes, null, 2)}`);
 
 			if (!documentTypes || documentTypes.length === 0) {
 				this.logger.log(`ℹ️ No se encontró tipo de documento para país ${countryId}, tipo ${internalType} (compañía ${companyId})`);

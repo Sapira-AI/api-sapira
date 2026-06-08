@@ -783,6 +783,7 @@ export class InvoiceSchedulerService {
 			?.toLowerCase()
 			.normalize('NFD')
 			.replace(/[\u0300-\u036f]/g, '');
+
 		if (normalizedCountry === 'peru') {
 			const totalAmount = parseFloat(invoice.total_invoice_currency?.toString() || '0');
 			let requiresDetraction = false;
