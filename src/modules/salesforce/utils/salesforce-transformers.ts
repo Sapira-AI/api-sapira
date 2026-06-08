@@ -4,13 +4,13 @@
 
 /**
  * Transform Salesforce billing method to Sapira billing method
- * Prepago -> Anticipado, Postpago -> Vencido
+ * Prepago -> Anticipado, Postpago -> Vencido, default -> Anticipado
  */
-export function transformBillingMethod(formaDepago?: string): 'Anticipado' | 'Vencido' | undefined {
-	if (!formaDepago) return undefined;
+export function transformBillingMethod(formaDepago?: string): 'Anticipado' | 'Vencido' {
+	if (!formaDepago) return 'Anticipado';
 	if (formaDepago === 'Prepago') return 'Anticipado';
 	if (formaDepago === 'Postpago') return 'Vencido';
-	return undefined;
+	return 'Anticipado';
 }
 
 /**
