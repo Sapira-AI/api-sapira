@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource } from 'typeorm';
 
+import { RetryOnTimeout } from '@/decorators/retry-on-timeout.decorator';
+
 import { AgentsService } from './agents.service';
 
 @Injectable()
@@ -18,21 +20,7 @@ export class AgentsScheduler {
 		this.logger.debug('Checking for scheduled agents to execute...');
 
 		try {
-			const agents = await this.dataSource.query(
-				`
-				SELECT 
-					id, 
-					type, 
-					schedule, 
-					holding_id,
-					auto_execute,
-					require_approval
-				FROM ai_agents 
-				WHERE is_enabled = true 
-					AND auto_execute = true
-					AND schedule IS NOT NULL
-			`
-			);
+			const agents = await this.getScheduledAgentsWithRetry();
 
 			if (!agents || agents.length === 0) {
 				this.logger.debug('No scheduled agents found');
@@ -53,8 +41,33 @@ export class AgentsScheduler {
 				}
 			}
 		} catch (error) {
-			this.logger.error('Error in checkScheduledAgents:', error);
+			const isTimeoutError = error.message?.includes('timeout') || error.message?.includes('Connection terminated');
+
+			if (isTimeoutError) {
+				this.logger.error('Error de timeout en checkScheduledAgents - se reintentará en el próximo ciclo');
+			} else {
+				this.logger.error('Error in checkScheduledAgents:', error);
+			}
 		}
+	}
+
+	@RetryOnTimeout({ maxAttempts: 3, delayMs: 1000 })
+	private async getScheduledAgentsWithRetry(): Promise<any[]> {
+		return await this.dataSource.query(
+			`
+			SELECT 
+				id, 
+				type, 
+				schedule, 
+				holding_id,
+				auto_execute,
+				require_approval
+			FROM ai_agents 
+			WHERE is_enabled = true 
+				AND auto_execute = true
+				AND schedule IS NOT NULL
+		`
+		);
 	}
 
 	private shouldExecuteNow(cronExpression: string): boolean {
