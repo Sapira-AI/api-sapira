@@ -34,10 +34,16 @@ import { PostgreSQLDatabaseProvider } from './database.provider';
 					retryDelay: 5000,
 					autoLoadEntities: true,
 					extra: {
-						max: 5,
-						min: 1,
-						idleTimeoutMillis: 30000,
-						connectionTimeoutMillis: 30000,
+						// Pool de conexiones optimizado para producción
+						max: configService.get<number>('SUPABASE_POOL_MAX', 20), // Máximo de conexiones
+						min: configService.get<number>('SUPABASE_POOL_MIN', 2), // Mínimo de conexiones activas
+						idleTimeoutMillis: configService.get<number>('SUPABASE_IDLE_TIMEOUT', 300000), // 5 minutos
+						connectionTimeoutMillis: configService.get<number>('SUPABASE_CONNECTION_TIMEOUT', 60000), // 60 segundos
+						acquireTimeoutMillis: configService.get<number>('SUPABASE_ACQUIRE_TIMEOUT', 60000), // 60 segundos
+						evictionRunIntervalMillis: 10000, // Limpiar conexiones muertas cada 10 segundos
+						softIdleTimeoutMillis: 30000, // Soft timeout para conexiones idle
+						statement_timeout: 30000, // Timeout de queries a 30 segundos
+						query_timeout: 30000, // Timeout de queries a 30 segundos
 					},
 				};
 			},
