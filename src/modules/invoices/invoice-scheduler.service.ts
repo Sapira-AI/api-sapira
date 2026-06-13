@@ -137,6 +137,7 @@ export class InvoiceSchedulerService {
 			.where('inv.status = :status', { status: 'Por Emitir' })
 			.andWhere('inv.issue_date <= CURRENT_DATE')
 			.andWhere('inv.sent_to_odoo_at IS NULL')
+			.andWhere('inv.is_active = true')
 			.andWhere("DATE_TRUNC('month', inv.issue_date) = DATE_TRUNC('month', CURRENT_DATE)")
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
@@ -940,6 +941,22 @@ export class InvoiceSchedulerService {
 		exchangeRate?: number;
 		fallbackDate?: Date;
 	}> {
+		// FX FIJO: si el contrato tiene política 'fixed' y la factura ya trae un
+		// fx_contract_to_invoice válido (persistido por el front), respetamos ese
+		// tipo de cambio y NO recalculamos spot contra Banco Central.
+		if (invoice.contract?.fx_invoice_policy === 'fixed' && invoice.fx_contract_to_invoice != null && Number(invoice.fx_contract_to_invoice) > 0) {
+			this.logger.log(
+				`💱 FX fijo aplicado para factura ${invoice.invoice_number}: ` +
+					`${invoice.contract_currency}/${invoice.invoice_currency} = ${invoice.fx_contract_to_invoice} ` +
+					`(política 'fixed' — sin consultar Banco Central)`
+			);
+			return {
+				success: true,
+				usedFallback: false,
+				exchangeRate: Number(invoice.fx_contract_to_invoice),
+			};
+		}
+
 		this.logger.log(`Calculando montos para factura ${invoice.invoice_number} (${invoice.id})`);
 
 		try {
