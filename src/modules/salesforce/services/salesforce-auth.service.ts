@@ -136,6 +136,18 @@ export class SalesforceAuthService {
 			);
 
 			this.logger.log('✅ Client Credentials authentication successful');
+			this.logger.log(`📋 Response keys: ${Object.keys(response.data).join(', ')}`);
+			this.logger.log(`📦 Full Salesforce response: ${JSON.stringify(response.data, null, 2)}`);
+			this.logger.log(`🔄 Has refresh_token: ${!!response.data.refresh_token}`);
+			this.logger.log(`🔑 Has access_token: ${!!response.data.access_token}`);
+			this.logger.log(`🌐 Has instance_url: ${!!response.data.instance_url}`);
+
+			if (response.data.refresh_token) {
+				this.logger.log(`✅ Refresh token received from Salesforce (Client Credentials)`);
+			} else {
+				this.logger.warn(`⚠️ No refresh token in Salesforce response. This is EXPECTED for Client Credentials flow.`);
+			}
+
 			return response.data;
 		} catch (error: any) {
 			this.logger.error('❌ Client Credentials authentication failed:', error.response?.data || error.message);
@@ -153,12 +165,16 @@ export class SalesforceAuthService {
 	): Promise<SalesforceConnection> {
 		this.logger.log(`Storing Client Credentials connection for holding ${holdingId}`);
 
+		const existingConnection = await this.connectionRepository.findOne({
+			where: { holding_id: holdingId },
+		});
+
 		const connectionData = {
 			user_id: userId,
 			holding_id: holdingId,
 			username: null,
 			client_id: clientId,
-			client_secret: clientSecret,
+			client_secret: clientSecret || existingConnection?.client_secret,
 			security_token: null,
 			login_url: loginUrl,
 			access_token: authData.access_token,
@@ -171,10 +187,6 @@ export class SalesforceAuthService {
 			is_active: true,
 			last_sync_at: new Date(),
 		};
-
-		const existingConnection = await this.connectionRepository.findOne({
-			where: { holding_id: holdingId },
-		});
 
 		if (existingConnection) {
 			await this.connectionRepository.update({ holding_id: holdingId }, connectionData);
@@ -193,13 +205,20 @@ export class SalesforceAuthService {
 	): Promise<SalesforceConnection> {
 		this.logger.log(`Guardando credenciales sin autenticar para holding ${holdingId}, tipo: ${authType}`);
 
+		const existingConnection = await this.connectionRepository.findOne({
+			where: { holding_id: holdingId },
+		});
+
 		const connectionData = {
 			user_id: userId,
 			holding_id: holdingId,
 			username: authType === SalesforceAuthType.PASSWORD ? credentials.username : null,
-			password: authType === SalesforceAuthType.PASSWORD && credentials.password ? this.encryptionService.encrypt(credentials.password) : null,
+			password:
+				authType === SalesforceAuthType.PASSWORD && credentials.password
+					? this.encryptionService.encrypt(credentials.password)
+					: existingConnection?.password,
 			client_id: credentials.clientId,
-			client_secret: credentials.clientSecret,
+			client_secret: credentials.clientSecret || existingConnection?.client_secret,
 			security_token: authType === SalesforceAuthType.PASSWORD ? credentials.securityToken : null,
 			login_url: credentials.loginUrl || 'https://login.salesforce.com',
 			access_token: null,
@@ -209,13 +228,9 @@ export class SalesforceAuthService {
 			token_issued_at: null,
 			token_expires_at: null,
 			auth_type: authType,
-			is_active: true,
+			is_active: false,
 			last_sync_at: null,
 		};
-
-		const existingConnection = await this.connectionRepository.findOne({
-			where: { holding_id: holdingId },
-		});
 
 		if (existingConnection) {
 			await this.connectionRepository.update({ holding_id: holdingId }, connectionData);

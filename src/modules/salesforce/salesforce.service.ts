@@ -99,15 +99,19 @@ export class SalesforceService {
 		}
 
 		const connection = await this.connectionRepository.findOne({
-			where: { holding_id: holdingId, is_active: true },
+			where: { holding_id: holdingId },
 		});
 
 		if (!connection) {
-			this.logger.warn(`No active connection found for holding: ${holdingId}`);
+			this.logger.warn(`No connection found for holding: ${holdingId}`);
 			return null;
 		}
 
-		this.logger.log(`Connection found for holding: ${holdingId}, username: ${connection.username}`);
+		const hasValidToken = !!connection.access_token;
+
+		this.logger.log(
+			`Connection found for holding: ${holdingId}, username: ${connection.username || 'null'}, has_token: ${hasValidToken}, is_active: ${connection.is_active}`
+		);
 
 		return {
 			id: connection.id,
@@ -116,6 +120,10 @@ export class SalesforceService {
 			instance_url: connection.instance_url,
 			auth_type: connection.auth_type,
 			is_active: connection.is_active,
+			has_valid_token: hasValidToken,
+			client_id: connection.client_id,
+			has_client_secret: !!connection.client_secret,
+			login_url: connection.login_url,
 			last_sync_at: connection.last_sync_at,
 			created_at: connection.created_at,
 		};
@@ -173,11 +181,25 @@ export class SalesforceService {
 	}
 
 	async disconnect(holdingId: string) {
-		const result = await this.connectionRepository.update({ holding_id: holdingId, is_active: true }, { is_active: false });
+		const connection = await this.connectionRepository.findOne({
+			where: { holding_id: holdingId },
+		});
 
-		if (result.affected === 0) {
-			throw new NotFoundException('No active connection found');
+		if (!connection) {
+			throw new NotFoundException('No connection found for this holding');
 		}
+
+		await this.connectionRepository.update(
+			{ holding_id: holdingId },
+			{
+				access_token: null,
+				token_issued_at: null,
+				token_expires_at: null,
+				is_active: true,
+			}
+		);
+
+		this.logger.log(`✅ Disconnected from Salesforce for holding ${holdingId} - credentials kept, token cleared`);
 
 		return {
 			success: true,
@@ -298,34 +320,76 @@ export class SalesforceService {
 			throw new NotFoundException(`No active Salesforce connection found for holding ${holdingId}`);
 		}
 
-		if (!connection.password) {
-			throw new BadRequestException('Password not found in connection. Please reconnect using "Conectar y Validar".');
-		}
-
 		const testedAt = new Date().toISOString();
 
 		try {
-			const decryptedPassword = this.encryptionService.decrypt(connection.password);
-			const loginResult = await this.soapService.attemptLogin(
-				connection.login_url,
-				connection.username,
-				decryptedPassword,
-				connection.security_token
+			if (connection.auth_type === SalesforceAuthType.CLIENT_CREDENTIALS) {
+				this.logger.log(`Testing Client Credentials connection for holding ${holdingId}`);
+
+				const authData = await this.authService.authenticateWithClientCredentials(
+					connection.client_id,
+					connection.client_secret,
+					holdingId,
+					connection.login_url
+				);
+
+				await this.tokenService.updateTokens(holdingId, authData);
+
+				this.logger.log(`✅ Client Credentials test successful for holding ${holdingId}`);
+
+				return {
+					ok: true,
+					tested_at: testedAt,
+					result: {
+						instance_url: authData.instance_url,
+						connection_id: connection.id,
+						auth_type: 'client_credentials',
+					},
+				};
+			}
+
+			if (connection.auth_type === SalesforceAuthType.PASSWORD) {
+				if (!connection.password) {
+					throw new BadRequestException('Password not found in connection. Please reconnect using "Guardar Conexión y Validar".');
+				}
+
+				const decryptedPassword = this.encryptionService.decrypt(connection.password);
+				const loginResult = await this.soapService.attemptLogin(
+					connection.login_url,
+					connection.username,
+					decryptedPassword,
+					connection.security_token
+				);
+
+				this.logger.log(`✅ SOAP test successful for holding ${holdingId}`);
+
+				return {
+					ok: true,
+					tested_at: testedAt,
+					result: {
+						user_id: loginResult.userId,
+						server_url: loginResult.serverUrl,
+						connection_id: connection.id,
+						auth_type: 'password',
+					},
+				};
+			}
+
+			throw new BadRequestException(`Unknown auth_type: ${connection.auth_type}`);
+		} catch (error: any) {
+			this.logger.error(`❌ Connection test failed for holding ${holdingId}:`, error.message);
+
+			await this.connectionRepository.update(
+				{ holding_id: holdingId },
+				{
+					access_token: null,
+					is_active: false,
+					token_issued_at: null,
+					token_expires_at: null,
+				}
 			);
 
-			this.logger.log(`✅ SOAP test successful for holding ${holdingId}`);
-
-			return {
-				ok: true,
-				tested_at: testedAt,
-				result: {
-					user_id: loginResult.userId,
-					server_url: loginResult.serverUrl,
-					connection_id: connection.id,
-				},
-			};
-		} catch (error: any) {
-			this.logger.error(`❌ SOAP test failed for holding ${holdingId}:`, error.message);
+			this.logger.warn(`Access token cleared for holding ${holdingId} due to test failure`);
 
 			throw new BadRequestException({
 				ok: false,
