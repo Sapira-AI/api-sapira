@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
@@ -62,6 +62,8 @@ export class InvoiceSchedulerService {
 		private readonly contractRepository: Repository<Contract>,
 		@InjectRepository(InvoiceReference)
 		private readonly invoiceReferenceRepository: Repository<InvoiceReference>,
+		@InjectDataSource()
+		private readonly dataSource: DataSource,
 		@InjectModel(InvoiceOdooSendLog.name)
 		private readonly invoiceOdooSendLogModel: Model<InvoiceOdooSendLogDocument>,
 		@InjectModel(InvoiceSchedulerJob.name)
@@ -73,6 +75,30 @@ export class InvoiceSchedulerService {
 		private readonly documentTypeMappingService: DocumentTypeMappingService,
 		private readonly schedulerGateway: InvoiceSchedulerGateway
 	) {}
+
+	private getBusinessTimezone(): string {
+		return process.env.TZ || 'America/Santiago';
+	}
+
+	private getBusinessTodayString(date: Date = new Date()): string {
+		const formatter = new Intl.DateTimeFormat('en-CA', {
+			timeZone: this.getBusinessTimezone(),
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+		});
+
+		const parts = formatter.formatToParts(date);
+		const year = parts.find((part) => part.type === 'year')?.value;
+		const month = parts.find((part) => part.type === 'month')?.value;
+		const day = parts.find((part) => part.type === 'day')?.value;
+
+		if (!year || !month || !day) {
+			throw new Error('No se pudo determinar la fecha del negocio para el scheduler');
+		}
+
+		return `${year}-${month}-${day}`;
+	}
 
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
 		const { dryRun, holdingId, contractId } = options;
@@ -97,7 +123,7 @@ export class InvoiceSchedulerService {
 			this.logger.log(`📋 Encontradas ${invoices.length} facturas para procesar`);
 
 			for (const invoice of invoices) {
-				const result = await this.sendInvoiceToOdoo(invoice, dryRun);
+				const result = await this.sendInvoiceToOdoo(invoice, dryRun, 'automatic');
 				results.push(result);
 
 				if (result.status === 'sent') {
@@ -129,16 +155,19 @@ export class InvoiceSchedulerService {
 	}
 
 	async getInvoicesToSend(holdingId?: string, contractId?: string): Promise<InvoiceWithRelations[]> {
+		const businessToday = this.getBusinessTodayString();
+		const businessCurrentMonth = businessToday.substring(0, 7);
+
 		const query = this.invoiceRepository
 			.createQueryBuilder('inv')
 			.leftJoin('client_entities', 'cle', 'cle.id = inv.client_entity_id')
 			.leftJoin('companies', 'com', 'com.id = inv.company_id')
 			.leftJoin('contracts', 'con', 'con.id = inv.contract_id')
 			.where('inv.status = :status', { status: 'Por Emitir' })
-			.andWhere('inv.issue_date <= CURRENT_DATE')
+			.andWhere('inv.issue_date <= :businessToday', { businessToday })
 			.andWhere('inv.sent_to_odoo_at IS NULL')
 			.andWhere('inv.is_active = true')
-			.andWhere("DATE_TRUNC('month', inv.issue_date) = DATE_TRUNC('month', CURRENT_DATE)")
+			.andWhere("TO_CHAR(inv.issue_date, 'YYYY-MM') = :businessCurrentMonth", { businessCurrentMonth })
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
 			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)')
@@ -185,7 +214,11 @@ export class InvoiceSchedulerService {
 		return invoices as InvoiceWithRelations[];
 	}
 
-	async sendInvoiceToOdoo(invoice: InvoiceWithRelations, dryRun: boolean): Promise<InvoiceResultDto> {
+	async sendInvoiceToOdoo(
+		invoice: InvoiceWithRelations,
+		dryRun: boolean,
+		schedulerSource: 'manual' | 'automatic' = 'automatic'
+	): Promise<InvoiceResultDto> {
 		// LOG INICIAL: Verificar relaciones al recibir la factura
 		this.logger.log(`🔵 INICIO sendInvoiceToOdoo - Factura ${invoice.id}`);
 		this.logger.log(`   clientEntity: ${invoice.clientEntity ? `SÍ (${invoice.clientEntity.legal_name})` : 'NO'}`);
@@ -480,12 +513,17 @@ export class InvoiceSchedulerService {
 											`✓ Factura ${invoice.invoice_number} emitida electrónicamente exitosamente (${invoice.company.country})`
 										);
 									} else if (emitResponse.electronic_status === 'rejected') {
+										const electronicErrorMessage =
+											emitResponse.electronic_errors?.map((e) => e.message).join(', ') || 'La entidad electrónica rechazó la factura';
+
 										await this.invoiceRepository.update(invoice.id, {
 											status: 'Emitida',
 										});
-										result.details = `Factura publicada en Odoo pero rechazada por entidad electrónica (${invoice.company.country}): ${emitResponse.electronic_errors?.map((e) => e.message).join(', ')}`;
+										result.status = 'error';
+										result.error = electronicErrorMessage;
+										result.details = `Factura publicada en Odoo pero rechazada por entidad electrónica (${invoice.company.country}): ${electronicErrorMessage}`;
 										this.logger.error(
-											`✗ Factura ${invoice.invoice_number} rechazada por entidad electrónica: ${emitResponse.electronic_errors?.map((e) => e.message).join(', ')}`
+											`✗ Factura ${invoice.invoice_number} rechazada por entidad electrónica: ${electronicErrorMessage}`
 										);
 									} else if (emitResponse.electronic_status === 'not_required') {
 										await this.invoiceRepository.update(invoice.id, {
@@ -520,10 +558,29 @@ export class InvoiceSchedulerService {
 											country: invoice.company.country,
 										},
 										responseData: emitResponse,
-										errorMessage: emitResponse.electronic_errors?.map((e) => e.message).join(', '),
+										errorMessage:
+											emitResponse.electronic_status === 'rejected'
+												? emitResponse.electronic_errors?.map((e) => e.message).join(', ')
+												: undefined,
 										errorType: emitResponse.electronic_status === 'rejected' ? 'electronic_rejection' : undefined,
 										durationMs: emitDurationMs,
 									});
+
+									if (emitResponse.electronic_status === 'rejected') {
+										await this.createOdooFailureNotification({
+											invoice,
+											stage: 'emit_electronic_invoice',
+											title: `Error en emision electronica de factura ${invoice.invoice_number || 'SIN-NUMERO'}`,
+											message: result.details || result.error || 'La factura fue rechazada por la entidad electrónica',
+											errorType: 'electronic_rejection',
+											errorMessage:
+												emitResponse.electronic_errors?.map((e) => e.message).join(', ') ||
+												'La entidad electrónica rechazó la factura',
+											odooInvoiceId: odooResponse.invoice_id,
+											schedulerSource,
+											responseData: emitResponse,
+										});
+									}
 								}
 							} catch (emitError) {
 								// Error en emisión electrónica, pero la factura está publicada en Odoo
@@ -533,6 +590,8 @@ export class InvoiceSchedulerService {
 									status: 'Emitida',
 								});
 
+								result.status = 'error';
+								result.error = emitError.message;
 								result.details = `Factura publicada en Odoo (ID: ${odooResponse.invoice_id}) pero falló emisión electrónica: ${emitError.message}`;
 
 								// Registrar log de error en emisión electrónica
@@ -554,8 +613,22 @@ export class InvoiceSchedulerService {
 									errorType: 'emit_electronic_exception',
 									errorDetails: { stack: emitError.stack },
 								});
+
+								await this.createOdooFailureNotification({
+									invoice,
+									stage: 'emit_electronic_invoice',
+									title: `Error en emision electronica de factura ${invoice.invoice_number || 'SIN-NUMERO'}`,
+									message: result.details,
+									errorType: 'emit_electronic_exception',
+									errorMessage: emitError.message,
+									odooInvoiceId: odooResponse.invoice_id,
+									schedulerSource,
+									errorDetails: { stack: emitError.stack },
+								});
 							}
 						} else {
+							result.status = 'error';
+							result.error = postResponse.message || 'Falló el post de la factura en Odoo';
 							result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postResponse.message}`;
 							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);
 
@@ -576,8 +649,22 @@ export class InvoiceSchedulerService {
 								errorType: 'odoo_post_failed',
 								durationMs: postDurationMs,
 							});
+
+							await this.createOdooFailureNotification({
+								invoice,
+								stage: 'post_invoice',
+								title: `Error al publicar factura ${invoice.invoice_number || 'SIN-NUMERO'} en Odoo`,
+								message: result.details,
+								errorType: 'odoo_post_failed',
+								errorMessage: postResponse.message || 'Falló el post de la factura en Odoo',
+								odooInvoiceId: odooResponse.invoice_id,
+								schedulerSource,
+								responseData: postResponse,
+							});
 						}
 					} catch (postError) {
+						result.status = 'error';
+						result.error = postError.message;
 						result.details = `Factura creada en Odoo con ID: ${odooResponse.invoice_id}, pero falló la emisión: ${postError.message}`;
 						this.logger.error(`✗ Error al emitir factura ${invoice.invoice_number}:`, postError);
 
@@ -595,6 +682,18 @@ export class InvoiceSchedulerService {
 							requestData: { odoo_invoice_id: odooResponse.invoice_id },
 							errorMessage: postError.message,
 							errorType: 'odoo_post_exception',
+							errorDetails: { stack: postError.stack },
+						});
+
+						await this.createOdooFailureNotification({
+							invoice,
+							stage: 'post_invoice',
+							title: `Error al publicar factura ${invoice.invoice_number || 'SIN-NUMERO'} en Odoo`,
+							message: result.details,
+							errorType: 'odoo_post_exception',
+							errorMessage: postError.message,
+							odooInvoiceId: odooResponse.invoice_id,
+							schedulerSource,
 							errorDetails: { stack: postError.stack },
 						});
 					}
@@ -1319,8 +1418,7 @@ export class InvoiceSchedulerService {
 	async debugInvoicesToday(holdingId?: string): Promise<any> {
 		this.logger.log(`🔍 DEBUG: Analizando facturas con issue_date de hoy`);
 
-		const today = new Date();
-		const todayStr = today.toISOString().split('T')[0];
+		const todayStr = this.getBusinessTodayString();
 
 		const query = this.invoiceRepository
 			.createQueryBuilder('inv')
@@ -1415,6 +1513,69 @@ export class InvoiceSchedulerService {
 		return await log.save();
 	}
 
+	private async createOdooFailureNotification(params: {
+		invoice: InvoiceWithRelations;
+		stage: 'post_invoice' | 'emit_electronic_invoice';
+		title: string;
+		message: string;
+		errorType: string;
+		errorMessage: string;
+		odooInvoiceId?: number;
+		schedulerSource: 'manual' | 'automatic';
+		responseData?: any;
+		errorDetails?: any;
+	}): Promise<void> {
+		if (!params.invoice.contract_id) {
+			this.logger.warn(
+				`⚠️ No se pudo crear notificación de error Odoo para factura ${params.invoice.id} porque no tiene contract_id`
+			);
+			return;
+		}
+
+		try {
+			await this.dataSource.query(
+				`
+					INSERT INTO contract_notifications (
+						contract_id,
+						notification_type,
+						title,
+						message,
+						metadata,
+						holding_id
+					)
+					VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+				`,
+				[
+					params.invoice.contract_id,
+					'client_action_needed',
+					params.title,
+					params.message,
+					JSON.stringify({
+						source: 'invoice_scheduler',
+						scheduler_source: params.schedulerSource,
+						invoice_id: params.invoice.id,
+						invoice_number: params.invoice.invoice_number,
+						odoo_invoice_id: params.odooInvoiceId,
+						failure_stage: params.stage,
+						error_type: params.errorType,
+						error_message: params.errorMessage,
+						country: params.invoice.company?.country || null,
+						client_name: params.invoice.clientEntity?.legal_name || null,
+						company_name: params.invoice.company?.legal_name || null,
+						response_data: params.responseData || null,
+						error_details: params.errorDetails || null,
+					}),
+					params.invoice.holding_id,
+				]
+			);
+		} catch (error) {
+			this.logger.error(
+				`❌ Error creando contract_notification para factura ${params.invoice.invoice_number || params.invoice.id}:`,
+				error
+			);
+		}
+	}
+
 	async startSchedulerJob(options: ProcessOptions & { userId: string }): Promise<string> {
 		const { dryRun, holdingId, contractId, userId } = options;
 		const jobId = uuidv4();
@@ -1482,7 +1643,7 @@ export class InvoiceSchedulerService {
 
 			for (const invoice of invoices) {
 				current++;
-				const result = await this.sendInvoiceToOdoo(invoice, dryRun);
+				const result = await this.sendInvoiceToOdoo(invoice, dryRun, 'manual');
 				results.push(result);
 
 				if (result.status === 'sent') {
