@@ -1533,7 +1533,23 @@ export class InvoiceSchedulerService {
 		}
 
 		try {
-			await this.dataSource.query(
+			const metadata = {
+				source: 'invoice_scheduler',
+				scheduler_source: params.schedulerSource,
+				invoice_id: params.invoice.id,
+				invoice_number: params.invoice.invoice_number,
+				odoo_invoice_id: params.odooInvoiceId,
+				failure_stage: params.stage,
+				error_type: params.errorType,
+				error_message: params.errorMessage,
+				country: params.invoice.company?.country || null,
+				client_name: params.invoice.clientEntity?.legal_name || null,
+				company_name: params.invoice.company?.legal_name || null,
+				response_data: params.responseData || null,
+				error_details: params.errorDetails || null,
+			};
+
+			const insertedNotifications = await this.dataSource.query(
 				`
 					INSERT INTO contract_notifications (
 						contract_id,
@@ -1544,30 +1560,22 @@ export class InvoiceSchedulerService {
 						holding_id
 					)
 					VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+					RETURNING id, contract_id, notification_type, title, message, is_read, metadata, created_at, holding_id
 				`,
 				[
 					params.invoice.contract_id,
 					'client_action_needed',
 					params.title,
 					params.message,
-					JSON.stringify({
-						source: 'invoice_scheduler',
-						scheduler_source: params.schedulerSource,
-						invoice_id: params.invoice.id,
-						invoice_number: params.invoice.invoice_number,
-						odoo_invoice_id: params.odooInvoiceId,
-						failure_stage: params.stage,
-						error_type: params.errorType,
-						error_message: params.errorMessage,
-						country: params.invoice.company?.country || null,
-						client_name: params.invoice.clientEntity?.legal_name || null,
-						company_name: params.invoice.company?.legal_name || null,
-						response_data: params.responseData || null,
-						error_details: params.errorDetails || null,
-					}),
+					JSON.stringify(metadata),
 					params.invoice.holding_id,
 				]
 			);
+
+			const insertedNotification = insertedNotifications?.[0];
+			if (insertedNotification) {
+				this.schedulerGateway.emitNotificationCreated(params.invoice.holding_id, insertedNotification);
+			}
 		} catch (error) {
 			this.logger.error(
 				`❌ Error creando contract_notification para factura ${params.invoice.invoice_number || params.invoice.id}:`,
