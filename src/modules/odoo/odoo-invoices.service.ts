@@ -43,6 +43,7 @@ export class OdooInvoicesService {
 			auto_post,
 			l10n_pe_edi_operation_type,
 			invoice_line_ids,
+			l10n_cl_reference_ids,
 		} = data;
 
 		try {
@@ -131,6 +132,10 @@ export class OdooInvoicesService {
 
 			if (l10n_pe_edi_operation_type) {
 				invoiceData.l10n_pe_edi_operation_type = l10n_pe_edi_operation_type;
+			}
+
+			if (l10n_cl_reference_ids && l10n_cl_reference_ids.length > 0) {
+				invoiceData.l10n_cl_reference_ids = l10n_cl_reference_ids.map((reference) => [0, 0, reference]);
 			}
 
 			// Procesar líneas de factura con mapeo de impuestos

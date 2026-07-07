@@ -1,0 +1,738 @@
+{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "result": [
+        {
+            "id": 186086,
+            "authorized_transaction_ids": [],
+            "edi_show_cancel_button": false,
+            "edi_show_abandon_cancel_button": false,
+            "edi_show_force_cancel_button": false,
+            "l10n_mx_edi_is_cfdi_needed": false,
+            "l10n_mx_edi_update_payments_needed": false,
+            "l10n_mx_edi_update_sat_needed": false,
+            "l10n_cl_dte_acceptation_status": "received",
+            "l10n_cl_dte_status": "accepted",
+            "state": "posted",
+            "tax_closing_end_date": false,
+            "tax_closing_alert": false,
+            "l10n_uy_edi_error": false,
+            "extract_state": "no_extract_requested",
+            "extract_word_ids": [],
+            "extract_attachment_id": false,
+            "extract_can_show_send_button": false,
+            "extract_can_show_banners": false,
+            "extract_status": false,
+            "extract_error_message": "Ocurrió un error",
+            "edi_blocking_level": false,
+            "edi_error_count": 0,
+            "edi_web_services_to_process": "",
+            "edi_error_message": false,
+            "tax_lock_date_message": false,
+            "date": "2026-03-25",
+            "auto_post": "no",
+            "auto_post_until": false,
+            "partner_credit_warning": "",
+            "suspense_statement_line_id": false,
+            "transaction_ids": [],
+            "sale_order_count": 0,
+            "debit_note_count": 0,
+            "purchase_order_count": 0,
+            "deferred_move_ids": [],
+            "deferred_original_move_ids": [],
+            "deferred_entry_type": false,
+            "asset_id": false,
+            "count_asset": 0,
+            "draft_asset_exists": false,
+            "asset_id_display_name": "Activo",
+            "company_id": {
+                "id": 1,
+                "display_name": "SIMPLIT SPA"
+            },
+            "journal_id": {
+                "id": 1,
+                "display_name": "Facturas de cliente"
+            },
+            "show_name_warning": false,
+            "posted_before": true,
+            "move_type": "out_invoice",
+            "payment_state": "in_payment",
+            "invoice_filter_type_domain": "sale",
+            "suitable_journal_ids": [
+                1,
+                23,
+                75
+            ],
+            "currency_id": {
+                "id": 45,
+                "display_name": "CLP"
+            },
+            "company_currency_id": {
+                "id": 45
+            },
+            "commercial_partner_id": {
+                "id": 16189
+            },
+            "bank_partner_id": {
+                "id": 1
+            },
+            "display_qr_code": false,
+            "show_reset_to_draft_button": true,
+            "invoice_has_outstanding": false,
+            "is_move_sent": false,
+            "invoice_pdf_report_id": false,
+            "need_cancel_request": false,
+            "has_reconciled_entries": true,
+            "restrict_mode_hash_table": false,
+            "inalterable_hash": false,
+            "country_code": "CL",
+            "display_inactive_currency_warning": false,
+            "statement_line_id": false,
+            "statement_id": false,
+            "payment_id": false,
+            "tax_country_id": {
+                "id": 46
+            },
+            "tax_calculation_rounding_method": "round_globally",
+            "tax_cash_basis_created_move_ids": [],
+            "quick_edit_mode": false,
+            "hide_post_button": true,
+            "duplicated_ref_ids": [],
+            "quick_encoding_vals": false,
+            "show_delivery_date": false,
+            "is_being_sent": false,
+            "show_update_fpos": false,
+            "highest_name": "FAC 027531",
+            "name": "FAC 026575",
+            "partner_id": {
+                "id": 16189,
+                "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA\nAvenida José Joaquín Pérez 1376, Parque Industrial ENEA,\nPudahuel 13\nChile ‒ 76972715-9"
+            },
+            "quick_edit_total_amount": 0.0,
+            "ref": false,
+            "l10n_mx_edi_payment_method_id": false,
+            "l10n_mx_edi_payment_policy": false,
+            "l10n_mx_edi_usage": false,
+            "tax_cash_basis_origin_move_id": false,
+            "purchase_id": false,
+            "purchase_vendor_bill_id": false,
+            "l10n_pe_edi_is_required": false,
+            "l10n_pe_edi_operation_type": false,
+            "l10n_mx_edi_cfdi_to_public": false,
+            "invoice_date": "2026-03-25",
+            "payment_reference": "FAC 026575",
+            "partner_bank_id": {
+                "id": 1,
+                "display_name": "52697568 - Banco De Credito e Inversiones (BCI) (confiable)"
+            },
+            "invoice_date_due": "2026-04-24",
+            "invoice_payment_term_id": {
+                "id": 4,
+                "display_name": "30 días"
+            },
+            "delivery_date": false,
+            "l10n_latam_document_type_id": {
+                "id": 1,
+                "display_name": "(33) Factura Electrónica"
+            },
+            "l10n_latam_document_number": "026575",
+            "l10n_uy_edi_journal_type": false,
+            "l10n_uy_edi_cfe_state": false,
+            "l10n_uy_edi_document_id": false,
+            "l10n_uy_edi_cfe_uuid": false,
+            "edi_state": false,
+            "l10n_mx_edi_cfdi_state": false,
+            "l10n_mx_edi_cfdi_sat_state": false,
+            "l10n_mx_edi_cfdi_uuid": false,
+            "l10n_mx_edi_cfdi_origin": false,
+            "l10n_mx_edi_cfdi_cancel_id": false,
+            "l10n_co_edi_debit_note": false,
+            "l10n_co_edi_is_direct_payment": false,
+            "l10n_co_edi_is_support_document": false,
+            "l10n_co_edi_type": "1",
+            "l10n_co_edi_attachment_url": false,
+            "l10n_co_edi_operation_type": "10",
+            "l10n_co_edi_payment_option_id": {
+                "id": 1,
+                "display_name": "Instrumento no definido"
+            },
+            "l10n_co_edi_cufe_cude_ref": false,
+            "l10n_co_edi_description_code_credit": false,
+            "l10n_co_edi_description_code_debit": false,
+            "invoice_line_ids": [
+                {
+                    "id": 536061,
+                    "sequence": 100,
+                    "product_id": {
+                        "id": 484,
+                        "display_name": "Servicio Simpliroute recurrente"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nMarzo 2026",
+                    "l10n_uy_edi_addenda_ids": [],
+                    "account_id": {
+                        "id": 2553,
+                        "display_name": "41001001 Servicios prestados por servicios de software - Nacionales"
+                    },
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "has_abnormal_deferred_dates": false,
+                    "deferred_start_date": false,
+                    "deferred_end_date": false,
+                    "quantity": 26.0,
+                    "product_uom_category_id": {
+                        "id": 1
+                    },
+                    "product_uom_id": {
+                        "id": 1
+                    },
+                    "price_unit": 39841.72,
+                    "discount": 0.0,
+                    "l10n_pe_edi_allowance_charge_reason_code": false,
+                    "tax_ids": [
+                        {
+                            "id": 1,
+                            "display_name": "IVA 19% Venta"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "price_subtotal": 1035885.0,
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3,
+                        "display_name": "kg"
+                    },
+                    "l10n_mx_edi_customs_number": false,
+                    "price_total": 1232703.0,
+                    "partner_id": {
+                        "id": 16189
+                    },
+                    "currency_id": {
+                        "id": 45
+                    },
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "purchase_order_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "product",
+                    "tax_calculation_rounding_method": "round_globally",
+                    "subscription_id": false
+                },
+                {
+                    "id": 536062,
+                    "sequence": 101,
+                    "product_id": false,
+                    "name": "40 Licencias * 0.65 UF = 26 UF \nUF 39.841,72",
+                    "l10n_uy_edi_addenda_ids": [],
+                    "account_id": false,
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "has_abnormal_deferred_dates": false,
+                    "deferred_start_date": false,
+                    "deferred_end_date": false,
+                    "quantity": 0.0,
+                    "product_uom_category_id": false,
+                    "product_uom_id": false,
+                    "price_unit": 0.0,
+                    "discount": 0.0,
+                    "l10n_pe_edi_allowance_charge_reason_code": false,
+                    "tax_ids": [],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "price_subtotal": 0.0,
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": false,
+                    "l10n_mx_edi_customs_number": false,
+                    "price_total": 0.0,
+                    "partner_id": {
+                        "id": 16189
+                    },
+                    "currency_id": {
+                        "id": 45
+                    },
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "purchase_order_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "line_note",
+                    "tax_calculation_rounding_method": "round_globally",
+                    "subscription_id": false
+                },
+                {
+                    "id": 536063,
+                    "sequence": 102,
+                    "product_id": {
+                        "id": 484,
+                        "display_name": "Servicio Simpliroute recurrente"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nSoporte - Marzo 2026",
+                    "l10n_uy_edi_addenda_ids": [],
+                    "account_id": {
+                        "id": 2553,
+                        "display_name": "41001001 Servicios prestados por servicios de software - Nacionales"
+                    },
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "has_abnormal_deferred_dates": false,
+                    "deferred_start_date": false,
+                    "deferred_end_date": false,
+                    "quantity": 12.0,
+                    "product_uom_category_id": {
+                        "id": 1
+                    },
+                    "product_uom_id": {
+                        "id": 1
+                    },
+                    "price_unit": 39841.72,
+                    "discount": 0.0,
+                    "l10n_pe_edi_allowance_charge_reason_code": false,
+                    "tax_ids": [
+                        {
+                            "id": 1,
+                            "display_name": "IVA 19% Venta"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "price_subtotal": 478101.0,
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3,
+                        "display_name": "kg"
+                    },
+                    "l10n_mx_edi_customs_number": false,
+                    "price_total": 568940.0,
+                    "partner_id": {
+                        "id": 16189
+                    },
+                    "currency_id": {
+                        "id": 45
+                    },
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "purchase_order_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "product",
+                    "tax_calculation_rounding_method": "round_globally",
+                    "subscription_id": false
+                }
+            ],
+            "narration": false,
+            "tax_totals": {
+                "amount_untaxed": 1513986.0,
+                "amount_total": 1801643.0,
+                "formatted_amount_total": "$ 1.801.643",
+                "formatted_amount_untaxed": "$ 1.513.986",
+                "groups_by_subtotal": {
+                    "Monto neto": [
+                        {
+                            "group_key": 263,
+                            "tax_group_id": 263,
+                            "tax_group_name": "IVA 19%",
+                            "tax_group_amount": 287657.0,
+                            "tax_group_base_amount": 1513986.0000000002,
+                            "formatted_tax_group_amount": "$ 287.657",
+                            "formatted_tax_group_base_amount": "$ 1.513.986",
+                            "hide_base_amount": false
+                        }
+                    ]
+                },
+                "subtotals": [
+                    {
+                        "name": "Monto neto",
+                        "amount": 1513986.0,
+                        "formatted_amount": "$ 1.513.986"
+                    }
+                ],
+                "subtotals_order": [
+                    "Monto neto"
+                ],
+                "display_tax_base": false
+            },
+            "amount_total": 1801643.0,
+            "invoice_payments_widget": {
+                "title": "Menos pagos",
+                "outstanding": false,
+                "content": [
+                    {
+                        "name": "Pago de cliente $ 5.395.574 - CHILEXPRESS SERVICIOS LOGÍSTICOS SPA - 30/03/2026",
+                        "journal_name": "Banco BCI CLP - 7568",
+                        "company_name": false,
+                        "amount": 1801643.0,
+                        "currency_id": 45,
+                        "date": "2026-03-30",
+                        "partial_id": 45870,
+                        "account_payment_id": 11310,
+                        "payment_method_name": "Manual",
+                        "move_id": 187265,
+                        "ref": "BCICL/2026/03/0393 (FAC 026528 FAC 026529 FAC 026575)",
+                        "is_exchange": false,
+                        "amount_company_currency": "$ 5.395.574",
+                        "amount_foreign_currency": false
+                    }
+                ]
+            },
+            "amount_residual": 0.0,
+            "invoice_outstanding_credits_debits_widget": false,
+            "line_ids": [
+                {
+                    "id": 536061,
+                    "account_id": {
+                        "id": 2553,
+                        "display_name": "41001001 Servicios prestados por servicios de software - Nacionales"
+                    },
+                    "partner_id": {
+                        "id": 16189,
+                        "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nMarzo 2026",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": false,
+                    "amount_currency": -1035885.0,
+                    "currency_id": {
+                        "id": 45,
+                        "display_name": "CLP"
+                    },
+                    "tax_ids": [
+                        {
+                            "id": 1,
+                            "display_name": "IVA 19% Venta"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 0.0,
+                    "credit": 1035885.0,
+                    "balance": -1035885.0,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [
+                        {
+                            "id": 26,
+                            "display_name": "+Ventas Netas Gravadas con IVA"
+                        }
+                    ],
+                    "tax_tag_invert": true,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "product",
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 100,
+                    "account_internal_group": "income",
+                    "account_type": "income",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3
+                    },
+                    "l10n_mx_edi_customs_number": false
+                },
+                {
+                    "id": 536062,
+                    "account_id": false,
+                    "partner_id": {
+                        "id": 16189,
+                        "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA"
+                    },
+                    "name": "40 Licencias * 0.65 UF = 26 UF \nUF 39.841,72",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": false,
+                    "amount_currency": 0.0,
+                    "currency_id": {
+                        "id": 45,
+                        "display_name": "CLP"
+                    },
+                    "tax_ids": [],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 0.0,
+                    "credit": 0.0,
+                    "balance": 0.0,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [],
+                    "tax_tag_invert": false,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "line_note",
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 101,
+                    "account_internal_group": false,
+                    "account_type": false,
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": false,
+                    "l10n_mx_edi_customs_number": false
+                },
+                {
+                    "id": 536063,
+                    "account_id": {
+                        "id": 2553,
+                        "display_name": "41001001 Servicios prestados por servicios de software - Nacionales"
+                    },
+                    "partner_id": {
+                        "id": 16189,
+                        "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nSoporte - Marzo 2026",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": false,
+                    "amount_currency": -478101.0,
+                    "currency_id": {
+                        "id": 45,
+                        "display_name": "CLP"
+                    },
+                    "tax_ids": [
+                        {
+                            "id": 1,
+                            "display_name": "IVA 19% Venta"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 0.0,
+                    "credit": 478101.0,
+                    "balance": -478101.0,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [
+                        {
+                            "id": 26,
+                            "display_name": "+Ventas Netas Gravadas con IVA"
+                        }
+                    ],
+                    "tax_tag_invert": true,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "product",
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 102,
+                    "account_internal_group": "income",
+                    "account_type": "income",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3
+                    },
+                    "l10n_mx_edi_customs_number": false
+                },
+                {
+                    "id": 536064,
+                    "account_id": {
+                        "id": 98,
+                        "display_name": "21006001 IVA Débito Fiscal"
+                    },
+                    "partner_id": {
+                        "id": 16189,
+                        "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA"
+                    },
+                    "name": "IVA 19% Vta",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": false,
+                    "amount_currency": -287657.0,
+                    "currency_id": {
+                        "id": 45,
+                        "display_name": "CLP"
+                    },
+                    "tax_ids": [],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 0.0,
+                    "credit": 287657.0,
+                    "balance": -287657.0,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [
+                        {
+                            "id": 34,
+                            "display_name": "+IVA Debito Fiscal"
+                        }
+                    ],
+                    "tax_tag_invert": true,
+                    "tax_line_id": {
+                        "id": 1
+                    },
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "tax",
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 10000,
+                    "account_internal_group": "liability",
+                    "account_type": "liability_current",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": false,
+                    "l10n_mx_edi_customs_number": false
+                },
+                {
+                    "id": 536065,
+                    "account_id": {
+                        "id": 2462,
+                        "display_name": "11003001 Clientes por cobrar - Nacionales"
+                    },
+                    "partner_id": {
+                        "id": 16189,
+                        "display_name": "CHILEXPRESS SERVICIOS LOGÍSTICOS SPA"
+                    },
+                    "name": "FAC 026575",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": "2026-04-24",
+                    "amount_currency": 1801643.0,
+                    "currency_id": {
+                        "id": 45,
+                        "display_name": "CLP"
+                    },
+                    "tax_ids": [],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 1801643.0,
+                    "credit": 0.0,
+                    "balance": 1801643.0,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [],
+                    "tax_tag_invert": false,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 45
+                    },
+                    "display_type": "payment_term",
+                    "company_id": {
+                        "id": 1
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 12000,
+                    "account_internal_group": "asset",
+                    "account_type": "asset_receivable",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": false,
+                    "l10n_mx_edi_customs_number": false
+                }
+            ],
+            "user_id": {
+                "id": 69
+            },
+            "invoice_user_id": {
+                "id": 69,
+                "display_name": "Carelis Rengifo"
+            },
+            "team_id": {
+                "id": 1,
+                "display_name": "TARIFA FIJA"
+            },
+            "invoice_origin": false,
+            "debit_origin_id": false,
+            "qr_code_method": false,
+            "l10n_uy_edi_addenda_ids": [],
+            "invoice_incoterm_id": false,
+            "l10n_uy_edi_cfe_sale_mode": false,
+            "l10n_uy_edi_cfe_transport_route": false,
+            "incoterm_location": false,
+            "fiscal_position_id": false,
+            "invoice_source_email": false,
+            "to_check": false,
+            "extract_document_uuid": false,
+            "campaign_id": false,
+            "medium_id": false,
+            "source_id": false,
+            "l10n_mx_edi_external_trade": false,
+            "l10n_mx_edi_external_trade_type": false,
+            "l10n_mx_edi_cer_source": false,
+            "l10n_latam_document_type_id_code": "33",
+            "l10n_pe_detraction_number": false,
+            "l10n_pe_detraction_date": false,
+            "l10n_pe_dua_invoice_id": false,
+            "l10n_pe_service_modality": false,
+            "l10n_pe_usage_type_id": false,
+            "l10n_pe_edi_cancel_reason": false,
+            "l10n_pe_edi_refund_reason": false,
+            "l10n_pe_edi_charge_reason": false,
+            "l10n_pe_edi_legend": false,
+            "l10n_pe_edi_legend_value": false,
+            "edi_document_ids": [],
+            "reversed_entry_id": false,
+            "l10n_mx_closing_move": false,
+            "l10n_pe_sunat_transaction_type": false,
+            "l10n_mx_edi_document_ids": [],
+            "l10n_cl_reference_ids": [
+                {
+                    "id": 6224,
+                    "origin_doc_number": "4500169810",
+                    "l10n_cl_reference_doc_type_id": {
+                        "id": 37,
+                        "display_name": "(801) Orden de Compra"
+                    },
+                    "reference_doc_code": false,
+                    "reason": false,
+                    "date": "2025-11-11",
+                    "l10n_cl_reference_doc_internal_type": false
+                },
+                {
+                    "id": 6225,
+                    "origin_doc_number": "1000558134",
+                    "l10n_cl_reference_doc_type_id": {
+                        "id": 30,
+                        "display_name": "(HES) Hoja de Entrada de Servicio (HES)"
+                    },
+                    "reference_doc_code": false,
+                    "reason": false,
+                    "date": "2026-03-25",
+                    "l10n_cl_reference_doc_internal_type": false
+                }
+            ],
+            "l10n_cl_dte_partner_status": "sent",
+            "l10n_cl_sii_send_ident": "11848810982",
+            "cession_partner_id": {
+                "id": 15795,
+                "display_name": "Capital Express S.A."
+            },
+            "cession_number": 1,
+            "sworn_declaration": "Se declara bajo juramento que SIMPLIT SPA, RUT 76403266-7 ha puesto a disposicion del cesionario Capital Express S.A., RUT 76083507-2, el o los documentos donde constan los recibos de las mercaderías entregadas o servicios prestados, entregados por parte del deudor de la factura CHILEXPRESS SERVICIOS LOGÍSTICOS SPA, RUT 76972715-9, de acuerdo a lo establecido en la Ley No. 19.983",
+            "l10n_cl_aec_file": {
+                "id": 188804,
+                "display_name": "AEC_1.xml"
+            },
+            "sii_xml_dte": "<DTE version=\"1.0\"><Documento ID=\"F26575T33\"><Encabezado><IdDoc><TipoDTE>33</TipoDTE><Folio>26575</Folio><FchEmis>2026-03-25</FchEmis><FmaPago>2</FmaPago><FchVenc>2026-04-24</FchVenc></IdDoc><Emisor><RUTEmisor>76403266-7</RUTEmisor><RznSoc>SIMPLIT SPA</RznSoc><GiroEmis>Servicios integrales de inform&#225;tica</GiroEmis><CorreoEmisor>simplitdte@simplit-solutions.com</CorreoEmisor><Acteco>702000</Acteco><DirOrigen>Holanda 100, oficina 606, Providencia, Santiago</DirOrigen><CmnaOrigen>SANTIAGO</CmnaOrigen><CdgVendedor>Carelis Rengifo</CdgVendedor></Emisor><Receptor><RUTRecep>76972715-9</RUTRecep><RznSocRecep>CHILEXPRESS SERVICIOS LOG&#205;STICOS SPA</RznSocRecep><GiroRecep>OTRAS ACTIVIDADES DE APOYO AL TRANSPORTE</GiroRecep><Contacto>aquintana@chilexpress.cl,jsegura@chilexpress.cl,pabarca@chilexpress.cl</Contacto><CorreoRecep>FacturacionMIPYME@sii.cl</CorreoRecep><DirRecep>Avenida Jos&#233; Joaqu&#237;n P&#233;rez 1376, Parque Industrial ENEA,</DirRecep><CmnaRecep>Pudahuel</CmnaRecep></Receptor><Totales><MntNeto>1513986</MntNeto><TasaIVA>19.00</TasaIVA><IVA>287657</IVA><MntTotal>1801643</MntTotal></Totales></Encabezado><Detalle><NroLinDet>1</NroLinDet><NmbItem>Servicio Simpliroute recurrente</NmbItem><DscItem>Servicio Simpliroute recurrente\nMarzo 2026</DscItem><QtyItem>26.000000</QtyItem><UnmdItem>U</UnmdItem><PrcItem>39841.730769</PrcItem><MontoItem>1035885</MontoItem></Detalle><Detalle><NroLinDet>2</NroLinDet><NmbItem>Servicio Simpliroute recurrente</NmbItem><DscItem>Servicio Simpliroute recurrente\nSoporte - Marzo 2026</DscItem><QtyItem>12.000000</QtyItem><UnmdItem>U</UnmdItem><PrcItem>39841.750000</PrcItem><MontoItem>478101</MontoItem></Detalle><Referencia><NroLinRef>1</NroLinRef><TpoDocRef>801</TpoDocRef><FolioRef>4500169810</FolioRef><FchRef>2025-11-11</FchRef></Referencia><Referencia><NroLinRef>2</NroLinRef><TpoDocRef>HES</TpoDocRef><FolioRef>1000558134</FolioRef><FchRef>2026-03-25</FchRef></Referencia><TED version=\"1.0\"><DD><RE>76403266-7</RE><TD>33</TD><F>26575</F><FE>2026-03-25</FE><RR>76972715-9</RR><RSR>CHILEXPRESS SERVICIOS LOG&#205;STICOS SPA</RSR><MNT>1801643</MNT><IT1>Servicio Simpliroute recurrente</IT1><CAF version=\"1.0\"><DA><RE>76403266-7</RE><RS>SIMPLIT SPA</RS><TD>33</TD><RNG><D>26501</D><H>27500</H></RNG><FA>2026-03-12</FA><RSAPK><M>73UHULuLN0qeoFQw0CCURurXL18J9I0TmwkhRr6vQqf2sVAL4yvGIIoBlBX3125hTSjct/+VxRfb3h+6NhWc+Q==</M><E>Aw==</E></RSAPK><IDK>300</IDK></DA><FRMA algoritmo=\"SHA1withRSA\">aitqiNqS28cRR66yVyX+pKDa8p3rVZUNKgD3EJYu+iLRWT35nMh/pOZhbxU9LqIegIYPsHGFvx8/QZllGm5CUg==</FRMA></CAF><TSTED>2026-03-25T10:47:57</TSTED></DD><FRMT algoritmo=\"SHA1withRSA\">vbU9vZ+JstQ0VDpQa8UyPfC/wTKSmucQr6ahkDuJwQDBWrwOtp449n+qy3benS/j4IXuB91//dvRZGnzx21hyg==</FRMT></TED><TmstFirma>2026-03-25T10:47:57</TmstFirma></Documento><Signature xmlns=\"http://www.w3.org/2000/09/xmldsig#\"><SignedInfo xmlns=\"http://www.w3.org/2000/09/xmldsig#\"><CanonicalizationMethod Algorithm=\"http://www.w3.org/TR/2001/REC-xml-c14n-20010315\"/><SignatureMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#rsa-sha1\"/><Reference URI=\"#F26575T33\"><Transforms><Transform Algorithm=\"http://www.w3.org/TR/2001/REC-xml-c14n-20010315\"/></Transforms><DigestMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#sha1\"/><DigestValue>yRhK/tVVdUaW2CXGZCgqWY21AmI=</DigestValue></Reference></SignedInfo><SignatureValue>c22rSdyQMdLyKeNZs0aS3NDIL8k2/Y5gC0vhsBu3xqqJIsoniSaFVDTJTKJCKZLfuNc8Ouk51PPyFdp0e+2Pgz7K+bmMEhtzWiDkTy9YjzLjUbj3Pn+rU5YNRnRNlEv6j5gQsXRrSYJ5gu8EeFFWAKF5UkOG6Pej/zRs1cJvsAtDfOiy53/t9z7IEwqGMmylXRvx8BXmOmfwG9UbMwTiObjRyLwpYJjpEN9YrMqtGqZncnTTGidw1xRSEiDbaKqcYV5kYuv1MQJG6wObuPxFUdwWJvO7K72qY4cnBgbWz2SGl/x5nHsQ32fmrCr6TgvYR9/mG4BHVxF3lMLZNqwdQw==</SignatureValue><KeyInfo><KeyValue><RSAKeyValue><Modulus>rIzfEH4C/qtowenZV+vbUQ7rQbhlt6D5kO4oQd3v4oL3P/GfIqPXVSS4RN4lBsej0XQ7KCH728/BaDkMsr8H3tplGTbaov7w9LM9HqUQRtaAe5LXXt+k7unEd78Bo8dw+curIVGTTViaFdKvVzcO9wmyzOUchEsry/IsqGaGUvU9dPPsQGZntBp1y6MqJfyUym2biFW3CdGzjLcaDvxnq3tF+9LIlpQGB/8GxqnZjRDxZiJ4ESCUhWO+I+cVple4qGt/QNImgwoQjJP5VnFmMydhtSqv1TnxaX5VZYxff/UOlyhaR4itBAYxcvfB74JCOCj/xKCKKMkLUA1wVPOTFw==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue></KeyValue><X509Data><X509Certificate>\nMIIGhzCCBW+gAwIBAgIDBJ3vMA0GCSqGSIb3DQEBCwUAMIGmMQswCQYDVQQGEwJD\nTDEYMBYGA1UEChMPQWNlcHRhLmNvbSBTLkEuMUgwRgYDVQQDEz9BY2VwdGEuY29t\nIEF1dG9yaWRhZCBDZXJ0aWZpY2Fkb3JhIENsYXNlIDMgUGVyc29uYSBOYXR1cmFs\nIC0gRzQxHjAcBgkqhkiG9w0BCQEWD2luZm9AYWNlcHRhLmNvbTETMBEGA1UEBRMK\nOTY5MTkwNTAtODAeFw0yNDA5MjcxOTMyMDlaFw0yNzA5MjcxOTMyMDlaMIGSMQsw\nCQYDVQQGEwJDTDEYMBYGA1UEDBMPUEVSU09OQSBOQVRVUkFMMSgwJgYDVQQDEx9B\nTFZBUk8gUklDQVJETyBFQ0hFVkVSUklBIFNPTElTMSowKAYJKoZIhvcNAQkBFhtG\nQUNUVVJBQ0lPTkBTSU1QTElST1VURS5DT00xEzARBgNVBAUTCjE2MzU4NDg3LTUw\nggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCsjN8QfgL+q2jB6dlX69tR\nDutBuGW3oPmQ7ihB3e/igvc/8Z8io9dVJLhE3iUGx6PRdDsoIfvbz8FoOQyyvwfe\n2mUZNtqi/vD0sz0epRBG1oB7ktde36Tu6cR3vwGjx3D5y6shUZNNWJoV0q9XNw73\nCbLM5RyESyvL8iyoZoZS9T108+xAZme0GnXLoyol/JTKbZuIVbcJ0bOMtxoO/Ger\ne0X70siWlAYH/wbGqdmNEPFmIngRIJSFY74j5xWmV7ioa39A0iaDChCMk/lWcWYz\nJ2G1Kq/VOfFpflVljF9/9Q6XKFpHiK0EBjFy98HvgkI4KP/EoIooyQtQDXBU85MX\nAgMBAAGjggLOMIICyjAfBgNVHSMEGDAWgBSq/b3F6TdN9plNV47BcRr568MG4zAd\nBgNVHQ4EFgQUNmow9K+QVKw4NhUDm0JXtJBnCJEwCwYDVR0PBAQDAgTwMB0GA1Ud\nJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDARBglghkgBhvhCAQEEBAMCBaAwgfoG\nA1UdIASB8jCB7zCB7AYIKwYBBAG1awIwgd8wMQYIKwYBBQUHAgEWJWh0dHBzOi8v\nYWNnNC5hY2VwdGEuY29tL0NQUy1BY2VwdGFjb20wgakGCCsGAQUFBwICMIGcMBYW\nD0FjZXB0YS5jb20gUy5BLjADAgECGoGBRWwgdGl0dWxhciBoYSBzaWRvIHZhbGlk\nYWRvIGVuIGZvcm1hIHByZXNlbmNpYWwsIHF1ZWRhbmRvIGhhYmlsaXRhZG8gZWwg\nQ2VydGlmaWNhZG8gcGFyYSB1c28gdHJpYnV0YXJpbywgcGFnb3MsIGNvbWVyY2lv\nIHkgb3Ryb3MuMFoGA1UdEgRTMFGgGAYIKwYBBAHBAQKgDBYKOTY5MTkwNTAtOKAk\nBggrBgEFBQcIA6AYMBYMCjk2OTE5MDUwLTgGCCsGAQQBwQECgQ9pbmZvQGFjZXB0\nYS5jb20wZgYDVR0RBF8wXaAYBggrBgEEAcEBAaAMFgoxNjM1ODQ4Ny01oCQGCCsG\nAQUFBwgDoBgwFgwKMTYzNTg0ODctNQYIKwYBBAHBAQKBG0ZBQ1RVUkFDSU9OQFNJ\nTVBMSVJPVVRFLkNPTTBHBggrBgEFBQcBAQQ7MDkwNwYIKwYBBQUHMAGGK2h0dHBz\nOi8vYWNnNC5hY2VwdGEuY29tL2FjZzQvb2NzcC9DbGFzZTMtRzQwPwYDVR0fBDgw\nNjA0oDKgMIYuaHR0cHM6Ly9hY2c0LmFjZXB0YS5jb20vYWNnNC9jcmwvQ2xhc2Uz\nLUc0LmNybDANBgkqhkiG9w0BAQsFAAOCAQEAON1CsCd5zGGv4l6n/sZG/eoKE/AT\nrHfGfjIYuCFmzmPQzlHmRfhq3SqLFGtsEM9fgeTlO4PlGR5TdztETQ9CTX9hJvsU\nvBb0K8CwUIg0RzYTH0aZvtGKPbxGKmZik3iUEgisi+aUsjl7EFaN44rt3cO1sFRs\nVbzsH0yhrQT/ECN2IGM1EcNhyZoO4nOvdx3ENi9bB0CmziVioftdSLWs2tIlC4fg\ngqZCXiicNhtYS14usatBN16c1FDEm/eegAyNo6t6ysNk7x3UzcID5j1J66L3J8b4\nlpgqKrEZy3JwDTABsoFDXeQJyvfYu+U3JPFaBNp8Tl1+NU0ZR0myCSgsYQ==</X509Certificate></X509Data></KeyInfo></Signature></DTE>",
+            "sii_cesion_message": false,
+            "l10n_latam_available_document_type_ids": [
+                1,
+                2,
+                4,
+                5,
+                14,
+                19,
+                28,
+                34,
+                35
+            ],
+            "l10n_latam_use_documents": true,
+            "l10n_latam_manual_document_number": false,
+            "l10n_latam_internal_type": "invoice",
+            "display_name": "FAC 026575"
+        }
+    ]
+}
