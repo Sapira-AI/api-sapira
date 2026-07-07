@@ -5,6 +5,18 @@ import { Server, Socket } from 'socket.io';
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
 
+interface SchedulerNotificationPayload {
+	id: string;
+	contract_id: string;
+	notification_type: string;
+	title: string;
+	message: string;
+	is_read: boolean;
+	metadata: Record<string, any> | null;
+	created_at: Date;
+	holding_id: string;
+}
+
 @WebSocketGateway({
 	cors: {
 		origin: process.env.FRONT_BASE_URL || 'http://localhost:8080',
@@ -85,5 +97,15 @@ export class InvoiceSchedulerGateway implements OnGatewayInit, OnGatewayConnecti
 			timestamp: new Date(),
 		});
 		this.logger.error(`❌ Evento scheduler:error emitido para job ${jobId} (room: ${room}): ${error}`);
+	}
+
+	emitNotificationCreated(holdingId: string, notification: SchedulerNotificationPayload) {
+		const room = `holding:${holdingId}`;
+		this.server.to(room).emit('notification:created', {
+			holdingId,
+			notification,
+			timestamp: new Date(),
+		});
+		this.logger.log(`🔔 Evento notification:created emitido para holding ${holdingId} (room: ${room})`);
 	}
 }
