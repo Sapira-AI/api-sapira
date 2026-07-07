@@ -223,6 +223,7 @@ export class InvoiceSchedulerService {
 		this.logger.log(`🔵 INICIO sendInvoiceToOdoo - Factura ${invoice.id}`);
 		this.logger.log(`   clientEntity: ${invoice.clientEntity ? `SÍ (${invoice.clientEntity.legal_name})` : 'NO'}`);
 		this.logger.log(`   company: ${invoice.company ? `SÍ (${invoice.company.legal_name})` : 'NO'}`);
+		this.logger.log(`   references: ${invoice.references ? `${invoice.references.length} cargadas` : 'NO CARGADAS'}`);
 
 		const result: InvoiceResultDto = {
 			invoiceId: invoice.id,
@@ -408,8 +409,13 @@ export class InvoiceSchedulerService {
 			}
 
 			if (dryRun) {
+				const { invoiceData: finalOdooPayload } = await this.odooInvoicesService.buildDraftInvoicePayload(
+					invoice.holding_id,
+					odooInvoiceData
+				);
+
 				result.status = 'sent';
-				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${odooInvoiceData.partner_id}`;
+				result.details = `DRY RUN - Factura se enviaría a Odoo con partner_id: ${finalOdooPayload.partner_id} (payload final de account.move.create)`;
 				this.logger.log(`🔍 DRY RUN - Factura ${invoice.invoice_number} (${invoice.id}) se enviaría a Odoo`);
 
 				// Resumen de factura de exportación
@@ -430,7 +436,7 @@ export class InvoiceSchedulerService {
 					this.logger.log(`\n💰 Sin descuentos en esta factura\n`);
 				}
 
-				console.log('📦 DATOS QUE SE ENVIARÍAN A ODOO:', JSON.stringify(odooInvoiceData, null, 2));
+				console.log('📦 DATOS FINALES QUE SE ENVIARÍAN A ODOO:', JSON.stringify(finalOdooPayload, null, 2));
 				return result;
 			}
 
@@ -514,7 +520,8 @@ export class InvoiceSchedulerService {
 										);
 									} else if (emitResponse.electronic_status === 'rejected') {
 										const electronicErrorMessage =
-											emitResponse.electronic_errors?.map((e) => e.message).join(', ') || 'La entidad electrónica rechazó la factura';
+											emitResponse.electronic_errors?.map((e) => e.message).join(', ') ||
+											'La entidad electrónica rechazó la factura';
 
 										await this.invoiceRepository.update(invoice.id, {
 											status: 'Emitida',
@@ -757,6 +764,12 @@ export class InvoiceSchedulerService {
 		const companyId = invoice.company?.odoo_integration_id;
 		const isExportInvoice = invoice.export_type === 1;
 
+		this.logger.log(
+			`📎 Estado de referencias antes de mapear factura ${invoice.invoice_number}: ${
+				invoice.references ? `${invoice.references.length} cargadas` : 'NO CARGADAS'
+			}`
+		);
+
 		// Log de factura de exportación
 		if (isExportInvoice) {
 			this.logger.log(`🌍 FACTURA DE EXPORTACIÓN - Los items se enviarán SIN impuestos`);
@@ -929,7 +942,11 @@ export class InvoiceSchedulerService {
 			this.logger.log(`📎 Procesando ${invoice.references.length} referencias para factura ${invoice.invoice_number}`);
 
 			const referencesPromises = invoice.references.map(async (ref) => {
-				const odooDocTypeId = await this.getOdooDocumentTypeId(invoice.holding_id, ref.document_type_code);
+				const odooDocTypeId = await this.getOdooDocumentTypeId(
+					invoice.holding_id,
+					ref.document_type_code,
+					invoice.company?.country
+				);
 
 				if (!odooDocTypeId) {
 					this.logger.warn(
@@ -1165,15 +1182,22 @@ export class InvoiceSchedulerService {
 			where: { id: invoice.contract_id },
 		});
 
+		const references = await this.invoiceReferenceRepository.find({
+			where: { invoice_id: invoice.id },
+			order: { created_at: 'ASC' },
+		});
+
 		this.logger.log(`   contract encontrado: ${contract ? 'SÍ' : 'NO'} - ID: ${contract?.id || 'N/A'}`);
 		this.logger.log(
 			`   contract.invoice_terms_and_conditions: ${contract?.invoice_terms_and_conditions ? `SÍ (${contract.invoice_terms_and_conditions.substring(0, 50)}...)` : 'NO/VACÍO'}`
 		);
+		this.logger.log(`   references recargadas: ${references.length}`);
 
 		(invoice as InvoiceWithRelations).clientEntity = clientEntity;
 		(invoice as InvoiceWithRelations).company = company;
 		(invoice as InvoiceWithRelations).items = items;
 		(invoice as InvoiceWithRelations).contract = contract;
+		(invoice as InvoiceWithRelations).references = references;
 
 		return invoice as InvoiceWithRelations;
 	}
@@ -1209,11 +1233,13 @@ export class InvoiceSchedulerService {
 	/**
 	 * Obtiene el ID de Odoo para un tipo de documento consultando dinámicamente
 	 */
-	private async getOdooDocumentTypeId(holdingId: string, documentTypeCode: string): Promise<number | null> {
+	private async getOdooDocumentTypeId(holdingId: string, documentTypeCode: string, countryName?: string): Promise<number | null> {
 		try {
-			const odooId = await this.documentTypeMappingService.getOdooDocumentTypeId(holdingId, documentTypeCode);
+			const odooId = await this.documentTypeMappingService.getOdooDocumentTypeId(holdingId, documentTypeCode, countryName);
 			if (!odooId) {
-				this.logger.warn(`⚠️ Tipo de documento "${documentTypeCode}" no encontrado en Odoo`);
+				this.logger.warn(
+					`⚠️ Tipo de documento "${documentTypeCode}" no encontrado en Odoo${countryName ? ` para país "${countryName}"` : ''}`
+				);
 			}
 			return odooId;
 		} catch (error) {
@@ -1526,9 +1552,7 @@ export class InvoiceSchedulerService {
 		errorDetails?: any;
 	}): Promise<void> {
 		if (!params.invoice.contract_id) {
-			this.logger.warn(
-				`⚠️ No se pudo crear notificación de error Odoo para factura ${params.invoice.id} porque no tiene contract_id`
-			);
+			this.logger.warn(`⚠️ No se pudo crear notificación de error Odoo para factura ${params.invoice.id} porque no tiene contract_id`);
 			return;
 		}
 
@@ -1577,10 +1601,7 @@ export class InvoiceSchedulerService {
 				this.schedulerGateway.emitNotificationCreated(params.invoice.holding_id, insertedNotification);
 			}
 		} catch (error) {
-			this.logger.error(
-				`❌ Error creando contract_notification para factura ${params.invoice.invoice_number || params.invoice.id}:`,
-				error
-			);
+			this.logger.error(`❌ Error creando contract_notification para factura ${params.invoice.invoice_number || params.invoice.id}:`, error);
 		}
 	}
 

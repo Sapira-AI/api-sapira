@@ -24,9 +24,15 @@ export class OdooInvoicesService {
 	) {}
 
 	/**
-	 * Crea una factura en borrador en Odoo
+	 * Construye el payload final que se envía a account.move.create en Odoo
 	 */
-	async createDraftInvoice(holdingId: string, data: CreateDraftInvoiceDTO): Promise<CreateDraftInvoiceResult> {
+	async buildDraftInvoicePayload(
+		holdingId: string,
+		data: CreateDraftInvoiceDTO
+	): Promise<{
+		invoiceData: any;
+		clientEntity: Pick<ClientEntity, 'id' | 'odoo_fiscal_position_id' | 'odoo_fiscal_position_name'> | null;
+	}> {
 		const {
 			partner_id,
 			move_type,
@@ -46,26 +52,165 @@ export class OdooInvoicesService {
 			l10n_cl_reference_ids,
 		} = data;
 
+		// Obtener fiscal position Y tax IDs de retenciones del cliente
+		const clientEntity = await this.clientEntitiesRepository.findOne({
+			where: {
+				odoo_partner_id: partner_id,
+				holding_id: holdingId,
+			},
+			select: ['id', 'odoo_fiscal_position_id', 'odoo_fiscal_position_name'],
+		});
+
+		if (clientEntity?.odoo_fiscal_position_id) {
+			this.logger.log(
+				`✅ Cliente encontrado con posición fiscal: "${clientEntity.odoo_fiscal_position_name}" (ID: ${clientEntity.odoo_fiscal_position_id})`
+			);
+		} else {
+			this.logger.debug(`ℹ️  Cliente no tiene posición fiscal configurada (partner_id: ${partner_id})`);
+		}
+
+		const invoiceData: any = {
+			partner_id: partner_id,
+			move_type: move_type || 'out_invoice',
+		};
+
+		// Agregar fiscal position ANTES de otros campos
+		// Esto permite que Odoo procese correctamente el mapeo de impuestos
+		if (clientEntity?.odoo_fiscal_position_id) {
+			invoiceData.fiscal_position_id = clientEntity.odoo_fiscal_position_id;
+		}
+
+		if (currency_id) {
+			invoiceData.currency_id = currency_id;
+		}
+
+		if (invoice_date) {
+			invoiceData.invoice_date = invoice_date;
+		}
+
+		if (invoice_date_due) {
+			invoiceData.invoice_date_due = invoice_date_due;
+		}
+
+		if (payment_reference) {
+			invoiceData.payment_reference = payment_reference;
+		}
+
+		if (invoice_origin) {
+			invoiceData.invoice_origin = invoice_origin;
+		}
+
+		if (narration) {
+			invoiceData.narration = narration;
+		}
+
+		if (company_id) {
+			invoiceData.company_id = company_id;
+		}
+
+		if (l10n_latam_document_type_id) {
+			invoiceData.l10n_latam_document_type_id = l10n_latam_document_type_id;
+		}
+
+		if (journal_id) {
+			invoiceData.journal_id = journal_id;
+		}
+
+		if (x_sapira_invoice_id) {
+			invoiceData.x_sapira_invoice_id = x_sapira_invoice_id;
+		}
+
+		if (auto_post) {
+			invoiceData.auto_post = auto_post;
+		}
+
+		if (l10n_pe_edi_operation_type) {
+			invoiceData.l10n_pe_edi_operation_type = l10n_pe_edi_operation_type;
+		}
+
+		if (l10n_cl_reference_ids && l10n_cl_reference_ids.length > 0) {
+			invoiceData.l10n_cl_reference_ids = l10n_cl_reference_ids.map((reference) => [0, 0, reference]);
+		}
+
+		// Procesar líneas de factura con mapeo de impuestos
+		const invoiceLines = await Promise.all(
+			invoice_line_ids.map(async (line) => {
+				const lineData: any = {
+					product_id: line.product_id,
+					quantity: line.quantity,
+					price_unit: line.price_unit,
+				};
+
+				if (line.name) {
+					lineData.name = line.name;
+				}
+
+				if (line.discount !== undefined && line.discount !== null) {
+					lineData.discount = line.discount;
+				}
+
+				// Verificar si los tax_ids ya vienen definidos en el DTO
+				if (line.tax_ids !== undefined) {
+					// Respetar los tax_ids del DTO (puede ser [] para facturas de exportación)
+					// IMPORTANTE: Siempre enviar [[6, 0, tax_ids]] incluso si es array vacío
+					// Esto fuerza a Odoo a usar exactamente estos impuestos (o ninguno si es [])
+					lineData.tax_ids = [[6, 0, line.tax_ids]];
+
+					if (line.tax_ids.length > 0) {
+						this.logger.debug(
+							`📦 Producto ${line.product_id}: usando ${line.tax_ids.length} impuestos del DTO: [${line.tax_ids.join(', ')}]`
+						);
+					} else {
+						this.logger.debug(`📦 Producto ${line.product_id}: sin impuestos (factura de exportación) - forzando tax_ids=[]`);
+					}
+				} else {
+					// Flujo actual: calcular impuestos desde Odoo cuando no vienen en el DTO
+					const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(line.product_id, company_id, holdingId);
+
+					let finalTaxIds: number[] = [];
+
+					// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
+					if (clientEntity?.odoo_fiscal_position_id) {
+						const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
+							productSaleTaxIds,
+							clientEntity.odoo_fiscal_position_id,
+							holdingId
+						);
+						finalTaxIds = mappingResult.final_tax_ids;
+
+						this.logger.debug(
+							`📦 Producto ${line.product_id}: ${productSaleTaxIds.length} impuestos originales → ${finalTaxIds.length} impuestos finales (con mapeo)`
+						);
+					} else {
+						// Sin posición fiscal, usar impuestos del producto directamente
+						finalTaxIds = productSaleTaxIds;
+						this.logger.debug(`📦 Producto ${line.product_id}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
+					}
+
+					// Asignar impuestos finales a la línea
+					if (finalTaxIds.length > 0) {
+						lineData.tax_ids = [[6, 0, finalTaxIds]];
+					}
+				}
+
+				return [0, 0, lineData];
+			})
+		);
+
+		invoiceData.invoice_line_ids = invoiceLines;
+
+		return {
+			invoiceData,
+			clientEntity,
+		};
+	}
+
+	/**
+	 * Crea una factura en borrador en Odoo
+	 */
+	async createDraftInvoice(holdingId: string, data: CreateDraftInvoiceDTO): Promise<CreateDraftInvoiceResult> {
 		try {
 			const connection = await this.getOdooConnectionByHoldingId(holdingId);
-
-			// Obtener fiscal position Y tax IDs de retenciones del cliente
-			const clientEntity = await this.clientEntitiesRepository.findOne({
-				where: {
-					odoo_partner_id: partner_id,
-					holding_id: holdingId,
-				},
-				select: ['id', 'odoo_fiscal_position_id', 'odoo_fiscal_position_name'],
-			});
-
-			if (clientEntity?.odoo_fiscal_position_id) {
-				this.logger.log(
-					`✅ Cliente encontrado con posición fiscal: "${clientEntity.odoo_fiscal_position_name}" (ID: ${clientEntity.odoo_fiscal_position_id})`
-				);
-			} else {
-				this.logger.debug(`ℹ️  Cliente no tiene posición fiscal configurada (partner_id: ${partner_id})`);
-			}
-
 			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
 			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
 
@@ -75,135 +220,7 @@ export class OdooInvoicesService {
 				throw new Error('Falló la autenticación con Odoo');
 			}
 
-			const invoiceData: any = {
-				partner_id: partner_id,
-				move_type: move_type || 'out_invoice',
-			};
-
-			// Agregar fiscal position ANTES de otros campos
-			// Esto permite que Odoo procese correctamente el mapeo de impuestos
-			if (clientEntity?.odoo_fiscal_position_id) {
-				invoiceData.fiscal_position_id = clientEntity.odoo_fiscal_position_id;
-			}
-
-			if (currency_id) {
-				invoiceData.currency_id = currency_id;
-			}
-
-			if (invoice_date) {
-				invoiceData.invoice_date = invoice_date;
-			}
-
-			if (invoice_date_due) {
-				invoiceData.invoice_date_due = invoice_date_due;
-			}
-
-			if (payment_reference) {
-				invoiceData.payment_reference = payment_reference;
-			}
-
-			if (invoice_origin) {
-				invoiceData.invoice_origin = invoice_origin;
-			}
-
-			if (narration) {
-				invoiceData.narration = narration;
-			}
-
-			if (company_id) {
-				invoiceData.company_id = company_id;
-			}
-
-			if (l10n_latam_document_type_id) {
-				invoiceData.l10n_latam_document_type_id = l10n_latam_document_type_id;
-			}
-
-			if (journal_id) {
-				invoiceData.journal_id = journal_id;
-			}
-
-			if (x_sapira_invoice_id) {
-				invoiceData.x_sapira_invoice_id = x_sapira_invoice_id;
-			}
-
-			if (auto_post) {
-				invoiceData.auto_post = auto_post;
-			}
-
-			if (l10n_pe_edi_operation_type) {
-				invoiceData.l10n_pe_edi_operation_type = l10n_pe_edi_operation_type;
-			}
-
-			if (l10n_cl_reference_ids && l10n_cl_reference_ids.length > 0) {
-				invoiceData.l10n_cl_reference_ids = l10n_cl_reference_ids.map((reference) => [0, 0, reference]);
-			}
-
-			// Procesar líneas de factura con mapeo de impuestos
-			const invoiceLines = await Promise.all(
-				invoice_line_ids.map(async (line) => {
-					const lineData: any = {
-						product_id: line.product_id,
-						quantity: line.quantity,
-						price_unit: line.price_unit,
-					};
-
-					if (line.name) {
-						lineData.name = line.name;
-					}
-
-					if (line.discount !== undefined && line.discount !== null) {
-						lineData.discount = line.discount;
-					}
-
-					// Verificar si los tax_ids ya vienen definidos en el DTO
-					if (line.tax_ids !== undefined) {
-						// Respetar los tax_ids del DTO (puede ser [] para facturas de exportación)
-						// IMPORTANTE: Siempre enviar [[6, 0, tax_ids]] incluso si es array vacío
-						// Esto fuerza a Odoo a usar exactamente estos impuestos (o ninguno si es [])
-						lineData.tax_ids = [[6, 0, line.tax_ids]];
-
-						if (line.tax_ids.length > 0) {
-							this.logger.debug(
-								`📦 Producto ${line.product_id}: usando ${line.tax_ids.length} impuestos del DTO: [${line.tax_ids.join(', ')}]`
-							);
-						} else {
-							this.logger.debug(`📦 Producto ${line.product_id}: sin impuestos (factura de exportación) - forzando tax_ids=[]`);
-						}
-					} else {
-						// Flujo actual: calcular impuestos desde Odoo cuando no vienen en el DTO
-						const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(line.product_id, company_id, holdingId);
-
-						let finalTaxIds: number[] = [];
-
-						// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
-						if (clientEntity?.odoo_fiscal_position_id) {
-							const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
-								productSaleTaxIds,
-								clientEntity.odoo_fiscal_position_id,
-								holdingId
-							);
-							finalTaxIds = mappingResult.final_tax_ids;
-
-							this.logger.debug(
-								`📦 Producto ${line.product_id}: ${productSaleTaxIds.length} impuestos originales → ${finalTaxIds.length} impuestos finales (con mapeo)`
-							);
-						} else {
-							// Sin posición fiscal, usar impuestos del producto directamente
-							finalTaxIds = productSaleTaxIds;
-							this.logger.debug(`📦 Producto ${line.product_id}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
-						}
-
-						// Asignar impuestos finales a la línea
-						if (finalTaxIds.length > 0) {
-							lineData.tax_ids = [[6, 0, finalTaxIds]];
-						}
-					}
-
-					return [0, 0, lineData];
-				})
-			);
-
-			invoiceData.invoice_line_ids = invoiceLines;
+			const { invoiceData, clientEntity } = await this.buildDraftInvoicePayload(holdingId, data);
 
 			// 📊 LOG DETALLADO DEL PAYLOAD
 			console.log('\n🔍 ===== PAYLOAD COMPLETO PARA ODOO =====');
@@ -223,8 +240,8 @@ export class OdooInvoicesService {
 			} else {
 				console.log(`ℹ️  Sin posición fiscal - usando impuestos de venta del producto`);
 			}
-			console.log(`\n📦 LÍNEAS DE FACTURA (${invoiceLines.length} items):`);
-			invoiceLines.forEach((line, index) => {
+			console.log(`\n📦 LÍNEAS DE FACTURA (${invoiceData.invoice_line_ids.length} items):`);
+			invoiceData.invoice_line_ids.forEach((line, index) => {
 				const lineData = line[2];
 				console.log(`  Línea ${index + 1}:`);
 				console.log(`    - Product ID: ${lineData.product_id}`);

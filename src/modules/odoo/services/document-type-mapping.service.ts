@@ -9,6 +9,7 @@ interface DocumentTypeMapping {
 	code: string;
 	odoo_id: number;
 	name: string;
+	country_name?: string | null;
 }
 
 interface DefaultDocumentType {
@@ -28,7 +29,7 @@ const ALLOWED_INVOICE_CODES_BY_COUNTRY: Record<string, string[]> = {
 @Injectable()
 export class DocumentTypeMappingService {
 	private readonly logger = new Logger(DocumentTypeMappingService.name);
-	private cache: Map<string, Map<string, DocumentTypeMapping>> = new Map();
+	private cache: Map<string, Map<string, DocumentTypeMapping[]>> = new Map();
 	private defaultDocTypeCache: Map<string, DefaultDocumentType | null> = new Map();
 
 	constructor(
@@ -37,12 +38,16 @@ export class DocumentTypeMappingService {
 		private readonly odooProvider: OdooProvider
 	) {}
 
-	async getOdooDocumentTypeId(holdingId: string, documentCode: string): Promise<number | null> {
+	async getOdooDocumentTypeId(holdingId: string, documentCode: string, countryName?: string): Promise<number | null> {
 		const cacheKey = `${holdingId}`;
+		const normalizedDocumentCode = this.normalizeDocumentCode(documentCode);
+		const normalizedCountryName = this.normalizeCountryName(countryName);
+
 		if (this.cache.has(cacheKey)) {
 			const holdingCache = this.cache.get(cacheKey)!;
-			if (holdingCache.has(documentCode)) {
-				return holdingCache.get(documentCode)!.odoo_id;
+			const odooId = this.findDocumentTypeIdInCache(holdingCache, normalizedDocumentCode, normalizedCountryName);
+			if (odooId) {
+				return odooId;
 			}
 		}
 
@@ -50,12 +55,15 @@ export class DocumentTypeMappingService {
 
 		if (this.cache.has(cacheKey)) {
 			const holdingCache = this.cache.get(cacheKey)!;
-			if (holdingCache.has(documentCode)) {
-				return holdingCache.get(documentCode)!.odoo_id;
+			const odooId = this.findDocumentTypeIdInCache(holdingCache, normalizedDocumentCode, normalizedCountryName);
+			if (odooId) {
+				return odooId;
 			}
 		}
 
-		this.logger.warn(`No se encontró mapeo para código "${documentCode}" en Odoo (holding: ${holdingId})`);
+		this.logger.warn(
+			`No se encontró mapeo para código "${normalizedDocumentCode}" en Odoo (holding: ${holdingId}, país: ${countryName || 'no especificado'})`
+		);
 		return null;
 	}
 
@@ -85,19 +93,25 @@ export class DocumentTypeMappingService {
 				'l10n_latam.document.type',
 				'search_read',
 				[[]],
-				{ fields: ['id', 'code', 'name', 'internal_type'] },
+				{
+					fields: ['id', 'code', 'name', 'internal_type', 'active', 'country_id'],
+					order: 'code asc',
+				},
 			]);
 
 			const cacheKey = `${holdingId}`;
-			const holdingCache = new Map<string, DocumentTypeMapping>();
+			const holdingCache = new Map<string, DocumentTypeMapping[]>();
 
 			for (const docType of documentTypes) {
+				const normalizedCode = this.normalizeDocumentCode(docType.code);
 				const mapping: DocumentTypeMapping = {
-					code: docType.code,
+					code: normalizedCode,
 					odoo_id: docType.id,
 					name: docType.name,
+					country_name: Array.isArray(docType.country_id) ? docType.country_id[1] : null,
 				};
-				holdingCache.set(docType.code, mapping);
+				const existingMappings = holdingCache.get(normalizedCode) || [];
+				holdingCache.set(normalizedCode, [...existingMappings, mapping]);
 			}
 
 			this.cache.set(cacheKey, holdingCache);
@@ -107,6 +121,49 @@ export class DocumentTypeMappingService {
 			this.logger.error(`Error cargando tipos de documento de Odoo: ${error.message}`, error.stack);
 			throw error;
 		}
+	}
+
+	private findDocumentTypeIdInCache(
+		holdingCache: Map<string, DocumentTypeMapping[]>,
+		documentCode: string,
+		countryName?: string
+	): number | null {
+		const candidates = holdingCache.get(documentCode);
+		if (!candidates || candidates.length === 0) {
+			return null;
+		}
+
+		if (countryName) {
+			const countryMatch = candidates.find((candidate) => this.normalizeCountryName(candidate.country_name) === countryName);
+			if (countryMatch) {
+				return countryMatch.odoo_id;
+			}
+		}
+
+		if (candidates.length > 1) {
+			this.logger.warn(
+				`Se encontraron múltiples tipos de documento para código "${documentCode}"${countryName ? ` y país "${countryName}"` : ''}. ` +
+					`Se usará el primero: ${JSON.stringify(candidates)}`
+			);
+		}
+
+		return candidates[0].odoo_id;
+	}
+
+	private normalizeDocumentCode(documentCode: string | number): string {
+		return String(documentCode).trim();
+	}
+
+	private normalizeCountryName(countryName?: string | null): string | undefined {
+		if (!countryName) {
+			return undefined;
+		}
+
+		return countryName
+			.trim()
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '');
 	}
 
 	async getDefaultDocumentTypeForInvoice(
@@ -170,8 +227,6 @@ export class DocumentTypeMappingService {
 
 			const countryCode = countryData?.[0]?.code || null;
 
-			// LOG DE DEPURACIÓN: Obtener TODOS los tipos de documento disponibles para este país
-			this.logger.log(`🔍 Consultando tipos de documento disponibles para país ${countryCode} (ID: ${countryId}), tipo ${internalType}`);
 			const allDocumentTypes = await objectClient.methodCall('execute_kw', [
 				connection.database_name,
 				uid,
@@ -186,8 +241,6 @@ export class DocumentTypeMappingService {
 				],
 				{ fields: ['id', 'code', 'name', 'internal_type', 'sequence', 'report_name', 'active'] },
 			]);
-
-			this.logger.log(`📋 Tipos de documento disponibles para ${countryCode}: ${JSON.stringify(allDocumentTypes, null, 2)}`);
 
 			// VALIDACIÓN: Solo ejecutar lógica de asignación automática para Perú
 			if (countryCode !== 'PE') {
