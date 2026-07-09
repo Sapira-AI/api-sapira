@@ -12,6 +12,7 @@ import { ExchangeRateMonthlyAvgEntity } from './entities/exchange-rate-monthly-a
 import { ExchangeRateEntity } from './entities/exchange-rate.entity';
 import { IndicadorEconomicoEntity } from './entities/indicador-economico.entity';
 import { ExchangeRatesScheduler } from './exchange-rates.scheduler';
+import { BancoCentralSchemaService } from './services/banco-central-schema.service';
 import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
 
@@ -23,7 +24,7 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 		EmailsModule,
 	],
 	controllers: [BancoCentralController],
-	providers: [BancoCentralService, ExchangeRatesService, ExchangeRatesNotificationService, ExchangeRatesScheduler],
+	providers: [BancoCentralService, BancoCentralSchemaService, ExchangeRatesService, ExchangeRatesNotificationService, ExchangeRatesScheduler],
 	exports: [BancoCentralService, ExchangeRatesService],
 })
 export class BancoCentralModule {}
