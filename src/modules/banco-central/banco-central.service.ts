@@ -7,6 +7,7 @@ import { GetSeriesDto } from './dtos/get-series.dto';
 import { SyncIndicatorsDto } from './dtos/sync-indicators.dto';
 import { IndicadorEconomicoEntity } from './entities/indicador-economico.entity';
 import { BancoCentralResponse, IndicadorEconomico, IndicadorEconomicoData } from './interfaces/banco-central.interface';
+import { BancoCentralSchemaService } from './services/banco-central-schema.service';
 
 @Injectable()
 export class BancoCentralService {
@@ -18,7 +19,8 @@ export class BancoCentralService {
 	constructor(
 		@InjectRepository(IndicadorEconomicoEntity)
 		private readonly indicadorRepository: Repository<IndicadorEconomicoEntity>,
-		private readonly configService: ConfigService
+		private readonly configService: ConfigService,
+		private readonly bancoCentralSchemaService: BancoCentralSchemaService
 	) {
 		this.user = this.configService.get<string>('BANCO_CENTRAL_USER');
 		this.pass = this.configService.get<string>('BANCO_CENTRAL_PASS');
@@ -72,6 +74,7 @@ export class BancoCentralService {
 
 	async syncIndicators(dto: SyncIndicatorsDto): Promise<{ synced: number; errors: number }> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			this.logger.log('Iniciando sincronización de indicadores económicos');
 
 			const firstdate = dto.firstdate || this.getDateDaysAgo(30);
@@ -161,6 +164,7 @@ export class BancoCentralService {
 
 	async getIndicatorHistory(codigo: string, fechaInicio?: string, fechaFin?: string): Promise<IndicadorEconomicoData[]> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			const query = this.indicadorRepository.createQueryBuilder('indicador').where('indicador.codigo = :codigo', { codigo });
 
 			if (fechaInicio) {
@@ -190,6 +194,7 @@ export class BancoCentralService {
 
 	async getLatestIndicators(): Promise<IndicadorEconomicoData[]> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			const query = `
 				SELECT DISTINCT ON (codigo) 
 					codigo, nombre, fecha, valor, unidad
