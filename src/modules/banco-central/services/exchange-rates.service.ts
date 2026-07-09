@@ -9,6 +9,7 @@ import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from '../dtos/sync
 import { ExchangeRateMonthlyAvgEntity } from '../entities/exchange-rate-monthly-avg.entity';
 import { ExchangeRateEntity } from '../entities/exchange-rate.entity';
 import { IndicadorEconomico } from '../interfaces/banco-central.interface';
+import { BancoCentralSchemaService } from './banco-central-schema.service';
 
 interface CurrencyMapping {
 	code: IndicadorEconomico;
@@ -83,7 +84,8 @@ export class ExchangeRatesService {
 		private readonly exchangeRateRepository: Repository<ExchangeRateEntity>,
 		@InjectRepository(ExchangeRateMonthlyAvgEntity)
 		private readonly monthlyAvgRepository: Repository<ExchangeRateMonthlyAvgEntity>,
-		private readonly bancoCentralService: BancoCentralService
+		private readonly bancoCentralService: BancoCentralService,
+		private readonly bancoCentralSchemaService: BancoCentralSchemaService
 	) {}
 
 	private dateToString(date: Date | string): string {
@@ -95,6 +97,7 @@ export class ExchangeRatesService {
 
 	async syncExchangeRates(dto: SyncExchangeRatesDto): Promise<SyncExchangeRatesResponseDto> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			// Si no se proporcionan fechas, sincronizar solo el día actual por defecto
 			const today = this.dateToString(new Date());
 			const endDate = dto.endDate || today;
@@ -293,6 +296,7 @@ export class ExchangeRatesService {
 
 	async calculateMonthlyAverages(dto: CalculateMonthlyAvgDto): Promise<CalculateMonthlyAvgResponseDto> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			this.logger.log('Calculando promedios mensuales de tipos de cambio');
 
 			const stats = {
@@ -442,6 +446,7 @@ export class ExchangeRatesService {
 
 	async getExchangeRates(dto: GetExchangeRatesDto): Promise<ExchangeRateResponseDto[]> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			const query = this.exchangeRateRepository.createQueryBuilder('er');
 
 			if (dto.fromCurrency) {
@@ -482,6 +487,7 @@ export class ExchangeRatesService {
 
 	async getLatestExchangeRates(dto: GetLatestExchangeRatesDto): Promise<ExchangeRateResponseDto[]> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			let query = `
 				SELECT DISTINCT ON (from_currency, to_currency)
 					rate_date, from_currency, to_currency, rate, source_type, 
@@ -528,6 +534,7 @@ export class ExchangeRatesService {
 
 	async getMonthlyAverages(year?: number, month?: number): Promise<MonthlyAvgResponseDto[]> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			const query = this.monthlyAvgRepository.createQueryBuilder('ma');
 
 			if (year) {
@@ -560,6 +567,7 @@ export class ExchangeRatesService {
 	}
 
 	async syncHistoricalRates(): Promise<SyncExchangeRatesResponseDto> {
+		await this.bancoCentralSchemaService.ensureSchema();
 		const lastRate = await this.exchangeRateRepository
 			.createQueryBuilder('er')
 			.select('MAX(er.rate_date)', 'last_date')
@@ -607,6 +615,7 @@ export class ExchangeRatesService {
 		date: string | Date
 	): Promise<ExchangeRateResponseDto & { is_fallback: boolean }> {
 		try {
+			await this.bancoCentralSchemaService.ensureSchema();
 			const targetDate = typeof date === 'string' ? date : this.dateToString(date);
 
 			const exactRate = await this.exchangeRateRepository.findOne({
