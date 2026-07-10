@@ -140,6 +140,7 @@ export class ExchangeRatesService {
 				errors: 0,
 				indirectConversions: 0,
 			};
+			const failedCurrencyPairs: string[] = [];
 
 			const mappingsToSync = dto.currencyPairs
 				? this.currencyMappings.filter((m) => dto.currencyPairs.includes(`${m.fromCurrency}/${m.toCurrency}`))
@@ -213,6 +214,7 @@ export class ExchangeRatesService {
 				} catch (error) {
 					this.logger.error(`Error sincronizando ${mapping.name}: ${error.message}`);
 					stats.errors++;
+					failedCurrencyPairs.push(`${mapping.fromCurrency}/${mapping.toCurrency}`);
 				}
 			}
 
@@ -226,10 +228,14 @@ export class ExchangeRatesService {
 			);
 
 			return {
-				success: true,
-				message: 'Sincronización completada exitosamente',
+				success: failedCurrencyPairs.length === 0,
+				message:
+					failedCurrencyPairs.length > 0
+						? `Sincronización completada con errores parciales en ${failedCurrencyPairs.length} pares de monedas`
+						: 'Sincronización completada exitosamente',
 				stats,
 				monthlyAveragesCalculated: monthlyStats,
+				failedCurrencyPairs,
 			};
 		} catch (error) {
 			this.logger.error(`Error en sincronización de tipos de cambio: ${error.message}`, error.stack);

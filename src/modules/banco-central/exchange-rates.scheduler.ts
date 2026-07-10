@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 
 import { AppLoggerService } from '@/logger/app-logger.service';
 
+import { SyncExchangeRatesResponseDto } from './dtos/sync-exchange-rates.dto';
 import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
 
@@ -101,8 +102,9 @@ export class ExchangeRatesScheduler {
 		}
 	}
 
-	private async syncWithRetries(maxRetries = 3): Promise<any> {
+	private async syncWithRetries(maxRetries = 3): Promise<SyncExchangeRatesResponseDto> {
 		const retryDelays = [5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000];
+		let lastFailedCurrencyPairs: string[] = [];
 
 		for (let attempt = 1; attempt <= maxRetries; attempt++) {
 			try {
@@ -121,19 +123,48 @@ export class ExchangeRatesScheduler {
 					this.logger.warn(`Sincronización completada con ${result.stats.errors} errores`);
 				}
 
-				return result;
+				lastFailedCurrencyPairs = result.failedCurrencyPairs || [];
+
+				if (lastFailedCurrencyPairs.length === 0) {
+					return result;
+				}
+
+				const failedPairs = lastFailedCurrencyPairs.join(', ');
+				this.logger.warn(`Intento ${attempt}/${maxRetries} con fallos en pares: ${failedPairs}`);
+
+				if (attempt < maxRetries) {
+					const delay = retryDelays[Math.min(attempt - 1, retryDelays.length - 1)];
+					this.logger.log(`Reintentando sincronización completa en ${delay / 60000} minutos...`);
+					await this.sleep(delay);
+					continue;
+				}
+
+				throw new Error(
+					`No se pudo completar la sincronización de tipos de cambio tras ${maxRetries} intentos. ` +
+						`Pares con fallo: ${failedPairs}`
+				);
+
 			} catch (error) {
 				this.logger.error(`Error en intento ${attempt}/${maxRetries}:`, error.message);
 
 				if (attempt < maxRetries) {
-					const delay = retryDelays[attempt - 1];
+					const delay = retryDelays[Math.min(attempt - 1, retryDelays.length - 1)];
 					this.logger.log(`Reintentando en ${delay / 60000} minutos...`);
 					await this.sleep(delay);
 				} else {
+					if (lastFailedCurrencyPairs.length > 0) {
+						throw new Error(
+							`No se pudo completar la sincronización de tipos de cambio tras ${maxRetries} intentos. ` +
+								`Pares con fallo: ${lastFailedCurrencyPairs.join(', ')}`
+						);
+					}
+
 					throw error;
 				}
 			}
 		}
+
+		throw new Error('La sincronización de tipos de cambio terminó sin resultado');
 	}
 
 	private sleep(ms: number): Promise<void> {
