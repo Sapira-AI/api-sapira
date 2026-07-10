@@ -29,4 +29,5 @@ export class SyncExchangeRatesResponseDto {
 		periods: number;
 		currencyPairs: number;
 	};
+	failedCurrencyPairs?: string[];
 }
