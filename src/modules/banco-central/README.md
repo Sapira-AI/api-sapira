@@ -32,6 +32,15 @@ Para obtener credenciales de acceso a la API del Banco Central:
 2. Regístrate con tu email
 3. Usa las credenciales proporcionadas
 
+### Comportamiento de reintentos
+
+La sincronización automática diaria de tipos de cambio incorpora reintentos con backoff cuando una o más consultas al Banco Central fallan a nivel de serie o par de monedas.
+
+- Se realizan hasta 3 intentos por ejecución automática.
+- Los reintentos usan esperas de 5, 15 y 30 minutos según el intento.
+- Si después del último intento siguen existiendo pares fallidos, la ejecución se considera fallida y se envía la alerta correspondiente.
+- El reporte de éxito solo se envía cuando la sincronización termina sin pares fallidos.
+
 ## Indicadores Disponibles
 
 El módulo incluye los siguientes indicadores económicos principales:
