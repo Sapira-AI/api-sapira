@@ -91,11 +91,11 @@ export class ExchangeRatesNotificationService {
 	private getRecentDate(): string {
 		const date = new Date();
 		date.setDate(date.getDate() - 7);
-		return date.toISOString().split('T')[0];
+		return this.formatLocalDate(date);
 	}
 
 	private getTodayDate(): string {
-		return new Date().toISOString().split('T')[0];
+		return this.formatLocalDate(new Date());
 	}
 
 	private formatCurrency(value: number): string {
@@ -106,12 +106,33 @@ export class ExchangeRatesNotificationService {
 	}
 
 	private formatDate(dateStr: string): string {
-		const date = new Date(dateStr);
+		const date = this.parseBancoCentralDate(dateStr);
 		return date.toLocaleDateString('es-CL', {
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric',
 		});
+	}
+
+	private parseBancoCentralDate(dateStr: string): Date {
+		if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
+			const [day, month, year] = dateStr.split('-');
+			return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+		}
+
+		if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+			const [year, month, day] = dateStr.split('-');
+			return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+		}
+
+		return new Date(dateStr);
+	}
+
+	private formatLocalDate(date: Date): string {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
 	}
 
 	async sendSyncFailureAlert(error: Error, context?: string): Promise<void> {

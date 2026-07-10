@@ -1,0 +1,13 @@
+---
+description: Convenciones base del backend api-sapira-ai
+alwaysApply: true
+---
+
+# api-sapira-ai
+
+- Responde en espanol.
+- Stack principal: NestJS + TypeScript.
+- Limita los cambios a lo solicitado y evita eliminar codigo o logica no pedida.
+- Revisa `package.json` antes de proponer scripts, dependencias o comandos.
+- Mantiene la estructura usual de modulo: `dtos`, `interfaces`, `schemas`, `helpers`, `controller`, `module`, `provider`, `service`.
+- Crea providers y controladores siguiendo los modulos ya existentes.

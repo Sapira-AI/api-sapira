@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 
 import { BancoCentralService } from '../banco-central.service';
 import { CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto } from '../dtos/calculate-monthly-avg.dto';
@@ -88,18 +88,46 @@ export class ExchangeRatesService {
 		private readonly bancoCentralSchemaService: BancoCentralSchemaService
 	) {}
 
+	private getBusinessTimezone(): string {
+		return process.env.TZ || 'America/Santiago';
+	}
+
+	private getBusinessDateParts(date: Date = new Date()): { year: string; month: string; day: string } {
+		const formatter = new Intl.DateTimeFormat('en-CA', {
+			timeZone: this.getBusinessTimezone(),
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+		});
+		const parts = formatter.formatToParts(date);
+		const year = parts.find((part) => part.type === 'year')?.value;
+		const month = parts.find((part) => part.type === 'month')?.value;
+		const day = parts.find((part) => part.type === 'day')?.value;
+
+		if (!year || !month || !day) {
+			throw new Error('No se pudo determinar la fecha de negocio para tipos de cambio');
+		}
+
+		return { year, month, day };
+	}
+
 	private dateToString(date: Date | string): string {
 		if (typeof date === 'string') {
-			return date.split('T')[0];
+			if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+				return date;
+			}
+
+			return this.formatLocalDate(new Date(date));
 		}
-		return new Date(date).toISOString().split('T')[0];
+
+		return this.formatLocalDate(date);
 	}
 
 	async syncExchangeRates(dto: SyncExchangeRatesDto): Promise<SyncExchangeRatesResponseDto> {
 		try {
 			await this.bancoCentralSchemaService.ensureSchema();
 			// Si no se proporcionan fechas, sincronizar solo el día actual por defecto
-			const today = this.dateToString(new Date());
+			const today = this.formatLocalDate(new Date());
 			const endDate = dto.endDate || today;
 			const startDate = dto.startDate || today;
 
@@ -188,10 +216,10 @@ export class ExchangeRatesService {
 				}
 			}
 
-			const indirectStats = await this.calculateIndirectConversions(dto.startDate, dto.endDate);
+			const indirectStats = await this.calculateIndirectConversions(startDate, endDate);
 			stats.indirectConversions = indirectStats.inserted + indirectStats.updated;
 
-			const monthlyStats = await this.calculateMonthlyAveragesForPeriod(dto.startDate, dto.endDate);
+			const monthlyStats = await this.calculateMonthlyAveragesForPeriod(startDate, endDate);
 
 			this.logger.log(
 				`Sincronización completada: ${stats.totalProcessed} procesados, ${stats.inserted} insertados, ${stats.updated} actualizados, ${stats.errors} errores, ${stats.indirectConversions} conversiones indirectas`
@@ -214,75 +242,81 @@ export class ExchangeRatesService {
 			this.logger.log('Calculando conversiones indirectas CLF→CLP→USD');
 
 			const stats = { inserted: 0, updated: 0 };
+			const start = this.parseIsoDateAsLocalDate(startDate);
+			const end = this.parseIsoDateAsLocalDate(endDate);
 
-			const clfClpRates = await this.exchangeRateRepository.find({
-				where: {
-					from_currency: 'CLF',
-					to_currency: 'CLP',
-				},
-				order: { rate_date: 'ASC' },
-			});
-
-			for (const clfClp of clfClpRates) {
-				const rateDateStr = this.dateToString(clfClp.rate_date);
-
-				if (rateDateStr < startDate || rateDateStr > endDate) {
-					continue;
-				}
-
-				const clpUsd = await this.exchangeRateRepository.findOne({
+			const [clfClpRates, usdClpRates, existingIndirectRates] = await Promise.all([
+				this.exchangeRateRepository.find({
 					where: {
-						rate_date: clfClp.rate_date,
+						from_currency: 'CLF',
+						to_currency: 'CLP',
+						rate_date: Between(start as any, end as any),
+					},
+					order: { rate_date: 'ASC' },
+				}),
+				this.exchangeRateRepository.find({
+					where: {
 						from_currency: 'USD',
 						to_currency: 'CLP',
+						rate_date: Between(start as any, end as any),
 					},
-				});
+				}),
+				this.exchangeRateRepository.find({
+					where: {
+						from_currency: 'CLF',
+						to_currency: 'USD',
+						rate_date: Between(start as any, end as any),
+					},
+				}),
+			]);
+
+			const usdClpByDate = new Map(usdClpRates.map((rate) => [this.dateToString(rate.rate_date), rate]));
+			const existingIndirectDates = new Set(existingIndirectRates.map((rate) => this.dateToString(rate.rate_date)));
+
+			const indirectRates = clfClpRates.flatMap((clfClp) => {
+				const rateDateStr = this.dateToString(clfClp.rate_date);
+				const clpUsd = usdClpByDate.get(rateDateStr);
 
 				if (!clpUsd) {
-					continue;
+					return [];
 				}
 
 				const clfUsdRate = Number(clfClp.rate) / Number(clpUsd.rate);
 
-				const indirectRate = this.exchangeRateRepository.create({
-					rate_date: clfClp.rate_date,
-					from_currency: 'CLF',
-					to_currency: 'USD',
-					rate: clfUsdRate,
-					source_type: 'BANCOCENTRAL',
-					api_source: 'Banco Central de Chile (calculado)',
-					is_indirect_conversion: true,
-					conversion_chain: {
-						path: 'CLF→CLP→USD',
-						rates: {
-							'CLF/CLP': Number(clfClp.rate),
-							'USD/CLP': Number(clpUsd.rate),
-						},
-					},
-				});
-
-				const existing = await this.exchangeRateRepository.findOne({
-					where: {
+				return [
+					this.exchangeRateRepository.create({
 						rate_date: clfClp.rate_date,
 						from_currency: 'CLF',
 						to_currency: 'USD',
-					},
-				});
-
-				if (existing) {
-					await this.exchangeRateRepository.update(
-						{
-							rate_date: clfClp.rate_date,
-							from_currency: 'CLF',
-							to_currency: 'USD',
+						rate: clfUsdRate,
+						source_type: 'BANCOCENTRAL',
+						api_source: 'Banco Central de Chile (calculado)',
+						is_indirect_conversion: true,
+						conversion_chain: {
+							path: 'CLF→CLP→USD',
+							rates: {
+								'CLF/CLP': Number(clfClp.rate),
+								'USD/CLP': Number(clpUsd.rate),
+							},
 						},
-						indirectRate
-					);
+					}),
+				];
+			});
+
+			for (const indirectRate of indirectRates) {
+				const rateDateStr = this.dateToString(indirectRate.rate_date);
+				if (existingIndirectDates.has(rateDateStr)) {
 					stats.updated++;
 				} else {
-					await this.exchangeRateRepository.save(indirectRate);
 					stats.inserted++;
 				}
+			}
+
+			if (indirectRates.length > 0) {
+				await this.exchangeRateRepository.upsert(indirectRates, {
+					conflictPaths: ['rate_date', 'from_currency', 'to_currency'],
+					skipUpdateIfNoValuesChanged: true,
+				});
 			}
 
 			this.logger.log(`Conversiones indirectas completadas: ${stats.inserted} insertadas, ${stats.updated} actualizadas`);
@@ -412,8 +446,8 @@ export class ExchangeRatesService {
 
 	private async calculateMonthlyAveragesForPeriod(startDate: string, endDate: string): Promise<{ periods: number; currencyPairs: number }> {
 		try {
-			const start = new Date(startDate);
-			const end = new Date(endDate);
+			const start = this.parseIsoDateAsLocalDate(startDate);
+			const end = this.parseIsoDateAsLocalDate(endDate);
 
 			const years = new Set<number>();
 			const months = new Set<string>();
@@ -577,16 +611,16 @@ export class ExchangeRatesService {
 		let startDate: string;
 
 		if (lastRate?.last_date) {
-			const lastDate = new Date(lastRate.last_date);
+			const lastDate = this.normalizeStoredDate(lastRate.last_date);
 			lastDate.setDate(lastDate.getDate() + 1);
-			startDate = lastDate.toISOString().split('T')[0];
+			startDate = this.formatLocalDate(lastDate);
 			this.logger.log(`Sincronización incremental desde última fecha: ${startDate}`);
 		} else {
 			startDate = '2025-01-01';
 			this.logger.log('Primera sincronización, iniciando desde 2025-01-01');
 		}
 
-		const today = new Date().toISOString().split('T')[0];
+		const today = this.formatLocalDate(new Date());
 
 		if (startDate > today) {
 			this.logger.log('Ya estamos al día, no hay datos nuevos para sincronizar');
@@ -622,7 +656,7 @@ export class ExchangeRatesService {
 				where: {
 					from_currency: fromCurrency,
 					to_currency: toCurrency,
-					rate_date: new Date(targetDate) as any,
+					rate_date: this.parseIsoDateAsLocalDate(targetDate) as any,
 				},
 			});
 
@@ -680,6 +714,28 @@ export class ExchangeRatesService {
 
 	private parseDate(dateString: string): Date {
 		const [day, month, year] = dateString.split('-');
-		return new Date(`${year}-${month}-${day}`);
+		return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+	}
+
+	private parseIsoDateAsLocalDate(dateString: string): Date {
+		const [year, month, day] = dateString.split('-');
+		return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+	}
+
+	private formatLocalDate(date: Date): string {
+		const { year, month, day } = this.getBusinessDateParts(date);
+		return `${year}-${month}-${day}`;
+	}
+
+	private normalizeStoredDate(dateValue: Date | string): Date {
+		if (dateValue instanceof Date) {
+			return new Date(dateValue.getUTCFullYear(), dateValue.getUTCMonth(), dateValue.getUTCDate(), 12, 0, 0, 0);
+		}
+
+		if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue))) {
+			return this.parseIsoDateAsLocalDate(String(dateValue));
+		}
+
+		return new Date(String(dateValue));
 	}
 }
