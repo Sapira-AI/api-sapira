@@ -493,6 +493,11 @@ export class CreateDraftInvoiceDTO {
 	@IsString()
 	payment_reference?: string;
 
+	@ApiProperty({ description: 'Referencia libre en Odoo para facturas no chilenas', required: false })
+	@IsOptional()
+	@IsString()
+	ref?: string;
+
 	@ApiProperty({ description: 'Referencia de origen', required: false })
 	@IsOptional()
 	@IsString()

@@ -39,6 +39,7 @@ export class OdooInvoicesService {
 			invoice_date,
 			invoice_date_due,
 			payment_reference,
+			ref,
 			invoice_origin,
 			narration,
 			company_id,
@@ -94,6 +95,10 @@ export class OdooInvoicesService {
 
 		if (payment_reference) {
 			invoiceData.payment_reference = payment_reference;
+		}
+
+		if (ref) {
+			invoiceData.ref = ref;
 		}
 
 		if (invoice_origin) {
@@ -228,6 +233,9 @@ export class OdooInvoicesService {
 			console.log(`👤 Partner ID: ${invoiceData.partner_id}`);
 			console.log(`📅 Invoice Date: ${invoiceData.invoice_date}`);
 			console.log(`💰 Currency ID: ${data.currency_id}`);
+			if (invoiceData.ref) {
+				console.log(`🧾 Ref: ${invoiceData.ref}`);
+			}
 			if (invoiceData.l10n_latam_document_type_id) {
 				console.log(`📄 Tipo de documento LATAM ID: ${invoiceData.l10n_latam_document_type_id}`);
 			}

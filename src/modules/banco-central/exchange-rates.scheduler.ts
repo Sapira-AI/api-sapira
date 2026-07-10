@@ -85,8 +85,6 @@ export class ExchangeRatesScheduler {
 			);
 
 			await this.notificationService.sendSyncSuccessReport(result, executionTime);
-
-			await this.calculateMonthlyAverages();
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			this.logger.error(`✗ Error en sincronización automática después de ${(executionTime / 1000).toFixed(2)}s:`, error);
@@ -135,16 +133,6 @@ export class ExchangeRatesScheduler {
 					throw error;
 				}
 			}
-		}
-	}
-
-	private async calculateMonthlyAverages(): Promise<void> {
-		try {
-			this.logger.log('Calculando promedios mensuales...');
-			await this.exchangeRatesService.calculateMonthlyAverages({});
-			this.logger.log('✓ Promedios mensuales calculados exitosamente');
-		} catch (error) {
-			this.logger.error('Error calculando promedios mensuales:', error);
 		}
 	}
 
