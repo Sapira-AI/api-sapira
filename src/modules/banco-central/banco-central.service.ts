@@ -136,22 +136,21 @@ export class BancoCentralService {
 						continue;
 					}
 
-					const indicador = this.indicadorRepository.create({
+					const indicadorData = {
 						codigo: Series.seriesId,
 						nombre: Series.descripEsp,
 						fecha,
 						valor,
 						status_code: obs.statusCode,
-					});
+					};
 
-					await this.indicadorRepository.save(indicador);
+					await this.indicadorRepository.upsert(indicadorData, {
+						conflictPaths: ['codigo', 'fecha'],
+						skipUpdateIfNoValuesChanged: true,
+					});
 					saved++;
 				} catch (error) {
-					if (error.code === '23505') {
-						this.logger.debug(`Registro duplicado para ${Series.seriesId} en fecha ${obs.indexDateString}`);
-					} else {
-						this.logger.error(`Error guardando observación: ${error.message}`);
-					}
+					this.logger.error(`Error guardando observación: ${error.message}`);
 				}
 			}
 
@@ -207,7 +206,7 @@ export class BancoCentralService {
 			return indicadores.map((ind) => ({
 				codigo: ind.codigo,
 				nombre: ind.nombre,
-				fecha: new Date(ind.fecha),
+				fecha: this.normalizeStoredDate(ind.fecha),
 				valor: parseFloat(ind.valor),
 				unidad: ind.unidad,
 			}));
@@ -219,16 +218,32 @@ export class BancoCentralService {
 
 	private parseDate(dateString: string): Date {
 		const [day, month, year] = dateString.split('-');
-		return new Date(`${year}-${month}-${day}`);
+		return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
 	}
 
 	private getDateDaysAgo(days: number): string {
 		const date = new Date();
 		date.setDate(date.getDate() - days);
-		return date.toISOString().split('T')[0];
+		return this.formatLocalDate(date);
 	}
 
 	private getTodayDate(): string {
-		return new Date().toISOString().split('T')[0];
+		return this.formatLocalDate(new Date());
+	}
+
+	private formatLocalDate(date: Date): string {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	private normalizeStoredDate(dateValue: Date | string): Date {
+		if (dateValue instanceof Date) {
+			return new Date(dateValue.getUTCFullYear(), dateValue.getUTCMonth(), dateValue.getUTCDate(), 12, 0, 0, 0);
+		}
+
+		const [year, month, day] = String(dateValue).split('-');
+		return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
 	}
 }

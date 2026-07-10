@@ -39,7 +39,7 @@ export class ExchangeRatesScheduler {
 
 	@Cron('0 * * * *')
 	async syncExchangeRatesDaily() {
-		const currentHour = new Date().getHours();
+		const currentHour = this.getBusinessHour();
 
 		if (currentHour !== this.syncHour) {
 			return;
@@ -85,8 +85,6 @@ export class ExchangeRatesScheduler {
 			);
 
 			await this.notificationService.sendSyncSuccessReport(result, executionTime);
-
-			await this.calculateMonthlyAverages();
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			this.logger.error(`✗ Error en sincronización automática después de ${(executionTime / 1000).toFixed(2)}s:`, error);
@@ -111,7 +109,7 @@ export class ExchangeRatesScheduler {
 				this.logger.log(`Intento ${attempt}/${maxRetries} de sincronización...`);
 
 				// Sincronizar solo el día actual para evitar modificar datos históricos ya usados en facturas
-				const today = new Date().toISOString().split('T')[0];
+				const today = this.formatLocalDate(new Date());
 
 				this.logger.log(`Sincronizando tipos de cambio del día: ${today}`);
 				const result = await this.exchangeRatesService.syncExchangeRates({
@@ -138,17 +136,42 @@ export class ExchangeRatesScheduler {
 		}
 	}
 
-	private async calculateMonthlyAverages(): Promise<void> {
-		try {
-			this.logger.log('Calculando promedios mensuales...');
-			await this.exchangeRatesService.calculateMonthlyAverages({});
-			this.logger.log('✓ Promedios mensuales calculados exitosamente');
-		} catch (error) {
-			this.logger.error('Error calculando promedios mensuales:', error);
-		}
-	}
-
 	private sleep(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	private getBusinessTimezone(): string {
+		return process.env.TZ || 'America/Santiago';
+	}
+
+	private getBusinessDateParts(date: Date = new Date()): { year: string; month: string; day: string; hour: string } {
+		const formatter = new Intl.DateTimeFormat('en-CA', {
+			timeZone: this.getBusinessTimezone(),
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			hour12: false,
+		});
+		const parts = formatter.formatToParts(date);
+		const year = parts.find((part) => part.type === 'year')?.value;
+		const month = parts.find((part) => part.type === 'month')?.value;
+		const day = parts.find((part) => part.type === 'day')?.value;
+		const hour = parts.find((part) => part.type === 'hour')?.value;
+
+		if (!year || !month || !day || hour == null) {
+			throw new Error('No se pudo determinar la fecha/hora de negocio para el scheduler de tipos de cambio');
+		}
+
+		return { year, month, day, hour };
+	}
+
+	private getBusinessHour(date: Date = new Date()): number {
+		return Number(this.getBusinessDateParts(date).hour);
+	}
+
+	private formatLocalDate(date: Date): string {
+		const { year, month, day } = this.getBusinessDateParts(date);
+		return `${year}-${month}-${day}`;
 	}
 }

@@ -95,6 +95,30 @@ export class BancoCentralController {
 		status: HttpStatus.UNAUTHORIZED,
 		description: 'No autenticado. Se requiere Bearer Token',
 	})
+	@ApiBody({
+		type: SyncIndicatorsDto,
+		required: false,
+		examples: {
+			'Últimos 30 días': {
+				value: {},
+				description: 'Usa el comportamiento por defecto del servicio para sincronizar los últimos 30 días hasta hoy',
+			},
+			'Rango acotado': {
+				value: {
+					firstdate: '2026-07-01',
+					lastdate: '2026-07-09',
+				},
+				description: 'Sincroniza indicadores económicos solo dentro del rango indicado',
+			},
+			'Mes completo': {
+				value: {
+					firstdate: '2026-06-01',
+					lastdate: '2026-06-30',
+				},
+				description: 'Ejemplo para reprocesar un mes calendario completo',
+			},
+		},
+	})
 	@HttpCode(HttpStatus.OK)
 	async syncIndicators(@Body() dto: SyncIndicatorsDto): Promise<{ synced: number; errors: number }> {
 		return this.bancoCentralService.syncIndicators(dto);
@@ -203,6 +227,39 @@ export class BancoCentralController {
 	@ApiResponse({
 		status: HttpStatus.OK,
 		description: 'Sincronización completada exitosamente',
+	})
+	@ApiBody({
+		type: SyncExchangeRatesDto,
+		required: false,
+		examples: {
+			'Solo hoy': {
+				value: {},
+				description: 'Sincroniza todos los pares configurados para la fecha de negocio actual',
+			},
+			'Rango de fechas': {
+				value: {
+					startDate: '2026-07-01',
+					endDate: '2026-07-09',
+				},
+				description: 'Sincroniza todos los pares configurados dentro del rango indicado',
+			},
+			'Pares específicos': {
+				value: {
+					startDate: '2026-07-01',
+					endDate: '2026-07-09',
+					currencyPairs: ['USD/CLP', 'EUR/USD', 'CLF/CLP'],
+				},
+				description: 'Sincroniza solo los pares indicados en el rango solicitado',
+			},
+			'Un día puntual': {
+				value: {
+					startDate: '2026-07-09',
+					endDate: '2026-07-09',
+					currencyPairs: ['USD/CLP'],
+				},
+				description: 'Útil para reprocesar un solo día y un solo par de monedas',
+			},
+		},
 	})
 	@HttpCode(HttpStatus.OK)
 	async syncExchangeRates(@Body() dto: SyncExchangeRatesDto): Promise<SyncExchangeRatesResponseDto> {

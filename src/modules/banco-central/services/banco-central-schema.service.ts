@@ -78,6 +78,11 @@ export class BancoCentralSchemaService implements OnModuleInit {
 		`);
 
 		await this.dataSource.query(`
+			CREATE INDEX IF NOT EXISTS idx_exchange_rates_pair_date
+			ON public.exchange_rates (from_currency, to_currency, rate_date)
+		`);
+
+		await this.dataSource.query(`
 			CREATE TABLE IF NOT EXISTS public.exchange_rates_monthly_avg (
 				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 				from_currency VARCHAR(3) NOT NULL,

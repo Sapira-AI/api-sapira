@@ -100,6 +100,21 @@ export class InvoiceSchedulerService {
 		return `${year}-${month}-${day}`;
 	}
 
+	private normalizeCountryName(country?: string | null): string {
+		if (!country) {
+			return '';
+		}
+
+		return country
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '');
+	}
+
+	private usesChileanReferencePayload(country?: string | null): boolean {
+		return this.normalizeCountryName(country) === 'chile';
+	}
+
 	async processInvoicesToSend(options: ProcessOptions): Promise<ProcessInvoicesResponseDto> {
 		const { dryRun, holdingId, contractId } = options;
 		const startTime = Date.now();
@@ -892,10 +907,7 @@ export class InvoiceSchedulerService {
 		// Determinar si requiere detracción (Perú >= 700 PEN)
 		let l10nPeEdiOperationType: string | undefined = undefined;
 
-		const normalizedCountry = invoice.company.country
-			?.toLowerCase()
-			.normalize('NFD')
-			.replace(/[\u0300-\u036f]/g, '');
+		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
 
 		if (normalizedCountry === 'peru') {
 			const totalAmount = parseFloat(invoice.total_invoice_currency?.toString() || '0');
@@ -936,9 +948,10 @@ export class InvoiceSchedulerService {
 		}
 
 		// Mapear referencias si existen
+		let odooRef: string | undefined = undefined;
 		let l10nClReferenceIds: OdooReferenceDTO[] | undefined = undefined;
 
-		if (invoice.references && invoice.references.length > 0) {
+		if (invoice.references && invoice.references.length > 0 && this.usesChileanReferencePayload(invoice.company?.country)) {
 			this.logger.log(`📎 Procesando ${invoice.references.length} referencias para factura ${invoice.invoice_number}`);
 
 			const referencesPromises = invoice.references.map(async (ref) => {
@@ -982,6 +995,16 @@ export class InvoiceSchedulerService {
 			} else {
 				this.logger.log(`✅ ${l10nClReferenceIds.length} referencias mapeadas correctamente`);
 			}
+		} else if (invoice.references && invoice.references.length > 0) {
+			odooRef = invoice.references.find((reference) => reference.document_number?.trim())?.document_number?.trim();
+
+			this.logger.log(
+				`ℹ️ Referencias detectadas para factura ${invoice.invoice_number}, pero no se enviarán en l10n_cl_reference_ids porque la compañía es ${invoice.company?.country || 'desconocida'}`
+			);
+
+			if (odooRef) {
+				this.logger.log(`🧾 Referencia no chilena enviada en ref: ${odooRef}`);
+			}
 		}
 
 		// Obtener tipo de documento latinoamericano
@@ -1008,6 +1031,7 @@ export class InvoiceSchedulerService {
 			partner_id: invoice.clientEntity.odoo_partner_id,
 			company_id: invoice.company.odoo_integration_id,
 			move_type: 'out_invoice',
+			ref: odooRef,
 			invoice_date: issueDateStr,
 			invoice_date_due: dueDateStr,
 			payment_reference: invoice.invoice_number || undefined,
@@ -1046,6 +1070,13 @@ export class InvoiceSchedulerService {
 
 		if (!invoice.invoice_currency) {
 			return { valid: false, error: 'Factura no tiene invoice_currency' };
+		}
+
+		if (this.usesChileanReferencePayload(invoice.company?.country) && invoice.references?.some((reference) => !reference.reference_date)) {
+			return {
+				valid: false,
+				error: 'Factura de Chile con referencias sin reference_date. El campo date es obligatorio para l10n_cl_reference_ids',
+			};
 		}
 
 		return { valid: true };

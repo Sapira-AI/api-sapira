@@ -1,0 +1,483 @@
+{
+    "jsonrpc": "2.0",
+    "id": 6,
+    "result": [
+        {
+            "id": 189626,
+            "authorized_transaction_ids": [],
+            "edi_show_cancel_button": false,
+            "edi_show_abandon_cancel_button": false,
+            "edi_show_force_cancel_button": false,
+            "l10n_mx_edi_is_cfdi_needed": false,
+            "l10n_mx_edi_update_payments_needed": false,
+            "l10n_mx_edi_update_sat_needed": false,
+            "l10n_cl_dte_acceptation_status": false,
+            "l10n_cl_dte_status": false,
+            "state": "posted",
+            "tax_closing_end_date": false,
+            "tax_closing_alert": false,
+            "l10n_uy_edi_error": false,
+            "extract_state": "no_extract_requested",
+            "extract_word_ids": [],
+            "extract_attachment_id": false,
+            "extract_can_show_send_button": false,
+            "extract_can_show_banners": false,
+            "extract_status": false,
+            "extract_error_message": "Ocurrió un error",
+            "edi_blocking_level": false,
+            "edi_error_count": 0,
+            "edi_web_services_to_process": "",
+            "edi_error_message": false,
+            "tax_lock_date_message": false,
+            "date": "2026-05-08",
+            "auto_post": "no",
+            "auto_post_until": false,
+            "partner_credit_warning": "",
+            "suspense_statement_line_id": false,
+            "transaction_ids": [],
+            "sale_order_count": 0,
+            "debit_note_count": 0,
+            "purchase_order_count": 0,
+            "deferred_move_ids": [],
+            "deferred_original_move_ids": [],
+            "deferred_entry_type": false,
+            "asset_id": false,
+            "count_asset": 0,
+            "draft_asset_exists": false,
+            "asset_id_display_name": "Activo",
+            "company_id": {
+                "id": 5,
+                "display_name": "SimpliRoute S.A.S"
+            },
+            "journal_id": {
+                "id": 66,
+                "display_name": "Facturas de Clientes"
+            },
+            "show_name_warning": false,
+            "posted_before": true,
+            "move_type": "out_invoice",
+            "payment_state": "not_paid",
+            "invoice_filter_type_domain": "sale",
+            "suitable_journal_ids": [
+                66,
+                76
+            ],
+            "currency_id": {
+                "id": 2,
+                "display_name": "USD"
+            },
+            "company_currency_id": {
+                "id": 46
+            },
+            "commercial_partner_id": {
+                "id": 16115
+            },
+            "bank_partner_id": {
+                "id": 16025
+            },
+            "display_qr_code": false,
+            "show_reset_to_draft_button": false,
+            "invoice_has_outstanding": false,
+            "is_move_sent": false,
+            "invoice_pdf_report_id": {
+                "id": 193643
+            },
+            "need_cancel_request": false,
+            "has_reconciled_entries": false,
+            "restrict_mode_hash_table": false,
+            "inalterable_hash": false,
+            "country_code": "UY",
+            "display_inactive_currency_warning": false,
+            "statement_line_id": false,
+            "statement_id": false,
+            "payment_id": false,
+            "tax_country_id": {
+                "id": 234
+            },
+            "tax_calculation_rounding_method": "round_per_line",
+            "tax_cash_basis_created_move_ids": [],
+            "quick_edit_mode": false,
+            "hide_post_button": true,
+            "duplicated_ref_ids": [],
+            "quick_encoding_vals": false,
+            "show_delivery_date": false,
+            "is_being_sent": false,
+            "show_update_fpos": false,
+            "highest_name": "e-FC A0003099",
+            "name": "e-FC A0003011",
+            "partner_id": {
+                "id": 16115,
+                "display_name": "ADMINISTRACION NACIONAL DE CORREOS.\nBuenos Aires 451 P.2 451\nPiso 2\nMontevideo MO 11000\nUruguay ‒ 214130990011"
+            },
+            "quick_edit_total_amount": 0.0,
+            "ref": "OC-27-2026",
+            "l10n_mx_edi_payment_method_id": false,
+            "l10n_mx_edi_payment_policy": false,
+            "l10n_mx_edi_usage": false,
+            "tax_cash_basis_origin_move_id": false,
+            "purchase_id": false,
+            "purchase_vendor_bill_id": false,
+            "l10n_pe_edi_is_required": false,
+            "l10n_pe_edi_operation_type": false,
+            "l10n_mx_edi_cfdi_to_public": false,
+            "invoice_date": "2026-05-08",
+            "payment_reference": "e-FC A0003011",
+            "partner_bank_id": {
+                "id": 16,
+                "display_name": "24032093 - BBVA Uruguay (confiable)"
+            },
+            "invoice_date_due": "2026-06-07",
+            "invoice_payment_term_id": {
+                "id": 4,
+                "display_name": "30 días"
+            },
+            "delivery_date": false,
+            "l10n_latam_document_type_id": {
+                "id": 138,
+                "display_name": "(111) e-Factura"
+            },
+            "l10n_latam_document_number": "A0003011",
+            "l10n_uy_edi_journal_type": "electronic",
+            "l10n_uy_edi_cfe_state": "accepted",
+            "l10n_uy_edi_document_id": {
+                "id": 668,
+                "display_name": "A0003011"
+            },
+            "l10n_uy_edi_cfe_uuid": "account.move-189626",
+            "edi_state": false,
+            "l10n_mx_edi_cfdi_state": false,
+            "l10n_mx_edi_cfdi_sat_state": false,
+            "l10n_mx_edi_cfdi_uuid": false,
+            "l10n_mx_edi_cfdi_origin": false,
+            "l10n_mx_edi_cfdi_cancel_id": false,
+            "l10n_co_edi_debit_note": false,
+            "l10n_co_edi_is_direct_payment": false,
+            "l10n_co_edi_is_support_document": false,
+            "l10n_co_edi_type": "1",
+            "l10n_co_edi_attachment_url": false,
+            "l10n_co_edi_operation_type": "10",
+            "l10n_co_edi_payment_option_id": {
+                "id": 1,
+                "display_name": "Instrumento no definido"
+            },
+            "l10n_co_edi_cufe_cude_ref": false,
+            "l10n_co_edi_description_code_credit": false,
+            "l10n_co_edi_description_code_debit": false,
+            "invoice_line_ids": [
+                {
+                    "id": 547055,
+                    "name": "Servicio Simpliroute recurrente 28 Licencias \nTrimestral Abril a Junio 2026",
+                    "product_id": {
+                        "id": 484,
+                        "display_name": "Servicio Simpliroute recurrente"
+                    },
+                    "price_subtotal": 3659.04,
+                    "price_total": 4464.03,
+                    "quantity": 3.0,
+                    "product_uom_category_id": {
+                        "id": 1,
+                        "display_name": "Unidad"
+                    },
+                    "price_unit": 1219.68,
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_calculation_rounding_method": "round_per_line",
+                    "currency_id": {
+                        "id": 2,
+                        "display_name": "USD"
+                    },
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "display_type": "product",
+                    "company_id": {
+                        "id": 5
+                    },
+                    "partner_id": {
+                        "id": 16115
+                    },
+                    "discount": 0.0,
+                    "account_id": {
+                        "id": 7441
+                    },
+                    "tax_ids": [
+                        116
+                    ],
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "subscription_id": false
+                },
+                {
+                    "id": 547056,
+                    "name": "Factura Trimestral correspondiente a Abril - Junio 2026\nLic 28 x 43.56 USD = 1.219,68 usd mensual",
+                    "product_id": false,
+                    "price_subtotal": 0.0,
+                    "price_total": 0.0,
+                    "quantity": 0.0,
+                    "product_uom_category_id": false,
+                    "price_unit": 0.0,
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_calculation_rounding_method": "round_per_line",
+                    "currency_id": {
+                        "id": 2,
+                        "display_name": "USD"
+                    },
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "display_type": "line_note",
+                    "company_id": {
+                        "id": 5
+                    },
+                    "partner_id": {
+                        "id": 16115
+                    },
+                    "discount": 0.0,
+                    "account_id": false,
+                    "tax_ids": [],
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "subscription_id": false
+                }
+            ],
+            "narration": false,
+            "tax_totals": {
+                "amount_untaxed": 3659.04,
+                "amount_total": 4464.03,
+                "formatted_amount_total": "$ 4.464,03",
+                "formatted_amount_untaxed": "$ 3.659,04",
+                "groups_by_subtotal": {
+                    "Monto neto": [
+                        {
+                            "group_key": 435,
+                            "tax_group_id": 435,
+                            "tax_group_name": "IVA 22%",
+                            "tax_group_amount": 804.99,
+                            "tax_group_base_amount": 3659.04,
+                            "formatted_tax_group_amount": "$ 804,99",
+                            "formatted_tax_group_base_amount": "$ 3.659,04",
+                            "hide_base_amount": false,
+                            "tax_group_amount_company_currency": 31998.0,
+                            "tax_group_base_amount_company_currency": 145443.18
+                        }
+                    ]
+                },
+                "subtotals": [
+                    {
+                        "name": "Monto neto",
+                        "amount": 3659.04,
+                        "formatted_amount": "$ 3.659,04",
+                        "amount_company_currency": 145443.18
+                    }
+                ],
+                "subtotals_order": [
+                    "Monto neto"
+                ],
+                "display_tax_base": false,
+                "amount_total_company_currency": 177441.0
+            },
+            "amount_total": 4464.03,
+            "invoice_payments_widget": false,
+            "amount_residual": 4464.03,
+            "invoice_outstanding_credits_debits_widget": false,
+            "line_ids": [
+                {
+                    "id": 547055,
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "partner_id": {
+                        "id": 16115,
+                        "display_name": "ADMINISTRACION NACIONAL DE CORREOS."
+                    },
+                    "account_id": {
+                        "id": 7441,
+                        "display_name": "410100 Ventas Tasa Básica"
+                    },
+                    "date_maturity": false,
+                    "name": "Servicio Simpliroute recurrente 28 Licencias \nTrimestral Abril a Junio 2026",
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_ids": [
+                        {
+                            "id": 116,
+                            "display_name": "22%"
+                        }
+                    ],
+                    "debit": 0.0,
+                    "credit": 145443.18,
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "amount_currency": -3659.04,
+                    "company_id": {
+                        "id": 5
+                    },
+                    "currency_id": {
+                        "id": 2
+                    },
+                    "balance": -145443.18
+                },
+                {
+                    "id": 547056,
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "partner_id": {
+                        "id": 16115,
+                        "display_name": "ADMINISTRACION NACIONAL DE CORREOS."
+                    },
+                    "account_id": false,
+                    "date_maturity": false,
+                    "name": "Factura Trimestral correspondiente a Abril - Junio 2026\nLic 28 x 43.56 USD = 1.219,68 usd mensual",
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_ids": [],
+                    "debit": 0.0,
+                    "credit": 0.0,
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "amount_currency": 0.0,
+                    "company_id": {
+                        "id": 5
+                    },
+                    "currency_id": {
+                        "id": 2
+                    },
+                    "balance": 0.0
+                },
+                {
+                    "id": 547057,
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "partner_id": {
+                        "id": 16115,
+                        "display_name": "ADMINISTRACION NACIONAL DE CORREOS."
+                    },
+                    "account_id": {
+                        "id": 7412,
+                        "display_name": "214020 Iva Ventas Básica"
+                    },
+                    "date_maturity": false,
+                    "name": "22%",
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_ids": [],
+                    "debit": 0.0,
+                    "credit": 31997.55,
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "amount_currency": -804.99,
+                    "company_id": {
+                        "id": 5
+                    },
+                    "currency_id": {
+                        "id": 2
+                    },
+                    "balance": -31997.55
+                },
+                {
+                    "id": 547058,
+                    "company_currency_id": {
+                        "id": 46,
+                        "display_name": "UYU"
+                    },
+                    "partner_id": {
+                        "id": 16115,
+                        "display_name": "ADMINISTRACION NACIONAL DE CORREOS."
+                    },
+                    "account_id": {
+                        "id": 7340,
+                        "display_name": "113000 Deudores por Ventas"
+                    },
+                    "date_maturity": "2026-06-07",
+                    "name": "e-FC A0003011",
+                    "write_date": "2026-07-08 09:47:01",
+                    "tax_ids": [],
+                    "debit": 177440.73,
+                    "credit": 0.0,
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "amount_currency": 4464.03,
+                    "company_id": {
+                        "id": 5
+                    },
+                    "currency_id": {
+                        "id": 2
+                    },
+                    "balance": 177440.73
+                }
+            ],
+            "user_id": {
+                "id": 69
+            },
+            "invoice_user_id": {
+                "id": 69,
+                "display_name": "Carelis Rengifo"
+            },
+            "team_id": {
+                "id": 1,
+                "display_name": "TARIFA FIJA"
+            },
+            "invoice_origin": false,
+            "debit_origin_id": false,
+            "qr_code_method": false,
+            "l10n_uy_edi_addenda_ids": [],
+            "invoice_incoterm_id": false,
+            "l10n_uy_edi_cfe_sale_mode": false,
+            "l10n_uy_edi_cfe_transport_route": "8",
+            "incoterm_location": false,
+            "fiscal_position_id": {
+                "id": 19,
+                "display_name": "Local – Uruguay"
+            },
+            "invoice_source_email": false,
+            "to_check": false,
+            "extract_document_uuid": false,
+            "campaign_id": false,
+            "medium_id": false,
+            "source_id": false,
+            "l10n_mx_edi_external_trade": false,
+            "l10n_mx_edi_external_trade_type": false,
+            "l10n_mx_edi_cer_source": false,
+            "l10n_latam_document_type_id_code": "111",
+            "l10n_pe_detraction_number": false,
+            "l10n_pe_detraction_date": false,
+            "l10n_pe_dua_invoice_id": false,
+            "l10n_pe_service_modality": false,
+            "l10n_pe_usage_type_id": false,
+            "l10n_pe_edi_cancel_reason": false,
+            "l10n_pe_edi_refund_reason": false,
+            "l10n_pe_edi_charge_reason": false,
+            "l10n_pe_edi_legend": false,
+            "l10n_pe_edi_legend_value": false,
+            "edi_document_ids": [],
+            "reversed_entry_id": false,
+            "l10n_mx_closing_move": false,
+            "l10n_pe_sunat_transaction_type": false,
+            "l10n_mx_edi_document_ids": [],
+            "l10n_cl_reference_ids": [],
+            "l10n_cl_dte_partner_status": false,
+            "l10n_cl_sii_send_ident": false,
+            "cession_partner_id": false,
+            "cession_number": 1,
+            "sworn_declaration": false,
+            "l10n_cl_aec_file": false,
+            "sii_xml_dte": false,
+            "sii_cesion_message": false,
+            "l10n_latam_available_document_type_ids": [
+                135,
+                137,
+                138,
+                140,
+                141,
+                143
+            ],
+            "l10n_latam_use_documents": true,
+            "l10n_latam_manual_document_number": false,
+            "l10n_latam_internal_type": "invoice",
+            "display_name": "e-FC A0003011 (OC-27-2026)"
+        }
+    ]
+}

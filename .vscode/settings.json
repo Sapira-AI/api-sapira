@@ -1,25 +1,35 @@
 {
-	"editor.defaultFormatter": "esbenp.prettier-vscode",
-	"[typescript]": {
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	},
-	"[javascript]": {
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	},
-	"[json]": {
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	},
-	"editor.formatOnSave": true,
-	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "always"
-	},
-	"editor.formatOnSaveMode": "modificationsIfAvailable",
-	"files.autoSave": "afterDelay",
-	"files.autoSaveDelay": 2000,
-	"editor.indentSize": "tabSize",
-	"editor.insertSpaces": false,
-	"editor.detectIndentation": false,
-	"editor.tabSize": 4,
-	"prettier.useTabs": true,
-	"prettier.tabWidth": 4
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.eslint": "always"
+        }
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "always"
+    },
+    "editor.formatOnSaveMode": "modificationsIfAvailable",
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 2000,
+    "editor.indentSize": "tabSize",
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "editor.tabSize": 4,
+    "prettier.requireConfig": true,
+    "prettier.useEditorConfig": false,
+    "prettier.useTabs": true,
+    "prettier.tabWidth": 4,
+    "eslint.validate": [
+        "javascript",
+        "typescript"
+    ]
 }

@@ -19,3 +19,7 @@
 - Crea controladores y providers siguiendo los modulos ya existentes.
 - Evita refactors o simplificaciones no pedidas.
 - No hagas commits ni cambios destructivos de git sin instruccion explicita.
+- Toda funcionalidad nueva o modificada debe evaluar si cambia comportamiento, flujos, contratos, integraciones, payloads, validaciones o configuracion relevante; si aplica, actualizar documentacion es obligatorio.
+- Prioriza documentar en la ubicacion mas cercana del modulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `api-sapira-ai/docs/` si la documentacion es transversal o aun no hay docs del modulo.
+- Toda funcionalidad nueva o modificada en backend debe incluir tests unitarios nuevos o actualizados.
+- Usa Jest para pruebas unitarias y manten las specs dentro de `src/` con sufijo `.spec.ts`, idealmente cerca del modulo afectado.
