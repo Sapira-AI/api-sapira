@@ -5,12 +5,15 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import {
 	CreateObjectMappingDto,
+	CreateFieldMappingDto,
 	CreateProductMappingDto,
 	CreateQuoteTypeMappingDto,
+	SalesforceFieldMappingDto,
 	SalesforceObjectMappingDto,
 	SalesforceProductMappingDto,
 	SalesforceQuoteTypeMappingDto,
 	UpdateObjectMappingDto,
+	UpdateFieldMappingDto,
 	UpdateProductMappingDto,
 	UpdateQuoteTypeMappingDto,
 } from './dtos/salesforce-mapping.dto';
@@ -153,6 +156,69 @@ export class SalesforceMappingController {
 	async deleteQuoteTypeMapping(@Param('id') id: string, @Headers('x-holding-id') holdingId: string) {
 		await this.mappingService.deleteQuoteTypeMapping(id, holdingId);
 		return { success: true, message: 'Quote type mapping deleted successfully' };
+	}
+
+	@Get('fields')
+	@ApiOperation({
+		summary: 'Obtener mapeos de campos',
+		description: 'Obtiene los mapeos configurables de campos Salesforce -> Sapira para el holding',
+	})
+	@ApiQuery({
+		name: 'objectType',
+		required: false,
+		description: 'Filtrar por tipo de objeto: client, client_entity, opportunity, line_item, product, contact',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Lista de mapeos de campos',
+		type: [SalesforceFieldMappingDto],
+	})
+	async getFieldMappings(@Headers('x-holding-id') holdingId: string, @Query('objectType') objectType?: string) {
+		return this.mappingService.getFieldMappings(holdingId, objectType as any);
+	}
+
+	@Post('fields')
+	@ApiOperation({
+		summary: 'Crear mapeo de campo',
+		description: 'Crea o actualiza un mapeo de campo configurable para Salesforce',
+	})
+	@ApiResponse({
+		status: HttpStatus.CREATED,
+		description: 'Mapeo de campo creado exitosamente',
+		type: SalesforceFieldMappingDto,
+	})
+	async createFieldMapping(@Headers('x-holding-id') holdingId: string, @Body() dto: CreateFieldMappingDto) {
+		return this.mappingService.createFieldMapping(holdingId, dto);
+	}
+
+	@Put('fields/:id')
+	@ApiOperation({
+		summary: 'Actualizar mapeo de campo',
+		description: 'Actualiza un mapeo de campo existente',
+	})
+	@ApiParam({ name: 'id', description: 'ID del mapeo de campo' })
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Mapeo de campo actualizado exitosamente',
+		type: SalesforceFieldMappingDto,
+	})
+	async updateFieldMapping(@Param('id') id: string, @Headers('x-holding-id') holdingId: string, @Body() dto: UpdateFieldMappingDto) {
+		return this.mappingService.updateFieldMapping(id, holdingId, dto);
+	}
+
+	@Delete('fields/:id')
+	@ApiOperation({
+		summary: 'Eliminar mapeo de campo',
+		description: 'Elimina un mapeo de campo configurable',
+	})
+	@ApiParam({ name: 'id', description: 'ID del mapeo de campo' })
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Mapeo de campo eliminado exitosamente',
+	})
+	async deleteFieldMapping(@Param('id') id: string, @Headers('x-holding-id') holdingId: string) {
+		await this.mappingService.deleteFieldMapping(id, holdingId);
+		return { success: true, message: 'Field mapping deleted successfully' };
 	}
 
 	@Get('objects')

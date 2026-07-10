@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+.temp/
+.tmp/
+uploads/
+.yarn/
+*.log
+*.tsbuildinfo
+.DS_Store

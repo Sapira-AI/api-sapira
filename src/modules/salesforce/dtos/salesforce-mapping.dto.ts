@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class SalesforceProductMappingDto {
 	@ApiProperty({ description: 'ID del producto en Salesforce' })
@@ -219,4 +219,81 @@ export class UpdateObjectMappingDto {
 	@ApiPropertyOptional({ description: 'Metadata adicional del mapeo' })
 	@IsOptional()
 	metadata?: any;
+}
+
+export class SalesforceFieldMappingDto {
+	@ApiProperty({ description: 'Tipo de objeto de Salesforce' })
+	@IsString()
+	@IsIn(['client', 'client_entity', 'opportunity', 'line_item', 'product', 'contact'])
+	object_type: string;
+
+	@ApiProperty({ description: 'Campo de Sapira' })
+	@IsString()
+	@IsNotEmpty()
+	sapira_field: string;
+
+	@ApiProperty({ description: 'Campo de Salesforce' })
+	@IsString()
+	@IsNotEmpty()
+	salesforce_field: string;
+
+	@ApiPropertyOptional({ description: 'Indica si el campo es requerido', default: false })
+	@IsBoolean()
+	@IsOptional()
+	is_required?: boolean;
+
+	@ApiPropertyOptional({ description: 'Indica si el mapeo está activo', default: true })
+	@IsBoolean()
+	@IsOptional()
+	is_active?: boolean;
+
+	@ApiPropertyOptional({ description: 'Tipo de dato' })
+	@IsString()
+	@IsOptional()
+	data_type?: string;
+
+	@ApiPropertyOptional({ description: 'Valor por defecto' })
+	@IsString()
+	@IsOptional()
+	default_value?: string;
+}
+
+export class CreateFieldMappingDto extends SalesforceFieldMappingDto {}
+
+export class UpdateFieldMappingDto {
+	@ApiPropertyOptional({ description: 'Tipo de objeto de Salesforce' })
+	@IsString()
+	@IsIn(['client', 'client_entity', 'opportunity', 'line_item', 'product', 'contact'])
+	@IsOptional()
+	object_type?: string;
+
+	@ApiPropertyOptional({ description: 'Campo de Sapira' })
+	@IsString()
+	@IsOptional()
+	sapira_field?: string;
+
+	@ApiPropertyOptional({ description: 'Campo de Salesforce' })
+	@IsString()
+	@IsOptional()
+	salesforce_field?: string;
+
+	@ApiPropertyOptional({ description: 'Indica si el campo es requerido' })
+	@IsBoolean()
+	@IsOptional()
+	is_required?: boolean;
+
+	@ApiPropertyOptional({ description: 'Indica si el mapeo está activo' })
+	@IsBoolean()
+	@IsOptional()
+	is_active?: boolean;
+
+	@ApiPropertyOptional({ description: 'Tipo de dato' })
+	@IsString()
+	@IsOptional()
+	data_type?: string;
+
+	@ApiPropertyOptional({ description: 'Valor por defecto' })
+	@IsString()
+	@IsOptional()
+	default_value?: string;
 }
