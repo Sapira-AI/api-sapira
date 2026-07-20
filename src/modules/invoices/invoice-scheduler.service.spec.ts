@@ -23,6 +23,7 @@ describe('InvoiceSchedulerService', () => {
 		};
 		const taxMappingService = {
 			getProductSaleTaxes: jest.fn().mockResolvedValue([116]),
+			getCompanyZeroRateSaleTax: jest.fn().mockResolvedValue(null),
 			applyFiscalPositionMapping: jest.fn(),
 		};
 		const documentTypeMappingService = {
@@ -167,6 +168,19 @@ describe('InvoiceSchedulerService', () => {
 		});
 
 		expect(payload.l10n_pe_edi_operation_type).toBe('1001');
+	});
+
+	it('usa impuesto 0% para exportacion de Mexico', async () => {
+		const { service, taxMappingService } = createService();
+		taxMappingService.getCompanyZeroRateSaleTax.mockResolvedValue(90);
+
+		const payload = await service.mapInvoiceToOdooFormat({
+			...buildInvoice('México', null, []),
+			export_type: 1,
+		});
+
+		expect(taxMappingService.getCompanyZeroRateSaleTax).toHaveBeenCalledWith(5, 'holding-1');
+		expect(payload.invoice_line_ids[0].tax_ids).toEqual([90]);
 	});
 
 	it('persiste total_invoice_currency y vat al recalcular montos para emision', async () => {
