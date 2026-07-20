@@ -305,7 +305,7 @@ export class OdooInvoicesService {
 			};
 		} catch (error) {
 			console.error('❌ Error creando factura en borrador:', error);
-			throw new Error(`Error creando factura en borrador en Odoo: ${error.message}`);
+			throw new Error(`Error creando factura en borrador en Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}
 
@@ -357,7 +357,7 @@ export class OdooInvoicesService {
 			};
 		} catch (error) {
 			console.error('❌ Error emitiendo factura:', error);
-			throw new Error(`Error emitiendo factura en Odoo: ${error.message}`);
+			throw new Error(`Error emitiendo factura en Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}
 
@@ -365,6 +365,7 @@ export class OdooInvoicesService {
 	 * Emite electrónicamente una factura según el país de la compañía
 	 * - Chile: No requiere paso adicional (ya está emitida con action_post)
 	 * - Colombia: Ejecuta wizard "Enviar e imprimir" con DIAN
+	 * - México: Ejecuta wizard "Enviar e imprimir" para timbrado/EDI
 	 * - Uruguay: Ejecuta wizard "Enviar e imprimir" con CFE
 	 */
 	async emitElectronicInvoice(
@@ -400,6 +401,11 @@ export class OdooInvoicesService {
 				return await this.emitElectronicInvoiceColombia(holdingId, invoiceId);
 			}
 
+			// México: Ejecutar wizard de envío/timbrado
+			if (normalizedCountry === 'mexico') {
+				return await this.emitElectronicInvoiceMexico(holdingId, invoiceId);
+			}
+
 			// Uruguay: Ejecutar wizard de envío con CFE
 			if (normalizedCountry === 'uruguay') {
 				return await this.emitElectronicInvoiceUruguay(holdingId, invoiceId);
@@ -432,98 +438,29 @@ export class OdooInvoicesService {
 		electronic_status: 'sent' | 'accepted' | 'rejected';
 		electronic_errors?: any[];
 	}> {
-		try {
-			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+		return await this.emitElectronicInvoiceWithSendWizard(holdingId, invoiceId, {
+			countryLabel: 'Colombia',
+			authorityLabel: 'DIAN',
+		});
+	}
 
-			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
-			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
-
-			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
-
-			if (!uid) {
-				throw new Error('Falló la autenticación con Odoo');
-			}
-
-			this.logger.log(`🇨🇴 Colombia: Creando wizard de envío para factura ${invoiceId}`);
-
-			// Crear wizard account.move.send con contexto de la factura
-			const wizardId = await objectClient.methodCall('execute_kw', [
-				connection.database_name,
-				uid,
-				connection.api_key,
-				'account.move.send',
-				'create',
-				[
-					{
-						move_ids: [[6, 0, [invoiceId]]],
-						checkbox_download: false,
-						checkbox_send_mail: false,
-					},
-				],
-				{
-					context: {
-						active_model: 'account.move',
-						active_ids: [invoiceId],
-						active_id: invoiceId,
-					},
-				},
-			]);
-
-			this.logger.log(`📋 Wizard creado con ID: ${wizardId}`);
-
-			// Ejecutar action_send_and_print
-			await objectClient.methodCall('execute_kw', [
-				connection.database_name,
-				uid,
-				connection.api_key,
-				'account.move.send',
-				'action_send_and_print',
-				[[wizardId]],
-			]);
-
-			this.logger.log(`📤 Wizard ejecutado, verificando estado DIAN...`);
-
-			// Leer estado de la factura y verificar campos DIAN
-			const invoiceData = await objectClient.methodCall('execute_kw', [
-				connection.database_name,
-				uid,
-				connection.api_key,
-				'account.move',
-				'read',
-				[[invoiceId]],
-				{
-					fields: ['state', 'name', 'edi_state', 'edi_error_count', 'edi_error_message'],
-				},
-			]);
-
-			const invoice = invoiceData[0];
-
-			this.logger.log(`📊 Estado factura: ${invoice.state}, EDI state: ${invoice.edi_state || 'N/A'}`);
-
-			// Determinar estado electrónico basado en edi_state
-			let electronicStatus: 'sent' | 'accepted' | 'rejected' = 'sent';
-			const errors: any[] = [];
-
-			if (invoice.edi_state === 'sent') {
-				electronicStatus = 'accepted';
-			} else if (invoice.edi_error_count > 0 || invoice.edi_error_message) {
-				electronicStatus = 'rejected';
-				if (invoice.edi_error_message) {
-					errors.push({ message: invoice.edi_error_message });
-				}
-			}
-
-			return {
-				success: true,
-				message: `Factura ${invoice.name} enviada a DIAN - Estado: ${electronicStatus}`,
-				state: invoice.state,
-				electronic_status: electronicStatus,
-				electronic_errors: errors.length > 0 ? errors : undefined,
-			};
-		} catch (error) {
-			this.logger.error('❌ Error emitiendo factura Colombia con DIAN:', error);
-			throw new Error(`Error emitiendo factura Colombia en Odoo: ${error.message}`);
-		}
+	/**
+	 * Emite electrónicamente una factura de México con el wizard estándar de Odoo
+	 */
+	private async emitElectronicInvoiceMexico(
+		holdingId: string,
+		invoiceId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		state: string;
+		electronic_status: 'sent' | 'accepted' | 'rejected';
+		electronic_errors?: any[];
+	}> {
+		return await this.emitElectronicInvoiceWithSendWizard(holdingId, invoiceId, {
+			countryLabel: 'México',
+			authorityLabel: 'SAT/MX EDI',
+		});
 	}
 
 	/**
@@ -532,6 +469,26 @@ export class OdooInvoicesService {
 	private async emitElectronicInvoiceUruguay(
 		holdingId: string,
 		invoiceId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		state: string;
+		electronic_status: 'sent' | 'accepted' | 'rejected';
+		electronic_errors?: any[];
+	}> {
+		return await this.emitElectronicInvoiceWithSendWizard(holdingId, invoiceId, {
+			countryLabel: 'Uruguay',
+			authorityLabel: 'DGI Uruguay',
+		});
+	}
+
+	private async emitElectronicInvoiceWithSendWizard(
+		holdingId: string,
+		invoiceId: number,
+		labels: {
+			countryLabel: string;
+			authorityLabel: string;
+		}
 	): Promise<{
 		success: boolean;
 		message: string;
@@ -551,7 +508,7 @@ export class OdooInvoicesService {
 				throw new Error('Falló la autenticación con Odoo');
 			}
 
-			this.logger.log(`🇺🇾 Uruguay: Creando wizard de envío para factura ${invoiceId}`);
+			this.logger.log(`📤 ${labels.countryLabel}: Creando wizard de envío para factura ${invoiceId}`);
 
 			// Crear wizard account.move.send con contexto de la factura
 			const wizardId = await objectClient.methodCall('execute_kw', [
@@ -588,7 +545,7 @@ export class OdooInvoicesService {
 				[[wizardId]],
 			]);
 
-			this.logger.log(`📤 Wizard ejecutado, verificando estado CFE...`);
+			this.logger.log(`📤 Wizard ejecutado, verificando estado ${labels.authorityLabel}...`);
 
 			// Leer estado de la factura
 			const invoiceData = await objectClient.methodCall('execute_kw', [
@@ -622,14 +579,14 @@ export class OdooInvoicesService {
 
 			return {
 				success: true,
-				message: `Factura ${invoice.name} enviada a DGI Uruguay - Estado: ${electronicStatus}`,
+				message: `Factura ${invoice.name} enviada a ${labels.authorityLabel} - Estado: ${electronicStatus}`,
 				state: invoice.state,
 				electronic_status: electronicStatus,
 				electronic_errors: errors.length > 0 ? errors : undefined,
 			};
 		} catch (error) {
-			this.logger.error('❌ Error emitiendo factura Uruguay con CFE:', error);
-			throw new Error(`Error emitiendo factura Uruguay en Odoo: ${error.message}`);
+			this.logger.error(`❌ Error emitiendo factura ${labels.countryLabel} con ${labels.authorityLabel}:`, error);
+			throw new Error(`Error emitiendo factura ${labels.countryLabel} en Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}
 
@@ -670,8 +627,12 @@ export class OdooInvoicesService {
 			throw new Error(`Conexión Odoo no encontrada o inactiva para holding_id: ${holdingId}`);
 		} catch (error) {
 			console.error('Error obteniendo conexión Odoo desde BD:', error);
-			throw new Error(`No se pudo obtener la conexión Odoo para holding_id: ${holdingId}. ${error.message}`);
+			throw new Error(`No se pudo obtener la conexión Odoo para holding_id: ${holdingId}. ${this.getErrorMessage(error)}`);
 		}
+	}
+
+	private getErrorMessage(error: unknown): string {
+		return error instanceof Error ? error.message : String(error);
 	}
 
 	/**
@@ -745,7 +706,7 @@ export class OdooInvoicesService {
 			};
 		} catch (error) {
 			console.error('❌ Error obteniendo taxes:', error);
-			throw new Error(`Error obteniendo taxes de Odoo: ${error.message}`);
+			throw new Error(`Error obteniendo taxes de Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}
 
@@ -821,7 +782,7 @@ export class OdooInvoicesService {
 			};
 		} catch (error) {
 			console.error('❌ Error validando taxes:', error);
-			throw new Error(`Error validando taxes en Odoo: ${error.message}`);
+			throw new Error(`Error validando taxes en Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}
 }

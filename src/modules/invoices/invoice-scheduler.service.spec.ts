@@ -6,6 +6,21 @@ jest.mock('uuid', () => ({
 
 describe('InvoiceSchedulerService', () => {
 	const createService = () => {
+		const invoiceRepository = {
+			update: jest.fn(),
+			findOne: jest.fn(),
+		};
+		const invoiceItemRepository = {
+			update: jest.fn(),
+			find: jest.fn(),
+		};
+		const invoiceNotificationService = {
+			sendExchangeRateFallbackNotification: jest.fn(),
+			sendMissingExchangeRateNotification: jest.fn(),
+		};
+		const exchangeRatesService = {
+			getExchangeRateWithFallback: jest.fn(),
+		};
 		const taxMappingService = {
 			getProductSaleTaxes: jest.fn().mockResolvedValue([116]),
 			applyFiscalPositionMapping: jest.fn(),
@@ -15,8 +30,8 @@ describe('InvoiceSchedulerService', () => {
 		};
 
 		const service = new InvoiceSchedulerService(
-			{} as any,
-			{} as any,
+			invoiceRepository as any,
+			invoiceItemRepository as any,
 			{} as any,
 			{} as any,
 			{} as any,
@@ -29,15 +44,21 @@ describe('InvoiceSchedulerService', () => {
 			{} as any,
 			{} as any,
 			{
-				getExchangeRateWithFallback: jest.fn(),
+				...exchangeRatesService,
 			} as any,
 			taxMappingService as any,
 			documentTypeMappingService as any,
-			{} as any
+			{
+				...invoiceNotificationService,
+			} as any
 		);
 
 		return {
 			service,
+			invoiceRepository,
+			invoiceItemRepository,
+			invoiceNotificationService,
+			exchangeRatesService,
 			taxMappingService,
 			documentTypeMappingService,
 		};
@@ -128,5 +149,64 @@ describe('InvoiceSchedulerService', () => {
 			},
 		]);
 		expect(payload.ref).toBeUndefined();
+	});
+
+	it('marca factura de Peru como sujeta a detraccion usando amount_invoice_currency', async () => {
+		const { service, documentTypeMappingService } = createService();
+		documentTypeMappingService.getDefaultDocumentTypeForInvoice.mockResolvedValue({
+			id: 55,
+			code: '1',
+			name: 'Factura',
+		});
+
+		const payload = await service.mapInvoiceToOdooFormat({
+			...buildInvoice('Peru', null, []),
+			invoice_currency: 'PEN',
+			amount_invoice_currency: 800,
+			total_invoice_currency: 0,
+		});
+
+		expect(payload.l10n_pe_edi_operation_type).toBe('1001');
+	});
+
+	it('persiste total_invoice_currency y vat al recalcular montos para emision', async () => {
+		const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService } = createService();
+		exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({
+			rate: 3.5,
+			is_fallback: false,
+			rate_date: new Date('2026-07-10'),
+		});
+
+		await service.calculateInvoiceAmountsAtIssue({
+			id: 'invoice-1',
+			invoice_number: 'INV-PE-001',
+			issue_date: new Date('2026-07-10'),
+			contract_currency: 'USD',
+			invoice_currency: 'PEN',
+			amount_contract_currency: 100,
+			items: [
+				{
+					id: 'item-1',
+					unit_price_contract_currency: 100,
+					subtotal_contract_currency: 100,
+					tax_amount_contract_currency: 18,
+					total_contract_currency: 118,
+				},
+			],
+		} as any);
+
+		expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', {
+			amount_invoice_currency: 350,
+			vat: 63,
+			total_invoice_currency: 413,
+			fx_contract_to_invoice: 3.5,
+		});
+		expect(invoiceItemRepository.update).toHaveBeenCalledWith('item-1', {
+			unit_price_invoice_currency: 350,
+			subtotal_invoice_currency: 350,
+			tax_amount_invoice_currency: 63,
+			total_invoice_currency: 413,
+			fx_contract_to_invoice: 3.5,
+		});
 	});
 });
