@@ -800,8 +800,20 @@ export class InvoiceSchedulerService {
 			this.logger.debug(`ℹ️  Cliente ${invoice.clientEntity?.legal_name || 'N/A'} no tiene posición fiscal configurada`);
 		}
 
+		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
+
 		for (const item of invoice.items || []) {
 			let odooProductId = 1;
+			const itemLabel = item.description || 'Producto/Servicio';
+			this.logger.log(`🧾 Iniciando cálculo de impuestos para item ${item.id} (${itemLabel})`);
+			this.logger.log(
+				`   - invoice_id: ${invoice.id}\n` +
+					`   - invoice_number: ${invoice.invoice_number || 'SIN-NUMERO'}\n` +
+					`   - company_odoo_id: ${companyId}\n` +
+					`   - export_type: ${invoice.export_type}\n` +
+					`   - sapira_product_id: ${item.product_id || 'SIN PRODUCTO'}\n` +
+					`   - client_fiscal_position_id: ${invoice.clientEntity?.odoo_fiscal_position_id || 'SIN POSICION FISCAL'}`
+			);
 
 			// Obtener mapeo del producto
 			if (item.product_id) {
@@ -812,21 +824,43 @@ export class InvoiceSchedulerService {
 					`Item factura ${invoice.invoice_number}: producto_sapira=${item.product_id}, ` +
 						`odoo_product=${odooProductId}, source=${mappingInfo.source}`
 				);
+				this.logger.log(`   - mapeo producto: sapira=${item.product_id} -> odoo=${odooProductId} (source=${mappingInfo.source})`);
+			} else {
+				this.logger.warn(`⚠️ Item ${item.id} no tiene product_id, se usará odoo_product_id por defecto=${odooProductId}`);
 			}
 
 			let finalTaxIds: number[] = [];
 
 			// Verificar si es factura de exportación
 			if (isExportInvoice) {
-				// Facturas de exportación NO llevan impuestos
-				finalTaxIds = [];
-				this.logger.log(`🌍 Factura de exportación - Item sin impuestos: ${item.description || 'Producto/Servicio'}`);
+				if (normalizedCountry === 'mexico') {
+					this.logger.log(`🌍🇲🇽 Factura de exportación MX - buscando impuesto de venta 0% para item ${item.id}`);
+					const zeroRateTaxId = await this.taxMappingService.getCompanyZeroRateSaleTax(companyId, invoice.holding_id);
+					if (zeroRateTaxId !== null) {
+						finalTaxIds = [zeroRateTaxId];
+						this.logger.log(`🌍🇲🇽 Factura de exportación MX - Item con impuesto 0%: ${itemLabel} -> tax_id ${zeroRateTaxId}`);
+					} else {
+						finalTaxIds = [];
+						this.logger.warn(
+							`⚠️ Factura de exportación MX sin impuesto 0% configurado para compañía ${companyId}. Se enviará sin impuestos para item ${item.id}`
+						);
+					}
+				} else {
+					// Facturas de exportación NO llevan impuestos
+					finalTaxIds = [];
+					this.logger.log(`🌍 Factura de exportación - Item sin impuestos: ${item.description || 'Producto/Servicio'}`);
+				}
 			} else {
 				// Flujo normal: obtener impuestos de venta del producto
+				this.logger.log(`🔎 Paso 1/2 item ${item.id}: consultando impuestos base del producto ${odooProductId} para company_id ${companyId}`);
 				const productSaleTaxIds = await this.taxMappingService.getProductSaleTaxes(odooProductId, companyId, invoice.holding_id);
+				this.logger.log(`   - impuestos base producto ${odooProductId}: [${productSaleTaxIds.join(', ')}]`);
 
 				// Aplicar mapeo de posición fiscal si el cliente tiene una configurada
 				if (invoice.clientEntity?.odoo_fiscal_position_id) {
+					this.logger.log(
+						`🔎 Paso 2/2 item ${item.id}: aplicando posición fiscal ${invoice.clientEntity.odoo_fiscal_position_id} a impuestos [${productSaleTaxIds.join(', ')}]`
+					);
 					const mappingResult = await this.taxMappingService.applyFiscalPositionMapping(
 						productSaleTaxIds,
 						invoice.clientEntity.odoo_fiscal_position_id,
@@ -838,14 +872,20 @@ export class InvoiceSchedulerService {
 						`📦 Producto ${odooProductId}: ${productSaleTaxIds.length} impuestos originales → ` +
 							`${finalTaxIds.length} impuestos finales (con mapeo de posición fiscal)`
 					);
+					this.logger.log(
+						`   - resultado mapeo posición fiscal: ${mappingResult.mappings_applied.length > 0 ? JSON.stringify(mappingResult.mappings_applied) : 'sin acciones explícitas'}`
+					);
 				} else {
 					// Sin posición fiscal, usar impuestos del producto directamente
 					finalTaxIds = productSaleTaxIds;
 					this.logger.debug(`📦 Producto ${odooProductId}: ${finalTaxIds.length} impuestos (sin posición fiscal)`);
+					this.logger.log(`   - sin posición fiscal, se conservan impuestos base: [${finalTaxIds.join(', ')}]`);
 				}
 
 				this.logger.debug(`Item ${item.id}: tax_ids finales = [${finalTaxIds.join(', ')}]`);
 			}
+
+			this.logger.log(`✅ Item ${item.id}: tax_ids finales resueltos = [${finalTaxIds.join(', ')}]`);
 
 			const discount = parseFloat(item.discount_pct?.toString() || '0');
 			const quantity = parseFloat(item.quantity?.toString() || '1');
@@ -867,7 +907,11 @@ export class InvoiceSchedulerService {
 
 		// Log resumen
 		if (isExportInvoice) {
-			this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN - sin impuestos)`);
+			if (normalizedCountry === 'mexico') {
+				this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN MX - con impuesto 0% cuando exista)`);
+			} else {
+				this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN - sin impuestos)`);
+			}
 		} else {
 			this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados con mapeo de impuestos`);
 		}
@@ -906,8 +950,6 @@ export class InvoiceSchedulerService {
 
 		// Determinar si requiere detracción (Perú >= 700 PEN)
 		let l10nPeEdiOperationType: string | undefined = undefined;
-
-		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
 
 		if (normalizedCountry === 'peru') {
 			const invoiceAmount = parseFloat(invoice.amount_invoice_currency?.toString() || '0');

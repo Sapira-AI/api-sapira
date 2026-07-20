@@ -29,6 +29,7 @@ Este módulo implementa la sincronización de datos desde Odoo ERP hacia la apli
 -   `auto_invoice = true` crea el draft, publica la factura y ejecuta el paso adicional de emisión electrónica según país.
 -   Países con wizard `account.move.send` + `action_send_and_print`: `Colombia`, `México` y `Uruguay`.
 -   `Chile` no requiere wizard adicional; se considera emitida con `action_post`.
+-   Para facturas de exportación de `México`, SAPIRA intenta enviar el impuesto de venta `0%` de la compañía en vez de dejar la línea sin impuestos.
 
 ## Estructura del Módulo
 
