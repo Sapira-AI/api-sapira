@@ -910,13 +910,13 @@ export class InvoiceSchedulerService {
 		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
 
 		if (normalizedCountry === 'peru') {
-			const totalAmount = parseFloat(invoice.total_invoice_currency?.toString() || '0');
+			const invoiceAmount = parseFloat(invoice.amount_invoice_currency?.toString() || '0');
 			let requiresDetraction = false;
 
 			if (invoice.invoice_currency === 'PEN') {
 				// Factura en soles: comparar directamente
-				requiresDetraction = totalAmount >= 700;
-				this.logger.log(`🇵🇪 Perú - Factura en PEN: ${totalAmount} >= 700? ${requiresDetraction}`);
+				requiresDetraction = invoiceAmount >= 700;
+				this.logger.log(`🇵🇪 Perú - Factura en PEN: ${invoiceAmount} >= 700? ${requiresDetraction}`);
 			} else if (invoice.invoice_currency === 'USD') {
 				// Factura en dólares: convertir 700 PEN a USD
 				try {
@@ -925,10 +925,10 @@ export class InvoiceSchedulerService {
 					if (exchangeRateData && exchangeRateData.rate) {
 						// 700 PEN / rate = equivalente en USD
 						const threshold = 700 / exchangeRateData.rate;
-						requiresDetraction = totalAmount >= threshold;
+						requiresDetraction = invoiceAmount >= threshold;
 
 						this.logger.log(
-							`🇵🇪 Perú - Factura en USD: ${totalAmount} >= ${threshold.toFixed(2)} (700 PEN / ${exchangeRateData.rate})? ${requiresDetraction}`
+							`🇵🇪 Perú - Factura en USD: ${invoiceAmount} >= ${threshold.toFixed(2)} (700 PEN / ${exchangeRateData.rate})? ${requiresDetraction}`
 						);
 					} else {
 						this.logger.warn(`⚠️ No se pudo obtener tipo de cambio USD/PEN para ${invoice.issue_date}`);
@@ -1116,14 +1116,25 @@ export class InvoiceSchedulerService {
 			const exchangeRate = exchangeRateResult.rate;
 			const isFallback = exchangeRateResult.is_fallback;
 
+			const invoiceItems = invoice.items || [];
 			const amountInvoiceCurrency = Number(invoice.amount_contract_currency) * exchangeRate;
+			const vatInvoiceCurrency = invoiceItems.reduce(
+				(sum, item) => sum + Number(item.tax_amount_contract_currency || 0) * exchangeRate,
+				0
+			);
+			const totalInvoiceCurrency =
+				invoiceItems.length > 0
+					? invoiceItems.reduce((sum, item) => sum + Number(item.total_contract_currency || 0) * exchangeRate, 0)
+					: amountInvoiceCurrency + vatInvoiceCurrency;
 
 			await this.invoiceRepository.update(invoice.id, {
 				amount_invoice_currency: amountInvoiceCurrency,
+				vat: vatInvoiceCurrency,
+				total_invoice_currency: totalInvoiceCurrency,
 				fx_contract_to_invoice: exchangeRate,
 			});
 
-			for (const item of invoice.items) {
+			for (const item of invoiceItems) {
 				await this.invoiceItemRepository.update(item.id, {
 					unit_price_invoice_currency: Number(item.unit_price_contract_currency) * exchangeRate,
 					subtotal_invoice_currency: Number(item.subtotal_contract_currency) * exchangeRate,
