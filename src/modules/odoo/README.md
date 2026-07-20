@@ -24,6 +24,12 @@ Este módulo implementa la sincronización de datos desde Odoo ERP hacia la apli
     -   Paginación
     -   Sincronización independiente
 
+### 3. Emisión de facturas a Odoo
+
+-   `auto_invoice = true` crea el draft, publica la factura y ejecuta el paso adicional de emisión electrónica según país.
+-   Países con wizard `account.move.send` + `action_send_and_print`: `Colombia`, `México` y `Uruguay`.
+-   `Chile` no requiere wizard adicional; se considera emitida con `action_post`.
+
 ## Estructura del Módulo
 
 ```
