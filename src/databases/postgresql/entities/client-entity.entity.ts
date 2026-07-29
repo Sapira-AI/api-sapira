@@ -15,7 +15,7 @@ export class ClientEntity {
 	legal_name?: string;
 
 	@Column({ type: 'text', nullable: true })
-	tax_id?: string;
+	tax_id?: string | null;
 
 	@Column({ type: 'text', nullable: true })
 	country?: string;

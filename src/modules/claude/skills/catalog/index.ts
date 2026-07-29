@@ -1,8 +1,8 @@
 import { SkillDefinition } from '../skill-definition.interface';
 
 import { CLIENT_SKILLS } from './client-skills';
-import { COHORT_SKILLS } from './cohort-skills';
 import { CMRR_MOMENTUM_SKILLS } from './cmrr-momentum-skills';
+import { COHORT_SKILLS } from './cohort-skills';
 import { CONTRACT_SKILLS } from './contract-skills';
 import { INVOICE_SKILLS } from './invoice-skills';
 import { MRR_SKILLS } from './mrr-skills';

@@ -26,12 +26,7 @@ describe('ExchangeRatesScheduler', () => {
 			error: jest.fn(),
 		};
 
-		const scheduler = new ExchangeRatesScheduler(
-			exchangeRatesService as any,
-			notificationService as any,
-			configService as any,
-			appLogger as any
-		);
+		const scheduler = new ExchangeRatesScheduler(exchangeRatesService as any, notificationService as any, configService as any, appLogger as any);
 
 		jest.spyOn(scheduler as any, 'formatLocalDate').mockReturnValue('2026-07-10');
 		jest.spyOn(scheduler as any, 'sleep').mockResolvedValue(undefined);

@@ -51,9 +51,10 @@ export class SalesforceQueryService {
 			}
 
 			const result = await this.executeQueryWithToken(soql, connection.instance_url, accessToken);
+			const completeResult = await this.fetchAllQueryPages(result, connection.instance_url, accessToken);
 			await this.updateLastSync(holdingId);
 
-			return { data: result, tokenRefreshed: wasExpired };
+			return { data: completeResult, tokenRefreshed: wasExpired };
 		} catch (error: any) {
 			if (error.response?.status === 401) {
 				this.logger.error('Authentication failed even after token refresh, marking connection as inactive');
@@ -78,6 +79,36 @@ export class SalesforceQueryService {
 		);
 
 		return response.data;
+	}
+
+	private async fetchAllQueryPages(
+		initialResult: SalesforceQueryResult,
+		instanceUrl: string,
+		accessToken: string
+	): Promise<SalesforceQueryResult> {
+		const records = [...(initialResult.records || [])];
+		let nextRecordsUrl = initialResult.nextRecordsUrl;
+
+		while (nextRecordsUrl) {
+			const response = await firstValueFrom(
+				this.httpService.get(`${instanceUrl}${nextRecordsUrl}`, {
+					headers: {
+						Authorization: `Bearer ${accessToken}`,
+						'Content-Type': 'application/json',
+					},
+				})
+			);
+			const page = response.data as SalesforceQueryResult;
+			records.push(...(page.records || []));
+			nextRecordsUrl = page.nextRecordsUrl;
+		}
+
+		return {
+			...initialResult,
+			records,
+			done: true,
+			nextRecordsUrl: undefined,
+		};
 	}
 
 	buildQueryUrl(instanceUrl: string, soql: string): string {

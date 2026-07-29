@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Headers, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Headers, HttpStatus, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { SupabaseUser } from '@/auth/strategies/supabase.strategy';
@@ -7,7 +7,15 @@ import { GetSupabaseUser } from '@/decorators/supabase-user.decorator';
 
 import { SalesforceClientCredentialsDto } from './dtos/salesforce-client-credentials.dto';
 import { SalesforceCredentialsDto } from './dtos/salesforce-credentials.dto';
+import { SalesforceClientEntityPreviewDto } from './dtos/salesforce-client-entity-preview.dto';
+import {
+	SalesforceDuplicateClientEntitiesQueryDto,
+	SalesforceDuplicateClientEntitiesResponseDto,
+} from './dtos/salesforce-duplicate-client-entities.dto';
+import { SalesforceLineItemPreviewDto, SalesforceLineItemPreviewRequestDto } from './dtos/salesforce-line-item-preview.dto';
+import { SalesforceAccount, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
 import { SalesforceQueryDto } from './dtos/salesforce-query.dto';
+import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
 import {
 	SalesforceAuthResponseDto,
 	SalesforceConnectionResponseDto,
@@ -210,6 +218,72 @@ export class SalesforceController {
 		return this.salesforceService.executeQuery(queryDto.query, holdingId);
 	}
 
+	@Post('client-entities/normalize-tax-ids')
+	@ApiOperation({
+		summary: 'Normalizar identificadores fiscales del holding',
+		description:
+			'Elimina espacios Unicode y puntos de client_entities.tax_id del holding actual. Conserva guiones, barras y letras; no fusiona ni deduplica entidades.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Normalización completada',
+		type: SalesforceTaxIdNormalizationResponseDto,
+	})
+	async normalizeTaxIds(@Headers('x-holding-id') holdingId: string): Promise<SalesforceTaxIdNormalizationResponseDto> {
+		return this.salesforceService.normalizeTaxIds(holdingId);
+	}
+
+	@Get('client-entities/duplicate-tax-ids')
+	@ApiOperation({
+		summary: 'Listar entidades con identificadores fiscales duplicados',
+		description:
+			'Agrupa client_entities del holding por tax_id normalizado y omite los VATs genéricos activos de exportación.',
+	})
+	@ApiQuery({ name: 'page', required: false, type: Number })
+	@ApiQuery({ name: 'limit', required: false, type: Number })
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Entidades con tax_id duplicados',
+		type: SalesforceDuplicateClientEntitiesResponseDto,
+	})
+	async getDuplicateClientEntitiesTaxIds(
+		@Headers('x-holding-id') holdingId: string,
+		@Query() query: SalesforceDuplicateClientEntitiesQueryDto
+	): Promise<SalesforceDuplicateClientEntitiesResponseDto> {
+		return this.salesforceService.getDuplicateClientEntitiesTaxIds(holdingId, query);
+	}
+
+	@Get('client-entities/pending-source-check')
+	@ApiOperation({
+		summary: 'Listar Accounts Salesforce con datos pendientes',
+		description:
+			'Consulta directamente en Salesforce los Accounts cuyo RUT__c o BusinessName__c sea “pendiente”.',
+	})
+	@ApiHeader({
+		name: 'x-holding-id',
+		description: 'ID del holding a consultar',
+		required: true,
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Accounts Salesforce encontrados con datos pendientes',
+		schema: {
+			type: 'array',
+			items: {
+				type: 'object',
+				properties: {
+					salesforceAccountId: { type: 'string', nullable: true },
+					salesforceBusinessName: { type: 'string', nullable: true },
+					salesforceRut: { type: 'string', nullable: true },
+					salesforceLastModifiedDate: { type: 'string', format: 'date-time', nullable: true },
+				},
+			},
+		},
+	})
+	async getPendingClientEntitiesSalesforceSource(@Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.getPendingClientEntitiesSalesforceSource(holdingId);
+	}
+
 	@Post('sync')
 	@ApiOperation({
 		summary: 'Sincronizar oportunidades',
@@ -254,6 +328,38 @@ export class SalesforceController {
 	})
 	async syncComplete(@Body() syncDto: SalesforceSyncCompleteDto, @Headers('x-holding-id') holdingId: string) {
 		return this.salesforceService.syncOpportunitiesComplete(holdingId, syncDto.dateFrom, syncDto.dateTo, syncDto.opportunityIds);
+	}
+
+	@Post('preview/line-items')
+	@ApiOperation({
+		summary: 'Resolver line items para preview',
+		description: 'Aplica los mappings y reglas finales de Salesforce sin escribir en staging ni tablas de negocio.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Line items resueltos para comparación en frontend',
+	})
+	async previewLineItems(@Body() previewDto: SalesforceLineItemPreviewDto, @Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.previewLineItems(
+			holdingId,
+			previewDto.items.map((item: SalesforceLineItemPreviewRequestDto) => ({
+				opportunity: item.opportunity as unknown as SalesforceOpportunityWithLineItems,
+				lineItems: item.lineItems as unknown as SalesforceOpportunityLineItem[],
+			}))
+		);
+	}
+
+	@Post('preview/client-entities')
+	@ApiOperation({
+		summary: 'Resolver entidades legales para preview',
+		description: 'Aplica mappings y reglas de resolución de client_entities sin escribir datos.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Entidades legales y campos a actualizar para comparación en frontend',
+	})
+	async previewClientEntities(@Body() previewDto: SalesforceClientEntityPreviewDto, @Headers('x-holding-id') holdingId: string) {
+		return this.salesforceService.previewClientEntities(holdingId, previewDto.accounts as unknown as SalesforceAccount[]);
 	}
 
 	@Post('sync/complete/all')

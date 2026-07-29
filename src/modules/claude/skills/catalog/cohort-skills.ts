@@ -75,7 +75,17 @@ Usar esta skill cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Ciclo Booking → Factura por Cohort Mensual',
-			columns: ['cohort_month', 'total_contracts', 'avg_days', 'min_days', 'max_days', 'tramo_0_15', 'tramo_16_30', 'tramo_31_60', 'tramo_mas_60'],
+			columns: [
+				'cohort_month',
+				'total_contracts',
+				'avg_days',
+				'min_days',
+				'max_days',
+				'tramo_0_15',
+				'tramo_16_30',
+				'tramo_31_60',
+				'tramo_mas_60',
+			],
 			columnLabels: {
 				cohort_month: 'Cohort',
 				total_contracts: 'Contratos',
@@ -271,7 +281,17 @@ Usar esta skill cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Ciclo Booking → Pago por Cohort Mensual',
-			columns: ['cohort_month', 'total_contracts', 'avg_days_to_payment', 'min_days', 'max_days', 'tramo_0_30', 'tramo_31_60', 'tramo_61_90', 'tramo_mas_90'],
+			columns: [
+				'cohort_month',
+				'total_contracts',
+				'avg_days_to_payment',
+				'min_days',
+				'max_days',
+				'tramo_0_30',
+				'tramo_31_60',
+				'tramo_61_90',
+				'tramo_mas_90',
+			],
 			columnLabels: {
 				cohort_month: 'Cohort',
 				total_contracts: 'Contratos',
@@ -292,8 +312,4 @@ Usar esta skill cuando el usuario pregunte por:
 	},
 };
 
-export const COHORT_SKILLS: SkillDefinition[] = [
-	GET_COHORT_BOOKING_TO_INVOICE,
-	GET_COHORT_RETENTION,
-	GET_COHORT_BOOKING_TO_PAYMENT,
-];
+export const COHORT_SKILLS: SkillDefinition[] = [GET_COHORT_BOOKING_TO_INVOICE, GET_COHORT_RETENTION, GET_COHORT_BOOKING_TO_PAYMENT];

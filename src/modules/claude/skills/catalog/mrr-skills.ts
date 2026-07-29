@@ -16,7 +16,8 @@ Para desglose por compañía usar get_mrr_by_company. Para desglose por cliente 
 
 El MRR se calcula sumando valores de mrr_legacy y revenue_schedule_monthly para cada período.`,
 
-	emptyMessage: 'No se encontraron datos de MRR para el período indicado. Verifica que el holding tenga contratos activos con facturación recurrente.',
+	emptyMessage:
+		'No se encontraron datos de MRR para el período indicado. Verifica que el holding tenga contratos activos con facturación recurrente.',
 
 	parameters: {
 		required: [],

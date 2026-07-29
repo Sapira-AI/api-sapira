@@ -6,8 +6,11 @@ import { Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { normalizeTaxId } from '@/modules/salesforce/utils/salesforce-transformers';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
+import { ResolveOdooPartnerByTaxIdResponseDto } from './dtos/resolve-odoo-partner-by-tax-id.dto';
+import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
 import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
@@ -43,6 +46,269 @@ export class OdooPartnersService {
 	 */
 	async processPartners(dto: ProcessPartnersDto): Promise<ProcessPartnersResponseDto> {
 		return await this.partnersProcessorService.processPartners(dto);
+	}
+
+	async resolveAndLinkPartnerByTaxId(
+		holdingId: string,
+		taxId: string,
+		legalName?: string
+	): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
+		const normalizedTaxId = normalizeTaxId(taxId);
+		if (!normalizedTaxId) {
+			return {
+				status: 'not_found',
+				taxId: '',
+				message: 'El tax ID no contiene caracteres válidos después de normalizarlo',
+			};
+		}
+
+		const isGenericExportVat = await this.genericVatsService.isGenericExportVat(normalizedTaxId);
+		if (isGenericExportVat && !legalName?.trim()) {
+			return {
+				status: 'missing_legal_name',
+				taxId: normalizedTaxId,
+				message: 'La razón social es obligatoria para resolver un VAT genérico de exportación',
+			};
+		}
+
+		const entities = await this.clientEntitiesRepository.find({
+			where: { holding_id: holdingId },
+			select: ['id', 'tax_id', 'legal_name', 'odoo_partner_id'],
+		});
+		const matchingEntities = entities.filter(
+			(entity) =>
+				normalizeTaxId(entity.tax_id) === normalizedTaxId &&
+				(!isGenericExportVat || this.normalizeLegalName(entity.legal_name) === this.normalizeLegalName(legalName))
+		);
+
+		if (matchingEntities.length === 0) {
+			return {
+				status: 'not_found',
+				taxId: normalizedTaxId,
+				message: 'No existe una entidad legal Sapira que coincida con el tax ID indicado',
+			};
+		}
+
+		if (matchingEntities.length > 1) {
+			return {
+				status: 'ambiguous',
+				taxId: normalizedTaxId,
+				message: 'Existen múltiples entidades legales Sapira que coinciden con los criterios indicados',
+			};
+		}
+
+		return this.resolveAndLinkPartnerForEntity(holdingId, matchingEntities[0], true);
+	}
+
+	async resolveAndLinkPartnerForEntity(
+		holdingId: string,
+		entity: Pick<ClientEntity, 'id' | 'tax_id' | 'legal_name' | 'odoo_partner_id'>,
+		includePartnerData = false
+	): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
+		const normalizedTaxId = normalizeTaxId(entity.tax_id);
+		if (!normalizedTaxId) {
+			return {
+				status: 'not_found',
+				taxId: '',
+				clientEntityId: entity.id,
+				message: 'La entidad legal no tiene un tax ID válido para resolver en Odoo',
+			};
+		}
+
+		if (entity.odoo_partner_id) {
+			const partner = includePartnerData ? await this.searchPartnerById(holdingId, entity.odoo_partner_id) : null;
+			return {
+				status: 'already_linked',
+				taxId: normalizedTaxId,
+				clientEntityId: entity.id,
+				odooPartnerId: entity.odoo_partner_id,
+				partnerData: partner ? this.toPartnerData(partner) : undefined,
+				message: partner
+					? 'La entidad legal ya tiene un partner Odoo asociado; sus datos están disponibles para confirmación'
+					: 'La entidad legal ya tiene un partner Odoo asociado',
+			};
+		}
+
+		const isGenericExportVat = await this.genericVatsService.isGenericExportVat(normalizedTaxId);
+		if (isGenericExportVat && !entity.legal_name?.trim()) {
+			return {
+				status: 'missing_legal_name',
+				taxId: normalizedTaxId,
+				clientEntityId: entity.id,
+				message: 'La entidad legal requiere razón social para resolver un VAT genérico de exportación',
+			};
+		}
+
+		const partners = await this.searchPartnersByTaxId(holdingId, normalizedTaxId);
+		const candidates = isGenericExportVat
+			? partners.filter((partner) => this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name))
+			: partners;
+
+		if (candidates.length === 0) {
+			return {
+				status: 'not_found',
+				taxId: normalizedTaxId,
+				clientEntityId: entity.id,
+				message: 'No se encontró un partner Odoo que coincida con la entidad legal',
+			};
+		}
+
+		if (candidates.length > 1) {
+			return {
+				status: 'ambiguous',
+				taxId: normalizedTaxId,
+				clientEntityId: entity.id,
+				candidates: candidates.map((partner) => ({ id: partner.id, name: partner.name || partner.display_name, vat: partner.vat || '' })),
+				message: 'La búsqueda en Odoo devolvió múltiples partners candidatos',
+			};
+		}
+
+		await this.clientEntitiesRepository.update({ id: entity.id, holding_id: holdingId }, { odoo_partner_id: candidates[0].id });
+		return {
+			status: 'found',
+			taxId: normalizedTaxId,
+			clientEntityId: entity.id,
+			odooPartnerId: candidates[0].id,
+			partnerData: this.toPartnerData(candidates[0]),
+			message: 'Partner Odoo encontrado y asociado a la entidad legal',
+		};
+	}
+
+	async resolveAndLinkPartnerForEntityId(holdingId: string, clientEntityId: string): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
+		const entity = await this.clientEntitiesRepository.findOne({
+			where: { id: clientEntityId, holding_id: holdingId },
+			select: ['id', 'tax_id', 'legal_name', 'odoo_partner_id'],
+		});
+		if (!entity) {
+			return {
+				status: 'not_found',
+				taxId: '',
+				clientEntityId,
+				message: 'No se encontró la entidad legal Sapira para resolver su partner Odoo',
+			};
+		}
+
+		return this.resolveAndLinkPartnerForEntity(holdingId, entity);
+	}
+
+	async resolveMissingPartners(
+		holdingId: string,
+		dto: ResolveMissingOdooPartnersDto
+	): Promise<ResolveMissingOdooPartnersResponseDto> {
+		const entities = await this.clientEntitiesRepository.find({
+			where: { holding_id: holdingId },
+			select: ['id', 'tax_id', 'legal_name', 'odoo_partner_id'],
+		});
+		const taxIds = [...new Set(entities.map((entity) => normalizeTaxId(entity.tax_id)).filter(Boolean))];
+		const partnersByTaxId = await this.searchPartnersByTaxIds(holdingId, taxIds);
+		const examples: ResolveMissingOdooPartnersResponseDto['examples'] = [];
+		let wouldUpdate = 0;
+		let updated = 0;
+		let unchanged = 0;
+		let unresolved = 0;
+
+		for (const entity of entities) {
+			const taxId = normalizeTaxId(entity.tax_id);
+			let result: ResolveMissingOdooPartnersResponseDto['examples'][number];
+
+			if (!taxId) {
+				unresolved++;
+				result = {
+					clientEntityId: entity.id,
+					legalName: entity.legal_name || null,
+					taxId: entity.tax_id || null,
+					status: 'invalid_tax_id',
+					message: 'La entidad no tiene un RUT o VAT válido',
+				};
+			} else {
+				const isGenericExportVat = await this.genericVatsService.isGenericExportVat(taxId);
+				if (isGenericExportVat && !entity.legal_name?.trim()) {
+					unresolved++;
+					result = {
+						clientEntityId: entity.id,
+						legalName: entity.legal_name || null,
+						taxId,
+						status: 'missing_legal_name',
+						message: 'El RUT genérico requiere razón social para identificar el partner',
+					};
+				} else {
+					const candidates = (partnersByTaxId.get(taxId) || []).filter(
+						(partner) => !isGenericExportVat || this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name)
+					);
+					if (candidates.length === 0) {
+						unresolved++;
+						result = {
+							clientEntityId: entity.id,
+							legalName: entity.legal_name || null,
+							taxId,
+							status: 'not_found',
+							message: 'No se encontró un partner Odoo coincidente',
+						};
+					} else if (candidates.length > 1) {
+						unresolved++;
+						result = {
+							clientEntityId: entity.id,
+							legalName: entity.legal_name || null,
+							taxId,
+							status: 'ambiguous',
+							message: 'Se encontraron múltiples partners Odoo coincidentes',
+						};
+					} else {
+						const resolvedPartnerId = candidates[0].id;
+						if (entity.odoo_partner_id === resolvedPartnerId) {
+							unchanged++;
+							result = {
+								clientEntityId: entity.id,
+								legalName: entity.legal_name || null,
+								taxId,
+								status: 'unchanged',
+								odooPartnerId: resolvedPartnerId,
+								message: 'El partner Odoo ya coincide; no requiere actualización',
+							};
+						} else {
+							wouldUpdate++;
+							if (!dto.dryRun) {
+								const updateResult = await this.clientEntitiesRepository
+									.createQueryBuilder()
+									.update(ClientEntity)
+									.set({ odoo_partner_id: resolvedPartnerId })
+									.where('id = :entityId', { entityId: entity.id })
+									.andWhere('holding_id = :holdingId', { holdingId })
+									.andWhere('odoo_partner_id IS DISTINCT FROM :partnerId', { partnerId: resolvedPartnerId })
+									.execute();
+								updated += updateResult.affected || 0;
+							}
+							result = {
+								clientEntityId: entity.id,
+								legalName: entity.legal_name || null,
+								taxId,
+								status: dto.dryRun ? (entity.odoo_partner_id ? 'would_update' : 'would_create') : 'updated',
+								odooPartnerId: resolvedPartnerId,
+								message: dto.dryRun
+									? entity.odoo_partner_id
+										? 'Se reemplazaría el partner Odoo por el partner único encontrado'
+										: 'Se asociaría el partner Odoo único encontrado'
+									: 'Partner Odoo asociado o actualizado',
+							};
+						}
+					}
+				}
+			}
+
+			if (examples.length < dto.sampleSize) {
+				examples.push(result);
+			}
+		}
+
+		return {
+			dryRun: dto.dryRun,
+			evaluated: entities.length,
+			wouldUpdate,
+			updated,
+			unchanged,
+			unresolved,
+			examples,
+		};
 	}
 
 	/**
@@ -185,6 +451,148 @@ export class OdooPartnersService {
 				],
 			},
 		]);
+	}
+
+	private async searchPartnersByTaxId(holdingId: string, taxId: string): Promise<OdooPartner[]> {
+		const activeConnection = await this.odooConnectionRepository.findOne({
+			where: { holding_id: holdingId, is_active: true },
+		});
+		if (!activeConnection) {
+			throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
+		}
+
+		const connection: OdooConnectionConfig = {
+			id: activeConnection.id,
+			url: activeConnection.url,
+			database_name: activeConnection.database_name,
+			username: activeConnection.username || '',
+			api_key: activeConnection.api_key,
+			holding_id: activeConnection.holding_id,
+		};
+		const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+		const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+		if (!uid) {
+			throw new Error(`No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
+		}
+
+		const partners = await objectClient.methodCall('execute_kw', [
+			connection.database_name,
+			uid,
+			connection.api_key,
+			'res.partner',
+			'search_read',
+			[[['vat', '=', taxId], ['active', '=', true]]],
+			{
+				fields: ['id', 'name', 'display_name', 'vat', 'active', 'email', 'phone', 'mobile', 'street', 'street2', 'city', 'zip', 'state_id', 'country_id', 'contact_address_complete'],
+				limit: 20,
+			},
+		]);
+
+		return (Array.isArray(partners) ? partners : []).filter((partner) => normalizeTaxId(partner.vat) === taxId);
+	}
+
+	private async searchPartnerById(holdingId: string, partnerId: number): Promise<OdooPartner | null> {
+		const activeConnection = await this.odooConnectionRepository.findOne({
+			where: { holding_id: holdingId, is_active: true },
+		});
+		if (!activeConnection) {
+			throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
+		}
+
+		const commonClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/object`);
+		const uid = await commonClient.methodCall('authenticate', [
+			activeConnection.database_name,
+			activeConnection.username || '',
+			activeConnection.api_key,
+			{},
+		]);
+		if (!uid) {
+			throw new Error(`No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
+		}
+
+		const partners = await objectClient.methodCall('execute_kw', [
+			activeConnection.database_name,
+			uid,
+			activeConnection.api_key,
+			'res.partner',
+			'search_read',
+			[[['id', '=', partnerId], ['active', '=', true]]],
+			{
+				fields: ['id', 'name', 'display_name', 'vat', 'active', 'email', 'phone', 'mobile', 'street', 'street2', 'city', 'zip', 'state_id', 'country_id', 'contact_address_complete'],
+				limit: 1,
+			},
+		]);
+
+		return Array.isArray(partners) && partners.length ? (partners[0] as OdooPartner) : null;
+	}
+
+	private toPartnerData(partner: OdooPartner): ResolveOdooPartnerByTaxIdResponseDto['partnerData'] {
+		const legalAddress =
+			partner.contact_address_complete ||
+			[partner.street, partner.street2, partner.city, partner.state_id?.[1], partner.zip, partner.country_id?.[1]]
+				.filter(Boolean)
+				.join(', ') ||
+			null;
+
+		return {
+			legal_name: partner.name || partner.display_name || null,
+			legal_address: legalAddress,
+			email: partner.email || null,
+			phone: partner.phone || partner.mobile || null,
+		};
+	}
+
+	private async searchPartnersByTaxIds(holdingId: string, taxIds: string[]): Promise<Map<string, OdooPartner[]>> {
+		const partnersByTaxId = new Map<string, OdooPartner[]>();
+		if (!taxIds.length) {
+			return partnersByTaxId;
+		}
+
+		const activeConnection = await this.odooConnectionRepository.findOne({
+			where: { holding_id: holdingId, is_active: true },
+		});
+		if (!activeConnection) {
+			throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
+		}
+
+		const commonClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/object`);
+		const uid = await commonClient.methodCall('authenticate', [
+			activeConnection.database_name,
+			activeConnection.username || '',
+			activeConnection.api_key,
+			{},
+		]);
+		if (!uid) {
+			throw new Error(`No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
+		}
+
+		for (let start = 0; start < taxIds.length; start += 100) {
+			const batch = taxIds.slice(start, start + 100);
+			const partners = await objectClient.methodCall('execute_kw', [
+				activeConnection.database_name,
+				uid,
+				activeConnection.api_key,
+				'res.partner',
+				'search_read',
+				[[['vat', 'in', batch], ['active', '=', true]]],
+				{ fields: ['id', 'name', 'display_name', 'vat', 'active'] },
+			]);
+
+			for (const partner of Array.isArray(partners) ? partners : []) {
+				const normalizedTaxId = normalizeTaxId(partner.vat);
+				if (!normalizedTaxId || !batch.includes(normalizedTaxId)) continue;
+				partnersByTaxId.set(normalizedTaxId, [...(partnersByTaxId.get(normalizedTaxId) || []), partner]);
+			}
+		}
+
+		return partnersByTaxId;
+	}
+
+	private normalizeLegalName(value?: string | null): string {
+		return (value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 	}
 
 	/**

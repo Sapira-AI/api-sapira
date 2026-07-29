@@ -76,6 +76,7 @@ export interface SalesforceSyncResult {
 export interface SalesforceAccount {
 	Id: string;
 	Name: string;
+	LastModifiedDate?: string;
 	Salesforce_API_ID__c?: string;
 	Industry?: string;
 	Segmento__c?: string;
@@ -95,6 +96,7 @@ export interface SalesforceAccount {
 	};
 	M_nimo_facturable_licencias__c?: number;
 	Per_odo_de_facturaci_n__c?: string;
+	Phone?: string;
 }
 
 export interface SalesforceOpportunityLineItem {

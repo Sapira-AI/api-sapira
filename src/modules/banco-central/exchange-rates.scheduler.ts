@@ -140,10 +140,8 @@ export class ExchangeRatesScheduler {
 				}
 
 				throw new Error(
-					`No se pudo completar la sincronización de tipos de cambio tras ${maxRetries} intentos. ` +
-						`Pares con fallo: ${failedPairs}`
+					`No se pudo completar la sincronización de tipos de cambio tras ${maxRetries} intentos. ` + `Pares con fallo: ${failedPairs}`
 				);
-
 			} catch (error) {
 				this.logger.error(`Error en intento ${attempt}/${maxRetries}:`, error.message);
 
