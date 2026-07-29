@@ -5,10 +5,7 @@ import { DynamicQueryBuilder } from './query-builder';
 import { SkillDefinition, SkillExecutionContext, SkillExecutionResult } from './skill-definition.interface';
 
 // Paleta de colores para series múltiples (bar_stacked, etc.)
-const SERIES_COLORS = [
-	'#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-	'#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
-];
+const SERIES_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
 
 // Formatear period_month a MM/YYYY para evitar problemas de agrupación por timezone
 const formatPeriodMonth = (value: any): string => {
@@ -311,9 +308,7 @@ export class SkillExecutor {
 			const xOrder: string[] = [];
 			data.forEach((row) => {
 				// CRÍTICO: Formatear period_month a MM/YYYY para evitar agrupación incorrecta por timezone
-				const xVal = xKey === 'period_month' 
-					? formatPeriodMonth(row[xKey]) 
-					: String(row[xKey] ?? '');
+				const xVal = xKey === 'period_month' ? formatPeriodMonth(row[xKey]) : String(row[xKey] ?? '');
 				const sName = String(row[seriesKey] ?? 'Sin nombre');
 				const yVal = Number(row[yKey]) || 0;
 				if (!pivotMap[xVal]) {
@@ -629,13 +624,9 @@ export class SkillExecutor {
 		if (value === null || value === undefined) return '—';
 
 		// Determinar el formato según el yKey o el primer key de currency en format
-		const isCurrency =
-			(yKey && format?.[yKey] === 'currency') ||
-			Object.values(format || {}).includes('currency');
+		const isCurrency = (yKey && format?.[yKey] === 'currency') || Object.values(format || {}).includes('currency');
 
-		const isPercentage =
-			(yKey && format?.[yKey] === 'percentage') ||
-			Object.values(format || {}).includes('percentage');
+		const isPercentage = (yKey && format?.[yKey] === 'percentage') || Object.values(format || {}).includes('percentage');
 
 		if (isCurrency && typeof value === 'number') {
 			return new Intl.NumberFormat('en-US', {

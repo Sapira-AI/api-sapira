@@ -4,18 +4,24 @@ import { Repository } from 'typeorm';
 
 import { EncryptionService } from '@/common/services/encryption.service';
 
+import {
+	SalesforceDuplicateClientEntitiesQueryDto,
+	SalesforceDuplicateClientEntitiesResponseDto,
+} from './dtos/salesforce-duplicate-client-entities.dto';
+import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
 import { IntegrationSalesforceConnection } from './entities/integration-salesforce-connection.entity';
 import { IntegrationSalesforceFieldMapping } from './entities/integration-salesforce-field-mapping.entity';
 import { IntegrationSalesforceMappingDetail } from './entities/integration-salesforce-mapping-detail.entity';
 import { IntegrationSalesforceSyncRun } from './entities/integration-salesforce-sync-run.entity';
 import { SalesforceAuthType, SalesforceConnection } from './entities/salesforce-connection.entity';
-import { SalesforceCredentials } from './interfaces/salesforce.interface';
+import { SalesforceAccount, SalesforceCredentials, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
 import { SalesforceAuthService } from './services/salesforce-auth.service';
 import { SalesforceQueryService } from './services/salesforce-query.service';
 import { SalesforceSoapService } from './services/salesforce-soap.service';
 import { SalesforceSyncCompleteService } from './services/salesforce-sync-complete.service';
 import { SalesforceSyncService } from './services/salesforce-sync.service';
 import { SalesforceTokenService } from './services/salesforce-token.service';
+import { SalesforceTypeOrmService } from './services/salesforce-typeorm.service';
 
 @Injectable()
 export class SalesforceService {
@@ -38,6 +44,7 @@ export class SalesforceService {
 		private readonly syncCompleteService: SalesforceSyncCompleteService,
 		private readonly tokenService: SalesforceTokenService,
 		private readonly soapService: SalesforceSoapService,
+		private readonly typeormService: SalesforceTypeOrmService,
 		private readonly encryptionService: EncryptionService
 	) {}
 
@@ -140,44 +147,77 @@ export class SalesforceService {
 			throw new NotFoundException('No credentials found. Please save credentials first.');
 		}
 
-		if (!connection.username || !connection.password || !connection.security_token) {
-			throw new NotFoundException('Incomplete credentials. Please save complete credentials first.');
+		if (connection.auth_type === SalesforceAuthType.PASSWORD) {
+			if (!connection.username || !connection.password || !connection.security_token) {
+				throw new NotFoundException('Incomplete credentials. Please save complete credentials first.');
+			}
+
+			const decryptedPassword = this.encryptionService.decrypt(connection.password);
+			const loginResult = await this.soapService.attemptLogin(
+				connection.login_url,
+				connection.username,
+				decryptedPassword,
+				connection.security_token
+			);
+			const instanceUrl = loginResult.serverUrl.split('/services/')[0];
+
+			await this.connectionRepository.update(
+				{ holding_id: holdingId },
+				{
+					access_token: loginResult.sessionId,
+					instance_url: instanceUrl,
+					salesforce_user_id: loginResult.userId,
+					token_issued_at: new Date(),
+					token_expires_at: null,
+					is_active: true,
+					last_sync_at: new Date(),
+				}
+			);
+
+			this.logger.log(`✅ Password credentials validated successfully for holding ${holdingId}`);
+
+			return {
+				success: true,
+				message: 'Password credentials validated successfully',
+				instanceUrl: instanceUrl,
+			};
 		}
 
-		// Desencriptar password
-		const decryptedPassword = this.encryptionService.decrypt(connection.password);
-
-		// Autenticar con SOAP
-		const loginResult = await this.soapService.attemptLogin(
-			connection.login_url,
-			connection.username,
-			decryptedPassword,
-			connection.security_token
-		);
-
-		// Extraer instance_url
-		const instanceUrl = loginResult.serverUrl.split('/services/')[0];
-
-		// Actualizar la conexión con el nuevo token
-		await this.connectionRepository.update(
-			{ holding_id: holdingId },
-			{
-				access_token: loginResult.sessionId,
-				instance_url: instanceUrl,
-				salesforce_user_id: loginResult.userId,
-				token_issued_at: new Date(),
-				is_active: true,
-				last_sync_at: new Date(),
+		if (connection.auth_type === SalesforceAuthType.CLIENT_CREDENTIALS) {
+			if (!connection.client_id || !connection.client_secret) {
+				throw new NotFoundException('Incomplete client credentials. Please save complete credentials first.');
 			}
-		);
 
-		this.logger.log(`✅ Credentials validated successfully for holding ${holdingId}`);
+			const authData = await this.authService.authenticateWithClientCredentials(
+				connection.client_id,
+				connection.client_secret,
+				holdingId,
+				connection.login_url
+			);
 
-		return {
-			success: true,
-			message: 'Credentials validated successfully',
-			instanceUrl: instanceUrl,
-		};
+			await this.connectionRepository.update(
+				{ holding_id: holdingId },
+				{
+					access_token: authData.access_token,
+					instance_url: authData.instance_url,
+					salesforce_user_id: authData.id || null,
+					token_issued_at: new Date(parseInt(authData.issued_at)),
+					token_expires_at: authData.expires_in ? new Date(Date.now() + authData.expires_in * 1000) : null,
+					is_active: true,
+					last_sync_at: new Date(),
+				}
+			);
+
+			this.logger.log(`✅ Client credentials validated successfully for holding ${holdingId}`);
+
+			return {
+				success: true,
+				message: 'Client credentials validated successfully',
+				instanceUrl: authData.instance_url,
+			};
+		}
+
+		throw new BadRequestException(`Unknown auth_type: ${connection.auth_type}`);
 	}
 
 	async disconnect(holdingId: string) {
@@ -214,7 +254,7 @@ export class SalesforceService {
 
 		return {
 			success: true,
-			message: 'Credenciales guardadas. Usa "Conectar" para validar la conexión.',
+			message: 'Credenciales guardadas. Usa "Validar Credenciales" para activar la conexión.',
 		};
 	}
 
@@ -228,7 +268,7 @@ export class SalesforceService {
 
 		return {
 			success: true,
-			message: 'Credenciales guardadas. Usa "Conectar" para validar la conexión.',
+			message: 'Credenciales guardadas. Usa "Validar Credenciales" para activar la conexión.',
 		};
 	}
 
@@ -282,6 +322,78 @@ export class SalesforceService {
 
 	async syncOpportunitiesComplete(holdingId: string, dateFrom?: string, dateTo?: string, opportunityIds?: string[]) {
 		return this.syncCompleteService.syncOpportunitiesComplete(holdingId, dateFrom, dateTo, opportunityIds);
+	}
+
+	async normalizeTaxIds(holdingId: string): Promise<SalesforceTaxIdNormalizationResponseDto> {
+		return this.syncCompleteService.normalizeTaxIdsForHolding(holdingId);
+	}
+
+	async getDuplicateClientEntitiesTaxIds(
+		holdingId: string,
+		query: SalesforceDuplicateClientEntitiesQueryDto
+	): Promise<SalesforceDuplicateClientEntitiesResponseDto> {
+		return this.typeormService.getDuplicateClientEntitiesTaxIds(holdingId, query);
+	}
+
+	async getPendingClientEntitiesSalesforceSource(holdingId: string) {
+		const soql = `
+			SELECT Id, BusinessName__c, RUT__c, LastModifiedDate
+			FROM Account
+			WHERE RUT__c = 'pendiente'
+				OR BusinessName__c = 'pendiente'
+		`;
+		const { data } = await this.queryService.executeQuery(soql, holdingId);
+
+		return (data.records as SalesforceAccount[]).map((account) => ({
+			salesforceAccountId: account.Id,
+			salesforceBusinessName: account.BusinessName__c || null,
+			salesforceRut: account.RUT__c || null,
+			salesforceLastModifiedDate: account.LastModifiedDate || null,
+		}));
+	}
+
+	async previewLineItems(
+		holdingId: string,
+		previews: Array<{
+			opportunity: SalesforceOpportunityWithLineItems;
+			lineItems: SalesforceOpportunityLineItem[];
+		}>
+	) {
+		const items = await Promise.all(
+			previews.flatMap(({ opportunity, lineItems }) =>
+				lineItems.map((lineItem) => this.syncCompleteService.resolveLineItemPreview(holdingId, opportunity, lineItem))
+			)
+		);
+
+		return { items };
+	}
+
+	async previewClientEntities(holdingId: string, accounts: SalesforceAccount[]) {
+		const items = await Promise.all(
+			accounts.map((account) => this.syncCompleteService.resolveClientEntityPreview(holdingId, account))
+		);
+
+		return { items };
+	}
+
+	async syncOpportunitiesToStaging(holdingId: string, dateFrom?: string, dateTo?: string, opportunityIds?: string[]) {
+		return this.syncCompleteService.syncOpportunitiesToStaging(holdingId, dateFrom, dateTo, opportunityIds);
+	}
+
+	async syncAccountsToStaging(holdingId: string, filters: { letter?: string; subRange?: string; dateFrom?: string; dateTo?: string }) {
+		return this.syncCompleteService.syncAccountsToStaging(holdingId, filters);
+	}
+
+	async reclassifyAccountsStaging(holdingId: string) {
+		return this.syncCompleteService.reclassifyAccountsStaging(holdingId);
+	}
+
+	async processAccountsStaging(holdingId: string, salesforceIds?: string[], clientFields?: string[]) {
+		return this.syncCompleteService.processAccountsStaging(holdingId, salesforceIds, clientFields);
+	}
+
+	async processOpportunitiesStaging(holdingId: string, opportunityIds?: string[]) {
+		return this.syncCompleteService.processOpportunitiesStaging(holdingId, opportunityIds);
 	}
 
 	async syncAllConnectionsComplete() {

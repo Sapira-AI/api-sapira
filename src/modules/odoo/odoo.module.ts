@@ -99,6 +99,6 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		InvoiceProcessingService,
 		OdooIntegrationLogService,
 	],
-	exports: [OdooService, OdooInvoicesService, OdooConnectionService, FiscalPositionsService, TaxMappingService, DocumentTypeMappingService],
+	exports: [OdooService, OdooInvoicesService, OdooConnectionService, OdooPartnersService, FiscalPositionsService, TaxMappingService, DocumentTypeMappingService],
 })
 export class OdooModule {}

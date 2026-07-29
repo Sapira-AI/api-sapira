@@ -4,6 +4,11 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { ClassifyPartnersResponseDto, ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
+import {
+	ResolveOdooPartnerByTaxIdDto,
+	ResolveOdooPartnerByTaxIdResponseDto,
+} from './dtos/resolve-odoo-partner-by-tax-id.dto';
+import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
 import { OdooPartnersService } from './odoo-partners.service';
 
 @ApiTags('Odoo Partners')
@@ -114,6 +119,52 @@ export class OdooPartnersController {
 	@ApiBadRequestResponse({ description: 'Error al sincronizar partner' })
 	async syncPartnerById(@Headers('x-holding-id') holdingId: string, @Body() body: { odoo_partner_id: number }) {
 		return await this.odooPartnersService.syncPartnerById(holdingId, body.odoo_partner_id);
+	}
+
+	@Post('resolve-partner-by-tax-id')
+	@ApiOperation({
+		summary: 'Resolver y asociar partner Odoo por tax ID',
+		description:
+			'Busca una entidad legal del holding. Si no tiene odoo_partner_id, consulta Odoo y lo asigna sólo cuando obtiene una coincidencia única. Para VATs genéricos se requiere razón social.',
+	})
+	@ApiHeader({
+		name: 'x-holding-id',
+		description: 'ID del holding',
+		required: true,
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Resultado de la resolución de partner',
+		type: ResolveOdooPartnerByTaxIdResponseDto,
+	})
+	async resolvePartnerByTaxId(
+		@Headers('x-holding-id') holdingId: string,
+		@Body() dto: ResolveOdooPartnerByTaxIdDto
+	): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
+		return this.odooPartnersService.resolveAndLinkPartnerByTaxId(holdingId, dto.taxId, dto.legalName);
+	}
+
+	@Post('resolve-missing-partners')
+	@ApiOperation({
+		summary: 'Simular o completar partners Odoo faltantes por RUT',
+		description:
+			'Por defecto ejecuta un dry run. Solo asigna o actualiza odoo_partner_id cuando la coincidencia única de Odoo difiere del valor actual.',
+	})
+	@ApiHeader({
+		name: 'x-holding-id',
+		description: 'ID del holding',
+		required: true,
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Resultado de la simulación o actualización de partners faltantes',
+		type: ResolveMissingOdooPartnersResponseDto,
+	})
+	async resolveMissingPartners(
+		@Headers('x-holding-id') holdingId: string,
+		@Body() dto: ResolveMissingOdooPartnersDto
+	): Promise<ResolveMissingOdooPartnersResponseDto> {
+		return this.odooPartnersService.resolveMissingPartners(holdingId, dto);
 	}
 
 	@Get('status-counts')

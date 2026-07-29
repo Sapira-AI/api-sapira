@@ -1,13 +1,7 @@
 import { OdooInvoicesService } from './odoo-invoices.service';
 
 describe('OdooInvoicesService', () => {
-	const createService = () =>
-		new OdooInvoicesService(
-			{} as any,
-			{} as any,
-			{} as any,
-			{} as any
-		);
+	const createService = () => new OdooInvoicesService({} as any, {} as any, {} as any, {} as any);
 
 	it('usa el flujo de autoemit para Mexico', async () => {
 		const service = createService();

@@ -1,0 +1,463 @@
+{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "result": [
+        {
+            "id": 194496,
+            "authorized_transaction_ids": [],
+            "edi_show_cancel_button": false,
+            "edi_show_abandon_cancel_button": false,
+            "edi_show_force_cancel_button": false,
+            "l10n_mx_edi_is_cfdi_needed": true,
+            "l10n_mx_edi_update_payments_needed": false,
+            "l10n_mx_edi_update_sat_needed": true,
+            "l10n_cl_dte_acceptation_status": false,
+            "l10n_cl_dte_status": false,
+            "state": "posted",
+            "tax_closing_end_date": false,
+            "tax_closing_alert": false,
+            "l10n_uy_edi_error": false,
+            "extract_state": "no_extract_requested",
+            "extract_word_ids": [],
+            "extract_attachment_id": false,
+            "extract_can_show_send_button": false,
+            "extract_can_show_banners": false,
+            "extract_status": false,
+            "extract_error_message": "Ocurrió un error",
+            "edi_blocking_level": false,
+            "edi_error_count": 0,
+            "edi_web_services_to_process": "",
+            "edi_error_message": false,
+            "tax_lock_date_message": false,
+            "date": "2026-07-20",
+            "auto_post": "no",
+            "auto_post_until": false,
+            "partner_credit_warning": "",
+            "suspense_statement_line_id": false,
+            "transaction_ids": [],
+            "sale_order_count": 1,
+            "debit_note_count": 0,
+            "purchase_order_count": 0,
+            "deferred_move_ids": [],
+            "deferred_original_move_ids": [],
+            "deferred_entry_type": false,
+            "asset_id": false,
+            "count_asset": 0,
+            "draft_asset_exists": false,
+            "asset_id_display_name": "Activo",
+            "company_id": {
+                "id": 4,
+                "display_name": "SimpliRoute"
+            },
+            "journal_id": {
+                "id": 55,
+                "display_name": "CxC apertura - USD (USD)"
+            },
+            "show_name_warning": false,
+            "posted_before": true,
+            "move_type": "out_invoice",
+            "payment_state": "not_paid",
+            "invoice_filter_type_domain": "sale",
+            "suitable_journal_ids": [
+                39,
+                54,
+                55
+            ],
+            "currency_id": {
+                "id": 2,
+                "display_name": "USD"
+            },
+            "company_currency_id": {
+                "id": 33
+            },
+            "commercial_partner_id": {
+                "id": 11176
+            },
+            "bank_partner_id": {
+                "id": 8521
+            },
+            "display_qr_code": false,
+            "show_reset_to_draft_button": false,
+            "invoice_has_outstanding": true,
+            "is_move_sent": true,
+            "invoice_pdf_report_id": {
+                "id": 201154
+            },
+            "need_cancel_request": true,
+            "has_reconciled_entries": false,
+            "restrict_mode_hash_table": false,
+            "inalterable_hash": false,
+            "country_code": "MX",
+            "display_inactive_currency_warning": false,
+            "statement_line_id": false,
+            "statement_id": false,
+            "payment_id": false,
+            "tax_country_id": {
+                "id": 156
+            },
+            "tax_calculation_rounding_method": "round_per_line",
+            "tax_cash_basis_created_move_ids": [],
+            "quick_edit_mode": false,
+            "hide_post_button": true,
+            "duplicated_ref_ids": [],
+            "quick_encoding_vals": false,
+            "show_delivery_date": false,
+            "is_being_sent": false,
+            "show_update_fpos": false,
+            "highest_name": "A5015",
+            "name": "A5016",
+            "partner_id": {
+                "id": 11176,
+                "display_name": "Corporacion Ecuatoriana de Licores y Alimentos SA\nAV. ESPAÑA 14-14\nEcuador ‒ 0190096467001"
+            },
+            "quick_edit_total_amount": 0.0,
+            "ref": "",
+            "l10n_mx_edi_payment_method_id": {
+                "id": 22,
+                "display_name": "Por definir"
+            },
+            "l10n_mx_edi_payment_policy": "PPD",
+            "l10n_mx_edi_usage": "G03",
+            "tax_cash_basis_origin_move_id": false,
+            "purchase_id": false,
+            "purchase_vendor_bill_id": false,
+            "l10n_pe_edi_is_required": false,
+            "l10n_pe_edi_operation_type": false,
+            "l10n_mx_edi_cfdi_to_public": false,
+            "invoice_date": "2026-07-20",
+            "payment_reference": "A5016",
+            "partner_bank_id": {
+                "id": 12,
+                "display_name": "1.01.001.001 - BBVA BANCOMER (confiable)"
+            },
+            "invoice_date_due": "2026-08-19",
+            "invoice_payment_term_id": {
+                "id": 4,
+                "display_name": "30 días"
+            },
+            "delivery_date": false,
+            "l10n_latam_document_type_id": false,
+            "l10n_latam_document_number": "A5016",
+            "l10n_uy_edi_journal_type": false,
+            "l10n_uy_edi_cfe_state": false,
+            "l10n_uy_edi_document_id": false,
+            "l10n_uy_edi_cfe_uuid": false,
+            "edi_state": false,
+            "l10n_mx_edi_cfdi_state": "sent",
+            "l10n_mx_edi_cfdi_sat_state": "not_defined",
+            "l10n_mx_edi_cfdi_uuid": "b1de3806-acad-4f9e-957e-71e80f32fa0e",
+            "l10n_mx_edi_cfdi_origin": false,
+            "l10n_mx_edi_cfdi_cancel_id": false,
+            "l10n_co_edi_debit_note": false,
+            "l10n_co_edi_is_direct_payment": false,
+            "l10n_co_edi_is_support_document": false,
+            "l10n_co_edi_type": "1",
+            "l10n_co_edi_attachment_url": false,
+            "l10n_co_edi_operation_type": "10",
+            "l10n_co_edi_payment_option_id": {
+                "id": 1,
+                "display_name": "Instrumento no definido"
+            },
+            "l10n_co_edi_cufe_cude_ref": false,
+            "l10n_co_edi_description_code_credit": false,
+            "l10n_co_edi_description_code_debit": false,
+            "invoice_line_ids": [
+                {
+                    "id": 562014,
+                    "sequence": 0,
+                    "product_id": {
+                        "id": 484,
+                        "display_name": "Servicio Simpliroute recurrente"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nServicio recurrente Simpliroute - 1 Meses\n20/07/2026 a 19/08/2026",
+                    "l10n_uy_edi_addenda_ids": [],
+                    "account_id": {
+                        "id": 1865,
+                        "display_name": "401.01 Ventas y/o servicios gravados a la tasa general"
+                    },
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "has_abnormal_deferred_dates": false,
+                    "deferred_start_date": "2026-07-20",
+                    "deferred_end_date": "2026-08-19",
+                    "quantity": 22.0,
+                    "product_uom_category_id": {
+                        "id": 1
+                    },
+                    "product_uom_id": {
+                        "id": 1
+                    },
+                    "price_unit": 44.0,
+                    "discount": 50.0,
+                    "l10n_pe_edi_allowance_charge_reason_code": false,
+                    "tax_ids": [
+                        {
+                            "id": 90,
+                            "display_name": "IVA(0%) VENTAS"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "price_subtotal": 484.0,
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3,
+                        "display_name": "kg"
+                    },
+                    "l10n_mx_edi_customs_number": false,
+                    "price_total": 484.0,
+                    "partner_id": {
+                        "id": 11176
+                    },
+                    "currency_id": {
+                        "id": 2
+                    },
+                    "company_id": {
+                        "id": 4
+                    },
+                    "purchase_line_id": false,
+                    "purchase_order_id": false,
+                    "company_currency_id": {
+                        "id": 33
+                    },
+                    "display_type": "product",
+                    "tax_calculation_rounding_method": "round_per_line",
+                    "subscription_id": {
+                        "id": 5117
+                    }
+                }
+            ],
+            "narration": "<p>Licencia Mensual SimpliRoute<br>Clave SAT: 81112501 - Servicio de licencias del software del computador<br>02 - Sí objeto de impuesto</p>",
+            "tax_totals": {
+                "amount_untaxed": 484.0,
+                "amount_total": 484.0,
+                "formatted_amount_total": "$ 484,00",
+                "formatted_amount_untaxed": "$ 484,00",
+                "groups_by_subtotal": {
+                    "Monto neto": [
+                        {
+                            "group_key": 103,
+                            "tax_group_id": 103,
+                            "tax_group_name": "IVA 0%",
+                            "tax_group_amount": 0.0,
+                            "tax_group_base_amount": 484.0,
+                            "formatted_tax_group_amount": "$ 0,00",
+                            "formatted_tax_group_base_amount": "$ 484,00",
+                            "hide_base_amount": false,
+                            "tax_group_amount_company_currency": 0.0,
+                            "tax_group_base_amount_company_currency": 8441.83
+                        }
+                    ]
+                },
+                "subtotals": [
+                    {
+                        "name": "Monto neto",
+                        "amount": 484.0,
+                        "formatted_amount": "$ 484,00",
+                        "amount_company_currency": 8441.83
+                    }
+                ],
+                "subtotals_order": [
+                    "Monto neto"
+                ],
+                "display_tax_base": false,
+                "amount_total_company_currency": 8442.0
+            },
+            "amount_total": 484.0,
+            "invoice_payments_widget": false,
+            "amount_residual": 484.0,
+            "invoice_outstanding_credits_debits_widget": {
+                "outstanding": true,
+                "content": [
+                    {
+                        "journal_name": "A4996",
+                        "amount": 484.0,
+                        "currency_id": 2,
+                        "id": 548019,
+                        "move_id": 189888,
+                        "date": "2026-05-19",
+                        "account_payment_id": 11868
+                    }
+                ],
+                "move_id": 194496,
+                "title": "Créditos pendientes"
+            },
+            "line_ids": [
+                {
+                    "id": 562014,
+                    "account_id": {
+                        "id": 1865,
+                        "display_name": "401.01 Ventas y/o servicios gravados a la tasa general"
+                    },
+                    "partner_id": {
+                        "id": 11176,
+                        "display_name": "Corporacion Ecuatoriana de Licores y Alimentos SA"
+                    },
+                    "name": "Servicio Simpliroute recurrente\nServicio recurrente Simpliroute - 1 Meses\n20/07/2026 a 19/08/2026",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": false,
+                    "amount_currency": -484.0,
+                    "currency_id": {
+                        "id": 2,
+                        "display_name": "USD"
+                    },
+                    "tax_ids": [
+                        {
+                            "id": 90,
+                            "display_name": "IVA(0%) VENTAS"
+                        }
+                    ],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 0.0,
+                    "credit": 8441.83,
+                    "balance": -8441.83,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [],
+                    "tax_tag_invert": true,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 33
+                    },
+                    "display_type": "product",
+                    "company_id": {
+                        "id": 4
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 0,
+                    "account_internal_group": "income",
+                    "account_type": "income",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": {
+                        "id": 3
+                    },
+                    "l10n_mx_edi_customs_number": false
+                },
+                {
+                    "id": 562015,
+                    "account_id": {
+                        "id": 1836,
+                        "display_name": "105.01 Clientes nacionales"
+                    },
+                    "partner_id": {
+                        "id": 11176,
+                        "display_name": "Corporacion Ecuatoriana de Licores y Alimentos SA"
+                    },
+                    "name": "A5016",
+                    "analytic_distribution": false,
+                    "analytic_precision": 2,
+                    "date_maturity": "2026-08-19",
+                    "amount_currency": 484.0,
+                    "currency_id": {
+                        "id": 2,
+                        "display_name": "USD"
+                    },
+                    "tax_ids": [],
+                    "l10n_pe_edi_affectation_reason": false,
+                    "debit": 8441.83,
+                    "credit": 0.0,
+                    "balance": 8441.83,
+                    "discount_date": false,
+                    "discount_amount_currency": 0.0,
+                    "tax_tag_ids": [],
+                    "tax_tag_invert": false,
+                    "tax_line_id": false,
+                    "company_currency_id": {
+                        "id": 33
+                    },
+                    "display_type": "payment_term",
+                    "company_id": {
+                        "id": 4
+                    },
+                    "purchase_line_id": false,
+                    "sequence": 12000,
+                    "account_internal_group": "asset",
+                    "account_type": "asset_receivable",
+                    "l10n_mx_edi_qty_umt": 0.0,
+                    "l10n_mx_edi_umt_aduana_id": false,
+                    "l10n_mx_edi_customs_number": false
+                }
+            ],
+            "user_id": {
+                "id": 51
+            },
+            "invoice_user_id": {
+                "id": 51,
+                "display_name": "Fernanda Flores"
+            },
+            "team_id": {
+                "id": 1,
+                "display_name": "TARIFA FIJA"
+            },
+            "invoice_origin": "S04135",
+            "debit_origin_id": false,
+            "qr_code_method": false,
+            "l10n_uy_edi_addenda_ids": [],
+            "invoice_incoterm_id": false,
+            "l10n_uy_edi_cfe_sale_mode": false,
+            "l10n_uy_edi_cfe_transport_route": false,
+            "incoterm_location": false,
+            "fiscal_position_id": false,
+            "invoice_source_email": false,
+            "to_check": false,
+            "extract_document_uuid": false,
+            "campaign_id": false,
+            "medium_id": false,
+            "source_id": false,
+            "l10n_mx_edi_external_trade": false,
+            "l10n_mx_edi_external_trade_type": false,
+            "l10n_mx_edi_cer_source": false,
+            "l10n_latam_document_type_id_code": false,
+            "l10n_pe_detraction_number": false,
+            "l10n_pe_detraction_date": false,
+            "l10n_pe_dua_invoice_id": false,
+            "l10n_pe_service_modality": false,
+            "l10n_pe_usage_type_id": false,
+            "l10n_pe_edi_cancel_reason": false,
+            "l10n_pe_edi_refund_reason": false,
+            "l10n_pe_edi_charge_reason": false,
+            "l10n_pe_edi_legend": false,
+            "l10n_pe_edi_legend_value": false,
+            "edi_document_ids": [],
+            "reversed_entry_id": false,
+            "l10n_mx_closing_move": false,
+            "l10n_pe_sunat_transaction_type": false,
+            "l10n_mx_edi_document_ids": [
+                {
+                    "id": 8572,
+                    "attachment_id": {
+                        "id": 201153
+                    },
+                    "cancel_button_needed": true,
+                    "retry_button_needed": false,
+                    "show_button_needed": false,
+                    "message": false,
+                    "datetime": "2026-07-20 06:01:02",
+                    "move_id": {
+                        "id": 194496,
+                        "display_name": "A5016"
+                    },
+                    "state": "invoice_sent",
+                    "sat_state": "not_defined",
+                    "attachment_uuid": "b1de3806-acad-4f9e-957e-71e80f32fa0e",
+                    "attachment_origin": false,
+                    "cancellation_reason": false
+                }
+            ],
+            "l10n_cl_reference_ids": [],
+            "l10n_cl_dte_partner_status": false,
+            "l10n_cl_sii_send_ident": false,
+            "cession_partner_id": false,
+            "cession_number": 1,
+            "sworn_declaration": false,
+            "l10n_cl_aec_file": false,
+            "sii_xml_dte": false,
+            "sii_cesion_message": false,
+            "l10n_latam_available_document_type_ids": [],
+            "l10n_latam_use_documents": false,
+            "l10n_latam_manual_document_number": false,
+            "l10n_latam_internal_type": false,
+            "display_name": "A5016"
+        }
+    ]
+}

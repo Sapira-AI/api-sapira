@@ -6,12 +6,12 @@ import { AppLoggerService } from '@/logger/app-logger.service';
 
 import { SALESFORCE_FIELD_MAPPING_DEFAULTS, SALESFORCE_FIELD_MAPPING_OBJECT_TYPES } from '../constants/salesforce-field-mapping-defaults';
 import {
-	CreateObjectMappingDto,
 	CreateFieldMappingDto,
+	CreateObjectMappingDto,
 	CreateProductMappingDto,
 	CreateQuoteTypeMappingDto,
-	UpdateObjectMappingDto,
 	UpdateFieldMappingDto,
+	UpdateObjectMappingDto,
 	UpdateProductMappingDto,
 	UpdateQuoteTypeMappingDto,
 } from '../dtos/salesforce-mapping.dto';
@@ -66,6 +66,8 @@ export class SalesforceMappingService {
 						is_active: true,
 						data_type: entry.data_type || null,
 						default_value: entry.default_value ?? null,
+						transformation_key: entry.transformation_key ?? null,
+						transformation_config: null,
 					})
 				);
 			}
@@ -241,6 +243,8 @@ export class SalesforceMappingService {
 				is_active: dto.is_active ?? true,
 				data_type: dto.data_type || null,
 				default_value: dto.default_value || null,
+				transformation_key: (dto.transformation_key as SalesforceFieldMapping['transformation_key']) || null,
+				transformation_config: dto.transformation_config || null,
 			})
 		);
 	}

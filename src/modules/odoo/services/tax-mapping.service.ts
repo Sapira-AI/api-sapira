@@ -87,7 +87,9 @@ export class TaxMappingService {
 			];
 			this.logger.log(
 				`🎯 Impuestos candidatos agregados para producto [${productTaxIds.join(', ')}]: ${
-					candidateTaxIds.length > 0 ? `[${candidateTaxIds.join(', ')}]` : 'sin candidatos por mapeo; se mantendrán impuestos originales donde aplique'
+					candidateTaxIds.length > 0
+						? `[${candidateTaxIds.join(', ')}]`
+						: 'sin candidatos por mapeo; se mantendrán impuestos originales donde aplique'
 				}`
 			);
 
@@ -111,7 +113,7 @@ export class TaxMappingService {
 										tax_dest_amount: mapping.tax_dest_amount,
 										tax_dest_type: mapping.tax_dest_type,
 									}))
-							  )
+								)
 							: 'sin candidatos explícitos; candidato implícito = mantener impuesto original'
 					}`
 				);
@@ -119,9 +121,7 @@ export class TaxMappingService {
 				const mapping = fiscalPosition.complete_tax_mappings.find((m) => m.tax_src_id === taxId);
 				this.logger.debug(
 					`🔎 Evaluando tax ${taxId} contra posición fiscal ${fiscalPositionId}: ${
-						mapping
-							? `match src=${mapping.tax_src_id} -> dest=${mapping.tax_dest_id ?? 'null'}`
-							: 'sin mapeo específico'
+						mapping ? `match src=${mapping.tax_src_id} -> dest=${mapping.tax_dest_id ?? 'null'}` : 'sin mapeo específico'
 					}`
 				);
 
@@ -166,9 +166,7 @@ export class TaxMappingService {
 			// Eliminar duplicados
 			const uniqueTaxIds = [...new Set(finalTaxIds)];
 			if (uniqueTaxIds.length !== finalTaxIds.length) {
-				this.logger.debug(
-					`🧹 Eliminando duplicados tras mapeo fiscal: [${finalTaxIds.join(', ')}] -> [${uniqueTaxIds.join(', ')}]`
-				);
+				this.logger.debug(`🧹 Eliminando duplicados tras mapeo fiscal: [${finalTaxIds.join(', ')}] -> [${uniqueTaxIds.join(', ')}]`);
 			}
 
 			this.logger.log(
@@ -256,7 +254,7 @@ export class TaxMappingService {
 									company_id: Array.isArray(tax.company_id) ? tax.company_id[0] : tax.company_id,
 									company_name: Array.isArray(tax.company_id) ? tax.company_id[1] : null,
 								}))
-						  )
+							)
 						: '[]'
 				}`
 			);
@@ -322,7 +320,7 @@ export class TaxMappingService {
 									company_id: Array.isArray(tax.company_id) ? tax.company_id[0] : tax.company_id,
 									company_name: Array.isArray(tax.company_id) ? tax.company_id[1] : null,
 								}))
-						  )
+							)
 						: '[]'
 				}`
 			);
@@ -337,9 +335,7 @@ export class TaxMappingService {
 				taxesData.find((tax: any) => /iva/i.test(String(tax.name))) ||
 				taxesData[0];
 
-			this.logger.log(
-				`✅ Compañía ${companyId}: impuesto 0% seleccionado = ${preferredTax.id} (${preferredTax.name})`
-			);
+			this.logger.log(`✅ Compañía ${companyId}: impuesto 0% seleccionado = ${preferredTax.id} (${preferredTax.name})`);
 
 			return preferredTax.id;
 		} catch (error) {

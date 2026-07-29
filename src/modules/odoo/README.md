@@ -24,7 +24,32 @@ Este módulo implementa la sincronización de datos desde Odoo ERP hacia la apli
     -   Paginación
     -   Sincronización independiente
 
-### 3. Emisión de facturas a Odoo
+### 3. Resolver partner por tax ID
+
+-   **Endpoint**: `POST /odoo-partners/resolve-partner-by-tax-id`
+-   **Headers**: `Authorization: Bearer <token>`, `X-Holding-Id: <holding-id>`
+-   **Body**: `{ "taxId": "76.517.784-7", "legalName": "Razón Social SpA" }`
+-   **Comportamiento**:
+    -   Asocia automáticamente `odoo_partner_id` cuando Odoo devuelve una coincidencia única por VAT.
+    -   Si la entidad legal ya tiene `odoo_partner_id`, consulta ese partner para devolver sus datos actuales.
+    -   Para VATs normales, asigna el partner sólo si Odoo devuelve una coincidencia única por VAT.
+    -   Para VATs genéricos de exportación, exige `legalName` y asigna sólo si VAT más razón social devuelven una única coincidencia.
+    -   Nunca crea partners; ante cero o múltiples candidatos devuelve `not_found` o `ambiguous` sin modificar datos.
+    -   La edición manual de una razón social normaliza el tax ID antes de invocar este endpoint; por ello se eliminan espacios y puntos, conservando guiones, barras y letras.
+    -   La respuesta incluye `partnerData` (`legal_name`, `legal_address`, `email`, `phone`) para que la interfaz solicite confirmación explícita antes de actualizar esos campos en Sapira.
+
+### 4. Resolver partners faltantes por RUT
+
+-   **Endpoint**: `POST /odoo-partners/resolve-missing-partners`
+-   **Headers**: `Authorization: Bearer <token>`, `X-Holding-Id: <holding-id>`
+-   **Body**: `{ "dryRun": true, "sampleSize": 20 }`
+-   **Comportamiento**:
+    -   El modo por defecto es `dryRun`: reporta entidades evaluadas, asociaciones posibles, no resueltas y ejemplos, sin escribir datos.
+    -   Con `dryRun: false`, asigna o actualiza `odoo_partner_id` solo cuando Odoo devuelve una coincidencia única distinta al valor actual.
+    -   Las entidades cuyo `odoo_partner_id` ya coincide se informan como `unchanged` y no se escriben.
+    -   Para RUTs genéricos, requiere coincidencia adicional de razón social.
+
+### 5. Emisión de facturas a Odoo
 
 -   `auto_invoice = true` crea el draft, publica la factura y ejecuta el paso adicional de emisión electrónica según país.
 -   Países con wizard `account.move.send` + `action_send_and_print`: `Colombia`, `México` y `Uruguay`.

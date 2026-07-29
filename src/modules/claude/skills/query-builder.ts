@@ -19,11 +19,25 @@ export class DynamicQueryBuilder {
 		// Detectar si hay alias de tabla (ej: "FROM table alias" o "FROM table AS alias")
 		// Excluir palabras reservadas como WHERE, JOIN, LEFT, RIGHT, etc.
 		const tableAliasMatch = baseQuery.match(/FROM\s+\w+\s+(?:AS\s+)?(\w+)(?=\s)/i);
-		const reservedWords = ['WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'CROSS', 'ON', 'AND', 'OR', 'GROUP', 'ORDER', 'LIMIT', 'OFFSET', 'HAVING'];
-		const tablePrefix = tableAliasMatch && !reservedWords.includes(tableAliasMatch[1].toUpperCase()) 
-			? `${tableAliasMatch[1]}.` 
-			: '';
-		
+		const reservedWords = [
+			'WHERE',
+			'JOIN',
+			'LEFT',
+			'RIGHT',
+			'INNER',
+			'OUTER',
+			'CROSS',
+			'ON',
+			'AND',
+			'OR',
+			'GROUP',
+			'ORDER',
+			'LIMIT',
+			'OFFSET',
+			'HAVING',
+		];
+		const tablePrefix = tableAliasMatch && !reservedWords.includes(tableAliasMatch[1].toUpperCase()) ? `${tableAliasMatch[1]}.` : '';
+
 		const whereClauses: string[] = [`${tablePrefix}holding_id = $1`];
 		const values: any[] = [holdingId];
 		let paramIndex = 2;

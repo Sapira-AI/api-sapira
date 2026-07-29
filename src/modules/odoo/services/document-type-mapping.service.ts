@@ -123,11 +123,7 @@ export class DocumentTypeMappingService {
 		}
 	}
 
-	private findDocumentTypeIdInCache(
-		holdingCache: Map<string, DocumentTypeMapping[]>,
-		documentCode: string,
-		countryName?: string
-	): number | null {
+	private findDocumentTypeIdInCache(holdingCache: Map<string, DocumentTypeMapping[]>, documentCode: string, countryName?: string): number | null {
 		const candidates = holdingCache.get(documentCode);
 		if (!candidates || candidates.length === 0) {
 			return null;
