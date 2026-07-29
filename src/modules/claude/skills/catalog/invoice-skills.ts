@@ -17,7 +17,8 @@ Usar esta skill cuando el usuario pregunte por:
 
 NOTA: Usa datos de revenue_schedule_monthly (RSM) que tiene la facturación consolidada por producto.`,
 
-	emptyMessage: 'No hay datos de facturación disponibles para el período solicitado. Esto puede ocurrir si no hay contratos con facturación registrada en ese mes.',
+	emptyMessage:
+		'No hay datos de facturación disponibles para el período solicitado. Esto puede ocurrir si no hay contratos con facturación registrada en ese mes.',
 
 	parameters: {
 		required: [],

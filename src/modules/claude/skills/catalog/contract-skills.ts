@@ -469,7 +469,15 @@ Usar cuando el usuario pregunte por:
 		widgetConfig: {
 			type: 'table',
 			title: 'Contratos del Cliente',
-			columns: ['contract_number', 'status', 'type', 'contract_start_date', 'contract_end_date', 'days_until_expiry', 'total_value_system_currency'],
+			columns: [
+				'contract_number',
+				'status',
+				'type',
+				'contract_start_date',
+				'contract_end_date',
+				'days_until_expiry',
+				'total_value_system_currency',
+			],
 			columnLabels: {
 				contract_number: 'N° Contrato',
 				status: 'Estado',

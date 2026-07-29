@@ -908,7 +908,9 @@ export class InvoiceSchedulerService {
 		// Log resumen
 		if (isExportInvoice) {
 			if (normalizedCountry === 'mexico') {
-				this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN MX - con impuesto 0% cuando exista)`);
+				this.logger.log(
+					`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN MX - con impuesto 0% cuando exista)`
+				);
 			} else {
 				this.logger.log(`✅ Factura ${invoice.invoice_number}: ${invoiceLines.length} items procesados (EXPORTACIÓN - sin impuestos)`);
 			}
@@ -997,11 +999,7 @@ export class InvoiceSchedulerService {
 			this.logger.log(`📎 Procesando ${invoice.references.length} referencias para factura ${invoice.invoice_number}`);
 
 			const referencesPromises = invoice.references.map(async (ref) => {
-				const odooDocTypeId = await this.getOdooDocumentTypeId(
-					invoice.holding_id,
-					ref.document_type_code,
-					invoice.company?.country
-				);
+				const odooDocTypeId = await this.getOdooDocumentTypeId(invoice.holding_id, ref.document_type_code, invoice.company?.country);
 
 				if (!odooDocTypeId) {
 					this.logger.warn(
@@ -1160,10 +1158,7 @@ export class InvoiceSchedulerService {
 
 			const invoiceItems = invoice.items || [];
 			const amountInvoiceCurrency = Number(invoice.amount_contract_currency) * exchangeRate;
-			const vatInvoiceCurrency = invoiceItems.reduce(
-				(sum, item) => sum + Number(item.tax_amount_contract_currency || 0) * exchangeRate,
-				0
-			);
+			const vatInvoiceCurrency = invoiceItems.reduce((sum, item) => sum + Number(item.tax_amount_contract_currency || 0) * exchangeRate, 0);
 			const totalInvoiceCurrency =
 				invoiceItems.length > 0
 					? invoiceItems.reduce((sum, item) => sum + Number(item.total_contract_currency || 0) * exchangeRate, 0)

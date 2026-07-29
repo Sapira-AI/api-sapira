@@ -9,7 +9,7 @@ import { SalesforceSyncCompleteService } from './services/salesforce-sync-comple
 
 /**
  * Scheduler para sincronización automática de Salesforce
- * Ejecuta sincronización completa diariamente a las 8:30 AM
+ * Actualiza staging con cambios del día anterior y procesa solo registros sin bloqueo.
  */
 @Injectable()
 export class SalesforceScheduler {
@@ -33,7 +33,7 @@ export class SalesforceScheduler {
 		const jobId = uuidv4();
 		const startTime = new Date();
 
-		this.logger.log('🔄 Starting daily Salesforce complete sync at 8:30 AM');
+		this.logger.log('🔄 Starting daily Salesforce staging sync at 8:30 AM');
 		this.logger.log(`📝 Job ID: ${jobId}`);
 
 		// Crear registro inicial en MongoDB
@@ -56,7 +56,7 @@ export class SalesforceScheduler {
 		await job.save();
 
 		try {
-			const results = await this.syncCompleteService.syncAllActiveConnectionsComplete();
+			const results = await this.syncCompleteService.syncAllActiveConnectionsDaily();
 
 			const successCount = results.filter((r) => r.success).length;
 			const failedCount = results.filter((r) => !r.success).length;

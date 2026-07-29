@@ -19,7 +19,8 @@ Usar esta skill cuando el usuario pregunte por:
 El CMRR ya viene calculado en la tabla revenue_schedule_monthly.
 NOTA: Si no hay datos de CMRR, puede ser que el holding no tenga contratos con fecha de booking configurada.`,
 
-	emptyMessage: 'No hay datos de CMRR disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada, o si no hay datos de revenue_schedule_monthly cargados. Puedes intentar consultar el MRR en su lugar, que usa la fecha de inicio de servicio.',
+	emptyMessage:
+		'No hay datos de CMRR disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada, o si no hay datos de revenue_schedule_monthly cargados. Puedes intentar consultar el MRR en su lugar, que usa la fecha de inicio de servicio.',
 
 	parameters: {
 		required: [],
@@ -128,7 +129,8 @@ Usar esta skill cuando el usuario pregunte por:
 
 NOTA: Si no hay datos de CMRR, puede ser que el holding no tenga contratos con fecha de booking configurada.`,
 
-	emptyMessage: 'No hay datos de CMRR por compañía disponibles. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada.',
+	emptyMessage:
+		'No hay datos de CMRR por compañía disponibles. Esto puede ocurrir si el holding no tiene contratos con fecha de booking configurada.',
 
 	parameters: {
 		required: [],
@@ -220,7 +222,8 @@ Usar esta skill cuando el usuario pregunte por:
 
 Los valores de momentum disponibles son: NEW, UPSELL, CROSS-SELL, DOWNSELL, CHURN, RENEWAL, REACTIVATION, BOP.`,
 
-	emptyMessage: 'No hay datos de momentum disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene movimientos de MRR registrados en ese período.',
+	emptyMessage:
+		'No hay datos de momentum disponibles para el período solicitado. Esto puede ocurrir si el holding no tiene movimientos de MRR registrados en ese período.',
 
 	parameters: {
 		required: [],
@@ -424,9 +427,4 @@ Muestra el desglose de momentum (NEW, UPSELL, CROSS-SELL, DOWNSELL, CHURN, RENEW
 	},
 };
 
-export const CMRR_MOMENTUM_SKILLS = [
-	GET_CMRR_SKILL,
-	GET_CMRR_BY_COMPANY_SKILL,
-	GET_MRR_MOMENTUM_SKILL,
-	GET_MRR_MOMENTUM_BY_PRODUCT_SKILL,
-];
+export const CMRR_MOMENTUM_SKILLS = [GET_CMRR_SKILL, GET_CMRR_BY_COMPANY_SKILL, GET_MRR_MOMENTUM_SKILL, GET_MRR_MOMENTUM_BY_PRODUCT_SKILL];

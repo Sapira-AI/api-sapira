@@ -8,6 +8,11 @@ import { Client } from '@/databases/postgresql/entities/client.entity';
 import { Product } from '@/modules/odoo/entities/products.entity';
 
 import { ClientContact } from '../entities/client-contact.entity';
+import {
+	SalesforceDuplicateClientEntitiesQueryDto,
+	SalesforceDuplicateClientEntitiesResponseDto,
+	SalesforceDuplicateTaxIdGroupDto,
+} from '../dtos/salesforce-duplicate-client-entities.dto';
 import { MasterData } from '../entities/master-data.entity';
 import { QuoteItem } from '../entities/quote-item.entity';
 import { QuoteStage } from '../entities/quote-stage.entity';
@@ -15,6 +20,13 @@ import { Quote } from '../entities/quote.entity';
 import { SalesforceObjectMapping } from '../entities/salesforce-object-mapping.entity';
 import { SalesforceProductMapping } from '../entities/salesforce-product-mapping.entity';
 import { Seller } from '../entities/seller.entity';
+
+export interface ClientEntityTaxIdResolution {
+	entities: Pick<
+		ClientEntity,
+		'id' | 'client_id' | 'legal_name' | 'tax_id' | 'country' | 'legal_address' | 'economic_activity' | 'client_number'
+	>[];
+}
 
 @Injectable()
 export class SalesforceTypeOrmService {
@@ -156,6 +168,14 @@ export class SalesforceTypeOrmService {
 		if (items.length === 0) return;
 
 		try {
+			const quoteId = items[0].quote_id;
+			const existingItems = await this.quoteItemRepository.find({
+				where: { quote_id: quoteId },
+			});
+			const buildItemKey = (item: { quote_item_number?: string | null; salesforce_line_item_id?: string | null }) =>
+				item.quote_item_number || item.salesforce_line_item_id || null;
+			const existingByKey = new Map(existingItems.map((item) => [buildItemKey(item), item]));
+
 			// Logging detallado de is_recurring antes de guardar
 			items.forEach((item, idx) => {
 				this.logger.debug(
@@ -163,8 +183,45 @@ export class SalesforceTypeOrmService {
 				);
 			});
 
-			await this.quoteItemRepository.save(items);
-			this.logger.log(`✅ ${items.length} quote items guardados exitosamente`);
+			const itemsToSave = items.map((item) => {
+				const existing = existingByKey.get(buildItemKey(item));
+				return existing ? { ...existing, ...item, id: existing.id } : item;
+			});
+
+			await this.quoteItemRepository.save(itemsToSave);
+
+			const incomingKeys = new Set(items.map((item) => buildItemKey(item)).filter(Boolean));
+			const itemsToRemove = existingItems.filter((item) => {
+				const key = buildItemKey(item);
+				return key && !incomingKeys.has(key);
+			});
+
+			if (itemsToRemove.length > 0) {
+				const removalIds = itemsToRemove.map((item) => item.id);
+				const linkedRows: Array<{ id: string; quote_item_number: string | null }> = await this.quoteItemRepository.query(
+					`
+						SELECT qi.id, qi.quote_item_number
+						FROM quote_items qi
+						INNER JOIN contract_items ci ON ci.quote_item_id = qi.id
+						WHERE qi.id = ANY($1::uuid[])
+					`,
+					[removalIds]
+				);
+
+				if (linkedRows.length > 0) {
+					const linkedIdentifiers = linkedRows
+						.map((row) => row.quote_item_number || row.id)
+						.slice(0, 5)
+						.join(', ');
+					throw new Error(
+						`No se pueden eliminar quote_items vinculados a contract_items. Items afectados: ${linkedIdentifiers}`
+					);
+				}
+
+				await this.quoteItemRepository.delete(removalIds);
+			}
+
+			this.logger.log(`✅ ${itemsToSave.length} quote items sincronizados exitosamente`);
 		} catch (error: any) {
 			this.logger.error(`Error creating quote items: ${error.message}`);
 			throw error;
@@ -217,13 +274,73 @@ export class SalesforceTypeOrmService {
 		return client?.id || null;
 	}
 
-	async getClientEntityByTaxId(holdingId: string, taxId: string): Promise<any | null> {
-		const clientEntity = await this.clientEntityRepository.findOne({
+	async resolveClientEntitiesByTaxId(holdingId: string, taxId: string): Promise<ClientEntityTaxIdResolution> {
+		const candidates = await this.clientEntityRepository.find({
 			where: { holding_id: holdingId, tax_id: taxId },
-			select: ['id', 'client_id', 'legal_name'],
+			select: ['id', 'client_id', 'legal_name', 'tax_id', 'country', 'legal_address', 'economic_activity', 'client_number'],
 		});
 
-		return clientEntity || null;
+		return { entities: candidates };
+	}
+
+	async getDuplicateClientEntitiesTaxIds(
+		holdingId: string,
+		query: SalesforceDuplicateClientEntitiesQueryDto
+	): Promise<SalesforceDuplicateClientEntitiesResponseDto> {
+		const page = query.page || 1;
+		const limit = query.limit || 50;
+		const normalizedTaxId = `UPPER(NULLIF(REGEXP_REPLACE(entity.tax_id, '[[:space:].]+', '', 'g'), ''))`;
+		const genericVatNormalization = `UPPER(NULLIF(REGEXP_REPLACE(generic_vat.vat, '[[:space:].]+', '', 'g'), ''))`;
+		const duplicateGroupsQuery = this.clientEntityRepository
+			.createQueryBuilder('entity')
+			.where('entity.holding_id = :holdingId', { holdingId })
+			.andWhere(`${normalizedTaxId} IS NOT NULL`)
+			.andWhere(`
+				NOT EXISTS (
+					SELECT 1
+					FROM generic_export_vats generic_vat
+					WHERE generic_vat.is_active = true
+						AND ${genericVatNormalization} = ${normalizedTaxId}
+				)
+			`)
+			.groupBy(normalizedTaxId)
+			.having('COUNT(*) > 1');
+		const total = (await duplicateGroupsQuery.clone().select(normalizedTaxId, 'taxId').getRawMany()).length;
+		const rows = await duplicateGroupsQuery
+			.clone()
+			.select(normalizedTaxId, 'taxId')
+			.addSelect('COUNT(*)', 'count')
+			.addSelect(
+				`
+					json_agg(
+						json_build_object(
+							'id', entity.id,
+							'legalName', entity.legal_name,
+							'clientId', entity.client_id,
+							'country', entity.country
+						)
+						ORDER BY entity.id
+					)
+				`,
+				'entities'
+			)
+			.orderBy(normalizedTaxId, 'ASC')
+			.offset((page - 1) * limit)
+			.limit(limit)
+			.getRawMany();
+		const items: SalesforceDuplicateTaxIdGroupDto[] = rows.map((row) => ({
+			taxId: row.taxId,
+			count: Number(row.count),
+			entities: typeof row.entities === 'string' ? JSON.parse(row.entities) : row.entities,
+		}));
+
+		return {
+			items,
+			total,
+			page,
+			limit,
+			totalPages: Math.ceil(total / limit) || 1,
+		};
 	}
 
 	async createClientEntityClient(clientEntityId: string, clientId: string, holdingId: string): Promise<void> {

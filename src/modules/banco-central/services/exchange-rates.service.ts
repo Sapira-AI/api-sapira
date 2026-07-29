@@ -9,6 +9,7 @@ import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from '../dtos/sync
 import { ExchangeRateMonthlyAvgEntity } from '../entities/exchange-rate-monthly-avg.entity';
 import { ExchangeRateEntity } from '../entities/exchange-rate.entity';
 import { IndicadorEconomico } from '../interfaces/banco-central.interface';
+
 import { BancoCentralSchemaService } from './banco-central-schema.service';
 
 interface CurrencyMapping {

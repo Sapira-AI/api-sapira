@@ -3,17 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import {
+	SalesforceFieldMapping,
+	SalesforceFieldMappingObjectType,
+	SalesforceFieldTransformationKey,
+} from '../entities/salesforce-field-mapping.entity';
+import { SalesforceQuoteTypeMapping } from '../entities/salesforce-quote-type-mapping.entity';
+import {
 	buildCustomFields,
 	formatAddress,
 	generateClientNumber,
 	isoToCountryName,
 	isRecurring,
+	normalizeTaxId,
 	parseSalesforceDate,
 	transformBillingMethod,
 	transformToBoolean,
 } from '../utils/salesforce-transformers';
-import { SalesforceFieldMapping, SalesforceFieldMappingObjectType } from '../entities/salesforce-field-mapping.entity';
-import { SalesforceQuoteTypeMapping } from '../entities/salesforce-quote-type-mapping.entity';
 
 import { SalesforceMappingService } from './salesforce-mapping.service';
 
@@ -58,7 +63,7 @@ export class SalesforceFieldMappingEngineService {
 
 		for (const mapping of mappings) {
 			const rawValue = this.extractSourceValue(sourceRecord, mapping.salesforce_field);
-			const transformedValue = await this.transformMappedValue(holdingId, objectType, mapping.sapira_field, rawValue, sourceRecord, context, mapping.default_value);
+			const transformedValue = await this.transformMappedValue(holdingId, mapping, rawValue, sourceRecord, context);
 
 			if (transformedValue === undefined || transformedValue === null || transformedValue === '') {
 				continue;
@@ -88,67 +93,129 @@ export class SalesforceFieldMappingEngineService {
 				return null;
 			}
 
-			return current[key];
+			return this.readPathSegment(current, key);
 		}, sourceRecord);
+	}
+
+	private readPathSegment(current: any, segment: string): any {
+		const match = segment.match(/^([^\[\]]+)(?:\[(\d+)\])?$/);
+		if (!match) {
+			return current?.[segment];
+		}
+
+		const [, propertyName, arrayIndex] = match;
+		const nextValue = current?.[propertyName];
+		if (arrayIndex === undefined) {
+			return nextValue;
+		}
+
+		if (!Array.isArray(nextValue)) {
+			return null;
+		}
+
+		return nextValue[Number(arrayIndex)] ?? null;
 	}
 
 	private async transformMappedValue(
 		holdingId: string,
-		objectType: SalesforceFieldMappingObjectType,
-		sapiraField: string,
+		mapping: SalesforceFieldMapping,
 		rawValue: any,
 		sourceRecord: Record<string, any>,
-		context: MappingContext,
-		defaultValue?: string | null
+		context: MappingContext
 	): Promise<any> {
-		const fallbackValue = defaultValue ?? null;
+		const sapiraField = mapping.sapira_field;
+		const fallbackValue = mapping.default_value ?? null;
+		const transformationKey = this.resolveTransformationKey(mapping);
 
-		switch (sapiraField) {
-			case 'client_number':
+		switch (transformationKey) {
+			case 'client_number_fallback':
 				return generateClientNumber(sourceRecord.Id, rawValue || fallbackValue || undefined);
-			case 'country':
+			case 'country_name':
 				return isoToCountryName(rawValue || fallbackValue);
-			case 'legal_address': {
+			case 'legal_address_concat': {
 				const values = Array.isArray(rawValue) ? rawValue : [rawValue];
 				return formatAddress(values[0], values[1], values[2], values[3], values[4]);
 			}
-			case 'quote_type':
+			case 'quote_type_mapping':
 				return this.resolveQuoteType(holdingId, rawValue || fallbackValue);
-			case 'quote_date': {
+			case 'quote_date_with_close_fallback': {
 				const created = parseSalesforceDate(rawValue || undefined);
 				return created || parseSalesforceDate(sourceRecord.CloseDate || undefined);
 			}
-			case 'booking_date':
-			case 'start_date':
-			case 'end_date':
+			case 'salesforce_date':
 				return parseSalesforceDate(rawValue || undefined);
-			case 'requires_contract_document':
-			case 'requires_references_for_billing':
+			case 'salesforce_boolean':
 				return transformToBoolean(rawValue);
-			case 'is_recurring':
+			case 'recurring_flag':
 				return isRecurring(rawValue || undefined);
 			case 'billing_method':
 				return transformBillingMethod(rawValue || context.opportunity?.Forma_de_pago__c || fallbackValue || undefined);
 			case 'billing_frequency':
-				return rawValue || context.opportunity?.Account?.Per_odo_de_facturaci_n__c || context.opportunity?.Modalidad_de_pago__c || fallbackValue;
-			case 'custom_fields':
+				return (
+					rawValue || context.opportunity?.Account?.Per_odo_de_facturaci_n__c || context.opportunity?.Modalidad_de_pago__c || fallbackValue
+				);
+			case 'custom_fields_bundle':
 				return buildCustomFields(context.lineItem || sourceRecord, context.opportunity?.Account?.Lista_de_Precio__r?.Tipo__c || null);
+			case 'tax_id_normalized':
+				return normalizeTaxId(rawValue || fallbackValue);
+			case 'direct':
+			default:
+				return this.resolveDirectValue(sapiraField, rawValue, sourceRecord, fallbackValue);
+		}
+	}
+
+	private resolveTransformationKey(mapping: SalesforceFieldMapping): SalesforceFieldTransformationKey {
+		if (mapping.transformation_key) {
+			return mapping.transformation_key;
+		}
+
+		switch (mapping.sapira_field) {
+			case 'client_number':
+				return 'client_number_fallback';
+			case 'country':
+				return 'country_name';
+			case 'legal_address':
+				return 'legal_address_concat';
+			case 'quote_type':
+				return 'quote_type_mapping';
+			case 'quote_date':
+				return 'quote_date_with_close_fallback';
+			case 'booking_date':
+			case 'start_date':
+			case 'end_date':
+				return 'salesforce_date';
+			case 'requires_contract_document':
+			case 'requires_references_for_billing':
+				return 'salesforce_boolean';
+			case 'is_recurring':
+				return 'recurring_flag';
+			case 'billing_method':
+				return 'billing_method';
+			case 'billing_frequency':
+				return 'billing_frequency';
+			case 'custom_fields':
+				return 'custom_fields_bundle';
+			case 'tax_id':
+				return 'tax_id_normalized';
+			default:
+				return 'direct';
+		}
+	}
+
+	private resolveDirectValue(sapiraField: string, rawValue: any, sourceRecord: Record<string, any>, fallbackValue?: string | null): Promise<any> {
+		switch (sapiraField) {
 			case 'salesforce_account_id':
 			case 'salesforce_opportunity_id':
 			case 'salesforce_line_item_id':
 			case 'salesforce_product_id':
 			case 'quote_item_number':
-				return rawValue || sourceRecord.Id || fallbackValue;
+				return Promise.resolve(rawValue || sourceRecord.Id || fallbackValue);
 			default:
 				if (rawValue === null || rawValue === undefined || rawValue === '') {
-					return fallbackValue;
+					return Promise.resolve(fallbackValue);
 				}
 
-				if (objectType === 'opportunity' && sapiraField === 'notes') {
-					return rawValue;
-				}
-
-				return rawValue;
+				return Promise.resolve(rawValue);
 		}
 	}
 

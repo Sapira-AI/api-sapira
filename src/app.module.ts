@@ -33,6 +33,7 @@ import { EmailModule } from './modules/email/email.module';
 import { EmailsModule } from './modules/emails/emails.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OdooModule } from './modules/odoo/odoo.module';
 import { SalesforceModule } from './modules/salesforce/salesforce.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
@@ -87,6 +88,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		PostgreSQLDatabaseModule,
 		HoldingsModule,
 		InvoicesModule,
+		NotificationsModule,
 		UsersModule,
 		ClientsModule,
 		OdooModule,

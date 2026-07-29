@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class SalesforceProductMappingDto {
 	@ApiProperty({ description: 'ID del producto en Salesforce' })
@@ -256,6 +256,34 @@ export class SalesforceFieldMappingDto {
 	@IsString()
 	@IsOptional()
 	default_value?: string;
+
+	@ApiPropertyOptional({
+		description: 'Transformación configurable aplicada al valor origen antes de persistirlo en Sapira',
+		enum: [
+			'direct',
+			'client_number_fallback',
+			'country_name',
+			'legal_address_concat',
+			'quote_type_mapping',
+			'salesforce_date',
+			'quote_date_with_close_fallback',
+			'salesforce_boolean',
+			'recurring_flag',
+			'billing_method',
+			'billing_frequency',
+			'custom_fields_bundle',
+		],
+	})
+	@IsString()
+	@IsOptional()
+	transformation_key?: string;
+
+	@ApiPropertyOptional({
+		description: 'Configuración opcional adicional para la transformación',
+	})
+	@IsObject()
+	@IsOptional()
+	transformation_config?: Record<string, unknown>;
 }
 
 export class CreateFieldMappingDto extends SalesforceFieldMappingDto {}
@@ -296,4 +324,14 @@ export class UpdateFieldMappingDto {
 	@IsString()
 	@IsOptional()
 	default_value?: string;
+
+	@ApiPropertyOptional({ description: 'Transformación configurable aplicada al valor origen' })
+	@IsString()
+	@IsOptional()
+	transformation_key?: string;
+
+	@ApiPropertyOptional({ description: 'Configuración opcional adicional para la transformación' })
+	@IsObject()
+	@IsOptional()
+	transformation_config?: Record<string, unknown>;
 }

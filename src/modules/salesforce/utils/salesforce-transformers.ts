@@ -80,6 +80,24 @@ export function isoToCountryName(isoCode: string | null | undefined): string | n
 }
 
 /**
+ * Normaliza identificadores fiscales sin alterar separadores significativos.
+ * Se eliminan espacios Unicode y puntos; se preservan guiones, barras y letras.
+ * El placeholder "pendiente", sin importar sus mayúsculas, se trata como ausencia de identificador.
+ */
+export function normalizeTaxId(taxId: string | null | undefined): string | null {
+	if (taxId === null || taxId === undefined) {
+		return null;
+	}
+
+	const normalized = String(taxId).replace(/[\s.]+/gu, '');
+	if (!normalized || normalized.toLocaleLowerCase('es-CL') === 'pendiente') {
+		return null;
+	}
+
+	return normalized;
+}
+
+/**
  * Build custom_fields JSON object for quote_items
  * Maps Salesforce pricing model levels 3-5 and other custom fields
  */
