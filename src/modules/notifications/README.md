@@ -11,6 +11,8 @@ El módulo expone `notifications` para eventos de aplicación persistentes y sus
 - `GET /notifications/subscriptions/salesforce-staging-blocked`: lista las suscripciones de rol de `salesforce_staging_blocked`.
 - `PUT /notifications/subscriptions/salesforce-staging-blocked`: reemplaza esas suscripciones con `{ role_ids, include_super_admins }`.
 
+La gestión de suscripciones requiere una membresía activa en el holding y puede ser realizada por Super Admin o por usuarios con rol `Administrador` en ese holding.
+
 `include_super_admins` se representa con una suscripción cuyo `role_id` es `NULL`, coherente con el esquema de base de datos. Las notificaciones usan `deduplication_key` para impedir la creación de más de un evento abierto para la misma clave y holding.
 
 ## Dependencias de datos
