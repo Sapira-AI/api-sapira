@@ -86,7 +86,6 @@ export class BancoCentralService {
 				IndicadorEconomico.DOLAR_PESO_COLOMBIANO,
 				IndicadorEconomico.DOLAR_PESO_MEXICANO,
 				IndicadorEconomico.DOLAR_REAL_BRASILENO,
-				IndicadorEconomico.DOLAR_SOL_PERUANO,
 				IndicadorEconomico.EURO,
 				IndicadorEconomico.IPC,
 				IndicadorEconomico.TPM,

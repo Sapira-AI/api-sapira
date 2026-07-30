@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import axios from 'axios';
 import { Between, Repository } from 'typeorm';
 
 import { BancoCentralService } from '../banco-central.service';
@@ -19,9 +20,21 @@ interface CurrencyMapping {
 	name: string;
 }
 
+interface PeruApiExchangeRateResponse {
+	fecha: string;
+	compra: string;
+	venta: string;
+	moneda: string;
+	fuente: string;
+	mensaje: string;
+	code: string;
+}
+
 @Injectable()
 export class ExchangeRatesService {
 	private readonly logger = new Logger(ExchangeRatesService.name);
+	private readonly peruApiCurrencyPair = 'USD/PEN';
+	private readonly peruApiMaxHistoricalRequests = 10;
 
 	private readonly currencyMappings: CurrencyMapping[] = [
 		{
@@ -59,12 +72,6 @@ export class ExchangeRatesService {
 			fromCurrency: 'USD',
 			toCurrency: 'BRL',
 			name: 'Dólar Real Brasileño',
-		},
-		{
-			code: IndicadorEconomico.DOLAR_SOL_PERUANO,
-			fromCurrency: 'USD',
-			toCurrency: 'PEN',
-			name: 'Dólar Sol Peruano',
 		},
 		{
 			code: IndicadorEconomico.EURO,
@@ -219,6 +226,10 @@ export class ExchangeRatesService {
 				}
 			}
 
+			if (this.shouldSyncPeruApi(dto)) {
+				await this.syncPeruApiRates(startDate, endDate, stats, failedCurrencyPairs);
+			}
+
 			const indirectStats = await this.calculateIndirectConversions(startDate, endDate);
 			stats.indirectConversions = indirectStats.inserted + indirectStats.updated;
 
@@ -242,6 +253,108 @@ export class ExchangeRatesService {
 			this.logger.error(`Error en sincronización de tipos de cambio: ${error.message}`, error.stack);
 			throw error;
 		}
+	}
+
+	private shouldSyncPeruApi(dto: SyncExchangeRatesDto): boolean {
+		return !dto.currencyPairs || dto.currencyPairs.includes(this.peruApiCurrencyPair);
+	}
+
+	private async syncPeruApiRates(
+		startDate: string,
+		endDate: string,
+		stats: { totalProcessed: number; inserted: number; updated: number; errors: number },
+		failedCurrencyPairs: string[]
+	): Promise<void> {
+		try {
+			const apiKey = process.env.PERU_API_KEY?.trim();
+			if (!apiKey) {
+				throw new Error('PERU_API_KEY no está configurada');
+			}
+
+			const baseUrl = (process.env.PERU_API_BASE_URL || 'https://peruapi.com/api/tipo_cambio').replace(/\/$/, '');
+			const start = this.parseIsoDateAsLocalDate(startDate);
+			const end = this.parseIsoDateAsLocalDate(endDate);
+			const requestedDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+			if (requestedDays > this.peruApiMaxHistoricalRequests) {
+				throw new Error(
+					`El rango de USD/PEN excede el máximo de ${this.peruApiMaxHistoricalRequests} consultas por sincronización`
+				);
+			}
+
+			for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+				const requestedDate = this.dateToString(currentDate);
+				const response = await axios.get<PeruApiExchangeRateResponse>(baseUrl, {
+					headers: { 'X-API-KEY': apiKey },
+					params: {
+						fecha: requestedDate,
+						summary: 0,
+						plan: 0,
+					},
+					timeout: 8000,
+				});
+				const data = response.data;
+				const rate = Number(data.venta);
+
+				if (
+					response.status < 200 ||
+					response.status >= 300 ||
+					data.code !== '200' ||
+					!this.isIsoDate(data.fecha) ||
+					!Number.isFinite(rate) ||
+					rate <= 0
+				) {
+					throw new Error(`Respuesta inválida de Perú API para ${requestedDate}`);
+				}
+
+				const rateDate = this.parseIsoDateAsLocalDate(data.fecha);
+				const exchangeRate = this.exchangeRateRepository.create({
+					rate_date: rateDate,
+					from_currency: 'USD',
+					to_currency: 'PEN',
+					rate,
+					source_type: 'PERU_API',
+					api_source: 'Perú API (SUNAT)',
+					is_indirect_conversion: false,
+					conversion_chain: null,
+				});
+				const existing = await this.exchangeRateRepository.findOne({
+					where: {
+						rate_date: rateDate,
+						from_currency: 'USD',
+						to_currency: 'PEN',
+					},
+				});
+
+				if (existing) {
+					await this.exchangeRateRepository.update(
+						{
+							rate_date: rateDate,
+							from_currency: 'USD',
+							to_currency: 'PEN',
+						},
+						exchangeRate
+					);
+					stats.updated++;
+				} else {
+					await this.exchangeRateRepository.save(exchangeRate);
+					stats.inserted++;
+				}
+
+				stats.totalProcessed++;
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logger.error(`Error sincronizando Dólar Sol Peruano desde Perú API: ${errorMessage}`);
+			stats.errors++;
+			if (!failedCurrencyPairs.includes(this.peruApiCurrencyPair)) {
+				failedCurrencyPairs.push(this.peruApiCurrencyPair);
+			}
+		}
+	}
+
+	private isIsoDate(date: string): boolean {
+		return /^\d{4}-\d{2}-\d{2}$/.test(date);
 	}
 
 	private async calculateIndirectConversions(startDate: string, endDate: string): Promise<{ inserted: number; updated: number }> {
@@ -393,7 +506,9 @@ export class ExchangeRatesService {
 						.addSelect('COUNT(*)', 'data_points')
 						.where('er.from_currency = :fromCurrency', { fromCurrency: pair.from_currency })
 						.andWhere('er.to_currency = :toCurrency', { toCurrency: pair.to_currency })
-						.andWhere('er.source_type = :sourceType', { sourceType: 'BANCOCENTRAL' })
+					.andWhere('er.source_type = :sourceType', {
+						sourceType: pair.from_currency === 'USD' && pair.to_currency === 'PEN' ? 'PERU_API' : 'BANCOCENTRAL',
+					})
 						.andWhere('EXTRACT(YEAR FROM er.rate_date) = :year', { year: period.year })
 						.andWhere('EXTRACT(MONTH FROM er.rate_date) = :month', { month: period.month });
 
@@ -609,27 +724,47 @@ export class ExchangeRatesService {
 
 	async syncHistoricalRates(): Promise<SyncExchangeRatesResponseDto> {
 		await this.bancoCentralSchemaService.ensureSchema();
-		const lastRate = await this.exchangeRateRepository
+		const lastBancoCentralRate = await this.exchangeRateRepository
 			.createQueryBuilder('er')
 			.select('MAX(er.rate_date)', 'last_date')
 			.where('er.source_type = :sourceType', { sourceType: 'BANCOCENTRAL' })
 			.getRawOne();
-
-		let startDate: string;
-
-		if (lastRate?.last_date) {
-			const lastDate = this.normalizeStoredDate(lastRate.last_date);
-			lastDate.setDate(lastDate.getDate() + 1);
-			startDate = this.formatLocalDate(lastDate);
-			this.logger.log(`Sincronización incremental desde última fecha: ${startDate}`);
-		} else {
-			startDate = '2025-01-01';
-			this.logger.log('Primera sincronización, iniciando desde 2025-01-01');
-		}
+		const lastPeruApiRate = await this.exchangeRateRepository
+			.createQueryBuilder('er')
+			.select('MAX(er.rate_date)', 'last_date')
+			.where('er.source_type = :sourceType', { sourceType: 'PERU_API' })
+			.andWhere('er.from_currency = :fromCurrency', { fromCurrency: 'USD' })
+			.andWhere('er.to_currency = :toCurrency', { toCurrency: 'PEN' })
+			.getRawOne();
 
 		const today = this.formatLocalDate(new Date());
+		const results: SyncExchangeRatesResponseDto[] = [];
+		const bancoCentralStartDate = this.getNextSyncDate(lastBancoCentralRate?.last_date);
 
-		if (startDate > today) {
+		if (bancoCentralStartDate <= today) {
+			results.push(
+				await this.syncExchangeRates({
+					startDate: bancoCentralStartDate,
+					endDate: today,
+					currencyPairs: this.currencyMappings.map((mapping) => `${mapping.fromCurrency}/${mapping.toCurrency}`),
+				})
+			);
+		}
+
+		const peruApiStartDate = this.getNextSyncDate(lastPeruApiRate?.last_date);
+		if (peruApiStartDate <= today) {
+			const peruApiEndDate = this.limitHistoricalEndDate(peruApiStartDate, today);
+			this.logger.log(`Sincronización histórica Perú API desde ${peruApiStartDate} hasta ${peruApiEndDate}`);
+			results.push(
+				await this.syncExchangeRates({
+					startDate: peruApiStartDate,
+					endDate: peruApiEndDate,
+					currencyPairs: [this.peruApiCurrencyPair],
+				})
+			);
+		}
+
+		if (results.length === 0) {
 			this.logger.log('Ya estamos al día, no hay datos nuevos para sincronizar');
 			return {
 				success: true,
@@ -644,10 +779,51 @@ export class ExchangeRatesService {
 			};
 		}
 
-		return this.syncExchangeRates({
-			startDate,
-			endDate: today,
-		});
+		return this.mergeSyncResults(results);
+	}
+
+	private getNextSyncDate(lastRateDate?: Date | string): string {
+		if (!lastRateDate) {
+			return '2025-01-01';
+		}
+
+		const lastDate = this.normalizeStoredDate(lastRateDate);
+		lastDate.setDate(lastDate.getDate() + 1);
+		return this.formatLocalDate(lastDate);
+	}
+
+	private limitHistoricalEndDate(startDate: string, today: string): string {
+		const endDate = this.parseIsoDateAsLocalDate(startDate);
+		endDate.setDate(endDate.getDate() + this.peruApiMaxHistoricalRequests - 1);
+		return this.dateToString(endDate) < today ? this.dateToString(endDate) : today;
+	}
+
+	private mergeSyncResults(results: SyncExchangeRatesResponseDto[]): SyncExchangeRatesResponseDto {
+		const stats = results.reduce(
+			(accumulator, result) => ({
+				totalProcessed: accumulator.totalProcessed + result.stats.totalProcessed,
+				inserted: accumulator.inserted + result.stats.inserted,
+				updated: accumulator.updated + result.stats.updated,
+				errors: accumulator.errors + result.stats.errors,
+				indirectConversions: accumulator.indirectConversions + result.stats.indirectConversions,
+			}),
+			{ totalProcessed: 0, inserted: 0, updated: 0, errors: 0, indirectConversions: 0 }
+		);
+		const failedCurrencyPairs = [...new Set(results.flatMap((result) => result.failedCurrencyPairs || []))];
+
+		return {
+			success: failedCurrencyPairs.length === 0,
+			message:
+				failedCurrencyPairs.length > 0
+					? `Sincronización completada con errores parciales en ${failedCurrencyPairs.length} pares de monedas`
+					: 'Sincronización completada exitosamente',
+			stats,
+			monthlyAveragesCalculated: {
+				periods: results.reduce((total, result) => total + (result.monthlyAveragesCalculated?.periods || 0), 0),
+				currencyPairs: Math.max(...results.map((result) => result.monthlyAveragesCalculated?.currencyPairs || 0)),
+			},
+			failedCurrencyPairs,
+		};
 	}
 
 	async getExchangeRateWithFallback(

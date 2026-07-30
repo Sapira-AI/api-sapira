@@ -7,6 +7,7 @@ import { EmailsModule } from '@/modules/emails/emails.module';
 
 import { BancoCentralController } from './banco-central.controller';
 import { BancoCentralService } from './banco-central.service';
+import { PeruApiController } from './peru-api.controller';
 import { Currency } from './entities/currency.entity';
 import { ExchangeRateMonthlyAvgEntity } from './entities/exchange-rate-monthly-avg.entity';
 import { ExchangeRateEntity } from './entities/exchange-rate.entity';
@@ -23,7 +24,7 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 		AuthModule,
 		EmailsModule,
 	],
-	controllers: [BancoCentralController],
+	controllers: [BancoCentralController, PeruApiController],
 	providers: [BancoCentralService, BancoCentralSchemaService, ExchangeRatesService, ExchangeRatesNotificationService, ExchangeRatesScheduler],
 	exports: [BancoCentralService, ExchangeRatesService],
 })
