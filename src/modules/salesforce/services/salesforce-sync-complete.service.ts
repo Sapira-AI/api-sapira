@@ -798,7 +798,10 @@ export class SalesforceSyncCompleteService {
 						})
 					: null);
 
-			const hasChanges = this.hasRecordChanges(clientPayload, existingClient) || this.hasRecordChanges(clientEntityPayload, existingEntity);
+			const comparableClientEntityPayload = this.removeBlankFields(clientEntityPayload);
+			const hasChanges =
+				this.hasRecordChanges(clientPayload, existingClient) ||
+				this.hasRecordChanges(comparableClientEntityPayload, existingEntity);
 			await this.accountsStgRepository.update(record.id, {
 				processing_status: hasChanges ? 'update' : 'processed',
 				integration_notes: hasChanges ? 'Cliente existente con cambios pendientes' : 'Cliente staging sincronizado',
@@ -1387,12 +1390,21 @@ export class SalesforceSyncCompleteService {
 	}
 
 	private async ensurePrincipalContact(clientId: string, accountData: SalesforceAccount, holdingId: string): Promise<void> {
-		if (!accountData.Email_de_contacto_principal__c) {
+		const email = accountData.Email_de_contacto_principal__c;
+		const phone = accountData.Phone || null;
+		if (!email && !phone) {
 			return;
 		}
 
-		const hasContact = await this.typeormService.hasClientContact(clientId, 'Principal');
-		if (hasContact) {
+		const existingContact = await this.typeormService.getClientContact(clientId, 'Principal');
+		if (existingContact) {
+			const contactUpdate = {
+				...(this.isBlankValue(existingContact.email) && email ? { email } : {}),
+				...(this.isBlankValue(existingContact.phone) && phone ? { phone } : {}),
+			};
+			if (Object.keys(contactUpdate).length > 0) {
+				await this.typeormService.updateClientContact(existingContact.id, contactUpdate);
+			}
 			return;
 		}
 
@@ -1400,8 +1412,8 @@ export class SalesforceSyncCompleteService {
 			client_id: clientId,
 			holding_id: holdingId,
 			contact_type: 'Principal',
-			email: accountData.Email_de_contacto_principal__c,
-			phone: (accountData as any).Phone || null,
+			email: email || null,
+			phone,
 		});
 	}
 
@@ -1443,7 +1455,7 @@ export class SalesforceSyncCompleteService {
 			const entityResolution = await this.resolveClientEntityByTaxId(holdingId, taxId, legalName);
 			if (entityResolution.entities.length > 0) {
 				for (const entity of entityResolution.entities) {
-					await this.clientEntityRepository.update(entity.id, entityUpdatePayload);
+					await this.clientEntityRepository.update(entity.id, this.fillClientEntityFieldsWhenEmpty(entity, entityUpdatePayload));
 					await this.resolveOdooPartnerForEntity(holdingId, entity.id);
 				}
 				return;
@@ -1462,7 +1474,7 @@ export class SalesforceSyncCompleteService {
 		});
 		if (existingByClient) {
 			await this.clientEntityRepository.update(existingByClient.id, {
-				...basePayload,
+				...this.fillClientEntityFieldsWhenEmpty(existingByClient, basePayload),
 				// La ausencia de RUT en Salesforce no autoriza eliminar un identificador fiscal ya validado en Sapira.
 				tax_id: taxId || existingByClient.tax_id || null,
 			});
@@ -1474,6 +1486,26 @@ export class SalesforceSyncCompleteService {
 		const savedEntity = await this.clientEntityRepository.save(this.clientEntityRepository.create(basePayload));
 		await this.typeormService.createClientEntityClient(savedEntity.id, clientId, holdingId);
 		await this.resolveOdooPartnerForEntity(holdingId, savedEntity.id);
+	}
+
+	private fillClientEntityFieldsWhenEmpty(existing: Record<string, any>, candidate: Record<string, any>): Record<string, any> {
+		const protectedFields = ['legal_name', 'legal_address', 'country'];
+		return {
+			...candidate,
+			...Object.fromEntries(
+				protectedFields
+					.filter((field) => !this.isBlankValue(existing[field]))
+					.map((field) => [field, existing[field]])
+			),
+		};
+	}
+
+	private isBlankValue(value: unknown): boolean {
+		return value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+	}
+
+	private removeBlankFields(payload: Record<string, any>): Record<string, any> {
+		return Object.fromEntries(Object.entries(payload).filter(([, value]) => !this.isBlankValue(value)));
 	}
 
 	private async resolveClientEntityByTaxId(holdingId: string, taxId: string, legalName?: string) {

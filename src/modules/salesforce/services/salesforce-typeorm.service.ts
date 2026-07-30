@@ -259,11 +259,17 @@ export class SalesforceTypeOrmService {
 	}
 
 	async hasClientContact(clientId: string, contactType: string): Promise<boolean> {
-		const contact = await this.clientContactRepository.findOne({
+		return Boolean(await this.getClientContact(clientId, contactType));
+	}
+
+	async getClientContact(clientId: string, contactType: string): Promise<ClientContact | null> {
+		return this.clientContactRepository.findOne({
 			where: { client_id: clientId, contact_type: contactType },
 		});
+	}
 
-		return !!contact;
+	async updateClientContact(contactId: string, contactData: Partial<ClientContact>): Promise<void> {
+		await this.clientContactRepository.update(contactId, contactData);
 	}
 
 	async getClientByNumber(holdingId: string, clientNumber: string): Promise<string | null> {

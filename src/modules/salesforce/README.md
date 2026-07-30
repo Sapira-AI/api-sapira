@@ -354,6 +354,10 @@ Al procesar un `Account`, el mapping `client_entity.tax_id` normaliza el valor d
 -   Conserva guiones, barras y letras para no alterar formatos fiscales válidos ni sus dígitos verificadores.
 -   No infiere ni reescribe el formato según país; el guion no es un indicador universal de dígito verificador.
 
+### Nombres de países
+
+Los códigos ISO 3166-1 alpha-2 recibidos desde Salesforce se convierten al nombre en español usando el mismo catálogo de países del frontend. Si el código no está en el catálogo, se conserva el valor original.
+
 Las migraciones `20260724162100_normalize_client_entity_tax_ids.sql` y `20260725102200_normalize_all_client_entity_tax_ids.sql` aplican la misma regla a históricos, incluidos los valores duplicados. La tabla `client_entity_tax_id_normalization_conflicts` se conserva como auditoría de los duplicados detectados antes de completar la normalización.
 
 Un valor activo de `generic_export_vats.vat` se considera un VAT genérico de exportación y no identifica de forma única a una entidad legal. Para esos valores, Salesforce resuelve y actualiza únicamente las entidades cuya combinación `holding_id + tax_id + razón social` coincide; si no existe esa combinación crea una entidad nueva. La razón social se compara ignorando mayúsculas, espacios iniciales/finales y espacios consecutivos.
