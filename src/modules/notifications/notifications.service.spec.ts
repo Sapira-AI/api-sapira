@@ -40,6 +40,7 @@ describe('NotificationsService', () => {
 			service,
 			notificationRepository,
 			roleSubscriptionRepository,
+			userRepository,
 			userQueryBuilder,
 			dataSource,
 			manager,
@@ -95,5 +96,21 @@ describe('NotificationsService', () => {
 		]);
 		expect(manager.delete).toHaveBeenCalled();
 		expect(result).toHaveLength(2);
+	});
+
+	it('permite a un Administrador activo del holding configurar suscripciones', async () => {
+		const { service, userRepository, dataSource } = buildService();
+		userRepository.findOne.mockResolvedValue({
+			id: 'user-1',
+			role_id: 'role-admin',
+			is_super_admin: false,
+		});
+		dataSource.query.mockResolvedValue([{ role_name: 'Administrador' }]);
+
+		await expect(service.assertCanManageSubscriptions('holding-1', 'auth-user-1')).resolves.toBeUndefined();
+		expect(dataSource.query).toHaveBeenCalledWith(
+			expect.stringContaining('assigned_role.holding_id = $2'),
+			['user-1', 'holding-1', 'role-admin']
+		);
 	});
 });

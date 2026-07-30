@@ -197,15 +197,24 @@ export class NotificationsService {
 
 	async assertCanManageSubscriptions(holdingId: string, authUserId: string): Promise<void> {
 		const user = await this.userRepository.findOne({ where: { auth_id: authUserId } });
-		if (!user?.is_super_admin) {
-			throw new ForbiddenException('Solo Super Admin puede configurar destinatarios de notificaciones');
+		if (!user) {
+			throw new ForbiddenException('No se encontró el usuario autenticado');
 		}
 		const membership = await this.dataSource.query(
-			'SELECT 1 FROM public.user_holdings WHERE user_id = $1 AND holding_id = $2 AND is_active = true LIMIT 1',
-			[user.id, holdingId]
+			`SELECT assigned_role.name AS role_name
+			 FROM public.user_holdings membership
+			 LEFT JOIN public.roles assigned_role ON assigned_role.id = $3 AND assigned_role.holding_id = $2
+			 WHERE membership.user_id = $1
+			 AND membership.holding_id = $2
+			 AND membership.is_active = true
+			 LIMIT 1`,
+			[user.id, holdingId, user.role_id]
 		);
 		if (!membership.length) {
 			throw new ForbiddenException('No tienes acceso al holding seleccionado');
+		}
+		if (!user.is_super_admin && membership[0].role_name !== 'Administrador') {
+			throw new ForbiddenException('Solo Super Admin o Administrador puede configurar destinatarios de notificaciones');
 		}
 	}
 
