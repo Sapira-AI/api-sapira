@@ -1,7 +1,7 @@
 {
-	"name": "saeia-api",
-	"version": "0.0.1",
-	"description": "",
+	"name": "api-sapira",
+	"version": "0.0.2",
+	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,
 	"license": "UNLICENSED",
@@ -18,7 +18,9 @@
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
 		"test:e2e": "jest --config ./test/jest-e2e.json",
-		"audit": "yarn audit --level moderate"
+		"audit": "yarn audit --level moderate",
+		"version:commit": "bash ../version-commit.sh",
+		"vcp": "yarn version:commit patch"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.71.2",
