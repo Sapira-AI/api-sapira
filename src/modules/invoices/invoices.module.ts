@@ -6,6 +6,7 @@ import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { BancoCentralModule } from '@/modules/banco-central/banco-central.module';
 import { EmailsModule } from '@/modules/emails/emails.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { OdooModule } from '@/modules/odoo/odoo.module';
 
 import { Company } from '../odoo/entities/companies.entity';
@@ -38,6 +39,7 @@ import { InvoiceSchedulerJob, InvoiceSchedulerJobSchema } from './schemas/invoic
 		BancoCentralModule,
 		OdooModule,
 		EmailsModule,
+		NotificationsModule,
 	],
 	controllers: [InvoicesController, InvoiceSchedulerController],
 	providers: [

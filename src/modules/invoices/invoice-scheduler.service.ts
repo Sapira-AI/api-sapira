@@ -6,6 +6,7 @@ import { DataSource, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
+import { INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 import { CreateDraftInvoiceDTO, InvoiceLineItemDTO, OdooReferenceDTO } from '../odoo/dtos/odoo.dto';
@@ -73,7 +74,8 @@ export class InvoiceSchedulerService {
 		private readonly exchangeRatesService: ExchangeRatesService,
 		private readonly taxMappingService: TaxMappingService,
 		private readonly documentTypeMappingService: DocumentTypeMappingService,
-		private readonly schedulerGateway: InvoiceSchedulerGateway
+		private readonly schedulerGateway: InvoiceSchedulerGateway,
+		private readonly notificationsService: NotificationsService
 	) {}
 
 	private getBusinessTimezone(): string {
@@ -1652,35 +1654,25 @@ export class InvoiceSchedulerService {
 				error_details: params.errorDetails || null,
 			};
 
-			const insertedNotifications = await this.dataSource.query(
-				`
-					INSERT INTO contract_notifications (
-						contract_id,
-						notification_type,
-						title,
-						message,
-						metadata,
-						holding_id
-					)
-					VALUES ($1, $2, $3, $4, $5::jsonb, $6)
-					RETURNING id, contract_id, notification_type, title, message, is_read, metadata, created_at, holding_id
-				`,
-				[
-					params.invoice.contract_id,
-					'client_action_needed',
-					params.title,
-					params.message,
-					JSON.stringify(metadata),
-					params.invoice.holding_id,
-				]
-			);
-
-			const insertedNotification = insertedNotifications?.[0];
-			if (insertedNotification) {
-				this.schedulerGateway.emitNotificationCreated(params.invoice.holding_id, insertedNotification);
-			}
+			await this.notificationsService.createOrUpdate(params.invoice.holding_id, {
+				source: 'invoices',
+				type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE,
+				severity: 'error',
+				title: params.title,
+				message: params.message,
+				recommendation: 'Revisa la configuración tributaria de la factura y vuelve a procesarla.',
+				action_type: 'open_contract',
+				action_payload: { contract_id: params.invoice.contract_id },
+				resource_type: 'invoice',
+				resource_id: params.invoice.id,
+				metadata: {
+					...metadata,
+					contract_id: params.invoice.contract_id,
+				},
+				deduplication_key: `invoice-odoo-failure:${params.invoice.id}:${params.stage}:${params.errorType}`,
+			});
 		} catch (error) {
-			this.logger.error(`❌ Error creando contract_notification para factura ${params.invoice.invoice_number || params.invoice.id}:`, error);
+			this.logger.error(`❌ Error creando notificación para factura ${params.invoice.invoice_number || params.invoice.id}:`, error);
 		}
 	}
 

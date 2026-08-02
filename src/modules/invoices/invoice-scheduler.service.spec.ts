@@ -29,6 +29,9 @@ describe('InvoiceSchedulerService', () => {
 		const documentTypeMappingService = {
 			getDefaultDocumentTypeForInvoice: jest.fn().mockResolvedValue(null),
 		};
+		const notificationsService = {
+			createOrUpdate: jest.fn(),
+		};
 
 		const service = new InvoiceSchedulerService(
 			invoiceRepository as any,
@@ -43,15 +46,14 @@ describe('InvoiceSchedulerService', () => {
 			{} as any,
 			{} as any,
 			{} as any,
-			{} as any,
+			invoiceNotificationService as any,
 			{
 				...exchangeRatesService,
 			} as any,
 			taxMappingService as any,
 			documentTypeMappingService as any,
-			{
-				...invoiceNotificationService,
-			} as any
+			{} as any,
+			notificationsService as any
 		);
 
 		return {
@@ -62,6 +64,7 @@ describe('InvoiceSchedulerService', () => {
 			exchangeRatesService,
 			taxMappingService,
 			documentTypeMappingService,
+			notificationsService,
 		};
 	};
 
@@ -112,6 +115,40 @@ describe('InvoiceSchedulerService', () => {
 			valid: false,
 			error: 'Factura de Chile con referencias sin reference_date. El campo date es obligatorio para l10n_cl_reference_ids',
 		});
+	});
+
+	it('crea fallos de Odoo como notificaciones unificadas vinculadas a la factura', async () => {
+		const { service, notificationsService } = createService();
+		notificationsService.createOrUpdate.mockResolvedValue({});
+
+		await (service as any).createOdooFailureNotification({
+			invoice: {
+				id: 'invoice-1',
+				holding_id: 'holding-1',
+				contract_id: 'contract-1',
+				invoice_number: 'FAC-001',
+				company: { country: 'Chile', legal_name: 'Sapira Chile' },
+				clientEntity: { legal_name: 'Cliente Demo' },
+			},
+			title: 'Error al publicar factura en Odoo',
+			message: 'La factura no tiene impuestos',
+			stage: 'post',
+			errorType: 'odoo_publish',
+			errorMessage: 'La factura no tiene impuestos',
+			schedulerSource: 'scheduler',
+		});
+
+		expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+			'holding-1',
+			expect.objectContaining({
+				source: 'invoices',
+				type: 'invoice_odoo_failure',
+				resource_type: 'invoice',
+				resource_id: 'invoice-1',
+				action_type: 'open_contract',
+				action_payload: { contract_id: 'contract-1' },
+			})
+		);
 	});
 
 	it('permite facturas de Uruguay aunque la referencia no tenga reference_date', () => {
