@@ -49,6 +49,8 @@ describe('SalesforceSyncCompleteService', () => {
 			ensureMasterDataValue: jest.fn(),
 			createObjectMapping: jest.fn(),
 			hasClientContact: jest.fn(),
+			getClientContact: jest.fn(),
+			updateClientContact: jest.fn(),
 			createClientContact: jest.fn(),
 			resolveClientEntitiesByTaxId: jest.fn().mockResolvedValue({ entities: [] }),
 			updateClientEntityClient: jest.fn(),
@@ -207,6 +209,35 @@ describe('SalesforceSyncCompleteService', () => {
 			'staging-1',
 			expect.objectContaining({
 				processing_status: expect.not.stringMatching(/^error$/),
+			})
+		);
+	});
+
+	it('no marca actualización cuando los campos vacíos de Salesforce ya tienen valor en la entidad final', async () => {
+		const { service, accountsStgRepository, clientRepository, clientEntityRepository, fieldMappingEngine, typeormService } = buildService();
+		accountsStgRepository.find.mockResolvedValue([
+			{
+				id: 'staging-1',
+				raw_data: { Id: 'account-1', Name: 'Cliente existente' },
+			},
+		]);
+		fieldMappingEngine.buildMappedRecord.mockResolvedValueOnce({ client_number: 'C-1' }).mockResolvedValueOnce({});
+		typeormService.getObjectMapping.mockResolvedValue('client-1');
+		clientRepository.findOne.mockResolvedValue({ id: 'client-1', client_number: 'C-1' });
+		clientEntityRepository.findOne.mockResolvedValue({
+			id: 'entity-1',
+			legal_name: 'Razón social Sapira',
+			legal_address: 'Dirección Sapira',
+			country: 'Chile',
+		});
+
+		await (service as any).classifyAccountStaging('holding-1', 'batch-1');
+
+		expect(accountsStgRepository.update).toHaveBeenCalledWith(
+			'staging-1',
+			expect.objectContaining({
+				processing_status: 'processed',
+				integration_notes: 'Cliente staging sincronizado',
 			})
 		);
 	});
@@ -766,5 +797,52 @@ describe('SalesforceSyncCompleteService', () => {
 
 		expect(clientEntityRepository.update).toHaveBeenCalledWith('entity-match', expect.objectContaining({ tax_id: '5555555-5' }));
 		expect(clientEntityRepository.update).not.toHaveBeenCalledWith('entity-other', expect.anything());
+	});
+
+	it('conserva razón social, dirección y país finales cuando ya tienen valor', () => {
+		const { service } = buildService();
+
+		const payload = (service as any).fillClientEntityFieldsWhenEmpty(
+			{
+				legal_name: 'Razón social Sapira',
+				legal_address: 'Dirección Sapira',
+				country: 'Chile',
+			},
+			{
+				legal_name: 'Razón social Salesforce',
+				legal_address: 'Dirección Salesforce',
+				country: 'Perú',
+				economic_activity: 'Tecnología',
+			}
+		);
+
+		expect(payload).toEqual({
+			legal_name: 'Razón social Sapira',
+			legal_address: 'Dirección Sapira',
+			country: 'Chile',
+			economic_activity: 'Tecnología',
+		});
+	});
+
+	it('completa email y teléfono del contacto principal solo si están vacíos', async () => {
+		const { service, typeormService } = buildService();
+		typeormService.getClientContact.mockResolvedValue({
+			id: 'contact-1',
+			email: 'existente@sapira.com',
+			phone: null,
+		});
+
+		await (service as any).ensurePrincipalContact(
+			'client-1',
+			{
+				Email_de_contacto_principal__c: 'salesforce@cliente.com',
+				Phone: '+56 9 1234 5678',
+			},
+			'holding-1'
+		);
+
+		expect(typeormService.updateClientContact).toHaveBeenCalledWith('contact-1', {
+			phone: '+56 9 1234 5678',
+		});
 	});
 });
