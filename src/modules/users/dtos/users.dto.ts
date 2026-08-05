@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsUUID } from 'class-validator';
 
+import { UserHoldingResponseDto } from '@/modules/holdings/dtos/holdings.dto';
+
 export class UserResponseDto {
 	@ApiProperty({
 		description: 'UUID del usuario',
@@ -61,6 +63,20 @@ export class UserResponseDto {
 		example: false,
 	})
 	is_super_admin?: boolean;
+}
+
+export class UserMenuContextResponseDto {
+	@ApiProperty({ type: UserResponseDto })
+	user: UserResponseDto;
+
+	@ApiProperty({
+		description: 'Nombre visible del rol. Super Admin tiene prioridad sobre el rol asignado.',
+		example: 'Super Admin',
+	})
+	role_name: string;
+
+	@ApiProperty({ type: [UserHoldingResponseDto] })
+	holdings: UserHoldingResponseDto[];
 }
 
 export class GetUserByAuthIdQueryDto {

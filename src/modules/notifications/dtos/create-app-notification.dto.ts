@@ -62,6 +62,15 @@ export class CreateAppNotificationDto {
 	deduplication_key?: string;
 
 	@IsOptional()
+	@IsString()
+	@MaxLength(120)
+	resource_type?: string;
+
+	@IsOptional()
+	@IsUUID('4')
+	resource_id?: string;
+
+	@IsOptional()
 	@ValidateNested()
 	@Type(() => NotificationRecipientsDto)
 	recipients?: NotificationRecipientsDto;

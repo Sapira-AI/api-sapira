@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
 import { User } from '@/modules/users/entities/user.entity';
@@ -10,8 +10,11 @@ import { ListNotificationsDto, ReplaceSalesforceStagingBlockedSubscriptionsDto }
 import { AppNotification } from './entities/app-notification.entity';
 import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
 import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
+import { NotificationsGateway } from './notifications.gateway';
 
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
+export const INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE = 'invoice_odoo_failure';
+const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE, INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE];
 type NotificationForRecipient = AppNotification & { is_read: boolean; read_at?: Date | null };
 
 @Injectable()
@@ -26,7 +29,8 @@ export class NotificationsService {
 		@InjectRepository(User)
 		private readonly userRepository: Repository<User>,
 		@InjectDataSource()
-		private readonly dataSource: DataSource
+		private readonly dataSource: DataSource,
+		private readonly notificationsGateway: NotificationsGateway
 	) {}
 
 	async create(holdingId: string, dto: CreateAppNotificationDto): Promise<{ notification: AppNotification; recipient_count: number }> {
@@ -50,7 +54,7 @@ export class NotificationsService {
 			Boolean(dto.recipients?.include_super_admins) || subscriptionRecipients.some((subscription) => subscription.role_id === null);
 		const userIds = await this.resolveActiveRecipientUserIds(holdingId, recipientUserIds, roleIds, includeSuperAdmins);
 
-		return this.dataSource.transaction(async (manager) => {
+		const result = await this.dataSource.transaction(async (manager) => {
 			const notification = manager.create(AppNotification, {
 				holding_id: holdingId,
 				source: dto.source,
@@ -63,6 +67,8 @@ export class NotificationsService {
 				action_payload: dto.action_payload || {},
 				metadata: dto.metadata || {},
 				deduplication_key: dto.deduplication_key || null,
+				resource_type: dto.resource_type || null,
+				resource_id: dto.resource_id || null,
 			});
 			const savedNotification = await manager.save(notification);
 
@@ -76,8 +82,11 @@ export class NotificationsService {
 				);
 			}
 
-			return { notification: savedNotification, recipient_count: userIds.length };
+			return { notification: savedNotification, recipient_count: userIds.length, recipientUserIds: userIds };
 		});
+
+		this.notificationsGateway.emitNotificationCreated(holdingId, result.recipientUserIds, result.notification);
+		return result;
 	}
 
 	async createOrUpdate(holdingId: string, dto: CreateAppNotificationDto): Promise<{ notification: AppNotification; recipient_count: number }> {
@@ -190,7 +199,7 @@ export class NotificationsService {
 
 	async listSalesforceStagingBlockedSubscriptions(holdingId: string): Promise<NotificationRoleSubscription[]> {
 		return this.roleSubscriptionRepository.find({
-			where: { holding_id: holdingId, notification_type: SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE },
+			where: { holding_id: holdingId, notification_type: In(ROLE_SUBSCRIPTION_NOTIFICATION_TYPES) },
 			order: { created_at: 'ASC' },
 		});
 	}
@@ -228,26 +237,18 @@ export class NotificationsService {
 		return this.dataSource.transaction(async (manager) => {
 			await manager.delete(NotificationRoleSubscription, {
 				holding_id: holdingId,
-				notification_type: SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
+				notification_type: In(ROLE_SUBSCRIPTION_NOTIFICATION_TYPES),
 			});
-			const subscriptions = [
-				...roleIds.map((roleId) =>
+			const recipientRoles = [...roleIds, ...(dto.include_super_admins ? [null] : [])];
+			const subscriptions = ROLE_SUBSCRIPTION_NOTIFICATION_TYPES.flatMap((notificationType) =>
+				recipientRoles.map((roleId) =>
 					manager.create(NotificationRoleSubscription, {
 						holding_id: holdingId,
 						role_id: roleId,
-						notification_type: SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
+						notification_type: notificationType,
 					})
-				),
-				...(dto.include_super_admins
-					? [
-							manager.create(NotificationRoleSubscription, {
-								holding_id: holdingId,
-								role_id: null,
-								notification_type: SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
-							}),
-						]
-					: []),
-			];
+				)
+			);
 			return subscriptions.length ? manager.save(subscriptions) : [];
 		});
 	}

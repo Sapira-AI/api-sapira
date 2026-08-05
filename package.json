@@ -1,7 +1,7 @@
 {
-	"name": "saeia-api",
-	"version": "0.0.1",
-	"description": "",
+	"name": "api-sapira",
+	"version": "0.0.2",
+	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,
 	"license": "UNLICENSED",
@@ -18,11 +18,15 @@
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
 		"test:e2e": "jest --config ./test/jest-e2e.json",
-		"audit": "yarn audit --level moderate"
+		"audit": "yarn audit --level moderate",
+		"version:commit": "bash ../version-commit.sh",
+		"vcp": "yarn version:commit patch"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@azure/cognitiveservices-computervision": "^8.2.0",
+		"@azure/identity": "^4.13.1",
+		"@azure/keyvault-secrets": "^4.11.2",
 		"@azure/ms-rest-azure-js": "^2.1.0",
 		"@azure/ms-rest-js": "^2.7.0",
 		"@azure/storage-blob": "^12.17.0",
@@ -65,7 +69,6 @@
 		"mongoose": "^8.2.3",
 		"multer": "^1.4.5-lts.1",
 		"passport": "^0.7.0",
-		"passport-azure-ad": "^4.3.5",
 		"passport-jwt": "^4.0.1",
 		"pg": "^8.16.3",
 		"pino": "^9.6.0",
@@ -94,7 +97,6 @@
 		"@types/mime-types": "^2",
 		"@types/multer": "^2.0.0",
 		"@types/node": "^20.3.1",
-		"@types/passport-azure-ad": "^4",
 		"@types/pg": "^8.16.0",
 		"@types/sharp": "^0.32.0",
 		"@types/supertest": "^6.0.0",

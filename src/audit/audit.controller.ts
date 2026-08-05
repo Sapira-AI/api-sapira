@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 import { Request } from 'express';
 import { PipelineStage } from 'mongoose';
 
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { PaginatedResponseDTO } from '@/core/dto/pagination.dto';
 import { PaginationDTO } from '@/core/dto/pagination.dto';
 import { BaseResponse } from '@/core/interfaces/base/base.interface';
@@ -15,7 +15,7 @@ import { Audit, AuditDocument } from './schemas/audit.schema';
 
 @ApiTags('Audit')
 @Controller('audit')
-@UseGuards(AzureADAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class AuditController {
 	constructor(private readonly auditService: AuditService) {}

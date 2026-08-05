@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiExcludeController, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { v4 as uuid } from 'uuid';
 
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { BaseEvent, EventStatus, EventType } from '@/core/interfaces/events/event.interface';
 
 import { ClientErrorDTO } from './dtos/client-error.dto';
@@ -12,7 +12,7 @@ import { EventsService } from './services/events.service';
 @ApiExcludeController()
 @ApiTags('Events')
 @Controller('events')
-@UseGuards(AzureADAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class EventsController {
 	constructor(private readonly eventsService: EventsService) {}

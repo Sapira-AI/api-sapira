@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserHolding } from '../modules/holdings/entities/user-holding.entity';
+import { User } from '../modules/users/entities/user.entity';
 
 import { HoldingAccessGuard } from './holding-access.guard';
 
@@ -11,7 +12,7 @@ import { HoldingAccessGuard } from './holding-access.guard';
  */
 @Global()
 @Module({
-	imports: [TypeOrmModule.forFeature([UserHolding])],
+	imports: [TypeOrmModule.forFeature([UserHolding, User])],
 	providers: [HoldingAccessGuard],
 	exports: [HoldingAccessGuard],
 })

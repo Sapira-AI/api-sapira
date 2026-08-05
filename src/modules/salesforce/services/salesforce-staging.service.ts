@@ -221,6 +221,31 @@ export class SalesforceStagingService {
 		};
 	}
 
+	async getEligibleOpportunityIdsForProcessing(holdingId: string, statuses: Array<'create' | 'update'> = ['create', 'update']): Promise<string[]> {
+		const rows = await this.opportunitiesStgRepository.find({
+			where: {
+				holding_id: holdingId,
+				processing_status: In(statuses),
+			},
+			select: ['salesforce_id'],
+			order: { updated_at: 'ASC' },
+		});
+		return rows.map((row) => row.salesforce_id);
+	}
+
+	async removeOrphanAccounts(holdingId: string): Promise<number> {
+		const result = await this.accountsStgRepository
+			.createQueryBuilder()
+			.delete()
+			.from(SalesforceAccountsStg)
+			.where('holding_id = :holdingId', { holdingId })
+			.andWhere(
+				'NOT EXISTS (SELECT 1 FROM salesforce_opportunities_stg opportunity WHERE opportunity.holding_id = salesforce_accounts_stg.holding_id AND opportunity.salesforce_account_id = salesforce_accounts_stg.salesforce_id)'
+			)
+			.execute();
+		return result.affected || 0;
+	}
+
 	async getRecords(holdingId: string, objectType: SalesforceStagingObjectType, params: SalesforceStagingListParams = {}) {
 		const repository = this.getRepository(objectType);
 		const page = params.page && params.page > 0 ? params.page : 1;
@@ -357,7 +382,19 @@ export class SalesforceStagingService {
 	}
 
 	getSourceHash(payload: Record<string, any>): string {
-		return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+		const normalize = (value: unknown): unknown => {
+			if (Array.isArray(value)) return value.map(normalize);
+			if (value && typeof value === 'object') {
+				return Object.fromEntries(
+					Object.entries(value as Record<string, unknown>)
+						.filter(([key]) => key !== 'attributes')
+						.sort(([left], [right]) => left.localeCompare(right))
+						.map(([key, nestedValue]) => [key, normalize(nestedValue)])
+				);
+			}
+			return value;
+		};
+		return createHash('sha256').update(JSON.stringify(normalize(payload))).digest('hex');
 	}
 
 	private buildAccountsMappingBaseQuery(holdingId: string, params: SalesforceAccountsMappingViewParams) {
