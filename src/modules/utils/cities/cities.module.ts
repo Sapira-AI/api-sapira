@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
 
 import { MongooseModules } from '../../../databases/mongoose/database.module';
 
@@ -8,12 +7,7 @@ import { CitiesProviders } from './cities.provider';
 import { CitiesService } from './cities.service';
 
 @Module({
-	imports: [
-		PassportModule.register({
-			defaultStrategy: 'AzureAD',
-		}),
-		MongooseModules,
-	],
+	imports: [MongooseModules],
 	controllers: [CitiesController],
 	providers: [CitiesService, ...CitiesProviders],
 })

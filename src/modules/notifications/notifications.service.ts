@@ -10,6 +10,7 @@ import { ListNotificationsDto, ReplaceSalesforceStagingBlockedSubscriptionsDto }
 import { AppNotification } from './entities/app-notification.entity';
 import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
 import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
+import { NotificationsGateway } from './notifications.gateway';
 
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
 export const INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE = 'invoice_odoo_failure';
@@ -28,7 +29,8 @@ export class NotificationsService {
 		@InjectRepository(User)
 		private readonly userRepository: Repository<User>,
 		@InjectDataSource()
-		private readonly dataSource: DataSource
+		private readonly dataSource: DataSource,
+		private readonly notificationsGateway: NotificationsGateway
 	) {}
 
 	async create(holdingId: string, dto: CreateAppNotificationDto): Promise<{ notification: AppNotification; recipient_count: number }> {
@@ -52,7 +54,7 @@ export class NotificationsService {
 			Boolean(dto.recipients?.include_super_admins) || subscriptionRecipients.some((subscription) => subscription.role_id === null);
 		const userIds = await this.resolveActiveRecipientUserIds(holdingId, recipientUserIds, roleIds, includeSuperAdmins);
 
-		return this.dataSource.transaction(async (manager) => {
+		const result = await this.dataSource.transaction(async (manager) => {
 			const notification = manager.create(AppNotification, {
 				holding_id: holdingId,
 				source: dto.source,
@@ -80,8 +82,11 @@ export class NotificationsService {
 				);
 			}
 
-			return { notification: savedNotification, recipient_count: userIds.length };
+			return { notification: savedNotification, recipient_count: userIds.length, recipientUserIds: userIds };
 		});
+
+		this.notificationsGateway.emitNotificationCreated(holdingId, result.recipientUserIds, result.notification);
+		return result;
 	}
 
 	async createOrUpdate(holdingId: string, dto: CreateAppNotificationDto): Promise<{ notification: AppNotification; recipient_count: number }> {

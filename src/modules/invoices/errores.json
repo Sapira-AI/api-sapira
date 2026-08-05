@@ -1,0 +1,1414 @@
+{
+  "_id": {
+    "$oid": "6a6ddfc02c493ca8be034007"
+  },
+  "jobId": "f0b9949b-49f6-40f9-914b-92e9739f8588",
+  "holdingId": "all",
+  "dryRun": false,
+  "status": "completed",
+  "progress": {
+    "total": 136,
+    "sent": 121,
+    "errors": 15,
+    "skipped": 0,
+    "current": 136
+  },
+  "userId": "system-scheduler",
+  "startedAt": {
+    "$date": "2026-08-01T12:00:00.002Z"
+  },
+  "createdAt": {
+    "$date": "2026-08-01T12:00:00.003Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-01T12:20:34.566Z"
+  },
+  "__v": 0,
+  "completedAt": {
+    "$date": "2026-08-01T12:20:34.566Z"
+  },
+  "result": {
+    "success": true,
+    "dryRun": false,
+    "summary": {
+      "total": 136,
+      "sent": 121,
+      "errors": 15,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "invoiceId": "495dc2f2-0342-48a4-b08f-b0b64f293ac8",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "REX ADHESIVOS SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195287,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195287, país: Chile)"
+      },
+      {
+        "invoiceId": "3982ee79-da59-48dd-9801-0e61c8f12fac",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DROGUERIA GLOBAL PHARMA SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195288,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195288, país: Chile)"
+      },
+      {
+        "invoiceId": "4cd598da-1832-49de-8793-6dbb9cd296f5",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FULL ICE SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195289,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195289, país: Chile)"
+      },
+      {
+        "invoiceId": "9c34ad00-473e-4678-b6ce-a0a166fc808e",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "JP LOGISTICA SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195290,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195290 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "aa7a0414-e837-4f06-b4a5-d0b9deb58d76",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "HELATONY’S S.A.C",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195291,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195291, país: Peru)"
+      },
+      {
+        "invoiceId": "76bc3f68-317d-4f74-887f-764797886d03",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Dream Tec SA SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195292,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195292 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "b2d3b28a-fd83-4f39-acd8-d4e7db1ef1b8",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Maxi Mobility Peru S.a.C",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195293,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195293 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "c5816d93-5f2f-45cd-a644-0b5d1ac50274",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DEPOSITO DE DROGAS MONACO S A",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195294,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "ab04ff63-eb5a-40d9-a59b-c7e620fcd5c0",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DP WORLD LOGISTICS S.R.L",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195295,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195295 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "0c52a7cc-d3e6-4e15-b8cb-51f53277ef3a",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "UES SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195296,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "d412330e-07fc-4501-a58a-0800423e7672",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Wurth del Uruguay SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195297,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "89168019-1909-4ec0-9f0d-d2281ccf0fa5",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Encatex SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195298,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "dd18380f-23cd-440a-b1a5-55bb294acb34",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CORAL DEL MAR S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195299,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "78bc85ff-c881-4d8b-8e61-b69e9543379f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DELMITA S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195300,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "36970c73-f9ff-4059-a7e9-8ba1b4851469",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Insumos Profesionales de Limpieza",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195301,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "5bfc60e2-d54c-4bab-999a-ab04c2374a8c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "ESTABLECIMIENTOS JUAN SARUBBI S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195302,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "08540939-b880-403e-829f-740108ff7a57",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Lazar SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195303,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "f8d78e3c-a140-4ca3-aceb-9a7b9a66caca",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FEM ROIG S.R.L.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195304,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "76c57413-1d77-4d73-8df2-56f5c9a00f89",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MARCAL IMPORTACIONES S.R.L.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195305,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "7f4ed39a-fc72-4bd3-a3f0-fffff69aacac",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Falcon y Falcon",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195306,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "fac2747c-8ed3-409b-8d2e-45b9ffa13578",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISTRIBUIDORA CUAREIM SRL",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195307,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "db497e75-c579-44d6-a70f-b8335ad3d925",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "BAZAR LA IBERICA S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195308,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "1db4ecbd-8780-43e2-8fc2-7b09aaf1b050",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Anhec Administración SRL",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195309,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "95316c18-b033-4e51-8518-4a83a30ee56e",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISER S.A.S.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195310,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "c5842aa7-d75a-4361-b859-ffc27408b6a9",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Distribuidora Madrid SRL",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195311,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "ff85fd23-8ba1-49c8-8e2f-d3a5a6339a50",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Wurst SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195312,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "b0e9616d-a23e-4b69-ad91-24c9253d559d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "RIBLINOR S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195313,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "929d0944-90dd-4e64-9da4-ec7e6685d838",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Macfisan SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195314,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "81c19f3e-9269-4bdc-8e57-aaf5b0525545",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Atland SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195315,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "4836a5ef-1179-43c8-b7d1-ed74a4048d09",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LABREZZA S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195316,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "944f59bb-6d4f-473f-82da-de2089a52288",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Divino",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195317,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "ddbdff25-0248-4532-b53a-f549b6db3eab",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "GOODLIFE SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195318,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "a993825b-298a-4180-8d68-d20b3a92a11e",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "HEY´DI URUGUAYA SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195319,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "90f10f26-ec35-4f3f-aa4e-3ee3b3d4681a",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Noesma S.A",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195320,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "8948ff4c-ab38-4f10-8bed-971d5c4895d3",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CLEARWATER URUGUAY S.R.L.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195321,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "9d52f5fd-fbed-44f8-b546-c6ee81e84c24",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "ABITOUY S.R.L.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195322,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "9d6a4b48-dfc2-408c-9a7e-992316c1e21b",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CORREA GULARTE KATIA SIBANA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195323,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "4e44a6d8-f747-4114-bc9a-31292634d9a6",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "UNIVERSIDAD SANTO TOMAS",
+        "companyName": "TANEQ SPA",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "error": "Error creando factura en borrador en Odoo: XML-RPC Fault: Traceback (most recent call last):\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6428, in _update_cache\n    field_values = [(fields[name], value) for name, value in values.items() if name != 'id']\n                     ~~~~~~^^^^^^\nKeyError: 'x_sapira_invoice_id'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/home/odoo/src/odoo/odoo/addons/base/controllers/rpc.py\", line 165, in xmlrpc_2\n    response = self._xmlrpc(service)\n               ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/addons/base/controllers/rpc.py\", line 139, in _xmlrpc\n    result = dispatch_rpc(service, method, params)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/http.py\", line 412, in dispatch_rpc\n    return dispatch(method, params)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 59, in dispatch\n    res = execute_kw(db, uid, *params[3:])\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 82, in execute_kw\n    return execute(db, uid, obj, method, *args, **kw or {})\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 88, in execute\n    res = execute_cr(cr, uid, obj, method, *args, **kw)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 73, in execute_cr\n    result = retrying(partial(odoo.api.call_kw, recs, method, args, kw), env)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 157, in retrying\n    result = func()\n             ^^^^^^\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 535, in call_kw\n    result = getattr(recs, name)(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-193>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 497, in _model_create_multi\n    return create(self, [arg])\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/base_automation/models/base_automation.py\", line 785, in create\n    records = create.origin(self.with_env(automations.env), vals_list, **kw)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-154>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/purchase/models/account_invoice.py\", line 169, in create\n    moves = super(AccountMove, self).create(vals_list)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-100>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/account/models/account_move.py\", line 3410, in create\n    moves = super().create(vals_list)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-52>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/mail/models/mail_thread.py\", line 294, in create\n    threads = super(MailThread, self).create(vals_list)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-0>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 4987, in create\n    new_vals_list = self._prepare_create_values(vals_list)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5144, in _prepare_create_values\n    self._add_precomputed_values(result_vals_list)\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5172, in _add_precomputed_values\n    records = self.browse().concat(*(self.new(vals) for vals in vals_list_todo))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5172, in <genexpr>\n    records = self.browse().concat(*(self.new(vals) for vals in vals_list_todo))\n                                     ^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6880, in new\n    record._update_cache(values, validate=False)\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6430, in _update_cache\n    raise ValueError(\"Invalid field %r on model %r\" % (e.args[0], self._name))\nValueError: Invalid field 'x_sapira_invoice_id' on model 'account.move' (Code: 1)"
+      },
+      {
+        "invoiceId": "a7c700d5-68ec-4737-a5c7-d47690cdd8eb",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Brinsud SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195324,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "5ba440e8-e021-4d64-9cf5-46addb51bd6f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Milanco SA",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195325,
+        "details": "Factura enviada a entidad electrónica (Uruguay), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "3dbeb902-02b7-48fb-9fd6-3834461b3af2",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FABRICA Y COMERCIALIZADORA DE HELADOS VILLAFRANCA DEL BIERZO LIMITADA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195326,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195326, país: Chile)"
+      },
+      {
+        "invoiceId": "1672aab4-020e-4b44-9a5d-6564455f5021",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CENTRO INCLUSIVO R SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195327,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195327, país: Chile)"
+      },
+      {
+        "invoiceId": "5cd33123-7ef6-4087-9b19-9197f3e625f0",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LOGISTICA MAJU SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195328,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195328, país: Chile)"
+      },
+      {
+        "invoiceId": "b8a2ce1b-356d-44f3-a622-699552f5df82",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Demarka S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195329,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195329, país: Chile)"
+      },
+      {
+        "invoiceId": "cf983223-7c7c-4894-ae50-081b1f4564a6",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MOSAICO S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195330,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195330, país: Chile)"
+      },
+      {
+        "invoiceId": "c4ff5e29-2f54-4757-be7c-98b7bd544f9c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SERVIALL SOCIEDAD ANONIMA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195331,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195331, país: Chile)"
+      },
+      {
+        "invoiceId": "2d8940fd-f086-46a0-aed6-c9bdc98e52d9",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISTRIBUIDORA LIMATCO S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195332,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195332, país: Chile)"
+      },
+      {
+        "invoiceId": "ec6b11eb-07a4-4b43-b02c-7cd71ba094d8",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "VENTA AL POR MENOR DE ALIMENTO Y ACCESORIOS PARA MASCOTAS, ARIEL SANDO",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195333,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195333, país: Chile)"
+      },
+      {
+        "invoiceId": "0ae9a22b-d292-450e-ab25-ec8591f04c2f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "COMERCIAL CENTRAL CHILE LIMITADA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195334,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195334, país: Chile)"
+      },
+      {
+        "invoiceId": "24519d0d-91c2-4317-9741-67bc02454f48",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Bidfood Chile S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195335,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195335, país: Chile)"
+      },
+      {
+        "invoiceId": "330c6853-b663-4b34-9e95-1616e2077b07",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOLUCIONES EFICIENTES HG SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195336,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195336, país: Chile)"
+      },
+      {
+        "invoiceId": "8ac008a3-4625-41ee-a3e8-3d17f1107c35",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "PERFILES Y METALES S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195337,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195337, país: Chile)"
+      },
+      {
+        "invoiceId": "38812fa0-4195-4717-bed1-1827047eaf2e",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Hod Foods SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195338,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195338, país: Chile)"
+      },
+      {
+        "invoiceId": "3003ebdc-109e-4dc9-ac44-1e47ca3370e7",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LOGISTICA Y BODEGAJE SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195339,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195339, país: Chile)"
+      },
+      {
+        "invoiceId": "a0a86235-f69d-47cb-97ad-7c783e8e0872",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Heaven Agua Purificada spa",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195340,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195340, país: Chile)"
+      },
+      {
+        "invoiceId": "22d9edab-5617-43a0-b877-2ecbeff36283",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SERVICIOS FINANCIEROS Y MERCADOTECNIA S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195341,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195341, país: Chile)"
+      },
+      {
+        "invoiceId": "a9e389ff-4ca0-43fd-86b6-d6175e4b01be",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "YOLITO BALART HERMANOS LIMITADA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195342,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195342, país: Chile)"
+      },
+      {
+        "invoiceId": "dd5b749c-8879-44d3-b989-12720d4c8e78",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "ECOMAS S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195343,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195343, país: Chile)"
+      },
+      {
+        "invoiceId": "bb932eba-1517-47cb-b86c-7cb60b6563d3",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SERVICIOS FINANCIEROS Y MERCADOTECNIA S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195344,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195344, país: Chile)"
+      },
+      {
+        "invoiceId": "32340c42-ab5b-4add-8046-4dfe5bc6b21b",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOCIEDAD DE SERVICIOS ENNVIOS SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195345,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195345, país: Chile)"
+      },
+      {
+        "invoiceId": "58badda7-e40a-40af-942a-994042455bf2",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "ILAN Chile SpA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195346,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195346, país: Chile)"
+      },
+      {
+        "invoiceId": "164d759f-feac-4b43-bff0-6088146db9fb",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "VINA UNDURRAGA S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195347,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195347, país: Chile)"
+      },
+      {
+        "invoiceId": "5a2af147-be6b-4ee7-9dfc-3a27ac221a6f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOCIEDAD H Y E SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195348,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195348, país: Chile)"
+      },
+      {
+        "invoiceId": "f135cf81-3da9-4d75-8017-73e1636d479d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOFRUCO ALIMENTOS LIMITADA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195349,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195349, país: Chile)"
+      },
+      {
+        "invoiceId": "451b5fc1-05a6-42c4-b08e-4841e38526a5",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISTRIBUCION Y LOGISTICA V&L SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "error": "Error creando factura en borrador en Odoo: XML-RPC Fault: Empresas incompatibles con los registros:\n- 'MAKE - Periodo 01/08/2026 a 31/08/2026' le pertenece a 'SIMPLIT SPA' y 'Product' (product_id: 'Descuento ') le pertenece a otra empresa. (Code: 2)"
+      },
+      {
+        "invoiceId": "a2823e53-4b37-482f-aac9-cf92bcba1d7f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SAFE ENERGY SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195351,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195351, país: Chile)"
+      },
+      {
+        "invoiceId": "4308011b-ddd6-4d45-b616-332382a1bcee",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "NINJA HUBS SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195352,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195352, país: Chile)"
+      },
+      {
+        "invoiceId": "bb68a733-69ba-4de0-ab2f-c74b4aac9fb9",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISTRIBUIDORA ALMA BRANDS SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195353,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195353, país: Chile)"
+      },
+      {
+        "invoiceId": "caec119e-ef3c-4cbd-9577-da9b297094eb",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "COMERCIAL LAS INVERNADAS S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195354,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195354, país: Chile)"
+      },
+      {
+        "invoiceId": "8708ecd3-c320-4f61-bf22-c6e07463eb05",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOCIEDAD IMPORTADORA MARITEX SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195355,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195355, país: Chile)"
+      },
+      {
+        "invoiceId": "0f935643-7b1e-4028-92cf-2ee667d3c3cd",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Transportes Frasene SpA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195356,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195356, país: Chile)"
+      },
+      {
+        "invoiceId": "d89d7786-f383-42c4-a595-ef48a5adb7d4",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Comercial Guaioio SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195357,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195357, país: Chile)"
+      },
+      {
+        "invoiceId": "ee8c2383-6d01-4772-af31-3a34fd3f0823",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "AMA LOGISTICA & DISTRIBUCIÓN SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195358,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195358, país: Chile)"
+      },
+      {
+        "invoiceId": "3beb981d-cec3-482c-a076-44f24b4a666c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SCHENKER CHILE S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195359,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195359, país: Chile)"
+      },
+      {
+        "invoiceId": "d28fafb5-d126-41a1-a134-2229201da46a",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LA VINOTECA SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195360,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195360, país: Chile)"
+      },
+      {
+        "invoiceId": "3f2e9686-8d01-4385-b8f7-fef70831cdbf",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FERRELECTRICA SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195361,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195361, país: Chile)"
+      },
+      {
+        "invoiceId": "de3932a7-4e06-4f32-9d4b-282689ff78fe",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LA BERLIN SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195362,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195362 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "d1ca4871-5ad8-4786-abf8-3aa32b6c43d0",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "GASCO GLP S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195363,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195363 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "a059b447-41bc-452a-9092-68fbbf0f4e00",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Unilever Andina Ecuador S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195364,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195364 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "09d84bc2-8d66-4ec6-be28-76f8ab125332",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "VIGATEC S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195365,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195365, país: Chile)"
+      },
+      {
+        "invoiceId": "8010c077-2050-4d29-9475-00b31ddb22f8",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DISTRIBUCION Y LOGISTICA V&L SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195366,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195366, país: Chile)"
+      },
+      {
+        "invoiceId": "1fe39d36-9d2b-4925-a3d5-9e7c1663ef12",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Empresa Nacional de Telecomunicaciones S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195367,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195367 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "16baaf38-4fed-466c-b449-d5ebdaec5e5b",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Empresa Nacional de Telecomunicaciones S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195368,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195368 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "19aa5179-5b33-4db3-9d84-467c45157ef4",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "IMPORTADORA ICOLTEX SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195369,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "e1cf63f7-cb2d-4039-8c87-74ef6da482b7",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SG COMERCIAL GROUP",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195370,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "3d91d882-8d6e-4295-9708-34de59df7e9c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "TEXTILES 1 X 1 SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195371,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "af79a24d-b002-429c-9258-b0b80acd06ac",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MECANELECTRO S.A.S",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195372,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "6e5f99b0-4eb7-4604-8a3f-a780bd53933f",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "TRONEX S.A.S",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195373,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "cd052f55-598c-4730-a2d0-2c16265efd88",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CINTAS ANDINAS DE COLOMBIA S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195374,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "3e07f3e4-1e99-4a1c-9a53-99108f79b97e",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CABIFY LOGISTICS SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195375,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "7d0780bb-e5ed-4dc7-8df9-2291cd00aadf",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MENSAJERIA Y MOVILIDAD SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195376,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "6693982e-1107-490e-9edb-ff5d7975e1ea",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "RED POSTAL POBLADO SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195377,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "9787f038-bf6b-472a-b081-569d93b3625a",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "BUSCALIBRE COLOMBIA S.A.S.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195378,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "f77eedb3-c82e-403d-9c4f-32d252671d6d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "COMMERK S.A.S",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195379,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "6bc60c97-3782-424c-825e-aceb0b66d330",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FERRAGRO S.A.S.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195380,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "1dc37eaf-439b-4e5e-9e94-bfe192778fee",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DECOWRAPS COLOMBIA S.A.S",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195381,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "f1b37559-3e09-4bd4-ba39-3d3b49c9811a",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LAND FAST S.A.",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195382,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "7564ce0d-93a4-4bae-83c0-fcb0336d6e29",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Zona Logistica S.A.S. ZLG",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195383,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "35e4e278-2bc9-4421-bf9d-e3cebc0f5b6c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "EDEN AGUA SOLUCIONES INTEGRALES S.A.C.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195384,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195384, país: Peru)"
+      },
+      {
+        "invoiceId": "42988c78-2d03-4082-b73c-7ea08f745642",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CORPORACION UNION FARMA S.A.C.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195385,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195385, país: Peru)"
+      },
+      {
+        "invoiceId": "2b4c30ed-3857-435c-a1f8-1a276729c3df",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "IMPORTADORA MULTISTOCK S.A.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195386,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195386, país: Peru)"
+      },
+      {
+        "invoiceId": "26587d58-68e5-4d04-9de2-d10d805101ed",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CORPORACION BENEST S.A.C.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195387,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195387, país: Peru)"
+      },
+      {
+        "invoiceId": "50ab8468-6892-4f5c-bfb2-39d62e1bcc22",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "AFE SERVICE SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195388,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195388, país: Peru)"
+      },
+      {
+        "invoiceId": "ae3ce6ad-0c4b-44b9-a46c-bb82b4d908d6",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "PREMIUM BRANDS S.A.C",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195389,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195389, país: Peru)"
+      },
+      {
+        "invoiceId": "43455d02-59a9-4145-9e2e-906d1c753736",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "BUSCALIBRE PERU S.A.C.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195390,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195390, país: Peru)"
+      },
+      {
+        "invoiceId": "86260354-3597-46d1-b4bb-a65288ed80b6",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Corporacion Arion SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195391,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195391, país: Peru)"
+      },
+      {
+        "invoiceId": "6414d436-d175-497f-b924-1d370c7be2cc",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "TNT EXPRESS SAS",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195392,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "53dc6a77-ac99-4a88-95ac-5d8149c4c8d8",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SG COMERCIAL GROUP",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195393,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195393 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "e0dd67b9-a351-4331-b5f9-337b9f3e01ad",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "INSTITUTO PROFESIONAL SANTO TOMAS",
+        "companyName": "TANEQ SPA",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "error": "Error creando factura en borrador en Odoo: XML-RPC Fault: Traceback (most recent call last):\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6428, in _update_cache\n    field_values = [(fields[name], value) for name, value in values.items() if name != 'id']\n                     ~~~~~~^^^^^^\nKeyError: 'x_sapira_invoice_id'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/home/odoo/src/odoo/odoo/addons/base/controllers/rpc.py\", line 165, in xmlrpc_2\n    response = self._xmlrpc(service)\n               ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/addons/base/controllers/rpc.py\", line 139, in _xmlrpc\n    result = dispatch_rpc(service, method, params)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/http.py\", line 412, in dispatch_rpc\n    return dispatch(method, params)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 59, in dispatch\n    res = execute_kw(db, uid, *params[3:])\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 82, in execute_kw\n    return execute(db, uid, obj, method, *args, **kw or {})\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 88, in execute\n    res = execute_cr(cr, uid, obj, method, *args, **kw)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 73, in execute_cr\n    result = retrying(partial(odoo.api.call_kw, recs, method, args, kw), env)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/service/model.py\", line 157, in retrying\n    result = func()\n             ^^^^^^\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 535, in call_kw\n    result = getattr(recs, name)(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-193>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 497, in _model_create_multi\n    return create(self, [arg])\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/base_automation/models/base_automation.py\", line 785, in create\n    records = create.origin(self.with_env(automations.env), vals_list, **kw)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-154>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/purchase/models/account_invoice.py\", line 169, in create\n    moves = super(AccountMove, self).create(vals_list)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-100>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/account/models/account_move.py\", line 3410, in create\n    moves = super().create(vals_list)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-52>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/addons/mail/models/mail_thread.py\", line 294, in create\n    threads = super(MailThread, self).create(vals_list)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<decorator-gen-0>\", line 2, in create\n  File \"/home/odoo/src/odoo/odoo/api.py\", line 498, in _model_create_multi\n    return create(self, arg)\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 4987, in create\n    new_vals_list = self._prepare_create_values(vals_list)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5144, in _prepare_create_values\n    self._add_precomputed_values(result_vals_list)\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5172, in _add_precomputed_values\n    records = self.browse().concat(*(self.new(vals) for vals in vals_list_todo))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 5172, in <genexpr>\n    records = self.browse().concat(*(self.new(vals) for vals in vals_list_todo))\n                                     ^^^^^^^^^^^^^^\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6880, in new\n    record._update_cache(values, validate=False)\n  File \"/home/odoo/src/odoo/odoo/models.py\", line 6430, in _update_cache\n    raise ValueError(\"Invalid field %r on model %r\" % (e.args[0], self._name))\nValueError: Invalid field 'x_sapira_invoice_id' on model 'account.move' (Code: 1)"
+      },
+      {
+        "invoiceId": "3d2f14e9-79ac-4407-909e-b6b25156f522",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MAREES SAS ESP",
+        "companyName": "SimpliRoute S.A.S",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195394,
+        "details": "Factura enviada a entidad electrónica (Colombia), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "5947d3f9-24be-438b-9f2f-ad3f78740532",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "HAP SELLERS SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195395,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195395 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "6bf8378b-0126-4d4a-9346-06a7dcce537d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "WEG PERU S.A.C.",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195396,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195396 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "0b184f3d-5f50-4584-98a7-69ee0e13f991",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "RANSA COMERCIAL S.A.C",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195397,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195397 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "57e171df-7c16-4246-ab07-f5311d860561",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "TATE & LYLE MEXICO",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195398,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195398) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "db50c098-a982-4309-b645-82d03d5d650d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FERRELECTRICA SPA",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195399,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195399 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "17bb8980-2711-4e2e-bb98-eab100b43158",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "Transportes Castello Branco Spa",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195400,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195400 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "eb7dda31-84ce-4ca5-8672-9b079daeff44",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FT FOODS S.A.",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195401,
+        "details": "Factura creada y emitida exitosamente en Odoo (ID: 195401, país: Chile)"
+      },
+      {
+        "invoiceId": "308b45c0-a465-4679-b8fa-4c5f1ed275b9",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "OPERATIVIDAD SUSTENTABLE",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195402,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195402) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "b5f51123-bf4c-4428-a9bb-1f79ef151c42",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DSTORECO",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195403,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195403) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "d7da9909-4ff8-4565-baf4-c7e8cf3367ec",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "B PARTES",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195404,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195404 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "71987afe-8015-4b75-905f-7cc75e295068",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "FERRETERIA INDAR",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195405,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195405) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "9914190d-b9ea-4de2-86f4-da570c60a098",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "CEFA CENTRAL FARMACEUTICA",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195406,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195406) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "3e53660f-1cb8-4648-8434-2d2456c5b4c1",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "PROVEEDORA HYH",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195407,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195407) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "096ff707-4f76-4bbb-a2c3-8a23f621ad6c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "INTEGRADORA DE FRANQUICIAS PKT 1",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195408,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195408) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "f7fd5c6c-83fd-4ab3-8156-5cde239a0476",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "PACKSYS MEXICO",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195409,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195409) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "bf6c8a7b-a6dc-44e4-a5d7-2c2e54e19cbb",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "VERSATILIDAD INDUSTRIAL DE SALTILLO",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195410,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195410) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "ae3f2f6d-fc22-4d90-8341-a7657b5e8c86",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "PETS TABLE",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195411,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195411) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "dc0c884a-82ff-41f4-8a0b-dac119f71ce1",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "GLOBAL VEU",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195412,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195412) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "3eea6372-6de1-4ec4-ac7c-34b86c58f596",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MARIA PAULA OCHOA CURIEL",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "error",
+        "odooInvoiceId": 195413,
+        "error": "Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)",
+        "details": "Factura publicada en Odoo (ID: 195413) pero falló emisión electrónica: Error emitiendo factura México en Odoo: XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC:\n- Código: CFDI40104 - El campo FormaPago no contiene un valor del catálogo c_FormaPago.\nMensaje: The 'FormaPago' attribute is invalid - The value '' is invalid according to its datatype 'http://www.sat.gob.mx/sitio_internet/cfd/catalogos:c_FormaPago' - The Enumeration constraint failed. (Code: 2)"
+      },
+      {
+        "invoiceId": "07d378a7-c505-4dec-b918-c195eacb49b7",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MANANTIAL S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195414,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195414 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "44f1264e-0949-4a06-9c25-34b4470d085c",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "MANANTIAL S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195415,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195415 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "2b3ea4b7-0ff8-4ed8-a59c-084cbbc155bd",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "DS Business Express SAC",
+        "companyName": "SimpliRoute S.A.C",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195416,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195416 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "b0f29b6a-23e0-448d-8b3b-cff66cbba307",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "LOGISTICA INDUSTRIAL S A",
+        "companyName": "Simplit SpA",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195417,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195417 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "11ca317a-a7c7-4fd3-8708-07fa7208ffa3",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "TECNOCONTROL VEHICULAR",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195418,
+        "details": "Factura enviada a entidad electrónica (Mexico), pendiente de confirmación"
+      },
+      {
+        "invoiceId": "f1a787f0-a021-40b8-83dd-d452df5203a1",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "BANCO PLATA S.A., INSTITUCION DE BANCA MULTIPLE",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195419,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195419 (mantiene estado 'Por Emitir')"
+      },
+      {
+        "invoiceId": "01cf9765-de61-4a3a-bdc8-85848a51e81d",
+        "invoiceNumber": "SIN-NUMERO",
+        "clientName": "SOLUCIONES BRIO",
+        "companyName": "SimpliRoute S.A.P.I DE C.V",
+        "issueDate": "2026-08-01",
+        "status": "sent",
+        "odooInvoiceId": 195420,
+        "details": "Factura enviada exitosamente a Odoo con ID: 195420 (mantiene estado 'Por Emitir')"
+      }
+    ],
+    "executedAt": {
+      "$date": "2026-08-01T12:20:34.566Z"
+    }
+  }
+}

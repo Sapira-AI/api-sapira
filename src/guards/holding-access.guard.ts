@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { UserHolding } from '../modules/holdings/entities/user-holding.entity';
+import { User } from '../modules/users/entities/user.entity';
 
 /**
  * Guard para validar que el usuario tiene acceso al holdingId recibido en el header X-Holding-Id
@@ -18,7 +19,9 @@ import { UserHolding } from '../modules/holdings/entities/user-holding.entity';
 export class HoldingAccessGuard implements CanActivate {
 	constructor(
 		@InjectRepository(UserHolding)
-		private readonly userHoldingRepository: Repository<UserHolding>
+		private readonly userHoldingRepository: Repository<UserHolding>,
+		@InjectRepository(User)
+		private readonly userRepository: Repository<User>
 	) {}
 
 	async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,9 +43,17 @@ export class HoldingAccessGuard implements CanActivate {
 		}
 
 		// Verificar que el usuario tenga acceso a ese holding
+		const internalUser = await this.userRepository.findOne({
+			where: [{ id: user.id }, { auth_id: user.id }],
+			select: ['id'],
+		});
+		if (!internalUser) {
+			throw new ForbiddenException('No existe un usuario interno asociado a la sesión');
+		}
+
 		const userHolding = await this.userHoldingRepository.findOne({
 			where: {
-				user_id: user.id,
+				user_id: internalUser.id,
 				holding_id: holdingId,
 			},
 		});

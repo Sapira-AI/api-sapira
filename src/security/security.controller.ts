@@ -19,7 +19,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { EventSeverity, EventStatus, EventType, SecurityAction, SecurityEvent, SecurityOutcome } from '@/core/interfaces/events/event.interface';
 import { SecurityViolationType } from '@/core/interfaces/security/security.types';
 import { SecurityUtils } from '@/core/utils/security.utils';
@@ -35,7 +35,7 @@ import { SecurityService } from './services/security.service';
 // @ApiExcludeController()
 @ApiTags('Security')
 @Controller('security')
-@UseGuards(AzureADAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class SecurityController {
 	constructor(

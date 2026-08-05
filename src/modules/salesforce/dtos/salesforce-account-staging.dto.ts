@@ -120,6 +120,20 @@ export class SalesforceSyncRunStartDto extends SalesforceOpportunityImportDto {
 	declare opportunityIds: string[];
 }
 
+export class SalesforceBulkOpportunityProcessDto {
+	@ApiPropertyOptional({
+		description: 'Estados de staging elegibles. Solo create y update están permitidos.',
+		enum: ['create', 'update'],
+		type: [String],
+		example: ['create', 'update'],
+	})
+	@IsOptional()
+	@IsArray()
+	@ArrayNotEmpty()
+	@IsIn(['create', 'update'], { each: true })
+	statuses?: Array<'create' | 'update'>;
+}
+
 export class SalesforceOpportunityRetryDto {
 	@ApiPropertyOptional({
 		description: 'Paso que se reintentará según la causa registrada en la notificación',

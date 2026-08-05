@@ -3,7 +3,9 @@ import { ConfigService } from '@nestjs/config';
 
 import { EmailsService } from '@/modules/emails/emails.service';
 
+import type { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
 import { Invoice } from './entities/invoice.entity';
+import type { ExecutionEnvironment, ExecutionSource } from './schemas/invoice-scheduler-job.schema';
 
 interface ExchangeRateInfo {
 	rate: number;
@@ -259,6 +261,70 @@ export class InvoiceNotificationService {
 		}
 	}
 
+	async sendSchedulerErrorSummary(params: {
+		jobId: string;
+		holdingId: string;
+		dryRun: boolean;
+		executionSource: ExecutionSource;
+		executionEnvironment: ExecutionEnvironment;
+		startedAt: Date;
+		result: ProcessInvoicesResponseDto;
+		distinctErrors: Array<{ message: string; count: number }>;
+	}): Promise<void> {
+		if (params.dryRun || params.result.summary.errors === 0 || this.adminEmails.length === 0) return;
+
+		const subject = `🚨 Integración de facturas con errores (${params.executionEnvironment.toUpperCase()})`;
+		const errorRows = params.distinctErrors
+			.map(
+				(error) =>
+					`<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${this.escapeHtml(error.message)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center;">${error.count}</td></tr>`
+			)
+			.join('');
+		const completedAt = params.result.executedAt;
+		const html = `
+			<!DOCTYPE html>
+			<html lang="es">
+			<head><meta charset="UTF-8"></head>
+			<body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;">
+				<div style="max-width:700px;margin:0 auto;padding:20px;">
+					<div style="background:#b91c1c;color:white;padding:18px;border-radius:6px 6px 0 0;">
+						<h2 style="margin:0;">Integración de facturas finalizada con errores</h2>
+					</div>
+					<div style="border:1px solid #e5e7eb;padding:20px;">
+						<p>La ejecución real de integración de facturas terminó con errores.</p>
+						<table style="width:100%;border-collapse:collapse;margin:16px 0;">
+							<tr><td><strong>Entorno</strong></td><td>${this.escapeHtml(params.executionEnvironment)}</td></tr>
+							<tr><td><strong>Origen</strong></td><td>${params.executionSource === 'automatic' ? 'Automática' : 'Manual'}</td></tr>
+							<tr><td><strong>Holding</strong></td><td>${this.escapeHtml(params.holdingId)}</td></tr>
+							<tr><td><strong>Inicio</strong></td><td>${params.startedAt.toISOString()}</td></tr>
+							<tr><td><strong>Finalización</strong></td><td>${completedAt.toISOString()}</td></tr>
+							<tr><td><strong>ID de ejecución</strong></td><td>${this.escapeHtml(params.jobId)}</td></tr>
+						</table>
+						<div style="display:flex;gap:12px;margin:18px 0;">
+							<div style="padding:10px;background:#f3f4f6;"><strong>Total:</strong> ${params.result.summary.total}</div>
+							<div style="padding:10px;background:#dcfce7;"><strong>Enviadas:</strong> ${params.result.summary.sent}</div>
+							<div style="padding:10px;background:#fee2e2;"><strong>Errores:</strong> ${params.result.summary.errors}</div>
+							<div style="padding:10px;background:#f3f4f6;"><strong>Omitidas:</strong> ${params.result.summary.skipped}</div>
+						</div>
+						<h3>Errores distintos</h3>
+						<table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;">
+							<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;">Error</th><th style="padding:8px;">Facturas</th></tr></thead>
+							<tbody>${errorRows}</tbody>
+						</table>
+					</div>
+				</div>
+			</body>
+			</html>
+		`;
+
+		try {
+			await this.emailsService.sendSystemEmail(this.adminEmails, subject, html);
+			this.logger.log(`✓ Resumen de errores del scheduler enviado a ${this.adminEmails.join(', ')} para job ${params.jobId}`);
+		} catch (error) {
+			this.logger.error(`Error enviando resumen de errores del scheduler ${params.jobId}:`, error);
+		}
+	}
+
 	private formatCurrency(value: number): string {
 		return new Intl.NumberFormat('es-CL', {
 			minimumFractionDigits: 2,
@@ -279,5 +345,9 @@ export class InvoiceNotificationService {
 		}
 
 		return 'N/A';
+	}
+
+	private escapeHtml(value: string): string {
+		return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character]);
 	}
 }

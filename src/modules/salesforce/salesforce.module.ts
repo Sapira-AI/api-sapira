@@ -10,9 +10,12 @@ import { ClientEntityClient } from '@/databases/postgresql/entities/client-entit
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/client.entity';
 import { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
+import { GuardsModule } from '@/guards/guards.module';
+import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { OdooModule } from '@/modules/odoo/odoo.module';
 import { Product } from '@/modules/odoo/entities/products.entity';
+import { User } from '@/modules/users/entities/user.entity';
 
 import { ClientContact } from './entities/client-contact.entity';
 import { IntegrationSalesforceConnection } from './entities/integration-salesforce-connection.entity';
@@ -57,6 +60,7 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 @Module({
 	imports: [
 		HttpModule,
+		GuardsModule,
 		OdooModule,
 		NotificationsModule,
 		ScheduleModule.forRoot(),
@@ -88,6 +92,8 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 			QuoteStage,
 			ClientContact,
 			Seller,
+			UserHolding,
+			User,
 		]),
 	],
 	controllers: [SalesforceController, SalesforceMappingController, SalesforceStagingController],

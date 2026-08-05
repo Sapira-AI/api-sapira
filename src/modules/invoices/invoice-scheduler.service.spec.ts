@@ -17,6 +17,7 @@ describe('InvoiceSchedulerService', () => {
 		const invoiceNotificationService = {
 			sendExchangeRateFallbackNotification: jest.fn(),
 			sendMissingExchangeRateNotification: jest.fn(),
+			sendSchedulerErrorSummary: jest.fn(),
 		};
 		const exchangeRatesService = {
 			getExchangeRateWithFallback: jest.fn(),
@@ -115,6 +116,50 @@ describe('InvoiceSchedulerService', () => {
 			valid: false,
 			error: 'Factura de Chile con referencias sin reference_date. El campo date es obligatorio para l10n_cl_reference_ids',
 		});
+	});
+
+	it('agrupa errores distintos y solo notifica ejecuciones reales', async () => {
+		const { service, invoiceNotificationService } = createService();
+		const result = {
+			dryRun: false,
+			summary: { total: 3, sent: 0, errors: 3, skipped: 0 },
+			results: [
+				{ invoiceId: '1', invoiceNumber: '1', status: 'error', error: ' Partner no encontrado ' },
+				{ invoiceId: '2', invoiceNumber: '2', status: 'error', error: 'Partner no encontrado' },
+				{ invoiceId: '3', invoiceNumber: '3', status: 'error' },
+			],
+			success: false,
+			executedAt: new Date('2026-08-01T12:10:00.000Z'),
+		};
+
+		await (service as any).sendErrorSummaryNotification({
+			jobId: 'job-1',
+			holdingId: 'holding-1',
+			dryRun: false,
+			executionSource: 'automatic',
+			executionEnvironment: 'qa',
+			startedAt: new Date('2026-08-01T12:00:00.000Z'),
+			result,
+		});
+
+		expect(invoiceNotificationService.sendSchedulerErrorSummary).toHaveBeenCalledWith(
+			expect.objectContaining({
+				distinctErrors: [
+					{ message: 'Partner no encontrado', count: 2 },
+					{ message: 'Error sin detalle', count: 1 },
+				],
+			})
+		);
+
+		await (service as any).sendErrorSummaryNotification({ ...{
+			jobId: 'job-2',
+			holdingId: 'holding-1',
+			executionSource: 'manual',
+			executionEnvironment: 'qa',
+			startedAt: new Date(),
+			result,
+		}, dryRun: true });
+		expect(invoiceNotificationService.sendSchedulerErrorSummary).toHaveBeenCalledTimes(1);
 	});
 
 	it('crea fallos de Odoo como notificaciones unificadas vinculadas a la factura', async () => {

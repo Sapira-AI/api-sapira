@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { SchedulerJobListItemDto, SchedulerJobStatusDto, StartSchedulerJobResponseDto } from './dtos/scheduler-job.dto';
+import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
 import { SchedulerStatusDto, SendInvoicesDto } from './dtos/send-invoices.dto';
 import { InvoiceSchedulerService } from './invoice-scheduler.service';
 
@@ -151,5 +152,15 @@ export class InvoiceSchedulerController {
 			startedAt: job.startedAt,
 			completedAt: job.completedAt,
 		}));
+	}
+
+	@Get('report')
+	@ApiOperation({
+		summary: 'Reporte de ejecuciones de integración de facturas',
+		description: 'Lista ejecuciones de scheduler con totales, entorno de despliegue y errores distintos.',
+	})
+	@ApiOkResponse({ type: SchedulerReportResponseDto })
+	async getReport(@Query() query: SchedulerReportQueryDto): Promise<SchedulerReportResponseDto> {
+		return await this.invoiceSchedulerService.getJobsReport(query);
 	}
 }

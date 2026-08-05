@@ -360,26 +360,42 @@ export class SalesforceSyncCompleteService {
 							salesforceId: lineItem.Id,
 							status: !stagedLineItem
 								? 'new'
-								: stagedLineItem.source_hash === this.stagingService.getSourceHash(lineItem)
+								: this.stagingService.getSourceHash(stagedLineItem.raw_data) === this.stagingService.getSourceHash(lineItem)
 									? 'synchronized'
 									: 'updatable',
 							staging: stagedLineItem || null,
 						};
 					});
 					const reasons: string[] = [];
+					const differences: Array<{
+						scope: 'quote' | 'line_item';
+						targetField: string;
+						label: string;
+						salesforceValue: unknown;
+						sapiraValue: unknown;
+					}> = [];
 
 					if (!stagedOpportunity) {
 						reasons.push('La oportunidad no existe en staging');
-					} else if (stagedOpportunity.source_hash !== this.stagingService.getSourceHash(opportunity)) {
+					} else if (this.stagingService.getSourceHash(stagedOpportunity.raw_data) !== this.stagingService.getSourceHash(opportunity as unknown as Record<string, unknown>)) {
 						reasons.push('La oportunidad cambió en Salesforce');
+						differences.push(
+							...this.getStagingFieldDifferences(
+								'Oportunidad',
+								opportunity as unknown as Record<string, unknown>,
+								stagedOpportunity.raw_data,
+								['Account', 'OpportunityLineItems']
+							)
+						);
 					}
 
 					const accountPayload =
 						opportunity.AccountId && opportunity.Account ? { Id: opportunity.AccountId, ...opportunity.Account } : null;
 					if (!stagedAccount) {
 						reasons.push('El cliente no existe en staging');
-					} else if (accountPayload && stagedAccount.source_hash !== this.stagingService.getSourceHash(accountPayload)) {
+					} else if (accountPayload && this.stagingService.getSourceHash(stagedAccount.raw_data) !== this.stagingService.getSourceHash(accountPayload)) {
 						reasons.push('El cliente cambió en Salesforce');
+						differences.push(...this.getStagingFieldDifferences('Cliente', accountPayload, stagedAccount.raw_data));
 					}
 
 					if (lineItemComparisons.some((lineItem) => lineItem.status !== 'synchronized')) {
@@ -393,6 +409,7 @@ export class SalesforceSyncCompleteService {
 						opportunity,
 						status: reasons.length === 0 ? 'synchronized' : stagedOpportunity ? 'updatable' : 'new',
 						reasons,
+						differences,
 						unmappedProducts,
 						staging: {
 							opportunity: stagedOpportunity || null,
@@ -403,6 +420,42 @@ export class SalesforceSyncCompleteService {
 				})
 			),
 		};
+	}
+
+	private getStagingFieldDifferences(
+		scope: string,
+		salesforceData: Record<string, unknown>,
+		stagingData: Record<string, unknown>,
+		excludedFields: string[] = []
+	): Array<{ scope: 'quote'; targetField: string; label: string; salesforceValue: unknown; sapiraValue: unknown }> {
+		const labels: Record<string, string> = {
+			Name: 'Nombre',
+			StageName: 'Etapa',
+			Amount: 'Monto',
+			CurrencyIsoCode: 'Moneda',
+			CloseDate: 'Fecha de cierre',
+			Type: 'Tipo',
+			Description: 'Descripción',
+			BusinessName__c: 'Razón social',
+			DemoCountry__c: 'País',
+			BillingCountry: 'País de facturación',
+			RUT__c: 'RUT / Identificación fiscal',
+			Industry: 'Industria',
+			Segmento__c: 'Segmento',
+			Email_de_contacto_principal__c: 'Email de contacto',
+			Phone: 'Teléfono',
+		};
+
+		return Object.entries(salesforceData)
+			.filter(([field, value]) => field !== 'attributes' && !excludedFields.includes(field) && typeof value !== 'object')
+			.filter(([field, value]) => JSON.stringify(value ?? null) !== JSON.stringify(stagingData[field] ?? null))
+			.map(([field, value]) => ({
+				scope: 'quote' as const,
+				targetField: `${scope}.${field}`,
+				label: `${scope}: ${labels[field] || field}`,
+				salesforceValue: value,
+				sapiraValue: stagingData[field] ?? null,
+			}));
 	}
 
 	async syncAllActiveConnectionsComplete(): Promise<SyncCompleteResponseDto[]> {

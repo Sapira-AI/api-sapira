@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags }
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
-import { GetUserByAuthIdQueryDto, GetUserByEmailQueryDto, UserResponseDto } from './dtos/users.dto';
+import { GetUserByAuthIdQueryDto, GetUserByEmailQueryDto, UserMenuContextResponseDto, UserResponseDto } from './dtos/users.dto';
 import { UsersService } from './users.service';
 
 @ApiTags('Users')
@@ -30,6 +30,21 @@ export class UsersController {
 	async getMe(@Request() req): Promise<UserResponseDto> {
 		const authId = req.user?.id;
 		return await this.usersService.getUserByAuthId(authId);
+	}
+
+	@Get('me/context')
+	@ApiOperation({
+		summary: 'Obtener contexto del menú del usuario autenticado',
+		description: 'Retorna perfil, rol visible y holdings asociados, incluyendo el holding seleccionado.',
+	})
+	@ApiResponse({
+		status: HttpStatus.OK,
+		description: 'Contexto del usuario obtenido exitosamente',
+		type: UserMenuContextResponseDto,
+	})
+	async getMenuContext(@Request() req): Promise<UserMenuContextResponseDto> {
+		const authId = req.user?.id || req.user?.sub;
+		return await this.usersService.getUserMenuContext(authId);
 	}
 
 	@Get('by-auth-id')

@@ -18,6 +18,7 @@ import { DocumentTypeMappingService } from '../odoo/services/document-type-mappi
 import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
+import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { Contract } from './entities/contract.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
@@ -26,7 +27,12 @@ import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
-import { InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from './schemas/invoice-scheduler-job.schema';
+import {
+	ExecutionEnvironment,
+	ExecutionSource,
+	InvoiceSchedulerJob,
+	InvoiceSchedulerJobDocument,
+} from './schemas/invoice-scheduler-job.schema';
 
 interface InvoiceWithRelations extends Invoice {
 	clientEntity?: ClientEntity;
@@ -80,6 +86,11 @@ export class InvoiceSchedulerService {
 
 	private getBusinessTimezone(): string {
 		return process.env.TZ || 'America/Santiago';
+	}
+
+	private getExecutionEnvironment(): ExecutionEnvironment {
+		const configuredEnvironment = process.env.NODE_ENV?.toLowerCase().trim();
+		return configuredEnvironment === 'production' || configuredEnvironment === 'qa' ? configuredEnvironment : 'unknown';
 	}
 
 	private getBusinessTodayString(date: Date = new Date()): string {
@@ -244,6 +255,7 @@ export class InvoiceSchedulerService {
 
 		const result: InvoiceResultDto = {
 			invoiceId: invoice.id,
+			holdingId: invoice.holding_id,
 			invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
 			clientName: 'Sin cliente',
 			companyName: 'Sin compañía',
@@ -604,6 +616,64 @@ export class InvoiceSchedulerService {
 											schedulerSource,
 											responseData: emitResponse,
 										});
+									} else {
+										try {
+											const customerSendStartTime = Date.now();
+											const customerSendResponse = await this.odooInvoicesService.sendInvoiceToCustomer(
+												invoice.holding_id,
+												odooResponse.invoice_id
+											);
+											const customerSendDurationMs = Date.now() - customerSendStartTime;
+
+											result.details = `${result.details}. ${customerSendResponse.message}`;
+											await this.createOdooSendLog({
+												holdingId: invoice.holding_id,
+												operation: 'send_invoice_to_customer',
+												status: 'success',
+												invoiceId: invoice.id,
+												invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+												odooInvoiceId: odooResponse.invoice_id,
+												clientName: result.clientName,
+												companyName: result.companyName,
+												invoiceCurrency: invoice.invoice_currency,
+												requestData: { odoo_invoice_id: odooResponse.invoice_id },
+												responseData: customerSendResponse,
+												durationMs: customerSendDurationMs,
+											});
+										} catch (customerSendError) {
+											const customerSendErrorDetails = customerSendError as Error;
+											result.status = 'error';
+											result.error = customerSendErrorDetails.message;
+											result.details = `Factura emitida en Odoo (ID: ${odooResponse.invoice_id}) pero no se pudo enviar al cliente: ${customerSendErrorDetails.message}`;
+
+											await this.createOdooSendLog({
+												holdingId: invoice.holding_id,
+												operation: 'send_invoice_to_customer',
+												status: 'error',
+												invoiceId: invoice.id,
+												invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+												odooInvoiceId: odooResponse.invoice_id,
+												clientName: result.clientName,
+												companyName: result.companyName,
+												invoiceCurrency: invoice.invoice_currency,
+												requestData: { odoo_invoice_id: odooResponse.invoice_id },
+												errorMessage: customerSendErrorDetails.message,
+												errorType: 'customer_email_delivery',
+												errorDetails: { stack: customerSendErrorDetails.stack },
+											});
+
+											await this.createOdooFailureNotification({
+												invoice,
+												stage: 'send_invoice_to_customer',
+												title: `Error enviando factura ${invoice.invoice_number || 'SIN-NUMERO'} al cliente`,
+												message: result.details,
+												errorType: 'customer_email_delivery',
+												errorMessage: customerSendErrorDetails.message,
+												odooInvoiceId: odooResponse.invoice_id,
+												schedulerSource,
+												errorDetails: { stack: customerSendErrorDetails.stack },
+											});
+										}
 									}
 								}
 							} catch (emitError) {
@@ -1622,7 +1692,7 @@ export class InvoiceSchedulerService {
 
 	private async createOdooFailureNotification(params: {
 		invoice: InvoiceWithRelations;
-		stage: 'post_invoice' | 'emit_electronic_invoice';
+		stage: 'post_invoice' | 'emit_electronic_invoice' | 'send_invoice_to_customer';
 		title: string;
 		message: string;
 		errorType: string;
@@ -1687,6 +1757,8 @@ export class InvoiceSchedulerService {
 			holdingId: holdingId || 'all',
 			contractId,
 			dryRun,
+			executionEnvironment: this.getExecutionEnvironment(),
+			executionSource: 'manual' as ExecutionSource,
 			status: 'pending',
 			progress: {
 				total: 0,
@@ -1788,6 +1860,16 @@ export class InvoiceSchedulerService {
 				}
 			);
 
+			await this.sendErrorSummaryNotification({
+				jobId,
+				holdingId: holdingId || 'all',
+				dryRun,
+				executionSource: 'manual',
+				executionEnvironment: this.getExecutionEnvironment(),
+				startedAt: response.executedAt,
+				result: response,
+			});
+
 			this.schedulerGateway.emitJobCompleted(jobId, holdingId || 'all', userId, response);
 
 			this.logger.log(
@@ -1824,6 +1906,132 @@ export class InvoiceSchedulerService {
 			.exec();
 	}
 
+	async getJobsReport(query: SchedulerReportQueryDto): Promise<SchedulerReportResponseDto> {
+		const match: Record<string, any> = {};
+		if (query.environment) match.executionEnvironment = query.environment;
+		if (query.source) match.executionSource = query.source;
+		if (query.holdingId) match.holdingId = query.holdingId;
+		if (query.dryRun !== undefined) match.dryRun = query.dryRun === 'true';
+
+		if (query.from || query.to) {
+			match.startedAt = {};
+			if (query.from) match.startedAt.$gte = new Date(`${query.from}T00:00:00.000Z`);
+			if (query.to) {
+				const end = new Date(`${query.to}T00:00:00.000Z`);
+				end.setUTCDate(end.getUTCDate() + 1);
+				match.startedAt.$lt = end;
+			}
+		}
+
+		const errorProjection = {
+			$map: {
+				input: {
+					$filter: {
+						input: { $ifNull: ['$result.results', []] },
+						as: 'result',
+						cond: { $eq: ['$$result.status', 'error'] },
+					},
+				},
+				as: 'result',
+				in: { $trim: { input: { $ifNull: ['$$result.error', 'Error sin detalle'] } } },
+			},
+		};
+		const basePipeline: any[] = [
+			{ $match: match },
+			{
+				$project: {
+					jobId: 1,
+					holdingId: 1,
+					executionEnvironment: { $ifNull: ['$executionEnvironment', 'unknown'] },
+					executionSource: { $ifNull: ['$executionSource', 'manual'] },
+					dryRun: 1,
+					status: 1,
+					startedAt: 1,
+					completedAt: 1,
+					error: 1,
+					progress: 1,
+					durationMs: {
+						$cond: [{ $and: ['$startedAt', '$completedAt'] }, { $subtract: ['$completedAt', '$startedAt'] }, null],
+					},
+					errors: errorProjection,
+					errorInvoices: {
+						$map: {
+							input: {
+								$filter: {
+									input: { $ifNull: ['$result.results', []] },
+									as: 'result',
+									cond: { $eq: ['$$result.status', 'error'] },
+								},
+							},
+							as: 'result',
+							in: {
+								invoiceId: '$$result.invoiceId',
+							holdingId: '$$result.holdingId',
+								invoiceNumber: '$$result.invoiceNumber',
+								clientName: '$$result.clientName',
+								companyName: '$$result.companyName',
+								issueDate: '$$result.issueDate',
+							odooInvoiceId: '$$result.odooInvoiceId',
+								error: '$$result.error',
+								details: '$$result.details',
+							},
+						},
+					},
+				},
+			},
+			{
+				$addFields: {
+					distinctErrors: {
+						$map: {
+							input: { $setUnion: ['$errors', []] },
+							as: 'message',
+							in: {
+								message: '$$message',
+								count: {
+									$size: {
+										$filter: {
+											input: '$errors',
+											as: 'errorMessage',
+											cond: { $eq: ['$$errorMessage', '$$message'] },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{ $project: { errors: 0 } },
+		];
+		const page = query.page || 1;
+		const limit = query.limit || 25;
+		const [items, total, summaryRows] = await Promise.all([
+			this.invoiceSchedulerJobModel
+				.aggregate([...basePipeline, { $sort: { startedAt: -1 } }, { $skip: (page - 1) * limit }, { $limit: limit }])
+				.exec(),
+			this.invoiceSchedulerJobModel.countDocuments(match).exec(),
+			this.invoiceSchedulerJobModel
+				.aggregate([
+					{ $match: match },
+					{
+						$group: {
+							_id: null,
+							executions: { $sum: 1 },
+							total: { $sum: { $ifNull: ['$progress.total', 0] } },
+							sent: { $sum: { $ifNull: ['$progress.sent', 0] } },
+							errors: { $sum: { $ifNull: ['$progress.errors', 0] } },
+							skipped: { $sum: { $ifNull: ['$progress.skipped', 0] } },
+						},
+					},
+				])
+				.exec(),
+		]);
+
+		const summary = summaryRows[0] || { executions: 0, total: 0, sent: 0, errors: 0, skipped: 0 };
+		delete summary._id;
+		return { items, total, page, limit, summary };
+	}
+
 	async createSystemSchedulerJob(options: ProcessOptions): Promise<string> {
 		const { dryRun, holdingId, contractId } = options;
 		const jobId = uuidv4();
@@ -1838,6 +2046,8 @@ export class InvoiceSchedulerService {
 			holdingId: holdingId || 'all',
 			contractId,
 			dryRun,
+			executionEnvironment: this.getExecutionEnvironment(),
+			executionSource: 'automatic' as ExecutionSource,
 			status: 'running',
 			progress: {
 				total: 0,
@@ -1876,6 +2086,17 @@ export class InvoiceSchedulerService {
 			`✅ Job del sistema ${jobId} completado - Total: ${result.summary.total}, Enviadas: ${result.summary.sent}, ` +
 				`Errores: ${result.summary.errors}, Omitidas: ${result.summary.skipped}`
 		);
+
+		const job = await this.invoiceSchedulerJobModel.findOne({ jobId }).lean().exec();
+		await this.sendErrorSummaryNotification({
+			jobId,
+			holdingId: job?.holdingId || 'all',
+			dryRun: result.dryRun,
+			executionSource: job?.executionSource || 'automatic',
+			executionEnvironment: job?.executionEnvironment || 'unknown',
+			startedAt: job?.startedAt || result.executedAt,
+			result,
+		});
 	}
 
 	async updateSchedulerJobError(jobId: string, error: Error): Promise<void> {
@@ -1889,5 +2110,29 @@ export class InvoiceSchedulerService {
 		);
 
 		this.logger.error(`❌ Job del sistema ${jobId} falló: ${error.message}`);
+	}
+
+	private async sendErrorSummaryNotification(params: {
+		jobId: string;
+		holdingId: string;
+		dryRun: boolean;
+		executionSource: ExecutionSource;
+		executionEnvironment: ExecutionEnvironment;
+		startedAt: Date;
+		result: ProcessInvoicesResponseDto;
+	}): Promise<void> {
+		if (params.dryRun || params.result.summary.errors === 0) return;
+
+		const errors = new Map<string, number>();
+		for (const result of params.result.results) {
+			if (result.status !== 'error') continue;
+			const message = result.error?.trim() || 'Error sin detalle';
+			errors.set(message, (errors.get(message) || 0) + 1);
+		}
+
+		await this.invoiceNotificationService.sendSchedulerErrorSummary({
+			...params,
+			distinctErrors: Array.from(errors, ([message, count]) => ({ message, count })),
+		});
 	}
 }

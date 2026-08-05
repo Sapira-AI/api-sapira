@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpStatus, Param, Patch, Res, UseGuards } from 
 import { ApiBearerAuth, ApiBody, ApiExcludeController, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UpdateWriteOpResult } from 'mongoose';
 
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { Public } from '@/decorators/public.decorator';
 import { ResponseDTO } from '@/modules/response.dto';
 
@@ -12,7 +12,7 @@ import { CitiesService } from './cities.service';
 @ApiExcludeController()
 @ApiTags('Utils')
 @Controller('cities')
-@UseGuards(AzureADAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class CitiesController {
 	constructor(private readonly citiesService: CitiesService) {}
