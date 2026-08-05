@@ -591,6 +591,102 @@ export class OdooInvoicesService {
 	}
 
 	/**
+	 * Solicita a Odoo el envío por correo de una factura ya emitida.
+	 * Odoo resuelve el destinatario, la plantilla y los adjuntos según su configuración.
+	 */
+	async sendInvoiceToCustomer(
+		holdingId: string,
+		invoiceId: number
+	): Promise<{
+		success: boolean;
+		message: string;
+		recipientEmail: string;
+	}> {
+		try {
+			const connection = await this.getOdooConnectionByHoldingId(holdingId);
+			const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+			const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+			const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+			if (!uid) {
+				throw new Error('Falló la autenticación con Odoo');
+			}
+
+			const invoiceData = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[[invoiceId]],
+				{ fields: ['name', 'partner_id'] },
+			]);
+			const invoice = invoiceData?.[0];
+			const partnerId = Array.isArray(invoice?.partner_id) ? invoice.partner_id[0] : invoice?.partner_id;
+
+			if (!partnerId) {
+				throw new Error(`La factura ${invoiceId} no tiene cliente configurado en Odoo`);
+			}
+
+			const partnerData = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'res.partner',
+				'read',
+				[[partnerId]],
+				{ fields: ['email'] },
+			]);
+			const recipientEmail = partnerData?.[0]?.email?.trim();
+
+			if (!recipientEmail) {
+				throw new Error(`El cliente de la factura ${invoice?.name || invoiceId} no tiene email configurado en Odoo`);
+			}
+
+			this.logger.log(`📧 Creando envío por email para factura ${invoice?.name || invoiceId} a ${recipientEmail}`);
+			const wizardId = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'create',
+				[
+					{
+						move_ids: [[6, 0, [invoiceId]]],
+						checkbox_download: false,
+						checkbox_send_mail: true,
+					},
+				],
+				{
+					context: {
+						active_model: 'account.move',
+						active_ids: [invoiceId],
+						active_id: invoiceId,
+					},
+				},
+			]);
+
+			await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move.send',
+				'action_send_and_print',
+				[[wizardId]],
+			]);
+
+			return {
+				success: true,
+				message: `Factura ${invoice?.name || invoiceId} enviada por Odoo a ${recipientEmail}`,
+				recipientEmail,
+			};
+		} catch (error) {
+			this.logger.error(`❌ Error enviando factura ${invoiceId} al cliente:`, error);
+			throw new Error(`Error enviando factura al cliente desde Odoo: ${this.getErrorMessage(error)}`);
+		}
+	}
+
+	/**
 	 * Normaliza el nombre del país para comparaciones
 	 */
 	private normalizeCountry(country: string): string {

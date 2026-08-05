@@ -14,7 +14,7 @@ import { SkillExecutor } from './skills/skill-executor';
 export class ClaudeService {
 	private readonly logger = new Logger(ClaudeService.name);
 	private readonly client: Anthropic;
-	private readonly model = 'claude-sonnet-4-20250514';
+	private readonly model = 'claude-sonnet-5';
 
 	constructor(
 		private readonly configService: ConfigService,

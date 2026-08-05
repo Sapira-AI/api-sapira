@@ -17,6 +17,7 @@ describe('InvoiceSchedulerService', () => {
 		const invoiceNotificationService = {
 			sendExchangeRateFallbackNotification: jest.fn(),
 			sendMissingExchangeRateNotification: jest.fn(),
+			sendSchedulerErrorSummary: jest.fn(),
 		};
 		const exchangeRatesService = {
 			getExchangeRateWithFallback: jest.fn(),
@@ -28,6 +29,9 @@ describe('InvoiceSchedulerService', () => {
 		};
 		const documentTypeMappingService = {
 			getDefaultDocumentTypeForInvoice: jest.fn().mockResolvedValue(null),
+		};
+		const notificationsService = {
+			createOrUpdate: jest.fn(),
 		};
 
 		const service = new InvoiceSchedulerService(
@@ -43,15 +47,14 @@ describe('InvoiceSchedulerService', () => {
 			{} as any,
 			{} as any,
 			{} as any,
-			{} as any,
+			invoiceNotificationService as any,
 			{
 				...exchangeRatesService,
 			} as any,
 			taxMappingService as any,
 			documentTypeMappingService as any,
-			{
-				...invoiceNotificationService,
-			} as any
+			{} as any,
+			notificationsService as any
 		);
 
 		return {
@@ -62,6 +65,7 @@ describe('InvoiceSchedulerService', () => {
 			exchangeRatesService,
 			taxMappingService,
 			documentTypeMappingService,
+			notificationsService,
 		};
 	};
 
@@ -112,6 +116,84 @@ describe('InvoiceSchedulerService', () => {
 			valid: false,
 			error: 'Factura de Chile con referencias sin reference_date. El campo date es obligatorio para l10n_cl_reference_ids',
 		});
+	});
+
+	it('agrupa errores distintos y solo notifica ejecuciones reales', async () => {
+		const { service, invoiceNotificationService } = createService();
+		const result = {
+			dryRun: false,
+			summary: { total: 3, sent: 0, errors: 3, skipped: 0 },
+			results: [
+				{ invoiceId: '1', invoiceNumber: '1', status: 'error', error: ' Partner no encontrado ' },
+				{ invoiceId: '2', invoiceNumber: '2', status: 'error', error: 'Partner no encontrado' },
+				{ invoiceId: '3', invoiceNumber: '3', status: 'error' },
+			],
+			success: false,
+			executedAt: new Date('2026-08-01T12:10:00.000Z'),
+		};
+
+		await (service as any).sendErrorSummaryNotification({
+			jobId: 'job-1',
+			holdingId: 'holding-1',
+			dryRun: false,
+			executionSource: 'automatic',
+			executionEnvironment: 'qa',
+			startedAt: new Date('2026-08-01T12:00:00.000Z'),
+			result,
+		});
+
+		expect(invoiceNotificationService.sendSchedulerErrorSummary).toHaveBeenCalledWith(
+			expect.objectContaining({
+				distinctErrors: [
+					{ message: 'Partner no encontrado', count: 2 },
+					{ message: 'Error sin detalle', count: 1 },
+				],
+			})
+		);
+
+		await (service as any).sendErrorSummaryNotification({ ...{
+			jobId: 'job-2',
+			holdingId: 'holding-1',
+			executionSource: 'manual',
+			executionEnvironment: 'qa',
+			startedAt: new Date(),
+			result,
+		}, dryRun: true });
+		expect(invoiceNotificationService.sendSchedulerErrorSummary).toHaveBeenCalledTimes(1);
+	});
+
+	it('crea fallos de Odoo como notificaciones unificadas vinculadas a la factura', async () => {
+		const { service, notificationsService } = createService();
+		notificationsService.createOrUpdate.mockResolvedValue({});
+
+		await (service as any).createOdooFailureNotification({
+			invoice: {
+				id: 'invoice-1',
+				holding_id: 'holding-1',
+				contract_id: 'contract-1',
+				invoice_number: 'FAC-001',
+				company: { country: 'Chile', legal_name: 'Sapira Chile' },
+				clientEntity: { legal_name: 'Cliente Demo' },
+			},
+			title: 'Error al publicar factura en Odoo',
+			message: 'La factura no tiene impuestos',
+			stage: 'post',
+			errorType: 'odoo_publish',
+			errorMessage: 'La factura no tiene impuestos',
+			schedulerSource: 'scheduler',
+		});
+
+		expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+			'holding-1',
+			expect.objectContaining({
+				source: 'invoices',
+				type: 'invoice_odoo_failure',
+				resource_type: 'invoice',
+				resource_id: 'invoice-1',
+				action_type: 'open_contract',
+				action_payload: { contract_id: 'contract-1' },
+			})
+		);
 	});
 
 	it('permite facturas de Uruguay aunque la referencia no tenga reference_date', () => {

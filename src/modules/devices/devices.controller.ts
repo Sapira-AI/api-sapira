@@ -1,14 +1,14 @@
 import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { AzureADAuthGuard } from '@/auth/strategies/azuread-auth.guard';
+import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { DevicesService } from './devices.service';
 import { Device } from './schemas/device.schema';
 
 @ApiTags('Devices')
 @Controller('devices')
-@UseGuards(AzureADAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class DevicesController {
 	constructor(private readonly devicesService: DevicesService) {}

@@ -9,6 +9,7 @@ import { AppNotification } from './entities/app-notification.entity';
 import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
 import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
 import { NotificationsController } from './notifications.controller';
+import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';
 
 @Module({
@@ -17,7 +18,7 @@ import { NotificationsService } from './notifications.service';
 		TypeOrmModule.forFeature([AppNotification, AppNotificationRecipient, NotificationRoleSubscription, User, UserHolding]),
 	],
 	controllers: [NotificationsController],
-	providers: [NotificationsService],
+	providers: [NotificationsService, NotificationsGateway],
 	exports: [NotificationsService],
 })
 export class NotificationsModule {}

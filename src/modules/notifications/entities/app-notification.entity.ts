@@ -43,6 +43,12 @@ export class AppNotification {
 	@Column({ type: 'text', nullable: true })
 	deduplication_key?: string | null;
 
+	@Column({ type: 'text', nullable: true })
+	resource_type?: string | null;
+
+	@Column({ type: 'uuid', nullable: true })
+	resource_id?: string | null;
+
 	@Column({ type: 'text', default: 'open' })
 	status!: AppNotificationStatus;
 

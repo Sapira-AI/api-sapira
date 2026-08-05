@@ -6,6 +6,8 @@ import { ProcessInvoicesResponseDto } from '../dtos/send-invoices.dto';
 export type InvoiceSchedulerJobDocument = InvoiceSchedulerJob & Document;
 
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ExecutionEnvironment = 'production' | 'qa' | 'unknown';
+export type ExecutionSource = 'automatic' | 'manual';
 
 @Schema({ timestamps: true, collection: 'invoice_scheduler_jobs' })
 export class InvoiceSchedulerJob {
@@ -20,6 +22,12 @@ export class InvoiceSchedulerJob {
 
 	@Prop({ required: true })
 	dryRun: boolean;
+
+	@Prop({ required: true, enum: ['production', 'qa', 'unknown'], default: 'unknown' })
+	executionEnvironment: ExecutionEnvironment;
+
+	@Prop({ required: true, enum: ['automatic', 'manual'], default: 'manual' })
+	executionSource: ExecutionSource;
 
 	@Prop({ required: true, enum: ['pending', 'running', 'completed', 'failed'], default: 'pending' })
 	status: JobStatus;
@@ -55,3 +63,5 @@ InvoiceSchedulerJobSchema.index({ jobId: 1 });
 InvoiceSchedulerJobSchema.index({ holdingId: 1, createdAt: -1 });
 InvoiceSchedulerJobSchema.index({ userId: 1, createdAt: -1 });
 InvoiceSchedulerJobSchema.index({ status: 1, createdAt: -1 });
+InvoiceSchedulerJobSchema.index({ executionEnvironment: 1, startedAt: -1 });
+InvoiceSchedulerJobSchema.index({ holdingId: 1, executionEnvironment: 1, startedAt: -1 });

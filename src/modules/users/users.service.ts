@@ -2,14 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { UserResponseDto } from './dtos/users.dto';
+import { HoldingsService } from '../holdings/holdings.service';
+
+import { UserMenuContextResponseDto, UserResponseDto } from './dtos/users.dto';
 import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
 	constructor(
 		@InjectRepository(User)
-		private readonly userRepository: Repository<User>
+		private readonly userRepository: Repository<User>,
+		private readonly holdingsService: HoldingsService
 	) {}
 
 	async getUserByAuthId(authId: string): Promise<UserResponseDto> {
@@ -54,6 +57,34 @@ export class UsersService {
 		});
 
 		return users.map((user) => this.mapToResponseDto(user));
+	}
+
+	async getUserMenuContext(authId: string): Promise<UserMenuContextResponseDto> {
+		const user = await this.userRepository.findOne({
+			where: { auth_id: authId },
+		});
+
+		if (!user) {
+			throw new NotFoundException(`Usuario con auth_id ${authId} no encontrado`);
+		}
+
+		const holdings = await this.holdingsService.getUserHoldings(authId);
+		const roleName = user.is_super_admin ? 'Super Admin' : await this.getRoleName(user.role_id);
+
+		return {
+			user: this.mapToResponseDto(user),
+			role_name: roleName || 'Sin rol asignado',
+			holdings,
+		};
+	}
+
+	private async getRoleName(roleId?: string): Promise<string | null> {
+		if (!roleId) {
+			return null;
+		}
+
+		const [role] = await this.userRepository.query<{ name?: string }[]>('SELECT name FROM roles WHERE id = $1 LIMIT 1', [roleId]);
+		return role?.name || null;
 	}
 
 	private mapToResponseDto(user: User): UserResponseDto {

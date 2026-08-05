@@ -1,9 +1,10 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { v4 as uuid } from 'uuid';
 
 import { AppLoggerService } from '@/logger/app-logger.service';
 import { TelemetryService } from '@/telemetry/telemetry.service';
+import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
 
 @Injectable()
 @Catch()
@@ -16,12 +17,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 	catch(exception: any, host: ArgumentsHost) {
 		const ctx = host.switchToHttp();
 		const response = ctx.getResponse<Response>();
-		const request = ctx.getRequest<Request>();
+		const request = ctx.getRequest<RequestWithUser>();
 		const timestamp = new Date();
 
 		// Extraer información del usuario
-		const user = request.user as any;
-		const userId = user?.extension_oid || 'anonymous';
+		const userId = request.user?.id || request.user?.sub || 'anonymous';
 		const correlationId = request.headers['x-correlation-id'] || uuid();
 
 		// Determinar el tipo de error y código HTTP

@@ -1,12 +1,14 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { HoldingAccessGuard } from '@/guards/holding-access.guard';
 
 import {
 	SalesforceAccountImportDto,
 	SalesforceAccountMappingViewDto,
 	SalesforceAccountProcessDto,
+	SalesforceBulkOpportunityProcessDto,
 	SalesforceOpportunityImportDto,
 	SalesforceOpportunityPreviewDto,
 	SalesforceOpportunityProcessDto,
@@ -20,7 +22,7 @@ import { SalesforceSyncRunService } from './services/salesforce-sync-run.service
 
 @ApiTags('Salesforce Staging')
 @Controller('salesforce/staging')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, HoldingAccessGuard)
 @ApiBearerAuth()
 export class SalesforceStagingController {
 	constructor(
@@ -131,6 +133,14 @@ export class SalesforceStagingController {
 		};
 	}
 
+	@Post('accounts/remove-orphans')
+	@ApiOperation({ summary: 'Eliminar Accounts de staging sin Opportunities asociadas' })
+	@ApiResponse({ status: HttpStatus.OK, description: 'Accounts huérfanas eliminadas' })
+	async removeOrphanAccounts(@Headers('x-holding-id') holdingId: string) {
+		const deleted = await this.stagingService.removeOrphanAccounts(holdingId);
+		return { success: true, deleted };
+	}
+
 	@Post('accounts/process')
 	@ApiOperation({ summary: 'Procesar staging de Accounts hacia tablas finales' })
 	@ApiResponse({ status: HttpStatus.OK, description: 'Accounts procesadas' })
@@ -183,6 +193,19 @@ export class SalesforceStagingController {
 	@ApiOperation({ summary: 'Crear ejecución asíncrona desde staging hacia tablas finales' })
 	async startOpportunitiesProcessRun(@Headers('x-holding-id') holdingId: string, @Body() body: SalesforceSyncRunStartDto) {
 		const run = await this.syncRunService.createRun(holdingId, 'process_final', body.opportunityIds);
+		return { run };
+	}
+
+	@Post('opportunities/process/run-bulk')
+	@HttpCode(HttpStatus.ACCEPTED)
+	@ApiOperation({ summary: 'Crear ejecución asíncrona masiva para Opportunities elegibles de staging' })
+	async startEligibleOpportunitiesProcessRun(@Headers('x-holding-id') holdingId: string, @Body() body: SalesforceBulkOpportunityProcessDto) {
+		const statuses: Array<'create' | 'update'> = body.statuses?.length ? body.statuses : ['create', 'update'];
+		const opportunityIds = await this.stagingService.getEligibleOpportunityIdsForProcessing(holdingId, statuses);
+		if (opportunityIds.length === 0) {
+			throw new BadRequestException('No hay oportunidades elegibles para integrar con los estados seleccionados');
+		}
+		const run = await this.syncRunService.createRun(holdingId, 'process_final', opportunityIds);
 		return { run };
 	}
 

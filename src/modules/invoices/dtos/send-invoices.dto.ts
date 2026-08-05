@@ -29,6 +29,9 @@ export class InvoiceResultDto {
 	})
 	invoiceId: string;
 
+	@ApiProperty({ description: 'ID del holding dueño de la factura' })
+	holdingId: string;
+
 	@ApiProperty({
 		description: 'Número de factura',
 		example: 'FAC-2026-001',

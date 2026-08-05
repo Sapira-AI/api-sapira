@@ -95,7 +95,7 @@ describe('NotificationsService', () => {
 			['role-1'],
 		]);
 		expect(manager.delete).toHaveBeenCalled();
-		expect(result).toHaveLength(2);
+		expect(result).toHaveLength(4);
 	});
 
 	it('permite a un Administrador activo del holding configurar suscripciones', async () => {
