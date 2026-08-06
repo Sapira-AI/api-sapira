@@ -10,10 +10,15 @@ import { User } from '@/modules/users/entities/user.entity';
 
 import { AppNotification } from './entities/app-notification.entity';
 
+const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean);
+
 @WebSocketGateway({
 	namespace: '/notifications',
 	cors: {
-		origin: process.env.FRONT_BASE_URL || 'http://localhost:8080',
+		origin: frontendOrigins,
 		credentials: true,
 	},
 })

@@ -12,6 +12,7 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 export class ExchangeRatesScheduler {
 	private readonly logger = new Logger(ExchangeRatesScheduler.name);
 	private readonly syncEnabled: boolean;
+	private readonly peruApiSyncEnabled: boolean;
 	private readonly syncHour: number;
 	private isRunning = false;
 
@@ -22,6 +23,7 @@ export class ExchangeRatesScheduler {
 		private readonly appLogger: AppLoggerService
 	) {
 		this.syncEnabled = this.configService.get<string>('BANCO_CENTRAL_SYNC_ENABLED') !== 'false';
+		this.peruApiSyncEnabled = this.configService.get<string>('PERU_API_SYNC_ENABLED') !== 'false';
 		this.syncHour = parseInt(this.configService.get<string>('BANCO_CENTRAL_SYNC_HOUR') || '8', 10);
 
 		if (!this.syncEnabled) {
@@ -114,10 +116,13 @@ export class ExchangeRatesScheduler {
 				const today = this.formatLocalDate(new Date());
 
 				this.logger.log(`Sincronizando tipos de cambio del día: ${today}`);
-				const result = await this.exchangeRatesService.syncExchangeRates({
-					startDate: today,
-					endDate: today,
-				});
+				const result = await this.exchangeRatesService.syncExchangeRates(
+					{
+						startDate: today,
+						endDate: today,
+					},
+					{ includePeruApi: this.peruApiSyncEnabled }
+				);
 
 				if (result.stats.errors > 0) {
 					this.logger.warn(`Sincronización completada con ${result.stats.errors} errores`);

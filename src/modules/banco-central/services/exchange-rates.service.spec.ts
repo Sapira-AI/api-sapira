@@ -88,6 +88,26 @@ describe('ExchangeRatesService', () => {
 		});
 	});
 
+	it('omite Perú API cuando el scheduler la deshabilita', async () => {
+		const { service } = createService();
+
+		const result = await service.syncExchangeRates(
+			{
+				startDate: '2026-07-29',
+				endDate: '2026-07-29',
+				currencyPairs: ['USD/PEN'],
+			},
+			{ includePeruApi: false }
+		);
+
+		expect(axios.get).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			success: true,
+			failedCurrencyPairs: [],
+			stats: { totalProcessed: 0, errors: 0 },
+		});
+	});
+
 	it('reporta USD/PEN como par fallido cuando falta la API key', async () => {
 		const { service } = createService();
 		delete process.env.PERU_API_KEY;

@@ -5,7 +5,7 @@ jest.mock('@/logger/app-logger.service', () => ({
 import { ExchangeRatesScheduler } from './exchange-rates.scheduler';
 
 describe('ExchangeRatesScheduler', () => {
-	const createScheduler = () => {
+	const createScheduler = (peruApiSyncEnabled = true) => {
 		const exchangeRatesService = {
 			syncExchangeRates: jest.fn(),
 		};
@@ -17,6 +17,7 @@ describe('ExchangeRatesScheduler', () => {
 			get: jest.fn((key: string) => {
 				if (key === 'BANCO_CENTRAL_SYNC_ENABLED') return 'true';
 				if (key === 'BANCO_CENTRAL_SYNC_HOUR') return '8';
+				if (key === 'PERU_API_SYNC_ENABLED') return peruApiSyncEnabled ? 'true' : 'false';
 				return undefined;
 			}),
 		};
@@ -76,6 +77,23 @@ describe('ExchangeRatesScheduler', () => {
 		expect((scheduler as any).sleep).toHaveBeenCalledWith(5 * 60 * 1000);
 		expect(result.failedCurrencyPairs).toEqual([]);
 		expect(result.success).toBe(true);
+	});
+
+	it('omite Perú API en la sincronización programada cuando PERU_API_SYNC_ENABLED es false', async () => {
+		const { scheduler, exchangeRatesService } = createScheduler(false);
+		exchangeRatesService.syncExchangeRates.mockResolvedValueOnce({
+			success: true,
+			message: 'Sincronización completada exitosamente',
+			stats: { totalProcessed: 0, inserted: 0, updated: 0, errors: 0, indirectConversions: 0 },
+			failedCurrencyPairs: [],
+		});
+
+		await (scheduler as any).syncWithRetries(1);
+
+		expect(exchangeRatesService.syncExchangeRates).toHaveBeenCalledWith(
+			{ startDate: '2026-07-10', endDate: '2026-07-10' },
+			{ includePeruApi: false }
+		);
 	});
 
 	it('no reintenta si solo existen errores de observaciones pero no pares fallidos', async () => {

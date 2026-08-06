@@ -39,6 +39,9 @@ export class SalesforceSchedulerJob {
 	@Prop({ required: true })
 	startedAt: Date;
 
+	@Prop({ required: true, index: true })
+	executionEnvironment: string;
+
 	@Prop({ required: false })
 	completedAt?: Date;
 
