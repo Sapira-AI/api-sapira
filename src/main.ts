@@ -17,6 +17,10 @@ process.env.TZ = 'America/Santiago';
 
 async function bootstrap() {
 	const app = await NestFactory.create<NestExpressApplication>(AppModule);
+	const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
+		.split(',')
+		.map((origin) => origin.trim())
+		.filter(Boolean);
 
 	// Obtener servicios necesarios para el filtro de excepciones
 	const logger = app.get(AppLoggerService);
@@ -107,7 +111,7 @@ async function bootstrap() {
 
 	// Configuración específica de CORS
 	app.enableCors({
-		origin: [/\.vercel\.app$/, process.env.FRONT_BASE_URL],
+		origin: [/\.vercel\.app$/, ...frontendOrigins],
 		methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 		allowedHeaders: [
 			'Origin',

@@ -5,6 +5,11 @@ import { Server, Socket } from 'socket.io';
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
 
+const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean);
+
 interface SchedulerNotificationPayload {
 	id: string;
 	contract_id: string;
@@ -19,7 +24,7 @@ interface SchedulerNotificationPayload {
 
 @WebSocketGateway({
 	cors: {
-		origin: process.env.FRONT_BASE_URL || 'http://localhost:8080',
+		origin: frontendOrigins,
 		credentials: true,
 	},
 	namespace: '/scheduler',

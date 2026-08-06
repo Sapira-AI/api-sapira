@@ -27,12 +27,7 @@ import { Invoice } from './entities/invoice.entity';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
-import {
-	ExecutionEnvironment,
-	ExecutionSource,
-	InvoiceSchedulerJob,
-	InvoiceSchedulerJobDocument,
-} from './schemas/invoice-scheduler-job.schema';
+import { ExecutionEnvironment, ExecutionSource, InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from './schemas/invoice-scheduler-job.schema';
 
 interface InvoiceWithRelations extends Invoice {
 	clientEntity?: ClientEntity;
@@ -1675,6 +1670,7 @@ export class InvoiceSchedulerService {
 			odoo_invoice_id: params.odooInvoiceId,
 			operation: params.operation,
 			status: params.status,
+			execution_environment: this.getExecutionEnvironment(),
 			client_name: params.clientName,
 			company_name: params.companyName,
 			invoice_currency: params.invoiceCurrency,
@@ -1966,12 +1962,12 @@ export class InvoiceSchedulerService {
 							as: 'result',
 							in: {
 								invoiceId: '$$result.invoiceId',
-							holdingId: '$$result.holdingId',
+								holdingId: '$$result.holdingId',
 								invoiceNumber: '$$result.invoiceNumber',
 								clientName: '$$result.clientName',
 								companyName: '$$result.companyName',
 								issueDate: '$$result.issueDate',
-							odooInvoiceId: '$$result.odooInvoiceId',
+								odooInvoiceId: '$$result.odooInvoiceId',
 								error: '$$result.error',
 								details: '$$result.details',
 							},

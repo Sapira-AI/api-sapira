@@ -50,6 +50,7 @@ export class AppLoggerService extends BaseService implements OnModuleInit {
 								time: new Date(logData.time),
 								message: logData.msg,
 								type: logData.type,
+								environment: this.configService.get<string>('NODE_ENV') || 'development',
 								correlationId: logData.correlationId,
 								userId: logData.userId,
 								metadata: logData.additional,
