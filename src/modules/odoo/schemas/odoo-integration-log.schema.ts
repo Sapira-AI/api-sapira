@@ -17,6 +17,9 @@ export class OdooIntegrationLog {
 	@Prop({ required: true, index: true, default: 'running' })
 	status: string;
 
+	@Prop({ required: true, default: () => process.env.NODE_ENV || 'development', index: true })
+	environment: string;
+
 	@Prop({ required: true })
 	source_table: string;
 

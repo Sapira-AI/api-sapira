@@ -1,6 +1,6 @@
 {
 	"name": "api-sapira",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron } from '@nestjs/schedule';
 import { Model } from 'mongoose';
@@ -14,12 +15,16 @@ import { SalesforceSyncCompleteService } from './services/salesforce-sync-comple
 @Injectable()
 export class SalesforceScheduler {
 	private readonly logger = new Logger(SalesforceScheduler.name);
+	private readonly syncEnabled: boolean;
 
 	constructor(
 		private readonly syncCompleteService: SalesforceSyncCompleteService,
 		@InjectModel(SalesforceSchedulerJob.name)
-		private readonly schedulerJobModel: Model<SalesforceSchedulerJobDocument>
-	) {}
+		private readonly schedulerJobModel: Model<SalesforceSchedulerJobDocument>,
+		private readonly configService: ConfigService
+	) {
+		this.syncEnabled = this.configService.get<string>('SALESFORCE_SYNC_ENABLED') !== 'false';
+	}
 
 	/**
 	 * Sincronización diaria a las 8:30 AM
@@ -30,6 +35,11 @@ export class SalesforceScheduler {
 		timeZone: 'America/Santiago', // Ajustar según zona horaria del servidor
 	})
 	async handleDailySync() {
+		if (!this.syncEnabled) {
+			this.logger.debug('Sincronización automática de Salesforce desactivada');
+			return;
+		}
+
 		const jobId = uuidv4();
 		const startTime = new Date();
 
@@ -41,6 +51,7 @@ export class SalesforceScheduler {
 			jobId,
 			status: 'running',
 			startedAt: startTime,
+			executionEnvironment: this.configService.get<string>('NODE_ENV') || 'development',
 			summary: {
 				totalHoldings: 0,
 				successfulHoldings: 0,

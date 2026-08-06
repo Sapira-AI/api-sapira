@@ -5,6 +5,7 @@ export const LogSchema = new Schema(
 		level: String,
 		time: Date,
 		type: String,
+		environment: String,
 		message: String,
 		context: String,
 		metadata: Object,

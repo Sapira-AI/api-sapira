@@ -26,6 +26,9 @@ export class InvoiceOdooSendLog {
 	@Prop({ required: true, enum: ['success', 'error', 'skipped'], index: true })
 	status: string;
 
+	@Prop({ required: true, enum: ['production', 'qa', 'unknown'], default: 'unknown', index: true })
+	execution_environment: 'production' | 'qa' | 'unknown';
+
 	@Prop({ required: true })
 	client_name: string;
 

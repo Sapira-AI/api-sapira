@@ -131,7 +131,7 @@ export class ExchangeRatesService {
 		return this.formatLocalDate(date);
 	}
 
-	async syncExchangeRates(dto: SyncExchangeRatesDto): Promise<SyncExchangeRatesResponseDto> {
+	async syncExchangeRates(dto: SyncExchangeRatesDto, options: { includePeruApi?: boolean } = {}): Promise<SyncExchangeRatesResponseDto> {
 		try {
 			await this.bancoCentralSchemaService.ensureSchema();
 			// Si no se proporcionan fechas, sincronizar solo el día actual por defecto
@@ -226,7 +226,7 @@ export class ExchangeRatesService {
 				}
 			}
 
-			if (this.shouldSyncPeruApi(dto)) {
+			if (options.includePeruApi !== false && this.shouldSyncPeruApi(dto)) {
 				await this.syncPeruApiRates(startDate, endDate, stats, failedCurrencyPairs);
 			}
 
@@ -277,9 +277,7 @@ export class ExchangeRatesService {
 			const requestedDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
 
 			if (requestedDays > this.peruApiMaxHistoricalRequests) {
-				throw new Error(
-					`El rango de USD/PEN excede el máximo de ${this.peruApiMaxHistoricalRequests} consultas por sincronización`
-				);
+				throw new Error(`El rango de USD/PEN excede el máximo de ${this.peruApiMaxHistoricalRequests} consultas por sincronización`);
 			}
 
 			for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
@@ -506,9 +504,9 @@ export class ExchangeRatesService {
 						.addSelect('COUNT(*)', 'data_points')
 						.where('er.from_currency = :fromCurrency', { fromCurrency: pair.from_currency })
 						.andWhere('er.to_currency = :toCurrency', { toCurrency: pair.to_currency })
-					.andWhere('er.source_type = :sourceType', {
-						sourceType: pair.from_currency === 'USD' && pair.to_currency === 'PEN' ? 'PERU_API' : 'BANCOCENTRAL',
-					})
+						.andWhere('er.source_type = :sourceType', {
+							sourceType: pair.from_currency === 'USD' && pair.to_currency === 'PEN' ? 'PERU_API' : 'BANCOCENTRAL',
+						})
 						.andWhere('EXTRACT(YEAR FROM er.rate_date) = :year', { year: period.year })
 						.andWhere('EXTRACT(MONTH FROM er.rate_date) = :month', { month: period.month });
 
