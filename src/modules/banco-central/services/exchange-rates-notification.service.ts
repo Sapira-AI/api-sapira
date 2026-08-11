@@ -135,12 +135,17 @@ export class ExchangeRatesNotificationService {
 		return `${year}-${month}-${day}`;
 	}
 
+	private getNodeEnvironment(): string {
+		return this.configService.get<string>('NODE_ENV') || 'development';
+	}
+
 	async sendSyncFailureAlert(error: Error, context?: string): Promise<void> {
 		if (this.adminEmails.length === 0) {
 			this.logger.warn('No hay emails configurados para notificaciones');
 			return;
 		}
 
+		const nodeEnvironment = this.getNodeEnvironment();
 		const now = new Date();
 		const dateStr = now.toLocaleDateString('es-CL', {
 			year: 'numeric',
@@ -150,7 +155,7 @@ export class ExchangeRatesNotificationService {
 			minute: '2-digit',
 		});
 
-		const subject = `🚨 Error en Sincronización de Tipos de Cambio - ${dateStr}`;
+		const subject = `🚨 [${nodeEnvironment}] Error en Sincronización de Tipos de Cambio - ${dateStr}`;
 
 		const html = `
 			<!DOCTYPE html>
@@ -175,6 +180,7 @@ export class ExchangeRatesNotificationService {
 					</div>
 					<div class="content">
 						<p><span class="label">Fecha y hora:</span> ${dateStr}</p>
+						<p><span class="label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
 						${context ? `<p><span class="label">Contexto:</span> ${context}</p>` : ''}
 						
 						<div class="error-box">
@@ -223,7 +229,7 @@ export class ExchangeRatesNotificationService {
 			});
 
 			try {
-				const errorSubject = `🚨 CRÍTICO: Fallo en Sistema de Emails - ${new Date().toLocaleString('es-CL')}`;
+				const errorSubject = `🚨 [${nodeEnvironment}] CRÍTICO: Fallo en Sistema de Emails - ${new Date().toLocaleString('es-CL')}`;
 				const errorHtml = `
 					<!DOCTYPE html>
 					<html>
@@ -246,6 +252,7 @@ export class ExchangeRatesNotificationService {
 							<div class="content">
 								<p><strong>⚠️ El sistema de emails de Sapira no está funcionando correctamente.</strong></p>
 								<p>Se intentó enviar una alerta de error pero falló el envío.</p>
+								<p><strong>Entorno (NODE_ENV):</strong> ${nodeEnvironment}</p>
 								
 								<div class="error-box">
 									<p><strong>Tipo de error:</strong> ${emailError?.name || 'Error desconocido'}</p>
@@ -298,6 +305,7 @@ export class ExchangeRatesNotificationService {
 		}
 
 		const indicators = await this.getEconomicIndicators();
+		const nodeEnvironment = this.getNodeEnvironment();
 
 		const now = new Date();
 		const dateStr = now.toLocaleDateString('es-CL', {
@@ -308,7 +316,7 @@ export class ExchangeRatesNotificationService {
 			minute: '2-digit',
 		});
 
-		const subject = `✅ Sincronización de Tipos de Cambio Completada - ${dateStr}`;
+		const subject = `✅ [${nodeEnvironment}] Sincronización de Tipos de Cambio Completada - ${dateStr}`;
 
 		const executionTimeStr =
 			executionTime > 60000 ? `${(executionTime / 60000).toFixed(2)} minutos` : `${(executionTime / 1000).toFixed(2)} segundos`;
@@ -337,6 +345,7 @@ export class ExchangeRatesNotificationService {
 					</div>
 					<div class="content">
 						<p><span class="stat-label">Fecha y hora:</span> ${dateStr}</p>
+						<p><span class="stat-label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
 						<p><span class="stat-label">Estado:</span> ${result.success ? '✓ Exitoso' : '✗ Con errores'}</p>
 						<p>${result.message}</p>
 						
