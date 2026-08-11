@@ -32,17 +32,23 @@ export class InvoiceNotificationService {
 		}
 	}
 
+	private getNodeEnvironment(): string {
+		return this.configService.get<string>('NODE_ENV') || 'development';
+	}
+
 	async sendExchangeRateFallbackNotification(invoice: Invoice, exchangeRateInfo: ExchangeRateInfo): Promise<void> {
 		if (this.adminEmails.length === 0) {
 			this.logger.warn('No hay emails configurados para notificaciones de facturas');
 			return;
 		}
 
+		const nodeEnvironment = this.getNodeEnvironment();
+
 		// Convertir fechas a string de forma segura
 		const requestedDateStr = this.dateToString(exchangeRateInfo.requestedDate);
 		const usedDateStr = this.dateToString(exchangeRateInfo.usedDate);
 
-		const subject = `⚠️ Factura Emitida con Tipo de Cambio Fallback - ${invoice.invoice_number || invoice.id}`;
+		const subject = `⚠️ [${nodeEnvironment}] Factura Emitida con Tipo de Cambio Fallback - ${invoice.invoice_number || invoice.id}`;
 
 		const html = `
 			<!DOCTYPE html>
@@ -68,6 +74,7 @@ export class InvoiceNotificationService {
 					</div>
 					<div class="content">
 						<p>Se ha emitido una factura utilizando un tipo de cambio de un día anterior debido a que no estaba disponible el tipo de cambio para la fecha de emisión solicitada.</p>
+						<p><span class="label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
 						
 						<div class="warning-box">
 							<h3 style="margin-top: 0; color: #ff9800;">Información de la Factura</h3>
@@ -146,9 +153,10 @@ export class InvoiceNotificationService {
 			return;
 		}
 
+		const nodeEnvironment = this.getNodeEnvironment();
 		const requestedDateStr = requestedDate.toISOString().split('T')[0];
 
-		const subject = `🚨 Factura NO Emitida - Tipo de Cambio No Disponible - ${invoice.invoice_number || invoice.id}`;
+		const subject = `🚨 [${nodeEnvironment}] Factura NO Emitida - Tipo de Cambio No Disponible - ${invoice.invoice_number || invoice.id}`;
 
 		const html = `
 			<!DOCTYPE html>
@@ -175,6 +183,7 @@ export class InvoiceNotificationService {
 					</div>
 					<div class="content">
 						<p><strong>ATENCIÓN:</strong> No se pudo emitir la siguiente factura debido a que no hay tipo de cambio disponible para la fecha de emisión.</p>
+						<p><span class="label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
 						
 						<div class="error-box">
 							<h3 style="margin-top: 0; color: #dc3545;">Información de la Factura</h3>
@@ -273,7 +282,8 @@ export class InvoiceNotificationService {
 	}): Promise<void> {
 		if (params.dryRun || params.result.summary.errors === 0 || this.adminEmails.length === 0) return;
 
-		const subject = `🚨 Integración de facturas con errores (${params.executionEnvironment.toUpperCase()})`;
+		const nodeEnvironment = this.getNodeEnvironment();
+		const subject = `🚨 [${nodeEnvironment}] Integración de facturas con errores`;
 		const errorRows = params.distinctErrors
 			.map(
 				(error) =>
@@ -293,7 +303,7 @@ export class InvoiceNotificationService {
 					<div style="border:1px solid #e5e7eb;padding:20px;">
 						<p>La ejecución real de integración de facturas terminó con errores.</p>
 						<table style="width:100%;border-collapse:collapse;margin:16px 0;">
-							<tr><td><strong>Entorno</strong></td><td>${this.escapeHtml(params.executionEnvironment)}</td></tr>
+							<tr><td><strong>Entorno (NODE_ENV)</strong></td><td>${this.escapeHtml(nodeEnvironment)}</td></tr>
 							<tr><td><strong>Origen</strong></td><td>${params.executionSource === 'automatic' ? 'Automática' : 'Manual'}</td></tr>
 							<tr><td><strong>Holding</strong></td><td>${this.escapeHtml(params.holdingId)}</td></tr>
 							<tr><td><strong>Inicio</strong></td><td>${params.startedAt.toISOString()}</td></tr>
