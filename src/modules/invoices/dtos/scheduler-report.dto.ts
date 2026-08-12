@@ -64,6 +64,9 @@ export class SchedulerErrorInvoiceDto {
 	@ApiProperty()
 	holdingId: string;
 
+	@ApiPropertyOptional()
+	holdingName?: string;
+
 	@ApiProperty()
 	invoiceNumber: string;
 
@@ -92,6 +95,9 @@ export class SchedulerReportItemDto {
 
 	@ApiProperty()
 	holdingId: string;
+
+	@ApiPropertyOptional()
+	holdingName?: string;
 
 	@ApiProperty({ enum: ['production', 'qa', 'unknown'] })
 	executionEnvironment: 'production' | 'qa' | 'unknown';

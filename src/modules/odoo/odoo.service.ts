@@ -1687,11 +1687,12 @@ export class OdooService {
 			// 2. Consultar mapeos de Odoo para este holding
 			const odooMappings = await this.odooProductMappingRepository.find({
 				where: { holding_id: holdingId },
+				order: { updated_at: 'DESC' },
 			});
 
-			// 3. Crear un mapa de sapira_product_id -> mapeo
-			// NOTA: Como es N:N, un producto Sapira puede tener múltiples mapeos Odoo
-			// Para la UI actual que espera 1:1, tomamos el primer mapeo
+			// 3. Crear un mapa de sapira_product_id -> mapeo.
+			// Los registros más recientes prevalecen para mantener compatibilidad
+			// con mapeos duplicados creados antes de aplicar la normalización 1:1.
 			const mappingsByProduct = odooMappings.reduce(
 				(acc, mapping) => {
 					if (!acc[mapping.sapira_product_id]) {
@@ -1771,23 +1772,29 @@ export class OdooService {
 						continue;
 					}
 
-					const existingMapping = await transactionalEntityManager.findOne(OdooProductMapping, {
+					const existingMappings = await transactionalEntityManager.find(OdooProductMapping, {
 						where: {
 							holding_id: holdingId,
 							sapira_product_id: sapira_product_id,
-							odoo_product_id: odoo_product_id,
 						},
+						order: { updated_at: 'DESC' },
 					});
+					const mappingForProduct = existingMappings.find((existingMapping) => existingMapping.odoo_product_id === odoo_product_id) || existingMappings[0];
 
-					if (existingMapping) {
-						existingMapping.updated_at = new Date();
+					if (mappingForProduct) {
+						mappingForProduct.odoo_product_id = odoo_product_id;
+						mappingForProduct.updated_at = new Date();
 						if (userId) {
-							existingMapping.created_by = userId;
+							mappingForProduct.created_by = userId;
 						}
 						if (odoo_tax_ids) {
-							existingMapping.metadata = { ...existingMapping.metadata, odoo_tax_ids };
+							mappingForProduct.metadata = { ...mappingForProduct.metadata, odoo_tax_ids };
 						}
-						await transactionalEntityManager.save(OdooProductMapping, existingMapping);
+						await transactionalEntityManager.save(OdooProductMapping, mappingForProduct);
+						await transactionalEntityManager.remove(
+							OdooProductMapping,
+							existingMappings.filter((existingMapping) => existingMapping.id !== mappingForProduct.id)
+						);
 						updatedCount++;
 					} else {
 						const newMapping = transactionalEntityManager.create(OdooProductMapping, {
