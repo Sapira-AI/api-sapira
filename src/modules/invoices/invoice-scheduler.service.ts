@@ -1408,6 +1408,7 @@ export class InvoiceSchedulerService {
 					sapira_product_id: sapiraProductId,
 					holding_id: holdingId,
 				},
+				order: { updated_at: 'DESC' },
 			});
 
 			if (mapping) {
@@ -2025,7 +2026,28 @@ export class InvoiceSchedulerService {
 
 		const summary = summaryRows[0] || { executions: 0, total: 0, sent: 0, errors: 0, skipped: 0 };
 		delete summary._id;
-		return { items, total, page, limit, summary };
+
+		const holdingIds = [
+			...new Set(
+				items
+					.flatMap((item) => [item.holdingId, ...(item.errorInvoices || []).map((invoice) => invoice.holdingId)])
+					.filter((holdingId): holdingId is string => Boolean(holdingId) && holdingId !== 'all')
+			),
+		];
+		const holdings: Array<{ id: string; name: string }> = holdingIds.length
+			? ((await this.dataSource.query('SELECT id, name FROM company_holdings WHERE id = ANY($1)', [holdingIds])) as Array<{ id: string; name: string }>)
+			: [];
+		const holdingNames = new Map(holdings.map((holding) => [holding.id, holding.name]));
+		const itemsWithHoldingNames = items.map((item) => ({
+			...item,
+			holdingName: holdingNames.get(item.holdingId),
+			errorInvoices: (item.errorInvoices || []).map((invoice) => ({
+				...invoice,
+				holdingName: holdingNames.get(invoice.holdingId),
+			})),
+		}));
+
+		return { items: itemsWithHoldingNames, total, page, limit, summary };
 	}
 
 	async createSystemSchedulerJob(options: ProcessOptions): Promise<string> {
