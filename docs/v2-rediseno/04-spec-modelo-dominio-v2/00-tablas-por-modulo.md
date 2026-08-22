@@ -1,8 +1,8 @@
 # 🗄️ Spec v2 · Sección 0 — Revisión del esquema de datos, tabla por tabla
 
-> **Para revisión de Domi** (2026-08-14). Las ~128 tablas de PROD organizadas por módulo, cada una con veredicto propuesto. Fuente: censo prod (filas vivas + columnas) + memorias de uso real + benchmarks (`03-mejoras-y-brechas.md`, decisiones A1–A12).
+> **Para revisión de Domi** (2026-08-21). Las ~128 tablas de PROD organizadas por módulo, cada una con veredicto propuesto. Fuente: censo prod (filas vivas + columnas) + memorias de uso real + benchmarks (`03-mejoras-y-brechas.md`, decisiones A1–A12).
 > Al revisar: confirma o discute el VEREDICTO de cada tabla; las notas explican el porqué.
-> ⚠️ **Actualización 18-08 (plan con Leon — estrategia incremental, sin proyecto Supabase nuevo)**: este doc es la guía de los pasos 1, 2 y 4 del plan. Lectura de los veredictos bajo la nueva estrategia: **✅/🔧 → entity espejo en el paso 1** (la mejora 🔧 se aplica cuando toque su módulo) · **🔄/➕ → paso 2** (entidades nuevas/rediseñadas, cerradas por sección de spec) · **🗑️/🔀 → insumo de la sesión de limpieza del paso 4** (nada se borra de la DB viva sin esa sesión). Los módulos de este doc definen las **subcarpetas de `entities/`** en api-sapira.
+> ⚠️ **Actualización 21-08 (plan con Leon — estrategia incremental, sin proyecto Supabase nuevo)**: este doc es la guía de los pasos 1, 2 y 4 del plan. Lectura de los veredictos bajo la nueva estrategia: **✅/🔧 → entity espejo en el paso 1** (la mejora 🔧 se aplica cuando toque su módulo) · **🔄/➕ → paso 2** (entidades nuevas/rediseñadas, cerradas por sección de spec) · **🗑️/🔀 → insumo de la sesión de limpieza del paso 4** (nada se borra de la DB viva sin esa sesión). Los módulos de este doc definen las **subcarpetas de `entities/`** en api-sapira.
 
 ## Leyenda de veredictos
 
@@ -70,7 +70,7 @@
 | `quote_attachments` | 0 | ✅ | Barata y útil |
 | `products` | 76 | 🔧 | → catálogo SIN precio (A2): + `sku`, `status`, `tax_code`; el precio vive en `prices` |
 
-**➕ Nuevas (módulo pricing — la sección 1 de la spec)**: `prices` (type × model × interval × status, `list_price_id` para negociado-vs-lista), `price_tiers` (ranges from/to/unit/flat), `price_features` (discounts / **commitments-mínimos** / **caps** / free_units / payment_terms, con prioridad), `billing_metrics` (guided|sql + agregación), `quantity_entries` (cantidad con `effective_from` — reemplaza overrides frágiles).
+**➕ Nuevas (módulo pricing — la sección 1 de la spec)**: `prices` (type × model × interval × status, `list_price_id` para negociado-vs-lista), `price_tiers` (ranges from/to/unit/flat), `price_features` (discounts / **commitments-mínimos** / **caps** / free_units / payment_terms, con prioridad), `billing_metrics` (guided|sql + agregación) y **Consumo** = `quantity_entries` — ambas son PARTE del modelo de precio: el precio declara `fixed | metered` y a qué métrica apunta, como en Zenskar (`quantity.aggregate_id`) y Relvo (`Price.type usage` + métrica) — (cantidad registrada por período con `effective_from`; nombre acordado: UI "Consumo", técnico billable metric — reemplaza "cantidades variables / overrides", ver `glosario.md`).
 
 ## 5 · Contratos
 
@@ -100,7 +100,7 @@
 | `invoice_payments` | 80 | 🔄 | → `payments` + **`payment_parts`** N:M (A8) — habilita aplicación parcial multi-documento |
 | `invoice_references` | 187 | 🔧 | → `commercial_references` (A11): kinds TpoDocRef SII + OC/HES, en documento Y en contrato |
 | `billing_references` / `reference_requests` / `invoice_reference_links` | 0/0/0 | 🔀 | Construidas sin conectar → las absorbe `commercial_references` + reglas de bloqueo (`requires_po/hes` → `issuance_blocked_reason`) |
-| `quantities` | 191 | 🔄 | → `quantity_entries` con vigencia (módulo 4) — mata el CHECK>0 y los triggers de restore |
+| `quantities` | 191 | 🔄 | → **Consumo** (`quantity_entries` con vigencia, módulo 4; nombre acordado UI "Consumo" / técnico billable metric) — mata el CHECK>0 y los triggers de restore |
 | `invoice_restructure_log` | 246 | 🔀 | → `events` |
 | `invoice_reschedules` | 0 | 🗑️ | Nunca usada; la historia va a `events` |
 | `invoice_adjustments` | 0 | 🔀 | El ajuste-a-lo-emitido queda como operación (evento + regenerar detalle) sobre `documents` |
@@ -175,7 +175,7 @@
 
 ## Decisiones que esta sección deja abiertas para ti (revisarlas ENTRE el paso 1 y el paso 2 — nada de esto bloquea el espejo de entities)
 
-> **Nota 18-08**: bajo el plan incremental, los puntos 1 y 4 (naming `tenants`, schemas de Postgres) son detalle innecesario por ahora — se descartan hasta que un paso los exija. Los relevantes para tu revisión: **2, 3, 5 y 6**.
+> **Nota 21-08**: bajo el plan incremental, los puntos 1 y 4 (naming `tenants`, schemas de Postgres) son detalle innecesario por ahora — se descartan hasta que un paso los exija. Los relevantes para tu revisión: **2, 3, 5 y 6**.
 
 1. **Naming del tenant**: `tenants` (propuesto) vs mantener `holdings`.
 2. **Emisor y receptor comparten `billing_profiles`** (propuesto, estilo Relvo) vs mantener `companies` separada de razones sociales de clientes.
