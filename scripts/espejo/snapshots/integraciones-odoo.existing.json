@@ -1,0 +1,748 @@
+{
+ "odoo_connections": {
+  "class": "OdooConnection",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "user_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "url": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "api_key": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "database_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "subscription_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "username": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_sync_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "odoo_invoices_stg": {
+  "class": "OdooInvoicesStg",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_id": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "raw_data": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "processing_status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "create",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_integrated_at": {
+    "type": "timestamp",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "error_message": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_session_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "odoo_invoice_lines_stg": {
+  "class": "OdooInvoiceLinesStg",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "invoice_staging_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_line_id": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_invoice_id": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "raw_data": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "processing_status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "pending",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_integrated_at": {
+    "type": "timestamp",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "error_message": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_session_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "odoo_partners_stg": {
+  "class": "OdooPartnersStg",
+  "columns": {
+   "id": {
+    "type": "Number",
+    "nullable": false,
+    "primary": true,
+    "generated": "increment",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_id": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "raw_data": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "processed_at": {
+    "type": "timestamp",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_batch_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "processing_status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "processed",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_integrated_at": {
+    "type": "timestamp",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "integration_notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "error_message": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "odoo_product_mappings": {
+  "class": "OdooProductMapping",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sapira_product_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_product_id": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "metadata": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": {},
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "FK_57cfe833d43b4e35d212a06442d": {
+    "columns": [
+     "sapira_product_id"
+    ],
+    "table": "products",
+    "onDelete": "NO ACTION"
+   }
+  }
+ }
+}

@@ -1,0 +1,409 @@
+{
+ "sii_configurations": {
+  "class": "SiiConfiguration",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "environment": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "certificacion",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "business_activity": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "activity_codes": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'[]'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "commune": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "city": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "region": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "resolution_number": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "resolution_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "enabled_document_types": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'[33,34,61]'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_enabled": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_2eb6c8db5aaa629f1362e8e317": {
+    "columns": [
+     "holding_id",
+     "company_id"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "sii_certificates": {
+  "class": "SiiCertificate",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "configuration_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "key_vault_secret_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "thumbprint": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "expires_at": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_299dc501af6d963cd4c80eb46f": {
+    "columns": [
+     "configuration_id"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "sii_cafs": {
+  "class": "SiiCaf",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "configuration_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "document_type": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "blob_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "folio_start": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "folio_end": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "next_folio": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_8f1b12c4ac14e81401c092e259": {
+    "columns": [
+     "configuration_id",
+     "document_type",
+     "folio_start",
+     "folio_end"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ }
+}

@@ -42,10 +42,19 @@ src/databases/postgresql/
 ├── database.module.ts          # Configuración de TypeORM para Supabase
 ├── database.provider.ts        # Provider con métodos utilitarios
 ├── entities/
-│   ├── base.entity.ts          # Entidad base con campos comunes
-│   └── example.entity.ts       # Ejemplo de entidad
+│   ├── README.md               # Convención del ESPEJO de la DB por módulo (rediseño v2, paso 1)
+│   ├── NOTAS-ESPEJO.md         # Rarezas verificadas en prod al espejar (insumo revisión Domi / paso 4)
+│   ├── <modulo>/               # 16 carpetas (base-tenancy, fx, clientes, …, integraciones/*, sii): `*.espejo.ts` apagados
+│   │                           # generados desde prod en vivo + README (diff de entities existentes) + snapshot + spec
+│   ├── espejo.index.ts         # Barrel de todos los espejos (solo para los specs)
+│   ├── espejo.existing.ts      # Reexport de las 59 entities existentes (solo para los specs)
+│   ├── *.entity.ts             # Entities existentes (producción) — NO se modifican
+│   └── base.entity.ts          # Entidad base con campos comunes (helper de módulos existentes)
+├── database.module.spec.ts     # Guard: synchronize:false, nadie habilita sincronización, el espejo (*.espejo.ts) no entra al glob de runtime
 └── README.md                   # Esta documentación
 ```
+
+> 🔴 Rediseño v2 (carril B): el espejo `entities/<modulo>/*.espejo.ts` se genera SOLO desde prod en vivo (MCP Supabase), es inerte en runtime y no toca las entities existentes. Ver `entities/README.md`.
 
 ## 🚀 Uso en Módulos
 

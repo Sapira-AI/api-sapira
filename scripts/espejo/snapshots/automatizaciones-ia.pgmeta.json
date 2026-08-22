@@ -1,0 +1,1592 @@
+{
+ "ai_agents": {
+  "name": "public.ai_agents",
+  "rls_enabled": true,
+  "rows": 16,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "type = ANY (ARRAY['collections'::text, 'proforma'::text, 'deal_validation'::text])"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "schedule",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "auto_execute",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Indica si el agente se ejecuta automáticamente según el schedule configurado"
+   },
+   {
+    "name": "require_approval",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Indica si los mensajes generados requieren aprobación manual antes de enviarse"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "ai_agent_configs_agent_id_fkey",
+    "source_table": "public.ai_agent_configs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.ai_agents",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "ai_runs_agent_id_fkey",
+    "source_table": "public.ai_runs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.ai_agents",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "ai_agent_configs": {
+  "name": "public.ai_agent_configs",
+  "rls_enabled": true,
+  "rows": 122,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "agent_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "key",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "value_json",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "ai_agent_configs_agent_id_fkey",
+    "source_table": "public.ai_agent_configs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.ai_agents",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "client_agent_configs": {
+  "name": "public.client_agent_configs",
+  "rls_enabled": true,
+  "rows": 0,
+  "comment": "Configuración de automatizaciones (agentes) por cliente. Permite personalizar estrategias de proforma y cobranza para cada cliente.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID del holding al que pertenece la configuración"
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del cliente. NULL indica configuración global del holding que aplica a todos los clientes sin configuración personalizada."
+   },
+   {
+    "name": "agent_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "agent_type = ANY (ARRAY['proforma'::text, 'collections'::text])",
+    "comment": "Tipo de agente: proforma (solicitud de referencias) o collections (cobranzas)"
+   },
+   {
+    "name": "is_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Si está deshabilitado (false), el cliente no recibirá automatizaciones de este tipo"
+   },
+   {
+    "name": "config_json",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Configuración específica en formato JSON. Para proformas: days_before_issue, email_sender_address_id, etc. Para cobranzas: days_overdue_bucket_1, frequency_bucket_1, email_sender_address_id, etc."
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "client_agent_configs_holding_id_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_client_id_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_created_by_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "agents": {
+  "name": "public.agents",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "last_activity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_activity_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_agents_holding_id",
+    "source_table": "public.agents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "agent_logs_agent_id_fkey",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.agents",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "agents_company_id_fkey",
+    "source_table": "public.agents",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "agent_logs": {
+  "name": "public.agent_logs",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "agent_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "activity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "executed_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "agent_logs_user_id_fkey",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_agent_logs_holding_id",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "agent_logs_agent_id_fkey",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.agents",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "ai_runs": {
+  "name": "public.ai_runs",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "agent_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "started_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "ended_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "status = ANY (ARRAY['queued'::text, 'approved'::text, 'sent'::text, 'error'::text, 'cancelled'::text])"
+   },
+   {
+    "name": "stats_json",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "approver_user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID del holding al que pertenece esta ejecución"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "ai_runs_agent_id_fkey",
+    "source_table": "public.ai_runs",
+    "source_columns": [
+     "agent_id"
+    ],
+    "target_table": "public.ai_agents",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "ai_runs_holding_id_fkey",
+    "source_table": "public.ai_runs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "ai_messages_run_id_fkey",
+    "source_table": "public.ai_messages",
+    "source_columns": [
+     "run_id"
+    ],
+    "target_table": "public.ai_runs",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "ai_messages": {
+  "name": "public.ai_messages",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "run_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "direction",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "direction = ANY (ARRAY['out'::text, 'in'::text])"
+   },
+   {
+    "name": "channel",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "channel = ANY (ARRAY['email'::text, 'crm'::text, 'webhook'::text])"
+   },
+   {
+    "name": "to",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "subject",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "body",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "meta_json",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "ai_messages_run_id_fkey",
+    "source_table": "public.ai_messages",
+    "source_columns": [
+     "run_id"
+    ],
+    "target_table": "public.ai_runs",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "rag_documents": {
+  "name": "public.rag_documents",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "source_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "source_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "content",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "embedding",
+    "data_type": "USER-DEFINED",
+    "format": "vector",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "rag_documents_holding_id_fkey",
+    "source_table": "public.rag_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "app_notifications": {
+  "name": "public.app_notifications",
+  "rls_enabled": true,
+  "rows": 3,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "source",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "severity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'error'::text",
+    "check": "severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text])"
+   },
+   {
+    "name": "title",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "recommendation",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "action_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "action_payload",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "deduplication_key",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'open'::text",
+    "check": "status = ANY (ARRAY['open'::text, 'resolved'::text])"
+   },
+   {
+    "name": "resolved_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "resource_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resource_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "app_notification_recipients_notification_id_fkey",
+    "source_table": "public.app_notification_recipients",
+    "source_columns": [
+     "notification_id"
+    ],
+    "target_table": "public.app_notifications",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notifications_holding_id_fkey",
+    "source_table": "public.app_notifications",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "app_notification_recipients": {
+  "name": "public.app_notification_recipients",
+  "rls_enabled": true,
+  "rows": 14,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "notification_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_read",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "read_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "app_notification_recipients_notification_id_fkey",
+    "source_table": "public.app_notification_recipients",
+    "source_columns": [
+     "notification_id"
+    ],
+    "target_table": "public.app_notifications",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notification_recipients_user_id_fkey",
+    "source_table": "public.app_notification_recipients",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "notification_role_subscriptions": {
+  "name": "public.notification_role_subscriptions",
+  "rls_enabled": true,
+  "rows": 18,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "role_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "notification_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "notification_role_subscriptions_role_id_fkey",
+    "source_table": "public.notification_role_subscriptions",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_role_subscriptions_holding_id_fkey",
+    "source_table": "public.notification_role_subscriptions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "email_sender_addresses": {
+  "name": "public.email_sender_addresses",
+  "rls_enabled": true,
+  "rows": 0,
+  "comment": "Múltiples direcciones de correo remitente por dominio verificado",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "domain_config_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "from_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Nombre del remitente (ej: Cobranza Sapira)"
+   },
+   {
+    "name": "from_email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Email del remitente, debe pertenecer al dominio"
+   },
+   {
+    "name": "reply_to_email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Email de respuesta opcional"
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "purpose",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Propósito del remitente (cobranzas, notificaciones, etc)"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "email_sender_addresses_domain_config_id_fkey",
+    "source_table": "public.email_sender_addresses",
+    "source_columns": [
+     "domain_config_id"
+    ],
+    "target_table": "public.holding_email_sender_settings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "email_sender_addresses_created_by_fkey",
+    "source_table": "public.email_sender_addresses",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "holding_email_sender_settings": {
+  "name": "public.holding_email_sender_settings",
+  "rls_enabled": true,
+  "rows": 0,
+  "comment": "Configuración de remitente de email por holding con verificación de dominio en Resend",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "sender_domain",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Dominio o subdominio para envío (ej: mail.miempresa.com)"
+   },
+   {
+    "name": "resend_domain_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del dominio en Resend API"
+   },
+   {
+    "name": "domain_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "comment": "Estado de verificación: pending, verified, failed"
+   },
+   {
+    "name": "domain_dns_records",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Registros DNS provistos por Resend (DKIM, SPF, DMARC)"
+   },
+   {
+    "name": "domain_verified_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Dominio por defecto para el holding"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Si el dominio está activo para uso"
+   },
+   {
+    "name": "display_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Nombre descriptivo del dominio"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "holding_email_sender_settings_created_by_fkey",
+    "source_table": "public.holding_email_sender_settings",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "email_sender_addresses_domain_config_id_fkey",
+    "source_table": "public.email_sender_addresses",
+    "source_columns": [
+     "domain_config_id"
+    ],
+    "target_table": "public.holding_email_sender_settings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_email_sender_settings_holding_id_fkey",
+    "source_table": "public.holding_email_sender_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

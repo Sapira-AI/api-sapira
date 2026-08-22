@@ -1,0 +1,1172 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "ai_agents": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "ai_agents_type_check",
+    "type": "c",
+    "expr": "type = ANY (ARRAY['collections'::text, 'proforma'::text, 'deal_validation'::text])"
+   },
+   {
+    "name": "ai_agents_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "ai_agents_holding_type_idx",
+    "cols": [
+     "holding_id",
+     "type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_ai_agents_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "AI agents - manage own holding (ALL, public)",
+   "AI agents - select own holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "AI agents - manage own holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
+    "with_check": null
+   },
+   {
+    "name": "AI agents - select own holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
+    "with_check": null
+   }
+  ]
+ },
+ "ai_agent_configs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "ai_agent_configs_agent_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (agent_id) REFERENCES ai_agents(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "ai_agent_configs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "ai_agent_configs_agent_id_key_key",
+    "type": "u",
+    "cols": [
+     "agent_id",
+     "key"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "ai_agent_configs_agent_idx",
+    "cols": [
+     "agent_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_ai_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "AI agent configs - manage via agent (ALL, public)",
+   "AI agent configs - select via agent (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "AI agent configs - manage via agent",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM ai_agents a\n  WHERE ((a.id = ai_agent_configs.agent_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   },
+   {
+    "name": "AI agent configs - select via agent",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM ai_agents a\n  WHERE ((a.id = ai_agent_configs.agent_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   }
+  ]
+ },
+ "client_agent_configs": {
+  "comment": "Configuración de automatizaciones (agentes) por cliente. Permite personalizar estrategias de proforma y cobranza para cada cliente.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "client_agent_configs_agent_type_check",
+    "type": "c",
+    "expr": "agent_type = ANY (ARRAY['proforma'::text, 'collections'::text])"
+   },
+   {
+    "name": "client_agent_configs_client_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_agent_configs_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "client_agent_configs_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_agent_configs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_holding_id_client_id_agent_type_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "client_id",
+     "agent_type"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_client_agent_configs_agent_type",
+    "cols": [
+     "agent_type",
+     "is_enabled"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_client_agent_configs_enabled",
+    "cols": [
+     "is_enabled"
+    ],
+    "unique": false,
+    "where": "is_enabled = true"
+   },
+   {
+    "name": "idx_client_agent_configs_holding_client",
+    "cols": [
+     "holding_id",
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_client_agent_configs_holding_global",
+    "cols": [
+     "holding_id",
+     "agent_type"
+    ],
+    "unique": true,
+    "where": "client_id IS NULL"
+   },
+   {
+    "name": "idx_client_agent_configs_holding_type",
+    "cols": [
+     "holding_id",
+     "agent_type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_update_client_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_client_agent_configs_updated_at()",
+   "trigger_validate_client_agent_config_email_sender · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_client_agent_config_email_sender()"
+  ],
+  "policies": [
+   "Users can create client agent configs for their holding (INSERT, public)",
+   "Users can delete client agent configs of their holding (DELETE, public)",
+   "Users can update client agent configs of their holding (UPDATE, public)",
+   "Users can view client agent configs of their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can create client agent configs for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can delete client agent configs of their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can update client agent configs of their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view client agent configs of their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "agents": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "agents_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "fk_agents_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "agents_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_agents_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_agents (DELETE, authenticated)",
+   "tenant_isolation_insert_agents (INSERT, authenticated)",
+   "tenant_isolation_select_agents (SELECT, authenticated)",
+   "tenant_isolation_update_agents (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_agents",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_agents",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_agents",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_agents",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "agent_logs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "agent_logs_agent_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (agent_id) REFERENCES agents(id)"
+   },
+   {
+    "name": "agent_logs_user_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES users(id)"
+   },
+   {
+    "name": "fk_agent_logs_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "agent_logs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_agent_logs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_insert_agent_logs (INSERT, authenticated)",
+   "tenant_isolation_select_agent_logs (SELECT, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_insert_agent_logs",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_agent_logs",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "ai_runs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "ai_runs_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['queued'::text, 'approved'::text, 'sent'::text, 'error'::text, 'cancelled'::text])"
+   },
+   {
+    "name": "ai_runs_agent_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (agent_id) REFERENCES ai_agents(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "ai_runs_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "ai_runs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "ai_runs_agent_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX ai_runs_agent_idx ON public.ai_runs USING btree (agent_id, created_at DESC)"
+   },
+   {
+    "name": "ai_runs_holding_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX ai_runs_holding_idx ON public.ai_runs USING btree (holding_id, created_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "AI runs - manage via agent (ALL, public)",
+   "AI runs - select via agent (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "AI runs - manage via agent",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM ai_agents a\n  WHERE ((a.id = ai_runs.agent_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   },
+   {
+    "name": "AI runs - select via agent",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM ai_agents a\n  WHERE ((a.id = ai_runs.agent_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   }
+  ]
+ },
+ "ai_messages": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "ai_messages_channel_check",
+    "type": "c",
+    "expr": "channel = ANY (ARRAY['email'::text, 'crm'::text, 'webhook'::text])"
+   },
+   {
+    "name": "ai_messages_direction_check",
+    "type": "c",
+    "expr": "direction = ANY (ARRAY['out'::text, 'in'::text])"
+   },
+   {
+    "name": "ai_messages_run_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (run_id) REFERENCES ai_runs(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "ai_messages_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "ai_messages_run_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX ai_messages_run_idx ON public.ai_messages USING btree (run_id, created_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "AI messages - manage via run (ALL, public)",
+   "AI messages - select via run (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "AI messages - manage via run",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM (ai_runs r\n     JOIN ai_agents a ON ((a.id = r.agent_id)))\n  WHERE ((r.id = ai_messages.run_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   },
+   {
+    "name": "AI messages - select via run",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM (ai_runs r\n     JOIN ai_agents a ON ((a.id = r.agent_id)))\n  WHERE ((r.id = ai_messages.run_id) AND (a.holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id)))))",
+    "with_check": null
+   }
+  ]
+ },
+ "rag_documents": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "rag_documents_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "rag_documents_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "rag_documents_embedding_ivfflat_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX rag_documents_embedding_ivfflat_idx ON public.rag_documents USING ivfflat (embedding vector_cosine_ops) WITH (lists='100')"
+   },
+   {
+    "name": "rag_documents_holding_id_idx",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "rag_documents_metadata_gin_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX rag_documents_metadata_gin_idx ON public.rag_documents USING gin (metadata)"
+   },
+   {
+    "name": "rag_documents_source_idx",
+    "cols": [
+     "source_type",
+     "source_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can view RAG documents from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can view RAG documents from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "app_notifications": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "app_notifications_severity_check",
+    "type": "c",
+    "expr": "severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text])"
+   },
+   {
+    "name": "app_notifications_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['open'::text, 'resolved'::text])"
+   },
+   {
+    "name": "app_notifications_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "app_notifications_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "app_notifications_holding_resource_created_idx",
+    "cols": null,
+    "unique": false,
+    "where": "resource_id IS NOT NULL",
+    "expr": "CREATE INDEX app_notifications_holding_resource_created_idx ON public.app_notifications USING btree (holding_id, resource_type, resource_id, created_at DESC) WHERE (resource_id IS NOT NULL)"
+   },
+   {
+    "name": "app_notifications_holding_status_created_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX app_notifications_holding_status_created_idx ON public.app_notifications USING btree (holding_id, status, created_at DESC)"
+   },
+   {
+    "name": "app_notifications_open_deduplication_key_idx",
+    "cols": [
+     "holding_id",
+     "deduplication_key"
+    ],
+    "unique": true,
+    "where": "(status = 'open'::text) AND (deduplication_key IS NOT NULL)"
+   }
+  ],
+  "triggers": [
+   "set_app_notifications_updated_at · BEFORE UPDATE FOR EACH ROW → update_app_notifications_updated_at()"
+  ],
+  "policies": [
+   "notification recipients can view their notifications (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "notification recipients can view their notifications",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(EXISTS ( SELECT 1\n   FROM app_notification_recipients recipient\n  WHERE ((recipient.notification_id = recipient.id) AND (recipient.user_id = get_current_user_id()))))",
+    "with_check": null
+   }
+  ]
+ },
+ "app_notification_recipients": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "app_notification_recipients_notification_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (notification_id) REFERENCES app_notifications(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "app_notification_recipients_user_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "app_notification_recipients_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notification_recipients_notification_id_user_id_key",
+    "type": "u",
+    "cols": [
+     "notification_id",
+     "user_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "app_notification_recipients_user_unread_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX app_notification_recipients_user_unread_idx ON public.app_notification_recipients USING btree (user_id, is_read, created_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "users can mark own notification recipients read (UPDATE, public)",
+   "users can view own notification recipients (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "users can mark own notification recipients read",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": "(user_id = get_current_user_id())"
+   },
+   {
+    "name": "users can view own notification recipients",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "notification_role_subscriptions": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "notification_role_subscriptions_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "notification_role_subscriptions_role_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "notification_role_subscriptions_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_role_subscriptio_holding_id_role_id_notificati_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "role_id",
+     "notification_type"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "notification_role_subscriptions_holding_type_idx",
+    "cols": [
+     "holding_id",
+     "notification_type"
+    ],
+    "unique": false,
+    "where": "is_enabled"
+   }
+  ],
+  "triggers": [
+   "set_notification_role_subscriptions_updated_at · BEFORE UPDATE FOR EACH ROW → update_app_notifications_updated_at()"
+  ],
+  "policies": [
+   "holding administrators can view notification role subscriptions (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding administrators can view notification role subscriptions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "((holding_id = get_current_user_holding_id()) AND (rls_is_super_admin() OR rls_is_holding_admin()))",
+    "with_check": null
+   }
+  ]
+ },
+ "email_sender_addresses": {
+  "comment": "Múltiples direcciones de correo remitente por dominio verificado",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "email_sender_addresses_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "email_sender_addresses_domain_config_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (domain_config_id) REFERENCES holding_email_sender_settings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "email_sender_addresses_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_email_sender_addresses_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_email_sender_addresses_default",
+    "cols": [
+     "domain_config_id",
+     "is_default"
+    ],
+    "unique": false,
+    "where": "is_default = true"
+   },
+   {
+    "name": "idx_email_sender_addresses_domain",
+    "cols": [
+     "domain_config_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "unique_default_sender_per_domain",
+    "cols": [
+     "domain_config_id"
+    ],
+    "unique": true,
+    "where": "(is_default = true) AND (is_active = true)"
+   }
+  ],
+  "triggers": [
+   "trigger_update_email_sender_addresses_updated_at · BEFORE UPDATE FOR EACH ROW → update_email_sender_addresses_updated_at()",
+   "trigger_validate_email_matches_domain · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_email_matches_domain()"
+  ],
+  "policies": [
+   "Users can create email senders for their holding domains (INSERT, public)",
+   "Users can delete email senders of their holding domains (DELETE, public)",
+   "Users can update email senders of their holding domains (UPDATE, public)",
+   "Users can view email senders of their holding domains (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can create email senders for their holding domains",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(domain_config_id IN ( SELECT holding_email_sender_settings.id\n   FROM holding_email_sender_settings\n  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = ( SELECT users.id\n                   FROM users\n                  WHERE (users.auth_id = auth.uid())))))))"
+   },
+   {
+    "name": "Users can delete email senders of their holding domains",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(domain_config_id IN ( SELECT holding_email_sender_settings.id\n   FROM holding_email_sender_settings\n  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = ( SELECT users.id\n                   FROM users\n                  WHERE (users.auth_id = auth.uid())))))))",
+    "with_check": null
+   },
+   {
+    "name": "Users can update email senders of their holding domains",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(domain_config_id IN ( SELECT holding_email_sender_settings.id\n   FROM holding_email_sender_settings\n  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = ( SELECT users.id\n                   FROM users\n                  WHERE (users.auth_id = auth.uid())))))))",
+    "with_check": "(domain_config_id IN ( SELECT holding_email_sender_settings.id\n   FROM holding_email_sender_settings\n  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = ( SELECT users.id\n                   FROM users\n                  WHERE (users.auth_id = auth.uid())))))))"
+   },
+   {
+    "name": "Users can view email senders of their holding domains",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(domain_config_id IN ( SELECT holding_email_sender_settings.id\n   FROM holding_email_sender_settings\n  WHERE (holding_email_sender_settings.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = ( SELECT users.id\n                   FROM users\n                  WHERE (users.auth_id = auth.uid())))))))",
+    "with_check": null
+   }
+  ]
+ },
+ "holding_email_sender_settings": {
+  "comment": "Configuración de remitente de email por holding con verificación de dominio en Resend",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "holding_email_sender_settings_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "holding_email_sender_settings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "holding_email_sender_settings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_holding_email_sender_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_holding_email_sender_default",
+    "cols": [
+     "holding_id",
+     "is_default"
+    ],
+    "unique": false,
+    "where": "is_default = true"
+   },
+   {
+    "name": "idx_holding_email_sender_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_holding_email_sender_status",
+    "cols": [
+     "domain_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "unique_default_domain_per_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "(is_default = true) AND (is_active = true)"
+   }
+  ],
+  "triggers": [
+   "trigger_update_holding_email_sender_updated_at · BEFORE UPDATE FOR EACH ROW → update_holding_email_sender_updated_at()"
+  ],
+  "policies": [
+   "Users can create email sender settings for their holding (INSERT, public)",
+   "Users can delete their holding email sender settings (DELETE, public)",
+   "Users can update their holding email sender settings (UPDATE, public)",
+   "Users can view their holding email sender settings (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can create email sender settings for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = ( SELECT users.id\n           FROM users\n          WHERE (users.auth_id = auth.uid())))))"
+   },
+   {
+    "name": "Users can delete their holding email sender settings",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = ( SELECT users.id\n           FROM users\n          WHERE (users.auth_id = auth.uid())))))",
+    "with_check": null
+   },
+   {
+    "name": "Users can update their holding email sender settings",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = ( SELECT users.id\n           FROM users\n          WHERE (users.auth_id = auth.uid())))))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = ( SELECT users.id\n           FROM users\n          WHERE (users.auth_id = auth.uid())))))"
+   },
+   {
+    "name": "Users can view their holding email sender settings",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = ( SELECT users.id\n           FROM users\n          WHERE (users.auth_id = auth.uid())))))",
+    "with_check": null
+   }
+  ]
+ }
+}

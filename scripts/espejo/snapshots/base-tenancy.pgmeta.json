@@ -1,0 +1,2855 @@
+{
+ "users": {
+  "name": "public.users",
+  "rls_enabled": true,
+  "rows": 28,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable",
+     "unique"
+    ]
+   },
+   {
+    "name": "role_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'Pendiente'::text",
+    "check": "status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])"
+   },
+   {
+    "name": "last_access",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "auth_provider",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "auth_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "is_super_admin",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "last_invitation_sent_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Último intento de envío de invitación (edge send-invitation)"
+   },
+   {
+    "name": "last_invitation_email_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del email en Resend del último envío"
+   },
+   {
+    "name": "last_invitation_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "sent | failed (según respuesta de Resend)"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "contract_notifications_user_id_fkey",
+    "source_table": "public.contract_notifications",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "workflow_step_documents_uploaded_by_fkey",
+    "source_table": "public.workflow_step_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_change_log_changed_by_fkey",
+    "source_table": "public.contract_change_log",
+    "source_columns": [
+     "changed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notification_recipients_user_id_fkey",
+    "source_table": "public.app_notification_recipients",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "users_role_id_fkey",
+    "source_table": "public.users",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "agent_logs_user_id_fkey",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_user_holdings_user_id",
+    "source_table": "public.user_holdings",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_created_by_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_created_by_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_confirmed_by_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "confirmed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "custom_field_definitions_created_by_fkey",
+    "source_table": "public.custom_field_definitions",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_attachments_uploaded_by_fkey",
+    "source_table": "public.quote_attachments",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "field_mappings_created_by_fkey",
+    "source_table": "public.field_mappings",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_email_sender_settings_created_by_fkey",
+    "source_table": "public.holding_email_sender_settings",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "email_sender_addresses_created_by_fkey",
+    "source_table": "public.email_sender_addresses",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_created_by_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_migrated_by_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "migrated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_view_preferences_user_id_fkey",
+    "source_table": "public.user_view_preferences",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_last_action_by_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "last_action_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_events_performed_by_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "performed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "period_guard_warnings_triggered_by_fkey",
+    "source_table": "public.period_guard_warnings",
+    "source_columns": [
+     "triggered_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_change_log_changed_by_fkey",
+    "source_table": "public.contract_item_change_log",
+    "source_columns": [
+     "changed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reschedules_changed_by_fkey",
+    "source_table": "public.invoice_reschedules",
+    "source_columns": [
+     "changed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_adjustments_adjusted_by_fkey",
+    "source_table": "public.invoice_adjustments",
+    "source_columns": [
+     "adjusted_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_emails_sent_by_fkey",
+    "source_table": "public.invoice_emails",
+    "source_columns": [
+     "sent_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_wsd_uploaded_by",
+    "source_table": "public.workflow_step_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billing_references_created_by_fkey",
+    "source_table": "public.billing_references",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_linked_by_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "linked_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_fx_period_rates_created_by_fkey",
+    "source_table": "public.holding_fx_period_rates",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "roles": {
+  "name": "public.roles",
+  "rls_enabled": true,
+  "rows": 70,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "users_role_id_fkey",
+    "source_table": "public.users",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "role_permissions_role_id_fkey",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_roles_holding_id",
+    "source_table": "public.roles",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_role_subscriptions_role_id_fkey",
+    "source_table": "public.notification_role_subscriptions",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "permissions": {
+  "name": "public.permissions",
+  "rls_enabled": true,
+  "rows": 22,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable",
+     "unique"
+    ]
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "role_permissions_permission_id_fkey",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "permission_id"
+    ],
+    "target_table": "public.permissions",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "role_permissions": {
+  "name": "public.role_permissions",
+  "rls_enabled": true,
+  "rows": 638,
+  "columns": [
+   {
+    "name": "role_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "permission_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "role_id",
+   "permission_id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "role_permissions_role_id_fkey",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "role_id"
+    ],
+    "target_table": "public.roles",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "role_permissions_permission_id_fkey",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "permission_id"
+    ],
+    "target_table": "public.permissions",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_role_permissions_holding_id",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "user_holdings": {
+  "name": "public.user_holdings",
+  "rls_enabled": true,
+  "rows": 38,
+  "columns": [
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "selected",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Indicates if this is the currently selected holding for the user"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Indicates if the user access to this holding is active"
+   }
+  ],
+  "primary_keys": [
+   "user_id",
+   "holding_id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_user_holdings_user_id",
+    "source_table": "public.user_holdings",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_holdings_holding_id_fkey",
+    "source_table": "public.user_holdings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "company_holdings": {
+  "name": "public.company_holdings",
+  "rls_enabled": true,
+  "rows": 7,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "website",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "phone",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "logo_url",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "manual_status_change_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "companies_holding_fk",
+    "source_table": "public.companies",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_holdings_holding_id_fkey",
+    "source_table": "public.user_holdings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "clients_holding_id_fkey",
+    "source_table": "public.clients",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "products_holding_id_fkey",
+    "source_table": "public.products",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contracts_holding_id",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_invoices_holding_id",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_quotes_holding_id",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_master_data_holding_id",
+    "source_table": "public.master_data",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contract_items_holding_id",
+    "source_table": "public.contract_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contract_invoices_holding_id",
+    "source_table": "public.contract_invoices",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_quote_items_holding_id",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_client_contacts_holding_id",
+    "source_table": "public.client_contacts",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_client_entities_holding_id",
+    "source_table": "public.client_entities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_client_documents_holding_id",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_sellers_holding_id",
+    "source_table": "public.sellers",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_stages_holding_id_fkey",
+    "source_table": "public.quote_stages",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_notifications_holding_id_fkey",
+    "source_table": "public.contract_notifications",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_invoice_items_holding_id",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reschedules_holding_id_fkey",
+    "source_table": "public.invoice_reschedules",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_settings_holding_id_fkey",
+    "source_table": "public.holding_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "workflow_step_documents_holding_id_fkey",
+    "source_table": "public.workflow_step_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_wsd_holding",
+    "source_table": "public.workflow_step_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_roles_holding_id",
+    "source_table": "public.roles",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_role_permissions_holding_id",
+    "source_table": "public.role_permissions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_agents_holding_id",
+    "source_table": "public.agents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_bank_movements_holding_id",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contract_clauses_holding_id",
+    "source_table": "public.contract_clauses",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contract_templates_holding_id",
+    "source_table": "public.contract_templates",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_integration_configs_holding_id",
+    "source_table": "public.integration_configs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_agent_logs_holding_id",
+    "source_table": "public.agent_logs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_holding_id_fkey",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_holding_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_lifecycle_events_holding_id_fkey",
+    "source_table": "public.contract_lifecycle_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_amendments_holding_id_fkey",
+    "source_table": "public.contract_amendments",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_amendment_items_holding_id_fkey",
+    "source_table": "public.contract_amendment_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_holding",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_billing_splits_holding_id_fkey",
+    "source_table": "public.contract_billing_splits",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billing_references_holding_id_fkey",
+    "source_table": "public.billing_references",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_holding_id_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fx_api_sync_log_holding_id_fkey",
+    "source_table": "public.fx_api_sync_log",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_fx_period_rates_holding_id_fkey",
+    "source_table": "public.holding_fx_period_rates",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_contract_fx_period_rates_holding_id",
+    "source_table": "public.contract_fx_period_rates",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quantities_holding_id_fkey",
+    "source_table": "public.quantities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_holding_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_holding_id_fkey",
+    "source_table": "public.invoice_items_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_holding_id_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "custom_field_definitions_holding_id_fkey",
+    "source_table": "public.custom_field_definitions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_object_mappings_holding_id_fkey",
+    "source_table": "public.salesforce_object_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_connections_holding_id_fkey",
+    "source_table": "public.odoo_connections",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_object_mappings_holding_id_fkey",
+    "source_table": "public.odoo_object_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_partners_stg_holding_id_fkey",
+    "source_table": "public.odoo_partners_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "field_mappings_holding_id_fkey",
+    "source_table": "public.field_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "integration_logs_holding_id_fkey",
+    "source_table": "public.integration_logs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoices_stg_holding_id_fkey",
+    "source_table": "public.odoo_invoices_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoice_lines_stg_holding_id_fkey",
+    "source_table": "public.odoo_invoice_lines_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_product_mappings_holding_id_fkey",
+    "source_table": "public.salesforce_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_quote_type_mappings_holding_id_fkey",
+    "source_table": "public.salesforce_quote_type_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "rag_documents_holding_id_fkey",
+    "source_table": "public.rag_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_email_sender_settings_holding_id_fkey",
+    "source_table": "public.holding_email_sender_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "semantic_catalog_holding_id_fkey",
+    "source_table": "analytics.semantic_catalog",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_holding_id_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_holding_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "ai_runs_holding_id_fkey",
+    "source_table": "public.ai_runs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_connections_holding_id_fkey",
+    "source_table": "public.salesforce_connections",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_sync_logs_holding_id_fkey",
+    "source_table": "public.salesforce_sync_logs",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_opportunities_cache_holding_id_fkey",
+    "source_table": "public.salesforce_opportunities_cache",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "claude_skills_holding_id_fkey",
+    "source_table": "public.claude_skills",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "overdue_check_log_holding_id_fkey",
+    "source_table": "public.overdue_check_log",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_holding_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_holding_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscription_items_holding_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "stripe_customers_bigquery_holding_id_fkey",
+    "source_table": "public.stripe_customers_bigquery",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_documents_holding_id_fkey",
+    "source_table": "public.contract_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "stripe_product_mappings_holding_id_fkey",
+    "source_table": "public.stripe_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_product_mappings_holding_id_fkey",
+    "source_table": "public.odoo_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_holding_id_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_events_holding_id_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bigquery_connections_holding_id_fkey",
+    "source_table": "public.bigquery_connections",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notifications_holding_id_fkey",
+    "source_table": "public.app_notifications",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_role_subscriptions_holding_id_fkey",
+    "source_table": "public.notification_role_subscriptions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "companies": {
+  "name": "public.companies",
+  "rls_enabled": true,
+  "rows": 22,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "legal_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "country",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "legal_address",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "representative_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "website",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "phone",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "invoice_prefix",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_prefix",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_rate",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tasa de impuesto de la empresa en formato PORCENTAJE (19 para 19%, 21 para 21%).\nEjemplos por país: Chile = 19, Perú = 18, Colombia = 19, México = 16.\nNOTA: El estándar es PORCENTAJE, NO decimal. Al crear una factura, este valor\nse copia a invoices.tax_rate mediante el trigger auto_populate_invoice_tax_rate."
+   },
+   {
+    "name": "logo_url",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "odoo_integration_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID de la company correspondiente en Odoo (res.company.id). Permite mapear companies de Sapira con companies de Odoo para integración multi-empresa."
+   },
+   {
+    "name": "odoo_default_sale_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del impuesto de venta por defecto en Odoo (account.tax). Se obtiene de account_sale_tax_id al mapear la compañía."
+   },
+   {
+    "name": "odoo_default_purchase_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del impuesto de compra por defecto en Odoo (account.tax). Se obtiene de account_purchase_tax_id al mapear la compañía."
+   },
+   {
+    "name": "odoo_reteica_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del tax de ReteICA configurado en Odoo para esta compañía (Colombia)"
+   },
+   {
+    "name": "odoo_retefuente_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del tax de Retefuente configurado en Odoo para esta compañía (Colombia)"
+   },
+   {
+    "name": "odoo_reteiva_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoices_company_id_fkey",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_events_company_id_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_company_id_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_company_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_company_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_company_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "company_account_mappings_company_id_fkey",
+    "source_table": "public.company_account_mappings",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_billing_splits_billing_company_id_fkey",
+    "source_table": "public.contract_billing_splits",
+    "source_columns": [
+     "billing_company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_company",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_adjustments_company_id_fkey",
+    "source_table": "public.mrr_adjustments",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "companies_holding_fk",
+    "source_table": "public.companies",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "company_legal_documents_company_id_fkey",
+    "source_table": "public.company_legal_documents",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "company_bank_accounts_company_id_fkey",
+    "source_table": "public.company_bank_accounts",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "integration_configs_company_id_fkey",
+    "source_table": "public.integration_configs",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "revenue_rules_company_id_fkey",
+    "source_table": "public.revenue_rules",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "agents_company_id_fkey",
+    "source_table": "public.agents",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_company_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_clauses_company_id_fkey",
+    "source_table": "public.contract_clauses",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_templates_company_id_fkey",
+    "source_table": "public.contract_templates",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contracts_company_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "master_data": {
+  "name": "public.master_data",
+  "rls_enabled": true,
+  "rows": 264,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "category",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "category = ANY (ARRAY['markets'::text, 'segments'::text, 'industries'::text, 'item_types'::text, 'units_of_measure'::text, 'quote_types'::text, 'payment_terms'::text, 'contact_types'::text])"
+   },
+   {
+    "name": "value",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_master_data_holding_id",
+    "source_table": "public.master_data",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "currencies": {
+  "name": "public.currencies",
+  "rls_enabled": true,
+  "rows": 10,
+  "columns": [
+   {
+    "name": "code",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "name_es",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "symbol",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "decimal_places",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "2"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "odoo_currency_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "country",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "code"
+  ]
+ },
+ "financial_settings": {
+  "name": "public.financial_settings",
+  "rls_enabled": true,
+  "rows": 4,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable",
+     "unique"
+    ]
+   },
+   {
+    "name": "recognition_granularity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'monthly'::text"
+   },
+   {
+    "name": "discount_policy",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'from_application_date'::text"
+   },
+   {
+    "name": "discounts_require_approval",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "revenue_schedule_monthly_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "holding_settings": {
+  "name": "public.holding_settings",
+  "rls_enabled": true,
+  "rows": 4,
+  "columns": [
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "system_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "fx_system_policy",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'monthly_avg'::text",
+    "check": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])",
+    "comment": "Política FX para conversión a moneda de sistema: fixed_period o monthly_avg"
+   },
+   {
+    "name": "currencies_in_use",
+    "data_type": "ARRAY",
+    "format": "_text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "ARRAY[]::text[]",
+    "comment": "Monedas utilizadas en el holding"
+   }
+  ],
+  "primary_keys": [
+   "holding_id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "holding_settings_holding_id_fkey",
+    "source_table": "public.holding_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "custom_field_definitions": {
+  "name": "public.custom_field_definitions",
+  "rls_enabled": true,
+  "rows": 16,
+  "comment": "Definiciones de campos personalizados creados por usuarios a nivel de holding",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "entity_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "entity_type = ANY (ARRAY['client'::text, 'contract'::text, 'contract_item'::text, 'quote'::text, 'quote_item'::text, 'invoice'::text, 'invoice_item'::text])"
+   },
+   {
+    "name": "field_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Identificador único del campo en snake_case (ej: proyecto_cliente)"
+   },
+   {
+    "name": "field_label",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Label visible para el usuario (ej: Proyecto del Cliente)"
+   },
+   {
+    "name": "field_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "field_type = ANY (ARRAY['text'::text, 'number'::text])",
+    "comment": "Tipo de dato: text o number"
+   },
+   {
+    "name": "is_required",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Permite ocultar campos sin eliminarlos"
+   },
+   {
+    "name": "display_order",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Orden de visualización en formularios"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "custom_field_definitions_holding_id_fkey",
+    "source_table": "public.custom_field_definitions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "custom_field_definitions_created_by_fkey",
+    "source_table": "public.custom_field_definitions",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "user_view_preferences": {
+  "name": "public.user_view_preferences",
+  "rls_enabled": true,
+  "rows": 8,
+  "comment": "Vistas guardadas por usuario y tipo de entidad. Cada vista persiste columnas + filtros + búsqueda. Aislada por usuario via RLS — no se comparte entre usuarios aunque sean del mismo holding.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "entity_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "view_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Mi Vista'::text"
+   },
+   {
+    "name": "column_config",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Array de configuración de columnas: [{key, label, visible}]."
+   },
+   {
+    "name": "filter_config",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Snapshot del FilterState: { quickFilters, advancedFilters, searchQuery }. Fechas como ISO string."
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Solo una vista por (user_id, entity_type) puede tener is_default=true (garantizado por idx_user_view_prefs_one_default_per_entity). Se carga al entrar al módulo."
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "user_view_preferences_user_id_fkey",
+    "source_table": "public.user_view_preferences",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "claude_skills": {
+  "name": "public.claude_skills",
+  "rls_enabled": true,
+  "rows": 2,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "name",
+    "data_type": "character varying",
+    "format": "varchar",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "input_schema",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "claude_skills_holding_id_fkey",
+    "source_table": "public.claude_skills",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,480 @@
+{
+ "bank_movements": {
+  "name": "public.bank_movements",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "bank_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "bank_account",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "movement_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'Pendiente'::text",
+    "check": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])"
+   },
+   {
+    "name": "suggested_invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reconciled_invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reconciled_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reconciled_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "match_confidence",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "check": "match_confidence = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text])"
+   },
+   {
+    "name": "match_score",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "original_row_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "bank_movements_reconciled_by_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "reconciled_by"
+    ],
+    "target_table": "auth.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_bank_movements_holding_id",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_payments_bank_movement_id_fkey",
+    "source_table": "public.invoice_payments",
+    "source_columns": [
+     "bank_movement_id"
+    ],
+    "target_table": "public.bank_movements",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_company_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_suggested_invoice_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "suggested_invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_batch_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "batch_id"
+    ],
+    "target_table": "public.bank_upload_batches",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_reconciled_invoice_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "reconciled_invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "bank_upload_batches": {
+  "name": "public.bank_upload_batches",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "bank_account_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_hash",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "row_count",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "column_mapping",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Procesado'::text",
+    "check": "status = ANY (ARRAY['Procesado'::text, 'Revertido'::text])"
+   },
+   {
+    "name": "uploaded_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "bank_upload_batches_uploaded_by_fkey",
+    "source_table": "public.bank_upload_batches",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "auth.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_movements_batch_id_fkey",
+    "source_table": "public.bank_movements",
+    "source_columns": [
+     "batch_id"
+    ],
+    "target_table": "public.bank_upload_batches",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_upload_batches_bank_account_id_fkey",
+    "source_table": "public.bank_upload_batches",
+    "source_columns": [
+     "bank_account_id"
+    ],
+    "target_table": "public.company_bank_accounts",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "bank_column_mappings": {
+  "name": "public.bank_column_mappings",
+  "rls_enabled": true,
+  "rows": 0,
+  "comment": "Presets de mapeo de columnas para importación de cartolas bancarias",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "bank_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "mapping_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "column_mapping",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "JSON con: date_column, description_column, amount_column, currency_column, default_currency, date_format, decimal_separator, thousands_separator, skip_rows, amount_sign_convention"
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ }
+}

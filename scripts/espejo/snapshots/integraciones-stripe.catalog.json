@@ -1,0 +1,729 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "stripe_connections": {
+  "comment": "Almacena las credenciales de conexión a Stripe por holding",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_connections_mode_check",
+    "type": "c",
+    "expr": "mode = ANY (ARRAY['test'::text, 'live'::text])"
+   },
+   {
+    "name": "stripe_connections_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_connections_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_connections_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_connections_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_stripe_connections_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's Stripe connections (DELETE, public)",
+   "Users can insert Stripe connections for their holdings (INSERT, public)",
+   "Users can update their holding's Stripe connections (UPDATE, public)",
+   "Users can view their holding's Stripe connections (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's Stripe connections",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert Stripe connections for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update their holding's Stripe connections",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's Stripe connections",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "stripe_customers_stg": {
+  "comment": "Tabla staging para clientes importados desde Stripe",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_customers_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_stripe_customer_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "stripe_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_customers_stg_connection_id",
+    "cols": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_stg_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_stg_stripe_id",
+    "cols": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_stg_sync_batch_id",
+    "cols": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_stripe_customers_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's Stripe customers (DELETE, public)",
+   "Users can insert Stripe customers for their holdings (INSERT, public)",
+   "Users can update their holding's Stripe customers (UPDATE, public)",
+   "Users can view their holding's Stripe customers (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's Stripe customers",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert Stripe customers for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update their holding's Stripe customers",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's Stripe customers",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "stripe_invoices_stg": {
+  "comment": "Tabla staging para facturas importadas desde Stripe",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_invoices_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_stripe_invoice_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "stripe_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_invoices_stg_connection_id",
+    "cols": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_invoices_stg_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_invoices_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_invoices_stg_stripe_id",
+    "cols": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_invoices_stg_sync_batch_id",
+    "cols": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_stripe_invoices_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's Stripe invoices (DELETE, public)",
+   "Users can insert Stripe invoices for their holdings (INSERT, public)",
+   "Users can update their holding's Stripe invoices (UPDATE, public)",
+   "Users can view their holding's Stripe invoices (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's Stripe invoices",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert Stripe invoices for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update their holding's Stripe invoices",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's Stripe invoices",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "stripe_subscriptions_stg": {
+  "comment": "Tabla staging para suscripciones importadas desde Stripe",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_subscriptions_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_stripe_subscription_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "stripe_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_subscriptions_stg_connection_id",
+    "cols": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_subscriptions_stg_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_subscriptions_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_subscriptions_stg_stripe_id",
+    "cols": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_subscriptions_stg_sync_batch_id",
+    "cols": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_stripe_subscriptions_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's Stripe subscriptions (DELETE, public)",
+   "Users can insert Stripe subscriptions for their holdings (INSERT, public)",
+   "Users can update their holding's Stripe subscriptions (UPDATE, public)",
+   "Users can view their holding's Stripe subscriptions (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's Stripe subscriptions",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert Stripe subscriptions for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update their holding's Stripe subscriptions",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's Stripe subscriptions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "stripe_product_mappings": {
+  "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Stripe",
+  "rls": false,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_product_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "stripe_product_mappings_sapira_product_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (sapira_product_id) REFERENCES products(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "stripe_product_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_stripe_mapping",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "sapira_product_id",
+     "stripe_product_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_mappings_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_mappings_holding_stripe",
+    "cols": [
+     "holding_id",
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_mappings_sapira_product",
+    "cols": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_mappings_stripe_product",
+    "cols": [
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "stripe_sync_jobs": {
+  "comment": "Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira",
+  "rls": false,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_sync_jobs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_sync_jobs_created_at",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_stripe_sync_jobs_created_at ON public.stripe_sync_jobs USING btree (created_at DESC)"
+   },
+   {
+    "name": "idx_stripe_sync_jobs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_sync_jobs_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_update_stripe_sync_jobs_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_sync_jobs_updated_at()"
+  ],
+  "policies": [],
+  "policies_detail": []
+ },
+ "stripe_customers_bigquery": {
+  "comment": "Tabla de clientes Stripe sincronizados desde BigQuery",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "stripe_customers_bigquery_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "stripe_customers_bigquery_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_stripe_customers_bigquery_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_bigquery_salesforce_account_id",
+    "cols": [
+     "salesforce_account_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_stripe_customers_bigquery_stripe_customer_id",
+    "cols": [
+     "stripe_customer_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_stripe_customers_bigquery_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_customers_bigquery_updated_at()"
+  ],
+  "policies": [
+   "Users can delete stripe customers in their holding (DELETE, public)",
+   "Users can insert stripe customers for their holding (INSERT, public)",
+   "Users can update stripe customers in their holding (UPDATE, public)",
+   "Users can view stripe customers in their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete stripe customers in their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert stripe customers for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update stripe customers in their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view stripe customers in their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

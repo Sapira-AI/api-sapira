@@ -1,0 +1,297 @@
+{
+  "bigquery_connections": {
+    "class": "BigQueryConnection",
+    "file": "src/databases/postgresql/entities/bigquery-connection.entity.ts",
+    "import": "@/databases/postgresql/entities/bigquery-connection.entity"
+  },
+  "client_entity_clients": {
+    "class": "ClientEntityClient",
+    "file": "src/databases/postgresql/entities/client-entity-client.entity.ts",
+    "import": "@/databases/postgresql/entities/client-entity-client.entity"
+  },
+  "client_entities": {
+    "class": "ClientEntity",
+    "file": "src/databases/postgresql/entities/client-entity.entity.ts",
+    "import": "@/databases/postgresql/entities/client-entity.entity"
+  },
+  "clients": {
+    "class": "Client",
+    "file": "src/databases/postgresql/entities/client.entity.ts",
+    "import": "@/databases/postgresql/entities/client.entity"
+  },
+  "field_mappings": {
+    "class": "FieldMapping",
+    "file": "src/databases/postgresql/entities/field-mapping.entity.ts",
+    "import": "@/databases/postgresql/entities/field-mapping.entity"
+  },
+  "generic_export_vats": {
+    "class": "GenericExportVat",
+    "file": "src/databases/postgresql/entities/generic-export-vat.entity.ts",
+    "import": "@/databases/postgresql/entities/generic-export-vat.entity"
+  },
+  "integration_logs": {
+    "class": "IntegrationLog",
+    "file": "src/databases/postgresql/entities/integration-log.entity.ts",
+    "import": "@/databases/postgresql/entities/integration-log.entity"
+  },
+  "stripe_customers_bigquery": {
+    "class": "StripeCustomerBigQuery",
+    "file": "src/databases/postgresql/entities/stripe-customer-bigquery.entity.ts",
+    "import": "@/databases/postgresql/entities/stripe-customer-bigquery.entity"
+  },
+  "currencies": {
+    "class": "Currency",
+    "file": "src/modules/banco-central/entities/currency.entity.ts",
+    "import": "@/modules/banco-central/entities/currency.entity"
+  },
+  "exchange_rates_monthly_avg": {
+    "class": "ExchangeRateMonthlyAvgEntity",
+    "file": "src/modules/banco-central/entities/exchange-rate-monthly-avg.entity.ts",
+    "import": "@/modules/banco-central/entities/exchange-rate-monthly-avg.entity"
+  },
+  "exchange_rates": {
+    "class": "ExchangeRateEntity",
+    "file": "src/modules/banco-central/entities/exchange-rate.entity.ts",
+    "import": "@/modules/banco-central/entities/exchange-rate.entity"
+  },
+  "indicadores_economicos": {
+    "class": "IndicadorEconomicoEntity",
+    "file": "src/modules/banco-central/entities/indicador-economico.entity.ts",
+    "import": "@/modules/banco-central/entities/indicador-economico.entity"
+  },
+  "company_holdings": {
+    "class": "CompanyHolding",
+    "file": "src/modules/holdings/entities/company-holding.entity.ts",
+    "import": "@/modules/holdings/entities/company-holding.entity"
+  },
+  "user_holdings": {
+    "class": "UserHolding",
+    "file": "src/modules/holdings/entities/user-holding.entity.ts",
+    "import": "@/modules/holdings/entities/user-holding.entity"
+  },
+  "contracts": {
+    "class": "Contract",
+    "file": "src/modules/invoices/entities/contract.entity.ts",
+    "import": "@/modules/invoices/entities/contract.entity"
+  },
+  "invoice_items": {
+    "class": "InvoiceItem",
+    "file": "src/modules/invoices/entities/invoice-item.entity.ts",
+    "import": "@/modules/invoices/entities/invoice-item.entity"
+  },
+  "invoice_references": {
+    "class": "InvoiceReference",
+    "file": "src/modules/invoices/entities/invoice-reference.entity.ts",
+    "import": "@/modules/invoices/entities/invoice-reference.entity"
+  },
+  "invoices": {
+    "class": "Invoice",
+    "file": "src/modules/invoices/entities/invoice.entity.ts",
+    "import": "@/modules/invoices/entities/invoice.entity"
+  },
+  "app_notification_recipients": {
+    "class": "AppNotificationRecipient",
+    "file": "src/modules/notifications/entities/app-notification-recipient.entity.ts",
+    "import": "@/modules/notifications/entities/app-notification-recipient.entity"
+  },
+  "app_notifications": {
+    "class": "AppNotification",
+    "file": "src/modules/notifications/entities/app-notification.entity.ts",
+    "import": "@/modules/notifications/entities/app-notification.entity"
+  },
+  "notification_role_subscriptions": {
+    "class": "NotificationRoleSubscription",
+    "file": "src/modules/notifications/entities/notification-role-subscription.entity.ts",
+    "import": "@/modules/notifications/entities/notification-role-subscription.entity"
+  },
+  "companies": {
+    "class": "Company",
+    "file": "src/modules/odoo/entities/companies.entity.ts",
+    "import": "@/modules/odoo/entities/companies.entity"
+  },
+  "odoo_connections": {
+    "class": "OdooConnection",
+    "file": "src/modules/odoo/entities/odoo-connection.entity.ts",
+    "import": "@/modules/odoo/entities/odoo-connection.entity"
+  },
+  "odoo_invoice_lines_stg": {
+    "class": "OdooInvoiceLinesStg",
+    "file": "src/modules/odoo/entities/odoo-invoice-lines-stg.entity.ts",
+    "import": "@/modules/odoo/entities/odoo-invoice-lines-stg.entity"
+  },
+  "odoo_invoices_stg": {
+    "class": "OdooInvoicesStg",
+    "file": "src/modules/odoo/entities/odoo-invoices-stg.entity.ts",
+    "import": "@/modules/odoo/entities/odoo-invoices-stg.entity"
+  },
+  "odoo_partners_stg": {
+    "class": "OdooPartnersStg",
+    "file": "src/modules/odoo/entities/odoo-partners-stg.entity.ts",
+    "import": "@/modules/odoo/entities/odoo-partners-stg.entity"
+  },
+  "odoo_product_mappings": {
+    "class": "OdooProductMapping",
+    "file": "src/modules/odoo/entities/odoo-product-mapping.entity.ts",
+    "import": "@/modules/odoo/entities/odoo-product-mapping.entity"
+  },
+  "products": {
+    "class": "Product",
+    "file": "src/modules/odoo/entities/products.entity.ts",
+    "import": "@/modules/odoo/entities/products.entity"
+  },
+  "client_contacts": {
+    "class": "ClientContact",
+    "file": "src/modules/salesforce/entities/client-contact.entity.ts",
+    "import": "@/modules/salesforce/entities/client-contact.entity"
+  },
+  "integration_salesforce_connections": {
+    "class": "IntegrationSalesforceConnection",
+    "file": "src/modules/salesforce/entities/integration-salesforce-connection.entity.ts",
+    "import": "@/modules/salesforce/entities/integration-salesforce-connection.entity"
+  },
+  "integration_salesforce_field_mappings": {
+    "class": "IntegrationSalesforceFieldMapping",
+    "file": "src/modules/salesforce/entities/integration-salesforce-field-mapping.entity.ts",
+    "import": "@/modules/salesforce/entities/integration-salesforce-field-mapping.entity"
+  },
+  "integration_salesforce_mapping_details": {
+    "class": "IntegrationSalesforceMappingDetail",
+    "file": "src/modules/salesforce/entities/integration-salesforce-mapping-detail.entity.ts",
+    "import": "@/modules/salesforce/entities/integration-salesforce-mapping-detail.entity"
+  },
+  "integration_salesforce_sync_runs": {
+    "class": "IntegrationSalesforceSyncRun",
+    "file": "src/modules/salesforce/entities/integration-salesforce-sync-run.entity.ts",
+    "import": "@/modules/salesforce/entities/integration-salesforce-sync-run.entity"
+  },
+  "master_data": {
+    "class": "MasterData",
+    "file": "src/modules/salesforce/entities/master-data.entity.ts",
+    "import": "@/modules/salesforce/entities/master-data.entity"
+  },
+  "quote_items": {
+    "class": "QuoteItem",
+    "file": "src/modules/salesforce/entities/quote-item.entity.ts",
+    "import": "@/modules/salesforce/entities/quote-item.entity"
+  },
+  "quote_stages": {
+    "class": "QuoteStage",
+    "file": "src/modules/salesforce/entities/quote-stage.entity.ts",
+    "import": "@/modules/salesforce/entities/quote-stage.entity"
+  },
+  "quotes": {
+    "class": "Quote",
+    "file": "src/modules/salesforce/entities/quote.entity.ts",
+    "import": "@/modules/salesforce/entities/quote.entity"
+  },
+  "salesforce_accounts_stg": {
+    "class": "SalesforceAccountsStg",
+    "file": "src/modules/salesforce/entities/salesforce-accounts-stg.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-accounts-stg.entity"
+  },
+  "salesforce_connections": {
+    "class": "SalesforceConnection",
+    "file": "src/modules/salesforce/entities/salesforce-connection.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-connection.entity"
+  },
+  "salesforce_field_mappings": {
+    "class": "SalesforceFieldMapping",
+    "file": "src/modules/salesforce/entities/salesforce-field-mapping.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-field-mapping.entity"
+  },
+  "salesforce_line_items_stg": {
+    "class": "SalesforceLineItemsStg",
+    "file": "src/modules/salesforce/entities/salesforce-line-items-stg.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-line-items-stg.entity"
+  },
+  "salesforce_object_mappings": {
+    "class": "SalesforceObjectMapping",
+    "file": "src/modules/salesforce/entities/salesforce-object-mapping.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-object-mapping.entity"
+  },
+  "salesforce_opportunities_stg": {
+    "class": "SalesforceOpportunitiesStg",
+    "file": "src/modules/salesforce/entities/salesforce-opportunities-stg.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-opportunities-stg.entity"
+  },
+  "salesforce_opportunities_cache": {
+    "class": "SalesforceOpportunityCache",
+    "file": "src/modules/salesforce/entities/salesforce-opportunity-cache.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-opportunity-cache.entity"
+  },
+  "salesforce_product_mappings": {
+    "class": "SalesforceProductMapping",
+    "file": "src/modules/salesforce/entities/salesforce-product-mapping.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-product-mapping.entity"
+  },
+  "salesforce_quote_type_mappings": {
+    "class": "SalesforceQuoteTypeMapping",
+    "file": "src/modules/salesforce/entities/salesforce-quote-type-mapping.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-quote-type-mapping.entity"
+  },
+  "salesforce_sync_run_items": {
+    "class": "SalesforceSyncRunItem",
+    "file": "src/modules/salesforce/entities/salesforce-sync-run-item.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-sync-run-item.entity"
+  },
+  "salesforce_sync_runs": {
+    "class": "SalesforceSyncRun",
+    "file": "src/modules/salesforce/entities/salesforce-sync-run.entity.ts",
+    "import": "@/modules/salesforce/entities/salesforce-sync-run.entity"
+  },
+  "sellers": {
+    "class": "Seller",
+    "file": "src/modules/salesforce/entities/seller.entity.ts",
+    "import": "@/modules/salesforce/entities/seller.entity"
+  },
+  "sii_configurations": {
+    "class": "SiiConfiguration",
+    "file": "src/modules/sii/entities/sii.entity.ts",
+    "import": "@/modules/sii/entities/sii.entity"
+  },
+  "sii_certificates": {
+    "class": "SiiCertificate",
+    "file": "src/modules/sii/entities/sii.entity.ts",
+    "import": "@/modules/sii/entities/sii.entity"
+  },
+  "sii_cafs": {
+    "class": "SiiCaf",
+    "file": "src/modules/sii/entities/sii.entity.ts",
+    "import": "@/modules/sii/entities/sii.entity"
+  },
+  "stripe_connections": {
+    "class": "StripeConnection",
+    "file": "src/modules/stripe/entities/stripe-connection.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-connection.entity"
+  },
+  "stripe_customers_stg": {
+    "class": "StripeCustomersStg",
+    "file": "src/modules/stripe/entities/stripe-customers-stg.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-customers-stg.entity"
+  },
+  "stripe_invoices_stg": {
+    "class": "StripeInvoicesStg",
+    "file": "src/modules/stripe/entities/stripe-invoices-stg.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-invoices-stg.entity"
+  },
+  "stripe_product_mappings": {
+    "class": "StripeProductMapping",
+    "file": "src/modules/stripe/entities/stripe-product-mapping.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-product-mapping.entity"
+  },
+  "stripe_subscriptions_stg": {
+    "class": "StripeSubscriptionsStg",
+    "file": "src/modules/stripe/entities/stripe-subscriptions-stg.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-subscriptions-stg.entity"
+  },
+  "stripe_sync_jobs": {
+    "class": "StripeSyncJob",
+    "file": "src/modules/stripe/entities/stripe-sync-job.entity.ts",
+    "import": "@/modules/stripe/entities/stripe-sync-job.entity"
+  },
+  "users": {
+    "class": "User",
+    "file": "src/modules/users/entities/user.entity.ts",
+    "import": "@/modules/users/entities/user.entity"
+  }
+}

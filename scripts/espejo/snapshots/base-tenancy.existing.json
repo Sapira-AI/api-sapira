@@ -1,0 +1,761 @@
+{
+ "users": {
+  "class": "User",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "email": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "role_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "Pendiente",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_access": {
+    "type": "timestamp",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "auth_provider": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "auth_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_super_admin": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "UQ_97672ac88f789774dd47f7c8be3": [
+    "email"
+   ]
+  },
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "user_holdings": {
+  "class": "UserHolding",
+  "columns": {
+   "user_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "selected": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "FK_33667ca270d1cad8895991a4469": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "company_holdings": {
+  "class": "CompanyHolding",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "website": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "phone": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "email": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "logo_url": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "manual_status_change_enabled": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "companies": {
+  "class": "Company",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "legal_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "legal_address": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "representative_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "website": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "email": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "phone": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "invoice_prefix": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_prefix": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_rate": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "logo_url": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_integration_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_default_sale_tax_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_default_purchase_tax_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_reteica_tax_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_retefuente_tax_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_reteiva_tax_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "master_data": {
+  "class": "MasterData",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "category": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "value": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamptz",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamptz",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "currencies": {
+  "class": "Currency",
+  "columns": {
+   "code": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": "3",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "100",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name_es": {
+    "type": "varchar",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "100",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "symbol": {
+    "type": "varchar",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "10",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "decimal_places": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 2,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_currency_id": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country": {
+    "type": "varchar",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "50",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ }
+}

@@ -1,0 +1,372 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "bank_movements": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "bank_movements_match_confidence_check",
+    "type": "c",
+    "expr": "match_confidence = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text])"
+   },
+   {
+    "name": "bank_movements_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])"
+   },
+   {
+    "name": "bank_movements_batch_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (batch_id) REFERENCES bank_upload_batches(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "bank_movements_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "bank_movements_reconciled_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (reconciled_by) REFERENCES auth.users(id)"
+   },
+   {
+    "name": "bank_movements_reconciled_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (reconciled_invoice_id) REFERENCES invoices(id)"
+   },
+   {
+    "name": "bank_movements_suggested_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (suggested_invoice_id) REFERENCES invoices(id)"
+   },
+   {
+    "name": "fk_bank_movements_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "bank_movements_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_bank_movements_batch_id",
+    "cols": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bank_movements_holding_date",
+    "cols": [
+     "holding_id",
+     "movement_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bank_movements_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bank_movements_reconciled_invoice",
+    "cols": [
+     "reconciled_invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bank_movements_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_bank_movements (DELETE, authenticated)",
+   "tenant_isolation_insert_bank_movements (INSERT, authenticated)",
+   "tenant_isolation_select_bank_movements (SELECT, authenticated)",
+   "tenant_isolation_update_bank_movements (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_bank_movements",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_bank_movements",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_bank_movements",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_bank_movements",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "bank_upload_batches": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "bank_upload_batches_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Procesado'::text, 'Revertido'::text])"
+   },
+   {
+    "name": "bank_upload_batches_bank_account_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (bank_account_id) REFERENCES company_bank_accounts(id)"
+   },
+   {
+    "name": "bank_upload_batches_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES auth.users(id)"
+   },
+   {
+    "name": "bank_upload_batches_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_bank_upload_batches (DELETE, authenticated)",
+   "tenant_isolation_insert_bank_upload_batches (INSERT, authenticated)",
+   "tenant_isolation_select_bank_upload_batches (SELECT, authenticated)",
+   "tenant_isolation_update_bank_upload_batches (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_bank_upload_batches",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_bank_upload_batches",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_bank_upload_batches",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_bank_upload_batches",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "bank_column_mappings": {
+  "comment": "Presets de mapeo de columnas para importación de cartolas bancarias",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "bank_column_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_bank_column_mappings (DELETE, authenticated)",
+   "tenant_isolation_insert_bank_column_mappings (INSERT, authenticated)",
+   "tenant_isolation_select_bank_column_mappings (SELECT, authenticated)",
+   "tenant_isolation_update_bank_column_mappings (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_bank_column_mappings",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_bank_column_mappings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_bank_column_mappings",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_bank_column_mappings",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

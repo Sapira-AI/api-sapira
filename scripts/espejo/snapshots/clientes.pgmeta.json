@@ -1,0 +1,1445 @@
+{
+ "clients": {
+  "name": "public.clients",
+  "rls_enabled": true,
+  "rows": 1784,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "name_commercial",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "segment",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "industry",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "market",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'Activo'::text",
+    "check": "status = ANY (ARRAY['Activo'::text, 'Inactivo'::text])"
+   },
+   {
+    "name": "portal_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "client_since",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "country",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_number",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID de Cliente generado desde Salesforce (Account ID)"
+   },
+   {
+    "name": "custom_fields",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Campos personalizados definidos por el usuario en formato JSONB"
+   },
+   {
+    "name": "salesforce_account_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_customer_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del cliente en Stripe, sincronizado desde BigQuery usando salesforce_account_id como clave de mapeo"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "client_entities_client_id_fkey",
+    "source_table": "public.client_entities",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_client_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_client_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_client_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_agent_configs_client_id_fkey",
+    "source_table": "public.client_agent_configs",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_client_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "clients_holding_id_fkey",
+    "source_table": "public.clients",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_client_id_fkey",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contracts_client_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quotes_client_id_fkey",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_documents_client_id_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_contacts_client_id_fkey",
+    "source_table": "public.client_contacts",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "client_entities": {
+  "name": "public.client_entities",
+  "rls_enabled": true,
+  "rows": 1513,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "legal_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "country",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "legal_address",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "phone",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "economic_activity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Giro o Actividad Económica del cliente"
+   },
+   {
+    "name": "client_number",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID de Cliente generado desde Salesforce"
+   },
+   {
+    "name": "odoo_partner_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del partner en Odoo. Usado para evitar duplicados y permitir actualizaciones en futuras sincronizaciones."
+   },
+   {
+    "name": "odoo_fiscal_position_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID de la posición fiscal en Odoo (ej: 12 para \"RC con ICA\", 13 para \"RC sin ICA\")"
+   },
+   {
+    "name": "odoo_fiscal_position_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Nombre de la posición fiscal en Odoo (ej: \"RC con ICA\", \"RC sin ICA\")"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_client_entities_holding_id",
+    "source_table": "public.client_entities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contracts_client_entity_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entities_client_id_fkey",
+    "source_table": "public.client_entities",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_client_entity_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_client_entity_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_invoices_client_entity",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_client_entity_id_fkey",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "client_entity_clients": {
+  "name": "public.client_entity_clients",
+  "rls_enabled": true,
+  "rows": 1529,
+  "comment": "Tabla de relación muchos-a-muchos entre client_entities y clients. Permite que una razón social esté asignada a múltiples clientes comerciales.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "client_entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_primary",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Indica si este es el cliente comercial principal para esta razón social. Solo uno puede ser primary por entidad."
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "client_entity_clients_client_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_created_by_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "auth.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_holding_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_entity_clients_client_entity_id_fkey",
+    "source_table": "public.client_entity_clients",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "client_contacts": {
+  "name": "public.client_contacts",
+  "rls_enabled": true,
+  "rows": 235,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contact_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "position",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "phone",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "quotes_client_contact_id_fkey",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "client_contact_id"
+    ],
+    "target_table": "public.client_contacts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_client_contacts_holding_id",
+    "source_table": "public.client_contacts",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_contacts_client_id_fkey",
+    "source_table": "public.client_contacts",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "contact_preferences": {
+  "name": "public.contact_preferences",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contact_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "allow_billing_emails",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "allow_proforma",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "client_documents": {
+  "name": "public.client_documents",
+  "rls_enabled": true,
+  "rows": 8,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "document_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_url",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "uploaded_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_client_documents_holding_id",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_documents_client_id_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "company_legal_documents": {
+  "name": "public.company_legal_documents",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "document_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "document_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "upload_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "CURRENT_DATE"
+   },
+   {
+    "name": "file_url",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "company_legal_documents_company_id_fkey",
+    "source_table": "public.company_legal_documents",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "client_entity_tax_id_normalization_conflicts": {
+  "name": "public.client_entity_tax_id_normalization_conflicts",
+  "rls_enabled": false,
+  "rows": 65,
+  "comment": "Registro histórico de tax_id duplicados detectados antes de normalizar. Los duplicados se conservan y la integración debe resolverlos de forma determinista.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "migration_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "conflicting_client_entity_ids",
+    "data_type": "ARRAY",
+    "format": "_uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_id_current",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_id_normalized",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "detected_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "resolved_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "company_bank_accounts": {
+  "name": "public.company_bank_accounts",
+  "rls_enabled": true,
+  "rows": 2,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "bank_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "account_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "account_number",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "account_holder",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "company_bank_accounts_company_id_fkey",
+    "source_table": "public.company_bank_accounts",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "bank_upload_batches_bank_account_id_fkey",
+    "source_table": "public.bank_upload_batches",
+    "source_columns": [
+     "bank_account_id"
+    ],
+    "target_table": "public.company_bank_accounts",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "company_account_mappings": {
+  "name": "public.company_account_mappings",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable",
+     "unique"
+    ]
+   },
+   {
+    "name": "revenue_account_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'4.1.01'::text"
+   },
+   {
+    "name": "revenue_account_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Revenue'::text"
+   },
+   {
+    "name": "unbilled_account_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'1.1.03'::text"
+   },
+   {
+    "name": "unbilled_account_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Unbilled Revenue (Contract Asset)'::text"
+   },
+   {
+    "name": "deferred_account_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'2.2.05'::text"
+   },
+   {
+    "name": "deferred_account_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Deferred Revenue'::text"
+   },
+   {
+    "name": "external_revenue_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "external_unbilled_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "external_deferred_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "company_account_mappings_company_id_fkey",
+    "source_table": "public.company_account_mappings",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "sellers": {
+  "name": "public.sellers",
+  "rls_enabled": true,
+  "rows": 37,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "phone",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "quotes_seller_id_fkey1",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "seller_id"
+    ],
+    "target_table": "public.sellers",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_sellers_holding_id",
+    "source_table": "public.sellers",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,508 @@
+{
+ "exchange_rates": {
+  "class": "ExchangeRateEntity",
+  "columns": {
+   "rate_date": {
+    "type": "date",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_currency": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": "3",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_currency": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": "3",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 20,
+    "scale": 8,
+    "array": false
+   },
+   "source_type": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "BANCOCENTRAL",
+    "length": "50",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "api_source": {
+    "type": "varchar",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "100",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_indirect_conversion": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "conversion_chain": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_525fa84b629fc56ad612fcf6db": {
+    "columns": [
+     "rate_date",
+     "from_currency",
+     "to_currency"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "exchange_rates_monthly_avg": {
+  "class": "ExchangeRateMonthlyAvgEntity",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_currency": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "3",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_currency": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "3",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "year": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "month": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "avg_rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 20,
+    "scale": 8,
+    "array": false
+   },
+   "min_rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 20,
+    "scale": 8,
+    "array": false
+   },
+   "max_rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 20,
+    "scale": 8,
+    "array": false
+   },
+   "data_points": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "calculated_at": {
+    "type": "timestamp",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_TIMESTAMP",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_a0f7bac807c2baa7f7e29c4a40": {
+    "columns": [
+     "from_currency",
+     "to_currency",
+     "year",
+     "month"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "indicadores_economicos": {
+  "class": "IndicadorEconomicoEntity",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "codigo": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "100",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "nombre": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "255",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fecha": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "valor": {
+    "type": "decimal",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "unidad": {
+    "type": "varchar",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "50",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status_code": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "OK",
+    "length": "20",
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "IDX_12adf0e0173888995638a10aa7": {
+    "columns": [
+     "codigo",
+     "fecha"
+    ],
+    "unique": true,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "generic_export_vats": {
+  "class": "GenericExportVat",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_id": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "vat": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "address": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "vat_rate": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "metadata": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ }
+}

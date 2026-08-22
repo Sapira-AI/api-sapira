@@ -1,0 +1,845 @@
+{
+ "stripe_connections": {
+  "name": "public.stripe_connections",
+  "rls_enabled": true,
+  "rows": 1,
+  "comment": "Almacena las credenciales de conexión a Stripe por holding",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "secret_key",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Secret Key de Stripe (debe estar encriptada en producción)"
+   },
+   {
+    "name": "publishable_key",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "mode",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'test'::text",
+    "check": "mode = ANY (ARRAY['test'::text, 'live'::text])",
+    "comment": "Modo de operación: test o live"
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "last_sync_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "subscriptions_connection_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "connection_id"
+    ],
+    "target_table": "public.stripe_connections",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "stripe_customers_stg": {
+  "name": "public.stripe_customers_stg",
+  "rls_enabled": true,
+  "rows": 407,
+  "comment": "Tabla staging para clientes importados desde Stripe",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Datos completos del cliente en formato JSON"
+   },
+   {
+    "name": "sync_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'pending'::text"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "connection_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "stripe_invoices_stg": {
+  "name": "public.stripe_invoices_stg",
+  "rls_enabled": true,
+  "rows": 3795,
+  "comment": "Tabla staging para facturas importadas desde Stripe",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Datos completos de la factura en formato JSON"
+   },
+   {
+    "name": "sync_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'pending'::text"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "connection_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "stripe_subscriptions_stg": {
+  "name": "public.stripe_subscriptions_stg",
+  "rls_enabled": true,
+  "rows": 533,
+  "comment": "Tabla staging para suscripciones importadas desde Stripe",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Datos completos de la suscripción en formato JSON"
+   },
+   {
+    "name": "sync_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'pending'::text"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "connection_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "stripe_product_mappings": {
+  "name": "public.stripe_product_mappings",
+  "rls_enabled": false,
+  "rows": 75,
+  "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Stripe",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "sapira_product_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_product_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Campo JSONB para almacenar información adicional del mapeo"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "stripe_product_mappings_holding_id_fkey",
+    "source_table": "public.stripe_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "stripe_product_mappings_sapira_product_id_fkey",
+    "source_table": "public.stripe_product_mappings",
+    "source_columns": [
+     "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "stripe_sync_jobs": {
+  "name": "public.stripe_sync_jobs",
+  "rls_enabled": false,
+  "rows": 177,
+  "comment": "Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'running'::text",
+    "comment": "Estado del job: running, completed, failed"
+   },
+   {
+    "name": "progress",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Progreso actual del job con contadores por entidad"
+   },
+   {
+    "name": "stats",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Estadísticas finales del job"
+   },
+   {
+    "name": "errors",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Array de errores encontrados durante la sincronización"
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "completed_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ]
+ },
+ "stripe_customers_bigquery": {
+  "name": "public.stripe_customers_bigquery",
+  "rls_enabled": true,
+  "rows": 26351,
+  "comment": "Tabla de clientes Stripe sincronizados desde BigQuery",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "salesforce_account_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID de la cuenta en Salesforce"
+   },
+   {
+    "name": "stripe_customer_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID del cliente en Stripe"
+   },
+   {
+    "name": "salesforce_account_country",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País de la cuenta en Salesforce"
+   },
+   {
+    "name": "client_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Nombre del cliente"
+   },
+   {
+    "name": "salesforce_account_segment",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Segmento de la cuenta en Salesforce"
+   },
+   {
+    "name": "salesforce_account_industry",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Industria de la cuenta en Salesforce"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "stripe_customers_bigquery_holding_id_fkey",
+    "source_table": "public.stripe_customers_bigquery",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}
