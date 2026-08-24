@@ -1,0 +1,1363 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "users": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "users_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])"
+   },
+   {
+    "name": "users_role_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (role_id) REFERENCES roles(id)"
+   },
+   {
+    "name": "users_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "users_email_key",
+    "type": "u",
+    "cols": [
+     "email"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_users_auth_id",
+    "cols": [
+     "auth_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_users_role_id",
+    "cols": [
+     "role_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "users_delete_v2 (DELETE, public)",
+   "users_insert_v2 (INSERT, public)",
+   "users_select_v2 (SELECT, public)",
+   "users_update_v2 (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "users_delete_v2",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (rls_is_holding_admin() AND rls_can_see_user(id)))",
+    "with_check": null
+   },
+   {
+    "name": "users_insert_v2",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(rls_is_super_admin() OR rls_is_holding_admin())"
+   },
+   {
+    "name": "users_select_v2",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "rls_can_see_user(id)",
+    "with_check": null
+   },
+   {
+    "name": "users_update_v2",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (rls_is_holding_admin() AND rls_can_see_user(id)))",
+    "with_check": null
+   }
+  ]
+ },
+ "roles": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "fk_roles_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "roles_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "roles_name_holding_id_key",
+    "type": "u",
+    "cols": [
+     "name",
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_roles_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Allow authenticated users to read roles (SELECT, authenticated)",
+   "tenant_isolation_delete_roles (DELETE, authenticated)",
+   "tenant_isolation_insert_roles (INSERT, authenticated)",
+   "tenant_isolation_select_roles (SELECT, authenticated)",
+   "tenant_isolation_update_roles (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Allow authenticated users to read roles",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "true",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_delete_roles",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_roles",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_roles",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_roles",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "permissions": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "permissions_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "permissions_code_key",
+    "type": "u",
+    "cols": [
+     "code"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [
+   "Allow authenticated users to read permissions (SELECT, authenticated)",
+   "Anyone can read permissions (SELECT, authenticated)",
+   "System only can manage permissions (ALL, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Allow authenticated users to read permissions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "true",
+    "with_check": null
+   },
+   {
+    "name": "Anyone can read permissions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "true",
+    "with_check": null
+   },
+   {
+    "name": "System only can manage permissions",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "false",
+    "with_check": "false"
+   }
+  ]
+ },
+ "role_permissions": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "fk_role_permissions_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "role_permissions_permission_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (permission_id) REFERENCES permissions(id)"
+   },
+   {
+    "name": "role_permissions_role_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (role_id) REFERENCES roles(id)"
+   },
+   {
+    "name": "role_permissions_pkey",
+    "type": "p",
+    "cols": [
+     "role_id",
+     "permission_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_role_permissions_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_role_permissions_permission_id",
+    "cols": [
+     "permission_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_role_permissions_role_id",
+    "cols": [
+     "role_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Allow authenticated users to read role_permissions (SELECT, authenticated)",
+   "tenant_isolation_delete_role_permissions (DELETE, authenticated)",
+   "tenant_isolation_insert_role_permissions (INSERT, authenticated)",
+   "tenant_isolation_select_role_permissions (SELECT, authenticated)",
+   "tenant_isolation_update_role_permissions (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Allow authenticated users to read role_permissions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "true",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_delete_role_permissions",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_role_permissions",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_role_permissions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_role_permissions",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "user_holdings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "fk_user_holdings_user_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "user_holdings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "user_holdings_pkey",
+    "type": "p",
+    "cols": [
+     "user_id",
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_user_holdings_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_user_holdings_one_selected_per_user",
+    "cols": [
+     "user_id"
+    ],
+    "unique": true,
+    "where": "selected = true"
+   },
+   {
+    "name": "idx_user_holdings_selected",
+    "cols": [
+     "user_id",
+     "selected"
+    ],
+    "unique": false,
+    "where": "selected = true"
+   },
+   {
+    "name": "idx_user_holdings_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "user_holdings_access (SELECT, public)",
+   "user_holdings_policy_direct (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "user_holdings_access",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()) OR (user_id IN ( SELECT users.id\n   FROM users\n  WHERE (users.auth_id = auth.uid()))))",
+    "with_check": null
+   },
+   {
+    "name": "user_holdings_policy_direct",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "company_holdings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "company_holdings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [
+   "trigger_create_default_roles · AFTER INSERT FOR EACH ROW → create_default_roles_for_holding()",
+   "trigger_create_quote_stages_on_holding_creation · AFTER INSERT FOR EACH ROW → create_quote_stages_for_new_holding()",
+   "trigger_create_standard_agents · AFTER INSERT FOR EACH ROW → create_standard_agents_for_holding()"
+  ],
+  "policies": [
+   "company_holdings_access (SELECT, public)",
+   "company_holdings_policy_secure (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "company_holdings_access",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "company_holdings_policy_secure",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "companies": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "companies_holding_fk",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "companies_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_companies_odoo_integration_id",
+    "cols": [
+     "odoo_integration_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "unique_odoo_integration_id_per_holding",
+    "cols": [
+     "odoo_integration_id",
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "odoo_integration_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "trigger_sync_contracts_company_currency · AFTER UPDATE OF currency FOR EACH ROW → sync_contracts_company_currency()"
+  ],
+  "policies": [
+   "companies_admin_delete (DELETE, public)",
+   "companies_admin_insert (INSERT, public)",
+   "companies_admin_update (UPDATE, public)",
+   "companies_holding_isolation (SELECT, public)",
+   "tenant_isolation_delete_companies (DELETE, authenticated)",
+   "tenant_isolation_insert_companies (INSERT, authenticated)",
+   "tenant_isolation_select_companies_current_holding (SELECT, public)",
+   "tenant_isolation_update_companies (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "companies_admin_delete",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "companies_admin_insert",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "companies_admin_update",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "companies_holding_isolation",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_delete_companies",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_companies",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_companies_current_holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_companies",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "master_data": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "master_data_category_check",
+    "type": "c",
+    "expr": "category = ANY (ARRAY['markets'::text, 'segments'::text, 'industries'::text, 'item_types'::text, 'units_of_measure'::text, 'quote_types'::text, 'payment_terms'::text, 'contact_types'::text])"
+   },
+   {
+    "name": "fk_master_data_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "master_data_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "master_data_holding_id_category_value_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "category",
+     "value"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_master_data_category_active",
+    "cols": [
+     "holding_id",
+     "category",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_master_data_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can delete master data from their holding (DELETE, public)",
+   "Users can insert master data for their holding (INSERT, public)",
+   "Users can update master data from their holding (UPDATE, public)",
+   "Users can view master data from their holding (SELECT, public)",
+   "holding_access_master_data (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete master data from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert master data for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update master data from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view master data from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "holding_access_master_data",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "currencies": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "code": {
+    "length": 3
+   },
+   "name": {
+    "length": 100
+   },
+   "name_es": {
+    "length": 100
+   },
+   "symbol": {
+    "length": 10
+   },
+   "country": {
+    "length": 50
+   }
+  },
+  "constraints": [
+   {
+    "name": "currencies_pkey",
+    "type": "p",
+    "cols": [
+     "code"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_currencies_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_currencies_odoo_id",
+    "cols": [
+     "odoo_currency_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Anyone can view active currencies (SELECT, public)",
+   "Authenticated users can view all currencies (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Anyone can view active currencies",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(is_active = true)",
+    "with_check": null
+   },
+   {
+    "name": "Authenticated users can view all currencies",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(auth.role() = 'authenticated'::text)",
+    "with_check": null
+   }
+  ]
+ },
+ "financial_settings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "financial_settings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "financial_settings_holding_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [
+   "trg_financial_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_financial_settings (DELETE, public)",
+   "tenant_isolation_insert_financial_settings (INSERT, public)",
+   "tenant_isolation_select_financial_settings (SELECT, public)",
+   "tenant_isolation_update_financial_settings (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_financial_settings",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_financial_settings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_financial_settings",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_financial_settings",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "holding_settings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "holding_settings_fx_system_policy_check",
+    "type": "c",
+    "expr": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
+   },
+   {
+    "name": "holding_settings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "holding_settings_pkey",
+    "type": "p",
+    "cols": [
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [
+   "trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "holding_settings_delete (DELETE, public)",
+   "holding_settings_insert (INSERT, public)",
+   "holding_settings_select (SELECT, public)",
+   "holding_settings_update (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_settings_delete",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "holding_settings_insert",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "holding_settings_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "holding_settings_update",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "custom_field_definitions": {
+  "comment": "Definiciones de campos personalizados creados por usuarios a nivel de holding",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "custom_field_definitions_field_type_check",
+    "type": "c",
+    "expr": "field_type = ANY (ARRAY['text'::text, 'number'::text])"
+   },
+   {
+    "name": "valid_entity_type",
+    "type": "c",
+    "expr": "entity_type = ANY (ARRAY['client'::text, 'contract'::text, 'contract_item'::text, 'quote'::text, 'quote_item'::text, 'invoice'::text, 'invoice_item'::text])"
+   },
+   {
+    "name": "custom_field_definitions_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "custom_field_definitions_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "custom_field_definitions_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_field_per_entity",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "entity_type",
+     "field_name"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_custom_field_defs_active",
+    "cols": [
+     "holding_id",
+     "entity_type",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_custom_field_defs_holding_entity",
+    "cols": [
+     "holding_id",
+     "entity_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_custom_field_defs_order",
+    "cols": [
+     "holding_id",
+     "entity_type",
+     "display_order",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "custom_field_definitions_delete (DELETE, public)",
+   "custom_field_definitions_insert (INSERT, public)",
+   "custom_field_definitions_select (SELECT, public)",
+   "custom_field_definitions_update (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "custom_field_definitions_delete",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "custom_field_definitions_insert",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_user_holding_id())"
+   },
+   {
+    "name": "custom_field_definitions_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "custom_field_definitions_update",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_user_holding_id())",
+    "with_check": "(holding_id = get_user_holding_id())"
+   }
+  ]
+ },
+ "user_view_preferences": {
+  "comment": "Vistas guardadas por usuario y tipo de entidad. Cada vista persiste columnas + filtros + búsqueda. Aislada por usuario via RLS — no se comparte entre usuarios aunque sean del mismo holding.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "user_view_preferences_user_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "user_view_preferences_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_view_preferences_user_id_entity_type_view_name_key",
+    "type": "u",
+    "cols": [
+     "user_id",
+     "entity_type",
+     "view_name"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_user_view_prefs_one_default_per_entity",
+    "cols": [
+     "user_id",
+     "entity_type"
+    ],
+    "unique": true,
+    "where": "is_default = true"
+   },
+   {
+    "name": "idx_user_view_prefs_user_entity",
+    "cols": [
+     "user_id",
+     "entity_type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "user_view_preferences_updated_at · BEFORE UPDATE FOR EACH ROW → update_user_view_preferences_updated_at()"
+  ],
+  "policies": [
+   "user_views_delete_own (DELETE, public)",
+   "user_views_insert_own (INSERT, public)",
+   "user_views_select_own (SELECT, public)",
+   "user_views_update_own (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "user_views_delete_own",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": null
+   },
+   {
+    "name": "user_views_insert_own",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(user_id = get_current_user_id())"
+   },
+   {
+    "name": "user_views_select_own",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": null
+   },
+   {
+    "name": "user_views_update_own",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_id = get_current_user_id())",
+    "with_check": "(user_id = get_current_user_id())"
+   }
+  ]
+ },
+ "claude_skills": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "name": {
+    "length": 255
+   }
+  },
+  "constraints": [
+   {
+    "name": "claude_skills_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "claude_skills_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "claude_skills_name_holding_id_key",
+    "type": "u",
+    "cols": [
+     "name",
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_claude_skills_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_claude_skills_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_claude_skills_name",
+    "cols": [
+     "name"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ }
+}

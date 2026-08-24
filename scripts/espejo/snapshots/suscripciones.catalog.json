@@ -1,0 +1,419 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "subscriptions": {
+  "comment": "Suscripciones externas (Stripe, Chargebee, etc.) que no siguen el modelo de contratos a plazo fijo. Read-only desde Sapira.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "monthly_amount": {
+    "precision": 18,
+    "scale": 2
+   },
+   "fx_to_system": {
+    "precision": 18,
+    "scale": 6
+   },
+   "monthly_amount_system_currency": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "subscriptions_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'paused'::text, 'unpaid'::text, 'trialing'::text, 'incomplete'::text, 'incomplete_expired'::text])"
+   },
+   {
+    "name": "subscriptions_client_entity_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "subscriptions_client_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "subscriptions_company_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "subscriptions_connection_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (connection_id) REFERENCES stripe_connections(id)"
+   },
+   {
+    "name": "subscriptions_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "subscriptions_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "uq_subscriptions_holding_external",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "external_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_subscriptions_client_entity_id",
+    "cols": [
+     "client_entity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_client_id",
+    "cols": [
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_company_id",
+    "cols": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_connection_id",
+    "cols": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_external_id",
+    "cols": [
+     "external_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_source",
+    "cols": [
+     "source"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscriptions_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_subscriptions_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's subscriptions (DELETE, public)",
+   "Users can insert subscriptions for their holdings (INSERT, public)",
+   "Users can update their holding's subscriptions (UPDATE, public)",
+   "Users can view their holding's subscriptions (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's subscriptions",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert subscriptions for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update their holding's subscriptions",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's subscriptions",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "subscription_items": {
+  "comment": "Items/líneas de una suscripción externa con pricing y producto mapeado a Sapira.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "quantity": {
+    "precision": 18,
+    "scale": 4
+   },
+   "unit_price": {
+    "precision": 18,
+    "scale": 6
+   },
+   "monthly_amount": {
+    "precision": 18,
+    "scale": 2
+   },
+   "fx_to_system": {
+    "precision": 18,
+    "scale": 6
+   },
+   "unit_price_system_currency": {
+    "precision": 18,
+    "scale": 6
+   },
+   "monthly_amount_system_currency": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "subscription_items_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "subscription_items_product_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "subscription_items_subscription_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "subscription_items_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "uq_subscription_items_holding_external",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "external_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_subscription_items_external_id",
+    "cols": [
+     "external_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscription_items_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscription_items_product_id",
+    "cols": [
+     "product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscription_items_stripe_product_id",
+    "cols": [
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_subscription_items_subscription_id",
+    "cols": [
+     "subscription_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_subscription_items_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete their holding's subscription items (DELETE, public)",
+   "Users can insert subscription items for their holdings (INSERT, public)",
+   "Users can update their holding's subscription items (UPDATE, public)",
+   "Users can view their holding's subscription items (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete their holding's subscription items",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert subscription items for their holdings",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update their holding's subscription items",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's subscription items",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

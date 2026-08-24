@@ -1,0 +1,778 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "revenue_schedule_monthly": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "recognized_period_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "recognized_cum_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_period_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_cum_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "deferred_balance_eom_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "unbilled_balance_eom_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "recognized_period_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "recognized_cum_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_period_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_cum_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "deferred_balance_eom_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "unbilled_balance_eom_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "recognized_period_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "recognized_cum_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_period_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "billed_cum_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "deferred_balance_eom_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "unbilled_balance_eom_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_contracted_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "cmrr_period_contract_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_contracted_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "cmrr_period_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_period_contracted_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "cmrr_period_system_ccy": {
+    "precision": 15,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "revenue_schedule_monthly_momentum_check",
+    "type": "c",
+    "expr": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
+   },
+   {
+    "name": "rsm_contract_or_subscription_required",
+    "type": "c",
+    "expr": "(contract_id IS NOT NULL) OR (subscription_id IS NOT NULL)"
+   },
+   {
+    "name": "fk_revenue_schedule_company",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "fk_revenue_schedule_contract",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id)"
+   },
+   {
+    "name": "fk_revenue_schedule_holding",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "fk_revenue_schedule_item",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id)"
+   },
+   {
+    "name": "revenue_schedule_monthly_subscription_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)"
+   },
+   {
+    "name": "revenue_schedule_monthly_subscription_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (subscription_item_id) REFERENCES subscription_items(id)"
+   },
+   {
+    "name": "revenue_schedule_monthly_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "revenue_schedule_monthly_contract_item_period_momentum_key",
+    "type": "u",
+    "cols": [
+     "contract_id",
+     "contract_item_id",
+     "period_month",
+     "momentum"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_revenue_schedule_momentum",
+    "cols": [
+     "momentum",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_revenue_schedule_monthly_company_period",
+    "cols": [
+     "company_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_revenue_schedule_monthly_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_revenue_schedule_monthly_holding_period",
+    "cols": [
+     "holding_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_revenue_schedule_monthly_is_total_row",
+    "cols": [
+     "contract_id",
+     "is_total_row",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_rsm_cmrr_period",
+    "cols": [
+     "holding_id",
+     "period_month",
+     "cmrr_period_contract_ccy"
+    ],
+    "unique": false,
+    "where": "cmrr_period_contract_ccy > (0)::numeric"
+   },
+   {
+    "name": "idx_rsm_company_period",
+    "cols": [
+     "company_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_rsm_contract_period",
+    "cols": [
+     "contract_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_rsm_mrr_contracted_period",
+    "cols": [
+     "holding_id",
+     "period_month",
+     "mrr_period_contracted_contract_ccy"
+    ],
+    "unique": false,
+    "where": "mrr_period_contracted_contract_ccy > (0)::numeric"
+   },
+   {
+    "name": "idx_rsm_subscription_id",
+    "cols": [
+     "subscription_id"
+    ],
+    "unique": false,
+    "where": "subscription_id IS NOT NULL"
+   },
+   {
+    "name": "idx_rsm_subscription_item_id",
+    "cols": [
+     "subscription_item_id"
+    ],
+    "unique": false,
+    "where": "subscription_item_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule()",
+   "update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_revenue_schedule_monthly (DELETE, public)",
+   "tenant_isolation_insert_revenue_schedule_monthly (INSERT, public)",
+   "tenant_isolation_select_revenue_schedule_monthly (SELECT, public)",
+   "tenant_isolation_update_revenue_schedule_monthly (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_revenue_schedule_monthly",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_revenue_schedule_monthly",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_revenue_schedule_monthly",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_revenue_schedule_monthly",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "revenue_rules": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "revenue_rules_target_type_check",
+    "type": "c",
+    "expr": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
+   },
+   {
+    "name": "revenue_rules_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "revenue_rules_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [
+   "Users can delete revenue rules from their holding companies (DELETE, public)",
+   "Users can insert revenue rules for their holding companies (INSERT, public)",
+   "Users can update revenue rules from their holding companies (UPDATE, public)",
+   "Users can view revenue rules from their holding companies (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete revenue rules from their holding companies",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert revenue rules for their holding companies",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))"
+   },
+   {
+    "name": "Users can update revenue rules from their holding companies",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view revenue rules from their holding companies",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "with_check": null
+   }
+  ]
+ },
+ "mrr_adjustments": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "mrr_adjustments_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "mrr_adjustments_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "mrr_adjustments_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_mrr_adj_company",
+    "cols": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_adj_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_adj_effective_date",
+    "cols": [
+     "effective_date"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_mrr_adjustments_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_mrr_adjustments (DELETE, public)",
+   "tenant_isolation_insert_mrr_adjustments (INSERT, public)",
+   "tenant_isolation_select_mrr_adjustments (SELECT, public)",
+   "tenant_isolation_update_mrr_adjustments (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_mrr_adjustments",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_mrr_adjustments",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_mrr_adjustments",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_mrr_adjustments",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "accounting_period_cutoff": {
+  "comment": "Cierre contable por compañía (modelo lineal). Una fila por (holding, company). cutoff_date marca la última fecha cerrada — todo <= es CLOSED, todo > es OPEN.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "accounting_period_cutoff_last_action_check",
+    "type": "c",
+    "expr": "last_action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   },
+   {
+    "name": "accounting_period_cutoff_company_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_cutoff_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_cutoff_last_action_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (last_action_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "accounting_period_cutoff_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_holding_id_company_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "company_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_cutoff_lookup",
+    "cols": [
+     "holding_id",
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_accounting_period_cutoff_updated_at · BEFORE UPDATE FOR EACH ROW → trg_set_updated_at_accounting_period_cutoff()",
+   "trg_cutoff_validate_company_holding · BEFORE INSERT OR UPDATE OF holding_id, company_id FOR EACH ROW → trg_validate_cutoff_company_holding_match()"
+  ],
+  "policies": [
+   "cutoff_insert (INSERT, public)",
+   "cutoff_select (SELECT, public)",
+   "cutoff_update (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "cutoff_insert",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))"
+   },
+   {
+    "name": "cutoff_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "cutoff_update",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))",
+    "with_check": null
+   }
+  ]
+ },
+ "accounting_period_events": {
+  "comment": "Audit log inmutable de cierres y reaperturas de períodos. Cada fila captura el movimiento de cutoff_date, motivo y snapshot del usuario.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "accounting_period_events_action_check",
+    "type": "c",
+    "expr": "action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   },
+   {
+    "name": "accounting_period_events_reason_check",
+    "type": "c",
+    "expr": "length(TRIM(BOTH FROM reason)) >= 10"
+   },
+   {
+    "name": "accounting_period_events_company_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_events_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_events_performed_by_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (performed_by) REFERENCES users(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_events_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_period_events_company_time",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_period_events_company_time ON public.accounting_period_events USING btree (holding_id, company_id, performed_at DESC)"
+   },
+   {
+    "name": "idx_period_events_performed_by",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_period_events_performed_by ON public.accounting_period_events USING btree (performed_by, performed_at DESC)"
+   }
+  ],
+  "triggers": [
+   "trg_events_validate_company_holding · BEFORE INSERT FOR EACH ROW → trg_validate_cutoff_company_holding_match()"
+  ],
+  "policies": [
+   "events_insert (INSERT, public)",
+   "events_select (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "events_insert",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))"
+   },
+   {
+    "name": "events_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   }
+  ]
+ }
+}

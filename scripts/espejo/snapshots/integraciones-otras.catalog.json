@@ -1,0 +1,534 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "bigquery_connections": {
+  "comment": "Configuración de conexiones a BigQuery por holding",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "bigquery_connections_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "bigquery_connections_user_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "bigquery_connections_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "bigquery_connections_holding_id_name_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "name"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_bigquery_connections_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bigquery_connections_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_bigquery_connections_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_bigquery_connections_updated_at · BEFORE UPDATE FOR EACH ROW → update_bigquery_connections_updated_at()"
+  ],
+  "policies": [
+   "Users can delete bigquery connections in their holding (DELETE, public)",
+   "Users can insert bigquery connections for their holding (INSERT, public)",
+   "Users can update bigquery connections in their holding (UPDATE, public)",
+   "Users can view bigquery connections in their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete bigquery connections in their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert bigquery connections for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update bigquery connections in their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view bigquery connections in their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "field_mappings": {
+  "comment": "Configuraciones de mapeo de campos entre Odoo y Sapira",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "field_mappings_mapping_type_check",
+    "type": "c",
+    "expr": "mapping_type = ANY (ARRAY['simple'::text, 'hierarchical'::text])"
+   },
+   {
+    "name": "field_mappings_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "field_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "field_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "field_mappings_holding_id_source_model_target_table_is_acti_key",
+    "type": "u",
+    "cols": null,
+    "deferrable": true,
+    "initially_deferred": true
+   },
+   {
+    "name": "unique_field_mapping",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "mapping_type",
+     "source_model",
+     "target_table"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_field_mappings_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_field_mappings_hierarchical",
+    "cols": [
+     "holding_id",
+     "source_model",
+     "secondary_source_model",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "mapping_type = 'hierarchical'::text"
+   },
+   {
+    "name": "idx_field_mappings_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_field_mappings_mapping_type",
+    "cols": [
+     "mapping_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_field_mappings_source_model",
+    "cols": [
+     "source_model"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_field_mappings_target_table",
+    "cols": [
+     "target_table"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_field_mappings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "Users can manage mappings for their holding (ALL, public)",
+   "Users can view mappings from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage mappings for their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view mappings from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "integration_logs": {
+  "comment": "Logs de auditoría para procesos de integración",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "integration_type": {
+    "length": 100
+   }
+  },
+  "constraints": [
+   {
+    "name": "integration_logs_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])"
+   },
+   {
+    "name": "integration_logs_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES auth.users(id)"
+   },
+   {
+    "name": "integration_logs_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "integration_logs_mapping_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (mapping_id) REFERENCES field_mappings(id)"
+   },
+   {
+    "name": "integration_logs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_integration_logs_batch_id",
+    "cols": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_connection_id",
+    "cols": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_integration_type",
+    "cols": [
+     "integration_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_progress_total",
+    "cols": [
+     "progress_total"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_started_at",
+    "cols": [
+     "started_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_integration_logs_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can create integration logs for their holding (INSERT, public)",
+   "Users can view integration logs from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can create integration logs for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can view integration logs from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "integration_configs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "integration_configs_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Connected'::text, 'Disconnected'::text, 'Error'::text])"
+   },
+   {
+    "name": "fk_integration_configs_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "integration_configs_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "integration_configs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_integration_configs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_integration_configs (DELETE, authenticated)",
+   "tenant_isolation_insert_integration_configs (INSERT, authenticated)",
+   "tenant_isolation_select_integration_configs (SELECT, authenticated)",
+   "tenant_isolation_update_integration_configs (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_integration_configs",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_integration_configs",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_integration_configs",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_integration_configs",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

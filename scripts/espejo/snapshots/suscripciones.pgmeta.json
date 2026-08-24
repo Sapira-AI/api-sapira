@@ -1,0 +1,728 @@
+{
+ "subscriptions": {
+  "name": "public.subscriptions",
+  "rls_enabled": true,
+  "rows": 434,
+  "comment": "Suscripciones externas (Stripe, Chargebee, etc.) que no siguen el modelo de contratos a plazo fijo. Read-only desde Sapira.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_name_commercial",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "legal_client_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "external_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID de la suscripción en el sistema externo (ej: sub_xxx para Stripe)"
+   },
+   {
+    "name": "source",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'stripe'::text",
+    "comment": "Sistema origen: stripe, chargebee, etc. Extensible para futuras integraciones."
+   },
+   {
+    "name": "connection_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'paused'::text, 'unpaid'::text, 'trialing'::text, 'incomplete'::text, 'incomplete_expired'::text])"
+   },
+   {
+    "name": "start_date",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "canceled_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "cancel_at_period_end",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "ended_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "current_period_start",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "current_period_end",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billing_cycle_anchor",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "cancellation_reason",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "cancellation_comment",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "monthly_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Suma de monthly_amount de todos los subscription_items activos"
+   },
+   {
+    "name": "collection_method",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'charge_automatically'::text"
+   },
+   {
+    "name": "system_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "fx_to_system",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1",
+    "comment": "Tipo de cambio de currency a system_currency. Default 1 cuando son iguales."
+   },
+   {
+    "name": "monthly_amount_system_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Campo libre editable por usuario de Sapira (único campo editable)"
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "last_synced_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "subscriptions_company_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_holding_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscription_items_subscription_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "subscription_id"
+    ],
+    "target_table": "public.subscriptions",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_subscription_id_fkey",
+    "source_table": "public.invoices",
+    "source_columns": [
+     "subscription_id"
+    ],
+    "target_table": "public.subscriptions",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "revenue_schedule_monthly_subscription_id_fkey",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "subscription_id"
+    ],
+    "target_table": "public.subscriptions",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_connection_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "connection_id"
+    ],
+    "target_table": "public.stripe_connections",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_client_entity_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscriptions_client_id_fkey",
+    "source_table": "public.subscriptions",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "subscription_items": {
+  "name": "public.subscription_items",
+  "rls_enabled": true,
+  "rows": 456,
+  "comment": "Items/líneas de una suscripción externa con pricing y producto mapeado a Sapira.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "subscription_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "external_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "stripe_product_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del producto en Stripe (ej: prod_xxx). Usado para mapeo via stripe_product_mappings."
+   },
+   {
+    "name": "stripe_price_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del precio/plan en Stripe (ej: pay_per_vehicle_2025)."
+   },
+   {
+    "name": "product_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "product_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "item_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'Digital'::text",
+    "comment": "Tipo fijo para filtros y análisis MRR (ej: Digital). Desde Master Data."
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "unit_price",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Precio unitario en la moneda de la suscripción. Ya convertido de centavos para Stripe (÷100)."
+   },
+   {
+    "name": "monthly_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Calculado: quantity × unit_price"
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "system_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "fx_to_system",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "unit_price_system_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "monthly_amount_system_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "billing_scheme",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "interval",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'month'::text"
+   },
+   {
+    "name": "interval_count",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "current_period_start",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "current_period_end",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "start_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "canceled_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "discounts",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'[]'::jsonb"
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "subscription_items_holding_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscription_items_subscription_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "subscription_id"
+    ],
+    "target_table": "public.subscriptions",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "revenue_schedule_monthly_subscription_item_id_fkey",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "subscription_item_id"
+    ],
+    "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_subscription_item_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "subscription_item_id"
+    ],
+    "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscription_items_product_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

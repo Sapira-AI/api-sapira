@@ -1,0 +1,739 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "odoo_connections": {
+  "comment": "Configuración de conexiones a Odoo",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_connections_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_connections_user_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_connections_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_connections_holding_id_name_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "name"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_connections_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_connections_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_connections_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_odoo_connections_updated_at · BEFORE UPDATE FOR EACH ROW → update_odoo_connections_updated_at()"
+  ],
+  "policies": [
+   "Users can delete odoo connections in their holding (DELETE, public)",
+   "Users can insert odoo connections for their holding (INSERT, public)",
+   "Users can update odoo connections in their holding (UPDATE, public)",
+   "Users can view odoo connections in their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete odoo connections in their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert odoo connections for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update odoo connections in their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view odoo connections in their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "odoo_invoices_stg": {
+  "comment": "Tabla de staging para facturas de Odoo (account.move) con metadatos de procesamiento",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_invoices_stg_processing_status_check",
+    "type": "c",
+    "expr": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])"
+   },
+   {
+    "name": "odoo_invoices_stg_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "odoo_invoices_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoices_stg_holding_id_odoo_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "odoo_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_invoices_stg_batch_id",
+    "cols": [
+     "integration_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoices_stg_error",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": "processing_status = 'error'::text"
+   },
+   {
+    "name": "idx_odoo_invoices_stg_holding_status",
+    "cols": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoices_stg_odoo_id_status",
+    "cols": [
+     "odoo_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoices_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoices_stg_sync_batch",
+    "cols": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoices_stg_sync_session",
+    "cols": [
+     "sync_session_id"
+    ],
+    "unique": false,
+    "where": "sync_session_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "update_invoice_timestamp_trigger · BEFORE UPDATE FOR EACH ROW → update_invoice_timestamp()"
+  ],
+  "policies": [
+   "Users can access invoice staging data for their holdings (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can access invoice staging data for their holdings",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "odoo_invoice_lines_stg": {
+  "comment": "Tabla de staging para líneas de factura de Odoo (account.move.line) con relación a factura padre",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_invoice_lines_stg_processing_status_check",
+    "type": "c",
+    "expr": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])"
+   },
+   {
+    "name": "odoo_invoice_lines_stg_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "odoo_invoice_lines_stg_invoice_staging_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_staging_id) REFERENCES odoo_invoices_stg(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_invoice_lines_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoice_lines_stg_holding_id_odoo_line_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "odoo_line_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_invoice_lines_stg_batch_id",
+    "cols": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": "batch_id IS NOT NULL"
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_error",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": "processing_status = 'error'::text"
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_holding_status",
+    "cols": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_invoice_staging_id",
+    "cols": [
+     "invoice_staging_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_odoo_invoice_id",
+    "cols": [
+     "odoo_invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_odoo_line_id",
+    "cols": [
+     "odoo_line_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_invoice_lines_stg_sync_session",
+    "cols": [
+     "sync_session_id"
+    ],
+    "unique": false,
+    "where": "sync_session_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "update_invoice_line_timestamp_trigger · BEFORE UPDATE FOR EACH ROW → update_invoice_line_timestamp()"
+  ],
+  "policies": [
+   "Users can access invoice line staging data for their holdings (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can access invoice line staging data for their holdings",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "odoo_partners_stg": {
+  "comment": "Tabla de staging para partners de Odoo con JSON híbrido",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_partners_stg_processing_status_check",
+    "type": "c",
+    "expr": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])"
+   },
+   {
+    "name": "odoo_partners_stg_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "odoo_partners_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_partners_stg_odoo_id_holding_id_key",
+    "type": "u",
+    "cols": [
+     "odoo_id",
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_partners_stg_batch_id",
+    "cols": [
+     "integration_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_odoo_id",
+    "cols": [
+     "odoo_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_odoo_id_status",
+    "cols": [
+     "odoo_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_processed_at",
+    "cols": [
+     "processed_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_processing_status",
+    "cols": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_partners_stg_raw_data_gin",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_odoo_partners_stg_raw_data_gin ON public.odoo_partners_stg USING gin (raw_data)"
+   }
+  ],
+  "triggers": [
+   "update_odoo_partners_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "Users can insert staging data to their holding (INSERT, public)",
+   "Users can update staging data from their holding (UPDATE, public)",
+   "Users can view staging data from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can insert staging data to their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update staging data from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view staging data from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "odoo_product_mappings": {
+  "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Odoo",
+  "rls": false,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_product_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_product_mappings_sapira_product_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (sapira_product_id) REFERENCES products(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_product_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_odoo_mapping",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "sapira_product_id",
+     "odoo_product_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_mappings_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_mappings_holding_odoo",
+    "cols": [
+     "holding_id",
+     "odoo_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_mappings_odoo_product",
+    "cols": [
+     "odoo_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_mappings_sapira_product",
+    "cols": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "odoo_object_mappings": {
+  "comment": "Mapeo entre objetos de Odoo y registros de Sapira",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "odoo_object_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "odoo_object_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_odoo_object_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "odoo_object_type",
+     "odoo_object_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_odoo_object_mappings_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_object_mappings_odoo_lookup",
+    "cols": [
+     "holding_id",
+     "odoo_object_type",
+     "odoo_object_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_odoo_object_mappings_sapira_lookup",
+    "cols": [
+     "holding_id",
+     "sapira_table_name",
+     "sapira_record_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_update_odoo_mapping_timestamp · BEFORE UPDATE FOR EACH ROW → update_odoo_mapping_updated_at()"
+  ],
+  "policies": [
+   "Users can delete odoo mappings from their holding (DELETE, public)",
+   "Users can insert odoo mappings for their holding (INSERT, public)",
+   "Users can update odoo mappings from their holding (UPDATE, public)",
+   "Users can view odoo mappings from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete odoo mappings from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert odoo mappings for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update odoo mappings from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view odoo mappings from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}
