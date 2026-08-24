@@ -1,0 +1,866 @@
+{
+ "odoo_connections": {
+  "name": "public.odoo_connections",
+  "rls_enabled": true,
+  "rows": 3,
+  "comment": "Configuración de conexiones a Odoo",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "url",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "URL del servidor Odoo"
+   },
+   {
+    "name": "api_key",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "API Key para autenticación con Odoo"
+   },
+   {
+    "name": "database_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Nombre de la base de datos en Odoo"
+   },
+   {
+    "name": "subscription_code",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Código de suscripción de Odoo"
+   },
+   {
+    "name": "username",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Indica si la conexión está activa"
+   },
+   {
+    "name": "last_sync_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Timestamp de la última sincronización"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_connections_holding_id_fkey",
+    "source_table": "public.odoo_connections",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_connections_user_id_fkey",
+    "source_table": "public.odoo_connections",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "auth.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "odoo_invoices_stg": {
+  "name": "public.odoo_invoices_stg",
+  "rls_enabled": true,
+  "rows": 10233,
+  "comment": "Tabla de staging para facturas de Odoo (account.move) con metadatos de procesamiento",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "odoo_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID de la factura en Odoo (account.move.id)"
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Datos completos de la factura en formato JSON desde Odoo"
+   },
+   {
+    "name": "sync_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "check": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])",
+    "comment": "Estado del procesamiento: pending, processed, error"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del lote de integración para agrupar facturas procesadas juntas"
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Timestamp de cuándo se integró por última vez"
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Notas adicionales sobre el procesamiento (errores, cambios detectados, etc.)"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID único del lote de procesamiento individual"
+   },
+   {
+    "name": "sync_session_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID único de la sesión de sincronización completa (compartido entre lotes)"
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Mensaje de error detallado cuando falla el procesamiento de la factura"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_invoice_lines_stg_invoice_staging_id_fkey",
+    "source_table": "public.odoo_invoice_lines_stg",
+    "source_columns": [
+     "invoice_staging_id"
+    ],
+    "target_table": "public.odoo_invoices_stg",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoices_stg_holding_id_fkey",
+    "source_table": "public.odoo_invoices_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "odoo_invoice_lines_stg": {
+  "name": "public.odoo_invoice_lines_stg",
+  "rls_enabled": true,
+  "rows": 14888,
+  "comment": "Tabla de staging para líneas de factura de Odoo (account.move.line) con relación a factura padre",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_staging_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Referencia a la factura padre en staging"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "odoo_line_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID de la línea en Odoo (account.move.line.id)"
+   },
+   {
+    "name": "odoo_invoice_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID de la factura padre en Odoo para referencia directa"
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Datos completos de la línea en formato JSON desde Odoo"
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "check": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID único del lote de procesamiento individual"
+   },
+   {
+    "name": "sync_session_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID único de la sesión de sincronización completa (compartido entre lotes)"
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Mensaje de error detallado cuando falla el procesamiento de la línea de factura"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_invoice_lines_stg_invoice_staging_id_fkey",
+    "source_table": "public.odoo_invoice_lines_stg",
+    "source_columns": [
+     "invoice_staging_id"
+    ],
+    "target_table": "public.odoo_invoices_stg",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_invoice_lines_stg_holding_id_fkey",
+    "source_table": "public.odoo_invoice_lines_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "odoo_partners_stg": {
+  "name": "public.odoo_partners_stg",
+  "rls_enabled": true,
+  "rows": 816,
+  "comment": "Tabla de staging para partners de Odoo con JSON híbrido",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "bigint",
+    "format": "int8",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "nextval('odoo_partners_stg_id_seq'::regclass)"
+   },
+   {
+    "name": "odoo_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "raw_data",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "JSON completo del partner desde Odoo XML-RPC"
+   },
+   {
+    "name": "processed_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Timestamp de cuándo se procesó a la tabla final"
+   },
+   {
+    "name": "sync_batch_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del lote de sincronización para agrupar registros"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "processing_status",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'processed'::text",
+    "check": "processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])",
+    "comment": "Estado del procesamiento: pending, processed, error"
+   },
+   {
+    "name": "integration_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del lote de integración para agrupar registros procesados juntos"
+   },
+   {
+    "name": "last_integrated_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Timestamp de cuándo se integró por última vez"
+   },
+   {
+    "name": "integration_notes",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Notas adicionales sobre el procesamiento (errores, cambios detectados, etc.)"
+   },
+   {
+    "name": "error_message",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Mensaje de error capturado durante el procesamiento del partner"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_partners_stg_holding_id_fkey",
+    "source_table": "public.odoo_partners_stg",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "odoo_product_mappings": {
+  "name": "public.odoo_product_mappings",
+  "rls_enabled": false,
+  "rows": 41,
+  "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Odoo",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "sapira_product_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "odoo_product_id",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Campo JSONB para almacenar información adicional del mapeo"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_product_mappings_sapira_product_id_fkey",
+    "source_table": "public.odoo_product_mappings",
+    "source_columns": [
+     "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_product_mappings_holding_id_fkey",
+    "source_table": "public.odoo_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "odoo_object_mappings": {
+  "name": "public.odoo_object_mappings",
+  "rls_enabled": true,
+  "rows": 0,
+  "comment": "Mapeo entre objetos de Odoo y registros de Sapira",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "odoo_object_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Tipo de objeto en Odoo (invoice, client, etc)"
+   },
+   {
+    "name": "odoo_object_id",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID del objeto en Odoo"
+   },
+   {
+    "name": "sapira_table_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Nombre de la tabla en Sapira"
+   },
+   {
+    "name": "sapira_record_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ID del registro en Sapira"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "last_synced_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "odoo_object_mappings_holding_id_fkey",
+    "source_table": "public.odoo_object_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

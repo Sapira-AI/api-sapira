@@ -1,0 +1,1161 @@
+{
+ "revenue_schedule_monthly": {
+  "name": "public.revenue_schedule_monthly",
+  "rls_enabled": true,
+  "rows": 18415,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "period_month",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "system_currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'USD'::text"
+   },
+   {
+    "name": "recognized_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "recognized_cum_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "billed_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "billed_cum_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "deferred_balance_eom_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "unbilled_balance_eom_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "mrr_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "recognized_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "recognized_cum_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billed_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billed_cum_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "deferred_balance_eom_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unbilled_balance_eom_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "mrr_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "recognized_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "recognized_cum_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billed_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billed_cum_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "deferred_balance_eom_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unbilled_balance_eom_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "mrr_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "calc_version",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'v1.0'::text"
+   },
+   {
+    "name": "source_snapshot_hash",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "deferred_balance_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "unbilled_balance_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "product_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_contract_to_company",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "fx_contract_to_system",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "fx_to_company_source",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_to_company_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_to_system_source",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_to_system_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_total_row",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "deferred_balance_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "unbilled_balance_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "deferred_balance_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "unbilled_balance_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "momentum",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "check": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])",
+    "comment": "Momentum del MRR: NEW/UPSELL/etc en primer periodo, BOP en periodos subsiguientes"
+   },
+   {
+    "name": "mrr_period_contracted_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "MRR Contracted: Valor mensual del contrato original (monthly_price del contract_item). Solo items recurrentes con start_date <= period_month. No se ajusta con quantities ni descuentos puntuales."
+   },
+   {
+    "name": "cmrr_period_contract_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "CMRR (Committed MRR): Valor mensual contractual proyectado (monthly_price del contract_item). Incluye TODOS los items recurrentes del contrato sin importar start_date. No se ajusta con quantities ni descuentos puntuales."
+   },
+   {
+    "name": "mrr_period_contracted_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "MRR Contracted en moneda de compañía (convertido con FX)."
+   },
+   {
+    "name": "cmrr_period_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "CMRR en moneda de compañía (convertido con FX)."
+   },
+   {
+    "name": "mrr_period_contracted_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "MRR Contracted en moneda de sistema (convertido con FX)."
+   },
+   {
+    "name": "cmrr_period_system_ccy",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "CMRR en moneda de sistema (convertido con FX)."
+   },
+   {
+    "name": "subscription_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "FK a subscriptions. Usado para registros RSM de suscripciones externas. Mutuamente excluyente con contract_id."
+   },
+   {
+    "name": "subscription_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "FK a subscription_items. Permite desglose de RSM por item de suscripción."
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "revenue_schedule_monthly_subscription_item_id_fkey",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "subscription_item_id"
+    ],
+    "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_holding",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_contract",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_company",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_revenue_schedule_item",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "revenue_schedule_monthly_subscription_id_fkey",
+    "source_table": "public.revenue_schedule_monthly",
+    "source_columns": [
+     "subscription_id"
+    ],
+    "target_table": "public.subscriptions",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "revenue_rules": {
+  "name": "public.revenue_rules",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "target_type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "check": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
+   },
+   {
+    "name": "target_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "method",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp without time zone",
+    "format": "timestamp",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "revenue_rules_company_id_fkey",
+    "source_table": "public.revenue_rules",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "mrr_adjustments": {
+  "name": "public.mrr_adjustments",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "amount_contract_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "effective_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "approved",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "approved_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "applied_retroactively",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "mrr_adjustments_company_id_fkey",
+    "source_table": "public.mrr_adjustments",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_adjustments_contract_id_fkey",
+    "source_table": "public.mrr_adjustments",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "accounting_period_cutoff": {
+  "name": "public.accounting_period_cutoff",
+  "rls_enabled": true,
+  "rows": 18,
+  "comment": "Cierre contable por compañía (modelo lineal). Una fila por (holding, company). cutoff_date marca la última fecha cerrada — todo <= es CLOSED, todo > es OPEN.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "cutoff_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_action",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "check": "last_action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   },
+   {
+    "name": "last_action_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_action_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_action_by_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_action_by_email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "last_action_reason",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "accounting_period_cutoff_last_action_by_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "last_action_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_holding_id_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_cutoff_company_id_fkey",
+    "source_table": "public.accounting_period_cutoff",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "accounting_period_events": {
+  "name": "public.accounting_period_events",
+  "rls_enabled": true,
+  "rows": 14,
+  "comment": "Audit log inmutable de cierres y reaperturas de períodos. Cada fila captura el movimiento de cutoff_date, motivo y snapshot del usuario.",
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "action",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   },
+   {
+    "name": "cutoff_date_before",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "cutoff_date_after",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "performed_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "performed_by_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "performed_by_email",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "performed_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "check": "length(TRIM(BOTH FROM reason)) >= 10"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "accounting_period_events_holding_id_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_events_company_id_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "accounting_period_events_performed_by_fkey",
+    "source_table": "public.accounting_period_events",
+    "source_columns": [
+     "performed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

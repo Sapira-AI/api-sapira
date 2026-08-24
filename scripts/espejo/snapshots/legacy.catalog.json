@@ -1,0 +1,976 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "invoices_legacy": {
+  "comment": "Facturas históricas o importadas desde ERP pendientes de reconciliación",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "amount_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "total_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "vat": {
+    "precision": 15,
+    "scale": 2
+   },
+   "fx_contract_to_invoice": {
+    "precision": 12,
+    "scale": 6
+   }
+  },
+  "constraints": [
+   {
+    "name": "invoices_legacy_reconciliation_status_check",
+    "type": "c",
+    "expr": "reconciliation_status = ANY (ARRAY['pending'::text, 'partially_reconciled'::text, 'reconciled'::text, 'migrated'::text, 'mrr_legacy'::text])"
+   },
+   {
+    "name": "invoices_legacy_source_type_check",
+    "type": "c",
+    "expr": "source_type = ANY (ARRAY['historical_import'::text, 'erp_unmatched'::text, 'manual_entry'::text])"
+   },
+   {
+    "name": "invoices_legacy_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Enviada'::text, 'Vencida'::text, 'Pagada'::text])"
+   },
+   {
+    "name": "fk_invoices_client_entity",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id)"
+   },
+   {
+    "name": "invoices_legacy_client_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_legacy_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoices_legacy_contract_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_legacy_created_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_legacy_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoices_legacy_reconciled_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (reconciled_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_legacy_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_holding_invoice_number_unique",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "invoice_number"
+    ]
+   },
+   {
+    "name": "invoices_legacy_holding_odoo_integration_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "odoo_integration_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoices_legacy_client_entity_id",
+    "cols": [
+     "client_entity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_client_id",
+    "cols": [
+     "client_id"
+    ],
+    "unique": false,
+    "where": "client_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_legacy_client_tax_id",
+    "cols": [
+     "client_tax_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_issue_date",
+    "cols": [
+     "issue_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_odoo_integration_id",
+    "cols": [
+     "odoo_integration_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_reconciliation_status",
+    "cols": [
+     "reconciliation_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_legacy_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_auto_populate_client_tax_id · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_client_tax_id_from_entity()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_invoices_legacy (DELETE, public)",
+   "tenant_isolation_insert_invoices_legacy (INSERT, public)",
+   "tenant_isolation_select_invoices_legacy (SELECT, public)",
+   "tenant_isolation_update_invoices_legacy (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoices_legacy",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoices_legacy",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoices_legacy",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoices_legacy",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_items_legacy": {
+  "comment": "Líneas de detalle de facturas legacy",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "quantity": {
+    "precision": 15,
+    "scale": 4
+   },
+   "unit_price": {
+    "precision": 15,
+    "scale": 2
+   },
+   "discount_pct": {
+    "precision": 5,
+    "scale": 2
+   },
+   "subtotal": {
+    "precision": 15,
+    "scale": 2
+   },
+   "tax_amount": {
+    "precision": 15,
+    "scale": 2
+   },
+   "total": {
+    "precision": 15,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "invoice_items_legacy_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_invoices_legacy_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoices_legacy_id) REFERENCES invoices_legacy(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_holding_odoo_line_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "odoo_line_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_items_legacy_currency",
+    "cols": [
+     "currency"
+    ],
+    "unique": false,
+    "where": "currency IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_legacy_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_items_legacy_holding_odoo_line",
+    "cols": [
+     "holding_id",
+     "odoo_line_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_items_legacy_invoice",
+    "cols": [
+     "invoices_legacy_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_items_legacy_item_type",
+    "cols": [
+     "item_type"
+    ],
+    "unique": false,
+    "where": "item_type IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_legacy_odoo_line_id",
+    "cols": [
+     "odoo_line_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_items_legacy_product_code",
+    "cols": [
+     "product_external_code"
+    ],
+    "unique": false,
+    "where": "product_external_code IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_legacy_unit_of_measure",
+    "cols": [
+     "unit_of_measure"
+    ],
+    "unique": false,
+    "where": "unit_of_measure IS NOT NULL"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_invoice_items_legacy (DELETE, public)",
+   "tenant_isolation_insert_invoice_items_legacy (INSERT, public)",
+   "tenant_isolation_select_invoice_items_legacy (SELECT, public)",
+   "tenant_isolation_update_invoice_items_legacy (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoice_items_legacy",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoice_items_legacy",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_items_legacy",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_items_legacy",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_items_legacy_match": {
+  "comment": "Asignaciones de líneas legacy a contract_items (permite splits)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "fx_contract_to_invoice": {
+    "precision": 12,
+    "scale": 6
+   },
+   "amount_contract_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "amount_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "invoice_items_legacy_match_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['tentative'::text, 'confirmed'::text])"
+   },
+   {
+    "name": "match_amount_positive",
+    "type": "c",
+    "expr": "(amount_contract_currency > (0)::numeric) AND (amount_invoice_currency > (0)::numeric)"
+   },
+   {
+    "name": "invoice_items_legacy_match_confirmed_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (confirmed_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoice_items_legacy_match_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_match_contract_item_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_match_created_by_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_match_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_match_invoice_item_legacy_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_item_legacy_id) REFERENCES invoice_items_legacy(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_items_legacy_match_product_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoice_items_legacy_match_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_legacy_match_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_legacy_match_contract_item",
+    "cols": [
+     "contract_item_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_legacy_match_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_legacy_match_item",
+    "cols": [
+     "invoice_item_legacy_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_legacy_match_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_prevent_confirmed_match_edit · BEFORE UPDATE FOR EACH ROW → prevent_confirmed_match_edit()",
+   "trigger_set_match_confirmed_metadata · BEFORE UPDATE FOR EACH ROW → set_match_confirmed_metadata()",
+   "trigger_update_invoice_legacy_status · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → update_invoice_legacy_status()",
+   "trigger_validate_match_total · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_match_total()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_legacy_match (DELETE, public)",
+   "tenant_isolation_insert_legacy_match (INSERT, public)",
+   "tenant_isolation_select_legacy_match (SELECT, public)",
+   "tenant_isolation_update_legacy_match (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_legacy_match",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_legacy_match",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_legacy_match",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_legacy_match",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "mrr_legacy": {
+  "comment": "Registro rápido de MRR histórico desde facturas legacy sin reconciliación completa. Una fila = 1 producto + 1 mes. Permite valores negativos para notas de crédito y ajustes.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "amount_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "total_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "vat": {
+    "precision": 15,
+    "scale": 2
+   },
+   "quantity": {
+    "precision": 15,
+    "scale": 4
+   },
+   "unit_price": {
+    "precision": 15,
+    "scale": 2
+   },
+   "discount_pct": {
+    "precision": 5,
+    "scale": 2
+   },
+   "subtotal": {
+    "precision": 15,
+    "scale": 2
+   },
+   "allocated_invoice_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "subtotal_contract_currency": {
+    "precision": 15,
+    "scale": 2
+   },
+   "fx_contract_to_invoice": {
+    "precision": 12,
+    "scale": 6
+   },
+   "fx_contract_to_system": {
+    "precision": 12,
+    "scale": 6
+   },
+   "mrr_legacy": {
+    "precision": 15,
+    "scale": 2
+   },
+   "mrr_legacy_system_currency": {
+    "precision": 15,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "mrr_legacy_fx_valid",
+    "type": "c",
+    "expr": "(fx_contract_to_invoice > (0)::numeric) OR (subtotal_contract_currency = (0)::numeric)"
+   },
+   {
+    "name": "mrr_legacy_momentum_check",
+    "type": "c",
+    "expr": "(momentum IS NULL) OR (momentum = 'EOP'::text)"
+   },
+   {
+    "name": "mrr_legacy_period_month_check",
+    "type": "c",
+    "expr": "date_trunc('month'::text, (period_month)::timestamp with time zone) = period_month"
+   },
+   {
+    "name": "mrr_legacy_split_index_check",
+    "type": "c",
+    "expr": "split_index > 0"
+   },
+   {
+    "name": "mrr_legacy_term_check",
+    "type": "c",
+    "expr": "term > 0"
+   },
+   {
+    "name": "mrr_legacy_client_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+   },
+   {
+    "name": "mrr_legacy_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "mrr_legacy_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "mrr_legacy_invoice_item_legacy_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_item_legacy_id) REFERENCES invoice_items_legacy(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "mrr_legacy_invoice_legacy_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_legacy_id) REFERENCES invoices_legacy(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "mrr_legacy_migrated_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (migrated_by) REFERENCES users(id)"
+   },
+   {
+    "name": "mrr_legacy_migrated_to_contract_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (migrated_to_contract_id) REFERENCES contracts(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "mrr_legacy_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_invoice_item_legacy_id_split_index_period_month_key",
+    "type": "u",
+    "cols": [
+     "invoice_item_legacy_id",
+     "split_index",
+     "period_month"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_mrr_legacy_batch_id",
+    "cols": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_client",
+    "cols": [
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_company",
+    "cols": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_invoice",
+    "cols": [
+     "invoice_legacy_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_invoice_created",
+    "cols": [
+     "invoice_legacy_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_invoice_item",
+    "cols": [
+     "invoice_item_legacy_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_migrated",
+    "cols": [
+     "migrated_to_contract_id"
+    ],
+    "unique": false,
+    "where": "migrated_to_contract_id IS NOT NULL"
+   },
+   {
+    "name": "idx_mrr_legacy_not_migrated",
+    "cols": [
+     "client_id",
+     "invoice_legacy_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": "migrated_to_contract_id IS NULL"
+   },
+   {
+    "name": "idx_mrr_legacy_period",
+    "cols": [
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_product",
+    "cols": [
+     "product_name"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_mrr_legacy_recurring",
+    "cols": [
+     "is_recurring"
+    ],
+    "unique": false,
+    "where": "is_recurring = true"
+   },
+   {
+    "name": "idx_mrr_legacy_skip_activation",
+    "cols": [
+     "skip_activation"
+    ],
+    "unique": false,
+    "where": "skip_activation = true"
+   }
+  ],
+  "triggers": [
+   "trg_calculate_mrr_legacy_fields · BEFORE INSERT OR UPDATE OF subtotal_contract_currency, term, is_recurring FOR EACH ROW → calculate_mrr_legacy_fields()",
+   "trg_calculate_mrr_legacy_system_currency · BEFORE INSERT OR UPDATE OF contract_currency, mrr_legacy, period_month FOR EACH ROW → calculate_mrr_legacy_system_currency()",
+   "trg_mrr_legacy_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()",
+   "trigger_update_invoice_legacy_status_on_mrr · AFTER INSERT FOR EACH ROW → update_invoice_legacy_status_on_mrr_creation()"
+  ],
+  "policies": [
+   "Users can delete mrr_legacy from their holding (DELETE, public)",
+   "Users can insert mrr_legacy in their holding (INSERT, public)",
+   "Users can update mrr_legacy in their holding (UPDATE, public)",
+   "Users can view mrr_legacy from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete mrr_legacy from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert mrr_legacy in their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update mrr_legacy in their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view mrr_legacy from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

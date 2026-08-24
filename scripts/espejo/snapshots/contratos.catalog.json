@@ -1,0 +1,2185 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "contracts": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "legacy_reconciliation_pct": {
+    "precision": 5,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "contracts_fx_company_policy_check",
+    "type": "c",
+    "expr": "fx_company_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
+   },
+   {
+    "name": "contracts_fx_invoice_policy_check",
+    "type": "c",
+    "expr": "fx_invoice_policy = ANY (ARRAY['fixed'::text, 'spot'::text])"
+   },
+   {
+    "name": "contracts_legacy_status_check",
+    "type": "c",
+    "expr": "legacy_status = ANY (ARRAY['pending'::text, 'in_reconciliation'::text, 'validated'::text, 'activated'::text])"
+   },
+   {
+    "name": "contracts_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['En revisión'::text, 'En proceso'::text, 'Firmado'::text, 'Activo'::text, 'Cancelado'::text, 'Expirado'::text])"
+   },
+   {
+    "name": "contracts_churn_reason_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (churn_reason_id) REFERENCES churn_reasons(id)"
+   },
+   {
+    "name": "contracts_client_entity_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id)"
+   },
+   {
+    "name": "contracts_client_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+   },
+   {
+    "name": "contracts_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "contracts_current_step_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (current_step_id) REFERENCES workflow_steps(id)"
+   },
+   {
+    "name": "contracts_quote_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (quote_id) REFERENCES quotes(id)"
+   },
+   {
+    "name": "contracts_renewed_from_contract_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (renewed_from_contract_id) REFERENCES contracts(id)"
+   },
+   {
+    "name": "contracts_renewed_to_contract_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (renewed_to_contract_id) REFERENCES contracts(id)"
+   },
+   {
+    "name": "fk_contracts_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contracts_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contracts_auto_invoice",
+    "cols": [
+     "auto_invoice",
+     "status"
+    ],
+    "unique": false,
+    "where": "auto_invoice = true"
+   },
+   {
+    "name": "idx_contracts_auto_send_to_odoo",
+    "cols": [
+     "auto_send_to_odoo"
+    ],
+    "unique": false,
+    "where": "auto_send_to_odoo = true"
+   },
+   {
+    "name": "idx_contracts_booking_date",
+    "cols": [
+     "booking_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contracts_client_entity_id",
+    "cols": [
+     "client_entity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contracts_currency",
+    "cols": [
+     "contract_currency"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contracts_current_step_id",
+    "cols": [
+     "current_step_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contracts_custom_fields",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_contracts_custom_fields ON public.contracts USING gin (custom_fields)"
+   },
+   {
+    "name": "idx_contracts_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contracts_sf_opp",
+    "cols": [
+     "salesforce_opportunity_id"
+    ],
+    "unique": false,
+    "where": "salesforce_opportunity_id IS NOT NULL"
+   },
+   {
+    "name": "idx_contracts_workflow_started_at",
+    "cols": [
+     "workflow_started_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "generate_invoices_on_contract_active · AFTER UPDATE OF status FOR EACH ROW → trigger_generate_invoices_on_status_change()",
+   "trg_00_period_guard_contracts · BEFORE UPDATE FOR EACH ROW → trg_period_guard_contracts()",
+   "trg_audit_contract_changes · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → trg_audit_contract_changes()",
+   "trg_cancel_schedule_on_contract_cancelled · AFTER UPDATE OF status FOR EACH ROW → cancel_contract_invoices_on_contract_cancelled() [WHEN ((new.status = 'Cancelado'::text) AND (old.status IS DISTINCT FROM 'Cancelado'::text))]",
+   "trg_prevent_end_date_update_when_active · BEFORE UPDATE OF contract_end_date, status FOR EACH ROW → prevent_end_date_update_when_active()",
+   "trg_set_booking_date_on_activate · BEFORE INSERT OR UPDATE FOR EACH ROW → set_booking_date_on_activate()",
+   "trigger_auto_calculate_contract_fx · AFTER INSERT OR UPDATE FOR EACH ROW → auto_calculate_contract_fx()",
+   "trigger_log_contract_workflow_transition · BEFORE UPDATE OF current_step_id FOR EACH ROW → log_contract_workflow_transition()",
+   "trigger_revenue_schedule_on_contract_activation · AFTER UPDATE FOR EACH ROW → trigger_revenue_schedule_on_contract_activation() [WHEN (old.status IS DISTINCT FROM new.status)]",
+   "trigger_set_contract_company_currency · BEFORE INSERT OR UPDATE FOR EACH ROW → set_contract_company_currency()",
+   "unified_generate_invoices_on_contract_signed · AFTER INSERT OR UPDATE OF status FOR EACH ROW → trigger_generate_invoices_on_contract_signed()",
+   "validate_contract_currency_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_contract_currency_consistency()",
+   "validate_fx_before_firmado · BEFORE UPDATE FOR EACH ROW → validate_fx_confirmation_before_firmado()"
+  ],
+  "policies": [
+   "contracts_delete_access (DELETE, public)",
+   "contracts_holding_isolation (SELECT, public)",
+   "contracts_manage_access (INSERT, public)",
+   "contracts_update_access (UPDATE, public)",
+   "tenant_isolation_delete_contracts (DELETE, public)",
+   "tenant_isolation_insert_contracts (INSERT, public)",
+   "tenant_isolation_select_contracts (SELECT, public)",
+   "tenant_isolation_update_contracts (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "contracts_delete_access",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "contracts_holding_isolation",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "with_check": null
+   },
+   {
+    "name": "contracts_manage_access",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(user_has_permission('EDIT_CONTRATOS'::text) AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "contracts_update_access",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(user_has_permission('EDIT_CONTRATOS'::text) AND (holding_id = get_current_user_holding_id()))",
+    "with_check": "(user_has_permission('EDIT_CONTRATOS'::text) AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "tenant_isolation_delete_contracts",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_contracts",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_contracts",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_contracts",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_items": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "item_type": {
+    "length": 64
+   },
+   "unit_of_measure": {
+    "length": 32
+   },
+   "unit_price": {
+    "precision": 18,
+    "scale": 6
+   },
+   "quantity": {
+    "precision": 18,
+    "scale": 6
+   },
+   "account": {
+    "length": 128
+   },
+   "churn_monthly_amount": {
+    "precision": 18,
+    "scale": 2
+   },
+   "monthly_price": {
+    "precision": 18,
+    "scale": 2
+   },
+   "billing_period_price": {
+    "precision": 18,
+    "scale": 2
+   },
+   "annual_unit_price": {
+    "precision": 18,
+    "scale": 6
+   },
+   "annual_price": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "chk_contract_items_price_entry_mode",
+    "type": "c",
+    "expr": "price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])"
+   },
+   {
+    "name": "contract_items_billing_frequency_check",
+    "type": "c",
+    "expr": "billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])"
+   },
+   {
+    "name": "contract_items_billing_method_check",
+    "type": "c",
+    "expr": "billing_method = ANY (ARRAY['Anticipado'::text, 'Vencido'::text])"
+   },
+   {
+    "name": "contract_items_categoria_check",
+    "type": "c",
+    "expr": "(categoria IS NULL) OR (categoria = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text]))"
+   },
+   {
+    "name": "contract_items_discount_type_check",
+    "type": "c",
+    "expr": "discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])"
+   },
+   {
+    "name": "contract_items_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_items_product_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (product_id) REFERENCES products(id)"
+   },
+   {
+    "name": "contract_items_quote_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (quote_item_id) REFERENCES quote_items(id)"
+   },
+   {
+    "name": "contract_items_related_item_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (related_item_id) REFERENCES contract_items(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_items_renewed_by_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (renewed_by_item_id) REFERENCES contract_items(id)"
+   },
+   {
+    "name": "contract_items_renews_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (renews_item_id) REFERENCES contract_items(id)"
+   },
+   {
+    "name": "fk_contract_items_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_items_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_items_auto_renew_end_date",
+    "cols": [
+     "auto_renew",
+     "end_date"
+    ],
+    "unique": false,
+    "where": "auto_renew = true"
+   },
+   {
+    "name": "idx_contract_items_categoria",
+    "cols": [
+     "categoria"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_items_churn_date",
+    "cols": [
+     "churn_date"
+    ],
+    "unique": false,
+    "where": "churn_date IS NOT NULL"
+   },
+   {
+    "name": "idx_contract_items_contract_end_date",
+    "cols": [
+     "contract_id",
+     "end_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_items_custom_fields",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_contract_items_custom_fields ON public.contract_items USING gin (custom_fields)"
+   },
+   {
+    "name": "idx_contract_items_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_items_monthly_price",
+    "cols": [
+     "monthly_price"
+    ],
+    "unique": false,
+    "where": "(monthly_price IS NOT NULL) AND (is_recurring = true)"
+   },
+   {
+    "name": "idx_contract_items_quote_item_id",
+    "cols": [
+     "quote_item_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_items_quote_item_number",
+    "cols": [
+     "quote_item_number"
+    ],
+    "unique": false,
+    "where": "quote_item_number IS NOT NULL"
+   },
+   {
+    "name": "idx_contract_items_recurring_dates",
+    "cols": [
+     "is_recurring",
+     "start_date",
+     "end_date"
+    ],
+    "unique": false,
+    "where": "is_recurring = true"
+   },
+   {
+    "name": "idx_contract_items_related",
+    "cols": [
+     "related_item_id"
+    ],
+    "unique": false,
+    "where": "related_item_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "trg_00_period_guard_contract_items · BEFORE INSERT OR DELETE OR UPDATE FOR EACH ROW → trg_period_guard_contract_items()",
+   "trg_audit_contract_item_changes · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → trg_audit_contract_item_changes()",
+   "trg_calculate_contract_categoria · BEFORE INSERT FOR EACH ROW → trg_set_contract_item_categoria()",
+   "trg_contract_items_calculate_pricing · BEFORE INSERT OR UPDATE OF unit_price, quantity, billing_frequency, is_recurring, final_price, term_months, discount_type, discount_value, annual_unit_price, price_entry_mode FOR EACH ROW → auto_calculate_pricing_fields()",
+   "trg_inherit_auto_renew_from_quote_item · BEFORE INSERT FOR EACH ROW → inherit_auto_renew_from_quote_item()",
+   "trg_rsm_on_contract_item_change · AFTER INSERT OR UPDATE FOR EACH ROW → trigger_rsm_on_contract_item_change()",
+   "trg_set_contract_item_end_date · BEFORE INSERT OR UPDATE OF start_date, term_months FOR EACH ROW → set_contract_item_end_date()",
+   "trg_z_fix_renewal_annual · BEFORE INSERT FOR EACH ROW → fix_renewal_annual_fields() [WHEN ((new.categoria = 'RENEWAL'::text) AND (new.renews_item_id IS NOT NULL))]",
+   "trg_zzz_pending_renewal_on_item_change · AFTER INSERT OR UPDATE FOR EACH ROW → trigger_pending_renewal_on_item_change()",
+   "trigger_update_contract_term · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → update_contract_term()",
+   "validate_contract_item_currency_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_contract_item_currency_consistency()"
+  ],
+  "policies": [
+   "Users can delete contract items from their holding (DELETE, public)",
+   "Users can insert contract items for their holding (INSERT, public)",
+   "Users can update contract items from their holding (UPDATE, public)",
+   "Users can view contract items from their holding (SELECT, public)",
+   "holding_access_contract_items (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete contract items from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert contract items for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update contract items from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view contract items from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "holding_access_contract_items",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_amendments": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_amendments_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_amendments_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "contract_amendments_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_amendments_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_amendments_contract_date",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_contract_amendments_contract_date ON public.contract_amendments USING btree (contract_id, effective_date DESC, created_at DESC)"
+   },
+   {
+    "name": "idx_contract_amendments_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_amendments_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_set_amendment_holding · BEFORE INSERT FOR EACH ROW → set_contract_amendment_holding_id()"
+  ],
+  "policies": [
+   "tenant_amendments_ins (INSERT, public)",
+   "tenant_amendments_sel (SELECT, public)",
+   "tenant_amendments_upd (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_amendments_ins",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_amendments_sel",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_amendments_upd",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_amendment_items": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_amendment_items_amendment_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (amendment_id) REFERENCES contract_amendments(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_amendment_items_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "contract_amendment_items_new_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (new_item_id) REFERENCES contract_items(id)"
+   },
+   {
+    "name": "contract_amendment_items_original_item_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (original_item_id) REFERENCES contract_items(id)"
+   },
+   {
+    "name": "contract_amendment_items_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_amendment_items_amendment",
+    "cols": [
+     "amendment_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_amendment_items_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_amendment_items_new",
+    "cols": [
+     "new_item_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_amendment_items_original",
+    "cols": [
+     "original_item_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_set_amendment_item_holding · BEFORE INSERT FOR EACH ROW → set_contract_amendment_item_holding_id()"
+  ],
+  "policies": [
+   "tenant_amend_items_ins (INSERT, public)",
+   "tenant_amend_items_sel (SELECT, public)",
+   "tenant_amend_items_upd (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_amend_items_ins",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_amend_items_sel",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_amend_items_upd",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_lifecycle_events": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_lifecycle_events_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_lifecycle_events_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "contract_lifecycle_events_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_lifecycle_events_contract_date",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_contract_lifecycle_events_contract_date ON public.contract_lifecycle_events USING btree (contract_id, effective_date DESC, created_at DESC)"
+   },
+   {
+    "name": "idx_contract_lifecycle_events_contract_effective",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_contract_lifecycle_events_contract_effective ON public.contract_lifecycle_events USING btree (contract_id, effective_date DESC)"
+   },
+   {
+    "name": "idx_contract_lifecycle_events_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_lifecycle_events_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_updated_at_on_contract_lifecycle_events · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at()",
+   "trg_lifecycle_events_update_updated_at · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at()",
+   "trg_set_lifecycle_event_holding_id_ins · BEFORE INSERT FOR EACH ROW → set_lifecycle_event_holding_id()",
+   "trg_set_lifecycle_event_holding_id_upd · BEFORE UPDATE OF contract_id FOR EACH ROW → set_lifecycle_event_holding_id()",
+   "update_contract_lifecycle_events_updated_at · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at()"
+  ],
+  "policies": [
+   "Users can insert lifecycle events for their holding contracts (INSERT, public)",
+   "Users can update lifecycle events from their holding contracts (UPDATE, public)",
+   "Users can view lifecycle events from their holding contracts (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can insert lifecycle events for their holding contracts",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "((contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id()))) AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "Users can update lifecycle events from their holding contracts",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view lifecycle events from their holding contracts",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id())))",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_change_log": {
+  "comment": "Audit log de cambios en contracts para contratos post-firma. Mantiene historial inmutable de qué/quién/cuándo/por qué.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_change_log_change_type_check",
+    "type": "c",
+    "expr": "change_type = ANY (ARRAY['CREATE'::text, 'UPDATE'::text, 'DELETE'::text])"
+   },
+   {
+    "name": "contract_change_log_changed_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_change_log_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_ccl_changed_by",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_ccl_changed_by ON public.contract_change_log USING btree (changed_by, changed_at DESC)"
+   },
+   {
+    "name": "idx_ccl_company",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_ccl_company ON public.contract_change_log USING btree (company_id, changed_at DESC)"
+   },
+   {
+    "name": "idx_ccl_contract",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_ccl_contract ON public.contract_change_log USING btree (contract_id, changed_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "ccl_select (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "ccl_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_item_change_log": {
+  "comment": "Audit log de cambios en contract_items para contratos post-firma (Activo/Cancelado/Expirado). Trazabilidad de qué cambió, quién, cuándo y por qué.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_item_change_log_change_type_check",
+    "type": "c",
+    "expr": "change_type = ANY (ARRAY['CREATE'::text, 'UPDATE'::text, 'DELETE'::text])"
+   },
+   {
+    "name": "contract_item_change_log_changed_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_item_change_log_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_cicl_changed_by",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_cicl_changed_by ON public.contract_item_change_log USING btree (changed_by, changed_at DESC)"
+   },
+   {
+    "name": "idx_cicl_company",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_cicl_company ON public.contract_item_change_log USING btree (company_id, changed_at DESC)"
+   },
+   {
+    "name": "idx_cicl_contract",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_cicl_contract ON public.contract_item_change_log USING btree (contract_id, changed_at DESC)"
+   },
+   {
+    "name": "idx_cicl_item",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_cicl_item ON public.contract_item_change_log USING btree (contract_item_id, changed_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "cicl_select (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "cicl_select",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_workflow_history": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_workflow_history_transition_type_check",
+    "type": "c",
+    "expr": "transition_type = ANY (ARRAY['manual'::text, 'automatic'::text, 'system'::text])"
+   },
+   {
+    "name": "contract_workflow_history_previous_step_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (previous_step_id) REFERENCES workflow_steps(id)"
+   },
+   {
+    "name": "contract_workflow_history_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_workflow_history_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_workflow_history_created_at",
+    "cols": [
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_workflow_history_step_id",
+    "cols": [
+     "workflow_step_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_workflow_history_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can insert contract workflow history for their holding (INSERT, public)",
+   "Users can update contract workflow history from their holding (UPDATE, public)",
+   "Users can view contract workflow history from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can insert contract workflow history for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id())))"
+   },
+   {
+    "name": "Users can update contract workflow history from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view contract workflow history from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM contracts c\n  WHERE (c.holding_id = get_current_user_holding_id())))",
+    "with_check": null
+   }
+  ]
+ },
+ "workflow_steps": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "workflow_steps_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_workflow_steps_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_workflow_steps_order",
+    "cols": [
+     "holding_id",
+     "order_index"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_workflow_steps_updated_at · BEFORE UPDATE FOR EACH ROW → update_workflow_steps_updated_at()"
+  ],
+  "policies": [
+   "Users can delete workflow steps from their holding (DELETE, public)",
+   "Users can insert workflow steps for their holding (INSERT, public)",
+   "Users can update workflow steps from their holding (UPDATE, public)",
+   "Users can view workflow steps from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete workflow steps from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert workflow steps for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update workflow steps from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can view workflow steps from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "workflow_step_documents": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": true,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "fk_wsd_contract",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "c",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON UPDATE CASCADE ON DELETE CASCADE"
+   },
+   {
+    "name": "fk_wsd_holding",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "c",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+   },
+   {
+    "name": "fk_wsd_step",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "c",
+    "def": "FOREIGN KEY (workflow_step_id) REFERENCES workflow_steps(id) ON UPDATE CASCADE ON DELETE SET NULL"
+   },
+   {
+    "name": "fk_wsd_uploaded_by",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "c",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+   },
+   {
+    "name": "workflow_step_documents_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "workflow_step_documents_holding_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "workflow_step_documents_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES users(id)"
+   },
+   {
+    "name": "workflow_step_documents_workflow_step_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (workflow_step_id) REFERENCES workflow_steps(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "workflow_step_documents_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_wsd_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_wsd_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_wsd_step",
+    "cols": [
+     "workflow_step_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_wsd_uploaded_at",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_wsd_uploaded_at ON public.workflow_step_documents USING btree (uploaded_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_wsd (DELETE, public)",
+   "tenant_isolation_insert_wsd (INSERT, public)",
+   "tenant_isolation_select_wsd (SELECT, public)",
+   "tenant_isolation_update_wsd (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_wsd",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_wsd",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_wsd",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_wsd",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   }
+  ]
+ },
+ "contract_clauses": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_clauses_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "fk_contract_clauses_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_clauses_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_clauses_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_contract_clauses (DELETE, authenticated)",
+   "tenant_isolation_insert_contract_clauses (INSERT, authenticated)",
+   "tenant_isolation_select_contract_clauses (SELECT, authenticated)",
+   "tenant_isolation_update_contract_clauses (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_contract_clauses",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_contract_clauses",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_contract_clauses",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_contract_clauses",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_templates": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_templates_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "fk_contract_templates_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_templates_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_templates_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_contract_templates (DELETE, authenticated)",
+   "tenant_isolation_insert_contract_templates (INSERT, authenticated)",
+   "tenant_isolation_select_contract_templates (SELECT, authenticated)",
+   "tenant_isolation_update_contract_templates (UPDATE, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_contract_templates",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_contract_templates",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_contract_templates",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_contract_templates",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_documents": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_documents_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_documents_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_documents_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES auth.users(id)"
+   },
+   {
+    "name": "contract_documents_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_documents_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_documents_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can delete contract documents in their holding (DELETE, public)",
+   "Users can insert contract documents for their holding (INSERT, public)",
+   "Users can update contract documents in their holding (UPDATE, public)",
+   "Users can view contract documents in their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete contract documents in their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert contract documents for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update contract documents in their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view contract documents in their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_notifications": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_notifications_notification_type_check",
+    "type": "c",
+    "expr": "notification_type = ANY (ARRAY['step_assigned'::text, 'step_completed'::text, 'overdue_alert'::text, 'validation_required'::text, 'client_action_needed'::text])"
+   },
+   {
+    "name": "contract_notifications_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_notifications_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "contract_notifications_user_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES users(id)"
+   },
+   {
+    "name": "contract_notifications_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_notifications_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_notifications_created_at",
+    "cols": [
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_notifications_is_read",
+    "cols": [
+     "is_read"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_notifications_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can insert contract notifications for their holding (INSERT, public)",
+   "Users can update their contract notifications (UPDATE, public)",
+   "Users can view their holding's contract notifications (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can insert contract notifications for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update their contract notifications",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can view their holding's contract notifications",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_billing_splits": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_billing_splits_percent_allocation_check",
+    "type": "c",
+    "expr": "(percent_allocation >= (0)::numeric) AND (percent_allocation <= (100)::numeric)"
+   },
+   {
+    "name": "valid_date_range",
+    "type": "c",
+    "expr": "(effective_to IS NULL) OR (effective_to >= effective_from)"
+   },
+   {
+    "name": "contract_billing_splits_billing_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (billing_company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "contract_billing_splits_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_billing_splits_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "contract_billing_splits_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_billing_splits_company",
+    "cols": [
+     "billing_company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_billing_splits_contract",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_billing_splits_dates",
+    "cols": [
+     "effective_from",
+     "effective_to"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_billing_splits (DELETE, public)",
+   "tenant_isolation_insert_billing_splits (INSERT, public)",
+   "tenant_isolation_select_billing_splits (SELECT, public)",
+   "tenant_isolation_update_billing_splits (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_billing_splits",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_billing_splits",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_billing_splits",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_billing_splits",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_invoices": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_invoices_satisfied_by_legacy_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (satisfied_by_legacy_id) REFERENCES invoices_legacy(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "fk_contract_invoices_contract_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "fk_contract_invoices_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_invoices_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_invoices_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_invoices_date",
+    "cols": [
+     "invoice_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_invoices_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_invoices_status",
+    "cols": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can delete contract invoices from their holding (DELETE, public)",
+   "Users can insert contract invoices for their holding (INSERT, public)",
+   "Users can update contract invoices from their holding (UPDATE, public)",
+   "Users can view contract invoices from their holding (SELECT, public)",
+   "holding_access_contract_invoices (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete contract invoices from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert contract invoices for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can update contract invoices from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "Users can view contract invoices from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(contract_id IN ( SELECT c.id\n   FROM ((contracts c\n     JOIN companies comp ON ((c.company_id = comp.id)))\n     JOIN user_holdings uh ON ((comp.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "holding_access_contract_invoices",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "churn_reasons": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "churn_reasons_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "churn_reasons_holding_id_name_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "name"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_churn_reasons_active",
+    "cols": [
+     "holding_id",
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_churn_reasons_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "churn_reasons_set_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_churn_reasons (DELETE, public)",
+   "tenant_isolation_insert_churn_reasons (INSERT, public)",
+   "tenant_isolation_select_churn_reasons (SELECT, public)",
+   "tenant_isolation_update_churn_reasons (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_churn_reasons",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_churn_reasons",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_churn_reasons",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_churn_reasons",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}

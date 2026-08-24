@@ -1,0 +1,160 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "sii_configurations": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "sii_configurations_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "sii_configurations_holding_id_company_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "company_id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "sii_certificates": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "sii_certificates_configuration_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (configuration_id) REFERENCES sii_configurations(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "sii_certificates_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "sii_certificates_configuration_id_key",
+    "type": "u",
+    "cols": [
+     "configuration_id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "sii_cafs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "sii_cafs_configuration_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (configuration_id) REFERENCES sii_configurations(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "sii_cafs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "sii_cafs_configuration_id_document_type_folio_start_folio_e_key",
+    "type": "u",
+    "cols": [
+     "configuration_id",
+     "document_type",
+     "folio_start",
+     "folio_end"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ }
+}

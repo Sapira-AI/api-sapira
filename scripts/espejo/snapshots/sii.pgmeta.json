@@ -1,0 +1,360 @@
+{
+ "sii_configurations": {
+  "name": "public.sii_configurations",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "environment",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'certificacion'::text"
+   },
+   {
+    "name": "business_activity",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "activity_codes",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'[]'::jsonb"
+   },
+   {
+    "name": "commune",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "city",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "region",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resolution_number",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resolution_date",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "enabled_document_types",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'[33, 34, 61]'::jsonb"
+   },
+   {
+    "name": "is_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "sii_certificates_configuration_id_fkey",
+    "source_table": "public.sii_certificates",
+    "source_columns": [
+     "configuration_id"
+    ],
+    "target_table": "public.sii_configurations",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "sii_cafs_configuration_id_fkey",
+    "source_table": "public.sii_cafs",
+    "source_columns": [
+     "configuration_id"
+    ],
+    "target_table": "public.sii_configurations",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "sii_certificates": {
+  "name": "public.sii_certificates",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "configuration_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable",
+     "unique"
+    ]
+   },
+   {
+    "name": "key_vault_secret_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "thumbprint",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "expires_at",
+    "data_type": "date",
+    "format": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "sii_certificates_configuration_id_fkey",
+    "source_table": "public.sii_certificates",
+    "source_columns": [
+     "configuration_id"
+    ],
+    "target_table": "public.sii_configurations",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "sii_cafs": {
+  "name": "public.sii_cafs",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "configuration_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "document_type",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "blob_name",
+    "data_type": "text",
+    "format": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "folio_start",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "folio_end",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "next_folio",
+    "data_type": "integer",
+    "format": "int4",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "is_active",
+    "data_type": "boolean",
+    "format": "bool",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "sii_cafs_configuration_id_fkey",
+    "source_table": "public.sii_cafs",
+    "source_columns": [
+     "configuration_id"
+    ],
+    "target_table": "public.sii_configurations",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

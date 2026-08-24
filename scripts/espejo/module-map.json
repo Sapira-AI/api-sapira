@@ -1,0 +1,19 @@
+{
+  "_meta": "Tabla → carpeta de entities/ según docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md. Validado contra las 130 tablas base de prod (2026-08-22).",
+  "base-tenancy": ["users", "roles", "permissions", "role_permissions", "user_holdings", "company_holdings", "companies", "master_data", "currencies", "financial_settings", "holding_settings", "custom_field_definitions", "user_view_preferences", "claude_skills"],
+  "fx": ["exchange_rates", "exchange_rates_monthly_avg", "holding_fx_period_rates", "contract_fx_period_rates", "indicadores_economicos", "fx_api_sync_log", "generic_export_vats"],
+  "clientes": ["clients", "client_entities", "client_entity_clients", "client_contacts", "contact_preferences", "client_documents", "company_legal_documents", "client_entity_tax_id_normalization_conflicts", "company_bank_accounts", "company_account_mappings", "sellers"],
+  "cotizaciones-catalogo": ["quotes", "quote_items", "quote_stages", "quote_attachments", "products"],
+  "contratos": ["contracts", "contract_items", "contract_amendments", "contract_amendment_items", "contract_lifecycle_events", "contract_change_log", "contract_item_change_log", "contract_workflow_history", "workflow_steps", "workflow_step_documents", "contract_clauses", "contract_templates", "contract_documents", "contract_notifications", "contract_billing_splits", "contract_invoices", "churn_reasons"],
+  "facturacion": ["invoices", "invoice_items", "invoice_payments", "invoice_references", "billing_references", "reference_requests", "invoice_reference_links", "quantities", "invoice_restructure_log", "invoice_reschedules", "invoice_adjustments", "invoice_emails", "invoice_collection_settings", "invoice_collection_logs", "invoice_trigger_debug_logs", "overdue_check_log", "period_guard_warnings"],
+  "revenue": ["revenue_schedule_monthly", "revenue_rules", "mrr_adjustments", "accounting_period_cutoff", "accounting_period_events"],
+  "legacy": ["invoices_legacy", "invoice_items_legacy", "invoice_items_legacy_match", "mrr_legacy"],
+  "conciliacion": ["bank_movements", "bank_upload_batches", "bank_column_mappings"],
+  "integraciones/salesforce": ["salesforce_connections", "salesforce_accounts_stg", "salesforce_opportunities_stg", "salesforce_line_items_stg", "salesforce_object_mappings", "salesforce_field_mappings", "salesforce_product_mappings", "salesforce_quote_type_mappings", "salesforce_sync_runs", "salesforce_sync_run_items", "salesforce_sync_logs", "salesforce_opportunities_cache"],
+  "integraciones/odoo": ["odoo_connections", "odoo_invoices_stg", "odoo_invoice_lines_stg", "odoo_partners_stg", "odoo_product_mappings", "odoo_object_mappings"],
+  "integraciones/stripe": ["stripe_connections", "stripe_customers_stg", "stripe_invoices_stg", "stripe_subscriptions_stg", "stripe_product_mappings", "stripe_sync_jobs", "stripe_customers_bigquery"],
+  "integraciones/otras": ["bigquery_connections", "field_mappings", "integration_logs", "integration_configs"],
+  "automatizaciones-ia": ["ai_agents", "ai_agent_configs", "client_agent_configs", "agents", "agent_logs", "ai_runs", "ai_messages", "rag_documents", "app_notifications", "app_notification_recipients", "notification_role_subscriptions", "email_sender_addresses", "holding_email_sender_settings"],
+  "suscripciones": ["subscriptions", "subscription_items"],
+  "sii": ["sii_configurations", "sii_certificates", "sii_cafs"]
+}

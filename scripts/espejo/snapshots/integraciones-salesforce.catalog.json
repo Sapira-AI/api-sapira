@@ -1,0 +1,1075 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "salesforce_connections": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_connections_auth_type_check",
+    "type": "c",
+    "expr": "auth_type = ANY (ARRAY['password'::text, 'client_credentials'::text])"
+   },
+   {
+    "name": "salesforce_connections_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_connections_user_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_connections_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_connections_holding_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_connections_auth_type",
+    "cols": [
+     "auth_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_connections_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_connections_is_active",
+    "cols": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_connections_user_id",
+    "cols": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_connections_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_connections_updated_at()"
+  ],
+  "policies": [
+   "Users can delete Salesforce connections from their holding (DELETE, public)",
+   "Users can insert Salesforce connections for their holding (INSERT, public)",
+   "Users can update Salesforce connections from their holding (UPDATE, public)",
+   "Users can view Salesforce connections from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete Salesforce connections from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert Salesforce connections for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update Salesforce connections from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view Salesforce connections from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_accounts_stg": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_accounts_stg_status_check",
+    "type": "c",
+    "expr": "(processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+   },
+   {
+    "name": "salesforce_accounts_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_accounts_stg_unique",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "salesforce_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_accounts_stg_holding_status",
+    "cols": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_accounts_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_staging_updated_at()"
+  ],
+  "policies": [
+   "Users can manage salesforce_accounts_stg in their holding (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage salesforce_accounts_stg in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   }
+  ]
+ },
+ "salesforce_opportunities_stg": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_opportunities_stg_status_check",
+    "type": "c",
+    "expr": "(processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+   },
+   {
+    "name": "salesforce_opportunities_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_opportunities_stg_unique",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "salesforce_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_opportunities_stg_account",
+    "cols": [
+     "holding_id",
+     "salesforce_account_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_opportunities_stg_holding_status",
+    "cols": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_opportunities_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_staging_updated_at()"
+  ],
+  "policies": [
+   "Users can manage salesforce_opportunities_stg in their holding (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage salesforce_opportunities_stg in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   }
+  ]
+ },
+ "salesforce_line_items_stg": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_line_items_stg_status_check",
+    "type": "c",
+    "expr": "(processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+   },
+   {
+    "name": "salesforce_line_items_stg_opportunity_staging_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (opportunity_staging_id) REFERENCES salesforce_opportunities_stg(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "salesforce_line_items_stg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_line_items_stg_unique",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "salesforce_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_line_items_stg_holding_status",
+    "cols": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_line_items_stg_opportunity",
+    "cols": [
+     "holding_id",
+     "salesforce_opportunity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_line_items_stg_product",
+    "cols": [
+     "holding_id",
+     "salesforce_product_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_line_items_stg_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_staging_updated_at()"
+  ],
+  "policies": [
+   "Users can manage salesforce_line_items_stg in their holding (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage salesforce_line_items_stg in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   }
+  ]
+ },
+ "salesforce_object_mappings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_object_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_object_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_salesforce_object_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "salesforce_object_type",
+     "salesforce_object_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_mappings_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_mappings_salesforce_lookup",
+    "cols": [
+     "holding_id",
+     "salesforce_object_type",
+     "salesforce_object_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_mappings_sapira_lookup",
+    "cols": [
+     "holding_id",
+     "sapira_table_name",
+     "sapira_record_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trigger_update_salesforce_mapping_timestamp · BEFORE UPDATE FOR EACH ROW → update_salesforce_mapping_updated_at()"
+  ],
+  "policies": [
+   "Users can delete mappings from their holding (DELETE, public)",
+   "Users can insert mappings for their holding (INSERT, public)",
+   "Users can update mappings from their holding (UPDATE, public)",
+   "Users can view mappings from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete mappings from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert mappings for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update mappings from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view mappings from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_field_mappings": {
+  "comment": "Configuración de mapeo de campos entre Salesforce y Sapira",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_field_mappings_object_type_check",
+    "type": "c",
+    "expr": "object_type = ANY (ARRAY['client'::text, 'client_entity'::text, 'opportunity'::text, 'line_item'::text, 'product'::text, 'contact'::text])"
+   },
+   {
+    "name": "salesforce_field_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_field_mappings_holding_id_object_type_sapira_fie_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "object_type",
+     "sapira_field"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_field_mappings_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_field_mappings_object_type",
+    "cols": [
+     "object_type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_field_mappings_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_field_mappings_updated_at()"
+  ],
+  "policies": [
+   "Users can manage field mappings in their holding (ALL, public)",
+   "Users can view field mappings in their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage field mappings in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   },
+   {
+    "name": "Users can view field mappings in their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_product_mappings": {
+  "comment": "Mapeo de productos Salesforce (Product2) a productos Sapira. Permite N:1 (varios productos SF → un producto Sapira)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_product_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_product_mappings_sapira_product_id_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (sapira_product_id) REFERENCES products(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "salesforce_product_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_sf_product_map_active",
+    "cols": [
+     "holding_id",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_sf_product_map_family",
+    "cols": [
+     "holding_id",
+     "salesforce_family"
+    ],
+    "unique": false,
+    "where": "salesforce_family IS NOT NULL"
+   },
+   {
+    "name": "idx_sf_product_map_sapira_product",
+    "cols": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_sf_product_map_unique",
+    "cols": [
+     "holding_id",
+     "salesforce_product_id"
+    ],
+    "unique": true,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can delete product mappings from their holding (DELETE, public)",
+   "Users can insert product mappings for their holding (INSERT, public)",
+   "Users can update product mappings from their holding (UPDATE, public)",
+   "Users can view product mappings from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete product mappings from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert product mappings for their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update product mappings from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view product mappings from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_quote_type_mappings": {
+  "comment": "Mapeo configurable de tipos de oportunidad Salesforce a quote_type de Sapira",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_quote_type_mappings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_quote_type_mappings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "unique_salesforce_type_per_holding",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "salesforce_type"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_sf_quote_type_mappings_active",
+    "cols": [
+     "holding_id",
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_sf_quote_type_mappings_holding",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "update_salesforce_quote_type_mappings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "Users can delete quote type mappings from their holding (DELETE, public)",
+   "Users can insert quote type mappings in their holding (INSERT, public)",
+   "Users can update quote type mappings from their holding (UPDATE, public)",
+   "Users can view quote type mappings from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can delete quote type mappings from their holding",
+    "cmd": "DELETE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "Users can insert quote type mappings in their holding",
+    "cmd": "INSERT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can update quote type mappings from their holding",
+    "cmd": "UPDATE",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "Users can view quote type mappings from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_sync_runs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_sync_runs_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['queued'::text, 'running'::text, 'cancellation_requested'::text, 'cancelled'::text, 'completed'::text, 'failed'::text])"
+   },
+   {
+    "name": "salesforce_sync_runs_type_check",
+    "type": "c",
+    "expr": "type = ANY (ARRAY['update_staging'::text, 'process_final'::text, 'retry_full'::text])"
+   },
+   {
+    "name": "salesforce_sync_runs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_sync_runs_holding_status",
+    "cols": [
+     "holding_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_sync_runs_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_staging_updated_at()"
+  ],
+  "policies": [
+   "Users can manage salesforce_sync_runs in their holding (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage salesforce_sync_runs in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
+   }
+  ]
+ },
+ "salesforce_sync_run_items": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_sync_run_items_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'error'::text, 'cancelled'::text])"
+   },
+   {
+    "name": "salesforce_sync_run_items_run_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (run_id) REFERENCES salesforce_sync_runs(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_sync_run_items_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_sync_run_items_run_opportunity_unique",
+    "type": "u",
+    "cols": [
+     "run_id",
+     "salesforce_opportunity_id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_sync_run_items_run_status",
+    "cols": [
+     "run_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_sync_run_items_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_staging_updated_at()"
+  ],
+  "policies": [
+   "Users can manage salesforce_sync_run_items in their holding (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can manage salesforce_sync_run_items in their holding",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(run_id IN ( SELECT salesforce_sync_runs.id\n   FROM salesforce_sync_runs\n  WHERE (salesforce_sync_runs.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = auth.uid())))))",
+    "with_check": "(run_id IN ( SELECT salesforce_sync_runs.id\n   FROM salesforce_sync_runs\n  WHERE (salesforce_sync_runs.holding_id IN ( SELECT user_holdings.holding_id\n           FROM user_holdings\n          WHERE (user_holdings.user_id = auth.uid())))))"
+   }
+  ]
+ },
+ "salesforce_sync_logs": {
+  "comment": "Registro de sincronizaciones automáticas de Salesforce",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "salesforce_sync_logs_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_sync_logs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_salesforce_sync_logs_created_at",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_salesforce_sync_logs_created_at ON public.salesforce_sync_logs USING btree (created_at DESC)"
+   },
+   {
+    "name": "idx_salesforce_sync_logs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_salesforce_sync_logs_sync_date",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_salesforce_sync_logs_sync_date ON public.salesforce_sync_logs USING btree (sync_date DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "Users can view sync logs from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Users can view sync logs from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "salesforce_opportunities_cache": {
+  "comment": "Cache de oportunidades sincronizadas automáticamente desde Salesforce. Los usuarios ven estos datos en el frontend sin necesidad de sincronizar manualmente.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "amount": {
+    "precision": 15,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "salesforce_opportunities_cache_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "salesforce_opportunities_cache_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_sf_opp_cache_close_date",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_sf_opp_cache_close_date ON public.salesforce_opportunities_cache USING btree (close_date DESC)"
+   },
+   {
+    "name": "idx_sf_opp_cache_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_sf_opp_cache_salesforce_id",
+    "cols": [
+     "salesforce_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_sf_opp_cache_sync_date",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_sf_opp_cache_sync_date ON public.salesforce_opportunities_cache USING btree (sync_date DESC)"
+   },
+   {
+    "name": "idx_sf_opp_cache_unique",
+    "cols": [
+     "holding_id",
+     "salesforce_id"
+    ],
+    "unique": true,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "set_salesforce_opportunities_cache_updated_at · BEFORE UPDATE FOR EACH ROW → update_salesforce_opportunities_cache_updated_at()"
+  ],
+  "policies": [
+   "Service role can manage all opportunities (ALL, public)",
+   "Users can view opportunities from their holding (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "Service role can manage all opportunities",
+    "cmd": "ALL",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "true",
+    "with_check": "true"
+   },
+   {
+    "name": "Users can view opportunities from their holding",
+    "cmd": "SELECT",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "using": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ }
+}
