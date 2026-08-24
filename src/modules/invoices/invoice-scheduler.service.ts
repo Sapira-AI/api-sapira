@@ -1951,6 +1951,24 @@ export class InvoiceSchedulerService {
 						$cond: [{ $and: ['$startedAt', '$completedAt'] }, { $subtract: ['$completedAt', '$startedAt'] }, null],
 					},
 					errors: errorProjection,
+					invoiceResults: {
+						$map: {
+							input: { $ifNull: ['$result.results', []] },
+							as: 'result',
+							in: {
+								invoiceId: '$$result.invoiceId',
+								holdingId: '$$result.holdingId',
+								invoiceNumber: '$$result.invoiceNumber',
+								clientName: '$$result.clientName',
+								companyName: '$$result.companyName',
+								issueDate: '$$result.issueDate',
+								status: '$$result.status',
+								odooInvoiceId: '$$result.odooInvoiceId',
+								error: '$$result.error',
+								details: '$$result.details',
+							},
+						},
+					},
 					errorInvoices: {
 						$map: {
 							input: {
@@ -2030,7 +2048,11 @@ export class InvoiceSchedulerService {
 		const holdingIds = [
 			...new Set(
 				items
-					.flatMap((item) => [item.holdingId, ...(item.errorInvoices || []).map((invoice) => invoice.holdingId)])
+					.flatMap((item) => [
+						item.holdingId,
+						...(item.invoiceResults || []).map((invoice) => invoice.holdingId),
+						...(item.errorInvoices || []).map((invoice) => invoice.holdingId),
+					])
 					.filter((holdingId): holdingId is string => Boolean(holdingId) && holdingId !== 'all')
 			),
 		];
@@ -2041,6 +2063,10 @@ export class InvoiceSchedulerService {
 		const itemsWithHoldingNames = items.map((item) => ({
 			...item,
 			holdingName: holdingNames.get(item.holdingId),
+			invoiceResults: (item.invoiceResults || []).map((invoice) => ({
+				...invoice,
+				holdingName: holdingNames.get(invoice.holdingId),
+			})),
 			errorInvoices: (item.errorInvoices || []).map((invoice) => ({
 				...invoice,
 				holdingName: holdingNames.get(invoice.holdingId),
