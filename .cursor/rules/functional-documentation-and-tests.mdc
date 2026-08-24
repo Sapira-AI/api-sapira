@@ -1,0 +1,12 @@
+---
+description: Requiere documentación y pruebas para todo cambio funcional del workspace
+alwaysApply: true
+---
+
+# Documentación y pruebas obligatorias
+
+- Toda funcionalidad nueva o modificada debe incluir, en la misma tarea, documentación funcional actualizada y pruebas automatizadas acordes al cambio.
+- Antes de cerrar una tarea, revisa la documentación existente del proyecto; actualízala si quedó desalineada. Si no existe y el cambio agrega una capacidad, módulo o flujo relevante, crea una fuente documental canónica en la ubicación establecida por ese proyecto.
+- Crea o actualiza pruebas que cubran el comportamiento observable, validaciones, errores, contratos y reglas de negocio afectados. Usa el framework de pruebas ya configurado en el proyecto.
+- No cierres una tarea funcional sin verificar explícitamente documentación y pruebas. Si una de ellas no aplica, deja la justificación en la entrega y solicita confirmación cuando corresponda.
+- No crees fuentes de documentación duplicadas ni inventes una ruta: respeta las convenciones y la documentación canónica de cada proyecto.

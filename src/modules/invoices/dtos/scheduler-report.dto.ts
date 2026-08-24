@@ -89,6 +89,11 @@ export class SchedulerErrorInvoiceDto {
 	details?: string;
 }
 
+export class SchedulerInvoiceResultDto extends SchedulerErrorInvoiceDto {
+	@ApiProperty({ enum: ['sent', 'error', 'skipped'] })
+	status: 'sent' | 'error' | 'skipped';
+}
+
 export class SchedulerReportItemDto {
 	@ApiProperty()
 	jobId: string;
@@ -128,6 +133,9 @@ export class SchedulerReportItemDto {
 
 	@ApiProperty({ type: [SchedulerErrorInvoiceDto] })
 	errorInvoices: SchedulerErrorInvoiceDto[];
+
+	@ApiProperty({ type: [SchedulerInvoiceResultDto] })
+	invoiceResults: SchedulerInvoiceResultDto[];
 
 	@ApiPropertyOptional()
 	error?: string;
