@@ -18,10 +18,6 @@ import { Product } from '@/modules/odoo/entities/products.entity';
 import { User } from '@/modules/users/entities/user.entity';
 
 import { ClientContact } from './entities/client-contact.entity';
-import { IntegrationSalesforceConnection } from './entities/integration-salesforce-connection.entity';
-import { IntegrationSalesforceFieldMapping } from './entities/integration-salesforce-field-mapping.entity';
-import { IntegrationSalesforceMappingDetail } from './entities/integration-salesforce-mapping-detail.entity';
-import { IntegrationSalesforceSyncRun } from './entities/integration-salesforce-sync-run.entity';
 import { MasterData } from './entities/master-data.entity';
 import { QuoteItem } from './entities/quote-item.entity';
 import { QuoteStage } from './entities/quote-stage.entity';
@@ -77,10 +73,6 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 			SalesforceSyncRun,
 			SalesforceSyncRunItem,
 			SalesforceObjectMapping,
-			IntegrationSalesforceConnection,
-			IntegrationSalesforceFieldMapping,
-			IntegrationSalesforceMappingDetail,
-			IntegrationSalesforceSyncRun,
 			Client,
 			ClientEntity,
 			ClientEntityClient,
