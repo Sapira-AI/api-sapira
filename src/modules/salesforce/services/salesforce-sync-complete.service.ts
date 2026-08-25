@@ -46,6 +46,11 @@ interface AccountProcessingOptions {
 interface OpportunityProcessingOptions {
 	salesforceIds?: string[];
 	processingStatuses?: string[];
+	insertOnly?: boolean;
+}
+
+interface OpportunityClassificationOptions {
+	insertOnly?: boolean;
 }
 
 export interface ResolvedSalesforceLineItemPreview {
@@ -122,7 +127,8 @@ export class SalesforceSyncCompleteService {
 		holdingId: string,
 		dateFrom?: string,
 		dateTo?: string,
-		opportunityIds?: string[]
+		opportunityIds?: string[],
+		options: OpportunityClassificationOptions = {}
 	): Promise<SyncCompleteResponseDto> {
 		const startTime = new Date();
 		const stats: SyncCompleteStats = {
@@ -172,7 +178,7 @@ export class SalesforceSyncCompleteService {
 
 			await this.classifyAccountStaging(holdingId, batchId);
 			await this.processAccountStaging(holdingId, batchId, stats);
-			await this.classifyOpportunityStaging(holdingId, batchId);
+		await this.classifyOpportunityStaging(holdingId, batchId, options);
 			await this.processOpportunityStaging(holdingId, batchId, stats);
 
 			await this.connectionRepository.update({ holding_id: holdingId }, { last_sync_at: new Date() });
@@ -228,7 +234,8 @@ export class SalesforceSyncCompleteService {
 		holdingId: string,
 		dateFrom?: string,
 		dateTo?: string,
-		opportunityIds?: string[]
+		opportunityIds?: string[],
+		options: OpportunityClassificationOptions = {}
 	): Promise<{
 		success: boolean;
 		importedAccounts: number;
@@ -269,7 +276,7 @@ export class SalesforceSyncCompleteService {
 		await this.stagingService.upsertLineItems(holdingId, opportunityStagingIds, stagedLineItems, batchId, syncSessionId);
 
 		await this.classifyAccountStaging(holdingId, batchId);
-		await this.classifyOpportunityStaging(holdingId, batchId);
+		await this.classifyOpportunityStaging(holdingId, batchId, options);
 		const unmappedProducts = (
 			await Promise.all(
 				opportunities.map(async (opportunity) =>
@@ -448,13 +455,13 @@ export class SalesforceSyncCompleteService {
 
 		return Object.entries(salesforceData)
 			.filter(([field, value]) => field !== 'attributes' && !excludedFields.includes(field) && typeof value !== 'object')
-			.filter(([field, value]) => JSON.stringify(value ?? null) !== JSON.stringify(stagingData[field] ?? null))
+			.filter(([field, value]) => JSON.stringify(value ?? null) !== JSON.stringify(stagingData?.[field] ?? null))
 			.map(([field, value]) => ({
 				scope: 'quote' as const,
 				targetField: `${scope}.${field}`,
 				label: `${scope}: ${labels[field] || field}`,
 				salesforceValue: value,
-				sapiraValue: stagingData[field] ?? null,
+				sapiraValue: stagingData?.[field] ?? null,
 			}));
 	}
 
@@ -489,7 +496,7 @@ export class SalesforceSyncCompleteService {
 		const stats = this.createEmptyStats();
 
 		try {
-			const { start, end } = this.getPreviousSantiagoDayRange();
+			const { start, end } = this.getSantiagoCalendarDayRange(7);
 			const opportunityIds = await this.fetchDailyChangedOpportunityIds(holdingId, start, end);
 			if (!opportunityIds.length) {
 				return {
@@ -503,15 +510,18 @@ export class SalesforceSyncCompleteService {
 			}
 
 			for (const opportunityIdsChunk of this.chunk(opportunityIds, 500)) {
-				const staging = await this.syncOpportunitiesToStaging(holdingId, undefined, undefined, opportunityIdsChunk);
+				const staging = await this.syncOpportunitiesToStaging(holdingId, undefined, undefined, opportunityIdsChunk, {
+					insertOnly: true,
+				});
 				stats.opportunities += staging.importedOpportunities;
 
 				await this.processAccountStaging(holdingId, staging.batchId, stats, {
-					processingStatuses: ['create', 'update'],
+					processingStatuses: ['create'],
 				});
-				await this.classifyOpportunityStaging(holdingId, staging.batchId);
+				await this.classifyOpportunityStaging(holdingId, staging.batchId, { insertOnly: true });
 				await this.processOpportunityStaging(holdingId, staging.batchId, stats, {
-					processingStatuses: ['create', 'update'],
+					processingStatuses: ['create'],
+					insertOnly: true,
 				});
 			}
 
@@ -966,7 +976,11 @@ export class SalesforceSyncCompleteService {
 		await this.notificationsService.resolveByDeduplicationKey(holdingId, `salesforce:${opportunityId}:${reason}`);
 	}
 
-	private async classifyOpportunityStaging(holdingId: string, batchId?: string): Promise<void> {
+	private async classifyOpportunityStaging(
+		holdingId: string,
+		batchId?: string,
+		options: OpportunityClassificationOptions = {}
+	): Promise<void> {
 		const records = await this.opportunitiesStgRepository.find({
 			where: batchId ? { holding_id: holdingId, batch_id: batchId } : { holding_id: holdingId },
 			order: { updated_at: 'ASC' },
@@ -974,6 +988,22 @@ export class SalesforceSyncCompleteService {
 
 		for (const record of records) {
 			const opportunity = record.raw_data as SalesforceOpportunityWithLineItems;
+			if (options.insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
+				await this.opportunitiesStgRepository.update(record.id, {
+					processing_status: 'processed',
+					integration_notes: 'Cotización existente: omitida por la sincronización automática de solo inserción',
+					error_message: null,
+				});
+				await this.updateLineItemsStagingStatus(
+					holdingId,
+					batchId,
+					opportunity.Id,
+					'processed',
+					'Ítem omitido: la cotización ya existe en Sapira'
+				);
+				continue;
+			}
+
 			if (!opportunity.AccountId) {
 				const errorMessage = 'La oportunidad no tiene un Account asociado en Salesforce';
 				await this.opportunitiesStgRepository.update(record.id, {
@@ -1111,7 +1141,7 @@ export class SalesforceSyncCompleteService {
 			}
 
 			try {
-				await this.processOpportunity(record, holdingId, stats);
+				await this.processOpportunity(record, holdingId, stats, options);
 				await this.opportunitiesStgRepository.update(record.id, {
 					processing_status: 'processed',
 					error_message: null,
@@ -1148,8 +1178,17 @@ export class SalesforceSyncCompleteService {
 		}
 	}
 
-	private async processOpportunity(record: SalesforceOpportunitiesStg, holdingId: string, stats: SyncCompleteStats): Promise<void> {
+	private async processOpportunity(
+		record: SalesforceOpportunitiesStg,
+		holdingId: string,
+		stats: SyncCompleteStats,
+		options: OpportunityProcessingOptions = {}
+	): Promise<void> {
 		const opportunity = record.raw_data as SalesforceOpportunityWithLineItems;
+		if (options.insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
+			return;
+		}
+
 		const clientId = await this.ensureOpportunityClientReady(record, opportunity, holdingId, stats);
 		const unmappedProducts = await this.getUnmappedSalesforceProducts(holdingId, opportunity);
 		if (unmappedProducts.length > 0) {
@@ -1157,7 +1196,7 @@ export class SalesforceSyncCompleteService {
 			throw new Error(this.getUnmappedProductsMessage(unmappedProducts));
 		}
 
-		await this.syncQuote(opportunity, clientId, holdingId, stats);
+		await this.syncQuote(opportunity, clientId, holdingId, stats, options.insertOnly);
 	}
 
 	private async markUnmappedLineItemsAsError(
@@ -1594,8 +1633,13 @@ export class SalesforceSyncCompleteService {
 		opportunity: SalesforceOpportunityWithLineItems,
 		clientId: string,
 		holdingId: string,
-		stats: SyncCompleteStats
+		stats: SyncCompleteStats,
+		insertOnly = false
 	): Promise<void> {
+		if (insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
+			return;
+		}
+
 		let stageId = await this.typeormService.getQuoteStageByName(holdingId, 'enviada');
 		if (!stageId) {
 			stageId = await this.typeormService.getFirstQuoteStage(holdingId);
@@ -1657,10 +1701,19 @@ export class SalesforceSyncCompleteService {
 
 		let quoteId: string;
 		if (existingQuoteId) {
+			if (insertOnly) {
+				return;
+			}
 			quoteId = await this.typeormService.upsertQuote({ ...quoteData, id: existingQuoteId });
 			stats.quotesUpdated++;
 		} else {
-			quoteId = await this.typeormService.upsertQuote(quoteData);
+			const createdQuoteId = insertOnly
+				? await this.typeormService.createQuoteIfAbsent(quoteData)
+				: await this.typeormService.upsertQuote(quoteData);
+			if (!createdQuoteId) {
+				return;
+			}
+			quoteId = createdQuoteId;
 			await this.typeormService.createObjectMapping(holdingId, 'Opportunity', opportunity.Id, 'quotes', quoteId);
 			stats.quotesCreated++;
 		}
@@ -1791,6 +1844,18 @@ export class SalesforceSyncCompleteService {
 		};
 	}
 
+	private async isOpportunityAlreadyIntegrated(holdingId: string, opportunityId: string): Promise<boolean> {
+		const [mappedQuoteId, quote] = await Promise.all([
+			this.typeormService.getObjectMapping(holdingId, 'Opportunity', opportunityId),
+			this.quoteRepository.findOne({
+				where: { holding_id: holdingId, salesforce_opportunity_id: opportunityId },
+				select: ['id'],
+			}),
+		]);
+
+		return Boolean(mappedQuoteId || quote);
+	}
+
 	private async hasOpportunityChanges(holdingId: string, opportunity: SalesforceOpportunityWithLineItems, existingQuote: Quote): Promise<boolean> {
 		const mappedQuote = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'opportunity', opportunity, { opportunity });
 		if (this.hasRecordChanges(mappedQuote, existingQuote, ['notes'])) {
@@ -1871,7 +1936,11 @@ export class SalesforceSyncCompleteService {
 		return yesterday.toISOString().split('T')[0];
 	}
 
-	private getPreviousSantiagoDayRange(reference = new Date()): { start: string; end: string } {
+	private getSantiagoCalendarDayRange(days: number, reference = new Date()): { start: string; end: string } {
+		if (!Number.isInteger(days) || days < 1) {
+			throw new Error('El rango de sincronización debe contener al menos un día calendario.');
+		}
+
 		const formatter = new Intl.DateTimeFormat('en-CA', {
 			timeZone: 'America/Santiago',
 			year: 'numeric',
@@ -1881,7 +1950,8 @@ export class SalesforceSyncCompleteService {
 		const parts = Object.fromEntries(formatter.formatToParts(reference).map((part) => [part.type, part.value]));
 		const endDate = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
 		const startDate = new Date(endDate);
-		startDate.setUTCDate(startDate.getUTCDate() - 1);
+		startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
+		endDate.setUTCDate(endDate.getUTCDate() + 1);
 		const toSantiagoMidnightUtc = (date: Date) => {
 			const offsetFormatter = new Intl.DateTimeFormat('en-US', {
 				timeZone: 'America/Santiago',

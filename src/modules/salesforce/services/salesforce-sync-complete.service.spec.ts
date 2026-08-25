@@ -48,6 +48,8 @@ describe('SalesforceSyncCompleteService', () => {
 			getClientByNumber: jest.fn(),
 			ensureMasterDataValue: jest.fn(),
 			createObjectMapping: jest.fn(),
+			createQuoteIfAbsent: jest.fn(),
+			createQuoteItems: jest.fn(),
 			hasClientContact: jest.fn(),
 			getClientContact: jest.fn(),
 			updateClientContact: jest.fn(),
@@ -119,8 +121,12 @@ describe('SalesforceSyncCompleteService', () => {
 		};
 	};
 
-	it('en la sincronización diaria procesa a finales solo staging create y update', async () => {
+	it('en la sincronización diaria consulta siete días y procesa solo staging create', async () => {
 		const { service } = buildService();
+		jest.spyOn(service as any, 'getSantiagoCalendarDayRange').mockReturnValue({
+			start: '2026-01-19T03:00:00.000Z',
+			end: '2026-01-26T03:00:00.000Z',
+		});
 		jest.spyOn(service as any, 'fetchDailyChangedOpportunityIds').mockResolvedValue(['opp-1']);
 		jest.spyOn(service, 'syncOpportunitiesToStaging').mockResolvedValue({
 			success: true,
@@ -139,19 +145,62 @@ describe('SalesforceSyncCompleteService', () => {
 		const result = await service.syncDailyModifiedOpportunities('holding-1');
 
 		expect(result).toMatchObject({ success: true, stats: { opportunities: 1 } });
+		expect((service as any).fetchDailyChangedOpportunityIds).toHaveBeenCalledWith(
+			'holding-1',
+			'2026-01-19T03:00:00.000Z',
+			'2026-01-26T03:00:00.000Z'
+		);
 		expect(processAccounts).toHaveBeenCalledWith(
 			'holding-1',
 			'batch-1',
 			expect.any(Object),
-			{ processingStatuses: ['create', 'update'] }
+			{ processingStatuses: ['create'] }
 		);
-		expect(classifyOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1');
+		expect(classifyOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1', { insertOnly: true });
 		expect(processOpportunities).toHaveBeenCalledWith(
 			'holding-1',
 			'batch-1',
 			expect.any(Object),
-			{ processingStatuses: ['create', 'update'] }
+			{ processingStatuses: ['create'], insertOnly: true }
 		);
+	});
+
+	it('calcula un rango de siete días de Santiago que incluye el día actual', () => {
+		const { service } = buildService();
+
+		const range = (service as any).getSantiagoCalendarDayRange(7, new Date('2026-01-25T15:00:00.000Z'));
+
+		expect(range).toEqual({
+			start: '2026-01-19T03:00:00.000Z',
+			end: '2026-01-26T03:00:00.000Z',
+		});
+	});
+
+	it('omite una cotización existente antes de procesar cliente o ítems', async () => {
+		const { service, opportunitiesStgRepository, lineItemsStgRepository, quoteRepository, typeormService, clientRepository } = buildService();
+		opportunitiesStgRepository.find.mockResolvedValue([
+			{
+				id: 'opp-stg-1',
+				salesforce_id: 'opp-1',
+				raw_data: { Id: 'opp-1', AccountId: 'account-1' },
+			},
+		]);
+		typeormService.getObjectMapping.mockResolvedValue('quote-1');
+		quoteRepository.findOne.mockResolvedValue({ id: 'quote-1' });
+
+		await (service as any).classifyOpportunityStaging('holding-1', 'batch-1', { insertOnly: true });
+
+		expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
+			'opp-stg-1',
+			expect.objectContaining({ processing_status: 'processed', integration_notes: expect.stringContaining('omitida') })
+		);
+		expect(lineItemsStgRepository.update).toHaveBeenCalledWith(
+			expect.objectContaining({ holding_id: 'holding-1', salesforce_opportunity_id: 'opp-1' }),
+			expect.objectContaining({ processing_status: 'processed' })
+		);
+		expect(clientRepository.update).not.toHaveBeenCalled();
+		expect(typeormService.createQuoteIfAbsent).not.toHaveBeenCalled();
+		expect(typeormService.createQuoteItems).not.toHaveBeenCalled();
 	});
 
 	it('importa accounts a staging usando el filtro por fechas y clasifica el batch', async () => {
@@ -390,11 +439,14 @@ describe('SalesforceSyncCompleteService', () => {
 		jest.spyOn(service as any, 'fetchQuoteLineItems').mockResolvedValue(new Map());
 		jest.spyOn(service as any, 'mergeLineItems').mockImplementation(() => undefined);
 		jest.spyOn(service as any, 'hydrateAccounts').mockResolvedValue(undefined);
-		opportunitiesStgRepository.find.mockResolvedValue([{ salesforce_id: 'opp-1', source_hash: JSON.stringify(opportunity) }]);
-		accountsStgRepository.find.mockResolvedValue([{ salesforce_id: 'acc-1', source_hash: JSON.stringify({ Id: 'acc-1', Name: 'ACME' }) }]);
+		opportunitiesStgRepository.find.mockResolvedValue([{ salesforce_id: 'opp-1', raw_data: opportunity, source_hash: JSON.stringify(opportunity) }]);
+		accountsStgRepository.find.mockResolvedValue([
+			{ salesforce_id: 'acc-1', raw_data: { Id: 'acc-1', Name: 'ACME' }, source_hash: JSON.stringify({ Id: 'acc-1', Name: 'ACME' }) },
+		]);
 		lineItemsStgRepository.find.mockResolvedValue([
 			{
 				salesforce_id: 'oli-1',
+				raw_data: { Id: 'oli-1', Product2Id: 'prod-1', Product2: { Name: 'Licencia' }, OpportunityId: 'opp-1' },
 				source_hash: JSON.stringify({ Id: 'oli-1', Product2Id: 'prod-1', Product2: { Name: 'Licencia' }, OpportunityId: 'opp-1' }),
 			},
 		]);
