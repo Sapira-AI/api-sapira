@@ -1,0 +1,5 @@
+{
+	"version": 1,
+	"directories": ["functions", "special-index", "triggers", "rls", "seed"],
+	"order": []
+}

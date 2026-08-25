@@ -156,6 +156,25 @@ export class SalesforceTypeOrmService {
 		}
 	}
 
+	/**
+	 * Inserta una cotización sin modificar una existente. El índice único de la
+	 * base protege corridas concurrentes; un conflicto se interpreta como que
+	 * otro proceso ya la integró.
+	 */
+	async createQuoteIfAbsent(quoteData: any): Promise<string | null> {
+		try {
+			const quote = await this.quoteRepository.save(quoteData);
+			return quote.id;
+		} catch (error: any) {
+			if (error?.code === '23505') {
+				return null;
+			}
+
+			this.logger.error(`Error creating quote: ${error.message}`);
+			throw error;
+		}
+	}
+
 	async deleteQuoteItems(quoteId: string): Promise<void> {
 		try {
 			await this.quoteItemRepository.delete({ quote_id: quoteId });

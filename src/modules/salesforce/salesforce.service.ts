@@ -9,10 +9,6 @@ import {
 	SalesforceDuplicateClientEntitiesResponseDto,
 } from './dtos/salesforce-duplicate-client-entities.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
-import { IntegrationSalesforceConnection } from './entities/integration-salesforce-connection.entity';
-import { IntegrationSalesforceFieldMapping } from './entities/integration-salesforce-field-mapping.entity';
-import { IntegrationSalesforceMappingDetail } from './entities/integration-salesforce-mapping-detail.entity';
-import { IntegrationSalesforceSyncRun } from './entities/integration-salesforce-sync-run.entity';
 import { SalesforceAuthType, SalesforceConnection } from './entities/salesforce-connection.entity';
 import { SalesforceAccount, SalesforceCredentials, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
 import { SalesforceAuthService } from './services/salesforce-auth.service';
@@ -30,14 +26,6 @@ export class SalesforceService {
 	constructor(
 		@InjectRepository(SalesforceConnection)
 		private readonly connectionRepository: Repository<SalesforceConnection>,
-		@InjectRepository(IntegrationSalesforceConnection)
-		private readonly integrationConnectionRepository: Repository<IntegrationSalesforceConnection>,
-		@InjectRepository(IntegrationSalesforceFieldMapping)
-		private readonly fieldMappingRepository: Repository<IntegrationSalesforceFieldMapping>,
-		@InjectRepository(IntegrationSalesforceMappingDetail)
-		private readonly mappingDetailRepository: Repository<IntegrationSalesforceMappingDetail>,
-		@InjectRepository(IntegrationSalesforceSyncRun)
-		private readonly syncRunRepository: Repository<IntegrationSalesforceSyncRun>,
 		private readonly authService: SalesforceAuthService,
 		private readonly queryService: SalesforceQueryService,
 		private readonly syncService: SalesforceSyncService,

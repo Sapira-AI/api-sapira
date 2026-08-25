@@ -31,10 +31,6 @@ export { OdooPartnersStg } from '@/modules/odoo/entities/odoo-partners-stg.entit
 export { OdooProductMapping } from '@/modules/odoo/entities/odoo-product-mapping.entity';
 export { Product } from '@/modules/odoo/entities/products.entity';
 export { ClientContact } from '@/modules/salesforce/entities/client-contact.entity';
-export { IntegrationSalesforceConnection } from '@/modules/salesforce/entities/integration-salesforce-connection.entity';
-export { IntegrationSalesforceFieldMapping } from '@/modules/salesforce/entities/integration-salesforce-field-mapping.entity';
-export { IntegrationSalesforceMappingDetail } from '@/modules/salesforce/entities/integration-salesforce-mapping-detail.entity';
-export { IntegrationSalesforceSyncRun } from '@/modules/salesforce/entities/integration-salesforce-sync-run.entity';
 export { MasterData } from '@/modules/salesforce/entities/master-data.entity';
 export { QuoteItem } from '@/modules/salesforce/entities/quote-item.entity';
 export { QuoteStage } from '@/modules/salesforce/entities/quote-stage.entity';

@@ -2,6 +2,9 @@ import { SalesforceTypeOrmService } from './salesforce-typeorm.service';
 
 describe('SalesforceTypeOrmService', () => {
 	const buildService = () => {
+		const quoteRepository = {
+			save: jest.fn(),
+		};
 		const quoteItemRepository = {
 			find: jest.fn(),
 			save: jest.fn(),
@@ -20,7 +23,7 @@ describe('SalesforceTypeOrmService', () => {
 			{} as any,
 			{} as any,
 			{} as any,
-			{} as any,
+			quoteRepository as any,
 			quoteItemRepository as any,
 			{} as any,
 			{} as any,
@@ -33,11 +36,19 @@ describe('SalesforceTypeOrmService', () => {
 
 		return {
 			service,
+			quoteRepository,
 			quoteItemRepository,
 			clientEntityRepository,
 			clientEntityClientRepository,
 		};
 	};
+
+	it('omite un conflicto único al crear una cotización insert-only', async () => {
+		const { service, quoteRepository } = buildService();
+		quoteRepository.save.mockRejectedValue({ code: '23505', message: 'duplicate key' });
+
+		await expect(service.createQuoteIfAbsent({ holding_id: 'holding-1', salesforce_opportunity_id: 'opp-1' })).resolves.toBeNull();
+	});
 
 	it('actualiza items existentes, crea nuevos y elimina sobrantes no vinculados', async () => {
 		const { service, quoteItemRepository } = buildService();

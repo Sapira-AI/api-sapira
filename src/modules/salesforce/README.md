@@ -451,6 +451,12 @@ Ahora también expone el flujo explícito de clientes:
 -   clasificar registros `create/update/processed/error`
 -   procesar selección completa o parcial hacia `clients`, `client_entities`, `client_contacts` y `salesforce_object_mappings`
 
+#### Contrato de sincronización automática
+
+El scheduler diario consulta las oportunidades modificadas durante los últimos siete días calendario, incluido el día actual, usando la zona horaria `America/Santiago`.
+
+La corrida automática es exclusivamente de inserción: si ya existe una cotización Sapira para una oportunidad de Salesforce —por `quotes.salesforce_opportunity_id` o por su `SalesforceObjectMapping`— la oportunidad y sus ítems se registran como omitidos. No se actualizan la cotización, ítems, cliente, entidad legal ni contactos asociados. Los flujos manuales de actualización y reintento mantienen su comportamiento administrativo y pueden clasificar o procesar actualizaciones de forma explícita.
+
 ## Uso desde Frontend
 
 El frontend debe enviar el header `X-Holding-Id` automáticamente (ya implementado en `NestJSApiClient`).
