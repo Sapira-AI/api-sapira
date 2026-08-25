@@ -1,6 +1,6 @@
 {
 	"name": "api-sapira",
-	"version": "0.0.6",
+	"version": "0.0.8",
 	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,
@@ -18,7 +18,11 @@
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
 		"test:e2e": "jest --config ./test/jest-e2e.json",
+		"postgres:assets": "ts-node -r tsconfig-paths/register scripts/apply-postgresql-assets.ts",
 		"audit": "yarn audit --level moderate",
+		"schema:log": "ts-node -r tsconfig-paths/register scripts/schema-log.ts",
+		"schema:sync": "ts-node -r tsconfig-paths/register scripts/sync-entities.ts",
+		"schema:sync:prod": "NODE_ENV=production yarn schema:sync",
 		"version:commit": "bash ../version-commit.sh",
 		"vcp": "yarn version:commit patch"
 	},

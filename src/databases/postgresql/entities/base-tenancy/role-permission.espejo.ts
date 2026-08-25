@@ -2,7 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typ
 
 import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
 
-import { Permission } from './permission.espejo';
+import { Permission } from './permission.entity';
 import { Role } from './role.espejo';
 
 /**

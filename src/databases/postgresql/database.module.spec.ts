@@ -2,12 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Guard rojo del carril B (rediseño v2): ninguna configuración de TypeORM del repo puede alterar la base de datos,
- * y el espejo de entities (`entities/<modulo>/`) no se carga en runtime hasta el paso 3 (validado con Leon).
+ * Guard del carril B: los espejos permanecen inertes hasta su promoción y
+ * synchronize solo se permite mediante la configuración explícita centralizada.
  */
-describe('Guard: TypeORM nunca sincroniza esquema y el espejo es inerte', () => {
+describe('Guard: entidades espejo y configuración TypeORM', () => {
 	const srcDir = path.join(__dirname, '..', '..');
 	const entitiesDir = path.join(__dirname, 'entities');
+	const promotedMirrorEntities = new Set([path.join(entitiesDir, 'base-tenancy', 'permission.entity.ts')]);
 
 	const listTypeScriptFiles = (dir: string): string[] =>
 		fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -16,25 +17,24 @@ describe('Guard: TypeORM nunca sincroniza esquema y el espejo es inerte', () => 
 			return entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts') ? [fullPath] : [];
 		});
 
-	it('database.module.ts mantiene synchronize: false', () => {
+	it('database.module.ts delega la sincronización a la configuración protegida', () => {
 		const source = fs.readFileSync(path.join(__dirname, 'database.module.ts'), 'utf8');
-		expect(source).toMatch(/synchronize:\s*false/);
-		expect(source).not.toMatch(/synchronize:\s*true/);
+		expect(source).toContain('createPostgreSqlOptions');
 	});
 
-	it('ningún archivo de src habilita synchronize, dropSchema ni migrationsRun', () => {
+	it('ningún archivo de src habilita synchronize, dropSchema ni migrationsRun de forma literal', () => {
 		const offenders = listTypeScriptFiles(srcDir).filter((file) =>
 			/\b(synchronize|dropSchema|migrationsRun)\s*:\s*true\b/.test(fs.readFileSync(file, 'utf8'))
 		);
 		expect(offenders).toEqual([]);
 	});
 
-	it('el espejo es inerte: ningún archivo dentro de entities/<modulo>/ termina en .entity.ts (glob de database.module.ts)', () => {
+	it('solo carga en runtime los espejos promovidos explícitamente', () => {
 		const offenders = fs
 			.readdirSync(entitiesDir, { withFileTypes: true })
 			.filter((entry) => entry.isDirectory())
 			.flatMap((dir) => listTypeScriptFiles(path.join(entitiesDir, dir.name)))
-			.filter((file) => file.endsWith('.entity.ts'));
+			.filter((file) => file.endsWith('.entity.ts') && !promotedMirrorEntities.has(file));
 		expect(offenders).toEqual([]);
 	});
 });

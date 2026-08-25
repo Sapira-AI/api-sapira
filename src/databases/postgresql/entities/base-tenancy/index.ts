@@ -6,7 +6,7 @@ export { ClaudeSkill } from './claude-skill.espejo';
 export { CustomFieldDefinition } from './custom-field-definition.espejo';
 export { FinancialSettings } from './financial-settings.espejo';
 export { HoldingSettings } from './holding-settings.espejo';
-export { Permission } from './permission.espejo';
+export { Permission } from './permission.entity';
 export { Role } from './role.espejo';
 export { RolePermission } from './role-permission.espejo';
 export { UserViewPreference } from './user-view-preference.espejo';

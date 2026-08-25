@@ -47,14 +47,43 @@ src/databases/postgresql/
 │   ├── <modulo>/               # 16 carpetas (base-tenancy, fx, clientes, …, integraciones/*, sii): `*.espejo.ts` apagados
 │   │                           # generados desde prod en vivo + README (diff de entities existentes) + snapshot + spec
 │   ├── espejo.index.ts         # Barrel de todos los espejos (solo para los specs)
-│   ├── espejo.existing.ts      # Reexport de las 59 entities existentes (solo para los specs)
+│   ├── espejo.existing.ts      # Reexport de las entities activas (solo para los specs)
 │   ├── *.entity.ts             # Entities existentes (producción) — NO se modifican
 │   └── base.entity.ts          # Entidad base con campos comunes (helper de módulos existentes)
-├── database.module.spec.ts     # Guard: synchronize:false, nadie habilita sincronización, el espejo (*.espejo.ts) no entra al glob de runtime
+├── database.module.spec.ts     # Guard: sync protegido y el espejo (*.espejo.ts) no entra al glob de runtime
+├── assets-runner.ts             # Runner de SQL no gestionado por TypeORM
+├── assets.manifest.json         # Orden de directorios y overrides explícitos de assets
+├── functions/                   # Funciones PostgreSQL
+├── special-index/               # Índices especiales (directorio opcional, preparado para futuro uso)
+├── triggers/                    # Triggers PostgreSQL
+├── rls/                         # Políticas Row Level Security
+├── seed/                        # Datos idempotentes posteriores a schema sync
 └── README.md                   # Esta documentación
 ```
 
 > 🔴 Rediseño v2 (carril B): el espejo `entities/<modulo>/*.espejo.ts` se genera SOLO desde prod en vivo (MCP Supabase), es inerte en runtime y no toca las entities existentes. Ver `entities/README.md`.
+
+## 🧱 Assets SQL no-TypeORM
+
+El runner `postgres:assets` aplica los `.sql` de `functions`, `special-index` (si existe), `triggers`, `rls` y `seed`, sin modificar ni depender de la configuración TypeORM. Por defecto los directorios se ejecutan en ese orden y los archivos se ordenan alfabéticamente. `assets.manifest.json` permite cambiar la prioridad: las rutas incluidas en `order` se ejecutan primero, en el orden declarado.
+
+Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su SHA-256. Un asset con el mismo checksum se omite en ejecuciones posteriores; si cambia, el runner falla para evitar reaplicar SQL mutable. Crea un archivo nuevo para cambios posteriores.
+
+```bash
+# Solo descubre y muestra el orden; no requiere conexión.
+yarn postgres:assets --plan
+
+# Consulta el historial y muestra pendientes; no ejecuta DDL/DML.
+SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --dry-run --target qa
+
+# Crea el historial y ejecuta los assets pendientes.
+SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --target qa
+
+# Producción requiere ambas confirmaciones explícitas.
+SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --target production --allow-production --confirm-target production
+```
+
+`SUPABASE_DATABASE_URL` es la variable preferida; `DATABASE_URL` se acepta como alternativa. No ejecutes `apply` en producción sin verificar el plan y el respaldo de la base.
 
 ## 🚀 Uso en Módulos
 
@@ -170,7 +199,9 @@ try {
 ## ⚠️ Consideraciones Importantes
 
 ### Seguridad
-- **NUNCA** pongas `SUPABASE_SYNCHRONIZE=true` en producción
+- `TYPEORM_SCHEMA_SYNC` está desactivado por defecto en todos los entornos.
+- En local y QA, usa `TYPEORM_SCHEMA_SYNC=true` solo después de revisar `yarn schema:log`.
+- En producción, la sincronización requiere además `TYPEORM_ALLOW_PROD_SYNC=true`, `TYPEORM_SCHEMA_BACKUP_CONFIRMED=true` y `SCHEMA_SYNC_CONFIRMATION=production`. Las tres variables deben inyectarse solo en el despliegue aprobado posterior a QA.
 - Usa variables de entorno para las credenciales
 - Supabase requiere SSL (ya configurado)
 
@@ -180,15 +211,27 @@ try {
 - Timeout de idle: 30 segundos
 
 ### Migraciones
-Para producción, usa migraciones en lugar de `synchronize`:
+El CLI comparte la misma configuración que Nest y permite inspeccionar el SQL
+sin escribir cambios:
 
 ```bash
-# Generar migración
-npx typeorm migration:generate -d src/databases/postgresql/data-source.ts MiMigracion
+# Mostrar el SQL de TypeORM sin aplicarlo
+yarn schema:log
 
-# Ejecutar migraciones
-npx typeorm migration:run -d src/databases/postgresql/data-source.ts
+# Sincronizar local/QA tras revisar el log
+TYPEORM_SCHEMA_SYNC=true yarn schema:sync
+
+# Producción: solo desde el despliegue aprobado, con respaldo confirmado
+TYPEORM_SCHEMA_SYNC=true \
+TYPEORM_ALLOW_PROD_SYNC=true \
+TYPEORM_SCHEMA_BACKUP_CONFIRMED=true \
+SCHEMA_SYNC_CONFIRMATION=production \
+yarn schema:sync:prod
 ```
+
+`synchronize` no gestiona triggers, funciones, RLS/policies, vistas ni índices
+GIN/IVFFLAT o con expresiones. Estos objetos se aplican mediante `postgres:assets`
+y deben revisarse junto con el cambio de entidades.
 
 ## 🔗 Enlaces Útiles
 
