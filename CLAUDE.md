@@ -1,7 +1,8 @@
 # api-sapira — Reglas obligatorias
 
 Convenciones de stack, estructura de módulo y estilo: `AGENTS.md`.
-Referencia completa del esquema: `src/databases/postgresql/README.md`.
+**Procedimiento para cambiar el esquema: `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`.**
+Referencia del corpus y su estado: `src/databases/postgresql/README.md`.
 
 ## Esquema de base de datos
 

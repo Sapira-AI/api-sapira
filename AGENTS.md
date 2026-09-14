@@ -26,6 +26,8 @@
 
 ## Base de datos y esquema
 
+- **Procedimiento completo: `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`** — dónde va cada
+  cambio, las recetas y cómo se revisa una migración generada.
 - `api-sapira` es el schema-as-code de todo el esquema `public`. El DDL no va en
   `front-sapira-vite/supabase/migrations/`.
 - **La entity define la tabla**; lo que TypeORM no puede declarar (enums, extensiones, índices

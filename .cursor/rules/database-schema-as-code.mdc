@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Esquema como código (api-sapira)
 
+- **Antes de tocar el esquema, lee `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`**: tiene la
+  tabla de decisión, las recetas y el procedimiento de revisión de una migración generada.
 - Todo el DDL de `public` vive en `api-sapira`, no en `front-sapira-vite/supabase/migrations/`.
 - **La entity define la tabla** (columnas, PK, FK, UNIQUE, CHECK, índices simples y parciales) y se
   aplica con `migration:generate` → **revisar** → `migration:run`.

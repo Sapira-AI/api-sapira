@@ -145,12 +145,23 @@ describe('Corpus de assets SQL', () => {
 		expect(desbalanceados).toEqual([]);
 	});
 
-	it('toda tabla nueva activa RLS en su propio asset', () => {
-		// Los archivos de rls/ solo declaran policies y NO activan RLS (se generaron desde prod,
-		// donde ya estaba activo). Sin el ALTER en el asset de la tabla, una tabla nueva nace con
-		// RLS apagado y sus policies quedan inertes.
-		const sinRls = listSql('tables')
-			.filter((file) => /CREATE\s+TABLE/i.test(read(file)))
+	it('toda migración que crea una tabla activa RLS', () => {
+		// Los 389 archivos de rls/ solo declaran policies y NO activan RLS: se generaron desde
+		// producción, donde ya estaba activo. Una tabla nueva nace entonces con RLS apagado y sus
+		// policies inertes, sobre una base donde el GRANT es ALL PRIVILEGES para anon.
+		//
+		// `ENABLE ROW LEVEL SECURITY` es propiedad de tabla y TypeORM no la modela, así que
+		// `migration:generate` nunca la emite: hay que escribirla a mano en la migración. Esta
+		// guarda existe porque es justo el paso que se olvida.
+		//
+		// Antes esto miraba el directorio `tables/`, que dejó de existir cuando las tablas pasaron
+		// a definirse por entity: la guarda pasaba sin verificar nada.
+		const migrationsDir = path.join(assetsRoot, 'migrations');
+		const sinRls = fs
+			.readdirSync(migrationsDir)
+			.filter((file) => file.endsWith('.ts'))
+			.map((file) => path.join('migrations', file))
+			.filter((file) => /CREATE\s+TABLE/i.test(sinComentarios(read(file))))
 			.filter((file) => !/ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(read(file)));
 
 		expect(sinRls).toEqual([]);

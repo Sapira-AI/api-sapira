@@ -2,6 +2,10 @@
 
 Este módulo proporciona integración con PostgreSQL usando TypeORM, específicamente configurado para Supabase.
 
+> 📘 **¿Vas a cambiar algo del esquema?** Empieza por **[`GUIA-CAMBIOS-DE-ESQUEMA.md`](./GUIA-CAMBIOS-DE-ESQUEMA.md)**:
+> dónde va tu cambio, las recetas, y cómo se revisa una migración generada. Este README es la
+> referencia del corpus y su estado; la guía es el procedimiento.
+
 ## 🔧 Configuración
 
 ### Variables de Entorno
@@ -134,36 +138,28 @@ SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --only rls/s
 
 > **El `--target` se verifica contra la conexión real.** Antes de conectar, el CLI resuelve el project ref de Supabase desde la cadena de conexión y aborta si no corresponde al target declarado. Como `--target` sale de `DATABASE_TARGET ?? NODE_ENV ?? 'development'`, sin esta verificación un `.env` apuntando a producción dejaba `--apply` corriendo contra prod sin ninguna confirmación. Para operar contra un proyecto nuevo, decláralo primero en `SUPABASE_PROJECT_ENVIRONMENTS`.
 
-### Crear una tabla nueva (receta completa)
+### Crear una tabla nueva
 
-> **El DDL del esquema `public` vive en api-sapira**, no en las migraciones de Supabase del front.
-> `front-sapira-vite/supabase/migrations/` queda para lo que es del front (Edge Functions, Storage, `auth.*`).
+La receta paso a paso está en **[`GUIA-CAMBIOS-DE-ESQUEMA.md`](./GUIA-CAMBIOS-DE-ESQUEMA.md)**, junto
+con las de agregar una columna, una función, un trigger o una policy, y —lo más importante— **cómo se
+revisa una migración generada**.
 
-> 🔴 **La tabla la define su entity TypeORM**, no un asset: no existe fase `tables/`. Una tabla nueva
-> se declara como entity y se aplica con una migración revisada (`migration:generate` → **revisar y
-> recortar** → `migration:run`). El resto de las piezas sí son assets.
+Lo que no se puede improvisar, resumido:
 
-El orden de fases del manifest resuelve las dependencias solo, así que basta con poner cada pieza en su carpeta:
+> 🔴 **La tabla la define su entity TypeORM**, no un asset: **no existe fase `tables/`**. Se declara
+> como entity y se aplica con una migración revisada (`migration:generate` → **revisar y recortar** →
+> `migration:run`). El resto de las piezas sí son assets.
 
-| Paso | Dónde | Qué va |
-|---|---|---|
-| 1 | `<tabla>.entity.ts` + migración | Columnas, PK, FKs, UNIQUE, CHECK e índices declarables, **con sus nombres reales**. Genera con `yarn migration:generate`, **revisa y recorta**: la migración generada incluye toda la deriva pendiente del resto del esquema. Agrega a mano `ALTER TABLE … ENABLE ROW LEVEL SECURITY`, que TypeORM no modela |
-| 1b | `types/` | Solo si la tabla usa un enum o una extensión nuevos |
-| 1c | `special-index/` | Solo para índices con `gin`/`ivfflat` u orden explícito (`DESC`, `NULLS`) |
-| 2 | `functions/` | Solo si necesitas una función nueva. **Revisa primero si ya existe**: `set_updated_at()` cubre el caso típico de `updated_at` |
-| 3 | `triggers/nombre_trigger.sql` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER` |
-| 4 | `rls/nombre_policy.sql` | Una policy por archivo, `DROP POLICY IF EXISTS` + `CREATE POLICY`. Nombre de archivo = nombre de policy |
-| 5 | entity | `<tabla>.entity.ts` en `entities/` (tabla propia, no espejo) + `forFeature` del módulo que la use |
+> ⚠️ **`ENABLE ROW LEVEL SECURITY` va a mano en la migración.** Los 389 archivos de `rls/` salieron de
+> producción, donde RLS ya estaba activo: **ninguno lo activa**, solo declaran policies. En una tabla
+> nueva eso deja RLS apagado y las policies inertes, sobre una base donde el `GRANT` es
+> `ALL PRIVILEGES` para `anon`.
 
-**Por qué `ENABLE ROW LEVEL SECURITY` va en `tables/` y no en `rls/`:** los archivos de `rls/` se
-generaron por ingeniería inversa desde producción, donde RLS ya estaba activo, así que **ninguno de los
-361 activa RLS** — solo declaran policies. En una tabla nueva creada por el runner eso deja RLS
-apagado y **las policies quedan inertes**. Activar RLS es parte de crear la tabla, así que va en su
-asset. `assets-runner.spec.ts` tiene una guarda que falla si un asset de `tables/` crea una tabla sin
-activar RLS.
-
-Ejemplo de referencia completo: `tables/002-sapira-quantity-imports.sql` +
-`triggers/sapira_quantity_imports_set_updated_at.sql` + `rls/sapira_quantity_imports_{select,service_role}.sql`.
+Ejemplo de referencia completo: `entities/facturacion/sapira-quantity-import.entity.ts` +
+`migrations/1788949477104-CreateSapiraQuantityImports.ts` +
+`special-index/sapira_quantity_imports_source_key.sql` +
+`triggers/sapira_quantity_imports_set_updated_at.sql` +
+`rls/sapira_quantity_imports_{select,service_role}.sql`.
 
 ### Eliminar una tabla, una función u otro objeto
 
