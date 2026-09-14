@@ -1,8 +1,8 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
  * Espejo de `public.billing_references` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -68,6 +68,10 @@ export class BillingReference {
 	@Column({ type: 'uuid', nullable: true })
 	created_by?: string;
 
+	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'billing_references_contract_id_fkey' })
+	contract?: Contract; // entity existente (no se duplica)
+
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'created_by', referencedColumnName: 'id', foreignKeyConstraintName: 'billing_references_created_by_fkey' })
 	createdBy?: User; // entity existente (no se duplica)
@@ -75,8 +79,4 @@ export class BillingReference {
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'billing_references_holding_id_fkey' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
-
-	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'billing_references_contract_id_fkey' })
-	contract?: Contract; // entity existente (no se duplica)
 }

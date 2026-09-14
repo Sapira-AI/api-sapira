@@ -19,6 +19,7 @@ No hace falta crear documentacion nueva para cambios cosmeticos, renombres inter
 
 - Si el modulo ya tiene documentacion propia, reutiliza la ubicacion mas cercana. Ejemplo: `src/modules/stripe/docs/`.
 - Si no existe una carpeta de docs del modulo o el cambio es transversal, documenta en `api-sapira-ai/docs/`.
+- **Cambios de esquema de base de datos**: su documentacion canonica es `src/databases/postgresql/`. El procedimiento esta en `GUIA-CAMBIOS-DE-ESQUEMA.md` y el estado del corpus en `README.md`. No dupliques nada de eso aca.
 - Para documentacion nueva dentro de `api-sapira-ai/docs/`, usa carpetas y archivos en minusculas con `_` cuando corresponda.
 
 ## Regla de tests unitarios

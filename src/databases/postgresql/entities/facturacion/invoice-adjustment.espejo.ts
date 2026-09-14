@@ -1,7 +1,7 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Invoice } from '@/modules/invoices/entities/invoice.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 /**
  * Espejo de `public.invoice_adjustments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -43,11 +43,11 @@ export class InvoiceAdjustment {
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
 	created_at: Date;
 
-	@ManyToOne(() => Invoice, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_adjustments_invoice_id_fkey' })
-	invoice?: Invoice; // entity existente (no se duplica)
-
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'adjusted_by', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_adjustments_adjusted_by_fkey' })
 	adjustedBy?: User; // entity existente (no se duplica)
+
+	@ManyToOne(() => Invoice, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_adjustments_invoice_id_fkey' })
+	invoice?: Invoice; // entity existente (no se duplica)
 }

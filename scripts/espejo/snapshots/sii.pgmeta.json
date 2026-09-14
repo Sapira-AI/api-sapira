@@ -2,12 +2,13 @@
  "sii_configurations": {
   "name": "public.sii_configurations",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -17,6 +18,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -25,6 +27,7 @@
     "name": "company_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -33,6 +36,7 @@
     "name": "environment",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -42,6 +46,7 @@
     "name": "business_activity",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -51,6 +56,7 @@
     "name": "activity_codes",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -60,6 +66,7 @@
     "name": "commune",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -69,6 +76,7 @@
     "name": "city",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -78,6 +86,7 @@
     "name": "region",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -87,6 +96,7 @@
     "name": "resolution_number",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -96,6 +106,7 @@
     "name": "resolution_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -105,6 +116,7 @@
     "name": "enabled_document_types",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -114,6 +126,7 @@
     "name": "is_enabled",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -123,6 +136,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -132,6 +146,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -143,8 +158,8 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "sii_certificates_configuration_id_fkey",
-    "source_table": "public.sii_certificates",
+    "name": "sii_cafs_configuration_id_fkey",
+    "source_table": "public.sii_cafs",
     "source_columns": [
      "configuration_id"
     ],
@@ -154,8 +169,8 @@
     ]
    },
    {
-    "name": "sii_cafs_configuration_id_fkey",
-    "source_table": "public.sii_cafs",
+    "name": "sii_certificates_configuration_id_fkey",
+    "source_table": "public.sii_certificates",
     "source_columns": [
      "configuration_id"
     ],
@@ -175,6 +190,7 @@
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -184,15 +200,16 @@
     "name": "configuration_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
-     "updatable",
-     "unique"
+     "updatable"
     ]
    },
    {
     "name": "key_vault_secret_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -201,6 +218,7 @@
     "name": "thumbprint",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -210,6 +228,7 @@
     "name": "file_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -218,6 +237,7 @@
     "name": "expires_at",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -227,6 +247,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -236,6 +257,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -268,6 +290,7 @@
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -277,6 +300,7 @@
     "name": "configuration_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -285,6 +309,7 @@
     "name": "document_type",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -293,6 +318,7 @@
     "name": "blob_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -301,6 +327,7 @@
     "name": "folio_start",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -309,6 +336,7 @@
     "name": "folio_end",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -317,6 +345,7 @@
     "name": "next_folio",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -325,6 +354,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -334,6 +364,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],

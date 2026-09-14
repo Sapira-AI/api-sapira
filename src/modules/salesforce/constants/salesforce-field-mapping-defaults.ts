@@ -1,4 +1,7 @@
-import { SalesforceFieldMappingObjectType, SalesforceFieldTransformationKey } from '../entities/salesforce-field-mapping.entity';
+import {
+	SalesforceFieldMappingObjectType,
+	SalesforceFieldTransformationKey,
+} from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-field-mapping.entity';
 
 export interface SalesforceFieldMappingDefault {
 	object_type: SalesforceFieldMappingObjectType;

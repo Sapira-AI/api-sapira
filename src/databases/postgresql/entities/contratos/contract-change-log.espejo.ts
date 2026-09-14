@@ -1,9 +1,9 @@
 import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
- * Espejo de `public.contract_change_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 913 filas · RLS on.
+ * Espejo de `public.contract_change_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 886 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Audit log de cambios en contracts para contratos post-firma. Mantiene historial inmutable de qué/quién/cuándo/por qué.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
@@ -13,7 +13,10 @@ import { User } from '@/modules/users/entities/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_ccl_company ON public.contract_change_log USING btree (company_id, changed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_ccl_contract ON public.contract_change_log USING btree (contract_id, changed_at DESC)
  */
-@Entity('contract_change_log')
+@Entity({
+	name: 'contract_change_log',
+	comment: 'Audit log de cambios en contracts para contratos post-firma. Mantiene historial inmutable de qué/quién/cuándo/por qué.',
+})
 @Check('contract_change_log_change_type_check', "change_type = ANY (ARRAY['CREATE'::text, 'UPDATE'::text, 'DELETE'::text])")
 export class ContractChangeLog {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'contract_change_log_pkey' })

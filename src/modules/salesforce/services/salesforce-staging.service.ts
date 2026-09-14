@@ -4,12 +4,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, ILike, In, Repository, SelectQueryBuilder } from 'typeorm';
 
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
+import { SalesforceAccountsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-accounts-stg.entity';
+import { SalesforceLineItemsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-line-items-stg.entity';
+import { SalesforceObjectMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-object-mapping.entity';
+import { SalesforceOpportunitiesStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-opportunities-stg.entity';
 
-import { SalesforceAccountsStg } from '../entities/salesforce-accounts-stg.entity';
-import { SalesforceLineItemsStg } from '../entities/salesforce-line-items-stg.entity';
-import { SalesforceObjectMapping } from '../entities/salesforce-object-mapping.entity';
-import { SalesforceOpportunitiesStg } from '../entities/salesforce-opportunities-stg.entity';
 import { isoToCountryName } from '../utils/salesforce-transformers';
 
 export type SalesforceStagingObjectType = 'accounts' | 'opportunities' | 'line-items';
@@ -394,7 +394,9 @@ export class SalesforceStagingService {
 			}
 			return value;
 		};
-		return createHash('sha256').update(JSON.stringify(normalize(payload))).digest('hex');
+		return createHash('sha256')
+			.update(JSON.stringify(normalize(payload)))
+			.digest('hex');
 	}
 
 	private buildAccountsMappingBaseQuery(holdingId: string, params: SalesforceAccountsMappingViewParams) {

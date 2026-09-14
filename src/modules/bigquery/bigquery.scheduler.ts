@@ -4,8 +4,8 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 
 import { BigQueryService } from './bigquery.service';
 
@@ -89,6 +89,13 @@ export class BigQueryScheduler {
 		let totalProcessed = 0;
 		let totalInserted = 0;
 		let totalUpdated = 0;
+		let quantitiesIngested = 0;
+		let quantitiesChangedInSource = 0;
+		let quantitiesIntegrated = 0;
+		let quantitiesUnmapped = 0;
+		let quantitiesBlocked = 0;
+		let quantitiesCurrencyMismatch = 0;
+		let quantitiesConflict = 0;
 		let errors = 0;
 
 		for (const holding of holdings) {
@@ -107,7 +114,24 @@ export class BigQueryScheduler {
 				this.logger.log(`✓ Holding ${holding.name} sincronizado exitosamente`);
 				this.logger.log(`   - Procesados: ${result.totalProcessed}`);
 				this.logger.log(`   - Insertados: ${result.inserted}`);
-				this.logger.log(`   - Actualizados: ${result.updated}\n`);
+				this.logger.log(`   - Actualizados: ${result.updated}`);
+
+				// Canal DWH → quantities: una sola consulta a BigQuery que cubre tanto la cola de
+				// integración como la detección de cambios en el origen.
+				const quantities = await this.bigQueryService.syncSapiraQuantities(holding.id);
+				quantitiesIngested += quantities.ingest.inserted + quantities.ingest.updated;
+				quantitiesChangedInSource += quantities.ingest.changedInSource;
+				quantitiesIntegrated += quantities.integration.integrated;
+				quantitiesUnmapped += quantities.integration.unmapped;
+				quantitiesBlocked += quantities.integration.blocked;
+				quantitiesCurrencyMismatch += quantities.integration.currencyMismatch;
+				quantitiesConflict += quantities.integration.conflict;
+
+				this.logger.log(`   - cantidades ingestadas: ${quantities.ingest.inserted + quantities.ingest.updated}`);
+				this.logger.log(`   - cantidades cambiadas en el origen: ${quantities.ingest.changedInSource}`);
+				this.logger.log(`   - cantidades integradas: ${quantities.integration.integrated}`);
+				this.logger.log(`   - cantidades sin mapeo: ${quantities.integration.unmapped}`);
+				this.logger.log(`   - cantidades bloqueadas por factura: ${quantities.integration.blocked}\n`);
 			} catch (error) {
 				errors++;
 				this.logger.error(`✗ Error sincronizando holding ${holding.name}:`, error);
@@ -125,6 +149,13 @@ export class BigQueryScheduler {
 		this.logger.log(`  Registros procesados: ${totalProcessed}`);
 		this.logger.log(`  Registros insertados: ${totalInserted}`);
 		this.logger.log(`  Registros actualizados: ${totalUpdated}`);
+		this.logger.log(`  Cantidades ingestadas: ${quantitiesIngested}`);
+		this.logger.log(`  Cantidades cambiadas en el origen: ${quantitiesChangedInSource}`);
+		this.logger.log(`  Cantidades integradas en quantities: ${quantitiesIntegrated}`);
+		this.logger.log(`  Cantidades sin mapeo: ${quantitiesUnmapped}`);
+		this.logger.log(`  Cantidades bloqueadas por estado de factura: ${quantitiesBlocked}`);
+		this.logger.log(`  Cantidades con moneda distinta: ${quantitiesCurrencyMismatch}`);
+		this.logger.log(`  Cantidades en conflicto con overrides existentes: ${quantitiesConflict}`);
 		this.logger.log(`  Errores: ${errors}`);
 		this.logger.log(`═══════════════════════════════════════════════════════════\n`);
 	}

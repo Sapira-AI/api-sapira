@@ -13,8 +13,8 @@ import {
 	SalesforceOpportunityPreviewDto,
 	SalesforceOpportunityProcessDto,
 	SalesforceOpportunityRetryDto,
-	SalesforceSyncRunStartDto,
 	SalesforceStagingListDto,
+	SalesforceSyncRunStartDto,
 } from './dtos/salesforce-account-staging.dto';
 import { SalesforceStagingService } from './services/salesforce-staging.service';
 import { SalesforceSyncCompleteService } from './services/salesforce-sync-complete.service';

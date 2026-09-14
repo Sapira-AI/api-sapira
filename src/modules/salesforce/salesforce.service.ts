@@ -3,14 +3,19 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { EncryptionService } from '@/common/services/encryption.service';
+import { SalesforceAuthType, SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 
 import {
 	SalesforceDuplicateClientEntitiesQueryDto,
 	SalesforceDuplicateClientEntitiesResponseDto,
 } from './dtos/salesforce-duplicate-client-entities.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
-import { SalesforceAuthType, SalesforceConnection } from './entities/salesforce-connection.entity';
-import { SalesforceAccount, SalesforceCredentials, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
+import {
+	SalesforceAccount,
+	SalesforceCredentials,
+	SalesforceOpportunityLineItem,
+	SalesforceOpportunityWithLineItems,
+} from './interfaces/salesforce.interface';
 import { SalesforceAuthService } from './services/salesforce-auth.service';
 import { SalesforceQueryService } from './services/salesforce-query.service';
 import { SalesforceSoapService } from './services/salesforce-soap.service';
@@ -357,9 +362,7 @@ export class SalesforceService {
 	}
 
 	async previewClientEntities(holdingId: string, accounts: SalesforceAccount[]) {
-		const items = await Promise.all(
-			accounts.map((account) => this.syncCompleteService.resolveClientEntityPreview(holdingId, account))
-		);
+		const items = await Promise.all(accounts.map((account) => this.syncCompleteService.resolveClientEntityPreview(holdingId, account)));
 
 		return { items };
 	}

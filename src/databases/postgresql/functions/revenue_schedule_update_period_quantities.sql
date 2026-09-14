@@ -1,13 +1,9 @@
-CREATE OR REPLACE FUNCTION public.revenue_schedule_update_period_quantities(
-  p_contract_item_id uuid,
-  p_period date,
-  p_amount numeric
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+CREATE OR REPLACE FUNCTION public.revenue_schedule_update_period_quantities(p_contract_item_id uuid, p_period date, p_amount numeric)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_contract_id uuid;
   v_is_recurring boolean;
@@ -30,20 +26,15 @@ BEGIN
     RETURN;
   END IF;
 
-  -- 1. Actualizar recognized_period del mes exacto con el override de quantities.
-  --    Si el item es recurrente, mrr_period = mismo valor (el reconocido real del período).
   UPDATE revenue_schedule_monthly
   SET
     recognized_period_contract_ccy         = p_amount,
     mrr_period_contract_ccy                = CASE WHEN v_is_recurring THEN p_amount ELSE mrr_period_contract_ccy END,
-    mrr_period_contracted_contract_ccy     = CASE WHEN v_is_recurring THEN p_amount ELSE mrr_period_contracted_contract_ccy END,
-    cmrr_period_contract_ccy               = CASE WHEN v_is_recurring THEN p_amount ELSE cmrr_period_contract_ccy END,
     updated_at                             = now()
   WHERE contract_item_id = p_contract_item_id
     AND period_month = p_period
     AND COALESCE(is_total_row, false) = false;
 
-  -- 2. Calcular acumulados hasta el período anterior como punto de partida.
   SELECT
     COALESCE(SUM(recognized_period_contract_ccy), 0),
     COALESCE(SUM(billed_period_contract_ccy), 0)
@@ -53,8 +44,6 @@ BEGIN
     AND period_month < p_period
     AND COALESCE(is_total_row, false) = false;
 
-  -- 3. Recorrer desde p_period en adelante para recalcular todos los acumulados
-  --    que dependen del recognized_period que acabamos de cambiar.
   FOR v_row IN
     SELECT *
     FROM revenue_schedule_monthly
@@ -108,7 +97,7 @@ BEGIN
     WHERE id = v_row.id;
   END LOOP;
 
-  -- 4. Aplicar conversión FX a moneda empresa y moneda sistema desde el período afectado.
   PERFORM revenue_schedule_apply_fx_for_contract(v_contract_id, p_period);
 END;
-$$;
+$function$
+

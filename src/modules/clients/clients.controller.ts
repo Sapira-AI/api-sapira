@@ -1,5 +1,20 @@
-import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+	BadRequestException,
+	Body,
+	Controller,
+	Delete,
+	Get,
+	Headers,
+	HttpStatus,
+	Param,
+	Patch,
+	Post,
+	Put,
+	Query,
+	Request,
+	UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
@@ -327,7 +342,12 @@ export class ClientsController {
 		status: HttpStatus.UNAUTHORIZED,
 		description: 'Token de autenticación inválido o no proporcionado',
 	})
-	async syncStripeCustomerIds() {
-		return await this.clientsService.syncStripeCustomerIds();
+	@ApiHeader({ name: 'x-holding-id', required: true, description: 'Identificador del holding cuya conexión de BigQuery se usará' })
+	async syncStripeCustomerIds(@Headers('x-holding-id') holdingId: string) {
+		if (!holdingId) {
+			throw new BadRequestException('El header x-holding-id es requerido');
+		}
+
+		return await this.clientsService.syncStripeCustomerIds(holdingId);
 	}
 }

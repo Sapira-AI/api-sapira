@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 import { EmailsService } from '@/modules/emails/emails.service';
 
 import type { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
-import { Invoice } from './entities/invoice.entity';
 import type { ExecutionEnvironment, ExecutionSource } from './schemas/invoice-scheduler-job.schema';
 
 interface ExchangeRateInfo {

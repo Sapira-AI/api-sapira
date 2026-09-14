@@ -147,9 +147,7 @@ describe('SalesforceTypeOrmService', () => {
 
 	it('devuelve una lista vacía cuando no hay coincidencias de tax_id', async () => {
 		const { service, clientEntityRepository } = buildService();
-		clientEntityRepository.find.mockResolvedValue([
-			
-		]);
+		clientEntityRepository.find.mockResolvedValue([]);
 
 		const result = await service.resolveClientEntitiesByTaxId('holding-1', '76517784-7');
 

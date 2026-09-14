@@ -151,14 +151,17 @@ describe('InvoiceSchedulerService', () => {
 			})
 		);
 
-		await (service as any).sendErrorSummaryNotification({ ...{
-			jobId: 'job-2',
-			holdingId: 'holding-1',
-			executionSource: 'manual',
-			executionEnvironment: 'qa',
-			startedAt: new Date(),
-			result,
-		}, dryRun: true });
+		await (service as any).sendErrorSummaryNotification({
+			...{
+				jobId: 'job-2',
+				holdingId: 'holding-1',
+				executionSource: 'manual',
+				executionEnvironment: 'qa',
+				startedAt: new Date(),
+				result,
+			},
+			dryRun: true,
+		});
 		expect(invoiceNotificationService.sendSchedulerErrorSummary).toHaveBeenCalledTimes(1);
 	});
 

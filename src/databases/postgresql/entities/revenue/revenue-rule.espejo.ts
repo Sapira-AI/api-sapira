@@ -1,6 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 
 /**
  * Espejo de `public.revenue_rules` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.

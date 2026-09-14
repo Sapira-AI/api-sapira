@@ -1,14 +1,17 @@
 import * as path from 'path';
 
+import 'dotenv/config';
 import { Client } from 'pg';
 
 import { assertTargetAllowed, AssetMode, AssetRunnerOptions, runSqlAssets } from '@/databases/postgresql/assets-runner';
+import { assertConnectionMatchesTarget } from '@/databases/postgresql/connection-target';
 
 interface CliArguments {
 	mode: AssetMode;
 	target: string;
 	allowProduction: boolean;
 	confirmTarget?: string;
+	only?: string[];
 }
 
 function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArguments {
@@ -16,6 +19,7 @@ function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArgu
 	let target = environment.DATABASE_TARGET ?? environment.NODE_ENV ?? 'development';
 	let allowProduction = false;
 	let confirmTarget: string | undefined;
+	const only: string[] = [];
 
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
@@ -31,12 +35,14 @@ function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArgu
 			target = requireValue(argument, args[++index]);
 		} else if (argument === '--confirm-target') {
 			confirmTarget = requireValue(argument, args[++index]);
+		} else if (argument === '--only') {
+			only.push(requireValue(argument, args[++index]));
 		} else {
 			throw new Error(`Argumento no reconocido: ${argument}`);
 		}
 	}
 
-	return { mode, target, allowProduction, confirmTarget };
+	return { mode, target, allowProduction, confirmTarget, only: only.length > 0 ? only : undefined };
 }
 
 async function main(): Promise<void> {
@@ -47,6 +53,7 @@ async function main(): Promise<void> {
 		target: arguments_.target,
 		allowProduction: arguments_.allowProduction,
 		confirmTarget: arguments_.confirmTarget,
+		only: arguments_.only,
 	};
 	assertTargetAllowed(options);
 
@@ -57,6 +64,11 @@ async function main(): Promise<void> {
 
 	const connectionString = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
 	if (!connectionString) throw new Error('SUPABASE_DATABASE_URL o DATABASE_URL debe estar configurada para dry-run o apply.');
+
+	// El target es una etiqueta escrita a mano; esto verifica que corresponda a la
+	// base real antes de abrir la conexión.
+	const resolved = assertConnectionMatchesTarget(connectionString, options.target);
+	console.log(`Conexión verificada: ${resolved.projectRef ? `proyecto ${resolved.projectRef}` : 'base local'} (${resolved.environment})`);
 
 	const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
 	await client.connect();

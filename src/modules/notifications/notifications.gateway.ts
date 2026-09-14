@@ -3,12 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
+import { Repository } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
-
-import { AppNotification } from './entities/app-notification.entity';
+import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
 	.split(',')

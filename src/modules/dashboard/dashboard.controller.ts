@@ -22,6 +22,9 @@ export class DashboardController {
 	@Get('home')
 	@ApiOperation({ summary: 'Obtener KPIs y tareas del dashboard para el holding seleccionado' })
 	async getHome(@Request() request, @Query() query: DashboardQueryDto) {
-		return this.dashboardService.getHome(request.user?.id || request.user?.sub, query.as_of ? new Date(`${query.as_of}T00:00:00.000Z`) : new Date());
+		return this.dashboardService.getHome(
+			request.user?.id || request.user?.sub,
+			query.as_of ? new Date(`${query.as_of}T00:00:00.000Z`) : new Date()
+		);
 	}
 }

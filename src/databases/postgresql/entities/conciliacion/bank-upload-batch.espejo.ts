@@ -1,6 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { CompanyBankAccount } from '../clientes/company-bank-account.espejo';
 
@@ -48,11 +48,11 @@ export class BankUploadBatch {
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
 	created_at: Date;
 
-	@ManyToOne(() => User)
-	@JoinColumn({ name: 'uploaded_by', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_upload_batches_uploaded_by_fkey' })
-	uploadedBy?: User; // entity existente (no se duplica)
-
 	@ManyToOne(() => CompanyBankAccount)
 	@JoinColumn({ name: 'bank_account_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_upload_batches_bank_account_id_fkey' })
 	bankAccount?: CompanyBankAccount; // espejo de otro módulo
+
+	@ManyToOne(() => User)
+	@JoinColumn({ name: 'uploaded_by', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_upload_batches_uploaded_by_fkey' })
+	uploadedBy?: User; // entity existente (no se duplica)
 }

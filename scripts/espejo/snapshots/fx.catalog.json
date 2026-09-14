@@ -125,12 +125,12 @@
   "policies_detail": [
    {
     "name": "exchange_rates_select_authenticated",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": "true",
+    "cmd": "SELECT",
+    "qual": "true",
     "with_check": null
    }
   ]
@@ -142,13 +142,6 @@
   "columns": {},
   "constraints": [
    {
-    "name": "exchange_rates_monthly_avg_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
     "name": "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key",
     "type": "u",
     "cols": [
@@ -156,6 +149,13 @@
      "to_currency",
      "year",
      "month"
+    ]
+   },
+   {
+    "name": "exchange_rates_monthly_avg_pkey",
+    "type": "p",
+    "cols": [
+     "id"
     ]
    }
   ],
@@ -186,12 +186,12 @@
   "policies_detail": [
    {
     "name": "exchange_rates_monthly_avg_select_authenticated",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": "true",
+    "cmd": "SELECT",
+    "qual": "true",
     "with_check": null
    }
   ]
@@ -202,16 +202,6 @@
   "rls_forced": false,
   "columns": {},
   "constraints": [
-   {
-    "name": "holding_fx_period_rates_period_check",
-    "type": "c",
-    "expr": "period_end >= period_start"
-   },
-   {
-    "name": "holding_fx_period_rates_rate_check",
-    "type": "c",
-    "expr": "rate > (0)::numeric"
-   },
    {
     "name": "holding_fx_period_rates_created_by_fkey",
     "type": "f",
@@ -227,11 +217,21 @@
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
+    "name": "holding_fx_period_rates_period_check",
+    "type": "c",
+    "expr": "period_end >= period_start"
+   },
+   {
     "name": "holding_fx_period_rates_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "holding_fx_period_rates_rate_check",
+    "type": "c",
+    "expr": "rate > (0)::numeric"
    },
    {
     "name": "holding_fx_period_rates_unique_period",
@@ -286,42 +286,42 @@
   "policies_detail": [
    {
     "name": "tenant_isolation_delete_holding_fx_period_rates",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_insert_holding_fx_period_rates",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "tenant_isolation_select_holding_fx_period_rates",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_update_holding_fx_period_rates",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -343,11 +343,6 @@
     "expr": "period_end > period_start"
    },
    {
-    "name": "contract_fx_period_rates_rate_check",
-    "type": "c",
-    "expr": "rate > (0)::numeric"
-   },
-   {
     "name": "contract_fx_period_rates_contract_id_fkey",
     "type": "f",
     "ondelete": "c",
@@ -355,18 +350,23 @@
     "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
    },
    {
-    "name": "fk_contract_fx_period_rates_holding_id",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
-   },
-   {
     "name": "contract_fx_period_rates_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "contract_fx_period_rates_rate_check",
+    "type": "c",
+    "expr": "rate > (0)::numeric"
+   },
+   {
+    "name": "fk_contract_fx_period_rates_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    }
   ],
   "indexes": [
@@ -418,42 +418,42 @@
   "policies_detail": [
    {
     "name": "tenant_isolation_delete_contract_fx_rates_enhanced",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "cmd": "DELETE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
     "with_check": null
    },
    {
     "name": "tenant_isolation_insert_contract_fx_rates_enhanced",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))"
    },
    {
     "name": "tenant_isolation_select_contract_fx_rates_enhanced",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
     "with_check": null
    },
    {
     "name": "tenant_isolation_update_contract_fx_rates_enhanced",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "cmd": "UPDATE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
     "with_check": null
    }
   ]
@@ -526,11 +526,6 @@
   "columns": {},
   "constraints": [
    {
-    "name": "fx_api_sync_log_status_check",
-    "type": "c",
-    "expr": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text, 'pending'::text])"
-   },
-   {
     "name": "fx_api_sync_log_holding_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -543,6 +538,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "fx_api_sync_log_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text, 'pending'::text])"
    }
   ],
   "indexes": [],
@@ -554,22 +554,22 @@
   "policies_detail": [
    {
     "name": "tenant_isolation_insert_fx_api_sync_log",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "((holding_id IS NULL) OR (holding_id = get_current_user_holding_id()))"
    },
    {
     "name": "tenant_isolation_select_fx_api_sync_log",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "((holding_id IS NULL) OR (holding_id = get_current_user_holding_id()))",
+    "cmd": "SELECT",
+    "qual": "((holding_id IS NULL) OR (holding_id = get_current_user_holding_id()))",
     "with_check": null
    }
   ]

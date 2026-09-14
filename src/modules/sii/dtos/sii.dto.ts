@@ -27,3 +27,11 @@ export class ReserveFolioDto {
 	@IsInt() document_type!: number;
 	@IsString() idempotency_key!: string;
 }
+
+export class IntegrateFacturaDto {
+	@IsOptional() @IsString() business_activity?: string;
+	@IsOptional() @IsString() commune?: string;
+	@IsOptional() @IsString() city?: string;
+	@IsOptional() @IsString() region?: string;
+	@IsOptional() @IsEnum(['certificacion', 'produccion']) environment?: 'certificacion' | 'produccion';
+}

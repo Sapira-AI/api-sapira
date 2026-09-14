@@ -1,15 +1,15 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
-import { ContractItem } from '../contratos/contract-item.espejo';
-import { SubscriptionItem } from '../suscripciones/subscription-item.espejo';
-import { Subscription } from '../suscripciones/subscription.espejo';
+import { ContractItem } from '../contratos/contract-item.entity';
+import { SubscriptionItem } from '../suscripciones/subscription-item.entity';
+import { Subscription } from '../suscripciones/subscription.entity';
 
 /**
- * Espejo de `public.revenue_schedule_monthly` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 18415 filas · RLS on.
+ * Espejo de `public.revenue_schedule_monthly` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 19514 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule(); update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at().
@@ -181,60 +181,86 @@ export class RevenueScheduleMonthly {
 	unbilled_balance_period_system_ccy?: number;
 
 	/** Momentum del MRR: NEW/UPSELL/etc en primer periodo, BOP en periodos subsiguientes */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Momentum del MRR: NEW/UPSELL/etc en primer periodo, BOP en periodos subsiguientes', nullable: true })
 	momentum?: string;
 
 	/** MRR Contracted: Valor mensual del contrato original (monthly_price del contract_item). Solo items recurrentes con start_date <= period_month. No se ajusta con quantities ni descuentos puntuales. */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({
+		type: 'numeric',
+		precision: 15,
+		scale: 2,
+		comment:
+			'MRR Contracted: Valor mensual del contrato original (monthly_price del contract_item). Solo items recurrentes con start_date <= period_month. No se ajusta con quantities ni descuentos puntuales.',
+		nullable: true,
+		default: 0,
+	})
 	mrr_period_contracted_contract_ccy?: number;
 
 	/** CMRR (Committed MRR): Valor mensual contractual proyectado (monthly_price del contract_item). Incluye TODOS los items recurrentes del contrato sin importar start_date. No se ajusta con quantities ni descuentos puntuales. */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({
+		type: 'numeric',
+		precision: 15,
+		scale: 2,
+		comment:
+			'CMRR (Committed MRR): Valor mensual contractual proyectado (monthly_price del contract_item). Incluye TODOS los items recurrentes del contrato sin importar start_date. No se ajusta con quantities ni descuentos puntuales.',
+		nullable: true,
+		default: 0,
+	})
 	cmrr_period_contract_ccy?: number;
 
 	/** MRR Contracted en moneda de compañía (convertido con FX). */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({
+		type: 'numeric',
+		precision: 15,
+		scale: 2,
+		comment: 'MRR Contracted en moneda de compañía (convertido con FX).',
+		nullable: true,
+		default: 0,
+	})
 	mrr_period_contracted_ccy?: number;
 
 	/** CMRR en moneda de compañía (convertido con FX). */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({ type: 'numeric', precision: 15, scale: 2, comment: 'CMRR en moneda de compañía (convertido con FX).', nullable: true, default: 0 })
 	cmrr_period_ccy?: number;
 
 	/** MRR Contracted en moneda de sistema (convertido con FX). */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({
+		type: 'numeric',
+		precision: 15,
+		scale: 2,
+		comment: 'MRR Contracted en moneda de sistema (convertido con FX).',
+		nullable: true,
+		default: 0,
+	})
 	mrr_period_contracted_system_ccy?: number;
 
 	/** CMRR en moneda de sistema (convertido con FX). */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true, default: 0 })
+	@Column({ type: 'numeric', precision: 15, scale: 2, comment: 'CMRR en moneda de sistema (convertido con FX).', nullable: true, default: 0 })
 	cmrr_period_system_ccy?: number;
 
 	/** FK a subscriptions. Usado para registros RSM de suscripciones externas. Mutuamente excluyente con contract_id. */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({
+		type: 'uuid',
+		comment: 'FK a subscriptions. Usado para registros RSM de suscripciones externas. Mutuamente excluyente con contract_id.',
+		nullable: true,
+	})
 	subscription_id?: string;
 
 	/** FK a subscription_items. Permite desglose de RSM por item de suscripción. */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'FK a subscription_items. Permite desglose de RSM por item de suscripción.', nullable: true })
 	subscription_item_id?: string;
 
-	@ManyToOne(() => SubscriptionItem)
-	@JoinColumn({
-		name: 'subscription_item_id',
-		referencedColumnName: 'id',
-		foreignKeyConstraintName: 'revenue_schedule_monthly_subscription_item_id_fkey',
-	})
-	subscriptionItem?: SubscriptionItem; // espejo de otro módulo
-
-	@ManyToOne(() => CompanyHolding)
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_holding' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
+	@ManyToOne(() => Company)
+	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_company' })
+	company?: Company; // entity existente (no se duplica)
 
 	@ManyToOne(() => Contract)
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_contract' })
 	contract?: Contract; // entity existente (no se duplica)
 
-	@ManyToOne(() => Company)
-	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_company' })
-	company?: Company; // entity existente (no se duplica)
+	@ManyToOne(() => CompanyHolding)
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_holding' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 
 	@ManyToOne(() => ContractItem)
 	@JoinColumn({ name: 'contract_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_revenue_schedule_item' })
@@ -243,4 +269,12 @@ export class RevenueScheduleMonthly {
 	@ManyToOne(() => Subscription)
 	@JoinColumn({ name: 'subscription_id', referencedColumnName: 'id', foreignKeyConstraintName: 'revenue_schedule_monthly_subscription_id_fkey' })
 	subscription?: Subscription; // espejo de otro módulo
+
+	@ManyToOne(() => SubscriptionItem)
+	@JoinColumn({
+		name: 'subscription_item_id',
+		referencedColumnName: 'id',
+		foreignKeyConstraintName: 'revenue_schedule_monthly_subscription_item_id_fkey',
+	})
+	subscriptionItem?: SubscriptionItem; // espejo de otro módulo
 }

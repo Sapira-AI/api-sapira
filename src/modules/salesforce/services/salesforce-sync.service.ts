@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
-import { SalesforceOpportunityCache } from '../entities/salesforce-opportunity-cache.entity';
+import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
+import { SalesforceOpportunityCache } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-opportunity-cache.entity';
+
 import { SalesforceOpportunity, SalesforceSyncResult } from '../interfaces/salesforce.interface';
 
 import { SalesforceQueryService } from './salesforce-query.service';

@@ -2,10 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+
 import { HoldingsService } from '../holdings/holdings.service';
 
 import { UserMenuContextResponseDto, UserResponseDto } from './dtos/users.dto';
-import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
@@ -70,12 +71,31 @@ export class UsersService {
 
 		const holdings = await this.holdingsService.getUserHoldings(authId);
 		const roleName = user.is_super_admin ? 'Super Admin' : await this.getRoleName(user.role_id);
+		const permissions = await this.getRolePermissionCodes(user.role_id);
 
 		return {
 			user: this.mapToResponseDto(user),
 			role_name: roleName || 'Sin rol asignado',
 			holdings,
+			permissions,
 		};
+	}
+
+	private async getRolePermissionCodes(roleId?: string): Promise<string[]> {
+		if (!roleId) {
+			return [];
+		}
+
+		const rows = await this.userRepository.query<{ code: string }[]>(
+			`SELECT DISTINCT p.code
+			 FROM role_permissions rp
+			 JOIN permissions p ON p.id = rp.permission_id
+			 WHERE rp.role_id = $1
+			 ORDER BY p.code`,
+			[roleId]
+		);
+
+		return rows.map((row) => row.code);
 	}
 
 	private async getRoleName(roleId?: string): Promise<string | null> {

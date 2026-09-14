@@ -120,4 +120,30 @@ describe('OdooInvoicesService', () => {
 			'El cliente de la factura FAC-001 no tiene email configurado en Odoo'
 		);
 	});
+
+	it('falla el envío si el email del cliente es solo espacios', async () => {
+		const commonClient = { methodCall: jest.fn().mockResolvedValue(7) };
+		const objectClient = {
+			methodCall: jest
+				.fn()
+				.mockResolvedValueOnce([{ name: 'FAC-002', partner_id: [123, 'Cliente Demo'] }])
+				.mockResolvedValueOnce([{ email: '   ' }]),
+		};
+		const odooProvider = {
+			createXmlRpcClient: jest.fn().mockReturnValueOnce(commonClient).mockReturnValueOnce(objectClient),
+		};
+		const connectionRepository = {
+			findOne: jest.fn().mockResolvedValue({
+				url: 'https://odoo.example.com',
+				database_name: 'odoo',
+				username: 'api@example.com',
+				api_key: 'api-key',
+			}),
+		};
+		const service = new OdooInvoicesService(odooProvider as any, connectionRepository as any, {} as any, {} as any);
+
+		await expect(service.sendInvoiceToCustomer('holding-1', 456)).rejects.toThrow(
+			'El cliente de la factura FAC-002 no tiene email configurado en Odoo'
+		);
+	});
 });

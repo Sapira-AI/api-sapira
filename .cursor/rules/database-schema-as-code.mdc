@@ -1,0 +1,39 @@
+---
+description: El esquema public de Supabase es código en api-sapira; cómo se cambia y cómo se elimina
+alwaysApply: true
+---
+
+# Esquema como código (api-sapira)
+
+- **Antes de tocar el esquema, lee `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`**: tiene la
+  tabla de decisión, las recetas y el procedimiento de revisión de una migración generada.
+- Todo el DDL de `public` vive en `api-sapira`, no en `front-sapira-vite/supabase/migrations/`.
+- **La entity define la tabla** (columnas, PK, FK, UNIQUE, CHECK, índices simples y parciales) y se
+  aplica con `migration:generate` → **revisar** → `migration:run`.
+- Lo que TypeORM no puede declarar es un **asset** en `src/databases/postgresql/`, aplicado con
+  `yarn postgres:assets`: `types/` (enums, extensiones), `special-index/` (gin, ivfflat, orden
+  explícito), `functions/`, `triggers/`, `rls/`, `grants/`, `seed/`.
+- Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`. El único uso de TypeORM sobre el
+  esquema es `yarn schema:log`, que solo lee.
+- **Toda migración generada se revisa antes de commitear**: TypeORM emite `DROP` sobre lo que no
+  modela. Ninguna migración con `DROP COLUMN` se aplica sin autorización explícita.
+- **Todo índice de producción se declara**: con `@Index` en la entity si es btree sobre columnas
+  simples (incluidos los parciales, con `@Index({ where })`), o como asset en `special-index/` si
+  no. Un `DROP INDEX` en una migración generada sobre un índice que no está en `special-index/`
+  es un índice sin declarar, no un cambio. Lo verifica `entities/indices-declarados.spec.ts`.
+- Nunca edites un asset `.sql` ya aplicado: su checksum está registrado y el runner falla. Corrige
+  con un asset nuevo.
+- Todo comando contra la base lleva `--target`, que se verifica contra la conexión real.
+
+## Para eliminar una tabla, función, trigger o policy
+
+- **Borrar el archivo del repo NO borra nada de la base**: el runner solo aplica, nunca deduce
+  borrados.
+- **Borrar la entity NO borra la tabla**: TypeORM solo ve las tablas con entity y la deja huérfana en
+  producción.
+- Son **dos acciones**: una migración con los `DROP` **y** borrar los archivos del repo.
+- El `DROP` va en una migración **escrita a mano** (`migration:create`), nunca en un asset:
+  `migration:generate` produce un archivo vacío y las funciones no están en su modelo.
+- Antes: demuestra que está sin uso (código de ambos repos, otras funciones, triggers, `cron.job`,
+  datos) y exporta lo que se quiera conservar.
+- Procedimiento completo: `src/databases/postgresql/README.md`.

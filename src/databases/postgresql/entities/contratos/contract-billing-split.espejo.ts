@@ -1,8 +1,8 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
  * Espejo de `public.contract_billing_splits` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -59,11 +59,11 @@ export class ContractBillingSplit {
 	})
 	billingCompany?: Company; // entity existente (no se duplica)
 
-	@ManyToOne(() => CompanyHolding)
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_billing_splits_holding_id_fkey' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_billing_splits_contract_id_fkey' })
 	contract?: Contract; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding)
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_billing_splits_holding_id_fkey' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

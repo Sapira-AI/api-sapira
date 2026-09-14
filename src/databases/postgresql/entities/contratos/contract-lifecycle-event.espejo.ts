@@ -1,10 +1,10 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
- * Espejo de `public.contract_lifecycle_events` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 176 filas · RLS on.
+ * Espejo de `public.contract_lifecycle_events` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 209 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: set_updated_at_on_contract_lifecycle_events · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at(); trg_lifecycle_events_update_updated_at · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at(); trg_set_lifecycle_event_holding_id_ins · BEFORE INSERT FOR EACH ROW → set_lifecycle_event_holding_id(); trg_set_lifecycle_event_holding_id_upd · BEFORE UPDATE OF contract_id FOR EACH ROW → set_lifecycle_event_holding_id(); update_contract_lifecycle_events_updated_at · BEFORE UPDATE FOR EACH ROW → update_contract_lifecycle_events_updated_at().
@@ -88,11 +88,11 @@ export class ContractLifecycleEvent {
 	@Column({ type: 'text', nullable: true })
 	event_subtype?: string;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'RESTRICT' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_lifecycle_events_holding_id_fkey' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_lifecycle_events_contract_id_fkey' })
 	contract?: Contract; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'RESTRICT' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_lifecycle_events_holding_id_fkey' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

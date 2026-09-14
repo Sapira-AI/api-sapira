@@ -1,6 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.holding_settings` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 4 filas · RLS on.
@@ -25,11 +25,16 @@ export class HoldingSettings {
 	updated_at: Date;
 
 	/** Política FX para conversión a moneda de sistema: fixed_period o monthly_avg */
-	@Column({ type: 'text', nullable: true, default: 'monthly_avg' })
+	@Column({
+		type: 'text',
+		comment: 'Política FX para conversión a moneda de sistema: fixed_period o monthly_avg',
+		nullable: true,
+		default: 'monthly_avg',
+	})
 	fx_system_policy?: string;
 
 	/** Monedas utilizadas en el holding */
-	@Column({ type: 'text', array: true, nullable: true, default: () => 'ARRAY[]::text[]' })
+	@Column({ type: 'text', comment: 'Monedas utilizadas en el holding', array: true, nullable: true, default: () => 'ARRAY[]::text[]' })
 	currencies_in_use?: string[];
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })

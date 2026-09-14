@@ -2,8 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+
 import { CreateOdooConnectionDto, UpdateOdooConnectionDto } from './dtos/odoo-connection.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
 
 @Injectable()
 export class OdooConnectionService {

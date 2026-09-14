@@ -2,9 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
-import { ClientEntityClient } from '@/databases/postgresql/entities/client-entity-client.entity';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryModule } from '@/modules/bigquery/bigquery.module';
 
 import { ClientsController } from './clients.controller';

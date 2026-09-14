@@ -61,17 +61,17 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['role_id', 'permission_id'],
 		foreignKeys: {
-			role_permissions_role_id_fkey: {
-				table: 'roles',
-				onDelete: 'NO ACTION',
+			fk_role_permissions_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 			role_permissions_permission_id_fkey: {
 				table: 'permissions',
 				onDelete: 'NO ACTION',
 			},
-			fk_role_permissions_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
+			role_permissions_role_id_fkey: {
+				table: 'roles',
+				onDelete: 'NO ACTION',
 			},
 		},
 		uniques: {},
@@ -149,13 +149,13 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			custom_field_definitions_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			custom_field_definitions_created_by_fkey: {
 				table: 'users',
 				onDelete: 'NO ACTION',
+			},
+			custom_field_definitions_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {

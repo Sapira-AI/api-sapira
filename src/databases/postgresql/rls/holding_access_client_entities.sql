@@ -5,4 +5,4 @@ ON "public"."client_entities"
 AS PERMISSIVE
 FOR ALL
 TO public
-USING ((holding_id = get_current_user_holding_id()));
+USING ((holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id)));

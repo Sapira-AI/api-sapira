@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { Agent } from './agent.espejo';
 
@@ -33,6 +33,10 @@ export class AgentLog {
 	@Column({ type: 'uuid', nullable: true })
 	holding_id?: string;
 
+	@ManyToOne(() => Agent)
+	@JoinColumn({ name: 'agent_id', referencedColumnName: 'id', foreignKeyConstraintName: 'agent_logs_agent_id_fkey' })
+	agent?: Agent;
+
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'user_id', referencedColumnName: 'id', foreignKeyConstraintName: 'agent_logs_user_id_fkey' })
 	user?: User; // entity existente (no se duplica)
@@ -40,8 +44,4 @@ export class AgentLog {
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_agent_logs_holding_id' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
-
-	@ManyToOne(() => Agent)
-	@JoinColumn({ name: 'agent_id', referencedColumnName: 'id', foreignKeyConstraintName: 'agent_logs_agent_id_fkey' })
-	agent?: Agent;
 }

@@ -1,23 +1,27 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
-import { Client } from '@/databases/postgresql/entities/client.entity';
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
-import { InvoiceItemsLegacy } from './invoice-items-legacy.espejo';
-import { InvoicesLegacy } from './invoices-legacy.espejo';
+import { InvoiceItemsLegacy } from './invoice-items-legacy.entity';
+import { InvoicesLegacy } from './invoices-legacy.entity';
 
 /**
- * Espejo de `public.mrr_legacy` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 11810 filas · RLS on.
+ * Espejo de `public.mrr_legacy` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 11836 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Registro rápido de MRR histórico desde facturas legacy sin reconciliación completa. Una fila = 1 producto + 1 mes. Permite valores negativos para notas de crédito y ajustes.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_calculate_mrr_legacy_fields · BEFORE INSERT OR UPDATE OF subtotal_contract_currency, term, is_recurring FOR EACH ROW → calculate_mrr_legacy_fields(); trg_calculate_mrr_legacy_system_currency · BEFORE INSERT OR UPDATE OF contract_currency, mrr_legacy, period_month FOR EACH ROW → calculate_mrr_legacy_system_currency(); trg_mrr_legacy_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at(); trigger_update_invoice_legacy_status_on_mrr · AFTER INSERT FOR EACH ROW → update_invoice_legacy_status_on_mrr_creation().
  * Policies (4): Users can delete mrr_legacy from their holding (DELETE, public); Users can insert mrr_legacy in their holding (INSERT, public); Users can update mrr_legacy in their holding (UPDATE, public); Users can view mrr_legacy from their holding (SELECT, public).
  */
-@Entity('mrr_legacy')
+@Entity({
+	name: 'mrr_legacy',
+	comment:
+		'Registro rápido de MRR histórico desde facturas legacy sin reconciliación completa. Una fila = 1 producto + 1 mes. Permite valores negativos para notas de crédito y ajustes.',
+})
 @Unique('mrr_legacy_invoice_item_legacy_id_split_index_period_month_key', ['invoice_item_legacy_id', 'split_index', 'period_month'])
 @Check('mrr_legacy_fx_valid', '(fx_contract_to_invoice > (0)::numeric) OR (subtotal_contract_currency = (0)::numeric)')
 @Check('mrr_legacy_momentum_check', "(momentum IS NULL) OR (momentum = 'EOP'::text)")
@@ -51,7 +55,12 @@ export class MrrLegacy {
 	invoice_item_legacy_id: string;
 
 	/** Índice de división cuando una línea de factura se asigna a múltiples productos/monedas */
-	@Column({ type: 'integer', nullable: false, default: 1 })
+	@Column({
+		type: 'integer',
+		comment: 'Índice de división cuando una línea de factura se asigna a múltiples productos/monedas',
+		nullable: false,
+		default: 1,
+	})
 	split_index: number;
 
 	@Column({ type: 'uuid', nullable: false })
@@ -100,11 +109,11 @@ export class MrrLegacy {
 	discount_pct?: number;
 
 	/** Subtotal original del invoice_item_legacy (sin dividir) */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: false })
+	@Column({ type: 'numeric', precision: 15, scale: 2, comment: 'Subtotal original del invoice_item_legacy (sin dividir)', nullable: false })
 	subtotal: number;
 
 	/** Monto asignado a este split en moneda de factura */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: false })
+	@Column({ type: 'numeric', precision: 15, scale: 2, comment: 'Monto asignado a este split en moneda de factura', nullable: false })
 	allocated_invoice_currency: number;
 
 	@Column({ type: 'uuid', nullable: false })
@@ -114,43 +123,55 @@ export class MrrLegacy {
 	contract_currency: string;
 
 	/** Monto en moneda de contrato ingresado por usuario */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: false })
+	@Column({ type: 'numeric', precision: 15, scale: 2, comment: 'Monto en moneda de contrato ingresado por usuario', nullable: false })
 	subtotal_contract_currency: number;
 
 	@Column({ type: 'text', nullable: false })
 	product_name: string;
 
 	/** Cantidad de períodos del contrato (para calcular MRR) */
-	@Column({ type: 'integer', nullable: false })
+	@Column({ type: 'integer', comment: 'Cantidad de períodos del contrato (para calcular MRR)', nullable: false })
 	term: number;
 
 	/** Período mensual (YYYY-MM-01). Una fila por mes. */
-	@Column({ type: 'date', nullable: false })
+	@Column({ type: 'date', comment: 'Período mensual (YYYY-MM-01). Una fila por mes.', nullable: false })
 	period_month: Date;
 
 	@Column({ type: 'boolean', nullable: false, default: true })
 	is_recurring: boolean;
 
 	/** FX calculado entre subtotal_contract_currency y allocated_invoice_currency */
-	@Column({ type: 'numeric', precision: 12, scale: 6, nullable: false })
+	@Column({
+		type: 'numeric',
+		precision: 12,
+		scale: 6,
+		comment: 'FX calculado entre subtotal_contract_currency y allocated_invoice_currency',
+		nullable: false,
+	})
 	fx_contract_to_invoice: number;
 
 	@Column({ type: 'numeric', precision: 12, scale: 6, nullable: true })
 	fx_contract_to_system?: number;
 
 	/** MRR calculado: subtotal_contract_currency / term (solo si is_recurring) */
-	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true })
+	@Column({
+		type: 'numeric',
+		precision: 15,
+		scale: 2,
+		comment: 'MRR calculado: subtotal_contract_currency / term (solo si is_recurring)',
+		nullable: true,
+	})
 	mrr_legacy?: number;
 
 	@Column({ type: 'numeric', precision: 15, scale: 2, nullable: true })
 	mrr_legacy_system_currency?: number;
 
 	/** Siempre EOP para registros recurrentes, NULL para no recurrentes */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Siempre EOP para registros recurrentes, NULL para no recurrentes', nullable: true })
 	momentum?: string;
 
 	/** Usuario que creó el registro de MRR legacy */
-	@Column({ type: 'uuid', nullable: true, default: () => 'auth.uid()' })
+	@Column({ type: 'uuid', comment: 'Usuario que creó el registro de MRR legacy', nullable: true, default: () => 'auth.uid()' })
 	created_by?: string;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
@@ -160,62 +181,72 @@ export class MrrLegacy {
 	updated_at: Date;
 
 	/** Contrato creado desde este registro legacy */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'Contrato creado desde este registro legacy', nullable: true })
 	migrated_to_contract_id?: string;
 
 	/** Fecha de migración a contrato activo */
-	@Column({ type: 'timestamp with time zone', nullable: true })
+	@Column({ type: 'timestamp with time zone', comment: 'Fecha de migración a contrato activo', nullable: true })
 	migrated_at?: Date;
 
 	/** Usuario que realizó la migración */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'Usuario que realizó la migración', nullable: true })
 	migrated_by?: string;
 
 	/** UUID que agrupa registros de MRR Legacy creados en el mismo lote, independientemente de la fecha de creación. Permite agregar facturas a grupos existentes. */
-	@Column({ type: 'uuid', nullable: false })
+	@Column({
+		type: 'uuid',
+		comment:
+			'UUID que agrupa registros de MRR Legacy creados en el mismo lote, independientemente de la fecha de creación. Permite agregar facturas a grupos existentes.',
+		nullable: false,
+	})
 	batch_id: string;
 
 	/** When true, this record should not be activated (e.g., churn, duplicate, error) */
-	@Column({ type: 'boolean', nullable: false, default: false })
+	@Column({
+		type: 'boolean',
+		comment: 'When true, this record should not be activated (e.g., churn, duplicate, error)',
+		nullable: false,
+		default: false,
+	})
 	skip_activation: boolean;
 
 	/** Reason why activation was skipped (e.g., Churn, Duplicado, Error de importación) */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Reason why activation was skipped (e.g., Churn, Duplicado, Error de importación)', nullable: true })
 	skip_activation_reason?: string;
 
 	/** Timestamp when skip_activation was set to true */
-	@Column({ type: 'timestamp with time zone', nullable: true })
+	@Column({ type: 'timestamp with time zone', comment: 'Timestamp when skip_activation was set to true', nullable: true })
 	skip_activation_at?: Date;
 
 	/** User who marked this record as skip_activation */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'User who marked this record as skip_activation', nullable: true })
 	skip_activation_by?: string;
-
-	@ManyToOne(() => InvoiceItemsLegacy, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'invoice_item_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_invoice_item_legacy_id_fkey' })
-	invoiceItemLegacy?: InvoiceItemsLegacy;
-
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_holding_id_fkey' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
 
 	@ManyToOne(() => Client)
 	@JoinColumn({ name: 'client_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_client_id_fkey' })
 	client?: Client; // entity existente (no se duplica)
 
-	@ManyToOne(() => Contract, { onDelete: 'SET NULL' })
-	@JoinColumn({ name: 'migrated_to_contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_migrated_to_contract_id_fkey' })
-	migratedToContract?: Contract; // entity existente (no se duplica)
+	@ManyToOne(() => Company)
+	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_company_id_fkey' })
+	company?: Company; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_holding_id_fkey' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
+
+	@ManyToOne(() => InvoiceItemsLegacy, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'invoice_item_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_invoice_item_legacy_id_fkey' })
+	invoiceItemLegacy?: InvoiceItemsLegacy;
+
+	@ManyToOne(() => InvoicesLegacy, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'invoice_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_invoice_legacy_id_fkey' })
+	invoiceLegacy?: InvoicesLegacy;
 
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'migrated_by', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_migrated_by_fkey' })
 	migratedBy?: User; // entity existente (no se duplica)
 
-	@ManyToOne(() => Company)
-	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_company_id_fkey' })
-	company?: Company; // entity existente (no se duplica)
-
-	@ManyToOne(() => InvoicesLegacy, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'invoice_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_invoice_legacy_id_fkey' })
-	invoiceLegacy?: InvoicesLegacy;
+	@ManyToOne(() => Contract, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'migrated_to_contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_migrated_to_contract_id_fkey' })
+	migratedToContract?: Contract; // entity existente (no se duplica)
 }

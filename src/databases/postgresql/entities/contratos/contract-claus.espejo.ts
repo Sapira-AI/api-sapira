@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.contract_clauses` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 18 filas · RLS on.
@@ -34,11 +34,11 @@ export class ContractClaus {
 	@Column({ type: 'uuid', nullable: true })
 	holding_id?: string;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_clauses_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
 	@ManyToOne(() => Company)
 	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_clauses_company_id_fkey' })
 	company?: Company; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_clauses_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

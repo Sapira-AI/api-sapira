@@ -2,11 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { User } from '../users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { UserHoldingResponseDto } from './dtos/holdings.dto';
-import { CompanyHolding } from './entities/company-holding.entity';
-import { UserHolding } from './entities/user-holding.entity';
 
 @Injectable()
 export class HoldingsService {

@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
-import { GetExchangeRatesDto, ExchangeRateResponseDto } from './dtos/get-exchange-rates.dto';
+import { ExchangeRateResponseDto, GetExchangeRatesDto } from './dtos/get-exchange-rates.dto';
 import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from './dtos/sync-exchange-rates.dto';
 import { ExchangeRatesService } from './services/exchange-rates.service';
 

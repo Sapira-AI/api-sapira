@@ -74,20 +74,16 @@ export const REVENUE_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			revenue_schedule_monthly_subscription_item_id_fkey: {
-				table: 'subscription_items',
-				onDelete: 'NO ACTION',
-			},
-			fk_revenue_schedule_holding: {
-				table: 'company_holdings',
+			fk_revenue_schedule_company: {
+				table: 'companies',
 				onDelete: 'NO ACTION',
 			},
 			fk_revenue_schedule_contract: {
 				table: 'contracts',
 				onDelete: 'NO ACTION',
 			},
-			fk_revenue_schedule_company: {
-				table: 'companies',
+			fk_revenue_schedule_holding: {
+				table: 'company_holdings',
 				onDelete: 'NO ACTION',
 			},
 			fk_revenue_schedule_item: {
@@ -96,6 +92,10 @@ export const REVENUE_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			},
 			revenue_schedule_monthly_subscription_id_fkey: {
 				table: 'subscriptions',
+				onDelete: 'NO ACTION',
+			},
+			revenue_schedule_monthly_subscription_item_id_fkey: {
+				table: 'subscription_items',
 				onDelete: 'NO ACTION',
 			},
 		},
@@ -247,17 +247,17 @@ export const REVENUE_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			accounting_period_cutoff_last_action_by_fkey: {
-				table: 'users',
-				onDelete: 'SET NULL',
+			accounting_period_cutoff_company_id_fkey: {
+				table: 'companies',
+				onDelete: 'RESTRICT',
 			},
 			accounting_period_cutoff_holding_id_fkey: {
 				table: 'company_holdings',
 				onDelete: 'RESTRICT',
 			},
-			accounting_period_cutoff_company_id_fkey: {
-				table: 'companies',
-				onDelete: 'RESTRICT',
+			accounting_period_cutoff_last_action_by_fkey: {
+				table: 'users',
+				onDelete: 'SET NULL',
 			},
 		},
 		uniques: {
@@ -289,12 +289,12 @@ export const REVENUE_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			accounting_period_events_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'RESTRICT',
-			},
 			accounting_period_events_company_id_fkey: {
 				table: 'companies',
+				onDelete: 'RESTRICT',
+			},
+			accounting_period_events_holding_id_fkey: {
+				table: 'company_holdings',
 				onDelete: 'RESTRICT',
 			},
 			accounting_period_events_performed_by_fkey: {

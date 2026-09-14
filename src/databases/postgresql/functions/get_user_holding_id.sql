@@ -1,4 +1,9 @@
-
+CREATE OR REPLACE FUNCTION public.get_user_holding_id()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
     user_record_id UUID;
     holding_id_result UUID;
@@ -22,10 +27,23 @@ BEGIN
         RETURN NULL;
     END IF;
     
-    -- Paso 2: Buscar el holding_id en user_holdings
+    -- Paso 2: Buscar primero el holding con selected=true
     SELECT uh.holding_id INTO holding_id_result
     FROM public.user_holdings uh
-    WHERE uh.user_id = user_record_id;
+    WHERE uh.user_id = user_record_id
+      AND uh.selected = true
+      AND uh.is_active = true
+    LIMIT 1;
+    
+    -- Si no hay holding con selected=true, buscar el primer holding activo disponible
+    IF holding_id_result IS NULL THEN
+        SELECT uh.holding_id INTO holding_id_result
+        FROM public.user_holdings uh
+        WHERE uh.user_id = user_record_id
+          AND uh.is_active = true
+        ORDER BY uh.created_at ASC
+        LIMIT 1;
+    END IF;
     
     -- Si no tiene holding y no es usuario pendiente, es un problema crítico
     IF holding_id_result IS NULL AND user_status != 'Pendiente' THEN
@@ -34,3 +52,5 @@ BEGIN
     
     RETURN holding_id_result;
 END;
+$function$
+

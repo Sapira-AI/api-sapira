@@ -4,15 +4,15 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 import { normalizeTaxId } from '@/modules/salesforce/utils/salesforce-transformers';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
-import { ResolveOdooPartnerByTaxIdResponseDto } from './dtos/resolve-odoo-partner-by-tax-id.dto';
 import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
-import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
+import { ResolveOdooPartnerByTaxIdResponseDto } from './dtos/resolve-odoo-partner-by-tax-id.dto';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import { OdooConnectionConfig, OdooPartner } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
@@ -48,11 +48,7 @@ export class OdooPartnersService {
 		return await this.partnersProcessorService.processPartners(dto);
 	}
 
-	async resolveAndLinkPartnerByTaxId(
-		holdingId: string,
-		taxId: string,
-		legalName?: string
-	): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
+	async resolveAndLinkPartnerByTaxId(holdingId: string, taxId: string, legalName?: string): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
 		const normalizedTaxId = normalizeTaxId(taxId);
 		if (!normalizedTaxId) {
 			return {
@@ -141,7 +137,9 @@ export class OdooPartnersService {
 
 		const partners = await this.searchPartnersByTaxId(holdingId, normalizedTaxId);
 		const candidates = isGenericExportVat
-			? partners.filter((partner) => this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name))
+			? partners.filter(
+					(partner) => this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name)
+				)
 			: partners;
 
 		if (candidates.length === 0) {
@@ -191,10 +189,7 @@ export class OdooPartnersService {
 		return this.resolveAndLinkPartnerForEntity(holdingId, entity);
 	}
 
-	async resolveMissingPartners(
-		holdingId: string,
-		dto: ResolveMissingOdooPartnersDto
-	): Promise<ResolveMissingOdooPartnersResponseDto> {
+	async resolveMissingPartners(holdingId: string, dto: ResolveMissingOdooPartnersDto): Promise<ResolveMissingOdooPartnersResponseDto> {
 		const entities = await this.clientEntitiesRepository.find({
 			where: { holding_id: holdingId },
 			select: ['id', 'tax_id', 'legal_name', 'odoo_partner_id'],
@@ -233,7 +228,9 @@ export class OdooPartnersService {
 					};
 				} else {
 					const candidates = (partnersByTaxId.get(taxId) || []).filter(
-						(partner) => !isGenericExportVat || this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name)
+						(partner) =>
+							!isGenericExportVat ||
+							this.normalizeLegalName(partner.name || partner.display_name) === this.normalizeLegalName(entity.legal_name)
 					);
 					if (candidates.length === 0) {
 						unresolved++;
@@ -482,9 +479,30 @@ export class OdooPartnersService {
 			connection.api_key,
 			'res.partner',
 			'search_read',
-			[[['vat', '=', taxId], ['active', '=', true]]],
+			[
+				[
+					['vat', '=', taxId],
+					['active', '=', true],
+				],
+			],
 			{
-				fields: ['id', 'name', 'display_name', 'vat', 'active', 'email', 'phone', 'mobile', 'street', 'street2', 'city', 'zip', 'state_id', 'country_id', 'contact_address_complete'],
+				fields: [
+					'id',
+					'name',
+					'display_name',
+					'vat',
+					'active',
+					'email',
+					'phone',
+					'mobile',
+					'street',
+					'street2',
+					'city',
+					'zip',
+					'state_id',
+					'country_id',
+					'contact_address_complete',
+				],
 				limit: 20,
 			},
 		]);
@@ -518,9 +536,30 @@ export class OdooPartnersService {
 			activeConnection.api_key,
 			'res.partner',
 			'search_read',
-			[[['id', '=', partnerId], ['active', '=', true]]],
+			[
+				[
+					['id', '=', partnerId],
+					['active', '=', true],
+				],
+			],
 			{
-				fields: ['id', 'name', 'display_name', 'vat', 'active', 'email', 'phone', 'mobile', 'street', 'street2', 'city', 'zip', 'state_id', 'country_id', 'contact_address_complete'],
+				fields: [
+					'id',
+					'name',
+					'display_name',
+					'vat',
+					'active',
+					'email',
+					'phone',
+					'mobile',
+					'street',
+					'street2',
+					'city',
+					'zip',
+					'state_id',
+					'country_id',
+					'contact_address_complete',
+				],
 				limit: 1,
 			},
 		]);
@@ -531,9 +570,7 @@ export class OdooPartnersService {
 	private toPartnerData(partner: OdooPartner): ResolveOdooPartnerByTaxIdResponseDto['partnerData'] {
 		const legalAddress =
 			partner.contact_address_complete ||
-			[partner.street, partner.street2, partner.city, partner.state_id?.[1], partner.zip, partner.country_id?.[1]]
-				.filter(Boolean)
-				.join(', ') ||
+			[partner.street, partner.street2, partner.city, partner.state_id?.[1], partner.zip, partner.country_id?.[1]].filter(Boolean).join(', ') ||
 			null;
 
 		return {
@@ -577,7 +614,12 @@ export class OdooPartnersService {
 				activeConnection.api_key,
 				'res.partner',
 				'search_read',
-				[[['vat', 'in', batch], ['active', '=', true]]],
+				[
+					[
+						['vat', 'in', batch],
+						['active', '=', true],
+					],
+				],
 				{ fields: ['id', 'name', 'display_name', 'vat', 'active'] },
 			]);
 

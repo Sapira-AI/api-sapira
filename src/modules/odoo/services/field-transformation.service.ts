@@ -2,9 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-
-import { Company } from '../entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 
 export enum TransformationType {
 	DIRECT = 'direct',

@@ -4,7 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
+import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
+
 import { SalesforceQueryResult } from '../interfaces/salesforce.interface';
 
 import { SalesforceTokenService } from './salesforce-token.service';
@@ -20,7 +21,20 @@ export class SalesforceQueryService {
 		private readonly httpService: HttpService
 	) {}
 
-	async executeQuery(soql: string, holdingId: string): Promise<{ data: SalesforceQueryResult; tokenRefreshed: boolean }> {
+	/**
+	 * Ejecuta una consulta SOQL resolviendo el token de la conexión del holding.
+	 *
+	 * La validación de token de `ensureValidToken` es proactiva: se basa en el
+	 * reloj local. Cuando Salesforce rechaza un token que localmente parecía
+	 * vigente —sesión revocada, timeout de la org menor al heurístico, cambio de
+	 * política o restricción de IP— se fuerza una re-autenticación y se reintenta
+	 * una única vez antes de dar la autenticación por perdida.
+	 */
+	async executeQuery(
+		soql: string,
+		holdingId: string,
+		options: { isRetry?: boolean } = {}
+	): Promise<{ data: SalesforceQueryResult; tokenRefreshed: boolean }> {
 		let connection = await this.connectionRepository.findOne({
 			where: { holding_id: holdingId, is_active: true },
 		});
@@ -54,11 +68,27 @@ export class SalesforceQueryService {
 			const completeResult = await this.fetchAllQueryPages(result, connection.instance_url, accessToken);
 			await this.updateLastSync(holdingId);
 
-			return { data: completeResult, tokenRefreshed: wasExpired };
+			return { data: completeResult, tokenRefreshed: wasExpired || Boolean(options.isRetry) };
 		} catch (error: any) {
+			if (error.response?.status === 401 && !options.isRetry) {
+				this.logger.warn(`Salesforce rechazó el token del holding ${holdingId}; forzando re-autenticación y reintentando`);
+
+				try {
+					const authData = await this.tokenService.refreshAccessToken(connection);
+					await this.tokenService.updateTokens(holdingId, authData);
+				} catch (refreshError: any) {
+					this.logger.error(`No se pudo re-autenticar el holding ${holdingId}: ${refreshError.message}`);
+					throw new Error(`Salesforce authentication failed and re-authentication was not possible: ${refreshError.message}`);
+				}
+
+				return this.executeQuery(soql, holdingId, { isRetry: true });
+			}
+
 			if (error.response?.status === 401) {
-				this.logger.error('Authentication failed even after token refresh, marking connection as inactive');
-				await this.connectionRepository.update({ holding_id: holdingId }, { is_active: false });
+				// La conexión NO se desactiva: dejar el holding fuera del barrido automático
+				// de forma permanente y silenciosa es peor que fallar hoy y reintentar mañana.
+				// El fallo se notifica desde SalesforceSyncCompleteService y queda en la bitácora.
+				this.logger.error(`Autenticación Salesforce fallida tras re-autenticar el holding ${holdingId}`);
 				throw new Error('Salesforce authentication failed. Please reconnect.');
 			}
 
@@ -81,11 +111,7 @@ export class SalesforceQueryService {
 		return response.data;
 	}
 
-	private async fetchAllQueryPages(
-		initialResult: SalesforceQueryResult,
-		instanceUrl: string,
-		accessToken: string
-	): Promise<SalesforceQueryResult> {
+	private async fetchAllQueryPages(initialResult: SalesforceQueryResult, instanceUrl: string, accessToken: string): Promise<SalesforceQueryResult> {
 		const records = [...(initialResult.records || [])];
 		let nextRecordsUrl = initialResult.nextRecordsUrl;
 

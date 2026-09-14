@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 
 import { CreateDraftInvoiceDTO } from './dtos/odoo.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
 import { CreateDraftInvoiceResult, OdooConnectionConfig } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
 import { TaxMappingService } from './services/tax-mapping.service';
@@ -637,7 +637,10 @@ export class OdooInvoicesService {
 				[[partnerId]],
 				{ fields: ['email'] },
 			]);
-			const recipientEmail = partnerData?.[0]?.email?.trim();
+			// Odoo devuelve `false` —no `null` ni `''`— en los campos vacíos, y `?.` no corta ante `false`:
+			// `false?.trim()` revienta con TypeError y tapa el error de dominio de más abajo.
+			const rawEmail = partnerData?.[0]?.email;
+			const recipientEmail = typeof rawEmail === 'string' ? rawEmail.trim() : '';
 
 			if (!recipientEmail) {
 				throw new Error(`El cliente de la factura ${invoice?.name || invoiceId} no tiene email configurado en Odoo`);

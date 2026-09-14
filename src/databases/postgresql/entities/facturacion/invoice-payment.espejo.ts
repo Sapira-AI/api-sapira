@@ -1,11 +1,11 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Invoice } from '@/modules/invoices/entities/invoice.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 import { BankMovement } from '../conciliacion/bank-movement.espejo';
 
 /**
- * Espejo de `public.invoice_payments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 89 filas · RLS on.
+ * Espejo de `public.invoice_payments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 45 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_recalc_after_delete · AFTER DELETE FOR EACH ROW → after_invoice_payment_change(); trg_recalc_after_insert · AFTER INSERT FOR EACH ROW → after_invoice_payment_change(); trg_recalc_after_update · AFTER UPDATE FOR EACH ROW → after_invoice_payment_change(); trg_set_invoice_payment_defaults · BEFORE INSERT FOR EACH ROW → set_invoice_payment_defaults().

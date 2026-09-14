@@ -7,6 +7,7 @@ AS $function$
 DECLARE
   v_enabled boolean := false;
   v_contract_status text;
+  v_amount numeric;
 BEGIN
   SELECT revenue_schedule_monthly_enabled INTO v_enabled
   FROM financial_settings
@@ -17,8 +18,15 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Solo actuar si el registro tiene amount y contract_id definidos
-  IF NEW.amount IS NULL OR NEW.contract_id IS NULL THEN
+  v_amount := COALESCE(
+    NEW.amount,
+    CASE
+      WHEN NEW.unit_price IS NOT NULL AND NEW.quantity IS NOT NULL
+      THEN NEW.unit_price * NEW.quantity
+    END
+  );
+
+  IF v_amount IS NULL OR NEW.contract_id IS NULL THEN
     RETURN NEW;
   END IF;
 
@@ -32,7 +40,7 @@ BEGIN
     PERFORM revenue_schedule_update_period_quantities(
       NEW.contract_item_id,
       NEW.period,
-      NEW.amount
+      v_amount
     );
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'RSM period update failed para contract_item % período %: %',

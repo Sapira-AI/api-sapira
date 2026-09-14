@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
-import { CompanyHolding } from './entities/company-holding.entity';
-import { UserHolding } from './entities/user-holding.entity';
 import { HoldingsController } from './holdings.controller';
 import { HoldingsService } from './holdings.service';
 

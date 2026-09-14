@@ -6,16 +6,14 @@ import { SupabaseUser } from '@/auth/strategies/supabase.strategy';
 import { GetSupabaseUser } from '@/decorators/supabase-user.decorator';
 
 import { SalesforceClientCredentialsDto } from './dtos/salesforce-client-credentials.dto';
-import { SalesforceCredentialsDto } from './dtos/salesforce-credentials.dto';
 import { SalesforceClientEntityPreviewDto } from './dtos/salesforce-client-entity-preview.dto';
+import { SalesforceCredentialsDto } from './dtos/salesforce-credentials.dto';
 import {
 	SalesforceDuplicateClientEntitiesQueryDto,
 	SalesforceDuplicateClientEntitiesResponseDto,
 } from './dtos/salesforce-duplicate-client-entities.dto';
 import { SalesforceLineItemPreviewDto, SalesforceLineItemPreviewRequestDto } from './dtos/salesforce-line-item-preview.dto';
-import { SalesforceAccount, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
 import { SalesforceQueryDto } from './dtos/salesforce-query.dto';
-import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
 import {
 	SalesforceAuthResponseDto,
 	SalesforceConnectionResponseDto,
@@ -26,6 +24,8 @@ import {
 } from './dtos/salesforce-response.dto';
 import { SalesforceSyncCompleteDto } from './dtos/salesforce-sync-complete.dto';
 import { SalesforceSyncDto } from './dtos/salesforce-sync.dto';
+import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
+import { SalesforceAccount, SalesforceOpportunityLineItem, SalesforceOpportunityWithLineItems } from './interfaces/salesforce.interface';
 import { SalesforceService } from './salesforce.service';
 
 @ApiTags('Salesforce')
@@ -236,8 +236,7 @@ export class SalesforceController {
 	@Get('client-entities/duplicate-tax-ids')
 	@ApiOperation({
 		summary: 'Listar entidades con identificadores fiscales duplicados',
-		description:
-			'Agrupa client_entities del holding por tax_id normalizado y omite los VATs genéricos activos de exportación.',
+		description: 'Agrupa client_entities del holding por tax_id normalizado y omite los VATs genéricos activos de exportación.',
 	})
 	@ApiQuery({ name: 'page', required: false, type: Number })
 	@ApiQuery({ name: 'limit', required: false, type: Number })
@@ -256,8 +255,7 @@ export class SalesforceController {
 	@Get('client-entities/pending-source-check')
 	@ApiOperation({
 		summary: 'Listar Accounts Salesforce con datos pendientes',
-		description:
-			'Consulta directamente en Salesforce los Accounts cuyo RUT__c o BusinessName__c sea “pendiente”.',
+		description: 'Consulta directamente en Salesforce los Accounts cuyo RUT__c o BusinessName__c sea “pendiente”.',
 	})
 	@ApiHeader({
 		name: 'x-holding-id',

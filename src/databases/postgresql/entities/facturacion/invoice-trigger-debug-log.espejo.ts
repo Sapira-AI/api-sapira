@@ -8,7 +8,7 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeor
  * Triggers: ninguno.
  * Policies (0): ninguna (RLS OFF).
  */
-@Entity('invoice_trigger_debug_logs')
+@Entity({ name: 'invoice_trigger_debug_logs', comment: 'Tabla temporal para debugging de triggers de facturas. ELIMINAR después del debugging.' })
 export class InvoiceTriggerDebugLog {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'invoice_trigger_debug_logs_pkey' })
 	id: string;

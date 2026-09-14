@@ -14,5 +14,5 @@ export { InvoiceRestructureLog } from './invoice-restructure-log.espejo';
 export { InvoiceTriggerDebugLog } from './invoice-trigger-debug-log.espejo';
 export { OverdueCheckLog } from './overdue-check-log.espejo';
 export { PeriodGuardWarning } from './period-guard-warning.espejo';
-export { Quantity } from './quantity.espejo';
+export { Quantity } from './quantity.entity';
 export { ReferenceRequest } from './reference-request.espejo';

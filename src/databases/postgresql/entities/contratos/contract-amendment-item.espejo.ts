@@ -1,9 +1,9 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 import { ContractAmendment } from './contract-amendment.espejo';
-import { ContractItem } from './contract-item.espejo';
+import { ContractItem } from './contract-item.entity';
 
 /**
  * Espejo de `public.contract_amendment_items` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 35 filas · RLS on.
@@ -61,10 +61,6 @@ export class ContractAmendmentItem {
 	@JoinColumn({ name: 'amendment_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_amendment_id_fkey' })
 	amendment?: ContractAmendment;
 
-	@ManyToOne(() => ContractItem)
-	@JoinColumn({ name: 'original_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_original_item_id_fkey' })
-	originalItem?: ContractItem;
-
 	@ManyToOne(() => CompanyHolding, { onDelete: 'RESTRICT' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_holding_id_fkey' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
@@ -72,4 +68,8 @@ export class ContractAmendmentItem {
 	@ManyToOne(() => ContractItem)
 	@JoinColumn({ name: 'new_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_new_item_id_fkey' })
 	newItem?: ContractItem;
+
+	@ManyToOne(() => ContractItem)
+	@JoinColumn({ name: 'original_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_original_item_id_fkey' })
+	originalItem?: ContractItem;
 }

@@ -1,8 +1,8 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
  * Espejo de `public.contract_notifications` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 13 filas · RLS on.
@@ -51,10 +51,6 @@ export class ContractNotification {
 	@Column({ type: 'uuid', nullable: false })
 	holding_id: string;
 
-	@ManyToOne(() => User)
-	@JoinColumn({ name: 'user_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_notifications_user_id_fkey' })
-	user?: User; // entity existente (no se duplica)
-
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_notifications_contract_id_fkey' })
 	contract?: Contract; // entity existente (no se duplica)
@@ -62,4 +58,8 @@ export class ContractNotification {
 	@ManyToOne(() => CompanyHolding)
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_notifications_holding_id_fkey' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
+
+	@ManyToOne(() => User)
+	@JoinColumn({ name: 'user_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_notifications_user_id_fkey' })
+	user?: User; // entity existente (no se duplica)
 }

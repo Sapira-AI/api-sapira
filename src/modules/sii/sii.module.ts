@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { SiiCaf, SiiCertificate, SiiConfiguration } from '@/databases/postgresql/entities/sii/sii.entity';
+import { FacturaModule } from '@/modules/factura/factura.module';
 
-import { SiiCaf, SiiCertificate, SiiConfiguration } from './entities/sii.entity';
 import { SiiController } from './sii.controller';
 import { SiiService } from './sii.service';
 
 @Module({
-	imports: [TypeOrmModule.forFeature([Company, SiiConfiguration, SiiCertificate, SiiCaf])],
+	imports: [FacturaModule, TypeOrmModule.forFeature([Company, SiiConfiguration, SiiCertificate, SiiCaf])],
 	controllers: [SiiController],
 	providers: [SiiService],
 	exports: [SiiService],

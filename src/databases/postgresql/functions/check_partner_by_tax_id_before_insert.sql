@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.check_partner_by_tax_id_before_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     partner_vat TEXT;
     existing_client_entity RECORD;
@@ -198,3 +201,5 @@ EXCEPTION WHEN OTHERS THEN
     NEW.integration_notes := 'Error en trigger: ' || SQLERRM;
     RETURN NEW;  -- ✅ NUNCA retornar NULL
 END;
+$function$
+

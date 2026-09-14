@@ -68,11 +68,6 @@
   "columns": {},
   "constraints": [
    {
-    "name": "clients_status_check",
-    "type": "c",
-    "expr": "status = ANY (ARRAY['Activo'::text, 'Inactivo'::text])"
-   },
-   {
     "name": "clients_holding_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -85,6 +80,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "clients_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Activo'::text, 'Inactivo'::text])"
    }
   ],
   "indexes": [
@@ -147,42 +147,42 @@
   "policies_detail": [
    {
     "name": "clients_delete_access",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+    "cmd": "DELETE",
+    "qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
     "with_check": null
    },
    {
     "name": "clients_holding_isolation",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "cmd": "SELECT",
+    "qual": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
     "with_check": null
    },
    {
     "name": "clients_update_access",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))",
+    "cmd": "UPDATE",
+    "qual": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))",
     "with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
    },
    {
     "name": "clients_write_access",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(user_has_permission('EDIT_CLIENTES'::text) AND (holding_id = get_current_user_holding_id()))"
    }
   ]
@@ -201,18 +201,18 @@
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
    },
    {
-    "name": "fk_client_entities_holding_id",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
-   },
-   {
     "name": "client_entities_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "fk_client_entities_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    }
   ],
   "indexes": [
@@ -257,12 +257,12 @@
   "policies_detail": [
    {
     "name": "holding_access_client_entities",
-    "cmd": "ALL",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
+    "cmd": "ALL",
+    "qual": "(holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id))",
     "with_check": null
    }
   ]
@@ -363,42 +363,42 @@
   "policies_detail": [
    {
     "name": "client_entity_clients_delete_policy",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "client_entity_clients_insert_policy",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "client_entity_clients_select_policy",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "client_entity_clients_update_policy",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": "(holding_id = get_current_user_holding_id())"
    }
   ]
@@ -417,18 +417,18 @@
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
    },
    {
-    "name": "fk_client_contacts_holding_id",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
-   },
-   {
     "name": "client_contacts_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "fk_client_contacts_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    }
   ],
   "indexes": [
@@ -448,12 +448,12 @@
   "policies_detail": [
    {
     "name": "holding_access_client_contacts",
-    "cmd": "ALL",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -465,19 +465,19 @@
   "columns": {},
   "constraints": [
    {
-    "name": "contact_preferences_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
     "name": "contact_preferences_holding_id_client_id_contact_id_key",
     "type": "u",
     "cols": [
      "holding_id",
      "client_id",
      "contact_id"
+    ]
+   },
+   {
+    "name": "contact_preferences_pkey",
+    "type": "p",
+    "cols": [
+     "id"
     ]
    }
   ],
@@ -502,22 +502,22 @@
   "policies_detail": [
    {
     "name": "Contact preferences - manage own holding",
-    "cmd": "ALL",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
+    "cmd": "ALL",
+    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
     "with_check": null
    },
    {
     "name": "Contact preferences - select own holding",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
+    "cmd": "SELECT",
+    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
     "with_check": null
    }
   ]
@@ -536,18 +536,18 @@
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
    },
    {
-    "name": "fk_client_documents_holding_id",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
-   },
-   {
     "name": "client_documents_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "fk_client_documents_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    }
   ],
   "indexes": [
@@ -567,12 +567,12 @@
   "policies_detail": [
    {
     "name": "holding_access_client_documents",
-    "cmd": "ALL",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -606,12 +606,12 @@
   "policies_detail": [
    {
     "name": "holding_access_legal_documents",
-    "cmd": "ALL",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -623,18 +623,18 @@
   "columns": {},
   "constraints": [
    {
-    "name": "client_entity_tax_id_normalization_conflicts_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
     "name": "client_entity_tax_id_normaliz_migration_name_client_entity__key",
     "type": "u",
     "cols": [
      "migration_name",
      "client_entity_id"
+    ]
+   },
+   {
+    "name": "client_entity_tax_id_normalization_conflicts_pkey",
+    "type": "p",
+    "cols": [
+     "id"
     ]
    }
   ],
@@ -675,42 +675,42 @@
   "policies_detail": [
    {
     "name": "financial_managers_can_delete_bank_accounts",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND can_manage_financial_data())",
+    "cmd": "DELETE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND can_manage_financial_data())",
     "with_check": null
    },
    {
     "name": "financial_managers_can_insert_bank_accounts",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "((holding_id = get_current_user_holding_id()) AND can_manage_financial_data())"
    },
    {
     "name": "financial_managers_can_update_bank_accounts",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND can_manage_financial_data())",
+    "cmd": "UPDATE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND can_manage_financial_data())",
     "with_check": null
    },
    {
     "name": "financial_users_can_view_bank_accounts",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "authenticated"
     ],
-    "using": "((holding_id = get_current_user_holding_id()) AND can_access_financial_data())",
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND can_access_financial_data())",
     "with_check": null
    }
   ]
@@ -763,42 +763,42 @@
   "policies_detail": [
    {
     "name": "Users delete own holding mappings",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
+    "cmd": "DELETE",
+    "qual": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
     "with_check": null
    },
    {
     "name": "Users insert own holding mappings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))"
    },
    {
     "name": "Users update own holding mappings",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
+    "cmd": "UPDATE",
+    "qual": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
     "with_check": null
    },
    {
     "name": "Users view own holding mappings",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
+    "cmd": "SELECT",
+    "qual": "(company_id IN ( SELECT companies.id\n   FROM companies\n  WHERE (companies.holding_id = ( SELECT companies.holding_id\n           FROM users\n          WHERE (users.id = auth.uid())))))",
     "with_check": null
    }
   ]
@@ -835,42 +835,42 @@
   "policies_detail": [
    {
     "name": "Users can delete sellers from their holding",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can insert sellers for their holding",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "Users can update sellers from their holding",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can view sellers from their holding",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]

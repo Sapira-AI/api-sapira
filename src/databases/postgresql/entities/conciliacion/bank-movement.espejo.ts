@@ -1,9 +1,9 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Invoice } from '@/modules/invoices/entities/invoice.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 import { BankUploadBatch } from './bank-upload-batch.espejo';
 
@@ -81,27 +81,27 @@ export class BankMovement {
 	@Column({ type: 'jsonb', nullable: true })
 	original_row_data?: any;
 
-	@ManyToOne(() => User)
-	@JoinColumn({ name: 'reconciled_by', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_reconciled_by_fkey' })
-	reconciledBy?: User; // entity existente (no se duplica)
-
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_bank_movements_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
+	@ManyToOne(() => BankUploadBatch, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'batch_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_batch_id_fkey' })
+	batch?: BankUploadBatch;
 
 	@ManyToOne(() => Company)
 	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_company_id_fkey' })
 	company?: Company; // entity existente (no se duplica)
 
-	@ManyToOne(() => Invoice)
-	@JoinColumn({ name: 'suggested_invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_suggested_invoice_id_fkey' })
-	suggestedInvoice?: Invoice; // entity existente (no se duplica)
-
-	@ManyToOne(() => BankUploadBatch, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'batch_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_batch_id_fkey' })
-	batch?: BankUploadBatch;
+	@ManyToOne(() => User)
+	@JoinColumn({ name: 'reconciled_by', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_reconciled_by_fkey' })
+	reconciledBy?: User; // entity existente (no se duplica)
 
 	@ManyToOne(() => Invoice)
 	@JoinColumn({ name: 'reconciled_invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_reconciled_invoice_id_fkey' })
 	reconciledInvoice?: Invoice; // entity existente (no se duplica)
+
+	@ManyToOne(() => Invoice)
+	@JoinColumn({ name: 'suggested_invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_suggested_invoice_id_fkey' })
+	suggestedInvoice?: Invoice; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_bank_movements_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

@@ -2,7 +2,15 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export const ASSET_DIRECTORIES = ['functions', 'special-index', 'triggers', 'rls'] as const;
+/**
+ * Fases del corpus, en orden de aplicación. Debe coincidir con `directories` de
+ * `assets.manifest.json`: un test lo verifica, porque el manifest tapaba esta
+ * constante y la divergencia pasó inadvertida.
+ *
+ * No hay fase `tables`: las tablas las define su entity TypeORM y se crean con
+ * migraciones revisadas, no con assets.
+ */
+export const ASSET_DIRECTORIES = ['types', 'functions', 'special-index', 'triggers', 'rls', 'grants', 'seed'] as const;
 export const HISTORY_TABLE = 'public.sapira_sql_asset_history';
 
 export type AssetMode = 'plan' | 'dry-run' | 'apply';
@@ -33,6 +41,12 @@ export interface AssetRunnerOptions {
 	target: string;
 	allowProduction?: boolean;
 	confirmTarget?: string;
+	/**
+	 * Si se define, limita la corrida a los assets cuyo path relativo coincida
+	 * (exacto) con alguno de estos valores. Útil para aplicar un asset puntual
+	 * sin tocar el manifest. Un path que no exista lanza error.
+	 */
+	only?: string[];
 }
 
 export interface AssetRunResult {
@@ -91,9 +105,23 @@ export function discoverSqlAssets(assetsRoot: string): SqlAsset[] {
 	});
 }
 
+export function filterAssetsByOnly(assets: SqlAsset[], only?: string[]): SqlAsset[] {
+	if (!only || only.length === 0) return assets;
+
+	const requested = only.map((value) => toPosixPath(value));
+	const available = new Set(assets.map((asset) => asset.path));
+	const missing = requested.filter((value) => !available.has(value));
+	if (missing.length > 0) {
+		throw new Error(`--only no coincide con ningún asset descubierto: ${missing.join(', ')}`);
+	}
+
+	const requestedSet = new Set(requested);
+	return assets.filter((asset) => requestedSet.has(asset.path));
+}
+
 export async function runSqlAssets(executor: SqlExecutor | undefined, options: AssetRunnerOptions): Promise<AssetRunResult> {
 	assertTargetAllowed(options);
-	const assets = discoverSqlAssets(options.assetsRoot);
+	const assets = filterAssetsByOnly(discoverSqlAssets(options.assetsRoot), options.only);
 	const result: AssetRunResult = { assets, applied: [], skipped: [], pending: [] };
 
 	if (options.mode === 'plan') {

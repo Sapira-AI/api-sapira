@@ -2,7 +2,7 @@ jest.mock('@/logger/app-logger.service', () => ({
 	AppLoggerService: class AppLoggerService {},
 }));
 
-import { SalesforceSyncCompleteService } from './salesforce-sync-complete.service';
+import { DAILY_SYNC_WINDOW_DAYS, SalesforceSyncCompleteService } from './salesforce-sync-complete.service';
 
 describe('SalesforceSyncCompleteService', () => {
 	const buildService = () => {
@@ -83,6 +83,11 @@ describe('SalesforceSyncCompleteService', () => {
 			createOrUpdate: jest.fn(),
 			resolveByDeduplicationKey: jest.fn(),
 		};
+		const syncLogService = {
+			record: jest.fn(),
+			recordMany: jest.fn(),
+			recordError: jest.fn(),
+		};
 
 		const service = new SalesforceSyncCompleteService(
 			connectionRepository as any,
@@ -99,11 +104,13 @@ describe('SalesforceSyncCompleteService', () => {
 			stagingService as any,
 			genericVatsService as any,
 			odooPartnersService as any,
-			notificationsService as any
+			notificationsService as any,
+			syncLogService as any
 		);
 
 		return {
 			service,
+			syncLogService,
 			connectionRepository,
 			clientRepository,
 			clientEntityRepository,
@@ -121,13 +128,11 @@ describe('SalesforceSyncCompleteService', () => {
 		};
 	};
 
-	it('en la sincronización diaria consulta siete días y procesa solo staging create', async () => {
-		const { service } = buildService();
-		jest.spyOn(service as any, 'getSantiagoCalendarDayRange').mockReturnValue({
-			start: '2026-01-19T03:00:00.000Z',
-			end: '2026-01-26T03:00:00.000Z',
+	const stubDailyRun = (service: SalesforceSyncCompleteService) => {
+		jest.spyOn(service as any, 'getSantiagoCloseDateRange').mockReturnValue({
+			start: '2025-12-27',
+			end: '2026-01-25',
 		});
-		jest.spyOn(service as any, 'fetchDailyChangedOpportunityIds').mockResolvedValue(['opp-1']);
 		jest.spyOn(service, 'syncOpportunitiesToStaging').mockResolvedValue({
 			success: true,
 			importedAccounts: 1,
@@ -138,42 +143,179 @@ describe('SalesforceSyncCompleteService', () => {
 			summary: {},
 			unmappedProducts: [],
 		});
-		const processAccounts = jest.spyOn(service as any, 'processAccountStaging').mockResolvedValue(undefined);
-		const classifyOpportunities = jest.spyOn(service as any, 'classifyOpportunityStaging').mockResolvedValue(undefined);
-		const processOpportunities = jest.spyOn(service as any, 'processOpportunityStaging').mockResolvedValue(undefined);
+		return {
+			processAccounts: jest.spyOn(service as any, 'processAccountStaging').mockResolvedValue(undefined),
+			classifyOpportunities: jest.spyOn(service as any, 'classifyOpportunityStaging').mockResolvedValue(undefined),
+			processOpportunities: jest.spyOn(service as any, 'processOpportunityStaging').mockResolvedValue(undefined),
+		};
+	};
+
+	it('en la sincronización diaria consulta treinta días de CloseDate y procesa solo staging create', async () => {
+		const { service, opportunitiesStgRepository } = buildService();
+		opportunitiesStgRepository.find.mockResolvedValue([]);
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1']);
+		const { processAccounts, classifyOpportunities, processOpportunities } = stubDailyRun(service);
 
 		const result = await service.syncDailyModifiedOpportunities('holding-1');
 
 		expect(result).toMatchObject({ success: true, stats: { opportunities: 1 } });
-		expect((service as any).fetchDailyChangedOpportunityIds).toHaveBeenCalledWith(
-			'holding-1',
-			'2026-01-19T03:00:00.000Z',
-			'2026-01-26T03:00:00.000Z'
-		);
-		expect(processAccounts).toHaveBeenCalledWith(
-			'holding-1',
-			'batch-1',
-			expect.any(Object),
-			{ processingStatuses: ['create'] }
-		);
+		expect((service as any).getSantiagoCloseDateRange).toHaveBeenCalledWith(DAILY_SYNC_WINDOW_DAYS);
+		expect((service as any).fetchDailyTargetOpportunityIds).toHaveBeenCalledWith('holding-1', '2025-12-27', '2026-01-25');
+		expect(processAccounts).toHaveBeenCalledWith('holding-1', 'batch-1', expect.any(Object), { processingStatuses: ['create'] });
 		expect(classifyOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1', { insertOnly: true });
-		expect(processOpportunities).toHaveBeenCalledWith(
+		expect(processOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1', expect.any(Object), {
+			processingStatuses: ['create'],
+			insertOnly: true,
+		});
+	});
+
+	it('consulta CloseDate y las etapas ganadoras sin usar LastModifiedDate', async () => {
+		const { service, queryService } = buildService();
+		queryService.executeQuery.mockResolvedValue({ data: { records: [{ Id: 'opp-1' }, { Id: 'opp-1' }] } });
+
+		const ids = await (service as any).fetchDailyTargetOpportunityIds('holding-1', '2025-12-27', '2026-01-25');
+
+		expect(ids).toEqual(['opp-1']);
+		const soql = queryService.executeQuery.mock.calls[0][0];
+		expect(soql).toContain('CloseDate >= 2025-12-27');
+		expect(soql).toContain('CloseDate <= 2026-01-25');
+		expect(soql).not.toContain('LastModifiedDate');
+	});
+
+	it('calcula una ventana de CloseDate de treinta días calendario de Santiago que incluye el día actual', () => {
+		const { service } = buildService();
+
+		const range = (service as any).getSantiagoCloseDateRange(30, new Date('2026-01-25T15:00:00.000Z'));
+
+		expect(range).toEqual({ start: '2025-12-27', end: '2026-01-25' });
+	});
+
+	it('aísla el fallo de un lote, notifica y continúa con los lotes restantes', async () => {
+		const { service, opportunitiesStgRepository, notificationsService, syncLogService } = buildService();
+		opportunitiesStgRepository.find.mockResolvedValue([]);
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1', 'opp-2']);
+		jest.spyOn(service as any, 'chunk').mockReturnValue([['opp-1'], ['opp-2']]);
+		stubDailyRun(service);
+		jest.spyOn(service, 'syncOpportunitiesToStaging').mockRejectedValueOnce(new Error('Salesforce request timeout')).mockResolvedValueOnce({
+			success: true,
+			importedAccounts: 1,
+			importedOpportunities: 1,
+			importedLineItems: 1,
+			batchId: 'batch-2',
+			syncSessionId: 'session-2',
+			summary: {},
+			unmappedProducts: [],
+		});
+
+		const result = await service.syncDailyModifiedOpportunities('holding-1', { jobId: 'job-1', executionEnvironment: 'production' });
+
+		// El segundo lote se procesa aunque el primero haya fallado.
+		expect(service.syncOpportunitiesToStaging).toHaveBeenCalledTimes(2);
+		expect(result).toMatchObject({ success: false, stats: { opportunities: 1 } });
+		expect(result.error).toContain('Salesforce request timeout');
+		expect(syncLogService.recordError).toHaveBeenCalledWith(
+			expect.objectContaining({ jobId: 'job-1', executionEnvironment: 'production', holdingId: 'holding-1', stage: 'staging' }),
+			expect.any(Error)
+		);
+		expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
 			'holding-1',
-			'batch-1',
-			expect.any(Object),
-			{ processingStatuses: ['create'], insertOnly: true }
+			expect.objectContaining({
+				type: 'salesforce_sync_failure',
+				severity: 'error',
+				message: 'Salesforce request timeout',
+				deduplication_key: 'salesforce:daily-sync:holding-1:staging',
+			})
 		);
 	});
 
-	it('calcula un rango de siete días de Santiago que incluye el día actual', () => {
-		const { service } = buildService();
+	it('registra en la bitácora el detalle de cada oportunidad del lote, incluido el motivo del bloqueo', async () => {
+		const { service, opportunitiesStgRepository, syncLogService } = buildService();
+		opportunitiesStgRepository.find.mockResolvedValue([
+			{
+				salesforce_id: 'opp-1',
+				salesforce_name: 'Deal bloqueado',
+				salesforce_account_id: 'account-1',
+				processing_status: 'error',
+				integration_notes: 'La oportunidad contiene productos Salesforce sin mapping activo',
+				error_message: 'Productos Salesforce sin mapping activo: Licencia (prod-1)',
+			},
+			{
+				salesforce_id: 'opp-2',
+				salesforce_name: 'Deal integrado',
+				salesforce_account_id: 'account-2',
+				processing_status: 'processed',
+				integration_notes: 'Cotización staging sincronizada',
+				error_message: null,
+			},
+		]);
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1', 'opp-2']);
+		stubDailyRun(service);
 
-		const range = (service as any).getSantiagoCalendarDayRange(7, new Date('2026-01-25T15:00:00.000Z'));
+		await service.syncDailyModifiedOpportunities('holding-1', { jobId: 'job-1', executionEnvironment: 'production' });
 
-		expect(range).toEqual({
-			start: '2026-01-19T03:00:00.000Z',
-			end: '2026-01-26T03:00:00.000Z',
-		});
+		expect(syncLogService.recordMany).toHaveBeenCalledWith([
+			expect.objectContaining({
+				jobId: 'job-1',
+				executionEnvironment: 'production',
+				holdingId: 'holding-1',
+				stage: 'opportunity',
+				level: 'error',
+				salesforceOpportunityId: 'opp-1',
+				processingStatus: 'error',
+				errorMessage: 'Productos Salesforce sin mapping activo: Licencia (prod-1)',
+			}),
+			expect.objectContaining({
+				stage: 'opportunity',
+				level: 'info',
+				salesforceOpportunityId: 'opp-2',
+				processingStatus: 'processed',
+			}),
+		]);
+	});
+
+	it('omite los eventos informativos cuando la sincronización se invoca sin contexto de corrida', async () => {
+		const { service, opportunitiesStgRepository, syncLogService } = buildService();
+		opportunitiesStgRepository.find.mockResolvedValue([]);
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1']);
+		stubDailyRun(service);
+
+		await service.syncDailyModifiedOpportunities('holding-1');
+
+		expect(syncLogService.record).not.toHaveBeenCalled();
+		expect(syncLogService.recordMany).not.toHaveBeenCalled();
+	});
+
+	it('registra los errores incluso sin contexto de corrida para no perder el rastro del fallo', async () => {
+		const { service, syncLogService } = buildService();
+		jest.spyOn(service as any, 'getSantiagoCloseDateRange').mockReturnValue({ start: '2025-12-27', end: '2026-01-25' });
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockRejectedValue(new Error('Salesforce caído'));
+
+		await service.syncDailyModifiedOpportunities('holding-1');
+
+		expect(syncLogService.recordError).toHaveBeenCalledWith(
+			expect.objectContaining({ jobId: 'manual', executionEnvironment: 'unknown', holdingId: 'holding-1', stage: 'selection' }),
+			expect.any(Error)
+		);
+	});
+
+	it('notifica y registra cuando la consulta de selección falla', async () => {
+		const { service, notificationsService, syncLogService } = buildService();
+		jest.spyOn(service as any, 'getSantiagoCloseDateRange').mockReturnValue({ start: '2025-12-27', end: '2026-01-25' });
+		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockRejectedValue(
+			new Error('Salesforce authentication failed. Please reconnect.')
+		);
+
+		const result = await service.syncDailyModifiedOpportunities('holding-1', { jobId: 'job-1', executionEnvironment: 'production' });
+
+		expect(result).toMatchObject({ success: false, error: 'Salesforce authentication failed. Please reconnect.' });
+		expect(syncLogService.recordError).toHaveBeenCalledWith(
+			expect.objectContaining({ stage: 'selection', holdingId: 'holding-1' }),
+			expect.any(Error)
+		);
+		expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+			'holding-1',
+			expect.objectContaining({ type: 'salesforce_sync_failure', deduplication_key: 'salesforce:daily-sync:holding-1:selection' })
+		);
 	});
 
 	it('omite una cotización existente antes de procesar cliente o ítems', async () => {
@@ -439,7 +581,9 @@ describe('SalesforceSyncCompleteService', () => {
 		jest.spyOn(service as any, 'fetchQuoteLineItems').mockResolvedValue(new Map());
 		jest.spyOn(service as any, 'mergeLineItems').mockImplementation(() => undefined);
 		jest.spyOn(service as any, 'hydrateAccounts').mockResolvedValue(undefined);
-		opportunitiesStgRepository.find.mockResolvedValue([{ salesforce_id: 'opp-1', raw_data: opportunity, source_hash: JSON.stringify(opportunity) }]);
+		opportunitiesStgRepository.find.mockResolvedValue([
+			{ salesforce_id: 'opp-1', raw_data: opportunity, source_hash: JSON.stringify(opportunity) },
+		]);
 		accountsStgRepository.find.mockResolvedValue([
 			{ salesforce_id: 'acc-1', raw_data: { Id: 'acc-1', Name: 'ACME' }, source_hash: JSON.stringify({ Id: 'acc-1', Name: 'ACME' }) },
 		]);
@@ -723,17 +867,9 @@ describe('SalesforceSyncCompleteService', () => {
 			tax_id: '76517784-7',
 		});
 
-		await (service as any).createOrLinkClientEntity(
-			'client-1',
-			{ legal_name: 'Acme SpA' },
-			{ Id: 'account-1', Name: 'Acme SpA' },
-			'holding-1'
-		);
+		await (service as any).createOrLinkClientEntity('client-1', { legal_name: 'Acme SpA' }, { Id: 'account-1', Name: 'Acme SpA' }, 'holding-1');
 
-		expect(clientEntityRepository.update).toHaveBeenCalledWith(
-			'entity-existing',
-			expect.objectContaining({ tax_id: '76517784-7' })
-		);
+		expect(clientEntityRepository.update).toHaveBeenCalledWith('entity-existing', expect.objectContaining({ tax_id: '76517784-7' }));
 		expect(typeormService.resolveClientEntitiesByTaxId).not.toHaveBeenCalled();
 	});
 
@@ -751,10 +887,7 @@ describe('SalesforceSyncCompleteService', () => {
 			'holding-1'
 		);
 
-		expect(clientEntityRepository.update).toHaveBeenCalledWith(
-			'entity-existing',
-			expect.objectContaining({ tax_id: '76517784-7' })
-		);
+		expect(clientEntityRepository.update).toHaveBeenCalledWith('entity-existing', expect.objectContaining({ tax_id: '76517784-7' }));
 		expect(typeormService.resolveClientEntitiesByTaxId).not.toHaveBeenCalled();
 	});
 

@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Espejo de `public.period_guard_warnings` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -11,7 +11,10 @@ import { User } from '@/modules/users/entities/user.entity';
  * Policies (1): pgw_select (SELECT, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_pgw_company_time ON public.period_guard_warnings USING btree (holding_id, company_id, occurred_at DESC)
  */
-@Entity('period_guard_warnings')
+@Entity({
+	name: 'period_guard_warnings',
+	comment: 'Registro de operaciones que el guard de cierre de períodos hubiera bloqueado, durante el modo "warn" del soft launch.',
+})
 export class PeriodGuardWarning {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'period_guard_warnings_pkey' })
 	id: string;
