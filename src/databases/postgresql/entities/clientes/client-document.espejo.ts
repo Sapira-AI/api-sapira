@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Client } from '@/databases/postgresql/entities/client.entity';
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 
 /**
  * Espejo de `public.client_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 8 filas · RLS on.
@@ -31,11 +31,11 @@ export class ClientDocument {
 	@Column({ type: 'uuid', nullable: false, default: () => 'gen_random_uuid()' })
 	holding_id: string;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_client_documents_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
 	@ManyToOne(() => Client, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'client_id', referencedColumnName: 'id', foreignKeyConstraintName: 'client_documents_client_id_fkey' })
 	client?: Client; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_client_documents_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

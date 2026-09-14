@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
 
 @Injectable()

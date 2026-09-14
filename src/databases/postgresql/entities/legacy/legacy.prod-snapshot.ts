@@ -44,13 +44,21 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
+			fk_invoices_client_entity: {
+				table: 'client_entities',
+				onDelete: 'NO ACTION',
+			},
+			invoices_legacy_client_id_fkey: {
+				table: 'clients',
+				onDelete: 'SET NULL',
+			},
 			invoices_legacy_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'CASCADE',
 			},
-			fk_invoices_client_entity: {
-				table: 'client_entities',
-				onDelete: 'NO ACTION',
+			invoices_legacy_contract_id_fkey: {
+				table: 'contracts',
+				onDelete: 'SET NULL',
 			},
 			invoices_legacy_created_by_fkey: {
 				table: 'users',
@@ -59,14 +67,6 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			invoices_legacy_holding_id_fkey: {
 				table: 'company_holdings',
 				onDelete: 'CASCADE',
-			},
-			invoices_legacy_client_id_fkey: {
-				table: 'clients',
-				onDelete: 'SET NULL',
-			},
-			invoices_legacy_contract_id_fkey: {
-				table: 'contracts',
-				onDelete: 'SET NULL',
 			},
 			invoices_legacy_reconciled_invoice_id_fkey: {
 				table: 'invoices',
@@ -226,24 +226,24 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			invoice_items_legacy_match_created_by_fkey: {
-				table: 'users',
-				onDelete: 'CASCADE',
-			},
 			invoice_items_legacy_match_confirmed_by_fkey: {
 				table: 'users',
 				onDelete: 'SET NULL',
 			},
-			invoice_items_legacy_match_holding_id_fkey: {
-				table: 'company_holdings',
+			invoice_items_legacy_match_contract_id_fkey: {
+				table: 'contracts',
 				onDelete: 'CASCADE',
 			},
 			invoice_items_legacy_match_contract_item_id_fkey: {
 				table: 'contract_items',
 				onDelete: 'CASCADE',
 			},
-			invoice_items_legacy_match_contract_id_fkey: {
-				table: 'contracts',
+			invoice_items_legacy_match_created_by_fkey: {
+				table: 'users',
+				onDelete: 'CASCADE',
+			},
+			invoice_items_legacy_match_holding_id_fkey: {
+				table: 'company_holdings',
 				onDelete: 'CASCADE',
 			},
 			invoice_items_legacy_match_invoice_item_legacy_id_fkey: {
@@ -335,33 +335,33 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			mrr_legacy_invoice_item_legacy_id_fkey: {
-				table: 'invoice_items_legacy',
-				onDelete: 'CASCADE',
-			},
-			mrr_legacy_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			mrr_legacy_client_id_fkey: {
 				table: 'clients',
-				onDelete: 'NO ACTION',
-			},
-			mrr_legacy_migrated_to_contract_id_fkey: {
-				table: 'contracts',
-				onDelete: 'SET NULL',
-			},
-			mrr_legacy_migrated_by_fkey: {
-				table: 'users',
 				onDelete: 'NO ACTION',
 			},
 			mrr_legacy_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'NO ACTION',
 			},
+			mrr_legacy_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
+			},
+			mrr_legacy_invoice_item_legacy_id_fkey: {
+				table: 'invoice_items_legacy',
+				onDelete: 'CASCADE',
+			},
 			mrr_legacy_invoice_legacy_id_fkey: {
 				table: 'invoices_legacy',
 				onDelete: 'CASCADE',
+			},
+			mrr_legacy_migrated_by_fkey: {
+				table: 'users',
+				onDelete: 'NO ACTION',
+			},
+			mrr_legacy_migrated_to_contract_id_fkey: {
+				table: 'contracts',
+				onDelete: 'SET NULL',
 			},
 		},
 		uniques: {

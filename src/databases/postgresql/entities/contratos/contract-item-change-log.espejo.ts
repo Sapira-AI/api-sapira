@@ -1,6 +1,6 @@
 import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Espejo de `public.contract_item_change_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1189 filas · RLS on.
@@ -14,7 +14,11 @@ import { User } from '@/modules/users/entities/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_cicl_contract ON public.contract_item_change_log USING btree (contract_id, changed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_cicl_item ON public.contract_item_change_log USING btree (contract_item_id, changed_at DESC)
  */
-@Entity('contract_item_change_log')
+@Entity({
+	name: 'contract_item_change_log',
+	comment:
+		'Audit log de cambios en contract_items para contratos post-firma (Activo/Cancelado/Expirado). Trazabilidad de qué cambió, quién, cuándo y por qué.',
+})
 @Check('contract_item_change_log_change_type_check', "change_type = ANY (ARRAY['CREATE'::text, 'UPDATE'::text, 'DELETE'::text])")
 export class ContractItemChangeLog {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'contract_item_change_log_pkey' })

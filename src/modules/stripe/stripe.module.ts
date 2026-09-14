@@ -4,16 +4,16 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@/auth/auth.module';
-import { Product } from '@/modules/odoo/entities/products.entity';
+import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
+import { StripeCustomersStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customers-stg.entity';
+import { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-invoices-stg.entity';
+import { StripeProductMapping } from '@/databases/postgresql/entities/integraciones/stripe/stripe-product-mapping.entity';
+import { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
+import { StripeSyncJob } from '@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity';
 
 import { StripeStagingController } from './controllers/stripe-staging.controller';
 import { StripeSyncController } from './controllers/stripe-sync.controller';
-import { StripeConnection } from './entities/stripe-connection.entity';
-import { StripeCustomersStg } from './entities/stripe-customers-stg.entity';
-import { StripeInvoicesStg } from './entities/stripe-invoices-stg.entity';
-import { StripeProductMapping } from './entities/stripe-product-mapping.entity';
-import { StripeSubscriptionsStg } from './entities/stripe-subscriptions-stg.entity';
-import { StripeSyncJob } from './entities/stripe-sync-job.entity';
 import { StripeIntegrationLog, StripeIntegrationLogSchema } from './schemas/stripe-integration-log.schema';
 import { StripeIntegrationLogService } from './services/stripe-integration-log.service';
 import { StripeStagingService } from './services/stripe-staging.service';

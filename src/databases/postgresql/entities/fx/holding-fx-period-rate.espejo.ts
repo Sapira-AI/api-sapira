@@ -1,17 +1,20 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
- * Espejo de `public.holding_fx_period_rates` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 71 filas · RLS on.
+ * Espejo de `public.holding_fx_period_rates` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 63 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Tipos de cambio fijos por período configurados a nivel holding para conversión a moneda del sistema
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: update_holding_fx_period_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column(); validate_holding_fx_period_rates_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_holding_fx_period_rates().
  * Policies (4): tenant_isolation_delete_holding_fx_period_rates (DELETE, public); tenant_isolation_insert_holding_fx_period_rates (INSERT, public); tenant_isolation_select_holding_fx_period_rates (SELECT, public); tenant_isolation_update_holding_fx_period_rates (UPDATE, public).
  */
-@Entity('holding_fx_period_rates')
+@Entity({
+	name: 'holding_fx_period_rates',
+	comment: 'Tipos de cambio fijos por período configurados a nivel holding para conversión a moneda del sistema',
+})
 @Unique('holding_fx_period_rates_unique_period', ['holding_id', 'from_currency', 'to_currency', 'period_start', 'period_end'])
 @Check('holding_fx_period_rates_period_check', 'period_end >= period_start')
 @Check('holding_fx_period_rates_rate_check', 'rate > (0)::numeric')

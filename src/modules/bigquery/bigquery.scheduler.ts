@@ -4,8 +4,8 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 
 import { BigQueryService } from './bigquery.service';
 

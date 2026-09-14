@@ -5,13 +5,13 @@ import { BadRequestException, Injectable, InternalServerErrorException, Logger, 
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
 
-import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
 import {
 	QuantityImportResolutionSource,
 	QuantityImportStatus,
 	SapiraQuantityImport,
-} from '@/databases/postgresql/entities/sapira-quantity-import.entity';
-import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/stripe-customer-bigquery.entity';
+} from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
+import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
+import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ListQuantityImportsDto } from './dtos/list-quantity-imports.dto';

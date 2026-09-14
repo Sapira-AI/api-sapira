@@ -4,9 +4,17 @@
 > hasta que `yarn schema:log` no emita nada. Mientras emita algo, la entity **no** es todavía
 > la definición de la tabla.
 
-> Medición base: 2026-09-09, **1102 sentencias** de deriva · **343 al día de hoy** con los 130 entities cargados
+> Medición base: 2026-09-09, **1102 sentencias** de deriva · **104 al día de hoy**
 > (`TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log` contra producción).
-> De esas 343, **59 vienen de entities activas y 284 de espejos inertes**.
+>
+> **Las 104 están todas clasificadas y ninguna cambiaría producción**: 41 índices de
+> `special-index/`, 28 FKs que TypeORM dropea y vuelve a crear idénticas, 14 sentencias del churn
+> de `gen_random_uuid()`, 10 índices que se dropean y recrean igual, 4 defaults `CURRENT_DATE` que
+> TypeORM normaliza a `('now'::text)::date`, 3 defaults `ARRAY[]` equivalentes y las 4 de la
+> migración `AlignStagingProcessingStatusDefault`, que está escrita y espera autorización.
+>
+> Inventario: **132 tablas en producción** = 66 con entity activa + 64 con espejo inerte + 2 de
+> contabilidad interna (`sapira_sql_asset_history`, `sapira_typeorm_migrations`), que no llevan entity.
 
 > ⚠️ **Corrección de método (2026-09-13).** Hasta esta fecha las cifras por tabla se calculaban
 > atribuyendo cada sentencia por su `ALTER TABLE "x"`. Un `DROP INDEX "public"."idx_..."` no
@@ -89,62 +97,42 @@ el grueso del trabajo se hace antes de tocar nada crítico.
 | 56 | `stripe_sync_jobs` | `modules/stripe/entities/stripe-sync-job.entity.ts` | 6 → **1** | comentarios 5, índices 3 | 4 | bajo | **revisada** | faltaba en este registro; sin impacto |
 | 55 | `company_holdings` | `modules/holdings/entities/company-holding.entity.ts` | 1 → **0** | nulabilidad 1 | 50 | alto | **revisada** | sin impacto en consumidores |
 
-## Espejos (46 tablas, 284 sentencias)
+## Espejos (64 inertes tras E4)
 
 Los `.espejo.ts` son inertes: están fuera del glob `src/**/*.entity.ts` y ningún servicio los
 importa, así que **alinearlos no puede romper nada**. Se regeneran con
-`scripts/espejo/generate-espejo.py`, no se editan a mano. Sus `DROP INDEX` son siempre pares
-`DROP` + `CREATE` de la misma definición: el espejo sí declara el índice y TypeORM lo recrea
-porque está alterando otra cosa de la misma tabla.
+`scripts/espejo/generate-espejo.py`, no se editan a mano.
 
-| Tabla | Deriva | Tipos de diferencia | Estado |
-|---|---:|---|---|
-| `contract_items` | 33 | comentarios 22, índices 5, FKs/CHECKs 4, otros 2 | pendiente |
-| `mrr_legacy` | 25 | comentarios 19, FKs/CHECKs 6 | pendiente |
-| `revenue_schedule_monthly` | 21 | comentarios 9, FKs/CHECKs 6, índices 6 | pendiente |
-| `client_agent_configs` | 20 | índices 8, comentarios 6, FKs/CHECKs 6 | pendiente |
-| `quantities` | 18 | comentarios 10, FKs/CHECKs 8 | pendiente |
-| `custom_field_definitions` | 12 | comentarios 6, índices 4, FKs/CHECKs 2 | pendiente |
-| `odoo_object_mappings` | 11 | comentarios 5, índices 4, FKs/CHECKs 2 | pendiente |
-| `contract_invoices` | 11 | comentarios 5, FKs/CHECKs 4, otros 2 | pendiente |
-| `holding_email_sender_settings` | 10 | comentarios 8, índices 2 | pendiente |
-| `invoices_legacy` | 10 | comentarios 6, FKs/CHECKs 4 | pendiente |
-| `invoice_items_legacy` | 9 | comentarios 5, índices 2, FKs/CHECKs 2 | pendiente |
-| `overdue_check_log` | 8 | índices 3, comentarios 2, FKs/CHECKs 2, otros 1 | pendiente |
-| `subscriptions` | 8 | comentarios 6, FKs/CHECKs 2 | pendiente |
-| `salesforce_sync_logs` | 7 | comentarios 4, índices 2, otros 1 | pendiente |
-| `subscription_items` | 6 | comentarios 6 | pendiente |
-| `ai_runs` | 5 | índices 2, FKs/CHECKs 2, comentarios 1 | pendiente |
-| `contract_item_change_log` | 5 | índices 4, comentarios 1 | pendiente |
-| `email_sender_addresses` | 5 | comentarios 5 | pendiente |
-| `invoice_restructure_log` | 4 | FKs/CHECKs 2, índices 2 | pendiente |
-| `rag_documents` | 4 | índices 2, otros 2 | pendiente |
-| `contract_change_log` | 4 | índices 3, comentarios 1 | pendiente |
-| `user_view_preferences` | 4 | comentarios 4 | pendiente |
-| `invoice_items_legacy_match` | 4 | comentarios 2, FKs/CHECKs 2 | pendiente |
-| `client_documents` | 4 | FKs/CHECKs 2, otros 2 | pendiente |
-| `accounting_period_events` | 3 | índices 2, comentarios 1 | pendiente |
-| `holding_settings` | 3 | comentarios 2, otros 1 | pendiente |
-| `invoice_payments` | 3 | índices 2, otros 1 | pendiente |
-| `bank_upload_batches` | 2 | FKs/CHECKs 2 | pendiente |
-| `bank_movements` | 2 | FKs/CHECKs 2 | pendiente |
-| `contract_documents` | 2 | FKs/CHECKs 2 | pendiente |
-| `contract_lifecycle_events` | 2 | índices 2 | pendiente |
-| `period_guard_warnings` | 2 | índices 1, comentarios 1 | pendiente |
-| `bank_column_mappings` | 2 | comentarios 2 | pendiente |
-| `quote_attachments` | 2 | comentarios 2 | pendiente |
-| `ai_agents` | 2 | comentarios 2 | pendiente |
-| `ai_messages` | 1 | índices 1 | pendiente |
-| `contract_amendments` | 1 | índices 1 | pendiente |
-| `workflow_step_documents` | 1 | índices 1 | pendiente |
-| `client_entity_tax_id_normalization_conflicts` | 1 | comentarios 1 | pendiente |
-| `invoice_trigger_debug_logs` | 1 | comentarios 1 | pendiente |
-| `fx_api_sync_log` | 1 | comentarios 1 | pendiente |
-| `holding_fx_period_rates` | 1 | comentarios 1 | pendiente |
-| `accounting_period_cutoff` | 1 | comentarios 1 | pendiente |
-| `company_legal_documents` | 1 | otros 1 | pendiente |
-| `workflow_steps` | 1 | otros 1 | pendiente |
-| `contract_workflow_history` | 1 | comentarios 1 | pendiente |
+Tras corregir el generador (bitácoras 9 y 10) los 64 espejos restantes emiten **49
+sentencias en total**, todas del ruido conocido: pares `DROP`+`CREATE` de índices y FKs idénticos,
+el churn de `gen_random_uuid()` y defaults que TypeORM normaliza distinto. Ninguna es deriva real.
+
+| Tabla | Sentencias (ruido) |
+|---|---:|
+| `invoice_restructure_log` | 4 |
+| `contract_item_change_log` | 4 |
+| `overdue_check_log` | 4 |
+| `client_documents` | 4 |
+| `contract_invoices` | 4 |
+| `contract_change_log` | 3 |
+| `salesforce_sync_logs` | 3 |
+| `invoice_payments` | 3 |
+| `bank_upload_batches` | 2 |
+| `bank_movements` | 2 |
+| `contract_documents` | 2 |
+| `ai_runs` | 2 |
+| `rag_documents` | 2 |
+| `contract_lifecycle_events` | 2 |
+| `accounting_period_events` | 2 |
+| `ai_messages` | 1 |
+| `contract_amendments` | 1 |
+| `workflow_step_documents` | 1 |
+| `period_guard_warnings` | 1 |
+| `holding_settings` | 1 |
+| `company_legal_documents` | 1 |
+
+El procedimiento de promoción está en `README.md` → **Promover un espejo**.
+
 
 ## Bitácora de alineación
 
@@ -343,6 +331,64 @@ Esta entity **no figuraba en el registro**: quedó fuera del inventario inicial.
 comentario de tabla y 4 de columna, más 3 índices. Lo único que queda es
 `idx_stripe_sync_jobs_created_at`, que es `DESC` y vive en `special-index/`.
 
+### 9 · El generador del espejo estaba roto (2026-09-14)
+
+Al empezar E4 se corrió `generate-espejo.py` sobre `contratos` y **corrompió los 16 espejos**. Tres
+fallas independientes, todas introducidas sin que nada las detectara:
+
+1. **FKs destruidas.** `fetch-catalog.ts` (escrito en E2) devolvía las columnas de cada FK como el
+   literal `{contract_id}` en vez de una lista, porque `array_agg(a.attname)` sobre una columna de
+   tipo `name` produce `name[]` y el driver no lo parsea. El generador recorría ese string carácter
+   por carácter y emitía `@JoinColumn([{ name: '{' }, { name: 's' }, …])`. Se arregló con
+   `a.attname::text` en la consulta y un normalizador defensivo en el generador.
+2. **Conteos de filas en `-1`.** `reltuples` vale -1 mientras la tabla no pase por `ANALYZE`
+   (PG 14+). Ahora se cuenta de verdad en ese caso.
+3. **El barrel global se regeneraba desde un inventario con fecha.** `espejo.existing.ts` salía de
+   `existing-entities.json` (2026-08-22): resucitó las 5 entities borradas en este trabajo y perdió
+   `AuthUser` y `SapiraQuantityImport`, con lo que **492 tests cayeron** con *Entity metadata for
+   BigQueryConnection#user was not found*. Ahora se arma leyendo los `.entity.ts` que existen en
+   disco, y `database.module.spec.ts` verifica que barrel y disco coincidan en ambas direcciones.
+
+Una cuarta apareció al promover: el generador **reescribía el `.espejo.ts` de una tabla ya
+promovida**, dejando dos clases sobre la misma tabla (pasó con `permissions`). Ahora detecta el
+`.entity.ts` y emite ese; hay guarda que lo verifica.
+
+Ninguna de las cuatro se veía desde `schema:log`: el generador solo se rompe cuando alguien lo corre.
+
+### 10 · Comentarios en los espejos (2026-09-14) — 343 → 118 sentencias
+
+El generador ponía los comentarios de producción en el **JSDoc** de cada columna, no en la opción
+`comment` del decorador. TypeORM compara comentarios, así que los 64 espejos pedían
+`COMMENT ON COLUMN … IS NULL` sobre cada comentario real de producción: 206 sentencias, el 60% de la
+deriva que quedaba. Emitirlos también como `comment:` las bajó a 2.
+
+De paso se cerró el último `DROP COLUMN` del corpus: `rag_documents.embedding` es `vector(1536)` en
+producción y el espejo declaraba `vector` a secas. La dimensión ya venía en `format_type`; se pasa
+como `length: 1536`.
+
+### 11 · E4 — promoción de espejos (2026-09-14) — 118 → 104 sentencias
+
+Promovidos por dependencia, verificando entre lotes:
+
+| Lote | Espejos promovidos | FKs que desbloquea |
+|---|---|---:|
+| 1 | `roles`, `contract_items`, `churn_reasons`, `workflow_steps`, `invoices_legacy`, `subscriptions` | 8 |
+| 2 | `quantities`, `subscription_items`, `invoice_items_legacy`, `invoice_items_legacy_match` | 4 |
+
+El orden importa: promover un espejo que importa otro `.espejo.ts` cargaría ese otro en runtime
+saltándose el mecanismo de promoción. Los seis del lote 1 no dependían de ningún espejo; los cuatro
+del lote 2 dependían solo del lote 1.
+
+Con eso quedaron declaradas las 12 FKs que estaban bloqueadas, en `users`,
+`notification_role_subscriptions`, `contracts`, `invoices`, `invoice_items` y
+`sapira_quantity_imports`. **No queda ninguna FK de producción sin declarar.**
+
+**Impacto en consumidores: ninguno.** Promover no registra la entity en ningún `forFeature`, así que
+ningún servicio recibe un repositorio nuevo; solo entra a la metadata que TypeORM construye al
+arrancar. Los 763 tests siguen en verde.
+
+Quedan **64 espejos inertes**. Ya no bloquean nada: se promueven cuando su módulo lo necesite.
+
 ## Falsos positivos conocidos de `schema:log`
 
 Diferencias que **no** son deriva y que no se pueden eliminar desde la entity. Hay que descontarlas
@@ -368,9 +414,9 @@ con autorización explícita. Hasta entonces `schema:log` va a seguir mostrando 
 
 ## Notas
 
-- **Las `DROP COLUMN` son lo más delicado**: son columnas que existen en producción y la
-  entity no declara. De las 68 iniciales queda **1**, `rag_documents.embedding`, en un espejo.
-  Ninguna migración con `DROP COLUMN` debe aplicarse sin autorización explícita.
+- **Las `DROP COLUMN` eran lo más delicado**: columnas que existen en producción y ninguna entity
+  declara. De las 68 iniciales quedan **0**. La regla sigue en pie: ninguna migración con
+  `DROP COLUMN` se aplica sin autorización explícita.
 - Los comentarios fueron un tercio de la deriva y salen de que las entities no declaran los que sí
   tiene producción. Es mecánico y sin riesgo funcional, pero **hay que copiarlos literalmente del
   catálogo**: transcribirlos a mano produjo texto inventado dos veces. Se copian con un script.

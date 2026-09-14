@@ -6,11 +6,11 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { SiiCaf, SiiCertificate, SiiConfiguration } from '@/databases/postgresql/entities/sii/sii.entity';
 import { FacturaClientService } from '@/modules/factura/factura-client.service';
-import { Company } from '@/modules/odoo/entities/companies.entity';
 
 import { CreateCafDto, IntegrateFacturaDto, ReserveFolioDto, UpdateSiiConfigurationDto } from './dtos/sii.dto';
-import { SiiCaf, SiiCertificate, SiiConfiguration } from './entities/sii.entity';
 
 @Injectable()
 export class SiiService {

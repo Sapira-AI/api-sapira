@@ -8,7 +8,7 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeor
  * Triggers: ninguno.
  * Policies (4): tenant_isolation_delete_bank_column_mappings (DELETE, authenticated); tenant_isolation_insert_bank_column_mappings (INSERT, authenticated); tenant_isolation_select_bank_column_mappings (SELECT, authenticated); tenant_isolation_update_bank_column_mappings (UPDATE, authenticated).
  */
-@Entity('bank_column_mappings')
+@Entity({ name: 'bank_column_mappings', comment: 'Presets de mapeo de columnas para importación de cartolas bancarias' })
 export class BankColumnMapping {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'bank_column_mappings_pkey' })
 	id: string;
@@ -23,7 +23,12 @@ export class BankColumnMapping {
 	mapping_name: string;
 
 	/** JSON con: date_column, description_column, amount_column, currency_column, default_currency, date_format, decimal_separator, thousands_separator, skip_rows, amount_sign_convention */
-	@Column({ type: 'jsonb', nullable: false })
+	@Column({
+		type: 'jsonb',
+		comment:
+			'JSON con: date_column, description_column, amount_column, currency_column, default_currency, date_format, decimal_separator, thousands_separator, skip_rows, amount_sign_convention',
+		nullable: false,
+	})
 	column_mapping: any;
 
 	@Column({ type: 'boolean', nullable: true, default: false })

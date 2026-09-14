@@ -1,9 +1,9 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
- * Espejo de `public.overdue_check_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 68 filas · RLS on.
+ * Espejo de `public.overdue_check_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 51 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Registro de ejecuciones de la verificación automática de facturas vencidas.
  *    Tabla de auditoría del sistema con RLS habilitado.
@@ -15,7 +15,11 @@ import { CompanyHolding } from '@/modules/holdings/entities/company-holding.enti
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_holding_id ON public.overdue_check_log USING btree (holding_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_status ON public.overdue_check_log USING btree (status, created_at DESC)
  */
-@Entity('overdue_check_log')
+@Entity({
+	name: 'overdue_check_log',
+	comment:
+		'Registro de ejecuciones de la verificación automática de facturas vencidas. \n   Tabla de auditoría del sistema con RLS habilitado. \n   holding_id NULL indica ejecución global que afecta múltiples holdings.',
+})
 @Check('overdue_check_log_status_check', "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text])")
 export class OverdueCheckLog {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'overdue_check_log_pkey' })
@@ -46,7 +50,7 @@ export class OverdueCheckLog {
 	created_at: Date;
 
 	/** ID del holding. NULL indica ejecución global del sistema que afecta múltiples holdings. */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'ID del holding. NULL indica ejecución global del sistema que afecta múltiples holdings.', nullable: true })
 	holding_id?: string;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })

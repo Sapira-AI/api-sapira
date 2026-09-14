@@ -1,7 +1,7 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Quote } from '@/modules/salesforce/entities/quote.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 
 /**
  * Espejo de `public.quote_attachments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -11,7 +11,7 @@ import { User } from '@/modules/users/entities/user.entity';
  * Triggers: ninguno.
  * Policies (4): Users can delete quote attachments in their holding (DELETE, public); Users can insert quote attachments in their holding (INSERT, public); Users can update quote attachments in their holding (UPDATE, public); Users can view quote attachments in their holding (SELECT, public).
  */
-@Entity('quote_attachments')
+@Entity({ name: 'quote_attachments', comment: 'Adjuntos de cotizaciones incluyendo aceptación de cliente, OC, HES' })
 @Check(
 	'quote_attachments_attachment_type_check',
 	"attachment_type = ANY (ARRAY['acceptance'::text, 'purchase_order'::text, 'hes'::text, 'contract'::text, 'other'::text])"
@@ -39,7 +39,7 @@ export class QuoteAttachment {
 	file_size?: number;
 
 	/** Tipo: acceptance (aceptación cliente), purchase_order (OC), hes (HES), contract, other */
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'Tipo: acceptance (aceptación cliente), purchase_order (OC), hes (HES), contract, other', nullable: false })
 	attachment_type: string;
 
 	@Column({ type: 'uuid', nullable: true })

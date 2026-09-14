@@ -3,7 +3,7 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, Primary
 import { AiAgent } from './ai-agent.espejo';
 
 /**
- * Espejo de `public.ai_agent_configs` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 122 filas · RLS on.
+ * Espejo de `public.ai_agent_configs` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 90 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: update_ai_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column().

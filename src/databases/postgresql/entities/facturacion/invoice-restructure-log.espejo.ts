@@ -1,10 +1,10 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
- * Espejo de `public.invoice_restructure_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 263 filas · RLS on.
+ * Espejo de `public.invoice_restructure_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 312 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
@@ -39,11 +39,11 @@ export class InvoiceRestructureLog {
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
 	created_at: Date;
 
-	@ManyToOne(() => Contract)
-	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_restructure_log_contract_id_fkey' })
-	contract?: Contract; // entity existente (no se duplica)
-
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'actor_user_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_restructure_log_actor_user_id_fkey' })
 	actorUser?: User; // entity existente (no se duplica)
+
+	@ManyToOne(() => Contract)
+	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_restructure_log_contract_id_fkey' })
+	contract?: Contract; // entity existente (no se duplica)
 }

@@ -2,8 +2,12 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
-import { SalesforceSyncRunItem } from '../entities/salesforce-sync-run-item.entity';
-import { SalesforceSyncRun, SalesforceSyncRunStatus, SalesforceSyncRunType } from '../entities/salesforce-sync-run.entity';
+import { SalesforceSyncRunItem } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-sync-run-item.entity';
+import {
+	SalesforceSyncRun,
+	SalesforceSyncRunStatus,
+	SalesforceSyncRunType,
+} from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-sync-run.entity';
 
 const ACTIVE_STATUSES: SalesforceSyncRunStatus[] = ['queued', 'running', 'cancellation_requested'];
 

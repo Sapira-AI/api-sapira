@@ -4,8 +4,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+import { OdooInvoiceLinesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoice-lines-stg.entity';
+import { OdooInvoicesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoices-stg.entity';
+import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
+import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 
 import {
 	CountRecordsDTO,
@@ -16,13 +23,6 @@ import {
 	StartAsyncJobDTO,
 	SyncInvoicesDTO,
 } from './dtos/odoo.dto';
-import { Company } from './entities/companies.entity';
-import { OdooConnection } from './entities/odoo-connection.entity';
-import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
-import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
-import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
-import { OdooProductMapping } from './entities/odoo-product-mapping.entity';
-import { Product } from './entities/products.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import {
 	EstimateResult,

@@ -3,13 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { EncryptionService } from '@/common/services/encryption.service';
+import { SalesforceAuthType, SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 
 import {
 	SalesforceDuplicateClientEntitiesQueryDto,
 	SalesforceDuplicateClientEntitiesResponseDto,
 } from './dtos/salesforce-duplicate-client-entities.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from './dtos/salesforce-tax-id-normalization.dto';
-import { SalesforceAuthType, SalesforceConnection } from './entities/salesforce-connection.entity';
 import {
 	SalesforceAccount,
 	SalesforceCredentials,

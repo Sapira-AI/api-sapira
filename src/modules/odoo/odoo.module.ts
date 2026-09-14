@@ -5,21 +5,20 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { MongooseModules } from '@/databases/mongoose/database.module';
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
-import { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { InvoiceItem } from '@/databases/postgresql/entities/facturacion/invoice-item.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
+import { GenericExportVat } from '@/databases/postgresql/entities/fx/generic-export-vat.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+import { OdooInvoiceLinesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoice-lines-stg.entity';
+import { OdooInvoicesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoices-stg.entity';
+import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
+import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 import { EventsModule } from '@/events/events.module';
 
-import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
-import { Invoice } from '../invoices/entities/invoice.entity';
-
-import { Company } from './entities/companies.entity';
-import { OdooConnection } from './entities/odoo-connection.entity';
-import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
-import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
-import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
-import { OdooProductMapping } from './entities/odoo-product-mapping.entity';
-import { Product } from './entities/products.entity';
 import { FiscalPositionsController } from './fiscal-positions.controller';
 import { InvoiceProcessingController } from './invoice-processing.controller';
 import { InvoiceProcessingService } from './invoice-processing.service';

@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 
 import { CreateDraftInvoiceDTO } from './dtos/odoo.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
 import { CreateDraftInvoiceResult, OdooConnectionConfig } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
 import { TaxMappingService } from './services/tax-mapping.service';

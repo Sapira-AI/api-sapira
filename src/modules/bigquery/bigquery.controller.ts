@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStat
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
-import { SapiraQuantityImport } from '@/databases/postgresql/entities/sapira-quantity-import.entity';
+import { SapiraQuantityImport } from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
 
 import { BigQueryService } from './bigquery.service';
 import { ListQuantityImportsDto } from './dtos/list-quantity-imports.dto';

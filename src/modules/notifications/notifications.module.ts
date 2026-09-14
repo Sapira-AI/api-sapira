@@ -2,12 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
-import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { AppNotificationRecipient } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity';
+import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
+import { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
-import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
-import { AppNotification } from './entities/app-notification.entity';
-import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';

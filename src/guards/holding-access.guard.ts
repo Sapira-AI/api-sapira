@@ -2,8 +2,8 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Unauthor
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { UserHolding } from '../modules/holdings/entities/user-holding.entity';
-import { User } from '../modules/users/entities/user.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Guard para validar que el usuario tiene acceso al holdingId recibido en el header X-Holding-Id

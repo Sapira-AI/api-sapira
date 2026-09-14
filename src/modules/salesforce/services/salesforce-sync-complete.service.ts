@@ -3,8 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { GenericVatsService } from '@/common/services/generic-vats.service';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
+import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity';
+import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
+import { SalesforceAccountsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-accounts-stg.entity';
+import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
+import { SalesforceLineItemsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-line-items-stg.entity';
+import { SalesforceOpportunitiesStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-opportunities-stg.entity';
 import {
 	NotificationsService,
 	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
@@ -14,12 +20,6 @@ import { OdooPartnersService } from '@/modules/odoo/odoo-partners.service';
 
 import { SyncCompleteResponseDto, SyncCompleteStats } from '../dtos/salesforce-sync-complete.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from '../dtos/salesforce-tax-id-normalization.dto';
-import { QuoteItem } from '../entities/quote-item.entity';
-import { Quote } from '../entities/quote.entity';
-import { SalesforceAccountsStg } from '../entities/salesforce-accounts-stg.entity';
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
-import { SalesforceLineItemsStg } from '../entities/salesforce-line-items-stg.entity';
-import { SalesforceOpportunitiesStg } from '../entities/salesforce-opportunities-stg.entity';
 import {
 	SalesforceAccount,
 	SalesforceOpportunityLineItem,

@@ -2,10 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+
 import { HoldingsService } from '../holdings/holdings.service';
 
 import { UserMenuContextResponseDto, UserResponseDto } from './dtos/users.dto';
-import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {

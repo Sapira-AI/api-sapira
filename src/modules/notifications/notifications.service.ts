@@ -2,14 +2,14 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
-import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { AppNotificationRecipient } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity';
+import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
+import { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { CreateAppNotificationDto } from './dtos/create-app-notification.dto';
 import { ListNotificationsDto, ReplaceSalesforceStagingBlockedSubscriptionsDto } from './dtos/notifications.dto';
-import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
-import { AppNotification } from './entities/app-notification.entity';
-import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
 import { NotificationsGateway } from './notifications.gateway';
 
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 
 import { FieldTransformationService, TransformationConfig, TransformationType } from './field-transformation.service';
 

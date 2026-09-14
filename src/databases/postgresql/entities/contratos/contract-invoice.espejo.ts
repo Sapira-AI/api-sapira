@@ -1,9 +1,9 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
-import { InvoicesLegacy } from '../legacy/invoices-legacy.espejo';
+import { InvoicesLegacy } from '../legacy/invoices-legacy.entity';
 
 /**
  * Espejo de `public.contract_invoices` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 4983 filas · RLS on.
@@ -51,31 +51,35 @@ export class ContractInvoice {
 	@UpdateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
 	updated_at: Date;
 
-	@Column({ type: 'uuid', nullable: false, default: () => "gen_random_uuid()" })
+	@Column({ type: 'uuid', nullable: false, default: () => 'gen_random_uuid()' })
 	holding_id: string;
 
 	/** Moneda de emisión de la factura (puede diferir de currency que es moneda del contrato) */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Moneda de emisión de la factura (puede diferir de currency que es moneda del contrato)', nullable: true })
 	invoice_currency?: string;
 
 	/** Política FX: fixed (tipo cambio fijo) o spot (tipo cambio del día de emisión) */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Política FX: fixed (tipo cambio fijo) o spot (tipo cambio del día de emisión)', nullable: true })
 	fx_policy?: string;
 
 	/** Tipo de cambio fijo cuando fx_policy = fixed */
-	@Column({ type: 'numeric', nullable: true })
+	@Column({ type: 'numeric', comment: 'Tipo de cambio fijo cuando fx_policy = fixed', nullable: true })
 	fx_contract_to_invoice?: number;
 
 	/** Factura legacy que satisfizo esta factura programada */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', comment: 'Factura legacy que satisfizo esta factura programada', nullable: true })
 	satisfied_by_legacy_id?: string;
 
 	/** Indica si la factura programada ya fue cubierta por legacy */
-	@Column({ type: 'boolean', nullable: true, default: false })
+	@Column({ type: 'boolean', comment: 'Indica si la factura programada ya fue cubierta por legacy', nullable: true, default: false })
 	is_satisfied?: boolean;
 
 	@ManyToOne(() => InvoicesLegacy, { onDelete: 'SET NULL' })
-	@JoinColumn({ name: 'satisfied_by_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_invoices_satisfied_by_legacy_id_fkey' })
+	@JoinColumn({
+		name: 'satisfied_by_legacy_id',
+		referencedColumnName: 'id',
+		foreignKeyConstraintName: 'contract_invoices_satisfied_by_legacy_id_fkey',
+	})
 	satisfiedByLegacy?: InvoicesLegacy; // espejo de otro módulo
 
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })

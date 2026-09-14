@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.odoo_object_mappings` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -10,7 +10,7 @@ import { CompanyHolding } from '@/modules/holdings/entities/company-holding.enti
  * Triggers: trigger_update_odoo_mapping_timestamp · BEFORE UPDATE FOR EACH ROW → update_odoo_mapping_updated_at().
  * Policies (4): Users can delete odoo mappings from their holding (DELETE, public); Users can insert odoo mappings for their holding (INSERT, public); Users can update odoo mappings from their holding (UPDATE, public); Users can view odoo mappings from their holding (SELECT, public).
  */
-@Entity('odoo_object_mappings')
+@Entity({ name: 'odoo_object_mappings', comment: 'Mapeo entre objetos de Odoo y registros de Sapira' })
 @Unique('unique_odoo_object_per_holding', ['holding_id', 'odoo_object_type', 'odoo_object_id'])
 @Index('idx_odoo_object_mappings_holding', ['holding_id'])
 @Index('idx_odoo_object_mappings_odoo_lookup', ['holding_id', 'odoo_object_type', 'odoo_object_id'])
@@ -23,19 +23,19 @@ export class OdooObjectMapping {
 	holding_id: string;
 
 	/** Tipo de objeto en Odoo (invoice, client, etc) */
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'Tipo de objeto en Odoo (invoice, client, etc)', nullable: false })
 	odoo_object_type: string;
 
 	/** ID del objeto en Odoo */
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'ID del objeto en Odoo', nullable: false })
 	odoo_object_id: string;
 
 	/** Nombre de la tabla en Sapira */
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'Nombre de la tabla en Sapira', nullable: false })
 	sapira_table_name: string;
 
 	/** ID del registro en Sapira */
-	@Column({ type: 'uuid', nullable: false })
+	@Column({ type: 'uuid', comment: 'ID del registro en Sapira', nullable: false })
 	sapira_record_id: string;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })

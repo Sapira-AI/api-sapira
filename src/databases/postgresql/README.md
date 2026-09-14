@@ -41,15 +41,18 @@ SUPABASE_LOGGING=false      # true para debug
 src/databases/postgresql/
 ├── database.module.ts          # Configuración de TypeORM para Supabase
 ├── database.provider.ts        # Provider con métodos utilitarios
-├── entities/
+├── entities/                   # TODAS las entities del repo, organizadas por dominio
 │   ├── README.md               # Convención del ESPEJO de la DB por módulo (rediseño v2, paso 1)
 │   ├── NOTAS-ESPEJO.md         # Rarezas verificadas en prod al espejar (insumo revisión Domi / paso 4)
-│   ├── <modulo>/               # 16 carpetas (base-tenancy, fx, clientes, …, integraciones/*, sii): `*.espejo.ts` apagados
-│   │                           # generados desde prod en vivo + README (diff de entities existentes) + snapshot + spec
+│   ├── <dominio>/              # 16 carpetas (base-tenancy, fx, clientes, …, integraciones/*, sii) según
+│   │                           # scripts/espejo/module-map.json. Conviven tres cosas:
+│   │                           #   *.entity.ts   entities del repo, que carga runtime
+│   │                           #   *.espejo.ts   espejos inertes (fuera del glob), generados desde prod
+│   │                           #   README + prod-snapshot + spec del módulo
 │   ├── espejo.index.ts         # Barrel de todos los espejos (solo para los specs)
 │   ├── espejo.existing.ts      # Reexport de las entities activas (solo para los specs)
-│   ├── *.entity.ts             # Entities existentes (producción) — NO se modifican
-│   └── base.entity.ts          # Entidad base con campos comunes (helper de módulos existentes)
+│   ├── auth-user.entity.ts     # `auth.users` de Supabase: no es una tabla de `public`, va en la raíz
+│   └── base.entity.ts          # Entidad base con campos comunes (clase abstracta, sin @Entity)
 ├── database.module.spec.ts     # Guard: sync protegido y el espejo (*.espejo.ts) no entra al glob de runtime
 ├── assets-runner.ts             # Runner de SQL no gestionado por TypeORM
 ├── assets.manifest.json         # Orden de directorios y overrides explícitos de assets
@@ -64,7 +67,26 @@ src/databases/postgresql/
 └── README.md                   # Esta documentación
 ```
 
-> 🔴 Rediseño v2 (carril B): el espejo `entities/<modulo>/*.espejo.ts` se genera SOLO desde prod en vivo (MCP Supabase), es inerte en runtime y no toca las entities existentes. Ver `entities/README.md`.
+> 🔴 Rediseño v2 (carril B): el espejo `entities/<dominio>/*.espejo.ts` se genera SOLO desde prod en vivo y es inerte en runtime. Convive en la misma carpeta con las entities del repo, que sí carga runtime; el generador no las toca. Ver `entities/README.md`.
+
+### Promover un espejo
+
+Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el runtime lo carga ni
+`schema:log` lo mira. Promoverlo lo convierte en la definición viva de su tabla.
+
+1. **Verifica que no dependa de otro espejo sin promover.** Si el espejo importa otro `.espejo.ts`,
+   promoverlo solo cargaría el otro en runtime saltándose este mismo control. Se promueve por lotes,
+   en orden de dependencia.
+2. Renombra `<tabla>.espejo.ts` → `<tabla>.entity.ts`.
+3. Corre el generador (`python3 scripts/espejo/generate-espejo.py <modulo>`, dos pasadas sobre todos
+   los módulos): detecta el archivo promovido, deja de emitir el espejo y arregla el barrel.
+4. Agrega la ruta a `promotedMirrorEntities` en `database.module.spec.ts`.
+5. Declara en las entities activas las FKs que ese espejo bloqueaba.
+6. `yarn jest` y `TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log`.
+
+> ⚠️ El generador **reescribe** el `.entity.ts` de un espejo promovido en cada corrida: sigue siendo
+> un archivo generado. Lo que se edite a mano ahí se pierde. Si una tabla promovida necesita algo que
+> el generador no produce, va en el generador, no en el archivo.
 
 ## 🧱 Assets SQL no-TypeORM
 
@@ -311,7 +333,8 @@ así que la fila quedaría invisible y descuadraría `getProcessingStats`—, ca
 por un agujero negro silencioso. `'create'` coincide con el fallback del propio clasificador y deja
 la fila procesable si el trigger llegara a faltar; `DROP DEFAULT` era la alternativa purista, pero un
 NULL tampoco entra en el loop. Aplicado en `1788953100000-AlignStagingProcessingStatusDefault` y en
-las entities; el guard está en `src/modules/odoo/entities/odoo-stg-processing-status.spec.ts`.
+las entities; el guard está en
+`src/databases/postgresql/entities/integraciones/odoo/odoo-stg-processing-status.spec.ts`.
 
 **5. Dependencias del esquema `auth` de Supabase.** `mrr_legacy.created_by` tiene
 `DEFAULT auth.uid()` y varias funciones leen `auth.users`. Un bootstrap en Postgres vainilla necesita

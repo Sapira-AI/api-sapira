@@ -62,7 +62,7 @@
  "churn_reasons": {
   "class": "ChurnReason",
   "module": "contratos",
-  "file": "churn-reason.espejo.ts"
+  "file": "churn-reason.entity.ts"
  },
  "claude_skills": {
   "class": "ClaudeSkill",
@@ -152,7 +152,7 @@
  "contract_items": {
   "class": "ContractItem",
   "module": "contratos",
-  "file": "contract-item.espejo.ts"
+  "file": "contract-item.entity.ts"
  },
  "contract_lifecycle_events": {
   "class": "ContractLifecycleEvent",
@@ -237,12 +237,12 @@
  "invoice_items_legacy": {
   "class": "InvoiceItemsLegacy",
   "module": "legacy",
-  "file": "invoice-items-legacy.espejo.ts"
+  "file": "invoice-items-legacy.entity.ts"
  },
  "invoice_items_legacy_match": {
   "class": "InvoiceItemsLegacyMatch",
   "module": "legacy",
-  "file": "invoice-items-legacy-match.espejo.ts"
+  "file": "invoice-items-legacy-match.entity.ts"
  },
  "invoice_payments": {
   "class": "InvoicePayment",
@@ -272,7 +272,7 @@
  "invoices_legacy": {
   "class": "InvoicesLegacy",
   "module": "legacy",
-  "file": "invoices-legacy.espejo.ts"
+  "file": "invoices-legacy.entity.ts"
  },
  "mrr_adjustments": {
   "class": "MrrAdjustment",
@@ -302,12 +302,12 @@
  "permissions": {
   "class": "Permission",
   "module": "base-tenancy",
-  "file": "permission.espejo.ts"
+  "file": "permission.entity.ts"
  },
  "quantities": {
   "class": "Quantity",
   "module": "facturacion",
-  "file": "quantity.espejo.ts"
+  "file": "quantity.entity.ts"
  },
  "quote_attachments": {
   "class": "QuoteAttachment",
@@ -342,7 +342,7 @@
  "roles": {
   "class": "Role",
   "module": "base-tenancy",
-  "file": "role.espejo.ts"
+  "file": "role.entity.ts"
  },
  "salesforce_sync_logs": {
   "class": "SalesforceSyncLog",
@@ -352,12 +352,12 @@
  "subscription_items": {
   "class": "SubscriptionItem",
   "module": "suscripciones",
-  "file": "subscription-item.espejo.ts"
+  "file": "subscription-item.entity.ts"
  },
  "subscriptions": {
   "class": "Subscription",
   "module": "suscripciones",
-  "file": "subscription.espejo.ts"
+  "file": "subscription.entity.ts"
  },
  "user_view_preferences": {
   "class": "UserViewPreference",
@@ -372,6 +372,6 @@
  "workflow_steps": {
   "class": "WorkflowStep",
   "module": "contratos",
-  "file": "workflow-step.espejo.ts"
+  "file": "workflow-step.entity.ts"
  }
 }

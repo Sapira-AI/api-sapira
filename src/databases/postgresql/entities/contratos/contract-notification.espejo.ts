@@ -1,18 +1,21 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Contract } from '@/modules/invoices/entities/contract.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 /**
- * Espejo de `public.contract_notifications` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). filas desconocidas (tabla sin ANALYZE) · RLS on.
+ * Espejo de `public.contract_notifications` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 13 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
  * Policies (3): Users can insert contract notifications for their holding (INSERT, public); Users can update their contract notifications (UPDATE, public); Users can view their holding's contract notifications (SELECT, public).
  */
 @Entity('contract_notifications')
-@Check('contract_notifications_notification_type_check', "notification_type = ANY (ARRAY['step_assigned'::text, 'step_completed'::text, 'overdue_alert'::text, 'validation_required'::text, 'client_action_needed'::text])")
+@Check(
+	'contract_notifications_notification_type_check',
+	"notification_type = ANY (ARRAY['step_assigned'::text, 'step_completed'::text, 'overdue_alert'::text, 'validation_required'::text, 'client_action_needed'::text])"
+)
 @Index('idx_contract_notifications_contract_id', ['contract_id'])
 @Index('idx_contract_notifications_created_at', ['created_at'])
 @Index('idx_contract_notifications_is_read', ['is_read'])

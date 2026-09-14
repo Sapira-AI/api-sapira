@@ -9,9 +9,9 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `sii_configurations` (0) | `src/modules/sii/entities/sii.entity.ts` · `SiiConfiguration` | ⚠️ difiere de prod | — | — | `enabled_document_types`: default `'[33,34,61]'` vs DB `'[33, 34, 61]'::jsonb`<br>`created_at`: tipo `timestamp` vs DB `timestamp with time zone`<br>`updated_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_configurations_pkey` |
-| `sii_certificates` (0) | `src/modules/sii/entities/sii.entity.ts` · `SiiCertificate` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_certificates_pkey`<br>FK `sii_certificates_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
-| `sii_cafs` (0) | `src/modules/sii/entities/sii.entity.ts` · `SiiCaf` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_cafs_pkey`<br>FK `sii_cafs_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
+| `sii_configurations` (1) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiConfiguration` | ⚠️ difiere de prod | — | — | `enabled_document_types`: default `'[33,34,61]'` vs DB `'[33, 34, 61]'::jsonb`<br>`created_at`: tipo `timestamp` vs DB `timestamp with time zone`<br>`updated_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_configurations_pkey` |
+| `sii_certificates` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCertificate` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_certificates_pkey`<br>FK `sii_certificates_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
+| `sii_cafs` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCaf` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_cafs_pkey`<br>FK `sii_cafs_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
 
 ## B · Tablas SIN entity → espejos creados (0), APAGADOS
 

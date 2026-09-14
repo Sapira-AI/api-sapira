@@ -1,8 +1,8 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Invoice } from '@/modules/invoices/entities/invoice.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 import { BillingReference } from './billing-reference.espejo';
 
@@ -36,19 +36,19 @@ export class InvoiceReferenceLink {
 	@Column({ type: 'uuid', nullable: true })
 	linked_by?: string;
 
-	@ManyToOne(() => User)
-	@JoinColumn({ name: 'linked_by', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_linked_by_fkey' })
-	linkedBy?: User; // entity existente (no se duplica)
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_holding_id_fkey' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 
 	@ManyToOne(() => Invoice, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'invoice_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_invoice_id_fkey' })
 	invoice?: Invoice; // entity existente (no se duplica)
 
+	@ManyToOne(() => User)
+	@JoinColumn({ name: 'linked_by', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_linked_by_fkey' })
+	linkedBy?: User; // entity existente (no se duplica)
+
 	@ManyToOne(() => BillingReference, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'reference_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_reference_id_fkey' })
 	reference?: BillingReference;
-
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_reference_links_holding_id_fkey' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
 }

@@ -4,7 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
+import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
+
 import { SalesforceQueryResult } from '../interfaces/salesforce.interface';
 
 import { SalesforceTokenService } from './salesforce-token.service';

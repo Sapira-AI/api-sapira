@@ -3,9 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { IndicadorEconomicoEntity } from '@/databases/postgresql/entities/fx/indicador-economico.entity';
+
 import { GetSeriesDto } from './dtos/get-series.dto';
 import { SyncIndicatorsDto } from './dtos/sync-indicators.dto';
-import { IndicadorEconomicoEntity } from './entities/indicador-economico.entity';
 import { BancoCentralResponse, IndicadorEconomico, IndicadorEconomicoData } from './interfaces/banco-central.interface';
 import { BancoCentralSchemaService } from './services/banco-central-schema.service';
 

@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Espejo de `public.holding_email_sender_settings` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -12,7 +12,7 @@ import { User } from '@/modules/users/entities/user.entity';
  * Triggers: trigger_update_holding_email_sender_updated_at · BEFORE UPDATE FOR EACH ROW → update_holding_email_sender_updated_at().
  * Policies (4): Users can create email sender settings for their holding (INSERT, public); Users can delete their holding email sender settings (DELETE, public); Users can update their holding email sender settings (UPDATE, public); Users can view their holding email sender settings (SELECT, public).
  */
-@Entity('holding_email_sender_settings')
+@Entity({ name: 'holding_email_sender_settings', comment: 'Configuración de remitente de email por holding con verificación de dominio en Resend' })
 @Index('idx_holding_email_sender_active', ['is_active'], { where: 'is_active = true' })
 @Index('idx_holding_email_sender_default', ['holding_id', 'is_default'], { where: 'is_default = true' })
 @Index('idx_holding_email_sender_holding', ['holding_id'])
@@ -26,19 +26,19 @@ export class HoldingEmailSenderSettings {
 	holding_id: string;
 
 	/** Dominio o subdominio para envío (ej: mail.miempresa.com) */
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'Dominio o subdominio para envío (ej: mail.miempresa.com)', nullable: false })
 	sender_domain: string;
 
 	/** ID del dominio en Resend API */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'ID del dominio en Resend API', nullable: true })
 	resend_domain_id?: string;
 
 	/** Estado de verificación: pending, verified, failed */
-	@Column({ type: 'text', nullable: false, default: 'pending' })
+	@Column({ type: 'text', comment: 'Estado de verificación: pending, verified, failed', nullable: false, default: 'pending' })
 	domain_status: string;
 
 	/** Registros DNS provistos por Resend (DKIM, SPF, DMARC) */
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', comment: 'Registros DNS provistos por Resend (DKIM, SPF, DMARC)', nullable: true })
 	domain_dns_records?: any;
 
 	@Column({ type: 'timestamp with time zone', nullable: true })
@@ -54,15 +54,15 @@ export class HoldingEmailSenderSettings {
 	created_by?: string;
 
 	/** Dominio por defecto para el holding */
-	@Column({ type: 'boolean', nullable: false, default: false })
+	@Column({ type: 'boolean', comment: 'Dominio por defecto para el holding', nullable: false, default: false })
 	is_default: boolean;
 
 	/** Si el dominio está activo para uso */
-	@Column({ type: 'boolean', nullable: false, default: true })
+	@Column({ type: 'boolean', comment: 'Si el dominio está activo para uso', nullable: false, default: true })
 	is_active: boolean;
 
 	/** Nombre descriptivo del dominio */
-	@Column({ type: 'text', nullable: true })
+	@Column({ type: 'text', comment: 'Nombre descriptivo del dominio', nullable: true })
 	display_name?: string;
 
 	@ManyToOne(() => User)

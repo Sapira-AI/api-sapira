@@ -2,9 +2,9 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 
-import { ClientEntityClient } from '@/databases/postgresql/entities/client-entity-client.entity';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
 
 import { AssignEntityToClientDto } from './dtos/assign-entity.dto';

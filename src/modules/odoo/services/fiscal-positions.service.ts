@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { OdooConnection } from '../entities/odoo-connection.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+
 import { OdooProvider } from '../odoo.provider';
 
 export interface FiscalPositionTaxMapping {

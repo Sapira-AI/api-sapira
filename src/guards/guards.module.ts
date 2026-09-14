@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { UserHolding } from '../modules/holdings/entities/user-holding.entity';
-import { User } from '../modules/users/entities/user.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { HoldingAccessGuard } from './holding-access.guard';
 

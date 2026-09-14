@@ -8,7 +8,11 @@ import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
  * Triggers: ninguno.
  * Policies (0): ninguna (RLS OFF).
  */
-@Entity('client_entity_tax_id_normalization_conflicts')
+@Entity({
+	name: 'client_entity_tax_id_normalization_conflicts',
+	comment:
+		'Registro histórico de tax_id duplicados detectados antes de normalizar. Los duplicados se conservan y la integración debe resolverlos de forma determinista.',
+})
 @Unique('client_entity_tax_id_normaliz_migration_name_client_entity__key', ['migration_name', 'client_entity_id'])
 export class ClientEntityTaxIdNormalizationConflict {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'client_entity_tax_id_normalization_conflicts_pkey' })

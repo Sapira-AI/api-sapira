@@ -4,15 +4,15 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 import { normalizeTaxId } from '@/modules/salesforce/utils/salesforce-transformers';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
 import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
 import { ResolveOdooPartnerByTaxIdResponseDto } from './dtos/resolve-odoo-partner-by-tax-id.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
-import { OdooPartnersStg } from './entities/odoo-partners-stg.entity';
 import { XmlRpcClientHelper } from './helpers/xml-rpc-client.helper';
 import { OdooConnectionConfig, OdooPartner } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';

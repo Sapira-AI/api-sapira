@@ -2,10 +2,10 @@ import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Pa
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
 
 import { CreateStripeConnectionDto } from './dtos/create-stripe-connection.dto';
 import { UpdateStripeConnectionDto } from './dtos/update-stripe-connection.dto';
-import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeConnectionService } from './stripe-connection.service';
 
 @ApiTags('Stripe Connections')

@@ -648,7 +648,11 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "embedding": {
+    "length": 1536
+   }
+  },
   "constraints": [
    {
     "name": "rag_documents_holding_id_fkey",

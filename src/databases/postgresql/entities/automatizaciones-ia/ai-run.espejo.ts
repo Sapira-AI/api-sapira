@@ -1,6 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 import { AiAgent } from './ai-agent.espejo';
 
@@ -45,7 +45,7 @@ export class AiRun {
 	created_at: Date;
 
 	/** ID del holding al que pertenece esta ejecución */
-	@Column({ type: 'uuid', nullable: false })
+	@Column({ type: 'uuid', comment: 'ID del holding al que pertenece esta ejecución', nullable: false })
 	holding_id: string;
 
 	@ManyToOne(() => AiAgent, { onDelete: 'CASCADE' })

@@ -1,6 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { WorkflowStep } from './workflow-step.espejo';
+import { WorkflowStep } from './workflow-step.entity';
 
 /**
  * Espejo de `public.contract_workflow_history` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 996 filas · RLS on.
@@ -23,7 +23,11 @@ export class ContractWorkflowHistory {
 	contract_id: string;
 
 	/** ID del paso del workflow. Puede ser NULL para registros de activación masiva o acciones fuera del workflow normal. */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({
+		type: 'uuid',
+		comment: 'ID del paso del workflow. Puede ser NULL para registros de activación masiva o acciones fuera del workflow normal.',
+		nullable: true,
+	})
 	workflow_step_id?: string;
 
 	@Column({ type: 'uuid', nullable: true })

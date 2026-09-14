@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
-import { Company } from '@/modules/odoo/entities/companies.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.agents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -44,11 +44,11 @@ export class Agent {
 	@Column({ type: 'uuid', nullable: true })
 	holding_id?: string;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_agents_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
 	@ManyToOne(() => Company)
 	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'agents_company_id_fkey' })
 	company?: Company; // entity existente (no se duplica)
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_agents_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

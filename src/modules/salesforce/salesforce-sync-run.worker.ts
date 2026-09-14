@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 
-import { SalesforceSyncRun } from './entities/salesforce-sync-run.entity';
+import { SalesforceSyncRun } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-sync-run.entity';
+
 import { SalesforceSyncCompleteService } from './services/salesforce-sync-complete.service';
 import { SalesforceSyncRunService } from './services/salesforce-sync-run.service';
 

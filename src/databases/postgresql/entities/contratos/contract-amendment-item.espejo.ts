@@ -1,9 +1,9 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 import { ContractAmendment } from './contract-amendment.espejo';
-import { ContractItem } from './contract-item.espejo';
+import { ContractItem } from './contract-item.entity';
 
 /**
  * Espejo de `public.contract_amendment_items` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 35 filas · RLS on.

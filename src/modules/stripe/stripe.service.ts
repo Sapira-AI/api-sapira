@@ -3,7 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import Stripe from 'stripe';
 import { Repository } from 'typeorm';
 
-import { Product } from '@/modules/odoo/entities/products.entity';
+import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
+import { StripeProductMapping } from '@/databases/postgresql/entities/integraciones/stripe/stripe-product-mapping.entity';
 
 import { GetCustomerByIdDto } from './dtos/get-customer-by-id.dto';
 import { GetCustomersDto } from './dtos/get-customers.dto';
@@ -12,8 +14,6 @@ import { GetInvoicesDto } from './dtos/get-invoices.dto';
 import { GetSubscriptionByIdDto } from './dtos/get-subscription-by-id.dto';
 import { GetSubscriptionsDto } from './dtos/get-subscriptions.dto';
 import { GetProductsResponseDTO, SaveProductMappingDTO, SaveProductMappingResponseDTO } from './dtos/stripe-products.dto';
-import { StripeConnection } from './entities/stripe-connection.entity';
-import { StripeProductMapping } from './entities/stripe-product-mapping.entity';
 import { StripeCustomer, StripeCustomerListResponse } from './interfaces/stripe-customer.interface';
 import { StripeInvoice, StripeInvoiceListResponse } from './interfaces/stripe-invoice.interface';
 import { StripeSubscription, StripeSubscriptionListResponse } from './interfaces/stripe-subscription.interface';

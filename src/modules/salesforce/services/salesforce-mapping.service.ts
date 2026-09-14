@@ -2,6 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import {
+	SalesforceFieldMapping,
+	SalesforceFieldMappingObjectType,
+} from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-field-mapping.entity';
+import { SalesforceObjectMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-object-mapping.entity';
+import { SalesforceProductMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-product-mapping.entity';
+import { SalesforceQuoteTypeMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-quote-type-mapping.entity';
 import { AppLoggerService } from '@/logger/app-logger.service';
 
 import { SALESFORCE_FIELD_MAPPING_DEFAULTS, SALESFORCE_FIELD_MAPPING_OBJECT_TYPES } from '../constants/salesforce-field-mapping-defaults';
@@ -15,10 +22,6 @@ import {
 	UpdateProductMappingDto,
 	UpdateQuoteTypeMappingDto,
 } from '../dtos/salesforce-mapping.dto';
-import { SalesforceFieldMapping, SalesforceFieldMappingObjectType } from '../entities/salesforce-field-mapping.entity';
-import { SalesforceObjectMapping } from '../entities/salesforce-object-mapping.entity';
-import { SalesforceProductMapping } from '../entities/salesforce-product-mapping.entity';
-import { SalesforceQuoteTypeMapping } from '../entities/salesforce-quote-type-mapping.entity';
 
 @Injectable()
 export class SalesforceMappingService {

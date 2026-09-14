@@ -1,6 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { Invoice } from '@/modules/invoices/entities/invoice.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 /**
  * Espejo de `public.invoice_collection_logs` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.

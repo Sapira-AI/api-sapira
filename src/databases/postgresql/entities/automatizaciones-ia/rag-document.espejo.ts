@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.rag_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -33,7 +33,7 @@ export class RagDocument {
 	@Column({ type: 'jsonb', nullable: false, default: '{}' })
 	metadata: any;
 
-	@Column({ type: 'vector', nullable: true })
+	@Column({ type: 'vector', length: 1536, nullable: true })
 	embedding?: string;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })

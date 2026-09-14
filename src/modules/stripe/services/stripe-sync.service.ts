@@ -2,12 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { StripeCustomersStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customers-stg.entity';
+import { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-invoices-stg.entity';
+import { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
+import { StripeSyncJob } from '@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity';
+
 import { SyncJobStatusDto, SyncProgressDto } from '../dto/sync-progress.dto';
 import { EntitySyncStatsDto, SyncStatsDto } from '../dto/sync-response.dto';
-import { StripeCustomersStg } from '../entities/stripe-customers-stg.entity';
-import { StripeInvoicesStg } from '../entities/stripe-invoices-stg.entity';
-import { StripeSubscriptionsStg } from '../entities/stripe-subscriptions-stg.entity';
-import { StripeSyncJob } from '../entities/stripe-sync-job.entity';
 
 @Injectable()
 export class StripeSyncService {

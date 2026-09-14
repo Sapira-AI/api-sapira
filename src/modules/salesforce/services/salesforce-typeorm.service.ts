@@ -2,24 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 
-import { ClientEntityClient } from '@/databases/postgresql/entities/client-entity-client.entity';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { Client } from '@/databases/postgresql/entities/client.entity';
-import { Product } from '@/modules/odoo/entities/products.entity';
+import { MasterData } from '@/databases/postgresql/entities/base-tenancy/master-data.entity';
+import { ClientContact } from '@/databases/postgresql/entities/clientes/client-contact.entity';
+import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
+import { Seller } from '@/databases/postgresql/entities/clientes/seller.entity';
+import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity';
+import { QuoteStage } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-stage.entity';
+import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
+import { SalesforceObjectMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-object-mapping.entity';
+import { SalesforceProductMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-product-mapping.entity';
 
 import {
 	SalesforceDuplicateClientEntitiesQueryDto,
 	SalesforceDuplicateClientEntitiesResponseDto,
 	SalesforceDuplicateTaxIdGroupDto,
 } from '../dtos/salesforce-duplicate-client-entities.dto';
-import { ClientContact } from '../entities/client-contact.entity';
-import { MasterData } from '../entities/master-data.entity';
-import { QuoteItem } from '../entities/quote-item.entity';
-import { QuoteStage } from '../entities/quote-stage.entity';
-import { Quote } from '../entities/quote.entity';
-import { SalesforceObjectMapping } from '../entities/salesforce-object-mapping.entity';
-import { SalesforceProductMapping } from '../entities/salesforce-product-mapping.entity';
-import { Seller } from '../entities/seller.entity';
 
 export interface ClientEntityTaxIdResolution {
 	entities: Pick<

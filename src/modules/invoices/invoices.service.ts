@@ -4,7 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
 import { DataSource, In, Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { InvoiceItem } from '@/databases/postgresql/entities/facturacion/invoice-item.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
 
@@ -17,8 +19,6 @@ import {
 import { BulkUpdateCurrencyDto } from './dtos/bulk-update-currency.dto';
 import { OdooSendLogsQueryDto } from './dtos/odoo-send-logs-query.dto';
 import { OdooSendLogsResponseDto } from './dtos/odoo-send-logs-response.dto';
-import { InvoiceItem } from './entities/invoice-item.entity';
-import { Invoice } from './entities/invoice.entity';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
 
 @Injectable()

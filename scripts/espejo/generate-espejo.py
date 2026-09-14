@@ -7,7 +7,7 @@ Reglas:
     del módulo dónde está la entity y su diferencia con prod (metadata TypeORM real vs lectura en vivo).
   - Solo se generan espejos para las tablas sin entity, APAGADOS en runtime: `<tabla>.espejo.ts` (no terminan en .entity.ts,
     así el glob `**/*.entity.ts` de database.module.ts no los carga y ningún módulo los registra en forFeature).
-  - Las FKs apuntan a la entity existente (import @/modules/…) o al espejo de su módulo (este u otro, vía
+  - Las FKs apuntan a la entity existente (import @/databases/postgresql/entities/<dominio>/…) o al espejo de su módulo (este u otro, vía
     scripts/espejo/generated-entities.json). Generar todos los módulos en DOS pasadas para resolver FKs entre módulos.
 
 Uso:
@@ -152,11 +152,51 @@ def norm_default(v):
     return s.strip("'").lower()
 
 
+ENTIDAD_DECO = re.compile(r"@Entity\(\s*(?:\{(?P<opts>[^)]*?)name:\s*)?'(?P<tabla>[a-z_0-9]+)'")
+
+
+def existing_en_disco():
+    """Inventario de las entities del repo leído del DISCO: tabla → {class, file, import}.
+
+    Antes salía de `existing-entities.json`, escrito a mano el 2026-08-22. Ese acoplamiento se
+    pudre solo: cuando se corrió este generador tras borrar y mover entities, 5 de 59 entradas
+    apuntaban a archivos inexistentes y `target_ref()` emitía imports rotos en 84 espejos.
+
+    Dos exclusiones, cada una por una razón concreta:
+      - Las tablas que están en `generated-entities.json` NO son entities del repo: son espejos,
+        y algunos ya promovidos a `.entity.ts`. Si entraran acá el generador dejaría de emitirlos
+        y desaparecerían de los barrels y de los prod-snapshot. La resta la hace el llamador.
+      - Las entities de un esquema que no es `public` (`auth-user.entity.ts` declara
+        `auth.users`) colisionarían por clave con la tabla `public` del mismo nombre.
+    """
+    encontradas = {}
+    src_dir = os.path.join(ROOT, 'src')
+    for base, _, archivos in sorted(os.walk(src_dir)):
+        for archivo in sorted(archivos):
+            if not archivo.endswith('.entity.ts'):
+                continue
+            ruta = os.path.join(base, archivo)
+            contenido = open(ruta, encoding='utf-8').read()
+            for m in ENTIDAD_DECO.finditer(contenido):
+                opts = m.group('opts') or ''
+                if "schema:" in opts and "schema: 'public'" not in opts:
+                    continue
+                clase = re.search(r'export class (\w+)', contenido[m.end():])
+                if not clase:
+                    continue
+                encontradas[m.group('tabla')] = {
+                    'class': clase.group(1),
+                    'file': os.path.relpath(ruta, ROOT).replace(os.sep, '/'),
+                    'import': '@/' + os.path.relpath(ruta, src_dir).replace(os.sep, '/')[: -len('.ts')],
+                }
+    return encontradas
+
+
 pgmeta = load(os.path.join(SNAP_DIR, MOD_ID + '.pgmeta.json'))
 catalog = load(os.path.join(SNAP_DIR, MOD_ID + '.catalog.json'), {})
 existing_meta = load(os.path.join(SNAP_DIR, MOD_ID + '.existing.json'), {})
-existing = load(EXISTING_PATH, {})
 registry = load(REGISTRY_PATH, {})
+existing = {tabla: e for tabla, e in existing_en_disco().items() if tabla not in registry}
 modmap = {k: v for k, v in load(MODMAP_PATH).items() if not k.startswith('_')}
 enums = catalog.get('_enums') or {}
 catalog = {k: v for k, v in catalog.items() if not k.startswith('_')}
@@ -181,12 +221,24 @@ def live_type(col):
     return pg, ts + ('[]' if array else ''), array, None
 
 
+def sufijo_espejo(clase, outdir=None):
+    """`.entity` si el espejo ya fue promovido (existe el archivo), `.espejo` si sigue inerte.
+
+    Sin esto el generador reescribe el `<tabla>.espejo.ts` de una tabla ya promovida y deja dos
+    clases mapeando la misma tabla: la promovida que carga runtime y el espejo que exporta el
+    barrel. Pasó con `permissions`.
+    """
+    base = kebab(clase)
+    destino = outdir if outdir is not None else OUTDIR
+    return '.entity' if os.path.exists(os.path.join(destino, base + '.entity.ts')) else '.espejo'
+
+
 def target_ref(target_table):
     """(clase, import, grupo) de la tabla destino de una FK: entity existente, espejo de este módulo u espejo de otro módulo."""
     if target_table in existing:
         return existing[target_table]['class'], existing[target_table]['import'], 'internal'
     if target_table in CLASS:
-        return CLASS[target_table], './' + kebab(CLASS[target_table]) + '.espejo', 'sibling'
+        return CLASS[target_table], './' + kebab(CLASS[target_table]) + sufijo_espejo(CLASS[target_table]), 'sibling'
     if target_table in registry:
         r = registry[target_table]
         target_dir = os.path.join(ENTITIES_DIR, *r['module'].split('/'))
@@ -274,7 +326,8 @@ for table in order:
     # ---------- tabla sin entity: espejo apagado ----------
     cls = CLASS[table]
     generated.append(table)
-    fname = kebab(cls) + '.espejo.ts'
+    fname = kebab(cls) + sufijo_espejo(cls) + '.ts'
+    promovido = fname.endswith('.entity.ts')
     single_unique_cols = {c['cols'][0] for c in uniques if len(c['cols']) == 1}
     decos = {'Entity'}
     imports = {'internal': {}, 'parent': {}, 'sibling': {}}
@@ -327,6 +380,10 @@ for table in order:
             comment_parts.append('Columna IDENTITY en DB')
         if extra.get('generated'):
             comment_parts.append(f"Columna generada en DB: {extra['generated']}")
+        # El comentario de prod va TAMBIÉN como opción `comment` del decorador, no solo al JSDoc:
+        # TypeORM compara comentarios al calcular la deriva, y si la entity no lo declara emite
+        # `COMMENT ON COLUMN ... IS NULL`, que borraría el comentario real de producción.
+        comment_opt = [f"comment: {ts_str(c['comment'])}"] if c.get('comment') else []
         if comment_parts:
             cl = jsdoc_lines('\n'.join(comment_parts))
             lines.append('\t/** ' + cl[0] + ' */' if len(cl) == 1 else '\t/**\n' + '\n'.join('\t * ' + l for l in cl) + '\n\t */')
@@ -347,13 +404,16 @@ for table in order:
                 type_opts.append(f"scale: {extra['scale']}")
         if array:
             pg_label += '[]'
+        type_opts += comment_opt
         pk_opt = [f"primaryKeyConstraintName: '{pk_name}'"] if pk_name else []
         if is_pk and len(pk) == 1 and fmt == 'uuid' and dv == 'gen_random_uuid()':
             decos.add('PrimaryGeneratedColumn')
-            lines.append("\t@PrimaryGeneratedColumn('uuid'" + (', { ' + ', '.join(pk_opt) + ' }' if pk_opt else '') + ')')
+            gen_opt = pk_opt + comment_opt
+            lines.append("\t@PrimaryGeneratedColumn('uuid'" + (', { ' + ', '.join(gen_opt) + ' }' if gen_opt else '') + ')')
         elif is_pk and len(pk) == 1 and (extra.get('identity') or (dv or '').startswith('nextval(')):
             decos.add('PrimaryGeneratedColumn')
-            lines.append("\t@PrimaryGeneratedColumn('identity'" + (', { ' + ', '.join(pk_opt) + ' }' if pk_opt else '') + ')' if extra.get('identity') else "\t@PrimaryGeneratedColumn('increment'" + (', { ' + ', '.join(pk_opt) + ' }' if pk_opt else '') + ')')
+            gen_opt = pk_opt + comment_opt
+            lines.append("\t@PrimaryGeneratedColumn('identity'" + (', { ' + ', '.join(gen_opt) + ' }' if gen_opt else '') + ')' if extra.get('identity') else "\t@PrimaryGeneratedColumn('increment'" + (', { ' + ', '.join(gen_opt) + ' }' if gen_opt else '') + ')')
         elif is_pk:
             decos.add('PrimaryColumn')
             o = type_opts + pk_opt
@@ -445,9 +505,15 @@ for table in order:
     out = 'import { ' + ', '.join(sorted(decos, key=str.lower)) + " } from 'typeorm';\n"
     for group in ('internal', 'parent', 'sibling'):
         if imports[group]:
-            out += '\n' + '\n'.join(f"import {{ {k} }} from '{imports[group][k]}';" for k in sorted(imports[group])) + '\n'
+            # Ordenados por RUTA: es el criterio de `import/order` con alphabetize en .eslintrc.js.
+            # Ordenarlos por nombre de clase hacía que `yarn lint --fix` y este generador se
+            # pisaran en bucle sobre los mismos archivos.
+            orden = sorted(imports[group], key=lambda k: imports[group][k].lower())
+            out += '\n' + '\n'.join(f"import {{ {k} }} from '{imports[group][k]}';" for k in orden) + '\n'
     out += '\n/**\n' + '\n'.join(' * ' + h for h in jsdoc_lines('\n'.join(header))) + '\n */\n'
-    out += '\n'.join([f"@Entity('{table}')"] + class_decos) + '\nexport class ' + cls + ' {\n' + '\n\n'.join(body) + '\n}\n'
+    tab_comment = t.get('comment') or c_tab.get('comment')
+    entity_deco = f"@Entity({{ name: '{table}', comment: {ts_str(tab_comment)} }})" if tab_comment else f"@Entity('{table}')"
+    out += '\n'.join([entity_deco] + class_decos) + '\nexport class ' + cls + ' {\n' + '\n\n'.join(body) + '\n}\n'
     open(os.path.join(OUTDIR, fname), 'w', encoding='utf-8').write(out)
 
     snapshot[table] = {
@@ -469,7 +535,7 @@ for table in order:
 
 # ---------- barrel del módulo, snapshot y spec ----------
 barrel = f'/**\n * Espejo del módulo `{MODULE}`: {len(generated)} tablas de `public` SIN entity previa en el repo, generadas desde prod en vivo.\n * APAGADAS en runtime (`*.espejo.ts`: el glob de entities de database.module.ts solo carga `*.entity.ts`). Las tablas que ya tenían entity no se duplican: ver README.md.\n */\n'
-barrel += ('\n'.join(f"export {{ {CLASS[t]} }} from './{kebab(CLASS[t])}.espejo';" for t in sorted(generated, key=lambda x: kebab(CLASS[x]))) if generated else 'export {};') + '\n'
+barrel += ('\n'.join(f"export {{ {CLASS[t]} }} from './{kebab(CLASS[t])}{sufijo_espejo(CLASS[t])}';" for t in sorted(generated, key=lambda x: kebab(CLASS[x]))) if generated else 'export {};') + '\n'
 open(os.path.join(OUTDIR, 'index.ts'), 'w', encoding='utf-8').write(barrel)
 
 const_name = MOD_ID.upper().replace('-', '_') + '_PROD_SNAPSHOT'
@@ -636,4 +702,11 @@ by_import = entities_en_disco()
 ge = ['/**', ' * Todas las entities EXISTENTES del repo (las que producción carga), reexportadas SOLO para que los specs del espejo', ' * construyan la metadata con los destinos de FK. Ningún módulo de la app importa este archivo. Generado por scripts/espejo/generate-espejo.py.', ' */']
 ge += [f"export {{ {', '.join(sorted(set(cls)))} }} from '{imp}';" for imp, cls in sorted(by_import.items())]
 open(os.path.join(ENTITIES_DIR, 'espejo.existing.ts'), 'w', encoding='utf-8').write('\n'.join(ge) + '\n')
+
+# `existing-entities.json` pasa de inventario escrito a mano a artefacto derivado del disco. Lo
+# siguen leyendo los 14 specs del espejo, que solo usan sus CLAVES para afirmar que ningún espejo
+# duplica una tabla que ya tiene entity en el repo.
+inventario = {'_meta': 'GENERADO por scripts/espejo/generate-espejo.py desde el disco (entities del repo menos las del registro de espejos). No editar a mano.'}
+inventario.update(dict(sorted(existing.items())))
+json.dump(inventario, open(EXISTING_PATH, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
 print(f'{MODULE}: {n_new} espejos creados, {n_exist} entities existentes documentadas -> {os.path.relpath(OUTDIR, ROOT)}')

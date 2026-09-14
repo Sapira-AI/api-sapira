@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 
-import { QUANTITY_IMPORT_STATUSES, QuantityImportStatus } from '@/databases/postgresql/entities/sapira-quantity-import.entity';
+import { QUANTITY_IMPORT_STATUSES, QuantityImportStatus } from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
 
 /** Filtros del listado de auditoría del canal automático DWH → quantities. */
 export class ListQuantityImportsDto {

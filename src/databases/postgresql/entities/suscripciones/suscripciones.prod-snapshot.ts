@@ -48,18 +48,6 @@ export const SUSCRIPCIONES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			subscriptions_company_id_fkey: {
-				table: 'companies',
-				onDelete: 'RESTRICT',
-			},
-			subscriptions_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
-			subscriptions_connection_id_fkey: {
-				table: 'stripe_connections',
-				onDelete: 'NO ACTION',
-			},
 			subscriptions_client_entity_id_fkey: {
 				table: 'client_entities',
 				onDelete: 'RESTRICT',
@@ -67,6 +55,18 @@ export const SUSCRIPCIONES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			subscriptions_client_id_fkey: {
 				table: 'clients',
 				onDelete: 'RESTRICT',
+			},
+			subscriptions_company_id_fkey: {
+				table: 'companies',
+				onDelete: 'RESTRICT',
+			},
+			subscriptions_connection_id_fkey: {
+				table: 'stripe_connections',
+				onDelete: 'NO ACTION',
+			},
+			subscriptions_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {
@@ -153,13 +153,13 @@ export const SUSCRIPCIONES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				table: 'company_holdings',
 				onDelete: 'CASCADE',
 			},
-			subscription_items_subscription_id_fkey: {
-				table: 'subscriptions',
-				onDelete: 'CASCADE',
-			},
 			subscription_items_product_id_fkey: {
 				table: 'products',
 				onDelete: 'RESTRICT',
+			},
+			subscription_items_subscription_id_fkey: {
+				table: 'subscriptions',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {

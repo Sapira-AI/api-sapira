@@ -36,29 +36,29 @@ export const CONCILIACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			bank_movements_reconciled_by_fkey: {
-				table: 'users',
-				onDelete: 'NO ACTION',
-			},
-			fk_bank_movements_holding_id: {
-				table: 'company_holdings',
+			bank_movements_batch_id_fkey: {
+				table: 'bank_upload_batches',
 				onDelete: 'CASCADE',
 			},
 			bank_movements_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'NO ACTION',
 			},
-			bank_movements_suggested_invoice_id_fkey: {
-				table: 'invoices',
+			bank_movements_reconciled_by_fkey: {
+				table: 'users',
 				onDelete: 'NO ACTION',
-			},
-			bank_movements_batch_id_fkey: {
-				table: 'bank_upload_batches',
-				onDelete: 'CASCADE',
 			},
 			bank_movements_reconciled_invoice_id_fkey: {
 				table: 'invoices',
 				onDelete: 'NO ACTION',
+			},
+			bank_movements_suggested_invoice_id_fkey: {
+				table: 'invoices',
+				onDelete: 'NO ACTION',
+			},
+			fk_bank_movements_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},
@@ -107,12 +107,12 @@ export const CONCILIACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			bank_upload_batches_uploaded_by_fkey: {
-				table: 'users',
-				onDelete: 'NO ACTION',
-			},
 			bank_upload_batches_bank_account_id_fkey: {
 				table: 'company_bank_accounts',
+				onDelete: 'NO ACTION',
+			},
+			bank_upload_batches_uploaded_by_fkey: {
+				table: 'users',
 				onDelete: 'NO ACTION',
 			},
 		},

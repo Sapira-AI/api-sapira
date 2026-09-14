@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
+import { StripeCustomersStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customers-stg.entity';
+import { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-invoices-stg.entity';
+import { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
+
 import { StagingFiltersDto } from '../dto/staging-filters.dto';
 import { ProcessingStatus } from '../dto/update-processing-status.dto';
-import { StripeCustomersStg } from '../entities/stripe-customers-stg.entity';
-import { StripeInvoicesStg } from '../entities/stripe-invoices-stg.entity';
-import { StripeSubscriptionsStg } from '../entities/stripe-subscriptions-stg.entity';
 
 @Injectable()
 export class StripeStagingService {

@@ -40,10 +40,20 @@ export class AiAgent {
 	updated_at: Date;
 
 	/** Indica si el agente se ejecuta automáticamente según el schedule configurado */
-	@Column({ type: 'boolean', nullable: true, default: false })
+	@Column({
+		type: 'boolean',
+		comment: 'Indica si el agente se ejecuta automáticamente según el schedule configurado',
+		nullable: true,
+		default: false,
+	})
 	auto_execute?: boolean;
 
 	/** Indica si los mensajes generados requieren aprobación manual antes de enviarse */
-	@Column({ type: 'boolean', nullable: true, default: true })
+	@Column({
+		type: 'boolean',
+		comment: 'Indica si los mensajes generados requieren aprobación manual antes de enviarse',
+		nullable: true,
+		default: true,
+	})
 	require_approval?: boolean;
 }

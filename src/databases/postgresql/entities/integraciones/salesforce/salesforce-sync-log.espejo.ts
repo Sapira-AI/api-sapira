@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
-import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Espejo de `public.salesforce_sync_logs` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
@@ -12,7 +12,7 @@ import { CompanyHolding } from '@/modules/holdings/entities/company-holding.enti
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_salesforce_sync_logs_created_at ON public.salesforce_sync_logs USING btree (created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_salesforce_sync_logs_sync_date ON public.salesforce_sync_logs USING btree (sync_date DESC)
  */
-@Entity('salesforce_sync_logs')
+@Entity({ name: 'salesforce_sync_logs', comment: 'Registro de sincronizaciones automáticas de Salesforce' })
 @Index('idx_salesforce_sync_logs_holding_id', ['holding_id'])
 export class SalesforceSyncLog {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'salesforce_sync_logs_pkey' })
@@ -22,11 +22,11 @@ export class SalesforceSyncLog {
 	holding_id?: string;
 
 	/** Fecha de los datos sincronizados (no la fecha de ejecución) */
-	@Column({ type: 'date', nullable: false, default: () => 'CURRENT_DATE' })
+	@Column({ type: 'date', comment: 'Fecha de los datos sincronizados (no la fecha de ejecución)', nullable: false, default: () => 'CURRENT_DATE' })
 	sync_date: Date;
 
 	/** Número de oportunidades encontradas en la sincronización */
-	@Column({ type: 'integer', nullable: true, default: 0 })
+	@Column({ type: 'integer', comment: 'Número de oportunidades encontradas en la sincronización', nullable: true, default: 0 })
 	opportunities_count?: number;
 
 	@Column({ type: 'integer', nullable: true, default: 0 })
@@ -39,7 +39,7 @@ export class SalesforceSyncLog {
 	error_message?: string;
 
 	/** Tiempo de ejecución en milisegundos */
-	@Column({ type: 'integer', nullable: true })
+	@Column({ type: 'integer', comment: 'Tiempo de ejecución en milisegundos', nullable: true })
 	execution_time_ms?: number;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: true, default: () => 'now()' })
