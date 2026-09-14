@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
+import { Repository } from 'typeorm';
 
 import { User } from '@/modules/users/entities/user.entity';
 

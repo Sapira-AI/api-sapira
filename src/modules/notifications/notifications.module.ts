@@ -5,8 +5,8 @@ import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module
 import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
 import { User } from '@/modules/users/entities/user.entity';
 
-import { AppNotification } from './entities/app-notification.entity';
 import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
+import { AppNotification } from './entities/app-notification.entity';
 import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsGateway } from './notifications.gateway';

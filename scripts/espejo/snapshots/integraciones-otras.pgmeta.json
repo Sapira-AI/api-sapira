@@ -3,12 +3,12 @@
   "name": "public.bigquery_connections",
   "rls_enabled": true,
   "rows": 1,
-  "comment": "Configuración de conexiones a BigQuery por holding",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -18,6 +18,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -27,6 +28,7 @@
     "name": "user_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -36,6 +38,7 @@
     "name": "name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -45,6 +48,7 @@
     "name": "project_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -54,6 +58,7 @@
     "name": "credentials",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -63,6 +68,7 @@
     "name": "dataset_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -73,6 +79,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -84,6 +91,7 @@
     "name": "last_sync_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -94,6 +102,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -104,6 +113,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -132,7 +142,7 @@
     "source_columns": [
      "user_id"
     ],
-    "target_table": "auth.users",
+    "target_table": "public.users",
     "target_columns": [
      "id"
     ]
@@ -143,12 +153,12 @@
   "name": "public.field_mappings",
   "rls_enabled": true,
   "rows": 4,
-  "comment": "Configuraciones de mapeo de campos entre Odoo y Sapira",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -158,6 +168,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -166,6 +177,7 @@
     "name": "source_model",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -174,6 +186,7 @@
     "name": "target_table",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -182,6 +195,7 @@
     "name": "mapping_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -191,6 +205,7 @@
     "name": "mapping_config",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -200,6 +215,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -210,6 +226,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -220,6 +237,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -230,6 +248,7 @@
     "name": "updated_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -240,18 +259,19 @@
     "name": "mapping_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
     "default_value": "'simple'::text",
-    "check": "mapping_type = ANY (ARRAY['simple'::text, 'hierarchical'::text])",
     "comment": "Tipo de mapeo: simple (una tabla) o hierarchical (padre-hijo)"
    },
    {
     "name": "secondary_source_model",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -262,6 +282,7 @@
     "name": "secondary_target_table",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -272,17 +293,10 @@
     "name": "transformation_type",
     "data_type": "USER-DEFINED",
     "format": "transformation_type_enum",
+    "type": "transformation_type_enum",
     "options": [
      "nullable",
      "updatable"
-    ],
-    "enums": [
-     "direct",
-     "lookup_table",
-     "company_mapping",
-     "partner_mapping",
-     "custom_function",
-     "value_mapping"
     ],
     "comment": "Tipo de transformación a aplicar al valor del campo durante la integración"
    },
@@ -290,6 +304,7 @@
     "name": "transformation_config",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -301,17 +316,6 @@
    "id"
   ],
   "foreign_key_constraints": [
-   {
-    "name": "integration_logs_mapping_id_fkey",
-    "source_table": "public.integration_logs",
-    "source_columns": [
-     "mapping_id"
-    ],
-    "target_table": "public.field_mappings",
-    "target_columns": [
-     "id"
-    ]
-   },
    {
     "name": "field_mappings_created_by_fkey",
     "source_table": "public.field_mappings",
@@ -336,238 +340,6 @@
    }
   ]
  },
- "integration_logs": {
-  "name": "public.integration_logs",
-  "rls_enabled": true,
-  "rows": 1378,
-  "comment": "Logs de auditoría para procesos de integración",
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "source_table",
-    "data_type": "text",
-    "format": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "target_table",
-    "data_type": "text",
-    "format": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "mapping_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "records_processed",
-    "data_type": "integer",
-    "format": "int4",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "0"
-   },
-   {
-    "name": "records_success",
-    "data_type": "integer",
-    "format": "int4",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "0"
-   },
-   {
-    "name": "records_failed",
-    "data_type": "integer",
-    "format": "int4",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "0"
-   },
-   {
-    "name": "error_details",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "execution_time_ms",
-    "data_type": "integer",
-    "format": "int4",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "started_at",
-    "data_type": "timestamp without time zone",
-    "format": "timestamp",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "completed_at",
-    "data_type": "timestamp without time zone",
-    "format": "timestamp",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "status",
-    "data_type": "text",
-    "format": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'running'::text",
-    "check": "status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])"
-   },
-   {
-    "name": "created_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "batch_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "ID único del lote de integración para agrupar operaciones relacionadas"
-   },
-   {
-    "name": "integration_type",
-    "data_type": "character varying",
-    "format": "varchar",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "progress_total",
-    "data_type": "integer",
-    "format": "int4",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "0"
-   },
-   {
-    "name": "result",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "metadata",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'{}'::jsonb"
-   },
-   {
-    "name": "connection_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "integration_logs_holding_id_fkey",
-    "source_table": "public.integration_logs",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "integration_logs_mapping_id_fkey",
-    "source_table": "public.integration_logs",
-    "source_columns": [
-     "mapping_id"
-    ],
-    "target_table": "public.field_mappings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "integration_logs_created_by_fkey",
-    "source_table": "public.integration_logs",
-    "source_columns": [
-     "created_by"
-    ],
-    "target_table": "auth.users",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
  "integration_configs": {
   "name": "public.integration_configs",
   "rls_enabled": true,
@@ -577,6 +349,7 @@
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -586,6 +359,7 @@
     "name": "company_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -595,6 +369,7 @@
     "name": "service_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -604,17 +379,18 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
-    "default_value": "'Disconnected'::text",
-    "check": "status = ANY (ARRAY['Connected'::text, 'Disconnected'::text, 'Error'::text])"
+    "default_value": "'Disconnected'::text"
    },
    {
     "name": "last_sync_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -624,6 +400,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -634,6 +411,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"

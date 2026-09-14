@@ -1,32 +1,58 @@
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
-@Entity('exchange_rates')
-@Index(['rate_date', 'from_currency', 'to_currency'], { unique: true })
+/**
+ * Espejo de `public.exchange_rates` tal como está en producción.
+ *
+ * `idx_exchange_rates_lookup` ordena `rate_date DESC` y no se puede declarar con
+ * `@Index`: vive en `special-index/`.
+ */
+@Index('idx_exchange_rates_currencies', ['from_currency', 'to_currency'])
+@Index('idx_exchange_rates_date', ['rate_date'])
+@Index('idx_exchange_rates_pair_date', ['from_currency', 'to_currency', 'rate_date'])
+@Entity({
+	name: 'exchange_rates',
+	comment:
+		'Tipos de cambio diarios. Los promedios mensuales se calculan mediante el servicio ExchangeRatesService del backend, no por triggers automáticos.',
+})
 export class ExchangeRateEntity {
-	@PrimaryColumn({ type: 'date' })
+	@PrimaryColumn({ type: 'date', primaryKeyConstraintName: 'exchange_rates_pkey' })
 	rate_date: Date;
 
-	@PrimaryColumn({ type: 'varchar', length: 3 })
+	@PrimaryColumn({ type: 'text', primaryKeyConstraintName: 'exchange_rates_pkey' })
 	from_currency: string;
 
-	@PrimaryColumn({ type: 'varchar', length: 3 })
+	@PrimaryColumn({ type: 'text', primaryKeyConstraintName: 'exchange_rates_pkey' })
 	to_currency: string;
 
 	@Column({ type: 'numeric', precision: 20, scale: 8 })
 	rate: number;
 
-	@Column({ type: 'varchar', length: 50, default: 'BANCOCENTRAL' })
+	@Column({ type: 'timestamptz', default: () => 'now()' })
+	created_at: Date;
+
+	@Column({ type: 'text', default: 'system' })
 	source_type: string;
 
-	@Column({ type: 'varchar', length: 100, nullable: true })
+	@Column({
+		type: 'text',
+		nullable: true,
+		default: 'system',
+		comment: 'Fuente de la tasa: manual, exchangerate-api, mindicador, system',
+	})
 	api_source?: string;
 
-	@Column({ type: 'boolean', default: false })
+	@Column({
+		type: 'boolean',
+		nullable: true,
+		default: false,
+		comment: 'Indica si la conversión es indirecta (ej: UF->CLP->USD)',
+	})
 	is_indirect_conversion: boolean;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment: 'Detalles de la cadena de conversión para tasas indirectas',
+	})
 	conversion_chain?: Record<string, any>;
-
-	@Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
-	created_at: Date;
 }

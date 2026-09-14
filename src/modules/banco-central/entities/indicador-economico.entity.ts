@@ -1,9 +1,11 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, Unique } from 'typeorm';
 
 import { BaseEntity } from '@/databases/postgresql/entities/base.entity';
 
+@Index('idx_indicadores_economicos_codigo', ['codigo'])
+@Index('idx_indicadores_economicos_fecha', ['fecha'])
 @Entity('indicadores_economicos')
-@Index(['codigo', 'fecha'], { unique: true })
+@Unique('uq_indicadores_economicos_codigo_fecha', ['codigo', 'fecha'])
 export class IndicadorEconomicoEntity extends BaseEntity {
 	@Column({ type: 'varchar', length: 100 })
 	codigo: string;
@@ -20,6 +22,6 @@ export class IndicadorEconomicoEntity extends BaseEntity {
 	@Column({ type: 'varchar', length: 50, nullable: true })
 	unidad?: string;
 
-	@Column({ type: 'varchar', length: 20, default: 'OK' })
+	@Column({ type: 'varchar', length: 20, nullable: true, default: 'OK' })
 	status_code: string;
 }

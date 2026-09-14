@@ -1,5 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
+@Index('idx_currencies_is_active', ['is_active'])
+@Index('idx_currencies_odoo_id', ['odoo_currency_id'])
 @Entity('currencies')
 export class Currency {
 	@PrimaryColumn({ type: 'varchar', length: 3 })
@@ -14,10 +16,10 @@ export class Currency {
 	@Column({ type: 'varchar', length: 10, nullable: true })
 	symbol?: string;
 
-	@Column({ type: 'integer', default: 2 })
+	@Column({ type: 'integer', nullable: true, default: 2 })
 	decimal_places: number;
 
-	@Column({ type: 'boolean', default: true })
+	@Column({ type: 'boolean', nullable: true, default: true })
 	is_active: boolean;
 
 	@Column({ type: 'integer', nullable: true })
@@ -26,9 +28,9 @@ export class Currency {
 	@Column({ type: 'varchar', length: 50, nullable: true })
 	country?: string;
 
-	@CreateDateColumn({ type: 'timestamp with time zone' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at: Date;
 
-	@UpdateDateColumn({ type: 'timestamp with time zone' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	updated_at: Date;
 }

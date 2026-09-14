@@ -31,6 +31,15 @@ REGISTRY_PATH = os.path.join(ROOT, 'scripts', 'espejo', 'generated-entities.json
 DATE = '2026-08-22'
 PROJECT = 'hklompkypzqtglprfobu'
 
+def cols_fk(v):
+    """Columnas de una FK. `fetch-catalog.ts` las emite como lista; si el driver no parsea el
+    array de Postgres llegan como el literal `{a,b}`, y recorrerlo como lista produce un
+    `@JoinColumn` con una entrada por carácter. Se normaliza acá para tolerar ambas formas."""
+    if isinstance(v, str):
+        return [c.strip().strip('"') for c in v.strip('{}').split(',') if c.strip()]
+    return list(v)
+
+
 MODULE = sys.argv[1]
 if '--registry' in sys.argv:
     REGISTRY_PATH = sys.argv[sys.argv.index('--registry') + 1]
@@ -251,7 +260,7 @@ for table in order:
                     missing_cons.append(f"CHECK `{ch['name']}`")
             for f in fks:
                 od = ON_ACTION.get(fk_rules.get(f['name'], {}).get('ondelete', 'a'))
-                if tuple(sorted(f['source_columns'])) not in e_fk_cols:
+                if tuple(sorted(cols_fk(f['source_columns']))) not in e_fk_cols:
                     missing_cons.append(f"FK `{f['name']}` → {f['target_table'].split('.', 1)[1]}" + (f' ON DELETE {od}' if od else ''))
             for i in indexes:
                 if tuple(sorted(i['cols'])) not in e_index_sets:
@@ -384,7 +393,7 @@ for table in order:
         snap_fks[f['name']] = {'table': target, 'onDelete': on_delete or 'NO ACTION'}
         tcls, timp, group = target_ref(target)
         if not tcls:
-            body.append(f"\t// FK {f['name']}: ({', '.join(f['source_columns'])}) → {target}({', '.join(f['target_columns'])})" + (f' ON DELETE {on_delete}' if on_delete else '') + ' — la tabla destino aún no tiene entity ni espejo')
+            body.append(f"\t// FK {f['name']}: ({', '.join(cols_fk(f['source_columns']))}) → {target}({', '.join(cols_fk(f['target_columns']))})" + (f' ON DELETE {on_delete}' if on_delete else '') + ' — la tabla destino aún no tiene entity ni espejo')
             notes.append(f"FK {f['name']} → {target} sin relación declarada (destino sin entity ni espejo todavía)")
             continue
         decos.update({'ManyToOne', 'JoinColumn'})
@@ -392,7 +401,7 @@ for table in order:
             imports[group][tcls] = timp
             if group != 'sibling':
                 spec_needs[tcls] = timp
-        src, ref = f['source_columns'], f['target_columns']
+        src, ref = cols_fk(f['source_columns']), cols_fk(f['target_columns'])
         prop = camel(re.sub(r'_id$', '', src[0])) if len(src) == 1 else camel(re.sub(r'_id$', '', f['name']))
         if prop in colnames or prop in ('constructor',):
             prop += 'Ref'
@@ -416,7 +425,8 @@ for table in order:
         note = {'internal': ' // entity existente (no se duplica)', 'parent': ' // espejo de otro módulo', 'sibling': ''}[group]
         body.append(f'\t{rel}\n\t{jc}\n\t{prop}?: {tcls};{note}')
 
-    header = [f"Espejo de `public.{table}` — generado desde prod en vivo (`{PROJECT}`, MCP Supabase, {DATE}). {t['rows']} filas · RLS {'on' if rls else 'OFF'}{' (forzado)' if c_tab.get('rls_forced') else ''}."]
+    filas = f"{t['rows']} filas" if t.get('rows', -1) >= 0 else 'filas desconocidas (tabla sin ANALYZE)'
+    header = [f"Espejo de `public.{table}` — generado desde prod en vivo (`{PROJECT}`, MCP Supabase, {DATE}). {filas} · RLS {'on' if rls else 'OFF'}{' (forzado)' if c_tab.get('rls_forced') else ''}."]
     header.append('APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.')
     comment = t.get('comment') or c_tab.get('comment')
     if comment:
@@ -600,9 +610,29 @@ mods = sorted({r['module'] for r in registry.values()})
 gi = ['/**', ' * Barrel de TODOS los espejos (solo para los specs; ningún módulo de la app lo importa). Generado por scripts/espejo/generate-espejo.py.', ' */']
 gi += [f"export * from './{m}';" for m in mods]
 open(os.path.join(ENTITIES_DIR, 'espejo.index.ts'), 'w', encoding='utf-8').write('\n'.join(gi) + '\n')
-by_import = {}
-for tbl, e in existing.items():
-    by_import.setdefault(e['import'], []).append(e['class'])
+# El barrel se arma desde los archivos que existen HOY en disco, no desde existing-entities.json:
+# ese inventario es del 2026-08-22 y no sabe de las entities borradas después (`integration_logs`,
+# las 4 `integration_salesforce_*`) ni de las agregadas (`auth-user`, `sapira-quantity-import`).
+# Armarlo desde el JSON resucitaba las borradas y perdía las nuevas, y los 14 specs del espejo
+# fallaban con "Entity metadata for ... was not found".
+def entities_en_disco():
+    encontradas = {}
+    src_dir = os.path.join(ROOT, 'src')
+    for base, _, archivos in os.walk(src_dir):
+        for archivo in archivos:
+            if not archivo.endswith('.entity.ts'):
+                continue
+            ruta = os.path.join(base, archivo)
+            contenido = open(ruta, encoding='utf-8').read()
+            if '@Entity(' not in contenido:
+                continue
+            imp = '@/' + os.path.relpath(ruta, src_dir).replace(os.sep, '/')[: -len('.ts')]
+            for clase in re.findall(r'export class (\w+)', contenido):
+                encontradas.setdefault(imp, []).append(clase)
+    return encontradas
+
+
+by_import = entities_en_disco()
 ge = ['/**', ' * Todas las entities EXISTENTES del repo (las que producción carga), reexportadas SOLO para que los specs del espejo', ' * construyan la metadata con los destinos de FK. Ningún módulo de la app importa este archivo. Generado por scripts/espejo/generate-espejo.py.', ' */']
 ge += [f"export {{ {', '.join(sorted(set(cls)))} }} from '{imp}';" for imp, cls in sorted(by_import.items())]
 open(os.path.join(ENTITIES_DIR, 'espejo.existing.ts'), 'w', encoding='utf-8').write('\n'.join(ge) + '\n')

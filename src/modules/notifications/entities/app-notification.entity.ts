@@ -1,13 +1,21 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+
+import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
 
 import { AppNotificationRecipient } from './app-notification-recipient.entity';
 
 export type AppNotificationSeverity = 'info' | 'warning' | 'error';
 export type AppNotificationStatus = 'open' | 'resolved';
 
+@Check('app_notifications_severity_check', `((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text])))`)
+@Check('app_notifications_status_check', `((status = ANY (ARRAY['open'::text, 'resolved'::text])))`)
+@Index('app_notifications_open_deduplication_key_idx', ['holding_id', 'deduplication_key'], {
+	unique: true,
+	where: `((status = 'open'::text) AND (deduplication_key IS NOT NULL))`,
+})
 @Entity('app_notifications')
 export class AppNotification {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notifications_pkey' })
 	id!: string;
 
 	@Column({ type: 'uuid' })
@@ -34,10 +42,12 @@ export class AppNotification {
 	@Column({ type: 'text', nullable: true })
 	action_type?: string | null;
 
-	@Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
+	// `default: {}` es la única forma que TypeORM reconoce como igual a `'{}'::jsonb`;
+	// con `default: () => "'{}'::jsonb"` compara los textos y siempre difiere.
+	@Column({ type: 'jsonb', default: {} })
 	action_payload!: Record<string, unknown>;
 
-	@Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
+	@Column({ type: 'jsonb', default: {} })
 	metadata!: Record<string, unknown>;
 
 	@Column({ type: 'text', nullable: true })
@@ -55,12 +65,16 @@ export class AppNotification {
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	resolved_at?: Date | null;
 
-	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', default: () => 'now()' })
 	created_at!: Date;
 
-	@UpdateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', default: () => 'now()' })
 	updated_at!: Date;
 
 	@OneToMany(() => AppNotificationRecipient, (recipient) => recipient.notification)
 	recipients!: AppNotificationRecipient[];
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'app_notifications_holding_id_fkey' })
+	holding?: CompanyHolding;
 }

@@ -5,6 +5,7 @@ AS $function$
 DECLARE
   v_item_categoria TEXT;
   v_item_start_date DATE;
+  v_renews_item_id UUID;
   v_is_first_period BOOLEAN;
 BEGIN
   IF NEW.momentum IS NOT NULL THEN
@@ -15,8 +16,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT ci.categoria, ci.start_date
-  INTO v_item_categoria, v_item_start_date
+  SELECT ci.categoria, ci.start_date, ci.renews_item_id
+  INTO v_item_categoria, v_item_start_date, v_renews_item_id
   FROM public.contract_items ci
   WHERE ci.id = NEW.contract_item_id;
 
@@ -29,10 +30,11 @@ BEGIN
   );
 
   IF v_is_first_period THEN
-    NEW.momentum := CASE
-      WHEN v_item_categoria = 'RECURRENT' THEN 'NEW'
-      ELSE v_item_categoria
-    END;
+    IF v_item_categoria = 'RENEWAL' AND v_renews_item_id IS NULL THEN
+      NEW.momentum := 'BOP';
+    ELSE
+      NEW.momentum := v_item_categoria;
+    END IF;
   ELSE
     NEW.momentum := 'BOP';
   END IF;

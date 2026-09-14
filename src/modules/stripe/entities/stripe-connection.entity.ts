@@ -1,6 +1,10 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Check, Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity('stripe_connections')
+@Check('stripe_connections_mode_check', `((mode = ANY (ARRAY['test'::text, 'live'::text])))`)
+@Index('idx_stripe_connections_holding_id', ['holding_id'])
+@Index('idx_stripe_connections_is_active', ['is_active'])
+@Index('idx_stripe_connections_user_id', ['user_id'])
+@Entity({ name: 'stripe_connections', comment: 'Almacena las credenciales de conexión a Stripe por holding' })
 export class StripeConnection {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
@@ -14,13 +18,13 @@ export class StripeConnection {
 	@Column({ type: 'text', nullable: false })
 	name: string;
 
-	@Column({ type: 'text', nullable: false })
+	@Column({ type: 'text', comment: 'Secret Key de Stripe (debe estar encriptada en producción)' })
 	secret_key: string;
 
 	@Column({ type: 'text', nullable: true })
 	publishable_key?: string;
 
-	@Column({ type: 'text', nullable: false, default: 'test' })
+	@Column({ type: 'text', default: 'test', comment: 'Modo de operación: test o live' })
 	mode: string; // 'test' o 'live'
 
 	@Column({ type: 'boolean', nullable: true, default: true })
@@ -29,9 +33,9 @@ export class StripeConnection {
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	last_sync_at?: Date;
 
-	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at: Date;
 
-	@UpdateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	updated_at: Date;
 }

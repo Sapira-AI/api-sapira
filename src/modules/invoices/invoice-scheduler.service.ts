@@ -2057,7 +2057,10 @@ export class InvoiceSchedulerService {
 			),
 		];
 		const holdings: Array<{ id: string; name: string }> = holdingIds.length
-			? ((await this.dataSource.query('SELECT id, name FROM company_holdings WHERE id = ANY($1)', [holdingIds])) as Array<{ id: string; name: string }>)
+			? ((await this.dataSource.query('SELECT id, name FROM company_holdings WHERE id = ANY($1)', [holdingIds])) as Array<{
+					id: string;
+					name: string;
+				}>)
 			: [];
 		const holdingNames = new Map(holdings.map((holding) => [holding.id, holding.name]));
 		const itemsWithHoldingNames = items.map((item) => ({

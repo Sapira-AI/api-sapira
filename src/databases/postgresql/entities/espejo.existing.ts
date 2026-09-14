@@ -2,13 +2,15 @@
  * Todas las entities EXISTENTES del repo (las que producción carga), reexportadas SOLO para que los specs del espejo
  * construyan la metadata con los destinos de FK. Ningún módulo de la app importa este archivo. Generado por scripts/espejo/generate-espejo.py.
  */
+export { AuthUser } from '@/databases/postgresql/entities/auth-user.entity';
+export { Permission } from '@/databases/postgresql/entities/base-tenancy/permission.entity';
 export { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
 export { ClientEntityClient } from '@/databases/postgresql/entities/client-entity-client.entity';
 export { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
 export { Client } from '@/databases/postgresql/entities/client.entity';
 export { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 export { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
-export { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
+export { SapiraQuantityImport } from '@/databases/postgresql/entities/sapira-quantity-import.entity';
 export { StripeCustomerBigQuery } from '@/databases/postgresql/entities/stripe-customer-bigquery.entity';
 export { Currency } from '@/modules/banco-central/entities/currency.entity';
 export { ExchangeRateMonthlyAvgEntity } from '@/modules/banco-central/entities/exchange-rate-monthly-avg.entity';

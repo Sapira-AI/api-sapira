@@ -1,4 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+
+import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
 
 @Entity('sellers')
 export class Seller {
@@ -22,4 +24,8 @@ export class Seller {
 
 	@Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
 	created_at: Date;
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_sellers_holding_id' })
+	holding?: CompanyHolding;
 }

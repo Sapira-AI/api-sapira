@@ -394,7 +394,9 @@ export class SalesforceStagingService {
 			}
 			return value;
 		};
-		return createHash('sha256').update(JSON.stringify(normalize(payload))).digest('hex');
+		return createHash('sha256')
+			.update(JSON.stringify(normalize(payload)))
+			.digest('hex');
 	}
 
 	private buildAccountsMappingBaseQuery(holdingId: string, params: SalesforceAccountsMappingViewParams) {

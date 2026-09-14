@@ -2,9 +2,9 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injec
 import { Response } from 'express';
 import { v4 as uuid } from 'uuid';
 
+import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
 import { AppLoggerService } from '@/logger/app-logger.service';
 import { TelemetryService } from '@/telemetry/telemetry.service';
-import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
 
 @Injectable()
 @Catch()

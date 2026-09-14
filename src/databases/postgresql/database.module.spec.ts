@@ -37,4 +37,23 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 			.filter((file) => file.endsWith('.entity.ts') && !promotedMirrorEntities.has(file));
 		expect(offenders).toEqual([]);
 	});
+
+	it('package.json no expone scripts de sincronización de esquema', () => {
+		// `schema:sync` construía un DataSource con SUPABASE_DATABASE_URL y llamaba
+		// dataSource.synchronize(): decidía por NODE_ENV, no por la base real, así que
+		// con un .env de producción sincronizaba prod pasando todas las guardas.
+		const packageJson = JSON.parse(fs.readFileSync(path.join(srcDir, '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+
+		expect(Object.keys(packageJson.scripts).filter((script) => script.startsWith('schema:sync'))).toEqual([]);
+		expect(packageJson.scripts['schema:log']).toBeDefined();
+		expect(packageJson.scripts['postgres:assets']).toBeDefined();
+	});
+
+	it('el CLI de assets verifica que la conexión corresponda al target declarado', () => {
+		// `target` sale de DATABASE_TARGET ?? NODE_ENV ?? 'development' y es
+		// independiente de SUPABASE_DATABASE_URL: sin esta verificación las guardas
+		// de producción no protegen nada.
+		const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', 'apply-postgresql-assets.ts'), 'utf8');
+		expect(source).toContain('assertConnectionMatchesTarget');
+	});
 });

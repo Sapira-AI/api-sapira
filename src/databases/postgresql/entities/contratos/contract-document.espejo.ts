@@ -5,7 +5,7 @@ import { Contract } from '@/modules/invoices/entities/contract.entity';
 import { User } from '@/modules/users/entities/user.entity';
 
 /**
- * Espejo de `public.contract_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 2 filas · RLS on.
+ * Espejo de `public.contract_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). filas desconocidas (tabla sin ANALYZE) · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.

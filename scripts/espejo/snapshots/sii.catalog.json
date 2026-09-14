@@ -68,18 +68,18 @@
   "columns": {},
   "constraints": [
    {
-    "name": "sii_configurations_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
     "name": "sii_configurations_holding_id_company_id_key",
     "type": "u",
     "cols": [
      "holding_id",
      "company_id"
+    ]
+   },
+   {
+    "name": "sii_configurations_pkey",
+    "type": "p",
+    "cols": [
+     "id"
     ]
    }
   ],
@@ -102,17 +102,17 @@
     "def": "FOREIGN KEY (configuration_id) REFERENCES sii_configurations(id) ON DELETE CASCADE"
    },
    {
-    "name": "sii_certificates_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
     "name": "sii_certificates_configuration_id_key",
     "type": "u",
     "cols": [
      "configuration_id"
+    ]
+   },
+   {
+    "name": "sii_certificates_pkey",
+    "type": "p",
+    "cols": [
+     "id"
     ]
    }
   ],
@@ -128,6 +128,16 @@
   "columns": {},
   "constraints": [
    {
+    "name": "sii_cafs_configuration_id_document_type_folio_start_folio_e_key",
+    "type": "u",
+    "cols": [
+     "configuration_id",
+     "document_type",
+     "folio_start",
+     "folio_end"
+    ]
+   },
+   {
     "name": "sii_cafs_configuration_id_fkey",
     "type": "f",
     "ondelete": "c",
@@ -139,16 +149,6 @@
     "type": "p",
     "cols": [
      "id"
-    ]
-   },
-   {
-    "name": "sii_cafs_configuration_id_document_type_folio_start_folio_e_key",
-    "type": "u",
-    "cols": [
-     "configuration_id",
-     "document_type",
-     "folio_start",
-     "folio_end"
     ]
    }
   ],

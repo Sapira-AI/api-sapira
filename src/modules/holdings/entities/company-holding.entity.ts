@@ -1,10 +1,10 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
 import { UserHolding } from './user-holding.entity';
 
 @Entity('company_holdings')
 export class CompanyHolding {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'company_holdings_pkey' })
 	id: string;
 
 	@Column({ type: 'text', nullable: false })
@@ -22,7 +22,7 @@ export class CompanyHolding {
 	@Column({ type: 'text', nullable: true })
 	logo_url?: string;
 
-	@CreateDateColumn({ type: 'timestamp', default: () => 'now()' })
+	@Column({ type: 'timestamp', nullable: true, default: () => 'now()' })
 	created_at: Date;
 
 	@Column({ type: 'boolean', nullable: true, default: false })

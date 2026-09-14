@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 /**
- * Espejo de `public.workflow_steps` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 17 filas · RLS on.
+ * Espejo de `public.workflow_steps` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 13 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 3 tabla(s): contract_workflow_history, contracts, workflow_step_documents.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
@@ -27,7 +27,7 @@ export class WorkflowStep {
 	@Column({ type: 'integer', nullable: false })
 	order_index: number;
 
-	@Column({ type: 'uuid', array: true, nullable: true, default: () => 'ARRAY[]::uuid[]' })
+	@Column({ type: 'uuid', array: true, nullable: true, default: () => "ARRAY[]::uuid[]" })
 	assigned_user_ids?: string[];
 
 	@Column({ type: 'boolean', nullable: true, default: false })

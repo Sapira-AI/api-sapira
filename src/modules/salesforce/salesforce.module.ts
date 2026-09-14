@@ -1,7 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { EncryptionService } from '@/common/services/encryption.service';
@@ -13,8 +12,8 @@ import { GenericExportVat } from '@/databases/postgresql/entities/generic-export
 import { GuardsModule } from '@/guards/guards.module';
 import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
-import { OdooModule } from '@/modules/odoo/odoo.module';
 import { Product } from '@/modules/odoo/entities/products.entity';
+import { OdooModule } from '@/modules/odoo/odoo.module';
 import { User } from '@/modules/users/entities/user.entity';
 
 import { ClientContact } from './entities/client-contact.entity';
@@ -36,10 +35,13 @@ import { SalesforceSyncRun } from './entities/salesforce-sync-run.entity';
 import { Seller } from './entities/seller.entity';
 import { SalesforceMappingController } from './salesforce-mapping.controller';
 import { SalesforceStagingController } from './salesforce-staging.controller';
+import { SalesforceSyncLogController } from './salesforce-sync-log.controller';
+import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 import { SalesforceController } from './salesforce.controller';
 import { SalesforceScheduler } from './salesforce.scheduler';
 import { SalesforceService } from './salesforce.service';
 import { SalesforceSchedulerJob, SalesforceSchedulerJobSchema } from './schemas/salesforce-scheduler-job.schema';
+import { SalesforceSyncLog, SalesforceSyncLogSchema } from './schemas/salesforce-sync-log.schema';
 import { SalesforceAuthService } from './services/salesforce-auth.service';
 import { SalesforceFieldMappingEngineService } from './services/salesforce-field-mapping-engine.service';
 import { SalesforceMappingService } from './services/salesforce-mapping.service';
@@ -47,11 +49,11 @@ import { SalesforceQueryService } from './services/salesforce-query.service';
 import { SalesforceSoapService } from './services/salesforce-soap.service';
 import { SalesforceStagingService } from './services/salesforce-staging.service';
 import { SalesforceSyncCompleteService } from './services/salesforce-sync-complete.service';
+import { SalesforceSyncLogService } from './services/salesforce-sync-log.service';
 import { SalesforceSyncRunService } from './services/salesforce-sync-run.service';
 import { SalesforceSyncService } from './services/salesforce-sync.service';
 import { SalesforceTokenService } from './services/salesforce-token.service';
 import { SalesforceTypeOrmService } from './services/salesforce-typeorm.service';
-import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 
 @Module({
 	imports: [
@@ -59,8 +61,10 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 		GuardsModule,
 		OdooModule,
 		NotificationsModule,
-		ScheduleModule.forRoot(),
-		MongooseModule.forFeature([{ name: SalesforceSchedulerJob.name, schema: SalesforceSchedulerJobSchema }]),
+		MongooseModule.forFeature([
+			{ name: SalesforceSchedulerJob.name, schema: SalesforceSchedulerJobSchema },
+			{ name: SalesforceSyncLog.name, schema: SalesforceSyncLogSchema },
+		]),
 		TypeOrmModule.forFeature([
 			SalesforceConnection,
 			SalesforceFieldMapping,
@@ -88,7 +92,7 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 			User,
 		]),
 	],
-	controllers: [SalesforceController, SalesforceMappingController, SalesforceStagingController],
+	controllers: [SalesforceController, SalesforceMappingController, SalesforceStagingController, SalesforceSyncLogController],
 	providers: [
 		SalesforceService,
 		SalesforceAuthService,
@@ -96,8 +100,9 @@ import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 		SalesforceQueryService,
 		SalesforceSyncService,
 		SalesforceSyncCompleteService,
-			SalesforceSyncRunService,
-			SalesforceSyncRunWorker,
+		SalesforceSyncLogService,
+		SalesforceSyncRunService,
+		SalesforceSyncRunWorker,
 		SalesforceStagingService,
 		SalesforceSoapService,
 		SalesforceTypeOrmService,

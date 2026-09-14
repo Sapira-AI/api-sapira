@@ -7,12 +7,12 @@ import { ClientEntity } from '@/databases/postgresql/entities/client-entity.enti
 import { Client } from '@/databases/postgresql/entities/client.entity';
 import { Product } from '@/modules/odoo/entities/products.entity';
 
-import { ClientContact } from '../entities/client-contact.entity';
 import {
 	SalesforceDuplicateClientEntitiesQueryDto,
 	SalesforceDuplicateClientEntitiesResponseDto,
 	SalesforceDuplicateTaxIdGroupDto,
 } from '../dtos/salesforce-duplicate-client-entities.dto';
+import { ClientContact } from '../entities/client-contact.entity';
 import { MasterData } from '../entities/master-data.entity';
 import { QuoteItem } from '../entities/quote-item.entity';
 import { QuoteStage } from '../entities/quote-stage.entity';
@@ -232,9 +232,7 @@ export class SalesforceTypeOrmService {
 						.map((row) => row.quote_item_number || row.id)
 						.slice(0, 5)
 						.join(', ');
-					throw new Error(
-						`No se pueden eliminar quote_items vinculados a contract_items. Items afectados: ${linkedIdentifiers}`
-					);
+					throw new Error(`No se pueden eliminar quote_items vinculados a contract_items. Items afectados: ${linkedIdentifiers}`);
 				}
 
 				await this.quoteItemRepository.delete(removalIds);
@@ -320,14 +318,16 @@ export class SalesforceTypeOrmService {
 			.createQueryBuilder('entity')
 			.where('entity.holding_id = :holdingId', { holdingId })
 			.andWhere(`${normalizedTaxId} IS NOT NULL`)
-			.andWhere(`
+			.andWhere(
+				`
 				NOT EXISTS (
 					SELECT 1
 					FROM generic_export_vats generic_vat
 					WHERE generic_vat.is_active = true
 						AND ${genericVatNormalization} = ${normalizedTaxId}
 				)
-			`)
+			`
+			)
 			.groupBy(normalizedTaxId)
 			.having('COUNT(*) > 1');
 		const total = (await duplicateGroupsQuery.clone().select(normalizedTaxId, 'taxId').getRawMany()).length;

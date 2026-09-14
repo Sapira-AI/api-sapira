@@ -6,7 +6,7 @@ import { Product } from '@/modules/odoo/entities/products.entity';
 import { QuoteItem } from '@/modules/salesforce/entities/quote-item.entity';
 
 /**
- * Espejo de `public.contract_items` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1087 filas · RLS on.
+ * Espejo de `public.contract_items` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1118 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 5 tabla(s): contract_amendment_items, invoice_items, invoice_items_legacy_match, quantities, revenue_schedule_monthly.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
@@ -16,26 +16,20 @@ import { QuoteItem } from '@/modules/salesforce/entities/quote-item.entity';
  */
 @Entity('contract_items')
 @Check('chk_contract_items_price_entry_mode', "price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])")
-@Check(
-	'contract_items_billing_frequency_check',
-	"billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])"
-)
+@Check('contract_items_billing_frequency_check', "billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])")
 @Check('contract_items_billing_method_check', "billing_method = ANY (ARRAY['Anticipado'::text, 'Vencido'::text])")
-@Check(
-	'contract_items_categoria_check',
-	"(categoria IS NULL) OR (categoria = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text]))"
-)
+@Check('contract_items_categoria_check', "(categoria IS NULL) OR (categoria = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text]))")
 @Check('contract_items_discount_type_check', "discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])")
-@Index('idx_contract_items_auto_renew_end_date', ['auto_renew', 'end_date'], { where: 'auto_renew = true' })
+@Index('idx_contract_items_auto_renew_end_date', ['auto_renew', 'end_date'], { where: "auto_renew = true" })
 @Index('idx_contract_items_categoria', ['categoria'])
-@Index('idx_contract_items_churn_date', ['churn_date'], { where: 'churn_date IS NOT NULL' })
+@Index('idx_contract_items_churn_date', ['churn_date'], { where: "churn_date IS NOT NULL" })
 @Index('idx_contract_items_contract_end_date', ['contract_id', 'end_date'])
 @Index('idx_contract_items_holding_id', ['holding_id'])
-@Index('idx_contract_items_monthly_price', ['monthly_price'], { where: '(monthly_price IS NOT NULL) AND (is_recurring = true)' })
+@Index('idx_contract_items_monthly_price', ['monthly_price'], { where: "(monthly_price IS NOT NULL) AND (is_recurring = true)" })
 @Index('idx_contract_items_quote_item_id', ['quote_item_id'])
-@Index('idx_contract_items_quote_item_number', ['quote_item_number'], { where: 'quote_item_number IS NOT NULL' })
-@Index('idx_contract_items_recurring_dates', ['is_recurring', 'start_date', 'end_date'], { where: 'is_recurring = true' })
-@Index('idx_contract_items_related', ['related_item_id'], { where: 'related_item_id IS NOT NULL' })
+@Index('idx_contract_items_quote_item_number', ['quote_item_number'], { where: "quote_item_number IS NOT NULL" })
+@Index('idx_contract_items_recurring_dates', ['is_recurring', 'start_date', 'end_date'], { where: "is_recurring = true" })
+@Index('idx_contract_items_related', ['related_item_id'], { where: "related_item_id IS NOT NULL" })
 export class ContractItem {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'contract_items_pkey' })
 	id: string;
@@ -80,7 +74,7 @@ export class ContractItem {
 	@Column({ type: 'uuid', nullable: true })
 	quote_item_id?: string;
 
-	@Column({ type: 'uuid', nullable: false, default: () => 'gen_random_uuid()' })
+	@Column({ type: 'uuid', nullable: false, default: () => "gen_random_uuid()" })
 	holding_id: string;
 
 	@Column({ type: 'date', nullable: true })
@@ -183,18 +177,6 @@ export class ContractItem {
 	@Column({ type: 'numeric', nullable: true })
 	renewal_base_unit_price?: number;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_items_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
-
-	@ManyToOne(() => ContractItem)
-	@JoinColumn({ name: 'renewed_by_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_renewed_by_item_id_fkey' })
-	renewedByItem?: ContractItem;
-
-	@ManyToOne(() => ContractItem)
-	@JoinColumn({ name: 'renews_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_renews_item_id_fkey' })
-	renewsItem?: ContractItem;
-
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_contract_id_fkey' })
 	contract?: Contract; // entity existente (no se duplica)
@@ -210,4 +192,16 @@ export class ContractItem {
 	@ManyToOne(() => ContractItem, { onDelete: 'SET NULL' })
 	@JoinColumn({ name: 'related_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_related_item_id_fkey' })
 	relatedItem?: ContractItem;
+
+	@ManyToOne(() => ContractItem)
+	@JoinColumn({ name: 'renewed_by_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_renewed_by_item_id_fkey' })
+	renewedByItem?: ContractItem;
+
+	@ManyToOne(() => ContractItem)
+	@JoinColumn({ name: 'renews_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_renews_item_id_fkey' })
+	renewsItem?: ContractItem;
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_items_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

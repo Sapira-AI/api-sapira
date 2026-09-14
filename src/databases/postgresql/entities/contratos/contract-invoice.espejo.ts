@@ -6,7 +6,7 @@ import { Contract } from '@/modules/invoices/entities/contract.entity';
 import { InvoicesLegacy } from '../legacy/invoices-legacy.espejo';
 
 /**
- * Espejo de `public.contract_invoices` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 4922 filas · RLS on.
+ * Espejo de `public.contract_invoices` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 4983 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
@@ -51,7 +51,7 @@ export class ContractInvoice {
 	@UpdateDateColumn({ type: 'timestamp with time zone', nullable: false, default: () => 'now()' })
 	updated_at: Date;
 
-	@Column({ type: 'uuid', nullable: false, default: () => 'gen_random_uuid()' })
+	@Column({ type: 'uuid', nullable: false, default: () => "gen_random_uuid()" })
 	holding_id: string;
 
 	/** Moneda de emisión de la factura (puede diferir de currency que es moneda del contrato) */
@@ -74,19 +74,15 @@ export class ContractInvoice {
 	@Column({ type: 'boolean', nullable: true, default: false })
 	is_satisfied?: boolean;
 
-	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_invoices_holding_id' })
-	holding?: CompanyHolding; // entity existente (no se duplica)
+	@ManyToOne(() => InvoicesLegacy, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'satisfied_by_legacy_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_invoices_satisfied_by_legacy_id_fkey' })
+	satisfiedByLegacy?: InvoicesLegacy; // espejo de otro módulo
 
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_invoices_contract_id' })
 	contract?: Contract; // entity existente (no se duplica)
 
-	@ManyToOne(() => InvoicesLegacy, { onDelete: 'SET NULL' })
-	@JoinColumn({
-		name: 'satisfied_by_legacy_id',
-		referencedColumnName: 'id',
-		foreignKeyConstraintName: 'contract_invoices_satisfied_by_legacy_id_fkey',
-	})
-	satisfiedByLegacy?: InvoicesLegacy; // espejo de otro módulo
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_invoices_holding_id' })
+	holding?: CompanyHolding; // entity existente (no se duplica)
 }

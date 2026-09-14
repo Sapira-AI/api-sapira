@@ -2,13 +2,13 @@
  "invoices_legacy": {
   "name": "public.invoices_legacy",
   "rls_enabled": true,
-  "rows": 9311,
-  "comment": "Facturas históricas o importadas desde ERP pendientes de reconciliación",
+  "rows": 9294,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -18,6 +18,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -26,6 +27,7 @@
     "name": "company_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -34,6 +36,7 @@
     "name": "client_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -43,6 +46,7 @@
     "name": "client_tax_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -53,6 +57,7 @@
     "name": "legal_client_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -61,15 +66,16 @@
     "name": "source_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
-    ],
-    "check": "source_type = ANY (ARRAY['historical_import'::text, 'erp_unmatched'::text, 'manual_entry'::text])"
+    ]
    },
    {
     "name": "source_system",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -79,6 +85,7 @@
     "name": "invoice_number",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -87,6 +94,7 @@
     "name": "issue_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -95,6 +103,7 @@
     "name": "due_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -104,6 +113,7 @@
     "name": "invoice_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -112,6 +122,7 @@
     "name": "amount_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -120,6 +131,7 @@
     "name": "total_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -128,6 +140,7 @@
     "name": "vat",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -137,6 +150,7 @@
     "name": "fx_contract_to_invoice",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(12,6)",
     "options": [
      "nullable",
      "updatable"
@@ -146,17 +160,18 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
     "default_value": "'Enviada'::text",
-    "check": "status = ANY (ARRAY['Enviada'::text, 'Vencida'::text, 'Pagada'::text])",
     "comment": "Estado de pago: Enviada (emitida sin pago), Vencida (pasó due_date sin pago), Pagada (pagada)"
    },
    {
     "name": "pdf_url",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -166,6 +181,7 @@
     "name": "notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -175,6 +191,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -185,6 +202,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -194,6 +212,7 @@
     "name": "contract_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -203,18 +222,19 @@
     "name": "reconciliation_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
     "default_value": "'pending'::text",
-    "check": "reconciliation_status = ANY (ARRAY['pending'::text, 'partially_reconciled'::text, 'reconciled'::text, 'migrated'::text, 'mrr_legacy'::text])",
     "comment": "Estado de reconciliación: pending (sin reconciliar), partially_reconciled (parcialmente reconciliada), reconciled (reconciliada completamente), migrated (migrada a invoices), mrr_legacy (usada en registro MRR Legacy)"
    },
    {
     "name": "reconciled_invoice_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -224,6 +244,7 @@
     "name": "reconciled_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -233,6 +254,7 @@
     "name": "client_entity_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -243,6 +265,7 @@
     "name": "odoo_integration_id",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -255,12 +278,12 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "invoices_legacy_company_id_fkey",
-    "source_table": "public.invoices_legacy",
+    "name": "contract_invoices_satisfied_by_legacy_id_fkey",
+    "source_table": "public.contract_invoices",
     "source_columns": [
-     "company_id"
+     "satisfied_by_legacy_id"
     ],
-    "target_table": "public.companies",
+    "target_table": "public.invoices_legacy",
     "target_columns": [
      "id"
     ]
@@ -272,6 +295,50 @@
      "client_entity_id"
     ],
     "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_invoices_legacy_id_fkey",
+    "source_table": "public.invoice_items_legacy",
+    "source_columns": [
+     "invoices_legacy_id"
+    ],
+    "target_table": "public.invoices_legacy",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_client_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_company_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_legacy_contract_id_fkey",
+    "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
     "target_columns": [
      "id"
     ]
@@ -299,67 +366,12 @@
     ]
    },
    {
-    "name": "mrr_legacy_invoice_legacy_id_fkey",
-    "source_table": "public.mrr_legacy",
-    "source_columns": [
-     "invoice_legacy_id"
-    ],
-    "target_table": "public.invoices_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoices_legacy_client_id_fkey",
-    "source_table": "public.invoices_legacy",
-    "source_columns": [
-     "client_id"
-    ],
-    "target_table": "public.clients",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_invoices_legacy_id_fkey",
-    "source_table": "public.invoice_items_legacy",
-    "source_columns": [
-     "invoices_legacy_id"
-    ],
-    "target_table": "public.invoices_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "invoices_legacy_invoice_id_fkey",
     "source_table": "public.invoices",
     "source_columns": [
      "legacy_invoice_id"
     ],
     "target_table": "public.invoices_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "contract_invoices_satisfied_by_legacy_id_fkey",
-    "source_table": "public.contract_invoices",
-    "source_columns": [
-     "satisfied_by_legacy_id"
-    ],
-    "target_table": "public.invoices_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoices_legacy_contract_id_fkey",
-    "source_table": "public.invoices_legacy",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
     "target_columns": [
      "id"
     ]
@@ -374,19 +386,30 @@
     "target_columns": [
      "id"
     ]
+   },
+   {
+    "name": "mrr_legacy_invoice_legacy_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "invoice_legacy_id"
+    ],
+    "target_table": "public.invoices_legacy",
+    "target_columns": [
+     "id"
+    ]
    }
   ]
  },
  "invoice_items_legacy": {
   "name": "public.invoice_items_legacy",
   "rls_enabled": true,
-  "rows": 11722,
-  "comment": "Líneas de detalle de facturas legacy",
+  "rows": 11698,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -396,6 +419,7 @@
     "name": "invoices_legacy_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -404,6 +428,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -412,6 +437,7 @@
     "name": "product_external_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -421,6 +447,7 @@
     "name": "description",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -429,6 +456,7 @@
     "name": "quantity",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,4)",
     "options": [
      "updatable"
     ],
@@ -438,6 +466,7 @@
     "name": "unit_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -446,6 +475,7 @@
     "name": "discount_pct",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(5,2)",
     "options": [
      "nullable",
      "updatable"
@@ -456,6 +486,7 @@
     "name": "tax_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -465,6 +496,7 @@
     "name": "currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -475,6 +507,7 @@
     "name": "subtotal",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -483,6 +516,7 @@
     "name": "tax_amount",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -493,6 +527,7 @@
     "name": "total",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -501,6 +536,7 @@
     "name": "account_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -510,6 +546,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -520,6 +557,7 @@
     "name": "item_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -530,6 +568,7 @@
     "name": "unit_of_measure",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -540,6 +579,7 @@
     "name": "odoo_line_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -552,17 +592,6 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "invoice_items_legacy_match_invoice_item_legacy_id_fkey",
-    "source_table": "public.invoice_items_legacy_match",
-    "source_columns": [
-     "invoice_item_legacy_id"
-    ],
-    "target_table": "public.invoice_items_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "invoice_items_legacy_holding_id_fkey",
     "source_table": "public.invoice_items_legacy",
     "source_columns": [
@@ -574,12 +603,12 @@
     ]
    },
    {
-    "name": "mrr_legacy_invoice_item_legacy_id_fkey",
-    "source_table": "public.mrr_legacy",
+    "name": "invoice_items_legacy_invoices_legacy_id_fkey",
+    "source_table": "public.invoice_items_legacy",
     "source_columns": [
-     "invoice_item_legacy_id"
+     "invoices_legacy_id"
     ],
-    "target_table": "public.invoice_items_legacy",
+    "target_table": "public.invoices_legacy",
     "target_columns": [
      "id"
     ]
@@ -596,12 +625,23 @@
     ]
    },
    {
-    "name": "invoice_items_legacy_invoices_legacy_id_fkey",
-    "source_table": "public.invoice_items_legacy",
+    "name": "invoice_items_legacy_match_invoice_item_legacy_id_fkey",
+    "source_table": "public.invoice_items_legacy_match",
     "source_columns": [
-     "invoices_legacy_id"
+     "invoice_item_legacy_id"
     ],
-    "target_table": "public.invoices_legacy",
+    "target_table": "public.invoice_items_legacy",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_invoice_item_legacy_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "invoice_item_legacy_id"
+    ],
+    "target_table": "public.invoice_items_legacy",
     "target_columns": [
      "id"
     ]
@@ -611,13 +651,13 @@
  "invoice_items_legacy_match": {
   "name": "public.invoice_items_legacy_match",
   "rls_enabled": true,
-  "rows": 78,
-  "comment": "Asignaciones de líneas legacy a contract_items (permite splits)",
+  "rows": 51,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -627,6 +667,7 @@
     "name": "invoice_item_legacy_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -635,6 +676,7 @@
     "name": "contract_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -643,6 +685,7 @@
     "name": "contract_item_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -652,6 +695,7 @@
     "name": "product_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -661,6 +705,7 @@
     "name": "contract_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -669,6 +714,7 @@
     "name": "fx_contract_to_invoice",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(12,6)",
     "options": [
      "updatable"
     ]
@@ -677,6 +723,7 @@
     "name": "amount_contract_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -685,6 +732,7 @@
     "name": "amount_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -693,16 +741,17 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "default_value": "'tentative'::text",
-    "check": "status = ANY (ARRAY['tentative'::text, 'confirmed'::text])"
+    "default_value": "'tentative'::text"
    },
    {
     "name": "notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -712,6 +761,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -720,6 +770,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -730,6 +781,7 @@
     "name": "confirmed_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -739,6 +791,7 @@
     "name": "confirmed_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -748,6 +801,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -759,10 +813,10 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "invoice_items_legacy_match_created_by_fkey",
+    "name": "invoice_items_legacy_match_confirmed_by_fkey",
     "source_table": "public.invoice_items_legacy_match",
     "source_columns": [
-     "created_by"
+     "confirmed_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -770,10 +824,32 @@
     ]
    },
    {
-    "name": "invoice_items_legacy_match_confirmed_by_fkey",
+    "name": "invoice_items_legacy_match_contract_id_fkey",
     "source_table": "public.invoice_items_legacy_match",
     "source_columns": [
-     "confirmed_by"
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_contract_item_id_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_created_by_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "created_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -798,28 +874,6 @@
      "legacy_match_id"
     ],
     "target_table": "public.invoice_items_legacy_match",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_match_contract_item_id_fkey",
-    "source_table": "public.invoice_items_legacy_match",
-    "source_columns": [
-     "contract_item_id"
-    ],
-    "target_table": "public.contract_items",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_match_contract_id_fkey",
-    "source_table": "public.invoice_items_legacy_match",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
     "target_columns": [
      "id"
     ]
@@ -851,13 +905,13 @@
  "mrr_legacy": {
   "name": "public.mrr_legacy",
   "rls_enabled": true,
-  "rows": 11810,
-  "comment": "Registro rápido de MRR histórico desde facturas legacy sin reconciliación completa. Una fila = 1 producto + 1 mes. Permite valores negativos para notas de crédito y ajustes.",
+  "rows": 11836,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -867,6 +921,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -875,6 +930,7 @@
     "name": "invoice_legacy_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -883,6 +939,7 @@
     "name": "invoice_item_legacy_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -891,17 +948,18 @@
     "name": "split_index",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
     "default_value": "1",
-    "check": "split_index > 0",
     "comment": "Índice de división cuando una línea de factura se asigna a múltiples productos/monedas"
    },
    {
     "name": "company_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -910,6 +968,7 @@
     "name": "client_tax_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -918,6 +977,7 @@
     "name": "legal_client_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -926,6 +986,7 @@
     "name": "invoice_number",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -934,6 +995,7 @@
     "name": "issue_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -942,6 +1004,7 @@
     "name": "invoice_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -950,6 +1013,7 @@
     "name": "amount_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -958,6 +1022,7 @@
     "name": "total_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ]
@@ -966,6 +1031,7 @@
     "name": "vat",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -975,6 +1041,7 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -983,6 +1050,7 @@
     "name": "description",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -991,6 +1059,7 @@
     "name": "currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -999,6 +1068,7 @@
     "name": "quantity",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,4)",
     "options": [
      "nullable",
      "updatable"
@@ -1008,6 +1078,7 @@
     "name": "unit_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -1017,6 +1088,7 @@
     "name": "discount_pct",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(5,2)",
     "options": [
      "nullable",
      "updatable"
@@ -1026,6 +1098,7 @@
     "name": "subtotal",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ],
@@ -1035,6 +1108,7 @@
     "name": "allocated_invoice_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ],
@@ -1044,6 +1118,7 @@
     "name": "client_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -1052,6 +1127,7 @@
     "name": "contract_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -1060,6 +1136,7 @@
     "name": "subtotal_contract_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "updatable"
     ],
@@ -1069,6 +1146,7 @@
     "name": "product_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -1077,26 +1155,27 @@
     "name": "term",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
-    "check": "term > 0",
     "comment": "Cantidad de períodos del contrato (para calcular MRR)"
    },
    {
     "name": "period_month",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ],
-    "check": "date_trunc('month'::text, period_month::timestamp with time zone) = period_month",
     "comment": "Período mensual (YYYY-MM-01). Una fila por mes."
    },
    {
     "name": "is_recurring",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -1106,6 +1185,7 @@
     "name": "fx_contract_to_invoice",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(12,6)",
     "options": [
      "updatable"
     ],
@@ -1115,6 +1195,7 @@
     "name": "fx_contract_to_system",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(12,6)",
     "options": [
      "nullable",
      "updatable"
@@ -1124,6 +1205,7 @@
     "name": "mrr_legacy",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -1134,6 +1216,7 @@
     "name": "mrr_legacy_system_currency",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -1143,17 +1226,18 @@
     "name": "momentum",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
-    "check": "momentum IS NULL OR momentum = 'EOP'::text",
     "comment": "Siempre EOP para registros recurrentes, NULL para no recurrentes"
    },
    {
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -1165,6 +1249,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -1174,6 +1259,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -1183,6 +1269,7 @@
     "name": "migrated_to_contract_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -1193,6 +1280,7 @@
     "name": "migrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1203,6 +1291,7 @@
     "name": "migrated_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -1213,6 +1302,7 @@
     "name": "batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1222,6 +1312,7 @@
     "name": "skip_activation",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -1232,6 +1323,7 @@
     "name": "skip_activation_reason",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1242,6 +1334,7 @@
     "name": "skip_activation_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1252,6 +1345,7 @@
     "name": "skip_activation_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -1264,56 +1358,12 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "mrr_legacy_invoice_item_legacy_id_fkey",
-    "source_table": "public.mrr_legacy",
-    "source_columns": [
-     "invoice_item_legacy_id"
-    ],
-    "target_table": "public.invoice_items_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "mrr_legacy_holding_id_fkey",
-    "source_table": "public.mrr_legacy",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "mrr_legacy_client_id_fkey",
     "source_table": "public.mrr_legacy",
     "source_columns": [
      "client_id"
     ],
     "target_table": "public.clients",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "mrr_legacy_migrated_to_contract_id_fkey",
-    "source_table": "public.mrr_legacy",
-    "source_columns": [
-     "migrated_to_contract_id"
-    ],
-    "target_table": "public.contracts",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "mrr_legacy_migrated_by_fkey",
-    "source_table": "public.mrr_legacy",
-    "source_columns": [
-     "migrated_by"
-    ],
-    "target_table": "public.users",
     "target_columns": [
      "id"
     ]
@@ -1330,12 +1380,56 @@
     ]
    },
    {
+    "name": "mrr_legacy_holding_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_invoice_item_legacy_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "invoice_item_legacy_id"
+    ],
+    "target_table": "public.invoice_items_legacy",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "mrr_legacy_invoice_legacy_id_fkey",
     "source_table": "public.mrr_legacy",
     "source_columns": [
      "invoice_legacy_id"
     ],
     "target_table": "public.invoices_legacy",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_migrated_by_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "migrated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "mrr_legacy_migrated_to_contract_id_fkey",
+    "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "migrated_to_contract_id"
+    ],
+    "target_table": "public.contracts",
     "target_columns": [
      "id"
     ]

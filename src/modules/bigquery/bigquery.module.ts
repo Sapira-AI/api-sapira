@@ -4,8 +4,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@/auth/auth.module';
 import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
+import { SapiraQuantityImport } from '@/databases/postgresql/entities/sapira-quantity-import.entity';
 import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/stripe-customer-bigquery.entity';
 import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { BigQueryConnectionController } from './bigquery-connection.controller';
 import { BigQueryController } from './bigquery.controller';
@@ -14,7 +16,12 @@ import { BigQueryScheduler } from './bigquery.scheduler';
 import { BigQueryService } from './bigquery.service';
 
 @Module({
-	imports: [AuthModule, ScheduleModule.forRoot(), TypeOrmModule.forFeature([StripeCustomerBigQuery, CompanyHolding, BigQueryConnection])],
+	imports: [
+		AuthModule,
+		ScheduleModule.forRoot(),
+		NotificationsModule,
+		TypeOrmModule.forFeature([StripeCustomerBigQuery, CompanyHolding, BigQueryConnection, SapiraQuantityImport]),
+	],
 	controllers: [BigQueryController, BigQueryConnectionController],
 	providers: [BigQueryService, BigQueryScheduler, ...BigQueryProviders],
 	exports: [BigQueryService],

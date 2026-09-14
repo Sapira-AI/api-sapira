@@ -1,8 +1,15 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Check, Column, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
+@Unique('salesforce_opportunities_stg_unique', ['holding_id', 'salesforce_id'])
+@Check(
+	'salesforce_opportunities_stg_status_check',
+	`(((processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))))`
+)
+@Index('idx_salesforce_opportunities_stg_account', ['holding_id', 'salesforce_account_id'])
+@Index('idx_salesforce_opportunities_stg_holding_status', ['holding_id', 'processing_status'])
 @Entity('salesforce_opportunities_stg')
 export class SalesforceOpportunitiesStg {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'salesforce_opportunities_stg_pkey' })
 	id!: string;
 
 	@Column({ type: 'uuid' })
@@ -38,15 +45,15 @@ export class SalesforceOpportunitiesStg {
 	@Column({ type: 'uuid', nullable: true })
 	sync_session_id?: string | null;
 
-	@Column({ type: 'timestamp', nullable: true })
+	@Column({ type: 'timestamptz', nullable: true })
 	processed_at?: Date | null;
 
-	@Column({ type: 'timestamp', nullable: true })
+	@Column({ type: 'timestamptz', nullable: true })
 	last_integrated_at?: Date | null;
 
-	@CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at!: Date;
 
-	@UpdateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	updated_at!: Date;
 }

@@ -118,42 +118,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's Stripe connections",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "DELETE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can insert Stripe connections for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
    },
    {
     "name": "Users can update their holding's Stripe connections",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "UPDATE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can view their holding's Stripe connections",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "SELECT",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    }
   ]
@@ -234,42 +234,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's Stripe customers",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "DELETE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can insert Stripe customers for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
    },
    {
     "name": "Users can update their holding's Stripe customers",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "UPDATE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can view their holding's Stripe customers",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "SELECT",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    }
   ]
@@ -350,42 +350,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's Stripe invoices",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "DELETE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can insert Stripe invoices for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
    },
    {
     "name": "Users can update their holding's Stripe invoices",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "UPDATE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can view their holding's Stripe invoices",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "SELECT",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    }
   ]
@@ -466,42 +466,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's Stripe subscriptions",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "DELETE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can insert Stripe subscriptions for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))"
    },
    {
     "name": "Users can update their holding's Stripe subscriptions",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "UPDATE",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    },
    {
     "name": "Users can view their holding's Stripe subscriptions",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
+    "cmd": "SELECT",
+    "qual": "(holding_id IN ( SELECT user_holdings.holding_id\n   FROM user_holdings\n  WHERE (user_holdings.user_id = auth.uid())))",
     "with_check": null
    }
   ]
@@ -520,18 +520,18 @@
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
-    "name": "stripe_product_mappings_sapira_product_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (sapira_product_id) REFERENCES products(id) ON DELETE CASCADE"
-   },
-   {
     "name": "stripe_product_mappings_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "stripe_product_mappings_sapira_product_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (sapira_product_id) REFERENCES products(id) ON DELETE CASCADE"
    },
    {
     "name": "unique_stripe_mapping",
@@ -686,42 +686,42 @@
   "policies_detail": [
    {
     "name": "Users can delete stripe customers in their holding",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can insert stripe customers for their holding",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "Users can update stripe customers in their holding",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "Users can view stripe customers in their holding",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]

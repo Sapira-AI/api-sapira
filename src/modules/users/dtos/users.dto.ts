@@ -77,6 +77,14 @@ export class UserMenuContextResponseDto {
 
 	@ApiProperty({ type: [UserHoldingResponseDto] })
 	holdings: UserHoldingResponseDto[];
+
+	@ApiProperty({
+		description:
+			'Códigos del catálogo public.permissions asociados al rol (VIEW_CONFIGURACION, EDIT_CONFIGURACION, …). No existe un código settings.',
+		example: ['VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'],
+		type: [String],
+	})
+	permissions: string[];
 }
 
 export class GetUserByAuthIdQueryDto {

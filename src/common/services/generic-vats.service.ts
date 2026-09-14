@@ -51,7 +51,9 @@ export class GenericVatsService {
 			return null;
 		}
 
-		const normalized = String(vat).replace(/[\s.]+/gu, '').toUpperCase();
+		const normalized = String(vat)
+			.replace(/[\s.]+/gu, '')
+			.toUpperCase();
 		return normalized || null;
 	}
 

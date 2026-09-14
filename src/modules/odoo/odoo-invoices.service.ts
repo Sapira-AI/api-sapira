@@ -637,7 +637,10 @@ export class OdooInvoicesService {
 				[[partnerId]],
 				{ fields: ['email'] },
 			]);
-			const recipientEmail = partnerData?.[0]?.email?.trim();
+			// Odoo devuelve `false` —no `null` ni `''`— en los campos vacíos, y `?.` no corta ante `false`:
+			// `false?.trim()` revienta con TypeError y tapa el error de dominio de más abajo.
+			const rawEmail = partnerData?.[0]?.email;
+			const recipientEmail = typeof rawEmail === 'string' ? rawEmail.trim() : '';
 
 			if (!recipientEmail) {
 				throw new Error(`El cliente de la factura ${invoice?.name || invoiceId} no tiene email configurado en Odoo`);

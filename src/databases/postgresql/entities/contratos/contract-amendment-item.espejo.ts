@@ -61,10 +61,6 @@ export class ContractAmendmentItem {
 	@JoinColumn({ name: 'amendment_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_amendment_id_fkey' })
 	amendment?: ContractAmendment;
 
-	@ManyToOne(() => ContractItem)
-	@JoinColumn({ name: 'original_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_original_item_id_fkey' })
-	originalItem?: ContractItem;
-
 	@ManyToOne(() => CompanyHolding, { onDelete: 'RESTRICT' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_holding_id_fkey' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
@@ -72,4 +68,8 @@ export class ContractAmendmentItem {
 	@ManyToOne(() => ContractItem)
 	@JoinColumn({ name: 'new_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_new_item_id_fkey' })
 	newItem?: ContractItem;
+
+	@ManyToOne(() => ContractItem)
+	@JoinColumn({ name: 'original_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_amendment_items_original_item_id_fkey' })
+	originalItem?: ContractItem;
 }

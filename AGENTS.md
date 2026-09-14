@@ -23,3 +23,21 @@
 - Prioriza documentar en la ubicación más cercana del módulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `docs/` para documentación transversal.
 - Toda funcionalidad nueva o modificada en backend debe incluir tests unitarios nuevos o actualizados.
 - Usa Jest para pruebas unitarias y manten las specs dentro de `src/` con sufijo `.spec.ts`, idealmente cerca del modulo afectado.
+
+## Base de datos y esquema
+
+- `api-sapira` es el schema-as-code de todo el esquema `public`. El DDL no va en
+  `front-sapira-vite/supabase/migrations/`.
+- **La entity define la tabla**; lo que TypeORM no puede declarar (enums, extensiones, índices
+  gin/ivfflat o con orden explícito, funciones, triggers, policies, permisos, semillas) es un asset
+  en `src/databases/postgresql/`, aplicado con `yarn postgres:assets`.
+- Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`. `yarn schema:log` es el único uso de
+  TypeORM sobre el esquema y solo lee.
+- Toda migración generada se revisa antes de commitear: TypeORM emite `DROP` sobre lo que no modela.
+- Todo índice de producción va declarado: `@Index` en la entity si es btree sobre columnas simples
+  (los parciales también, con `@Index({ where })`), o `special-index/` si no. Lo verifica
+  `entities/indices-declarados.spec.ts`.
+- Nunca edites un asset `.sql` ya aplicado (checksum registrado): corrige con un asset nuevo.
+- **Para eliminar algo**: borrar el archivo del repo no borra nada de la base, y borrar la entity no
+  borra la tabla. Son dos acciones: una migración escrita a mano con los `DROP` y borrar los
+  archivos. Procedimiento: `src/databases/postgresql/README.md`.

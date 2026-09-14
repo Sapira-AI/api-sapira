@@ -60,16 +60,14 @@ describe('Espejo contratos (TypeORM ↔ prod public)', () => {
 
 		it('tiene las mismas FKs (nombre → tabla, ON DELETE) que prod', () => {
 			expect(
-				Object.fromEntries(
-					metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }])
-				)
+				Object.fromEntries(metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }]))
 			).toEqual(expected.foreignKeys);
 		});
 
 		it('tiene los mismos UNIQUE (nombre → columnas) que prod', () => {
-			expect(
-				Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))
-			).toEqual(expected.uniques);
+			expect(Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual(
+				expected.uniques
+			);
 		});
 
 		it('tiene los mismos CHECK (nombres) que prod', () => {

@@ -1,6 +1,8 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity('stripe_sync_jobs')
+@Index('idx_stripe_sync_jobs_holding_id', ['holding_id'])
+@Index('idx_stripe_sync_jobs_status', ['status'])
+@Entity({ name: 'stripe_sync_jobs', comment: 'Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira' })
 export class StripeSyncJob {
 	@PrimaryGeneratedColumn('uuid')
 	id: string;
@@ -8,16 +10,16 @@ export class StripeSyncJob {
 	@Column({ type: 'uuid', nullable: false })
 	holding_id: string;
 
-	@Column({ type: 'text', nullable: false, default: 'running' })
+	@Column({ type: 'text', nullable: false, default: 'running', comment: 'Estado del job: running, completed, failed' })
 	status: string;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', nullable: true, comment: 'Progreso actual del job con contadores por entidad' })
 	progress: any;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', nullable: true, comment: 'Estadísticas finales del job' })
 	stats: any;
 
-	@Column({ type: 'jsonb', nullable: true })
+	@Column({ type: 'jsonb', nullable: true, comment: 'Array de errores encontrados durante la sincronización' })
 	errors: any;
 
 	@Column({ type: 'text', nullable: true })

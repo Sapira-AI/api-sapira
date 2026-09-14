@@ -1,8 +1,14 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
+import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+
+@Unique('unique_salesforce_object_per_holding', ['holding_id', 'salesforce_object_type', 'salesforce_object_id'])
+@Index('idx_salesforce_mappings_holding', ['holding_id'])
+@Index('idx_salesforce_mappings_salesforce_lookup', ['holding_id', 'salesforce_object_type', 'salesforce_object_id'])
+@Index('idx_salesforce_mappings_sapira_lookup', ['holding_id', 'sapira_table_name', 'sapira_record_id'])
 @Entity('salesforce_object_mappings')
 export class SalesforceObjectMapping {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'salesforce_object_mappings_pkey' })
 	id: string;
 
 	@Column({ type: 'uuid' })
@@ -20,12 +26,16 @@ export class SalesforceObjectMapping {
 	@Column({ type: 'uuid' })
 	sapira_record_id: string;
 
-	@CreateDateColumn({ type: 'timestamptz' })
+	@Column({ type: 'timestamptz', default: () => 'now()' })
 	created_at: Date;
 
-	@UpdateDateColumn({ type: 'timestamptz' })
+	@Column({ type: 'timestamptz', default: () => 'now()' })
 	updated_at: Date;
 
 	@Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
 	last_synced_at: Date;
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'salesforce_object_mappings_holding_id_fkey' })
+	holding?: CompanyHolding;
 }

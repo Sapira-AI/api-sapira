@@ -44,6 +44,20 @@ Estado 2026-08-22: ✅ los 16 módulos generados y verificados (75 espejos: 947 
 
 Archivos de soporte en esta carpeta: `espejo.index.ts` (barrel de todos los espejos) y `espejo.existing.ts` (reexport de las entities activas) — los usan los specs para construir la metadata completa con todos los destinos de FK. Para promover un lote verificado durante QA, el DataSource puede cargar los espejos mediante `TYPEORM_LOAD_MIRROR_ENTITIES=true`; `schema:sync` por sí solo no los habilita.
 
+## Tablas propias de api-sapira (NO son espejos)
+
+Ojo al leer esta carpeta: no todo `.entity.ts` suelto en la raíz es una promoción de espejo. Hay tablas que **nacieron en api-sapira** (no existían en prod y no vienen del inventario v2), y para esas el archivo es `.entity.ts` desde el día uno, se autoregistra por el glob y se registra en el `forFeature` del módulo que la usa. No aplican las reglas de "nacen apagadas" ni el allowlist `promotedMirrorEntities` de `database.module.spec.ts`.
+
+| Entity | Tabla | Módulo | Para qué |
+|---|---|---|---|
+| `sapira-quantity-import.entity.ts` | `sapira_quantity_imports` | `bigquery` | Tabla intermedia del canal DWH → `quantities`: cada fila del DWH con su `integration_status`, para auditoría, reproceso y detección de cambios en el origen |
+
+> `sapira-base-record.entity.ts` / `sapira_base_records` fue **retirada**: sus dos roles los absorbió
+> `sapira_quantity_imports`, que ahora cubre el canal con una sola consulta a BigQuery. La tabla física
+> no se elimina automáticamente (conserva el histórico); darla de baja es una decisión aparte.
+
+Su DDL vive en dos lados: la migración canónica en `front-sapira-vite/supabase/migrations/` y un asset espejo en `src/databases/postgresql/tables/` que aplica `yarn postgres:assets`.
+
 ## Convención de un espejo (tablas sin entity)
 
 1. **Archivo** `<tabla-en-singular-kebab>.espejo.ts`, **clase** PascalCase singular (colectivos se mantienen: `FinancialSettings`, `InvoicesLegacy`). `@Entity('<tabla>')` con el nombre real. JSDoc de cabecera: origen (proyecto, herramienta, fecha), "APAGADO en runtime", filas, RLS, comentario de tabla, quién la referencia por FK, triggers, policies (nombre, comando, roles) y las notas de lo que no se pudo declarar (índices con expresión, FKs duplicadas).

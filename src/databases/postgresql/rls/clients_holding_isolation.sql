@@ -5,4 +5,4 @@ ON "public"."clients"
 AS PERMISSIVE
 FOR SELECT
 TO public
-USING ((holding_id = get_current_user_holding_id()));
+USING ((holding_id = ( SELECT get_current_user_holding_id() AS get_current_user_holding_id)));

@@ -28,12 +28,16 @@ describe('NotificationsService', () => {
 			query: jest.fn(),
 			transaction: jest.fn(async (callback) => callback(manager)),
 		};
+		const notificationsGateway = {
+			emitNotificationCreated: jest.fn(),
+		};
 		const service = new NotificationsService(
 			notificationRepository as any,
 			recipientRepository as any,
 			roleSubscriptionRepository as any,
 			userRepository as any,
-			dataSource as any
+			dataSource as any,
+			notificationsGateway as any
 		);
 
 		return {
@@ -43,6 +47,7 @@ describe('NotificationsService', () => {
 			userRepository,
 			userQueryBuilder,
 			dataSource,
+			notificationsGateway,
 			manager,
 		};
 	};
@@ -59,10 +64,7 @@ describe('NotificationsService', () => {
 		});
 
 		expect(userQueryBuilder.andWhere).toHaveBeenCalledWith('(user.role_id IN (:...roleIds))');
-		expect(manager.insert).toHaveBeenCalledWith(
-			expect.anything(),
-			[{ notification_id: 'notification-1', user_id: 'user-1' }]
-		);
+		expect(manager.insert).toHaveBeenCalledWith(expect.anything(), [{ notification_id: 'notification-1', user_id: 'user-1' }]);
 		expect(result.recipient_count).toBe(1);
 	});
 
@@ -95,7 +97,10 @@ describe('NotificationsService', () => {
 			['role-1'],
 		]);
 		expect(manager.delete).toHaveBeenCalled();
-		expect(result).toHaveLength(4);
+		// 2 destinatarios (rol + super admins) por cada tipo suscribible:
+		// staging bloqueado, fallo de sincronización Salesforce y fallo Odoo.
+		expect(result).toHaveLength(6);
+		expect(result.map((subscription) => subscription.notification_type)).toContain('salesforce_sync_failure');
 	});
 
 	it('permite a un Administrador activo del holding configurar suscripciones', async () => {
@@ -108,9 +113,10 @@ describe('NotificationsService', () => {
 		dataSource.query.mockResolvedValue([{ role_name: 'Administrador' }]);
 
 		await expect(service.assertCanManageSubscriptions('holding-1', 'auth-user-1')).resolves.toBeUndefined();
-		expect(dataSource.query).toHaveBeenCalledWith(
-			expect.stringContaining('assigned_role.holding_id = $2'),
-			['user-1', 'holding-1', 'role-admin']
-		);
+		expect(dataSource.query).toHaveBeenCalledWith(expect.stringContaining('assigned_role.holding_id = $2'), [
+			'user-1',
+			'holding-1',
+			'role-admin',
+		]);
 	});
 });

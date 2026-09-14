@@ -1,5 +1,9 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
+import { CompanyHolding } from '@/modules/holdings/entities/company-holding.entity';
+
+@Unique('quote_stages_holding_id_name_key', ['holding_id', 'name'])
+@Unique('quote_stages_holding_id_position_key', ['holding_id', 'position'])
 @Entity('quote_stages')
 export class QuoteStage {
 	@PrimaryGeneratedColumn('uuid')
@@ -28,4 +32,8 @@ export class QuoteStage {
 
 	@UpdateDateColumn({ type: 'timestamptz' })
 	updated_at: Date;
+
+	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'quote_stages_holding_id_fkey' })
+	holding?: CompanyHolding;
 }

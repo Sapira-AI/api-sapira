@@ -4,7 +4,7 @@ import { CompanyHolding } from '@/modules/holdings/entities/company-holding.enti
 import { Contract } from '@/modules/invoices/entities/contract.entity';
 
 /**
- * Espejo de `public.contract_amendments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 56 filas · RLS on.
+ * Espejo de `public.contract_amendments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 48 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 1 tabla(s): contract_amendment_items.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

@@ -10,8 +10,6 @@ import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.enti
 import { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
 import { EventsModule } from '@/events/events.module';
 
-import { IntegrationLog } from '../../databases/postgresql/entities/integration-log.entity';
-
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 
@@ -63,7 +61,6 @@ import { TaxMappingService } from './services/tax-mapping.service';
 			OdooPartnersStg,
 			Product,
 			OdooProductMapping,
-			IntegrationLog,
 			ClientEntity,
 			FieldMapping,
 			GenericExportVat,
@@ -99,6 +96,14 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		InvoiceProcessingService,
 		OdooIntegrationLogService,
 	],
-	exports: [OdooService, OdooInvoicesService, OdooConnectionService, OdooPartnersService, FiscalPositionsService, TaxMappingService, DocumentTypeMappingService],
+	exports: [
+		OdooService,
+		OdooInvoicesService,
+		OdooConnectionService,
+		OdooPartnersService,
+		FiscalPositionsService,
+		TaxMappingService,
+		DocumentTypeMappingService,
+	],
 })
 export class OdooModule {}

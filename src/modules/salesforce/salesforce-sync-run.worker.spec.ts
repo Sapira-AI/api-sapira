@@ -1,3 +1,9 @@
+// `uuid` v13 es ESM y jest no transforma node_modules; `@nestjs/schedule` lo
+// arrastra al importar los decoradores del worker.
+jest.mock('uuid', () => ({
+	v4: () => 'uuid-test',
+}));
+
 import { SalesforceSyncRunWorker } from './salesforce-sync-run.worker';
 
 describe('SalesforceSyncRunWorker', () => {
@@ -6,9 +12,9 @@ describe('SalesforceSyncRunWorker', () => {
 			recoverExpiredClaims: jest.fn(),
 			acquireRunLock: jest.fn().mockResolvedValue(true),
 			releaseRunLock: jest.fn(),
-			getRunnableRuns: jest.fn().mockResolvedValue([
-				{ id: 'run-1', holding_id: 'holding-1', status: 'cancellation_requested', type: 'process_final' },
-			]),
+			getRunnableRuns: jest
+				.fn()
+				.mockResolvedValue([{ id: 'run-1', holding_id: 'holding-1', status: 'cancellation_requested', type: 'process_final' }]),
 			finishRunIfDone: jest.fn(),
 			claimPendingItems: jest.fn(),
 		};

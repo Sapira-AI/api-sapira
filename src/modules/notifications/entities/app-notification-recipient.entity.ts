@@ -1,10 +1,13 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
+
+import { User } from '@/modules/users/entities/user.entity';
 
 import { AppNotification } from './app-notification.entity';
 
+@Unique('app_notification_recipients_notification_id_user_id_key', ['notification_id', 'user_id'])
 @Entity('app_notification_recipients')
 export class AppNotificationRecipient {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notification_recipients_pkey' })
 	id!: string;
 
 	@Column({ type: 'uuid' })
@@ -23,6 +26,18 @@ export class AppNotificationRecipient {
 	created_at!: Date;
 
 	@ManyToOne(() => AppNotification, (notification) => notification.recipients, { onDelete: 'CASCADE' })
-	@JoinColumn({ name: 'notification_id' })
+	@JoinColumn({
+		name: 'notification_id',
+		referencedColumnName: 'id',
+		foreignKeyConstraintName: 'app_notification_recipients_notification_id_fkey',
+	})
 	notification!: AppNotification;
+
+	@ManyToOne(() => User, { onDelete: 'CASCADE' })
+	@JoinColumn({
+		name: 'user_id',
+		referencedColumnName: 'id',
+		foreignKeyConstraintName: 'app_notification_recipients_user_id_fkey',
+	})
+	user?: User;
 }

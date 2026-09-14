@@ -2,13 +2,13 @@
  "exchange_rates": {
   "name": "public.exchange_rates",
   "rls_enabled": true,
-  "rows": 8513,
-  "comment": "Tipos de cambio diarios. Los promedios mensuales se calculan mediante el servicio ExchangeRatesService del backend, no por triggers automáticos.",
+  "rows": 8284,
   "columns": [
    {
     "name": "rate_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -17,6 +17,7 @@
     "name": "from_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -25,6 +26,7 @@
     "name": "to_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -33,6 +35,7 @@
     "name": "rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(20,8)",
     "options": [
      "updatable"
     ]
@@ -41,6 +44,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -50,6 +54,7 @@
     "name": "source_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -59,6 +64,7 @@
     "name": "api_source",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -70,6 +76,7 @@
     "name": "is_indirect_conversion",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -81,6 +88,7 @@
     "name": "conversion_chain",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -92,18 +100,19 @@
    "rate_date",
    "from_currency",
    "to_currency"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "exchange_rates_monthly_avg": {
   "name": "public.exchange_rates_monthly_avg",
   "rls_enabled": true,
-  "rows": 445,
-  "comment": "Promedios mensuales de tipos de cambio calculados por el servicio ExchangeRatesService.",
+  "rows": 455,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -113,6 +122,7 @@
     "name": "from_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -121,6 +131,7 @@
     "name": "to_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -129,6 +140,7 @@
     "name": "year",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -137,6 +149,7 @@
     "name": "month",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ]
@@ -145,6 +158,7 @@
     "name": "avg_rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "updatable"
     ]
@@ -153,6 +167,7 @@
     "name": "min_rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -162,6 +177,7 @@
     "name": "max_rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -171,6 +187,7 @@
     "name": "data_points",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -180,6 +197,7 @@
     "name": "calculated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -189,18 +207,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "holding_fx_period_rates": {
   "name": "public.holding_fx_period_rates",
   "rls_enabled": true,
-  "rows": 71,
-  "comment": "Tipos de cambio fijos por período configurados a nivel holding para conversión a moneda del sistema",
+  "rows": 63,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -210,6 +229,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -218,6 +238,7 @@
     "name": "from_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -226,6 +247,7 @@
     "name": "to_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -234,15 +256,16 @@
     "name": "rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "updatable"
-    ],
-    "check": "rate > 0::numeric"
+    ]
    },
    {
     "name": "period_start",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -251,6 +274,7 @@
     "name": "period_end",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -259,6 +283,7 @@
     "name": "notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -268,6 +293,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -277,6 +303,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -286,6 +313,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -323,12 +351,13 @@
  "contract_fx_period_rates": {
   "name": "public.contract_fx_period_rates",
   "rls_enabled": true,
-  "rows": 1,
+  "rows": 2,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -338,6 +367,7 @@
     "name": "contract_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -346,6 +376,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -354,6 +385,7 @@
     "name": "from_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -362,6 +394,7 @@
     "name": "to_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -370,15 +403,16 @@
     "name": "rate",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,6)",
     "options": [
      "updatable"
-    ],
-    "check": "rate > 0::numeric"
+    ]
    },
    {
     "name": "period_start",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -387,6 +421,7 @@
     "name": "period_end",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -395,6 +430,7 @@
     "name": "notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -404,6 +440,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -413,6 +450,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -423,6 +461,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -461,12 +500,13 @@
  "indicadores_economicos": {
   "name": "public.indicadores_economicos",
   "rls_enabled": false,
-  "rows": 42,
+  "rows": 34,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -476,6 +516,7 @@
     "name": "codigo",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(100)",
     "options": [
      "updatable"
     ]
@@ -484,6 +525,7 @@
     "name": "nombre",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(255)",
     "options": [
      "updatable"
     ]
@@ -492,6 +534,7 @@
     "name": "fecha",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -500,6 +543,7 @@
     "name": "valor",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,6)",
     "options": [
      "updatable"
     ]
@@ -508,6 +552,7 @@
     "name": "unidad",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(50)",
     "options": [
      "nullable",
      "updatable"
@@ -517,6 +562,7 @@
     "name": "status_code",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(20)",
     "options": [
      "nullable",
      "updatable"
@@ -527,6 +573,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -536,6 +583,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -544,18 +592,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "fx_api_sync_log": {
   "name": "public.fx_api_sync_log",
   "rls_enabled": true,
   "rows": 3,
-  "comment": "Log de sincronizaciones de tipos de cambio desde APIs externas",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -565,6 +614,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -574,6 +624,7 @@
     "name": "sync_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ]
@@ -582,6 +633,7 @@
     "name": "api_source",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -590,6 +642,7 @@
     "name": "currencies_synced",
     "data_type": "ARRAY",
     "format": "_text",
+    "type": "text[]",
     "options": [
      "nullable",
      "updatable"
@@ -600,6 +653,7 @@
     "name": "records_created",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -610,6 +664,7 @@
     "name": "records_updated",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -620,16 +675,17 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "default_value": "'pending'::text",
-    "check": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text, 'pending'::text])"
+    "default_value": "'pending'::text"
    },
    {
     "name": "error_details",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -639,6 +695,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -666,12 +723,12 @@
   "name": "public.generic_export_vats",
   "rls_enabled": false,
   "rows": 8,
-  "comment": "VATs genéricos utilizados para facturación de exportación. Estos VATs se usan para múltiples clientes y NO deben usarse como identificador único.",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -681,9 +738,9 @@
     "name": "vat",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(50)",
     "options": [
-     "updatable",
-     "unique"
+     "updatable"
     ],
     "comment": "VAT genérico (RUT/Tax ID)"
    },
@@ -691,6 +748,7 @@
     "name": "description",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -701,6 +759,7 @@
     "name": "country_code",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(3)",
     "options": [
      "nullable",
      "updatable"
@@ -711,6 +770,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -721,6 +781,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -730,6 +791,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -738,6 +800,7 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  }
 }

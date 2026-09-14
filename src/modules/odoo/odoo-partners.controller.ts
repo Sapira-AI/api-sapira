@@ -4,11 +4,8 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
 import { ClassifyPartnersResponseDto, ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
-import {
-	ResolveOdooPartnerByTaxIdDto,
-	ResolveOdooPartnerByTaxIdResponseDto,
-} from './dtos/resolve-odoo-partner-by-tax-id.dto';
 import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
+import { ResolveOdooPartnerByTaxIdDto, ResolveOdooPartnerByTaxIdResponseDto } from './dtos/resolve-odoo-partner-by-tax-id.dto';
 import { OdooPartnersService } from './odoo-partners.service';
 
 @ApiTags('Odoo Partners')

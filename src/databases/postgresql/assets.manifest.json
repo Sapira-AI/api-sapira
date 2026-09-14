@@ -1,5 +1,13 @@
 {
 	"version": 1,
-	"directories": ["functions", "special-index", "triggers", "rls", "seed"],
+	"directories": [
+		"types",
+		"functions",
+		"special-index",
+		"triggers",
+		"rls",
+		"grants",
+		"seed"
+	],
 	"order": []
 }

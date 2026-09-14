@@ -1,8 +1,17 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
-@Entity('stripe_invoices_stg')
+@Unique('unique_stripe_invoice_per_holding', ['holding_id', 'stripe_id'])
+@Index('idx_stripe_invoices_stg_connection_id', ['connection_id'])
+@Index('idx_stripe_invoices_stg_holding_id', ['holding_id'])
+@Index('idx_stripe_invoices_stg_processing_status', ['processing_status'])
+@Index('idx_stripe_invoices_stg_stripe_id', ['stripe_id'])
+@Index('idx_stripe_invoices_stg_sync_batch_id', ['sync_batch_id'])
+@Entity({
+	name: 'stripe_invoices_stg',
+	comment: 'Tabla staging para facturas importadas desde Stripe',
+})
 export class StripeInvoicesStg {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'stripe_invoices_stg_pkey' })
 	id: string;
 
 	@Column({ type: 'uuid', nullable: false })
@@ -11,7 +20,7 @@ export class StripeInvoicesStg {
 	@Column({ type: 'text', nullable: false })
 	stripe_id: string;
 
-	@Column({ type: 'jsonb', nullable: false })
+	@Column({ type: 'jsonb', nullable: false, comment: 'Datos completos de la factura en formato JSON' })
 	raw_data: any;
 
 	@Column({ type: 'uuid', nullable: true })
@@ -32,10 +41,10 @@ export class StripeInvoicesStg {
 	@Column({ type: 'text', nullable: true })
 	error_message?: string;
 
-	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at: Date;
 
-	@UpdateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	updated_at: Date;
 
 	@Column({ type: 'uuid', nullable: true })

@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { IntegrationLog } from '@/databases/postgresql/entities/integration-log.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
 
 import {
 	CountRecordsDTO,
@@ -66,8 +66,9 @@ export class OdooService {
 		private readonly productsRepository: Repository<Product>,
 		@InjectRepository(OdooProductMapping)
 		private readonly odooProductMappingRepository: Repository<OdooProductMapping>,
-		@InjectRepository(IntegrationLog)
-		private readonly integrationLogRepository: Repository<IntegrationLog>,
+		// Las 4 consultas crudas de saveFieldMapping/getFieldMapping van contra field_mappings.
+		@InjectRepository(FieldMapping)
+		private readonly fieldMappingsRepository: Repository<FieldMapping>,
 		@InjectRepository(ClientEntity)
 		private readonly clientEntitiesRepository: Repository<ClientEntity>
 	) {}
@@ -1779,7 +1780,8 @@ export class OdooService {
 						},
 						order: { updated_at: 'DESC' },
 					});
-					const mappingForProduct = existingMappings.find((existingMapping) => existingMapping.odoo_product_id === odoo_product_id) || existingMappings[0];
+					const mappingForProduct =
+						existingMappings.find((existingMapping) => existingMapping.odoo_product_id === odoo_product_id) || existingMappings[0];
 
 					if (mappingForProduct) {
 						mappingForProduct.odoo_product_id = odoo_product_id;
@@ -2503,7 +2505,7 @@ export class OdooService {
 			const publicUserId = publicUser?.id || null;
 
 			// Buscar mapeo existente
-			const existingMapping = await this.integrationLogRepository.query(
+			const existingMapping = await this.fieldMappingsRepository.query(
 				`SELECT id FROM field_mappings 
 				 WHERE holding_id = $1 
 				 AND mapping_type = 'hierarchical'
@@ -2519,7 +2521,7 @@ export class OdooService {
 			if (existingMapping && existingMapping.length > 0) {
 				// Actualizar mapeo existente - REEMPLAZAR completamente el mapping_config
 
-				result = await this.integrationLogRepository.query(
+				result = await this.fieldMappingsRepository.query(
 					`UPDATE field_mappings 
 					 SET mapping_config = $1, updated_at = NOW()
 					 WHERE id = $2
@@ -2529,7 +2531,7 @@ export class OdooService {
 			} else {
 				// Crear nuevo mapeo
 
-				result = await this.integrationLogRepository.query(
+				result = await this.fieldMappingsRepository.query(
 					`INSERT INTO field_mappings 
 					 (holding_id, mapping_type, source_model, target_table, mapping_config, created_by, is_active)
 					 VALUES ($1, 'hierarchical', $2, $3, $4, $5, true)
@@ -2568,7 +2570,7 @@ export class OdooService {
 				throw new Error('source_model y target_table son requeridos');
 			}
 
-			const result = await this.integrationLogRepository.query(
+			const result = await this.fieldMappingsRepository.query(
 				`SELECT * FROM field_mappings 
 				 WHERE holding_id = $1 
 				 AND mapping_type = 'hierarchical'

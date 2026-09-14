@@ -15,7 +15,7 @@ export class StripeClientsService {
 		private readonly bigQueryService: BigQueryService
 	) {}
 
-	async syncStripeCustomerIds(): Promise<{
+	async syncStripeCustomerIds(holdingId: string): Promise<{
 		success: boolean;
 		message: string;
 		stats: {
@@ -28,7 +28,7 @@ export class StripeClientsService {
 		this.logger.log('Iniciando sincronización de stripe_customer_id desde BigQuery...');
 
 		try {
-			const result = await this.bigQueryService.executeQuery({
+			const result = await this.bigQueryService.executeQuery(holdingId, {
 				query: 'SELECT * FROM `datawarehouse-a2e2.finance.sapira_stripe`',
 				params: {},
 			});

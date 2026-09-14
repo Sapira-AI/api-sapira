@@ -8,6 +8,7 @@
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -17,6 +18,7 @@
     "name": "user_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -27,6 +29,7 @@
     "name": "username",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -37,6 +40,7 @@
     "name": "client_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -45,6 +49,7 @@
     "name": "client_secret",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -53,6 +58,7 @@
     "name": "security_token",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -63,6 +69,7 @@
     "name": "login_url",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -73,6 +80,7 @@
     "name": "access_token",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -82,6 +90,7 @@
     "name": "instance_url",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -91,6 +100,7 @@
     "name": "salesforce_user_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -100,6 +110,7 @@
     "name": "token_issued_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -109,6 +120,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -119,6 +131,7 @@
     "name": "last_sync_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -128,6 +141,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -138,6 +152,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -148,6 +163,7 @@
     "name": "refresh_token",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -158,6 +174,7 @@
     "name": "token_expires_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -168,9 +185,9 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
-     "updatable",
-     "unique"
+     "updatable"
     ],
     "comment": "Holding al que pertenece esta conexión. Una conexión es compartida por todos los usuarios del holding."
    },
@@ -178,18 +195,19 @@
     "name": "auth_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
     "default_value": "'client_credentials'::text",
-    "check": "auth_type = ANY (ARRAY['password'::text, 'client_credentials'::text])",
     "comment": "Tipo de autenticación: password (Username-Password Flow con refresh token) o client_credentials (Client Credentials Flow sin refresh token)"
    },
    {
     "name": "password",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -218,7 +236,7 @@
     "source_columns": [
      "user_id"
     ],
-    "target_table": "auth.users",
+    "target_table": "public.users",
     "target_columns": [
      "id"
     ]
@@ -228,12 +246,13 @@
  "salesforce_accounts_stg": {
   "name": "public.salesforce_accounts_stg",
   "rls_enabled": true,
-  "rows": 51,
+  "rows": 99,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -243,6 +262,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -251,6 +271,7 @@
     "name": "salesforce_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -259,6 +280,7 @@
     "name": "salesforce_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -268,6 +290,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ]
@@ -276,17 +299,18 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
-    "default_value": "'create'::text",
-    "check": "processing_status IS NULL OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+    "default_value": "'create'::text"
    },
    {
     "name": "source_hash",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -296,6 +320,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -305,6 +330,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -314,6 +340,7 @@
     "name": "batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -323,6 +350,7 @@
     "name": "sync_session_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -332,6 +360,7 @@
     "name": "processed_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -341,6 +370,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -350,6 +380,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -360,6 +391,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -369,17 +401,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "salesforce_opportunities_stg": {
   "name": "public.salesforce_opportunities_stg",
   "rls_enabled": true,
-  "rows": 62,
+  "rows": 132,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -389,6 +423,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -397,6 +432,7 @@
     "name": "salesforce_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -405,6 +441,7 @@
     "name": "salesforce_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -414,6 +451,7 @@
     "name": "salesforce_account_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -423,6 +461,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ]
@@ -431,17 +470,18 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
-    "default_value": "'create'::text",
-    "check": "processing_status IS NULL OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+    "default_value": "'create'::text"
    },
    {
     "name": "source_hash",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -451,6 +491,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -460,6 +501,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -469,6 +511,7 @@
     "name": "batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -478,6 +521,7 @@
     "name": "sync_session_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -487,6 +531,7 @@
     "name": "processed_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -496,6 +541,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -505,6 +551,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -515,6 +562,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -542,12 +590,13 @@
  "salesforce_line_items_stg": {
   "name": "public.salesforce_line_items_stg",
   "rls_enabled": true,
-  "rows": 68,
+  "rows": 144,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -557,6 +606,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -565,6 +615,7 @@
     "name": "opportunity_staging_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -574,6 +625,7 @@
     "name": "salesforce_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -582,6 +634,7 @@
     "name": "salesforce_opportunity_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -591,6 +644,7 @@
     "name": "salesforce_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -600,6 +654,7 @@
     "name": "salesforce_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -609,6 +664,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ]
@@ -617,17 +673,18 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
-    "default_value": "'create'::text",
-    "check": "processing_status IS NULL OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))"
+    "default_value": "'create'::text"
    },
    {
     "name": "source_hash",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -637,6 +694,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -646,6 +704,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -655,6 +714,7 @@
     "name": "batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -664,6 +724,7 @@
     "name": "sync_session_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -673,6 +734,7 @@
     "name": "processed_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -682,6 +744,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -691,6 +754,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -701,6 +765,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -728,12 +793,13 @@
  "salesforce_object_mappings": {
   "name": "public.salesforce_object_mappings",
   "rls_enabled": true,
-  "rows": 1522,
+  "rows": 1483,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -743,6 +809,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -751,6 +818,7 @@
     "name": "salesforce_object_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -759,6 +827,7 @@
     "name": "salesforce_object_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -767,6 +836,7 @@
     "name": "sapira_table_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -775,6 +845,7 @@
     "name": "sapira_record_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -783,6 +854,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -792,6 +864,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -801,6 +874,7 @@
     "name": "last_synced_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -828,12 +902,12 @@
   "name": "public.salesforce_field_mappings",
   "rls_enabled": true,
   "rows": 42,
-  "comment": "Configuración de mapeo de campos entre Salesforce y Sapira",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -843,6 +917,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -851,16 +926,17 @@
     "name": "object_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "check": "object_type = ANY (ARRAY['client'::text, 'client_entity'::text, 'opportunity'::text, 'line_item'::text, 'product'::text, 'contact'::text])",
     "comment": "Tipo de objeto: client, client_entity, opportunity, line_item, product, contact"
    },
    {
     "name": "sapira_field",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -870,6 +946,7 @@
     "name": "salesforce_field",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -879,6 +956,7 @@
     "name": "is_required",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -889,6 +967,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -899,6 +978,7 @@
     "name": "data_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -908,6 +988,7 @@
     "name": "default_value",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -917,6 +998,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -927,6 +1009,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -937,6 +1020,7 @@
     "name": "transformation_key",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -947,6 +1031,7 @@
     "name": "transformation_config",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -956,18 +1041,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "salesforce_product_mappings": {
   "name": "public.salesforce_product_mappings",
   "rls_enabled": true,
-  "rows": 109,
-  "comment": "Mapeo de productos Salesforce (Product2) a productos Sapira. Permite N:1 (varios productos SF → un producto Sapira)",
+  "rows": 61,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -977,6 +1063,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -985,6 +1072,7 @@
     "name": "salesforce_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -994,6 +1082,7 @@
     "name": "salesforce_product_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1003,6 +1092,7 @@
     "name": "salesforce_family",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1013,6 +1103,7 @@
     "name": "salesforce_product_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1022,6 +1113,7 @@
     "name": "sapira_product_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1031,6 +1123,7 @@
     "name": "sapira_product_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1040,6 +1133,7 @@
     "name": "sapira_product_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1049,6 +1143,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -1058,6 +1153,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1068,6 +1164,7 @@
     "name": "updated_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1107,12 +1204,12 @@
   "name": "public.salesforce_quote_type_mappings",
   "rls_enabled": true,
   "rows": 6,
-  "comment": "Mapeo configurable de tipos de oportunidad Salesforce a quote_type de Sapira",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1122,6 +1219,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -1130,6 +1228,7 @@
     "name": "salesforce_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -1139,6 +1238,7 @@
     "name": "sapira_quote_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -1148,6 +1248,7 @@
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -1158,6 +1259,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1168,6 +1270,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1195,12 +1298,13 @@
  "salesforce_sync_runs": {
   "name": "public.salesforce_sync_runs",
   "rls_enabled": true,
-  "rows": 20,
+  "rows": 41,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1210,6 +1314,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -1218,25 +1323,26 @@
     "name": "type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
-    ],
-    "check": "type = ANY (ARRAY['update_staging'::text, 'process_final'::text, 'retry_full'::text])"
+    ]
    },
    {
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "default_value": "'queued'::text",
-    "check": "status = ANY (ARRAY['queued'::text, 'running'::text, 'cancellation_requested'::text, 'cancelled'::text, 'completed'::text, 'failed'::text])"
+    "default_value": "'queued'::text"
    },
    {
     "name": "date_from",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -1246,6 +1352,7 @@
     "name": "date_to",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -1255,6 +1362,7 @@
     "name": "total_items",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
@@ -1264,6 +1372,7 @@
     "name": "completed_items",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
@@ -1273,6 +1382,7 @@
     "name": "failed_items",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
@@ -1282,6 +1392,7 @@
     "name": "started_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1291,6 +1402,7 @@
     "name": "finished_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1300,6 +1412,7 @@
     "name": "locked_until",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1309,6 +1422,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1318,6 +1432,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "updatable"
     ],
@@ -1327,6 +1442,7 @@
     "name": "updated_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "updatable"
     ],
@@ -1353,12 +1469,13 @@
  "salesforce_sync_run_items": {
   "name": "public.salesforce_sync_run_items",
   "rls_enabled": true,
-  "rows": 129,
+  "rows": 296,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1368,6 +1485,7 @@
     "name": "run_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -1376,6 +1494,7 @@
     "name": "salesforce_opportunity_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -1384,16 +1503,17 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "default_value": "'pending'::text",
-    "check": "status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'error'::text, 'cancelled'::text])"
+    "default_value": "'pending'::text"
    },
    {
     "name": "attempts",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
@@ -1403,6 +1523,7 @@
     "name": "claimed_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1412,6 +1533,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1421,6 +1543,7 @@
     "name": "processed_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1430,6 +1553,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "updatable"
     ],
@@ -1439,6 +1563,7 @@
     "name": "updated_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "updatable"
     ],
@@ -1466,12 +1591,12 @@
   "name": "public.salesforce_sync_logs",
   "rls_enabled": true,
   "rows": 0,
-  "comment": "Registro de sincronizaciones automáticas de Salesforce",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1481,6 +1606,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -1490,6 +1616,7 @@
     "name": "sync_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ],
@@ -1500,6 +1627,7 @@
     "name": "opportunities_count",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -1511,6 +1639,7 @@
     "name": "accounts_count",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -1521,6 +1650,7 @@
     "name": "success",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -1531,6 +1661,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1540,6 +1671,7 @@
     "name": "execution_time_ms",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -1550,6 +1682,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1578,12 +1711,12 @@
   "name": "public.salesforce_opportunities_cache",
   "rls_enabled": true,
   "rows": 0,
-  "comment": "Cache de oportunidades sincronizadas automáticamente desde Salesforce. Los usuarios ven estos datos en el frontend sin necesidad de sincronizar manualmente.",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -1593,6 +1726,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -1601,6 +1735,7 @@
     "name": "salesforce_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -1609,6 +1744,7 @@
     "name": "salesforce_account_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1618,6 +1754,7 @@
     "name": "opportunity_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -1626,6 +1763,7 @@
     "name": "account_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1635,6 +1773,7 @@
     "name": "account_country",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1644,6 +1783,7 @@
     "name": "opportunity_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1653,6 +1793,7 @@
     "name": "stage_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1662,6 +1803,7 @@
     "name": "is_won",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -1672,6 +1814,7 @@
     "name": "is_closed",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -1682,6 +1825,7 @@
     "name": "amount",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(15,2)",
     "options": [
      "nullable",
      "updatable"
@@ -1691,6 +1835,7 @@
     "name": "currency_iso_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1701,6 +1846,7 @@
     "name": "close_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -1710,6 +1856,7 @@
     "name": "id_largo_oportunidad__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1719,6 +1866,7 @@
     "name": "modalidad_de_pago__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1728,6 +1876,7 @@
     "name": "forma_de_pago__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1737,6 +1886,7 @@
     "name": "contrato__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1746,6 +1896,7 @@
     "name": "orden_de_compra__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1755,6 +1906,7 @@
     "name": "quote_project_manager__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1764,6 +1916,7 @@
     "name": "quote_billing_email__c",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1773,6 +1926,7 @@
     "name": "line_items_count",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -1783,6 +1937,7 @@
     "name": "line_items",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -1793,6 +1948,7 @@
     "name": "sync_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "updatable"
     ],
@@ -1803,6 +1959,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -1813,6 +1970,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"

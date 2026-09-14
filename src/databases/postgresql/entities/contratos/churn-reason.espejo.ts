@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
 /**
- * Espejo de `public.churn_reasons` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 15 filas · RLS on.
+ * Espejo de `public.churn_reasons` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). filas desconocidas (tabla sin ANALYZE) · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 1 tabla(s): contracts.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

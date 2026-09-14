@@ -1,8 +1,17 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
-@Entity('stripe_subscriptions_stg')
+@Unique('unique_stripe_subscription_per_holding', ['holding_id', 'stripe_id'])
+@Index('idx_stripe_subscriptions_stg_connection_id', ['connection_id'])
+@Index('idx_stripe_subscriptions_stg_holding_id', ['holding_id'])
+@Index('idx_stripe_subscriptions_stg_processing_status', ['processing_status'])
+@Index('idx_stripe_subscriptions_stg_stripe_id', ['stripe_id'])
+@Index('idx_stripe_subscriptions_stg_sync_batch_id', ['sync_batch_id'])
+@Entity({
+	name: 'stripe_subscriptions_stg',
+	comment: 'Tabla staging para suscripciones importadas desde Stripe',
+})
 export class StripeSubscriptionsStg {
-	@PrimaryGeneratedColumn('uuid')
+	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'stripe_subscriptions_stg_pkey' })
 	id: string;
 
 	@Column({ type: 'uuid', nullable: false })
@@ -11,7 +20,7 @@ export class StripeSubscriptionsStg {
 	@Column({ type: 'text', nullable: false })
 	stripe_id: string;
 
-	@Column({ type: 'jsonb', nullable: false })
+	@Column({ type: 'jsonb', nullable: false, comment: 'Datos completos de la suscripción en formato JSON' })
 	raw_data: any;
 
 	@Column({ type: 'uuid', nullable: true })
@@ -32,10 +41,10 @@ export class StripeSubscriptionsStg {
 	@Column({ type: 'text', nullable: true })
 	error_message?: string;
 
-	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at: Date;
 
-	@UpdateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
+	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	updated_at: Date;
 
 	@Column({ type: 'uuid', nullable: true })

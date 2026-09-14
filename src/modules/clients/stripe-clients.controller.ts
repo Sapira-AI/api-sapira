@@ -1,5 +1,5 @@
-import { Controller, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Headers, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
@@ -51,7 +51,12 @@ export class StripeClientsController {
 		status: HttpStatus.UNAUTHORIZED,
 		description: 'Token de autenticación inválido o no proporcionado',
 	})
-	async syncStripeCustomerIds() {
-		return await this.stripeClientsService.syncStripeCustomerIds();
+	@ApiHeader({ name: 'x-holding-id', required: true, description: 'Identificador del holding cuya conexión de BigQuery se usará' })
+	async syncStripeCustomerIds(@Headers('x-holding-id') holdingId: string) {
+		if (!holdingId) {
+			throw new BadRequestException('El header x-holding-id es requerido');
+		}
+
+		return await this.stripeClientsService.syncStripeCustomerIds(holdingId);
 	}
 }

@@ -2,12 +2,13 @@
  "quotes": {
   "name": "public.quotes",
   "rls_enabled": true,
-  "rows": 345,
+  "rows": 383,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -17,6 +18,7 @@
     "name": "client_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -26,6 +28,7 @@
     "name": "client_contact_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -35,6 +38,7 @@
     "name": "seller_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -44,6 +48,7 @@
     "name": "quote_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -53,6 +58,7 @@
     "name": "payment_terms",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -62,6 +68,7 @@
     "name": "requires_multicompany",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -72,6 +79,7 @@
     "name": "requires_multicurrency",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -82,6 +90,7 @@
     "name": "currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -91,6 +100,7 @@
     "name": "total_amount",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -100,6 +110,7 @@
     "name": "notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -109,6 +120,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -119,6 +131,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -127,6 +140,7 @@
     "name": "quote_stage_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -135,6 +149,7 @@
     "name": "requires_references_for_billing",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -146,6 +161,7 @@
     "name": "requires_contract_document",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -157,6 +173,7 @@
     "name": "quote_number",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -167,6 +184,7 @@
     "name": "quote_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -177,6 +195,7 @@
     "name": "booking_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -187,6 +206,7 @@
     "name": "salesforce_opportunity_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -197,6 +217,61 @@
    "id"
   ],
   "foreign_key_constraints": [
+   {
+    "name": "contracts_quote_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_quotes_holding_id",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_quotes_stage",
+    "source_table": "public.quotes",
+    "source_columns": [
+     "quote_stage_id"
+    ],
+    "target_table": "public.quote_stages",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_attachments_quote_id_fkey",
+    "source_table": "public.quote_attachments",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_items_quote_id_fkey",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
    {
     "name": "quotes_client_contact_id_fkey",
     "source_table": "public.quotes",
@@ -220,28 +295,6 @@
     ]
    },
    {
-    "name": "quote_attachments_quote_id_fkey",
-    "source_table": "public.quote_attachments",
-    "source_columns": [
-     "quote_id"
-    ],
-    "target_table": "public.quotes",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "fk_quotes_holding_id",
-    "source_table": "public.quotes",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "quotes_seller_id_fkey1",
     "source_table": "public.quotes",
     "source_columns": [
@@ -251,51 +304,19 @@
     "target_columns": [
      "id"
     ]
-   },
-   {
-    "name": "contracts_quote_id_fkey",
-    "source_table": "public.contracts",
-    "source_columns": [
-     "quote_id"
-    ],
-    "target_table": "public.quotes",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "quote_items_quote_id_fkey",
-    "source_table": "public.quote_items",
-    "source_columns": [
-     "quote_id"
-    ],
-    "target_table": "public.quotes",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "fk_quotes_stage",
-    "source_table": "public.quotes",
-    "source_columns": [
-     "quote_stage_id"
-    ],
-    "target_table": "public.quote_stages",
-    "target_columns": [
-     "id"
-    ]
    }
   ]
  },
  "quote_items": {
   "name": "public.quote_items",
   "rls_enabled": true,
-  "rows": 409,
+  "rows": 460,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -305,6 +326,7 @@
     "name": "quote_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -314,6 +336,7 @@
     "name": "product_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -323,6 +346,7 @@
     "name": "product_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -331,6 +355,7 @@
     "name": "term_months",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -340,6 +365,7 @@
     "name": "currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -349,6 +375,7 @@
     "name": "price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -359,16 +386,17 @@
     "name": "discount_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
-    ],
-    "check": "discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])"
+    ]
    },
    {
     "name": "discount_value",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -378,6 +406,7 @@
     "name": "final_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -388,26 +417,27 @@
     "name": "billing_method",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
-    ],
-    "check": "billing_method = ANY (ARRAY['Anticipado'::text, 'Vencido'::text])"
+    ]
    },
    {
     "name": "billing_frequency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
-    ],
-    "check": "billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])"
+    ]
    },
    {
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -417,6 +447,7 @@
     "name": "start_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -427,6 +458,7 @@
     "name": "end_date",
     "data_type": "date",
     "format": "date",
+    "type": "date",
     "options": [
      "nullable",
      "updatable"
@@ -437,6 +469,7 @@
     "name": "is_recurring",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -447,6 +480,7 @@
     "name": "item_type",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(64)",
     "options": [
      "nullable",
      "updatable"
@@ -457,6 +491,7 @@
     "name": "unit_of_measure",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(32)",
     "options": [
      "nullable",
      "updatable"
@@ -467,6 +502,7 @@
     "name": "unit_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,6)",
     "options": [
      "nullable",
      "updatable"
@@ -477,6 +513,7 @@
     "name": "quantity",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,6)",
     "options": [
      "nullable",
      "updatable"
@@ -487,6 +524,7 @@
     "name": "account",
     "data_type": "character varying",
     "format": "varchar",
+    "type": "character varying(128)",
     "options": [
      "nullable",
      "updatable"
@@ -497,6 +535,7 @@
     "name": "custom_fields",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -508,6 +547,7 @@
     "name": "quote_item_number",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -518,6 +558,7 @@
     "name": "data_source",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -528,6 +569,7 @@
     "name": "salesforce_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -538,6 +580,7 @@
     "name": "salesforce_line_item_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -547,6 +590,7 @@
     "name": "monthly_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,2)",
     "options": [
      "nullable",
      "updatable"
@@ -557,6 +601,7 @@
     "name": "billing_period_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,2)",
     "options": [
      "nullable",
      "updatable"
@@ -567,6 +612,7 @@
     "name": "auto_renew",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -577,6 +623,7 @@
     "name": "auto_renew_term_months",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -587,6 +634,7 @@
     "name": "annual_unit_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,6)",
     "options": [
      "nullable",
      "updatable"
@@ -597,6 +645,7 @@
     "name": "annual_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric(18,2)",
     "options": [
      "nullable",
      "updatable"
@@ -607,12 +656,12 @@
     "name": "price_entry_mode",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
     ],
     "default_value": "'monthly'::text",
-    "check": "price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])",
     "comment": "Indica cual campo es fuente de verdad: monthly (unit_price) o annual (annual_unit_price). Default: monthly."
    }
   ],
@@ -621,12 +670,12 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "quote_items_product_id_fkey",
-    "source_table": "public.quote_items",
+    "name": "contract_items_quote_item_id_fkey",
+    "source_table": "public.contract_items",
     "source_columns": [
-     "product_id"
+     "quote_item_id"
     ],
-    "target_table": "public.products",
+    "target_table": "public.quote_items",
     "target_columns": [
      "id"
     ]
@@ -643,6 +692,17 @@
     ]
    },
    {
+    "name": "quote_items_product_id_fkey",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "quote_items_quote_id_fkey",
     "source_table": "public.quote_items",
     "source_columns": [
@@ -652,29 +712,19 @@
     "target_columns": [
      "id"
     ]
-   },
-   {
-    "name": "contract_items_quote_item_id_fkey",
-    "source_table": "public.contract_items",
-    "source_columns": [
-     "quote_item_id"
-    ],
-    "target_table": "public.quote_items",
-    "target_columns": [
-     "id"
-    ]
    }
   ]
  },
  "quote_stages": {
   "name": "public.quote_stages",
   "rls_enabled": true,
-  "rows": 43,
+  "rows": 37,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -684,6 +734,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -692,6 +743,7 @@
     "name": "name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -700,6 +752,7 @@
     "name": "position",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "updatable"
     ],
@@ -709,6 +762,7 @@
     "name": "is_system_stage",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -718,6 +772,7 @@
     "name": "is_deletable",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "updatable"
     ],
@@ -727,6 +782,7 @@
     "name": "color",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -737,6 +793,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -746,6 +803,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -757,23 +815,23 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "quote_stages_holding_id_fkey",
-    "source_table": "public.quote_stages",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "fk_quotes_stage",
     "source_table": "public.quotes",
     "source_columns": [
      "quote_stage_id"
     ],
     "target_table": "public.quote_stages",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_stages_holding_id_fkey",
+    "source_table": "public.quote_stages",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
     "target_columns": [
      "id"
     ]
@@ -784,12 +842,12 @@
   "name": "public.quote_attachments",
   "rls_enabled": true,
   "rows": 0,
-  "comment": "Adjuntos de cotizaciones incluyendo aceptación de cliente, OC, HES",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -799,6 +857,7 @@
     "name": "quote_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -807,6 +866,7 @@
     "name": "file_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -815,6 +875,7 @@
     "name": "file_url",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -823,6 +884,7 @@
     "name": "file_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -832,6 +894,7 @@
     "name": "file_size",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -841,16 +904,17 @@
     "name": "attachment_type",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
-    "check": "attachment_type = ANY (ARRAY['acceptance'::text, 'purchase_order'::text, 'hes'::text, 'contract'::text, 'other'::text])",
     "comment": "Tipo: acceptance (aceptación cliente), purchase_order (OC), hes (HES), contract, other"
    },
    {
     "name": "uploaded_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -860,6 +924,7 @@
     "name": "uploaded_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -870,6 +935,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -878,6 +944,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -916,12 +983,13 @@
  "products": {
   "name": "public.products",
   "rls_enabled": true,
-  "rows": 76,
+  "rows": 88,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -931,6 +999,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -940,6 +1009,7 @@
     "name": "product_code",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -950,6 +1020,7 @@
     "name": "name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -959,6 +1030,7 @@
     "name": "is_recurring",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -969,6 +1041,7 @@
     "name": "default_currency",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -978,6 +1051,7 @@
     "name": "default_price",
     "data_type": "numeric",
     "format": "numeric",
+    "type": "numeric",
     "options": [
      "nullable",
      "updatable"
@@ -987,6 +1061,7 @@
     "name": "created_at",
     "data_type": "timestamp without time zone",
     "format": "timestamp",
+    "type": "timestamp without time zone",
     "options": [
      "nullable",
      "updatable"
@@ -997,6 +1072,7 @@
     "name": "salesforce_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1007,6 +1083,7 @@
     "name": "odoo_product_id",
     "data_type": "integer",
     "format": "int4",
+    "type": "integer",
     "options": [
      "nullable",
      "updatable"
@@ -1017,6 +1094,7 @@
     "name": "odoo_tax_ids",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1027,6 +1105,7 @@
     "name": "stripe_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1039,74 +1118,8 @@
   ],
   "foreign_key_constraints": [
    {
-    "name": "products_holding_id_fkey",
-    "source_table": "public.products",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
     "name": "contract_items_product_id_fkey",
     "source_table": "public.contract_items",
-    "source_columns": [
-     "product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "quote_items_product_id_fkey",
-    "source_table": "public.quote_items",
-    "source_columns": [
-     "product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "odoo_product_mappings_sapira_product_id_fkey",
-    "source_table": "public.odoo_product_mappings",
-    "source_columns": [
-     "sapira_product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "subscription_items_product_id_fkey",
-    "source_table": "public.subscription_items",
-    "source_columns": [
-     "product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "salesforce_product_mappings_sapira_product_id_fkey",
-    "source_table": "public.salesforce_product_mappings",
-    "source_columns": [
-     "sapira_product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_match_product_id_fkey",
-    "source_table": "public.invoice_items_legacy_match",
     "source_columns": [
      "product_id"
     ],
@@ -1127,10 +1140,76 @@
     ]
    },
    {
+    "name": "invoice_items_legacy_match_product_id_fkey",
+    "source_table": "public.invoice_items_legacy_match",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "odoo_product_mappings_sapira_product_id_fkey",
+    "source_table": "public.odoo_product_mappings",
+    "source_columns": [
+     "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "products_holding_id_fkey",
+    "source_table": "public.products",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_items_product_id_fkey",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "salesforce_product_mappings_sapira_product_id_fkey",
+    "source_table": "public.salesforce_product_mappings",
+    "source_columns": [
+     "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "stripe_product_mappings_sapira_product_id_fkey",
     "source_table": "public.stripe_product_mappings",
     "source_columns": [
      "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "subscription_items_product_id_fkey",
+    "source_table": "public.subscription_items",
+    "source_columns": [
+     "product_id"
     ],
     "target_table": "public.products",
     "target_columns": [

@@ -70,10 +70,7 @@ describe('OdooPartnersService', () => {
 			odoo_partner_id: null,
 		});
 
-		expect(clientEntitiesRepository.update).toHaveBeenCalledWith(
-			{ id: 'entity-1', holding_id: 'holding-1' },
-			{ odoo_partner_id: 125 }
-		);
+		expect(clientEntitiesRepository.update).toHaveBeenCalledWith({ id: 'entity-1', holding_id: 'holding-1' }, { odoo_partner_id: 125 });
 		expect(result.status).toBe('found');
 		expect(result.odooPartnerId).toBe(125);
 		expect(result.partnerData).toEqual({
@@ -135,10 +132,7 @@ describe('OdooPartnersService', () => {
 		});
 
 		expect(result).toMatchObject({ status: 'found', odooPartnerId: 126 });
-		expect(clientEntitiesRepository.update).toHaveBeenCalledWith(
-			{ id: 'entity-1', holding_id: 'holding-1' },
-			{ odoo_partner_id: 126 }
-		);
+		expect(clientEntitiesRepository.update).toHaveBeenCalledWith({ id: 'entity-1', holding_id: 'holding-1' }, { odoo_partner_id: 126 });
 	});
 
 	it('no asocia un VAT genérico si la razón social no entrega una coincidencia única', async () => {
@@ -165,9 +159,7 @@ describe('OdooPartnersService', () => {
 		clientEntitiesRepository.find.mockResolvedValue([
 			{ id: 'entity-missing', tax_id: '76.517.784-7', legal_name: 'Acme SpA', odoo_partner_id: null },
 		]);
-		objectClient.methodCall.mockResolvedValue([
-			{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true },
-		]);
+		objectClient.methodCall.mockResolvedValue([{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true }]);
 
 		const result = await service.resolveMissingPartners('holding-1', { dryRun: true, sampleSize: 20 });
 
@@ -181,9 +173,7 @@ describe('OdooPartnersService', () => {
 		clientEntitiesRepository.find.mockResolvedValue([
 			{ id: 'entity-missing', tax_id: '76.517.784-7', legal_name: 'Acme SpA', odoo_partner_id: null },
 		]);
-		objectClient.methodCall.mockResolvedValue([
-			{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true },
-		]);
+		objectClient.methodCall.mockResolvedValue([{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true }]);
 
 		const result = await service.resolveMissingPartners('holding-1', { dryRun: false, sampleSize: 20 });
 
@@ -197,9 +187,7 @@ describe('OdooPartnersService', () => {
 		clientEntitiesRepository.find.mockResolvedValue([
 			{ id: 'entity-linked', tax_id: '76.517.784-7', legal_name: 'Acme SpA', odoo_partner_id: 125 },
 		]);
-		objectClient.methodCall.mockResolvedValue([
-			{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true },
-		]);
+		objectClient.methodCall.mockResolvedValue([{ id: 125, name: 'Acme SpA', display_name: 'Acme SpA', vat: '76517784-7', active: true }]);
 
 		const result = await service.resolveMissingPartners('holding-1', { dryRun: false, sampleSize: 20 });
 
