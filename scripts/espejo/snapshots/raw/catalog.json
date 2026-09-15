@@ -5742,7 +5742,7 @@
 		},
 		"client_entity_tax_id_normalization_conflicts": {
 			"comment": "Registro histórico de tax_id duplicados detectados antes de normalizar. Los duplicados se conservan y la integración debe resolverlos de forma determinista.",
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -16155,7 +16155,7 @@
 		},
 		"generic_export_vats": {
 			"comment": "VATs genéricos utilizados para facturación de exportación. Estos VATs se usan para múltiples clientes y NO deben usarse como identificador único.",
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -16323,7 +16323,18 @@
 					"def": "CREATE TRIGGER trigger_update_generic_export_vats_updated_at BEFORE UPDATE ON public.generic_export_vats FOR EACH ROW EXECUTE FUNCTION update_generic_export_vats_updated_at()"
 				}
 			],
-			"policies": []
+			"policies": [
+				{
+					"name": "generic_export_vats_select_active",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"authenticated"
+					],
+					"cmd": "SELECT",
+					"qual": "(is_active = true)",
+					"with_check": null
+				}
+			]
 		},
 		"holding_email_sender_settings": {
 			"comment": "Configuración de remitente de email por holding con verificación de dominio en Resend",
@@ -17168,7 +17179,7 @@
 		},
 		"indicadores_economicos": {
 			"comment": null,
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -17363,7 +17374,18 @@
 				}
 			],
 			"triggers": [],
-			"policies": []
+			"policies": [
+				{
+					"name": "indicadores_economicos_select",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"authenticated"
+					],
+					"cmd": "SELECT",
+					"qual": "true",
+					"with_check": null
+				}
+			]
 		},
 		"integration_configs": {
 			"comment": null,
@@ -21605,194 +21627,6 @@
 					"with_check": null
 				}
 			]
-		},
-		"invoice_trigger_debug_logs": {
-			"comment": "Tabla temporal para debugging de triggers de facturas. ELIMINAR después del debugging.",
-			"rls": false,
-			"rls_forced": false,
-			"columns": [
-				{
-					"column": "id",
-					"attnum": 1,
-					"data_type": "uuid",
-					"udt": "uuid",
-					"type": "uuid",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": true,
-					"default": "gen_random_uuid()",
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "trigger_name",
-					"attnum": 2,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": true,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "operation",
-					"attnum": 3,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": true,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "holding_id",
-					"attnum": 4,
-					"data_type": "uuid",
-					"udt": "uuid",
-					"type": "uuid",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "odoo_id",
-					"attnum": 5,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "raw_data_sample",
-					"attnum": 6,
-					"data_type": "jsonb",
-					"udt": "jsonb",
-					"type": "jsonb",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "processing_status",
-					"attnum": 7,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "integration_notes",
-					"attnum": 8,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "error_message",
-					"attnum": 9,
-					"data_type": "text",
-					"udt": "text",
-					"type": "text",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": null,
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				},
-				{
-					"column": "created_at",
-					"attnum": 10,
-					"data_type": "timestamp with time zone",
-					"udt": "timestamptz",
-					"type": "timestamp with time zone",
-					"char_len": null,
-					"num_prec": null,
-					"num_scale": null,
-					"notnull": false,
-					"default": "now()",
-					"identity": "NO",
-					"generated": "NEVER",
-					"gen_expr": null,
-					"comment": null
-				}
-			],
-			"constraints": [
-				{
-					"name": "invoice_trigger_debug_logs_pkey",
-					"type": "p",
-					"def": "PRIMARY KEY (id)",
-					"deferrable": false,
-					"deferred": false,
-					"ondelete": " ",
-					"onupdate": " "
-				}
-			],
-			"indexes": [
-				{
-					"name": "invoice_trigger_debug_logs_pkey",
-					"def": "CREATE UNIQUE INDEX invoice_trigger_debug_logs_pkey ON public.invoice_trigger_debug_logs USING btree (id)",
-					"unique": true,
-					"primary": true
-				}
-			],
-			"triggers": [],
-			"policies": []
 		},
 		"invoices": {
 			"comment": "Tabla de facturas del sistema. \nIMPORTANTE: tax_rate se auto-completa desde companies.tax_rate en formato decimal (0.19 = 19%).",
@@ -26055,11 +25889,11 @@
 					"num_prec": null,
 					"num_scale": null,
 					"notnull": false,
-					"default": "'pending'::text",
+					"default": "'create'::text",
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": null
+					"comment": "Estado del procesamiento: create, update, processed, error"
 				},
 				{
 					"column": "integration_batch_id",
@@ -26413,11 +26247,11 @@
 					"num_prec": null,
 					"num_scale": null,
 					"notnull": false,
-					"default": "'pending'::text",
+					"default": "'create'::text",
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "Estado del procesamiento: pending, processed, error"
+					"comment": "Estado del procesamiento: create, update, processed, error"
 				},
 				{
 					"column": "integration_batch_id",
@@ -27270,7 +27104,7 @@
 		},
 		"odoo_product_mappings": {
 			"comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Odoo",
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -37228,7 +37062,7 @@
 		},
 		"sapira_sql_asset_history": {
 			"comment": null,
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -37320,7 +37154,7 @@
 		},
 		"sapira_typeorm_migrations": {
 			"comment": null,
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -39437,7 +39271,7 @@
 		},
 		"stripe_product_mappings": {
 			"comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Stripe",
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -39977,7 +39811,7 @@
 		},
 		"stripe_sync_jobs": {
 			"comment": "Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira",
-			"rls": false,
+			"rls": true,
 			"rls_forced": false,
 			"columns": [
 				{
@@ -51153,120 +50987,6 @@
 				"privilege": "UPDATE"
 			}
 		],
-		"invoice_trigger_debug_logs": [
-			{
-				"grantee": "anon",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "INSERT"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "REFERENCES"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "SELECT"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "TRIGGER"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "UPDATE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "INSERT"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "REFERENCES"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "SELECT"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "TRIGGER"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "UPDATE"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "INSERT"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "REFERENCES"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "SELECT"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "TRIGGER"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "postgres",
-				"privilege": "UPDATE"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "INSERT"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "REFERENCES"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "SELECT"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "TRIGGER"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "service_role",
-				"privilege": "UPDATE"
-			}
-		],
 		"invoices": [
 			{
 				"grantee": "anon",
@@ -58285,7 +58005,7 @@
 		},
 		{
 			"name": "apply_quote_downsell_to_contract",
-			"def": "CREATE OR REPLACE FUNCTION public.apply_quote_downsell_to_contract(p_contract_id uuid, p_quote_id uuid, p_items jsonb, p_effective_date date, p_reason text DEFAULT NULL::text, p_notes text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_user_id            uuid;\n  v_holding_id         uuid;\n  v_contract           record;\n  v_spec               jsonb;\n  v_orig               record;\n  v_quote_item_ids     uuid[] := ARRAY[]::uuid[];\n  v_already            int;\n  v_ds_qty             numeric;\n  v_ds_unit            numeric;\n  v_ds_term            int;\n  v_ds_start           date;\n  v_ds_end             date;\n  v_ds_freq            text;\n  v_ds_freq_months     int;\n  v_ds_monthly         numeric;\n  v_ds_final           numeric;\n  v_new_monthly        numeric;\n  v_orig_monthly       numeric;\n  v_ds_item_id         uuid;\n  v_inv                record;\n  v_line               record;\n  v_net_qty            numeric;\n  v_ratio              numeric;\n  v_repl_id            uuid;\n  v_total_monthly_delta numeric := 0;\n  v_value_delta        numeric := 0;\n  v_affected_orig_ids  uuid[] := ARRAY[]::uuid[];\n  v_ds_item_ids        uuid[] := ARRAY[]::uuid[];\n  v_stage_id           uuid;\n  v_n_items            int := 0;\n  v_currency           text;\n  v_rn_qty             numeric;\n  v_rn_unit            numeric;\n  v_rn_freq            text;\n  v_rn_freq_months     int;\n  v_rn_method          text;\n  v_rn_start           date;\n  v_rn_end             date;\n  v_rn_term            int;\n  v_rn_periods         int;\n  v_rn_monthly         numeric;\n  v_rn_period_amt      numeric;\n  v_rn_final           numeric;\n  v_rn_disc_type       text;\n  v_rn_disc_val        numeric;\n  v_rn_disc_factor     numeric;\n  v_rn_item_id         uuid;\n  v_rn_delta_monthly   numeric;\n  v_rn_delta_final     numeric;\n  v_old_term           int;\n  v_old_monthly        numeric;\n  v_old_final          numeric;\n  v_firm_end           date;\n  v_firm_count         int;\n  v_months_off         int;\n  v_candidate          date;\n  v_freq_or_term_change boolean;\n  v_touched            uuid[];\n  v_i                  int;\n  v_pstart             date;\n  v_pend               date;\n  v_sched              date;\n  v_amount             numeric;\n  v_vat                numeric;\n  v_tax_rate           numeric;\n  v_ref                record;\n  v_new_inv_id         uuid;\n  v_has_renegotiation  boolean := false;\n  v_max_rn_end         date := NULL;\nBEGIN\n  v_user_id := public.get_current_user_id();\n  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Usuario no autenticado'; END IF;\n  v_holding_id := public.get_contract_holding(p_contract_id);\n  IF v_holding_id IS NULL THEN RAISE EXCEPTION 'Contrato no encontrado o sin permisos'; END IF;\n\n  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN\n    RAISE EXCEPTION 'p_items no puede estar vacío';\n  END IF;\n\n  SELECT c.* INTO v_contract FROM public.contracts c WHERE c.id = p_contract_id;\n  IF NOT FOUND THEN RAISE EXCEPTION 'Contrato % no encontrado', p_contract_id; END IF;\n  v_currency := COALESCE(v_contract.contract_currency, 'USD');\n\n  SELECT array_agg((s->>'quote_item_id')::uuid)\n    INTO v_quote_item_ids\n  FROM jsonb_array_elements(p_items) s\n  WHERE NULLIF(s->>'quote_item_id','') IS NOT NULL;\n\n  IF v_quote_item_ids IS NOT NULL AND array_length(v_quote_item_ids,1) > 0 THEN\n    SELECT count(*) INTO v_already\n    FROM public.contract_items\n    WHERE quote_item_id = ANY(v_quote_item_ids);\n    IF v_already > 0 THEN\n      RAISE EXCEPTION 'Esta cotización ya fue procesada en un contrato (ítems enlazados). Revísalo antes de reintentar.';\n    END IF;\n  END IF;\n\n  FOR v_spec IN SELECT * FROM jsonb_array_elements(p_items) LOOP\n    SELECT * INTO v_orig FROM public.contract_items\n    WHERE id = (v_spec->>'related_item_id')::uuid\n      AND contract_id = p_contract_id AND holding_id = v_holding_id;\n    IF NOT FOUND THEN\n      RAISE EXCEPTION 'Item relacionado % no encontrado en el contrato', v_spec->>'related_item_id';\n    END IF;\n\n    v_rn_qty  := NULLIF(v_spec->>'new_quantity','')::numeric;\n    v_rn_unit := NULLIF(v_spec->>'new_unit_price','')::numeric;\n\n    IF v_rn_qty IS NOT NULL AND v_rn_unit IS NOT NULL THEN\n      IF v_rn_qty <= 0 OR v_rn_unit <= 0 THEN\n        RAISE EXCEPTION 'La renegociación requiere cantidad y precio unitario nuevos mayores a 0 (item %). Para dejar el servicio en cero usa churn/cancelación.', v_orig.product_name;\n      END IF;\n\n      IF EXISTS (SELECT 1 FROM public.quantities q WHERE q.contract_item_id = v_orig.id) THEN\n        RAISE EXCEPTION 'El item % tiene cantidades variables registradas: sus montos reales se manejan por período desde Cantidades Variables, no por renegociación. Corrige ahí o elimina los overrides primero.', v_orig.product_name;\n      END IF;\n\n      v_rn_freq := COALESCE(NULLIF(v_spec->>'new_billing_frequency',''), v_orig.billing_frequency, 'Mensual');\n      v_rn_freq_months := COALESCE(NULLIF(public.get_frequency_months(v_rn_freq), 0), 1);\n      v_rn_method := COALESCE(NULLIF(v_spec->>'billing_method',''), v_orig.billing_method, 'Anticipado');\n      v_rn_start := COALESCE(NULLIF(v_spec->>'start_date','')::date, p_effective_date);\n      v_rn_end   := COALESCE(NULLIF(v_spec->>'new_end_date','')::date, v_orig.end_date);\n\n      IF v_rn_start <= v_orig.start_date THEN\n        RAISE EXCEPTION 'La renegociación de % parte el % pero el item inicia el %: renegociar desde el inicio equivale a editar el item directamente (Editar Items).',\n          v_orig.product_name, v_rn_start, v_orig.start_date;\n      END IF;\n\n      SELECT MAX(ii.billing_period_end), COUNT(*)\n        INTO v_firm_end, v_firm_count\n      FROM public.invoice_items ii\n      JOIN public.invoices i ON i.id = ii.invoice_id\n      WHERE ii.contract_item_id = v_orig.id\n        AND COALESCE(i.is_active, true) = true\n        AND i.status IN ('Emitida','Enviada','Vencida','Pagada');\n      IF v_firm_end IS NOT NULL AND v_rn_start <= v_firm_end THEN\n        RAISE EXCEPTION 'El item % ya tiene facturado en firme hasta el %: la renegociación debe partir el % o después. Para cambiar lo ya emitido corresponde nota de crédito.',\n          v_orig.product_name, v_firm_end, v_firm_end + 1;\n      END IF;\n\n      v_months_off := ((EXTRACT(YEAR FROM v_rn_start) - EXTRACT(YEAR FROM v_orig.start_date)) * 12\n                      + EXTRACT(MONTH FROM v_rn_start) - EXTRACT(MONTH FROM v_orig.start_date))::int;\n      v_candidate := (v_orig.start_date + (v_months_off || ' months')::interval)::date;\n      IF v_candidate <> v_rn_start THEN\n        RAISE EXCEPTION 'La renegociación de % debe partir en un inicio de ciclo del item (día % de cada mes). La fecha % no calza; el inicio de ciclo más cercano es %.',\n          v_orig.product_name, EXTRACT(DAY FROM v_orig.start_date), v_rn_start, v_candidate;\n      END IF;\n\n      v_rn_term := GREATEST(1, (\n                    (EXTRACT(YEAR FROM (v_rn_end + 1)) - EXTRACT(YEAR FROM v_rn_start)) * 12\n                    + EXTRACT(MONTH FROM (v_rn_end + 1)) - EXTRACT(MONTH FROM v_rn_start))::int);\n      IF ((v_rn_start + (v_rn_term || ' months')::interval) - interval '1 day')::date <> v_rn_end THEN\n        RAISE EXCEPTION 'El término renegociado de % (% al %) no es un número entero de meses. Ajusta la fecha de fin (ej: %).',\n          v_orig.product_name, v_rn_start, v_rn_end,\n          ((v_rn_start + (v_rn_term || ' months')::interval) - interval '1 day')::date;\n      END IF;\n      IF v_rn_term % v_rn_freq_months <> 0 THEN\n        RAISE EXCEPTION 'El término renegociado de % (% meses) no es múltiplo de la frecuencia % (% meses por período). Ajusta término o frecuencia.',\n          v_orig.product_name, v_rn_term, v_rn_freq, v_rn_freq_months;\n      END IF;\n      v_rn_periods := v_rn_term / v_rn_freq_months;\n\n      v_rn_disc_type := COALESCE(NULLIF(v_spec->>'discount_type',''), v_orig.discount_type);\n      v_rn_disc_val  := COALESCE(NULLIF(v_spec->>'discount_value','')::numeric, v_orig.discount_value, 0);\n      v_rn_disc_factor := CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 AND v_rn_disc_val < 100\n                               THEN 1 - v_rn_disc_val / 100.0 ELSE 1 END;\n      v_rn_monthly := ROUND(v_rn_qty * v_rn_unit * v_rn_disc_factor, 2);\n      v_rn_period_amt := ROUND(v_rn_monthly * v_rn_freq_months, 2);\n      v_rn_final := ROUND(v_rn_monthly * v_rn_term, 2);\n\n      v_orig_monthly := COALESCE(v_orig.monthly_price,\n        CASE WHEN COALESCE(v_orig.term_months,0) > 0 THEN v_orig.final_price / v_orig.term_months ELSE 0 END);\n      v_freq_or_term_change := (v_rn_freq_months <> COALESCE(NULLIF(public.get_frequency_months(v_orig.billing_frequency),0),1))\n                               OR (v_rn_end IS DISTINCT FROM v_orig.end_date);\n      IF NOT v_freq_or_term_change\n         AND v_rn_qty = COALESCE(v_orig.quantity, 0)\n         AND v_rn_unit = COALESCE(v_orig.unit_price, 0) THEN\n        RAISE EXCEPTION 'La renegociación de % no cambia nada (misma cantidad, precio, frecuencia y término).', v_orig.product_name;\n      END IF;\n\n      v_touched := ARRAY[]::uuid[];\n\n      IF NOT v_freq_or_term_change THEN\n        v_rn_delta_monthly := ROUND(v_rn_monthly - v_orig_monthly, 2);\n        IF v_rn_delta_monthly = 0 THEN\n          RAISE EXCEPTION 'La renegociación de % no cambia el mensual (p×q − descuento queda igual). Si solo cambia el detalle cantidad/precio manteniendo el monto, edítalo por Editar Items.', v_orig.product_name;\n        END IF;\n        v_rn_delta_final := ROUND(v_rn_delta_monthly * v_rn_term, 2);\n\n        INSERT INTO public.contract_items(\n          contract_id, holding_id, product_id, product_name, categoria,\n          related_item_id, quote_item_id, quote_item_number,\n          quantity, unit_price, final_price, price,\n          term_months, billing_method, billing_frequency, currency,\n          start_date, end_date, is_recurring, item_type, unit_of_measure,\n          discount_type, discount_value, custom_fields, booking_date, account\n        ) VALUES (\n          p_contract_id, v_holding_id,\n          COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n          COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name),\n          CASE WHEN v_rn_delta_monthly < 0 THEN 'DOWNSELL' ELSE 'UPSELL' END,\n          v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n          v_rn_qty, ROUND(v_rn_delta_monthly / NULLIF(v_rn_qty, 0), 6),\n          v_rn_delta_final, v_rn_delta_final,\n          v_rn_term, v_rn_method, v_rn_freq,\n          COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n          v_rn_start, v_rn_end, true,\n          COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n          COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n          NULL, NULL,\n          COALESCE(v_spec->'custom_fields', NULL), p_effective_date, v_orig.account\n        ) RETURNING id INTO v_rn_item_id;\n\n        FOR v_line IN\n          SELECT ii.*, i.tax_rate AS inv_tax_rate\n          FROM public.invoice_items ii\n          JOIN public.invoices i ON i.id = ii.invoice_id\n          WHERE ii.contract_item_id = v_orig.id\n            AND i.contract_id = p_contract_id\n            AND i.status = 'Por Emitir'\n            AND COALESCE(i.is_active, true) = true\n            AND COALESCE(i.invoice_type, '') NOT IN ('Unificada','Consolidada')\n            AND ii.billing_period_start IS NOT NULL\n            AND ii.billing_period_start >= v_rn_start\n        LOOP\n          v_vat := ROUND(v_rn_period_amt * COALESCE(v_line.inv_tax_rate, 0) / 100.0, 2);\n          UPDATE public.invoice_items SET\n            quantity = v_rn_qty,\n            discount_pct = CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 THEN v_rn_disc_val ELSE 0 END,\n            unit_price_contract_currency = ROUND(v_rn_unit * v_rn_freq_months, 6),\n            subtotal_contract_currency = v_rn_period_amt,\n            tax_amount_contract_currency = v_vat,\n            total_contract_currency = v_rn_period_amt + v_vat,\n            description = COALESCE(v_orig.product_name, 'Servicio')\n              || CASE WHEN NULLIF(TRIM(v_orig.account), '') IS NOT NULL THEN ' Cuenta ' || TRIM(v_orig.account) ELSE '' END\n              || ' - Periodo ' || to_char(v_line.billing_period_start, 'DD/MM/YYYY')\n              || ' a ' || to_char(v_line.billing_period_end, 'DD/MM/YYYY'),\n            updated_at = now()\n          WHERE id = v_line.id;\n          v_touched := array_append(v_touched, v_line.invoice_id);\n        END LOOP;\n\n        v_total_monthly_delta := v_total_monthly_delta + (v_orig_monthly - v_rn_monthly);\n        v_value_delta := v_value_delta + v_rn_delta_final;\n      ELSE\n        v_old_term := v_months_off;\n        v_old_monthly := v_orig_monthly;\n        v_old_final := ROUND(v_old_monthly * v_old_term, 2);\n        UPDATE public.contract_items SET\n          end_date = v_rn_start - 1,\n          term_months = v_old_term,\n          final_price = v_old_final,\n          price = v_old_final\n        WHERE id = v_orig.id;\n\n        INSERT INTO public.contract_items(\n          contract_id, holding_id, product_id, product_name, categoria,\n          renews_item_id, quote_item_id, quote_item_number,\n          quantity, unit_price, final_price, price,\n          term_months, billing_method, billing_frequency, currency,\n          start_date, end_date, is_recurring, item_type, unit_of_measure,\n          discount_type, discount_value, custom_fields, booking_date, account\n        ) VALUES (\n          p_contract_id, v_holding_id,\n          COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n          COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name), 'RENEWAL',\n          v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n          COALESCE(v_orig.quantity, 1), COALESCE(v_orig.unit_price, 0),\n          ROUND(v_old_monthly * v_rn_term, 2), ROUND(v_old_monthly * v_rn_term, 2),\n          v_rn_term, v_rn_method, v_rn_freq,\n          COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n          v_rn_start, v_rn_end, true,\n          COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n          COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n          v_orig.discount_type, v_orig.discount_value,\n          COALESCE(v_spec->'custom_fields', NULL), p_effective_date, v_orig.account\n        ) RETURNING id INTO v_rn_item_id;\n\n        v_rn_delta_monthly := ROUND(v_rn_monthly - v_orig_monthly, 2);\n        v_rn_delta_final := ROUND(v_rn_delta_monthly * v_rn_term, 2);\n        IF v_rn_delta_monthly <> 0 THEN\n          INSERT INTO public.contract_items(\n            contract_id, holding_id, product_id, product_name, categoria,\n            related_item_id, quantity, unit_price, final_price, price,\n            term_months, billing_method, billing_frequency, currency,\n            start_date, end_date, is_recurring, item_type, unit_of_measure,\n            booking_date, account\n          ) VALUES (\n            p_contract_id, v_holding_id,\n            COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n            COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name),\n            CASE WHEN v_rn_delta_monthly < 0 THEN 'DOWNSELL' ELSE 'UPSELL' END,\n            v_rn_item_id, v_rn_qty, ROUND(v_rn_delta_monthly / NULLIF(v_rn_qty, 0), 6),\n            v_rn_delta_final, v_rn_delta_final,\n            v_rn_term, v_rn_method, v_rn_freq,\n            COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n            v_rn_start, v_rn_end, true,\n            COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n            COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n            p_effective_date, v_orig.account\n          );\n        END IF;\n\n        WITH del AS (\n          DELETE FROM public.invoice_items ii\n          USING public.invoices i\n          WHERE ii.invoice_id = i.id\n            AND ii.contract_item_id = v_orig.id\n            AND i.contract_id = p_contract_id\n            AND i.status = 'Por Emitir'\n            AND COALESCE(i.is_active, true) = true\n            AND COALESCE(i.invoice_type, '') NOT IN ('Unificada','Consolidada')\n            AND ii.billing_period_start IS NOT NULL\n            AND ii.billing_period_start >= v_rn_start\n          RETURNING ii.invoice_id\n        )\n        SELECT COALESCE(array_agg(DISTINCT invoice_id), ARRAY[]::uuid[]) INTO v_touched FROM del;\n\n        UPDATE public.invoices SET status = 'Cancelada', is_active = false\n        WHERE id = ANY(v_touched) AND status = 'Por Emitir'\n          AND NOT EXISTS (SELECT 1 FROM public.invoice_items ii WHERE ii.invoice_id = invoices.id);\n\n        SELECT * INTO v_ref FROM public.invoices\n        WHERE contract_id = p_contract_id AND holding_id = v_holding_id\n          AND COALESCE(invoice_type, '') NOT IN ('Unificada','Consolidada')\n          AND COALESCE(document_type, 'FACTURA') NOT IN ('NC','ND')\n        ORDER BY created_at DESC LIMIT 1;\n        v_tax_rate := COALESCE(v_ref.tax_rate, 0);\n\n        FOR v_i IN 0..(v_rn_periods - 1) LOOP\n          v_pstart := (v_rn_start + ((v_i * v_rn_freq_months) || ' months')::interval)::date;\n          v_pend   := ((v_rn_start + (((v_i + 1) * v_rn_freq_months) || ' months')::interval) - interval '1 day')::date;\n          IF LOWER(v_rn_method) LIKE '%vencid%' OR LOWER(v_rn_method) LIKE '%arrear%' THEN\n            v_sched := v_pend + 1;\n          ELSE\n            v_sched := v_pstart;\n          END IF;\n          v_amount := CASE WHEN v_i = v_rn_periods - 1\n                           THEN ROUND(v_rn_final - v_rn_period_amt * (v_rn_periods - 1), 2)\n                           ELSE v_rn_period_amt END;\n          v_vat := ROUND(v_amount * v_tax_rate / 100.0, 2);\n\n          INSERT INTO public.invoices (\n            contract_id, holding_id, client_id, company_id, client_entity_id,\n            scheduled_at, original_issue_date, issue_date, due_date, status,\n            invoice_type, document_type, contract_currency, invoice_currency,\n            fx_contract_to_invoice, tax_rate, invoice_terms_and_conditions,\n            issuer_legal_name, issuer_tax_id, issuer_address,\n            split_reason, is_active, auto_invoice,\n            client_tax_id, payment_method, invoice_series, fiscal_regime,\n            export_type, requires_references_for_billing,\n            amount_contract_currency, vat\n          ) VALUES (\n            p_contract_id, v_holding_id, v_contract.client_id,\n            COALESCE(v_ref.company_id, v_contract.company_id),\n            COALESCE(v_ref.client_entity_id, v_contract.client_entity_id),\n            v_sched, v_sched, v_sched, v_sched + INTERVAL '30 days', 'Por Emitir',\n            COALESCE(v_ref.invoice_type, 'Manual'), COALESCE(v_ref.document_type, 'FACTURA'),\n            COALESCE(v_ref.contract_currency, v_contract.contract_currency),\n            COALESCE(v_ref.invoice_currency, v_contract.invoice_currency),\n            v_ref.fx_contract_to_invoice, v_ref.tax_rate, v_ref.invoice_terms_and_conditions,\n            v_ref.issuer_legal_name, v_ref.issuer_tax_id, v_ref.issuer_address,\n            'item_renegotiation', true, COALESCE(v_ref.auto_invoice, false),\n            v_ref.client_tax_id, v_ref.payment_method, v_ref.invoice_series, v_ref.fiscal_regime,\n            v_ref.export_type, v_ref.requires_references_for_billing,\n            v_amount, v_vat\n          ) RETURNING id INTO v_new_inv_id;\n\n          INSERT INTO public.invoice_items (\n            invoice_id, holding_id, contract_id, contract_item_id, product_id,\n            description, billing_period_start, billing_period_end,\n            quantity, unit_of_measure, discount_pct,\n            unit_price_contract_currency, subtotal_contract_currency,\n            tax_amount_contract_currency, total_contract_currency,\n            contract_currency, invoice_currency, tax_code\n          ) VALUES (\n            v_new_inv_id, v_holding_id, p_contract_id, v_rn_item_id, COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n            COALESCE(v_orig.product_name, 'Servicio')\n              || CASE WHEN NULLIF(TRIM(v_orig.account), '') IS NOT NULL THEN ' Cuenta ' || TRIM(v_orig.account) ELSE '' END\n              || ' - Periodo ' || to_char(v_pstart, 'DD/MM/YYYY') || ' a ' || to_char(v_pend, 'DD/MM/YYYY'),\n            v_pstart, v_pend,\n            v_rn_qty, COALESCE(v_orig.unit_of_measure, 'UND'),\n            CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 THEN v_rn_disc_val ELSE 0 END,\n            ROUND(v_rn_unit * v_rn_freq_months, 6), v_amount,\n            v_vat, v_amount + v_vat,\n            COALESCE(v_ref.contract_currency, v_contract.contract_currency),\n            COALESCE(v_ref.invoice_currency, v_contract.invoice_currency),\n            COALESCE(v_tax_rate::text, '0')\n          );\n          UPDATE public.invoice_items SET\n            quantity = v_rn_qty,\n            unit_price_contract_currency = ROUND(v_rn_unit * v_rn_freq_months, 6),\n            subtotal_contract_currency = v_amount,\n            tax_amount_contract_currency = v_vat,\n            total_contract_currency = v_amount + v_vat\n          WHERE invoice_id = v_new_inv_id AND contract_item_id = v_rn_item_id;\n          v_touched := array_append(v_touched, v_new_inv_id);\n        END LOOP;\n\n        v_total_monthly_delta := v_total_monthly_delta + (v_old_monthly - v_rn_monthly);\n        v_value_delta := v_value_delta + (v_old_final + v_rn_final - COALESCE(v_orig.final_price, 0));\n        IF v_rn_end IS NOT NULL AND (v_max_rn_end IS NULL OR v_rn_end > v_max_rn_end) THEN\n          v_max_rn_end := v_rn_end;\n        END IF;\n      END IF;\n\n      UPDATE public.invoices i SET\n        amount_contract_currency = COALESCE(sums.subtotal, 0),\n        vat = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.vat, 0) END,\n        total_invoice_currency = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.total, 0) * i.fx_contract_to_invoice END,\n        amount_invoice_currency = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.subtotal, 0) * i.fx_contract_to_invoice END\n      FROM (\n        SELECT invoice_id, SUM(subtotal_contract_currency) AS subtotal,\n               SUM(tax_amount_contract_currency) AS vat, SUM(total_contract_currency) AS total\n        FROM public.invoice_items WHERE invoice_id = ANY(v_touched) GROUP BY invoice_id\n      ) sums WHERE i.id = sums.invoice_id AND COALESCE(i.is_active, true) = true;\n\n      UPDATE public.invoice_items ii SET\n        fx_contract_to_invoice      = inv.fx_contract_to_invoice,\n        unit_price_invoice_currency = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.unit_price_contract_currency * inv.fx_contract_to_invoice END,\n        subtotal_invoice_currency   = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.subtotal_contract_currency * inv.fx_contract_to_invoice END,\n        tax_amount_invoice_currency = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.tax_amount_contract_currency * inv.fx_contract_to_invoice END,\n        total_invoice_currency      = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.total_contract_currency * inv.fx_contract_to_invoice END\n      FROM public.invoices inv\n      WHERE ii.invoice_id = inv.id AND inv.id = ANY(v_touched)\n        AND ii.contract_item_id IN (v_rn_item_id, v_orig.id);\n\n      v_has_renegotiation := true;\n      v_ds_item_ids       := array_append(v_ds_item_ids, v_rn_item_id);\n      v_affected_orig_ids := array_append(v_affected_orig_ids, v_orig.id);\n      v_n_items := v_n_items + 1;\n      CONTINUE;\n    END IF;\n\n    v_ds_qty  := (v_spec->>'quantity')::numeric;\n    v_new_monthly := NULLIF(v_spec->>'new_monthly','')::numeric;\n    v_ds_unit := ABS(COALESCE(NULLIF(v_spec->>'unit_price','')::numeric, v_orig.unit_price, 0));\n    v_ds_start := COALESCE(NULLIF(v_spec->>'start_date','')::date, p_effective_date);\n    v_ds_end   := LEAST(COALESCE(NULLIF(v_spec->>'end_date','')::date, v_orig.end_date), v_orig.end_date);\n    v_ds_term  := GREATEST(1, (\n                    (EXTRACT(YEAR FROM (v_ds_end + 1)) - EXTRACT(YEAR FROM v_ds_start)) * 12\n                    + EXTRACT(MONTH FROM (v_ds_end + 1)) - EXTRACT(MONTH FROM v_ds_start))::int);\n    v_ds_freq := COALESCE(NULLIF(v_spec->>'billing_frequency',''), v_orig.billing_frequency, 'Mensual');\n    v_ds_freq_months := COALESCE(NULLIF(public.get_frequency_months(v_ds_freq), 0), 1);\n\n    IF v_new_monthly IS NOT NULL THEN\n      v_orig_monthly := COALESCE(v_orig.monthly_price, 0);\n      IF v_orig_monthly <= 0 THEN\n        RAISE EXCEPTION 'El item % no tiene mensual (monthly_price) válido para rebajar por precio', v_orig.product_name;\n      END IF;\n      IF v_new_monthly <= 0 THEN\n        RAISE EXCEPTION 'El nuevo mensual debe ser > 0 — rebajar a 0 es cancelación total, no rebaja parcial. Usa churn/cancelar item (item %).',\n          v_orig.product_name;\n      END IF;\n      IF v_new_monthly >= v_orig_monthly THEN\n        RAISE EXCEPTION 'El nuevo mensual (%) debe ser menor al actual (%) para representar una reducción (item %)',\n          v_new_monthly, v_orig_monthly, v_orig.product_name;\n      END IF;\n      v_ds_monthly := ROUND(v_orig_monthly - v_new_monthly, 2);\n      v_ds_qty  := COALESCE(v_orig.quantity, 1);\n      v_ds_unit := ROUND(v_ds_monthly / NULLIF(v_ds_qty, 0), 6);\n    ELSE\n      IF v_ds_qty IS NULL OR v_ds_qty <= 0 THEN\n        RAISE EXCEPTION 'La cantidad del downsell debe ser > 0 (item %)', v_orig.product_name;\n      END IF;\n      IF v_ds_qty > COALESCE(v_orig.quantity, 0) THEN\n        RAISE EXCEPTION 'El downsell quita % unidades pero el item tiene % - no se puede quitar mas de lo existente (item %).',\n          v_ds_qty, v_orig.quantity, v_orig.product_name;\n      END IF;\n\n      IF COALESCE(v_orig.monthly_price, 0) <> 0 AND COALESCE(v_orig.quantity, 0) <> 0 THEN\n        v_ds_monthly := ROUND((v_orig.monthly_price / v_orig.quantity) * v_ds_qty, 2);\n      ELSE\n        v_ds_monthly := ROUND(v_ds_unit * v_ds_qty, 2);\n      END IF;\n    END IF;\n    v_ds_final   := -(v_ds_monthly * v_ds_term);\n\n    INSERT INTO public.contract_items(\n      contract_id, holding_id, product_id, product_name, categoria,\n      related_item_id, quote_item_id, quote_item_number,\n      quantity, unit_price, final_price, price,\n      term_months, billing_method, billing_frequency, currency,\n      start_date, end_date, is_recurring, item_type, unit_of_measure,\n      discount_type, discount_value, custom_fields, booking_date\n    ) VALUES (\n      p_contract_id, v_holding_id,\n      COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n      COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name), 'DOWNSELL',\n      v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n      v_ds_qty, -v_ds_unit, v_ds_final, v_ds_final,\n      v_ds_term, COALESCE(NULLIF(v_spec->>'billing_method',''), v_orig.billing_method),\n      v_ds_freq, COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n      v_ds_start,\n      v_ds_end,\n      true,\n      COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n      COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n      COALESCE(NULLIF(v_spec->>'discount_type',''), v_orig.discount_type),\n      COALESCE(NULLIF(v_spec->>'discount_value','')::numeric, v_orig.discount_value),\n      COALESCE(v_spec->'custom_fields', NULL), p_effective_date\n    ) RETURNING id INTO v_ds_item_id;\n\n    v_ds_item_ids       := array_append(v_ds_item_ids, v_ds_item_id);\n    v_affected_orig_ids := array_append(v_affected_orig_ids, v_orig.id);\n    v_total_monthly_delta := v_total_monthly_delta + v_ds_monthly;\n    v_value_delta := v_value_delta + v_ds_final;\n    v_n_items := v_n_items + 1;\n\n    FOR v_inv IN\n      SELECT DISTINCT i.id, i.status\n      FROM public.invoices i\n      JOIN public.invoice_items ii ON ii.invoice_id = i.id\n      WHERE i.contract_id = p_contract_id\n        AND i.holding_id = v_holding_id\n        AND i.is_active = true\n        AND ii.contract_item_id = v_orig.id\n        AND ii.billing_period_start IS NOT NULL\n        AND ii.billing_period_start >= v_ds_start\n        AND i.status <> 'Cancelada'\n    LOOP\n      IF v_inv.status = 'Por Emitir' THEN\n        FOR v_line IN\n          SELECT * FROM public.invoice_items\n          WHERE invoice_id = v_inv.id AND contract_item_id = v_orig.id\n        LOOP\n          IF v_new_monthly IS NOT NULL THEN\n            v_ratio := v_new_monthly / v_orig_monthly;\n            UPDATE public.invoice_items SET\n              unit_price_contract_currency = ROUND(v_line.unit_price_contract_currency * v_ratio, 6),\n              unit_price_invoice_currency  = ROUND(v_line.unit_price_invoice_currency  * v_ratio, 6),\n              subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n              subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n              tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n              tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n              total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n              total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n            WHERE id = v_line.id;\n          ELSE\n            v_net_qty := COALESCE(v_line.quantity, 0) - v_ds_qty;\n            IF v_net_qty <= 0 THEN\n              DELETE FROM public.invoice_items WHERE id = v_line.id;\n              CONTINUE;\n            END IF;\n            v_ratio := v_net_qty / NULLIF(v_line.quantity, 0);\n            UPDATE public.invoice_items SET\n              quantity                     = v_net_qty,\n              subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n              subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n              tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n              tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n              total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n              total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n            WHERE id = v_line.id;\n          END IF;\n        END LOOP;\n        PERFORM public._recalc_invoice_header_from_items(v_inv.id);\n        IF NOT EXISTS (SELECT 1 FROM public.invoice_items WHERE invoice_id = v_inv.id) THEN\n          UPDATE public.invoices SET status = 'Cancelada' WHERE id = v_inv.id AND status = 'Por Emitir';\n        END IF;\n\n      ELSIF v_inv.status IN ('Emitida','Enviada','Vencida','Pagada') THEN\n        SELECT new_invoice_id INTO v_repl_id\n        FROM public.create_credit_note_safe(\n          v_inv.id, 'cancellation'::public.credit_note_type, 'downsell'::public.credit_note_reason,\n          NULL, COALESCE(p_notes, 'Downsell'), CURRENT_DATE, NULL, NULL, NULL\n        );\n\n        IF v_repl_id IS NOT NULL THEN\n          FOR v_line IN\n            SELECT * FROM public.invoice_items\n            WHERE invoice_id = v_repl_id AND contract_item_id = v_orig.id\n          LOOP\n            IF v_new_monthly IS NOT NULL THEN\n              v_ratio := v_new_monthly / v_orig_monthly;\n              UPDATE public.invoice_items SET\n                unit_price_contract_currency = ROUND(v_line.unit_price_contract_currency * v_ratio, 6),\n                unit_price_invoice_currency  = ROUND(v_line.unit_price_invoice_currency  * v_ratio, 6),\n                subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n                subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n                tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n                tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n                total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n                total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n              WHERE id = v_line.id;\n            ELSE\n              v_net_qty := COALESCE(v_line.quantity, 0) - v_ds_qty;\n              IF v_net_qty <= 0 THEN\n                DELETE FROM public.invoice_items WHERE id = v_line.id;\n                CONTINUE;\n              END IF;\n              v_ratio := v_net_qty / NULLIF(v_line.quantity, 0);\n              UPDATE public.invoice_items SET\n                quantity                     = v_net_qty,\n                subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n                subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n                tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n                tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n                total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n                total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n              WHERE id = v_line.id;\n            END IF;\n          END LOOP;\n          PERFORM public._recalc_invoice_header_from_items(v_repl_id);\n          IF NOT EXISTS (SELECT 1 FROM public.invoice_items WHERE invoice_id = v_repl_id) THEN\n            UPDATE public.invoices SET status = 'Cancelada' WHERE id = v_repl_id AND status = 'Por Emitir';\n          END IF;\n        END IF;\n      END IF;\n    END LOOP;\n  END LOOP;\n\n  IF v_max_rn_end IS NOT NULL AND v_max_rn_end > COALESCE(v_contract.contract_end_date, v_max_rn_end - 1) THEN\n    PERFORM set_config('sapira.bypass_end_date_guard', 'on', true);\n    UPDATE public.contracts SET contract_end_date = v_max_rn_end WHERE id = p_contract_id;\n    PERFORM set_config('sapira.bypass_end_date_guard', 'off', true);\n  END IF;\n\n  PERFORM public.log_lifecycle_event(\n    p_contract_id,\n    CASE WHEN v_has_renegotiation AND v_total_monthly_delta < 0 THEN 'UPSELL' ELSE 'DOWNSELL' END,\n    CASE WHEN v_has_renegotiation THEN 'Renegociación de ítem(s)' ELSE 'Reducción parcial (downsell)' END,\n    p_effective_date, -v_total_monthly_delta,\n    'Items afectados: ' || v_n_items::text\n      || '. Delta mensual: ' || v_currency || ' ' || ROUND(-v_total_monthly_delta, 2)::text,\n    COALESCE(NULLIF(p_reason,''), CASE WHEN v_has_renegotiation THEN 'Renegociación' ELSE 'Downsell parcial' END),\n    jsonb_build_object(\n      'timing', 'early',\n      'item_ids', to_jsonb(v_affected_orig_ids),\n      'downsell_item_ids', to_jsonb(v_ds_item_ids),\n      'total_mrr_delta', v_total_monthly_delta,\n      'renegotiation', v_has_renegotiation,\n      'source_quote_id', p_quote_id\n    ),\n    'early', 'Recorded'\n  );\n\n  IF v_value_delta <> 0 THEN\n    UPDATE public.contracts\n    SET total_value = ROUND(COALESCE(total_value,0) + v_value_delta, 2)\n    WHERE id = p_contract_id;\n  END IF;\n\n  SELECT id INTO v_stage_id FROM public.quote_stages\n  WHERE name = 'Contrato creado' AND holding_id = v_holding_id;\n  IF v_stage_id IS NOT NULL AND p_quote_id IS NOT NULL THEN\n    UPDATE public.quotes SET quote_stage_id = v_stage_id WHERE id = p_quote_id;\n  END IF;\n\n  RETURN jsonb_build_object(\n    'success', true,\n    'downsell_items', v_n_items,\n    'downsell_item_ids', to_jsonb(v_ds_item_ids),\n    'total_mrr_delta', ROUND(v_total_monthly_delta, 2),\n    'renegotiation', v_has_renegotiation,\n    'currency', v_currency,\n    'effective_date', p_effective_date\n  );\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.apply_quote_downsell_to_contract(p_contract_id uuid, p_quote_id uuid, p_items jsonb, p_effective_date date, p_reason text DEFAULT NULL::text, p_notes text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_user_id            uuid;\n  v_holding_id         uuid;\n  v_contract           record;\n  v_spec               jsonb;\n  v_orig               record;\n  v_quote_item_ids     uuid[] := ARRAY[]::uuid[];\n  v_already            int;\n  v_ds_qty             numeric;\n  v_ds_unit            numeric;\n  v_ds_term            int;\n  v_ds_start           date;\n  v_ds_end             date;\n  v_ds_freq            text;\n  v_ds_freq_months     int;\n  v_ds_monthly         numeric;\n  v_ds_final           numeric;\n  v_new_monthly        numeric;\n  v_orig_monthly       numeric;\n  v_ds_item_id         uuid;\n  v_inv                record;\n  v_line               record;\n  v_net_qty            numeric;\n  v_ratio              numeric;\n  v_repl_id            uuid;\n  v_total_monthly_delta numeric := 0;\n  v_value_delta        numeric := 0;\n  v_affected_orig_ids  uuid[] := ARRAY[]::uuid[];\n  v_ds_item_ids        uuid[] := ARRAY[]::uuid[];\n  v_stage_id           uuid;\n  v_n_items            int := 0;\n  v_currency           text;\n  v_rn_qty             numeric;\n  v_rn_unit            numeric;\n  v_rn_freq            text;\n  v_rn_freq_months     int;\n  v_rn_method          text;\n  v_rn_start           date;\n  v_rn_end             date;\n  v_rn_term            int;\n  v_rn_periods         int;\n  v_rn_monthly         numeric;\n  v_rn_period_amt      numeric;\n  v_rn_final           numeric;\n  v_rn_disc_type       text;\n  v_rn_disc_val        numeric;\n  v_rn_disc_factor     numeric;\n  v_rn_item_id         uuid;\n  v_rn_delta_monthly   numeric;\n  v_rn_delta_final     numeric;\n  v_old_term           int;\n  v_old_monthly        numeric;\n  v_old_final          numeric;\n  v_firm_end           date;\n  v_firm_count         int;\n  v_months_off         int;\n  v_candidate          date;\n  v_freq_or_term_change boolean;\n  v_touched            uuid[];\n  v_i                  int;\n  v_pstart             date;\n  v_pend               date;\n  v_sched              date;\n  v_amount             numeric;\n  v_vat                numeric;\n  v_tax_rate           numeric;\n  v_ref                record;\n  v_new_inv_id         uuid;\n  v_has_renegotiation  boolean := false;\n  v_max_rn_end         date := NULL;\nBEGIN\n  v_user_id := public.get_current_user_id();\n  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Usuario no autenticado'; END IF;\n  v_holding_id := public.get_contract_holding(p_contract_id);\n  IF v_holding_id IS NULL THEN RAISE EXCEPTION 'Contrato no encontrado o sin permisos'; END IF;\n\n  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN\n    RAISE EXCEPTION 'p_items no puede estar vacío';\n  END IF;\n\n  SELECT c.* INTO v_contract FROM public.contracts c WHERE c.id = p_contract_id;\n  IF NOT FOUND THEN RAISE EXCEPTION 'Contrato % no encontrado', p_contract_id; END IF;\n  v_currency := COALESCE(v_contract.contract_currency, 'USD');\n\n  SELECT array_agg((s->>'quote_item_id')::uuid)\n    INTO v_quote_item_ids\n  FROM jsonb_array_elements(p_items) s\n  WHERE NULLIF(s->>'quote_item_id','') IS NOT NULL;\n\n  IF v_quote_item_ids IS NOT NULL AND array_length(v_quote_item_ids,1) > 0 THEN\n    SELECT count(*) INTO v_already\n    FROM public.contract_items\n    WHERE quote_item_id = ANY(v_quote_item_ids);\n    IF v_already > 0 THEN\n      RAISE EXCEPTION 'Esta cotización ya fue procesada en un contrato (ítems enlazados). Revísalo antes de reintentar.';\n    END IF;\n  END IF;\n\n  FOR v_spec IN SELECT * FROM jsonb_array_elements(p_items) LOOP\n    SELECT * INTO v_orig FROM public.contract_items\n    WHERE id = (v_spec->>'related_item_id')::uuid\n      AND contract_id = p_contract_id AND holding_id = v_holding_id;\n    IF NOT FOUND THEN\n      RAISE EXCEPTION 'Item relacionado % no encontrado en el contrato', v_spec->>'related_item_id';\n    END IF;\n\n    v_rn_qty  := NULLIF(v_spec->>'new_quantity','')::numeric;\n    v_rn_unit := NULLIF(v_spec->>'new_unit_price','')::numeric;\n\n    IF v_rn_qty IS NOT NULL AND v_rn_unit IS NOT NULL THEN\n      IF v_rn_qty <= 0 OR v_rn_unit <= 0 THEN\n        RAISE EXCEPTION 'La renegociación requiere cantidad y precio unitario nuevos mayores a 0 (item %). Para dejar el servicio en cero usa churn/cancelación.', v_orig.product_name;\n      END IF;\n\n      IF EXISTS (SELECT 1 FROM public.quantities q WHERE q.contract_item_id = v_orig.id) THEN\n        RAISE EXCEPTION 'El item % tiene cantidades variables registradas: sus montos reales se manejan por período desde Cantidades Variables, no por renegociación. Corrige ahí o elimina los overrides primero.', v_orig.product_name;\n      END IF;\n\n      v_rn_freq := COALESCE(NULLIF(v_spec->>'new_billing_frequency',''), v_orig.billing_frequency, 'Mensual');\n      v_rn_freq_months := COALESCE(NULLIF(public.get_frequency_months(v_rn_freq), 0), 1);\n      v_rn_method := COALESCE(NULLIF(v_spec->>'billing_method',''), v_orig.billing_method, 'Anticipado');\n      v_rn_start := COALESCE(NULLIF(v_spec->>'start_date','')::date, p_effective_date);\n      v_rn_end   := COALESCE(NULLIF(v_spec->>'new_end_date','')::date, v_orig.end_date);\n\n      IF v_rn_start <= v_orig.start_date THEN\n        RAISE EXCEPTION 'La renegociación de % parte el % pero el item inicia el %: renegociar desde el inicio equivale a editar el item directamente (Editar Items).',\n          v_orig.product_name, v_rn_start, v_orig.start_date;\n      END IF;\n\n      SELECT MAX(ii.billing_period_end), COUNT(*)\n        INTO v_firm_end, v_firm_count\n      FROM public.invoice_items ii\n      JOIN public.invoices i ON i.id = ii.invoice_id\n      WHERE ii.contract_item_id = v_orig.id\n        AND COALESCE(i.is_active, true) = true\n        AND i.status IN ('Emitida','Enviada','Vencida','Pagada');\n      IF v_firm_end IS NOT NULL AND v_rn_start <= v_firm_end THEN\n        RAISE EXCEPTION 'El item % ya tiene facturado en firme hasta el %: la renegociación debe partir el % o después. Para cambiar lo ya emitido corresponde nota de crédito.',\n          v_orig.product_name, v_firm_end, v_firm_end + 1;\n      END IF;\n\n      v_months_off := ((EXTRACT(YEAR FROM v_rn_start) - EXTRACT(YEAR FROM v_orig.start_date)) * 12\n                      + EXTRACT(MONTH FROM v_rn_start) - EXTRACT(MONTH FROM v_orig.start_date))::int;\n      v_candidate := (v_orig.start_date + (v_months_off || ' months')::interval)::date;\n      IF v_candidate <> v_rn_start THEN\n        RAISE EXCEPTION 'La renegociación de % debe partir en un inicio de ciclo del item (día % de cada mes). La fecha % no calza; el inicio de ciclo más cercano es %.',\n          v_orig.product_name, EXTRACT(DAY FROM v_orig.start_date), v_rn_start, v_candidate;\n      END IF;\n\n      v_rn_term := GREATEST(1, (\n                    (EXTRACT(YEAR FROM (v_rn_end + 1)) - EXTRACT(YEAR FROM v_rn_start)) * 12\n                    + EXTRACT(MONTH FROM (v_rn_end + 1)) - EXTRACT(MONTH FROM v_rn_start))::int);\n      IF ((v_rn_start + (v_rn_term || ' months')::interval) - interval '1 day')::date <> v_rn_end THEN\n        RAISE EXCEPTION 'El término renegociado de % (% al %) no es un número entero de meses. Ajusta la fecha de fin (ej: %).',\n          v_orig.product_name, v_rn_start, v_rn_end,\n          ((v_rn_start + (v_rn_term || ' months')::interval) - interval '1 day')::date;\n      END IF;\n      IF v_rn_term % v_rn_freq_months <> 0 THEN\n        RAISE EXCEPTION 'El término renegociado de % (% meses) no es múltiplo de la frecuencia % (% meses por período). Ajusta término o frecuencia.',\n          v_orig.product_name, v_rn_term, v_rn_freq, v_rn_freq_months;\n      END IF;\n      v_rn_periods := v_rn_term / v_rn_freq_months;\n\n      v_rn_disc_type := COALESCE(NULLIF(v_spec->>'discount_type',''), v_orig.discount_type);\n      v_rn_disc_val  := COALESCE(NULLIF(v_spec->>'discount_value','')::numeric, v_orig.discount_value, 0);\n      v_rn_disc_factor := CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 AND v_rn_disc_val < 100\n                               THEN 1 - v_rn_disc_val / 100.0 ELSE 1 END;\n      v_rn_monthly := ROUND(v_rn_qty * v_rn_unit * v_rn_disc_factor, 2);\n      v_rn_period_amt := ROUND(v_rn_monthly * v_rn_freq_months, 2);\n      v_rn_final := ROUND(v_rn_monthly * v_rn_term, 2);\n\n      v_orig_monthly := COALESCE(v_orig.monthly_price,\n        CASE WHEN COALESCE(v_orig.term_months,0) > 0 THEN v_orig.final_price / v_orig.term_months ELSE 0 END);\n      v_freq_or_term_change := (v_rn_freq_months <> COALESCE(NULLIF(public.get_frequency_months(v_orig.billing_frequency),0),1))\n                               OR (v_rn_end IS DISTINCT FROM v_orig.end_date);\n      IF NOT v_freq_or_term_change\n         AND v_rn_qty = COALESCE(v_orig.quantity, 0)\n         AND v_rn_unit = COALESCE(v_orig.unit_price, 0) THEN\n        RAISE EXCEPTION 'La renegociación de % no cambia nada (misma cantidad, precio, frecuencia y término).', v_orig.product_name;\n      END IF;\n\n      v_touched := ARRAY[]::uuid[];\n\n      IF NOT v_freq_or_term_change THEN\n        v_rn_delta_monthly := ROUND(v_rn_monthly - v_orig_monthly, 2);\n        IF v_rn_delta_monthly = 0 THEN\n          RAISE EXCEPTION 'La renegociación de % no cambia el mensual (p×q − descuento queda igual). Si solo cambia el detalle cantidad/precio manteniendo el monto, edítalo por Editar Items.', v_orig.product_name;\n        END IF;\n        v_rn_delta_final := ROUND(v_rn_delta_monthly * v_rn_term, 2);\n\n        INSERT INTO public.contract_items(\n          contract_id, holding_id, product_id, product_name, categoria,\n          related_item_id, quote_item_id, quote_item_number,\n          quantity, unit_price, final_price, price,\n          term_months, billing_method, billing_frequency, currency,\n          start_date, end_date, is_recurring, item_type, unit_of_measure,\n          discount_type, discount_value, custom_fields, booking_date, account\n        ) VALUES (\n          p_contract_id, v_holding_id,\n          COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n          COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name),\n          CASE WHEN v_rn_delta_monthly < 0 THEN 'DOWNSELL' ELSE 'UPSELL' END,\n          v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n          v_rn_qty, ROUND(v_rn_delta_monthly / NULLIF(v_rn_qty, 0), 6),\n          v_rn_delta_final, v_rn_delta_final,\n          v_rn_term, v_rn_method, v_rn_freq,\n          COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n          v_rn_start, v_rn_end, true,\n          COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n          COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n          NULL, NULL,\n          COALESCE(v_spec->'custom_fields', NULL), p_effective_date, v_orig.account\n        ) RETURNING id INTO v_rn_item_id;\n\n        FOR v_line IN\n          SELECT ii.*, i.tax_rate AS inv_tax_rate\n          FROM public.invoice_items ii\n          JOIN public.invoices i ON i.id = ii.invoice_id\n          WHERE ii.contract_item_id = v_orig.id\n            AND i.contract_id = p_contract_id\n            AND i.status = 'Por Emitir'\n            AND COALESCE(i.is_active, true) = true\n            AND COALESCE(i.invoice_type, '') NOT IN ('Unificada','Consolidada')\n            AND ii.billing_period_start IS NOT NULL\n            AND ii.billing_period_start >= v_rn_start\n        LOOP\n          v_vat := ROUND(v_rn_period_amt * COALESCE(v_line.inv_tax_rate, 0) / 100.0, 2);\n          UPDATE public.invoice_items SET\n            quantity = v_rn_qty,\n            discount_pct = CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 THEN v_rn_disc_val ELSE 0 END,\n            unit_price_contract_currency = ROUND(v_rn_unit * v_rn_freq_months, 6),\n            subtotal_contract_currency = v_rn_period_amt,\n            tax_amount_contract_currency = v_vat,\n            total_contract_currency = v_rn_period_amt + v_vat,\n            description = COALESCE(v_orig.product_name, 'Servicio')\n              || CASE WHEN NULLIF(TRIM(v_orig.account), '') IS NOT NULL THEN ' Cuenta ' || TRIM(v_orig.account) ELSE '' END\n              || ' - Periodo ' || to_char(v_line.billing_period_start, 'DD/MM/YYYY')\n              || ' a ' || to_char(v_line.billing_period_end, 'DD/MM/YYYY'),\n            updated_at = now()\n          WHERE id = v_line.id;\n          v_touched := array_append(v_touched, v_line.invoice_id);\n        END LOOP;\n\n        v_total_monthly_delta := v_total_monthly_delta + (v_orig_monthly - v_rn_monthly);\n        v_value_delta := v_value_delta + v_rn_delta_final;\n      ELSE\n        v_old_term := v_months_off;\n        v_old_monthly := v_orig_monthly;\n        v_old_final := ROUND(v_old_monthly * v_old_term, 2);\n        UPDATE public.contract_items SET\n          end_date = v_rn_start - 1,\n          term_months = v_old_term,\n          final_price = v_old_final,\n          price = v_old_final\n        WHERE id = v_orig.id;\n\n        INSERT INTO public.contract_items(\n          contract_id, holding_id, product_id, product_name, categoria,\n          renews_item_id, quote_item_id, quote_item_number,\n          quantity, unit_price, final_price, price,\n          term_months, billing_method, billing_frequency, currency,\n          start_date, end_date, is_recurring, item_type, unit_of_measure,\n          discount_type, discount_value, custom_fields, booking_date, account\n        ) VALUES (\n          p_contract_id, v_holding_id,\n          COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n          COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name), 'RENEWAL',\n          v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n          COALESCE(v_orig.quantity, 1), COALESCE(v_orig.unit_price, 0),\n          ROUND(v_old_monthly * v_rn_term, 2), ROUND(v_old_monthly * v_rn_term, 2),\n          v_rn_term, v_rn_method, v_rn_freq,\n          COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n          v_rn_start, v_rn_end, true,\n          COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n          COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n          v_orig.discount_type, v_orig.discount_value,\n          COALESCE(v_spec->'custom_fields', NULL), p_effective_date, v_orig.account\n        ) RETURNING id INTO v_rn_item_id;\n\n        -- Relacion de renovacion en el item cortado: la alerta de expiracion\n        -- excluye items con renewed_by_item_id (feedback Domi 14-09, QA Cooprinsem).\n        UPDATE public.contract_items SET renewed_by_item_id = v_rn_item_id WHERE id = v_orig.id;\n\n        v_rn_delta_monthly := ROUND(v_rn_monthly - v_orig_monthly, 2);\n        v_rn_delta_final := ROUND(v_rn_delta_monthly * v_rn_term, 2);\n        IF v_rn_delta_monthly <> 0 THEN\n          INSERT INTO public.contract_items(\n            contract_id, holding_id, product_id, product_name, categoria,\n            related_item_id, quantity, unit_price, final_price, price,\n            term_months, billing_method, billing_frequency, currency,\n            start_date, end_date, is_recurring, item_type, unit_of_measure,\n            booking_date, account\n          ) VALUES (\n            p_contract_id, v_holding_id,\n            COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n            COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name),\n            CASE WHEN v_rn_delta_monthly < 0 THEN 'DOWNSELL' ELSE 'UPSELL' END,\n            v_rn_item_id, v_rn_qty, ROUND(v_rn_delta_monthly / NULLIF(v_rn_qty, 0), 6),\n            v_rn_delta_final, v_rn_delta_final,\n            v_rn_term, v_rn_method, v_rn_freq,\n            COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n            v_rn_start, v_rn_end, true,\n            COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n            COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n            p_effective_date, v_orig.account\n          );\n        END IF;\n\n        WITH del AS (\n          DELETE FROM public.invoice_items ii\n          USING public.invoices i\n          WHERE ii.invoice_id = i.id\n            AND ii.contract_item_id = v_orig.id\n            AND i.contract_id = p_contract_id\n            AND i.status = 'Por Emitir'\n            AND COALESCE(i.is_active, true) = true\n            AND COALESCE(i.invoice_type, '') NOT IN ('Unificada','Consolidada')\n            AND ii.billing_period_start IS NOT NULL\n            AND ii.billing_period_start >= v_rn_start\n          RETURNING ii.invoice_id\n        )\n        SELECT COALESCE(array_agg(DISTINCT invoice_id), ARRAY[]::uuid[]) INTO v_touched FROM del;\n\n        UPDATE public.invoices SET status = 'Cancelada', is_active = false\n        WHERE id = ANY(v_touched) AND status = 'Por Emitir'\n          AND NOT EXISTS (SELECT 1 FROM public.invoice_items ii WHERE ii.invoice_id = invoices.id);\n\n        SELECT * INTO v_ref FROM public.invoices\n        WHERE contract_id = p_contract_id AND holding_id = v_holding_id\n          AND COALESCE(invoice_type, '') NOT IN ('Unificada','Consolidada')\n          AND COALESCE(document_type, 'FACTURA') NOT IN ('NC','ND')\n        ORDER BY created_at DESC LIMIT 1;\n        v_tax_rate := COALESCE(v_ref.tax_rate, 0);\n\n        FOR v_i IN 0..(v_rn_periods - 1) LOOP\n          v_pstart := (v_rn_start + ((v_i * v_rn_freq_months) || ' months')::interval)::date;\n          v_pend   := ((v_rn_start + (((v_i + 1) * v_rn_freq_months) || ' months')::interval) - interval '1 day')::date;\n          IF LOWER(v_rn_method) LIKE '%vencid%' OR LOWER(v_rn_method) LIKE '%arrear%' THEN\n            v_sched := v_pend + 1;\n          ELSE\n            v_sched := v_pstart;\n          END IF;\n          v_amount := CASE WHEN v_i = v_rn_periods - 1\n                           THEN ROUND(v_rn_final - v_rn_period_amt * (v_rn_periods - 1), 2)\n                           ELSE v_rn_period_amt END;\n          v_vat := ROUND(v_amount * v_tax_rate / 100.0, 2);\n\n          INSERT INTO public.invoices (\n            contract_id, holding_id, client_id, company_id, client_entity_id,\n            scheduled_at, original_issue_date, issue_date, due_date, status,\n            invoice_type, document_type, contract_currency, invoice_currency,\n            fx_contract_to_invoice, tax_rate, invoice_terms_and_conditions,\n            issuer_legal_name, issuer_tax_id, issuer_address,\n            split_reason, is_active, auto_invoice,\n            client_tax_id, payment_method, invoice_series, fiscal_regime,\n            export_type, requires_references_for_billing,\n            amount_contract_currency, vat\n          ) VALUES (\n            p_contract_id, v_holding_id, v_contract.client_id,\n            COALESCE(v_ref.company_id, v_contract.company_id),\n            COALESCE(v_ref.client_entity_id, v_contract.client_entity_id),\n            v_sched, v_sched, v_sched, v_sched + INTERVAL '30 days', 'Por Emitir',\n            COALESCE(v_ref.invoice_type, 'Manual'), COALESCE(v_ref.document_type, 'FACTURA'),\n            COALESCE(v_ref.contract_currency, v_contract.contract_currency),\n            COALESCE(v_ref.invoice_currency, v_contract.invoice_currency),\n            v_ref.fx_contract_to_invoice, v_ref.tax_rate, v_ref.invoice_terms_and_conditions,\n            v_ref.issuer_legal_name, v_ref.issuer_tax_id, v_ref.issuer_address,\n            'item_renegotiation', true, COALESCE(v_ref.auto_invoice, false),\n            v_ref.client_tax_id, v_ref.payment_method, v_ref.invoice_series, v_ref.fiscal_regime,\n            v_ref.export_type, v_ref.requires_references_for_billing,\n            v_amount, v_vat\n          ) RETURNING id INTO v_new_inv_id;\n\n          INSERT INTO public.invoice_items (\n            invoice_id, holding_id, contract_id, contract_item_id, product_id,\n            description, billing_period_start, billing_period_end,\n            quantity, unit_of_measure, discount_pct,\n            unit_price_contract_currency, subtotal_contract_currency,\n            tax_amount_contract_currency, total_contract_currency,\n            contract_currency, invoice_currency, tax_code\n          ) VALUES (\n            v_new_inv_id, v_holding_id, p_contract_id, v_rn_item_id, COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n            COALESCE(v_orig.product_name, 'Servicio')\n              || CASE WHEN NULLIF(TRIM(v_orig.account), '') IS NOT NULL THEN ' Cuenta ' || TRIM(v_orig.account) ELSE '' END\n              || ' - Periodo ' || to_char(v_pstart, 'DD/MM/YYYY') || ' a ' || to_char(v_pend, 'DD/MM/YYYY'),\n            v_pstart, v_pend,\n            v_rn_qty, COALESCE(v_orig.unit_of_measure, 'UND'),\n            CASE WHEN v_rn_disc_type = 'Porcentaje' AND v_rn_disc_val > 0 THEN v_rn_disc_val ELSE 0 END,\n            ROUND(v_rn_unit * v_rn_freq_months, 6), v_amount,\n            v_vat, v_amount + v_vat,\n            COALESCE(v_ref.contract_currency, v_contract.contract_currency),\n            COALESCE(v_ref.invoice_currency, v_contract.invoice_currency),\n            COALESCE(v_tax_rate::text, '0')\n          );\n          UPDATE public.invoice_items SET\n            quantity = v_rn_qty,\n            unit_price_contract_currency = ROUND(v_rn_unit * v_rn_freq_months, 6),\n            subtotal_contract_currency = v_amount,\n            tax_amount_contract_currency = v_vat,\n            total_contract_currency = v_amount + v_vat\n          WHERE invoice_id = v_new_inv_id AND contract_item_id = v_rn_item_id;\n          v_touched := array_append(v_touched, v_new_inv_id);\n        END LOOP;\n\n        v_total_monthly_delta := v_total_monthly_delta + (v_old_monthly - v_rn_monthly);\n        v_value_delta := v_value_delta + (v_old_final + v_rn_final - COALESCE(v_orig.final_price, 0));\n        IF v_rn_end IS NOT NULL AND (v_max_rn_end IS NULL OR v_rn_end > v_max_rn_end) THEN\n          v_max_rn_end := v_rn_end;\n        END IF;\n      END IF;\n\n      UPDATE public.invoices i SET\n        amount_contract_currency = COALESCE(sums.subtotal, 0),\n        vat = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.vat, 0) END,\n        total_invoice_currency = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.total, 0) * i.fx_contract_to_invoice END,\n        amount_invoice_currency = CASE WHEN i.fx_contract_to_invoice IS NULL THEN NULL ELSE COALESCE(sums.subtotal, 0) * i.fx_contract_to_invoice END\n      FROM (\n        SELECT invoice_id, SUM(subtotal_contract_currency) AS subtotal,\n               SUM(tax_amount_contract_currency) AS vat, SUM(total_contract_currency) AS total\n        FROM public.invoice_items WHERE invoice_id = ANY(v_touched) GROUP BY invoice_id\n      ) sums WHERE i.id = sums.invoice_id AND COALESCE(i.is_active, true) = true;\n\n      UPDATE public.invoice_items ii SET\n        fx_contract_to_invoice      = inv.fx_contract_to_invoice,\n        unit_price_invoice_currency = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.unit_price_contract_currency * inv.fx_contract_to_invoice END,\n        subtotal_invoice_currency   = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.subtotal_contract_currency * inv.fx_contract_to_invoice END,\n        tax_amount_invoice_currency = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.tax_amount_contract_currency * inv.fx_contract_to_invoice END,\n        total_invoice_currency      = CASE WHEN inv.fx_contract_to_invoice IS NULL THEN NULL ELSE ii.total_contract_currency * inv.fx_contract_to_invoice END\n      FROM public.invoices inv\n      WHERE ii.invoice_id = inv.id AND inv.id = ANY(v_touched)\n        AND ii.contract_item_id IN (v_rn_item_id, v_orig.id);\n\n      v_has_renegotiation := true;\n      v_ds_item_ids       := array_append(v_ds_item_ids, v_rn_item_id);\n      v_affected_orig_ids := array_append(v_affected_orig_ids, v_orig.id);\n      v_n_items := v_n_items + 1;\n      CONTINUE;\n    END IF;\n\n    v_ds_qty  := (v_spec->>'quantity')::numeric;\n    v_new_monthly := NULLIF(v_spec->>'new_monthly','')::numeric;\n    v_ds_unit := ABS(COALESCE(NULLIF(v_spec->>'unit_price','')::numeric, v_orig.unit_price, 0));\n    v_ds_start := COALESCE(NULLIF(v_spec->>'start_date','')::date, p_effective_date);\n    v_ds_end   := LEAST(COALESCE(NULLIF(v_spec->>'end_date','')::date, v_orig.end_date), v_orig.end_date);\n    v_ds_term  := GREATEST(1, (\n                    (EXTRACT(YEAR FROM (v_ds_end + 1)) - EXTRACT(YEAR FROM v_ds_start)) * 12\n                    + EXTRACT(MONTH FROM (v_ds_end + 1)) - EXTRACT(MONTH FROM v_ds_start))::int);\n    v_ds_freq := COALESCE(NULLIF(v_spec->>'billing_frequency',''), v_orig.billing_frequency, 'Mensual');\n    v_ds_freq_months := COALESCE(NULLIF(public.get_frequency_months(v_ds_freq), 0), 1);\n\n    IF v_new_monthly IS NOT NULL THEN\n      v_orig_monthly := COALESCE(v_orig.monthly_price, 0);\n      IF v_orig_monthly <= 0 THEN\n        RAISE EXCEPTION 'El item % no tiene mensual (monthly_price) válido para rebajar por precio', v_orig.product_name;\n      END IF;\n      IF v_new_monthly <= 0 THEN\n        RAISE EXCEPTION 'El nuevo mensual debe ser > 0 — rebajar a 0 es cancelación total, no rebaja parcial. Usa churn/cancelar item (item %).',\n          v_orig.product_name;\n      END IF;\n      IF v_new_monthly >= v_orig_monthly THEN\n        RAISE EXCEPTION 'El nuevo mensual (%) debe ser menor al actual (%) para representar una reducción (item %)',\n          v_new_monthly, v_orig_monthly, v_orig.product_name;\n      END IF;\n      v_ds_monthly := ROUND(v_orig_monthly - v_new_monthly, 2);\n      v_ds_qty  := COALESCE(v_orig.quantity, 1);\n      v_ds_unit := ROUND(v_ds_monthly / NULLIF(v_ds_qty, 0), 6);\n    ELSE\n      IF v_ds_qty IS NULL OR v_ds_qty <= 0 THEN\n        RAISE EXCEPTION 'La cantidad del downsell debe ser > 0 (item %)', v_orig.product_name;\n      END IF;\n      IF v_ds_qty > COALESCE(v_orig.quantity, 0) THEN\n        RAISE EXCEPTION 'El downsell quita % unidades pero el item tiene % - no se puede quitar mas de lo existente (item %).',\n          v_ds_qty, v_orig.quantity, v_orig.product_name;\n      END IF;\n\n      IF COALESCE(v_orig.monthly_price, 0) <> 0 AND COALESCE(v_orig.quantity, 0) <> 0 THEN\n        v_ds_monthly := ROUND((v_orig.monthly_price / v_orig.quantity) * v_ds_qty, 2);\n      ELSE\n        v_ds_monthly := ROUND(v_ds_unit * v_ds_qty, 2);\n      END IF;\n    END IF;\n    v_ds_final   := -(v_ds_monthly * v_ds_term);\n\n    INSERT INTO public.contract_items(\n      contract_id, holding_id, product_id, product_name, categoria,\n      related_item_id, quote_item_id, quote_item_number,\n      quantity, unit_price, final_price, price,\n      term_months, billing_method, billing_frequency, currency,\n      start_date, end_date, is_recurring, item_type, unit_of_measure,\n      discount_type, discount_value, custom_fields, booking_date\n    ) VALUES (\n      p_contract_id, v_holding_id,\n      COALESCE(NULLIF(v_spec->>'product_id','')::uuid, v_orig.product_id),\n      COALESCE(NULLIF(v_spec->>'product_name',''), v_orig.product_name), 'DOWNSELL',\n      v_orig.id, NULLIF(v_spec->>'quote_item_id','')::uuid, NULLIF(v_spec->>'quote_item_number',''),\n      v_ds_qty, -v_ds_unit, v_ds_final, v_ds_final,\n      v_ds_term, COALESCE(NULLIF(v_spec->>'billing_method',''), v_orig.billing_method),\n      v_ds_freq, COALESCE(NULLIF(v_spec->>'currency',''), v_orig.currency, v_currency),\n      v_ds_start,\n      v_ds_end,\n      true,\n      COALESCE(NULLIF(v_spec->>'item_type',''), v_orig.item_type),\n      COALESCE(NULLIF(v_spec->>'unit_of_measure',''), v_orig.unit_of_measure),\n      COALESCE(NULLIF(v_spec->>'discount_type',''), v_orig.discount_type),\n      COALESCE(NULLIF(v_spec->>'discount_value','')::numeric, v_orig.discount_value),\n      COALESCE(v_spec->'custom_fields', NULL), p_effective_date\n    ) RETURNING id INTO v_ds_item_id;\n\n    v_ds_item_ids       := array_append(v_ds_item_ids, v_ds_item_id);\n    v_affected_orig_ids := array_append(v_affected_orig_ids, v_orig.id);\n    v_total_monthly_delta := v_total_monthly_delta + v_ds_monthly;\n    v_value_delta := v_value_delta + v_ds_final;\n    v_n_items := v_n_items + 1;\n\n    FOR v_inv IN\n      SELECT DISTINCT i.id, i.status\n      FROM public.invoices i\n      JOIN public.invoice_items ii ON ii.invoice_id = i.id\n      WHERE i.contract_id = p_contract_id\n        AND i.holding_id = v_holding_id\n        AND i.is_active = true\n        AND ii.contract_item_id = v_orig.id\n        AND ii.billing_period_start IS NOT NULL\n        AND ii.billing_period_start >= v_ds_start\n        AND i.status <> 'Cancelada'\n    LOOP\n      IF v_inv.status = 'Por Emitir' THEN\n        FOR v_line IN\n          SELECT * FROM public.invoice_items\n          WHERE invoice_id = v_inv.id AND contract_item_id = v_orig.id\n        LOOP\n          IF v_new_monthly IS NOT NULL THEN\n            v_ratio := v_new_monthly / v_orig_monthly;\n            UPDATE public.invoice_items SET\n              unit_price_contract_currency = ROUND(v_line.unit_price_contract_currency * v_ratio, 6),\n              unit_price_invoice_currency  = ROUND(v_line.unit_price_invoice_currency  * v_ratio, 6),\n              subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n              subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n              tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n              tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n              total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n              total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n            WHERE id = v_line.id;\n          ELSE\n            v_net_qty := COALESCE(v_line.quantity, 0) - v_ds_qty;\n            IF v_net_qty <= 0 THEN\n              DELETE FROM public.invoice_items WHERE id = v_line.id;\n              CONTINUE;\n            END IF;\n            v_ratio := v_net_qty / NULLIF(v_line.quantity, 0);\n            UPDATE public.invoice_items SET\n              quantity                     = v_net_qty,\n              subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n              subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n              tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n              tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n              total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n              total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n            WHERE id = v_line.id;\n          END IF;\n        END LOOP;\n        PERFORM public._recalc_invoice_header_from_items(v_inv.id);\n        IF NOT EXISTS (SELECT 1 FROM public.invoice_items WHERE invoice_id = v_inv.id) THEN\n          UPDATE public.invoices SET status = 'Cancelada' WHERE id = v_inv.id AND status = 'Por Emitir';\n        END IF;\n\n      ELSIF v_inv.status IN ('Emitida','Enviada','Vencida','Pagada') THEN\n        SELECT new_invoice_id INTO v_repl_id\n        FROM public.create_credit_note_safe(\n          v_inv.id, 'cancellation'::public.credit_note_type, 'downsell'::public.credit_note_reason,\n          NULL, COALESCE(p_notes, 'Downsell'), CURRENT_DATE, NULL, NULL, NULL\n        );\n\n        IF v_repl_id IS NOT NULL THEN\n          FOR v_line IN\n            SELECT * FROM public.invoice_items\n            WHERE invoice_id = v_repl_id AND contract_item_id = v_orig.id\n          LOOP\n            IF v_new_monthly IS NOT NULL THEN\n              v_ratio := v_new_monthly / v_orig_monthly;\n              UPDATE public.invoice_items SET\n                unit_price_contract_currency = ROUND(v_line.unit_price_contract_currency * v_ratio, 6),\n                unit_price_invoice_currency  = ROUND(v_line.unit_price_invoice_currency  * v_ratio, 6),\n                subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n                subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n                tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n                tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n                total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n                total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n              WHERE id = v_line.id;\n            ELSE\n              v_net_qty := COALESCE(v_line.quantity, 0) - v_ds_qty;\n              IF v_net_qty <= 0 THEN\n                DELETE FROM public.invoice_items WHERE id = v_line.id;\n                CONTINUE;\n              END IF;\n              v_ratio := v_net_qty / NULLIF(v_line.quantity, 0);\n              UPDATE public.invoice_items SET\n                quantity                     = v_net_qty,\n                subtotal_contract_currency   = ROUND(COALESCE(v_line.subtotal_contract_currency,0) * v_ratio, 2),\n                subtotal_invoice_currency    = ROUND(COALESCE(v_line.subtotal_invoice_currency,0)  * v_ratio, 2),\n                tax_amount_contract_currency = ROUND(COALESCE(v_line.tax_amount_contract_currency,0)* v_ratio, 2),\n                tax_amount_invoice_currency  = ROUND(COALESCE(v_line.tax_amount_invoice_currency,0) * v_ratio, 2),\n                total_contract_currency      = ROUND(COALESCE(v_line.total_contract_currency,0)     * v_ratio, 2),\n                total_invoice_currency       = ROUND(COALESCE(v_line.total_invoice_currency,0)      * v_ratio, 2)\n              WHERE id = v_line.id;\n            END IF;\n          END LOOP;\n          PERFORM public._recalc_invoice_header_from_items(v_repl_id);\n          IF NOT EXISTS (SELECT 1 FROM public.invoice_items WHERE invoice_id = v_repl_id) THEN\n            UPDATE public.invoices SET status = 'Cancelada' WHERE id = v_repl_id AND status = 'Por Emitir';\n          END IF;\n        END IF;\n      END IF;\n    END LOOP;\n  END LOOP;\n\n  IF v_max_rn_end IS NOT NULL AND v_max_rn_end > COALESCE(v_contract.contract_end_date, v_max_rn_end - 1) THEN\n    PERFORM set_config('sapira.bypass_end_date_guard', 'on', true);\n    UPDATE public.contracts SET contract_end_date = v_max_rn_end WHERE id = p_contract_id;\n    PERFORM set_config('sapira.bypass_end_date_guard', 'off', true);\n  END IF;\n\n  PERFORM public.log_lifecycle_event(\n    p_contract_id,\n    CASE WHEN v_has_renegotiation AND v_total_monthly_delta < 0 THEN 'UPSELL' ELSE 'DOWNSELL' END,\n    CASE WHEN v_has_renegotiation THEN 'Renegociación de ítem(s)' ELSE 'Reducción parcial (downsell)' END,\n    p_effective_date, -v_total_monthly_delta,\n    'Items afectados: ' || v_n_items::text\n      || '. Delta mensual: ' || v_currency || ' ' || ROUND(-v_total_monthly_delta, 2)::text,\n    COALESCE(NULLIF(p_reason,''), CASE WHEN v_has_renegotiation THEN 'Renegociación' ELSE 'Downsell parcial' END),\n    jsonb_build_object(\n      'timing', 'early',\n      'item_ids', to_jsonb(v_affected_orig_ids),\n      'downsell_item_ids', to_jsonb(v_ds_item_ids),\n      'total_mrr_delta', v_total_monthly_delta,\n      'renegotiation', v_has_renegotiation,\n      'source_quote_id', p_quote_id\n    ),\n    'early', 'Recorded'\n  );\n\n  IF v_value_delta <> 0 THEN\n    UPDATE public.contracts\n    SET total_value = ROUND(COALESCE(total_value,0) + v_value_delta, 2)\n    WHERE id = p_contract_id;\n  END IF;\n\n  SELECT id INTO v_stage_id FROM public.quote_stages\n  WHERE name = 'Contrato creado' AND holding_id = v_holding_id;\n  IF v_stage_id IS NOT NULL AND p_quote_id IS NOT NULL THEN\n    UPDATE public.quotes SET quote_stage_id = v_stage_id WHERE id = p_quote_id;\n  END IF;\n\n  RETURN jsonb_build_object(\n    'success', true,\n    'downsell_items', v_n_items,\n    'downsell_item_ids', to_jsonb(v_ds_item_ids),\n    'total_mrr_delta', ROUND(v_total_monthly_delta, 2),\n    'renegotiation', v_has_renegotiation,\n    'currency', v_currency,\n    'effective_date', p_effective_date\n  );\nEND;\n$function$\n",
 			"extension": null
 		},
 		{
@@ -58599,11 +58319,6 @@
 			"extension": null
 		},
 		{
-			"name": "cleanup_duplicate_pending_records",
-			"def": "CREATE OR REPLACE FUNCTION public.cleanup_duplicate_pending_records(batch_size integer DEFAULT 100)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    deleted_count INTEGER := 0;\n    current_batch INTEGER;\nBEGIN\n    -- Eliminar registros pending duplicados (mantener el más reciente)\n    LOOP\n        DELETE FROM odoo_partners_stg \n        WHERE id IN (\n            SELECT s1.id \n            FROM odoo_partners_stg s1\n            JOIN (\n                SELECT odoo_id, MAX(created_at) as max_created\n                FROM odoo_partners_stg \n                WHERE processing_status = 'pending'\n                GROUP BY odoo_id\n                HAVING COUNT(*) > 1\n            ) s2 ON s1.odoo_id = s2.odoo_id\n            WHERE s1.processing_status = 'pending'\n                AND s1.created_at < s2.max_created\n            LIMIT batch_size\n        );\n        \n        GET DIAGNOSTICS current_batch = ROW_COUNT;\n        deleted_count := deleted_count + current_batch;\n        \n        -- Salir si no hay más registros para eliminar\n        EXIT WHEN current_batch = 0;\n        \n        -- Pequeña pausa para evitar saturar la base de datos\n        PERFORM pg_sleep(0.1);\n    END LOOP;\n    \n    RETURN deleted_count;\nEND;\n$function$\n",
-			"extension": null
-		},
-		{
 			"name": "cleanup_old_processed_records",
 			"def": "CREATE OR REPLACE FUNCTION public.cleanup_old_processed_records(days_old integer DEFAULT 30, batch_size integer DEFAULT 100)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    deleted_count INTEGER := 0;\n    current_batch INTEGER;\nBEGIN\n    -- Eliminar registros procesados antiguos en lotes\n    LOOP\n        DELETE FROM odoo_partners_stg \n        WHERE id IN (\n            SELECT id \n            FROM odoo_partners_stg\n            WHERE processing_status = 'processed'\n                AND last_integrated_at < NOW() - INTERVAL '1 day' * days_old\n            LIMIT batch_size\n        );\n        \n        GET DIAGNOSTICS current_batch = ROW_COUNT;\n        deleted_count := deleted_count + current_batch;\n        \n        -- Salir si no hay más registros para eliminar\n        EXIT WHEN current_batch = 0;\n        \n        -- Pequeña pausa para evitar saturar la base de datos\n        PERFORM pg_sleep(0.1);\n    END LOOP;\n    \n    RETURN deleted_count;\nEND;\n$function$\n",
 			"extension": null
@@ -58746,11 +58461,6 @@
 		{
 			"name": "debug_current_user_context",
 			"def": "CREATE OR REPLACE FUNCTION public.debug_current_user_context()\n RETURNS TABLE(auth_uid uuid, user_id uuid, user_email text, is_super_admin boolean, user_role text, user_holding uuid, holding_name text)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  RETURN QUERY\n  SELECT \n    auth.uid() as auth_uid,\n    u.id as user_id,\n    u.email as user_email,\n    COALESCE(u.is_super_admin, FALSE) as is_super_admin,\n    r.name as user_role,\n    uh.holding_id as user_holding,\n    ch.name as holding_name\n  FROM public.users u\n  LEFT JOIN public.roles r ON u.role_id = r.id\n  LEFT JOIN public.user_holdings uh ON u.id = uh.user_id\n  LEFT JOIN public.company_holdings ch ON uh.holding_id = ch.id\n  WHERE u.auth_id = auth.uid();\nEND;\n$function$\n",
-			"extension": null
-		},
-		{
-			"name": "debug_invoice_trigger",
-			"def": "CREATE OR REPLACE FUNCTION public.debug_invoice_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    -- Log de entrada al trigger\n    INSERT INTO invoice_trigger_debug_logs (\n        trigger_name,\n        operation,\n        holding_id,\n        odoo_id,\n        raw_data_sample,\n        processing_status,\n        integration_notes,\n        error_message\n    ) VALUES (\n        'debug_invoice_trigger',\n        TG_OP,\n        NEW.holding_id,\n        NEW.odoo_id,\n        jsonb_build_object(\n            'name', NEW.raw_data::JSONB ->> 'name',\n            'id', NEW.raw_data::JSONB ->> 'id',\n            'invoice_date', NEW.raw_data::JSONB ->> 'invoice_date'\n        ),\n        COALESCE(NEW.processing_status, 'NULL'),\n        COALESCE(NEW.integration_notes, 'NULL'),\n        'Trigger ejecutado correctamente'\n    );\n    \n    -- SIEMPRE permitir la inserción\n    RETURN NEW;\n    \nEXCEPTION WHEN OTHERS THEN\n    -- Log de error\n    INSERT INTO invoice_trigger_debug_logs (\n        trigger_name,\n        operation,\n        holding_id,\n        odoo_id,\n        error_message\n    ) VALUES (\n        'debug_invoice_trigger',\n        TG_OP,\n        COALESCE(NEW.holding_id, NULL),\n        COALESCE(NEW.odoo_id, 'UNKNOWN'),\n        'ERROR: ' || SQLERRM\n    );\n    \n    -- Incluso con errores, permitir inserción\n    RETURN NEW;\nEND;\n$function$\n",
 			"extension": null
 		},
 		{

@@ -3,7 +3,7 @@ import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGenerat
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 
 /**
- * Espejo de `public.company_bank_accounts` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 2 filas · RLS on.
+ * Espejo de `public.company_bank_accounts` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 9 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 1 tabla(s): bank_upload_batches.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

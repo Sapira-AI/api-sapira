@@ -108,7 +108,7 @@ de las que sirvieron 45.
 
 ### Qué vas a ver que NO es tu cambio
 
-Hoy la deriva conocida son **104 sentencias**, todas clasificadas y ninguna de ellas un cambio real.
+Hoy la deriva conocida son **94 sentencias**, todas clasificadas y ninguna de ellas un cambio real.
 Si aparecen en tu migración, **bórralas**:
 
 | Vas a ver | Cuántas | Qué es |
@@ -116,10 +116,9 @@ Si aparecen en tu migración, **bórralas**:
 | `DROP INDEX` sobre un índice que está en `special-index/` | 41 | TypeORM no puede declararlos, así que no los reconoce |
 | `DROP CONSTRAINT` + `ADD CONSTRAINT` con el **mismo nombre y la misma definición** | 28 | Churn de TypeORM al alterar otra cosa de esa tabla. Netean a cero |
 | `DROP DEFAULT` + `SET DEFAULT gen_random_uuid()` sobre una columna FK | 14 | Las 7 columnas FK con ese default, anomalía de producción. Netean a cero |
-| `DROP INDEX` + `CREATE INDEX` con la misma definición | 10 | Idem: TypeORM recrea los índices de las columnas que altera |
+| `DROP INDEX` + `CREATE INDEX` con la misma definición | 4 | Idem: TypeORM recrea los índices de las columnas que altera |
 | `SET DEFAULT ('now'::text)::date` | 4 | Producción guarda `CURRENT_DATE`; TypeORM normaliza el texto. Son equivalentes |
 | `SET DEFAULT ARRAY[]::…` | 3 | Misma normalización |
-| `processing_status` en las tablas `odoo_*_stg` | 4 | No es deriva: es la migración `AlignStagingProcessingStatusDefault`, escrita y esperando autorización |
 
 ### Lo que nunca se aplica sin autorización explícita
 
@@ -136,7 +135,7 @@ ese es un constraint real de producción que se perdería.
 TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log   # solo lee, no aplica nada
 ```
 
-Debe emitir las 104 conocidas más nada. Si emite algo nuevo que no es tu cambio, la entity y la base
+Debe emitir las 94 conocidas más nada. Si emite algo nuevo que no es tu cambio, la entity y la base
 discreparon: el arreglo es **corregir la entity o escribir el asset**, nunca dejar que TypeORM aplique.
 
 ---
@@ -254,7 +253,7 @@ Corren con `yarn test`, todas offline y sin conexión a ninguna base:
 |---|---|
 | `database.module.spec.ts` | `synchronize`/`dropSchema`/`migrationsRun` en `true`; que un espejo se promueva sin decisión explícita; que una tabla quede con espejo y entity a la vez; que el barrel `espejo.existing.ts` se desincronice del disco |
 | `entities/indices-declarados.spec.ts` | Que un índice de producción quede sin declarar, ni en la entity ni en `special-index/`. Eran 161 |
-| `assets-runner.spec.ts` | Assets de `functions/` que no declaran la función o no cierran su dollar-quote; `types/` no re-ejecutable; `special-index/` con índices que sí eran declarables; fases del manifest desalineadas de `ASSET_DIRECTORIES`; **una migración que crea una tabla sin activar RLS** |
+| `assets-runner.spec.ts` | Assets de `functions/` que no declaran la función o no cierran su dollar-quote; `types/` no re-ejecutable; `special-index/` con índices que sí eran declarables; fases del manifest desalineadas de `ASSET_DIRECTORIES`; **una migración que crea una tabla sin activar RLS**; **una policy sobre una tabla que es deny-all por diseño** |
 | `typeorm-options.spec.ts` | Que el `--target` se desacople de la conexión real |
 | `entities/integraciones/odoo/odoo-stg-processing-status.spec.ts` | Que un default declarado no sea uno de los valores que admite su propio CHECK |
 
@@ -268,9 +267,14 @@ encontrar. Cada una nació de un problema real que está documentado en su propi
 Están en [`README.md` → Deudas conocidas del corpus](./README.md#deudas-conocidas-del-corpus), con su
 evidencia. Las que más te pueden afectar al tocar algo:
 
-- **26 assets apuntan a objetos que ya no existen en producción** (7 funciones, 13 triggers, 6 policies).
-- **7 tablas sin RLS con `GRANT` completo a `anon`** — sin ninguna capa de contención.
-- **4 tablas con RLS activo y cero policies**: hoy solo las ve el service role.
+- **24 assets apuntan a objetos que ya no existen en producción** (5 funciones, 13 triggers, 6
+  policies). Dos de esas funciones —`set_invoice_processing_status` y
+  `classify_invoice_line_before_insert`— llegaron a usarse como premisa en el comentario de una
+  migración que resultó estar equivocada. **Verifica contra la base, no contra el corpus.**
+- **Las 131 tablas tienen RLS** desde el 2026-09-14. Cuatro están deny-all a propósito
+  (`claude_skills`, `sii_*`) y hay una guarda que impide que alguien les escriba una policy.
+- **`cleanup_duplicate_partners_by_vat` está en ventana de observación**: se le revocó el `EXECUTE`
+  a PUBLIC y se elimina si nadie reclama.
 - **Anomalías de FK heredadas de producción** (FKs duplicadas con `ON DELETE` divergente,
   `SET NULL` sobre columna `NOT NULL`). Se replican tal cual; corregirlas es decisión de negocio.
 - **2 vistas sin asset ni entity**: `invoices_with_net_amounts`, `invoice_items_consolidated`.

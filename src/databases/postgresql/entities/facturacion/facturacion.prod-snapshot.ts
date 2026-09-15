@@ -367,25 +367,6 @@ export const FACTURACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		checks: ['invoice_restructure_log_action_check'],
 		indexes: {},
 	},
-	invoice_trigger_debug_logs: {
-		columns: {
-			id: false,
-			trigger_name: false,
-			operation: false,
-			holding_id: true,
-			odoo_id: true,
-			raw_data_sample: true,
-			processing_status: true,
-			integration_notes: true,
-			error_message: true,
-			created_at: true,
-		},
-		primary: ['id'],
-		foreignKeys: {},
-		uniques: {},
-		checks: [],
-		indexes: {},
-	},
 	overdue_check_log: {
 		columns: {
 			id: false,

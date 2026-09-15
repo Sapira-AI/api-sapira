@@ -166,7 +166,7 @@
 		{
 			"name": "public.accounting_period_events",
 			"rls_enabled": true,
-			"rows": 14,
+			"rows": 15,
 			"columns": [
 				{
 					"name": "id",
@@ -1432,7 +1432,7 @@
 		{
 			"name": "public.bank_movements",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 158,
 			"columns": [
 				{
 					"name": "id",
@@ -1713,7 +1713,7 @@
 		{
 			"name": "public.bank_upload_batches",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 10,
 			"columns": [
 				{
 					"name": "id",
@@ -3140,7 +3140,7 @@
 		},
 		{
 			"name": "public.client_entity_tax_id_normalization_conflicts",
-			"rls_enabled": false,
+			"rls_enabled": true,
 			"rows": 65,
 			"columns": [
 				{
@@ -4169,7 +4169,7 @@
 		{
 			"name": "public.company_bank_accounts",
 			"rls_enabled": true,
-			"rows": 2,
+			"rows": 9,
 			"columns": [
 				{
 					"name": "id",
@@ -5623,7 +5623,7 @@
 		{
 			"name": "public.contract_amendments",
 			"rls_enabled": true,
-			"rows": 48,
+			"rows": 87,
 			"columns": [
 				{
 					"name": "id",
@@ -5785,7 +5785,7 @@
 		{
 			"name": "public.contract_billing_splits",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -5936,7 +5936,7 @@
 		{
 			"name": "public.contract_change_log",
 			"rls_enabled": true,
-			"rows": 886,
+			"rows": 1030,
 			"columns": [
 				{
 					"name": "id",
@@ -6354,7 +6354,7 @@
 		{
 			"name": "public.contract_fx_period_rates",
 			"rls_enabled": true,
-			"rows": 2,
+			"rows": 6,
 			"columns": [
 				{
 					"name": "id",
@@ -6503,7 +6503,7 @@
 		{
 			"name": "public.contract_invoices",
 			"rls_enabled": true,
-			"rows": 4983,
+			"rows": 5339,
 			"columns": [
 				{
 					"name": "id",
@@ -8132,7 +8132,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 671,
+			"rows": 690,
 			"columns": [
 				{
 					"name": "id",
@@ -9523,7 +9523,7 @@
 		{
 			"name": "public.exchange_rates_monthly_avg",
 			"rls_enabled": true,
-			"rows": 455,
+			"rows": 695,
 			"columns": [
 				{
 					"name": "id",
@@ -10034,7 +10034,7 @@
 		},
 		{
 			"name": "public.generic_export_vats",
-			"rls_enabled": false,
+			"rls_enabled": true,
 			"rows": 8,
 			"columns": [
 				{
@@ -10522,7 +10522,7 @@
 		},
 		{
 			"name": "public.indicadores_economicos",
-			"rls_enabled": false,
+			"rls_enabled": true,
 			"rows": 34,
 			"columns": [
 				{
@@ -11227,7 +11227,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 10875,
+			"rows": 11252,
 			"columns": [
 				{
 					"name": "id",
@@ -12200,7 +12200,7 @@
 		{
 			"name": "public.invoice_payments",
 			"rls_enabled": true,
-			"rows": 45,
+			"rows": 243,
 			"columns": [
 				{
 					"name": "id",
@@ -12629,7 +12629,7 @@
 		{
 			"name": "public.invoice_reschedules",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -12859,119 +12859,9 @@
 			]
 		},
 		{
-			"name": "public.invoice_trigger_debug_logs",
-			"rls_enabled": false,
-			"rows": 0,
-			"columns": [
-				{
-					"name": "id",
-					"data_type": "uuid",
-					"format": "uuid",
-					"type": "uuid",
-					"options": [
-						"updatable"
-					],
-					"default_value": "gen_random_uuid()"
-				},
-				{
-					"name": "trigger_name",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"updatable"
-					]
-				},
-				{
-					"name": "operation",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"updatable"
-					]
-				},
-				{
-					"name": "holding_id",
-					"data_type": "uuid",
-					"format": "uuid",
-					"type": "uuid",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "odoo_id",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "raw_data_sample",
-					"data_type": "jsonb",
-					"format": "jsonb",
-					"type": "jsonb",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "processing_status",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "integration_notes",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "error_message",
-					"data_type": "text",
-					"format": "text",
-					"type": "text",
-					"options": [
-						"nullable",
-						"updatable"
-					]
-				},
-				{
-					"name": "created_at",
-					"data_type": "timestamp with time zone",
-					"format": "timestamptz",
-					"type": "timestamp with time zone",
-					"options": [
-						"nullable",
-						"updatable"
-					],
-					"default_value": "now()"
-				}
-			],
-			"primary_keys": [
-				"id"
-			],
-			"foreign_key_constraints": []
-		},
-		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9109,
+			"rows": 9460,
 			"columns": [
 				{
 					"name": "id",
@@ -15403,7 +15293,8 @@
 						"nullable",
 						"updatable"
 					],
-					"default_value": "'pending'::text"
+					"default_value": "'create'::text",
+					"comment": "Estado del procesamiento: create, update, processed, error"
 				},
 				{
 					"name": "integration_batch_id",
@@ -15582,8 +15473,8 @@
 						"nullable",
 						"updatable"
 					],
-					"default_value": "'pending'::text",
-					"comment": "Estado del procesamiento: pending, processed, error"
+					"default_value": "'create'::text",
+					"comment": "Estado del procesamiento: create, update, processed, error"
 				},
 				{
 					"name": "integration_batch_id",
@@ -15977,7 +15868,7 @@
 		},
 		{
 			"name": "public.odoo_product_mappings",
-			"rls_enabled": false,
+			"rls_enabled": true,
 			"rows": 41,
 			"columns": [
 				{
@@ -18181,7 +18072,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 19514,
+			"rows": 20144,
 			"columns": [
 				{
 					"name": "id",
@@ -21391,8 +21282,8 @@
 		},
 		{
 			"name": "public.sapira_sql_asset_history",
-			"rls_enabled": false,
-			"rows": 4,
+			"rls_enabled": true,
+			"rows": 7,
 			"columns": [
 				{
 					"name": "asset_path",
@@ -21439,8 +21330,8 @@
 		},
 		{
 			"name": "public.sapira_typeorm_migrations",
-			"rls_enabled": false,
-			"rows": 2,
+			"rls_enabled": true,
+			"rows": 5,
 			"columns": [
 				{
 					"name": "id",
@@ -22231,7 +22122,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 411,
+			"rows": 414,
 			"columns": [
 				{
 					"name": "id",
@@ -22373,7 +22264,7 @@
 		{
 			"name": "public.stripe_invoices_stg",
 			"rls_enabled": true,
-			"rows": 3924,
+			"rows": 4768,
 			"columns": [
 				{
 					"name": "id",
@@ -22514,7 +22405,7 @@
 		},
 		{
 			"name": "public.stripe_product_mappings",
-			"rls_enabled": false,
+			"rls_enabled": true,
 			"rows": 73,
 			"columns": [
 				{
@@ -22630,7 +22521,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 475,
+			"rows": 483,
 			"columns": [
 				{
 					"name": "id",
@@ -22771,8 +22662,8 @@
 		},
 		{
 			"name": "public.stripe_sync_jobs",
-			"rls_enabled": false,
-			"rows": 192,
+			"rls_enabled": true,
+			"rows": 200,
 			"columns": [
 				{
 					"name": "id",
@@ -23668,7 +23559,7 @@
 		{
 			"name": "public.user_holdings",
 			"rls_enabled": true,
-			"rows": 37,
+			"rows": 38,
 			"columns": [
 				{
 					"name": "user_id",

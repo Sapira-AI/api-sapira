@@ -5,7 +5,7 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 import { CompanyBankAccount } from '../clientes/company-bank-account.espejo';
 
 /**
- * Espejo de `public.bank_upload_batches` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
+ * Espejo de `public.bank_upload_batches` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 10 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 1 tabla(s): bank_movements.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

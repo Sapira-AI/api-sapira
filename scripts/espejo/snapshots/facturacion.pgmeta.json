@@ -1,8 +1,1866 @@
 {
+ "billing_references": {
+  "name": "public.billing_references",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "reference_type",
+    "data_type": "USER-DEFINED",
+    "format": "reference_type_enum",
+    "type": "reference_type_enum",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "reference_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "issuer",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "issue_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "valid_from",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "valid_to",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "covers_multiple_invoices",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "status",
+    "data_type": "USER-DEFINED",
+    "format": "reference_status_enum",
+    "type": "reference_status_enum",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'Active'::reference_status_enum"
+   },
+   {
+    "name": "file_url",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "billing_references_contract_id_fkey",
+    "source_table": "public.billing_references",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billing_references_created_by_fkey",
+    "source_table": "public.billing_references",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billing_references_holding_id_fkey",
+    "source_table": "public.billing_references",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_reference_id_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "reference_id"
+    ],
+    "target_table": "public.billing_references",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_adjustments": {
+  "name": "public.invoice_adjustments",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "amount_diff",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "adjusted_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "adjusted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_adjustments_adjusted_by_fkey",
+    "source_table": "public.invoice_adjustments",
+    "source_columns": [
+     "adjusted_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_adjustments_invoice_id_fkey",
+    "source_table": "public.invoice_adjustments",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_collection_logs": {
+  "name": "public.invoice_collection_logs",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "recipients",
+    "data_type": "ARRAY",
+    "format": "_text",
+    "type": "text[]",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "subject",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "message",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "channel",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'email'::text"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'sent'::text"
+   },
+   {
+    "name": "sent_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "sent_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_collection_logs_invoice_id_fkey",
+    "source_table": "public.invoice_collection_logs",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_collection_settings": {
+  "name": "public.invoice_collection_settings",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "dunning_enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "email_from",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "bcc",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reminder_days_before",
+    "data_type": "ARRAY",
+    "format": "_int4",
+    "type": "integer[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{7,3,1}'::integer[]"
+   },
+   {
+    "name": "reminder_days_after",
+    "data_type": "ARRAY",
+    "format": "_int4",
+    "type": "integer[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{1,7,15}'::integer[]"
+   },
+   {
+    "name": "email_subject_template",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Recordatorio de pago factura {{invoice_number}}'::text"
+   },
+   {
+    "name": "email_body_template",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'Estimado {{client_name}},\\n\\nLe recordamos que la factura {{invoice_number}} por {{amount_due}} vence el {{due_date}}.\\n\\nSaludos,\\n{{company_name}}'::text"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": []
+ },
+ "invoice_emails": {
+  "name": "public.invoice_emails",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "template",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "recipient",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "subject",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "message",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "sent_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "sent_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_emails_invoice_id_fkey",
+    "source_table": "public.invoice_emails",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_emails_sent_by_fkey",
+    "source_table": "public.invoice_emails",
+    "source_columns": [
+     "sent_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_items": {
+  "name": "public.invoice_items",
+  "rls_enabled": true,
+  "rows": 11252,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,4)",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_of_measure",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'UND'::text"
+   },
+   {
+    "name": "discount_pct",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(5,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "tax_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'19'::text"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "product_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "issue_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "legacy_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Referencia a la línea legacy original"
+   },
+   {
+    "name": "legacy_match_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Referencia al match que generó esta línea"
+   },
+   {
+    "name": "custom_fields",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Campos personalizados definidos por el usuario en formato JSONB"
+   },
+   {
+    "name": "invoice_currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_price_invoice_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "subtotal_invoice_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_amount_invoice_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "total_invoice_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_contract_to_invoice",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_rate_source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_rate_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_price_contract_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "subtotal_contract_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tax_amount_contract_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "total_contract_currency",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "billing_period_start",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Fecha de inicio del periodo de servicio que cubre esta línea de factura."
+   },
+   {
+    "name": "billing_period_end",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Fecha de fin del periodo de servicio que cubre esta línea de factura."
+   },
+   {
+    "name": "subscription_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "FK a subscription_items. Usado para items de invoices de suscripciones externas."
+   },
+   {
+    "name": "odoo_tax_id",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del impuesto de Odoo (account.tax) que se aplicará a esta línea de factura. Se asigna automáticamente desde la compañía emisora al enviar a Odoo."
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "fk_invoice_items_contract",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_invoice_items_holding_id",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "fk_invoice_items_product",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_contract_item_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_holding_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_invoice_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_item_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "legacy_item_id"
+    ],
+    "target_table": "public.invoice_items_legacy",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_legacy_match_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "legacy_match_id"
+    ],
+    "target_table": "public.invoice_items_legacy_match",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_subscription_item_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "subscription_item_id"
+    ],
+    "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_payments": {
+  "name": "public.invoice_payments",
+  "rls_enabled": true,
+  "rows": 243,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "payment_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "CURRENT_DATE"
+   },
+   {
+    "name": "method",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reference",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "confirmed",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "bank_movement_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_payments_bank_movement_id_fkey",
+    "source_table": "public.invoice_payments",
+    "source_columns": [
+     "bank_movement_id"
+    ],
+    "target_table": "public.bank_movements",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_payments_invoice_id_fkey",
+    "source_table": "public.invoice_payments",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_reference_links": {
+  "name": "public.invoice_reference_links",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "reference_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "linked_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "linked_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_reference_links_holding_id_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_invoice_id_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_linked_by_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "linked_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_reference_id_fkey",
+    "source_table": "public.invoice_reference_links",
+    "source_columns": [
+     "reference_id"
+    ],
+    "target_table": "public.billing_references",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_references": {
+  "name": "public.invoice_references",
+  "rls_enabled": true,
+  "rows": 230,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "document_number",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Numero o folio del documento referenciado (ej: 5020333)"
+   },
+   {
+    "name": "document_type_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Codigo del tipo de documento segun SII: 801=OC, 33=Factura, 34=Factura Exenta, 56=ND, 61=NC, 802=Nota Pedido, 803=Contrato, HES=Hoja Entrada Servicio"
+   },
+   {
+    "name": "document_type_name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Nombre descriptivo del tipo de documento (ej: Orden de Compra)"
+   },
+   {
+    "name": "reference_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Codigo de referencia SII: 1=Anula documento ref, 2=Corrige texto, 3=Corrige monto, (vacio)=Solo referencia"
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo o razon de la referencia"
+   },
+   {
+    "name": "reference_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_references_created_by_fkey",
+    "source_table": "public.invoice_references",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_references_invoice_id_fkey",
+    "source_table": "public.invoice_references",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_reschedules": {
+  "name": "public.invoice_reschedules",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "old_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "new_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "changed_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "changed_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_reschedules_changed_by_fkey",
+    "source_table": "public.invoice_reschedules",
+    "source_columns": [
+     "changed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reschedules_holding_id_fkey",
+    "source_table": "public.invoice_reschedules",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reschedules_invoice_id_fkey",
+    "source_table": "public.invoice_reschedules",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "invoice_restructure_log": {
+  "name": "public.invoice_restructure_log",
+  "rls_enabled": true,
+  "rows": 312,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "actor_user_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "action",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "payload",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "invoice_restructure_log_actor_user_id_fkey",
+    "source_table": "public.invoice_restructure_log",
+    "source_columns": [
+     "actor_user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_restructure_log_contract_id_fkey",
+    "source_table": "public.invoice_restructure_log",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 9109,
+  "rows": 9460,
   "columns": [
    {
     "name": "id",
@@ -890,2324 +2748,6 @@
    }
   ]
  },
- "invoice_items": {
-  "name": "public.invoice_items",
-  "rls_enabled": true,
-  "rows": 10875,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "description",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "quantity",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,4)",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "unit_of_measure",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'UND'::text"
-   },
-   {
-    "name": "discount_pct",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(5,2)",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "0"
-   },
-   {
-    "name": "tax_code",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'19'::text"
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "updated_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "contract_item_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "product_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "status",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "issue_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "legacy_item_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Referencia a la línea legacy original"
-   },
-   {
-    "name": "legacy_match_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Referencia al match que generó esta línea"
-   },
-   {
-    "name": "custom_fields",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "type": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'{}'::jsonb",
-    "comment": "Campos personalizados definidos por el usuario en formato JSONB"
-   },
-   {
-    "name": "invoice_currency",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "unit_price_invoice_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "subtotal_invoice_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,2)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "tax_amount_invoice_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,2)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "total_invoice_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,2)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "fx_contract_to_invoice",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "fx_rate_source",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "fx_rate_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "unit_price_contract_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "subtotal_contract_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "tax_amount_contract_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "total_contract_currency",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_currency",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "billing_period_start",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Fecha de inicio del periodo de servicio que cubre esta línea de factura."
-   },
-   {
-    "name": "billing_period_end",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Fecha de fin del periodo de servicio que cubre esta línea de factura."
-   },
-   {
-    "name": "subscription_item_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "FK a subscription_items. Usado para items de invoices de suscripciones externas."
-   },
-   {
-    "name": "odoo_tax_id",
-    "data_type": "integer",
-    "format": "int4",
-    "type": "integer",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "ID del impuesto de Odoo (account.tax) que se aplicará a esta línea de factura. Se asigna automáticamente desde la compañía emisora al enviar a Odoo."
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "fk_invoice_items_contract",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "fk_invoice_items_holding_id",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "fk_invoice_items_product",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "product_id"
-    ],
-    "target_table": "public.products",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_contract_item_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "contract_item_id"
-    ],
-    "target_table": "public.contract_items",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_holding_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_invoice_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_item_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "legacy_item_id"
-    ],
-    "target_table": "public.invoice_items_legacy",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_legacy_match_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "legacy_match_id"
-    ],
-    "target_table": "public.invoice_items_legacy_match",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_items_subscription_item_id_fkey",
-    "source_table": "public.invoice_items",
-    "source_columns": [
-     "subscription_item_id"
-    ],
-    "target_table": "public.subscription_items",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_payments": {
-  "name": "public.invoice_payments",
-  "rls_enabled": true,
-  "rows": 45,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "amount",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "currency",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "payment_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "CURRENT_DATE"
-   },
-   {
-    "name": "method",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "reference",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "notes",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "confirmed",
-    "data_type": "boolean",
-    "format": "bool",
-    "type": "boolean",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "true"
-   },
-   {
-    "name": "created_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "bank_movement_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_payments_bank_movement_id_fkey",
-    "source_table": "public.invoice_payments",
-    "source_columns": [
-     "bank_movement_id"
-    ],
-    "target_table": "public.bank_movements",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_payments_invoice_id_fkey",
-    "source_table": "public.invoice_payments",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_references": {
-  "name": "public.invoice_references",
-  "rls_enabled": true,
-  "rows": 230,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "document_number",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "comment": "Numero o folio del documento referenciado (ej: 5020333)"
-   },
-   {
-    "name": "document_type_code",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "comment": "Codigo del tipo de documento segun SII: 801=OC, 33=Factura, 34=Factura Exenta, 56=ND, 61=NC, 802=Nota Pedido, 803=Contrato, HES=Hoja Entrada Servicio"
-   },
-   {
-    "name": "document_type_name",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Nombre descriptivo del tipo de documento (ej: Orden de Compra)"
-   },
-   {
-    "name": "reference_code",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Codigo de referencia SII: 1=Anula documento ref, 2=Corrige texto, 3=Corrige monto, (vacio)=Solo referencia"
-   },
-   {
-    "name": "reason",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Motivo o razon de la referencia"
-   },
-   {
-    "name": "reference_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "updated_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "created_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_references_created_by_fkey",
-    "source_table": "public.invoice_references",
-    "source_columns": [
-     "created_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_references_invoice_id_fkey",
-    "source_table": "public.invoice_references",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "billing_references": {
-  "name": "public.billing_references",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "reference_type",
-    "data_type": "USER-DEFINED",
-    "format": "reference_type_enum",
-    "type": "reference_type_enum",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "reference_code",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "issuer",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "issue_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "valid_from",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "valid_to",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "covers_multiple_invoices",
-    "data_type": "boolean",
-    "format": "bool",
-    "type": "boolean",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "false"
-   },
-   {
-    "name": "status",
-    "data_type": "USER-DEFINED",
-    "format": "reference_status_enum",
-    "type": "reference_status_enum",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'Active'::reference_status_enum"
-   },
-   {
-    "name": "file_url",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "file_metadata",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "type": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "'{}'::jsonb"
-   },
-   {
-    "name": "notes",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "updated_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "created_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "billing_references_contract_id_fkey",
-    "source_table": "public.billing_references",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "billing_references_created_by_fkey",
-    "source_table": "public.billing_references",
-    "source_columns": [
-     "created_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "billing_references_holding_id_fkey",
-    "source_table": "public.billing_references",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reference_links_reference_id_fkey",
-    "source_table": "public.invoice_reference_links",
-    "source_columns": [
-     "reference_id"
-    ],
-    "target_table": "public.billing_references",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "reference_requests": {
-  "name": "public.reference_requests",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "reference_type",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "status",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "file_url",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "note",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "requested_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "received_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": []
- },
- "invoice_reference_links": {
-  "name": "public.invoice_reference_links",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "reference_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "linked_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "linked_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_reference_links_holding_id_fkey",
-    "source_table": "public.invoice_reference_links",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reference_links_invoice_id_fkey",
-    "source_table": "public.invoice_reference_links",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reference_links_linked_by_fkey",
-    "source_table": "public.invoice_reference_links",
-    "source_columns": [
-     "linked_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reference_links_reference_id_fkey",
-    "source_table": "public.invoice_reference_links",
-    "source_columns": [
-     "reference_id"
-    ],
-    "target_table": "public.billing_references",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "quantities": {
-  "name": "public.quantities",
-  "rls_enabled": true,
-  "rows": 252,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "contract_item_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "comment": "Holding propietario. Se auto-setea via trigger si es NULL en insert."
-   },
-   {
-    "name": "period",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "updatable"
-    ],
-    "comment": "Primer día del mes (YYYY-MM-01). Representa el mes completo. CHECK garantiza normalización."
-   },
-   {
-    "name": "unit_price",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Override de precio unitario para este período. NULL = usar contract_items.unit_price"
-   },
-   {
-    "name": "unit_of_measure",
-    "data_type": "character varying",
-    "format": "varchar",
-    "type": "character varying(32)",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "quantity",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,6)",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Override de cantidad para este período. NULL = usar contract_items.quantity. Permite 0 para suspensiones."
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "updated_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "created_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "notes",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "FK directo al contrato. Derivado de contract_items.contract_id. Permite joins y triggers RSM sin pasar por contract_items."
-   },
-   {
-    "name": "amount",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(15,2)",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Override del monto reconocido del período en moneda de contrato. Reemplaza el cálculo base (final_price / term_months) en recognized_period_contract_ccy para este mes únicamente. NULL = usar cálculo base del contrato."
-   },
-   {
-    "name": "salesforce_opportunity_id",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "ID de la Opportunity en Salesforce asociada a este registro de quantities."
-   },
-   {
-    "name": "salesforce_line_item_id",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "ID del Line Item en Salesforce asociado a este registro de quantities."
-   },
-   {
-    "name": "account",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "comment": "Cuenta contable proveniente del DWH (campo account_name en finance.sapira).\n Texto libre, se almacena tal como llega del DWH sin mapeo adicional."
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "quantities_contract_id_fkey",
-    "source_table": "public.quantities",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "quantities_contract_item_id_fkey",
-    "source_table": "public.quantities",
-    "source_columns": [
-     "contract_item_id"
-    ],
-    "target_table": "public.contract_items",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "quantities_created_by_fkey",
-    "source_table": "public.quantities",
-    "source_columns": [
-     "created_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "quantities_holding_id_fkey",
-    "source_table": "public.quantities",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "sapira_quantity_imports_quantity_id_fkey",
-    "source_table": "public.sapira_quantity_imports",
-    "source_columns": [
-     "quantity_id"
-    ],
-    "target_table": "public.quantities",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_restructure_log": {
-  "name": "public.invoice_restructure_log",
-  "rls_enabled": true,
-  "rows": 312,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "contract_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "actor_user_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "action",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "payload",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "type": "jsonb",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_restructure_log_actor_user_id_fkey",
-    "source_table": "public.invoice_restructure_log",
-    "source_columns": [
-     "actor_user_id"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_restructure_log_contract_id_fkey",
-    "source_table": "public.invoice_restructure_log",
-    "source_columns": [
-     "contract_id"
-    ],
-    "target_table": "public.contracts",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_reschedules": {
-  "name": "public.invoice_reschedules",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "old_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "new_date",
-    "data_type": "date",
-    "format": "date",
-    "type": "date",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "reason",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "changed_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "changed_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_reschedules_changed_by_fkey",
-    "source_table": "public.invoice_reschedules",
-    "source_columns": [
-     "changed_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reschedules_holding_id_fkey",
-    "source_table": "public.invoice_reschedules",
-    "source_columns": [
-     "holding_id"
-    ],
-    "target_table": "public.company_holdings",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_reschedules_invoice_id_fkey",
-    "source_table": "public.invoice_reschedules",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_adjustments": {
-  "name": "public.invoice_adjustments",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "type",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "amount_diff",
-    "data_type": "numeric",
-    "format": "numeric",
-    "type": "numeric(18,2)",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "notes",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "adjusted_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "adjusted_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_adjustments_adjusted_by_fkey",
-    "source_table": "public.invoice_adjustments",
-    "source_columns": [
-     "adjusted_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_adjustments_invoice_id_fkey",
-    "source_table": "public.invoice_adjustments",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_emails": {
-  "name": "public.invoice_emails",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "template",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "recipient",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "subject",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "message",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "sent_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "sent_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_emails_invoice_id_fkey",
-    "source_table": "public.invoice_emails",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_emails_sent_by_fkey",
-    "source_table": "public.invoice_emails",
-    "source_columns": [
-     "sent_by"
-    ],
-    "target_table": "public.users",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_collection_settings": {
-  "name": "public.invoice_collection_settings",
-  "rls_enabled": true,
-  "rows": 1,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "dunning_enabled",
-    "data_type": "boolean",
-    "format": "bool",
-    "type": "boolean",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "true"
-   },
-   {
-    "name": "email_from",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "bcc",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "reminder_days_before",
-    "data_type": "ARRAY",
-    "format": "_int4",
-    "type": "integer[]",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'{7,3,1}'::integer[]"
-   },
-   {
-    "name": "reminder_days_after",
-    "data_type": "ARRAY",
-    "format": "_int4",
-    "type": "integer[]",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'{1,7,15}'::integer[]"
-   },
-   {
-    "name": "email_subject_template",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'Recordatorio de pago factura {{invoice_number}}'::text"
-   },
-   {
-    "name": "email_body_template",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'Estimado {{client_name}},\\n\\nLe recordamos que la factura {{invoice_number}} por {{amount_due}} vence el {{due_date}}.\\n\\nSaludos,\\n{{company_name}}'::text"
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "updated_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": []
- },
- "invoice_collection_logs": {
-  "name": "public.invoice_collection_logs",
-  "rls_enabled": true,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "invoice_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "recipients",
-    "data_type": "ARRAY",
-    "format": "_text",
-    "type": "text[]",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "subject",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "message",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "channel",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'email'::text"
-   },
-   {
-    "name": "status",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'sent'::text"
-   },
-   {
-    "name": "sent_by",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "sent_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "now()"
-   },
-   {
-    "name": "metadata",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "type": "jsonb",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "'{}'::jsonb"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": [
-   {
-    "name": "invoice_collection_logs_invoice_id_fkey",
-    "source_table": "public.invoice_collection_logs",
-    "source_columns": [
-     "invoice_id"
-    ],
-    "target_table": "public.invoices",
-    "target_columns": [
-     "id"
-    ]
-   }
-  ]
- },
- "invoice_trigger_debug_logs": {
-  "name": "public.invoice_trigger_debug_logs",
-  "rls_enabled": false,
-  "rows": 0,
-  "columns": [
-   {
-    "name": "id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "updatable"
-    ],
-    "default_value": "gen_random_uuid()"
-   },
-   {
-    "name": "trigger_name",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "operation",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "updatable"
-    ]
-   },
-   {
-    "name": "holding_id",
-    "data_type": "uuid",
-    "format": "uuid",
-    "type": "uuid",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "odoo_id",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "raw_data_sample",
-    "data_type": "jsonb",
-    "format": "jsonb",
-    "type": "jsonb",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "processing_status",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "integration_notes",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "error_message",
-    "data_type": "text",
-    "format": "text",
-    "type": "text",
-    "options": [
-     "nullable",
-     "updatable"
-    ]
-   },
-   {
-    "name": "created_at",
-    "data_type": "timestamp with time zone",
-    "format": "timestamptz",
-    "type": "timestamp with time zone",
-    "options": [
-     "nullable",
-     "updatable"
-    ],
-    "default_value": "now()"
-   }
-  ],
-  "primary_keys": [
-   "id"
-  ],
-  "foreign_key_constraints": []
- },
  "overdue_check_log": {
   "name": "public.overdue_check_log",
   "rls_enabled": true,
@@ -3475,6 +3015,718 @@
      "triggered_by"
     ],
     "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "quantities": {
+  "name": "public.quantities",
+  "rls_enabled": true,
+  "rows": 252,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Holding propietario. Se auto-setea via trigger si es NULL en insert."
+   },
+   {
+    "name": "period",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Primer día del mes (YYYY-MM-01). Representa el mes completo. CHECK garantiza normalización."
+   },
+   {
+    "name": "unit_price",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Override de precio unitario para este período. NULL = usar contract_items.unit_price"
+   },
+   {
+    "name": "unit_of_measure",
+    "data_type": "character varying",
+    "format": "varchar",
+    "type": "character varying(32)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Override de cantidad para este período. NULL = usar contract_items.quantity. Permite 0 para suspensiones."
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "FK directo al contrato. Derivado de contract_items.contract_id. Permite joins y triggers RSM sin pasar por contract_items."
+   },
+   {
+    "name": "amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(15,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Override del monto reconocido del período en moneda de contrato. Reemplaza el cálculo base (final_price / term_months) en recognized_period_contract_ccy para este mes únicamente. NULL = usar cálculo base del contrato."
+   },
+   {
+    "name": "salesforce_opportunity_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID de la Opportunity en Salesforce asociada a este registro de quantities."
+   },
+   {
+    "name": "salesforce_line_item_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del Line Item en Salesforce asociado a este registro de quantities."
+   },
+   {
+    "name": "account",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuenta contable proveniente del DWH (campo account_name en finance.sapira).\n Texto libre, se almacena tal como llega del DWH sin mapeo adicional."
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "quantities_contract_id_fkey",
+    "source_table": "public.quantities",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quantities_contract_item_id_fkey",
+    "source_table": "public.quantities",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quantities_created_by_fkey",
+    "source_table": "public.quantities",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quantities_holding_id_fkey",
+    "source_table": "public.quantities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "sapira_quantity_imports_quantity_id_fkey",
+    "source_table": "public.sapira_quantity_imports",
+    "source_columns": [
+     "quantity_id"
+    ],
+    "target_table": "public.quantities",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "reference_requests": {
+  "name": "public.reference_requests",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reference_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "file_url",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "note",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "requested_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "received_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": []
+ },
+ "sapira_quantity_imports": {
+  "name": "public.sapira_quantity_imports",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "sf_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "billing_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "product",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "period",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_price",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_of_measure",
+    "data_type": "character varying",
+    "format": "varchar",
+    "type": "character varying(32)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "account",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "gross_local_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "business_name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "entity_name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "tin",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "country",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "dwh_status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "sapira_contract_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "sapira_contract_item_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "quote_line_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "opportunity_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resolved_contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resolved_contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resolution_source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cómo se resolvió contract_item_id: sapira_ids (IDs Sapira del DWH) o salesforce_ids (quote_line_id → contract_items.quote_item_number)."
+   },
+   {
+    "name": "integration_status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "comment": "pending | integrated | no_quantity_data | unmapped | not_variable | currency_mismatch | blocked | ambiguous | conflict | changed_in_source"
+   },
+   {
+    "name": "integration_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "quantity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "FK a la fila de quantities creada por esta importación. Es el vínculo de trazabilidad DWH ↔ quantities."
+   },
+   {
+    "name": "source_hash",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "synced_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "integrated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "sapira_quantity_imports_contract_item_id_fkey",
+    "source_table": "public.sapira_quantity_imports",
+    "source_columns": [
+     "resolved_contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "sapira_quantity_imports_holding_id_fkey",
+    "source_table": "public.sapira_quantity_imports",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "sapira_quantity_imports_quantity_id_fkey",
+    "source_table": "public.sapira_quantity_imports",
+    "source_columns": [
+     "quantity_id"
+    ],
+    "target_table": "public.quantities",
     "target_columns": [
      "id"
     ]

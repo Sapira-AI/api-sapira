@@ -3,7 +3,7 @@ import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } 
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
- * Espejo de `public.contract_change_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 886 filas · RLS on.
+ * Espejo de `public.contract_change_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1030 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Audit log de cambios en contracts para contratos post-firma. Mantiene historial inmutable de qué/quién/cuándo/por qué.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

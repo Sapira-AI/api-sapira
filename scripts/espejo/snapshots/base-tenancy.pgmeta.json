@@ -810,7 +810,7 @@
  "user_holdings": {
   "name": "public.user_holdings",
   "rls_enabled": true,
-  "rows": 37,
+  "rows": 38,
   "columns": [
    {
     "name": "user_id",

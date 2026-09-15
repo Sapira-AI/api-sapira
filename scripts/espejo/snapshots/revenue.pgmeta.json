@@ -2,7 +2,7 @@
  "revenue_schedule_monthly": {
   "name": "public.revenue_schedule_monthly",
   "rls_enabled": true,
-  "rows": 19514,
+  "rows": 20144,
   "columns": [
    {
     "name": "id",
@@ -1099,7 +1099,7 @@
  "accounting_period_events": {
   "name": "public.accounting_period_events",
   "rls_enabled": true,
-  "rows": 14,
+  "rows": 15,
   "columns": [
    {
     "name": "id",

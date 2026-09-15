@@ -5,7 +5,7 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 /**
- * Espejo de `public.invoice_reschedules` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
+ * Espejo de `public.invoice_reschedules` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.

@@ -229,8 +229,8 @@
      "nullable",
      "updatable"
     ],
-    "default_value": "'pending'::text",
-    "comment": "Estado del procesamiento: pending, processed, error"
+    "default_value": "'create'::text",
+    "comment": "Estado del procesamiento: create, update, processed, error"
    },
    {
     "name": "integration_batch_id",
@@ -422,7 +422,8 @@
      "nullable",
      "updatable"
     ],
-    "default_value": "'pending'::text"
+    "default_value": "'create'::text",
+    "comment": "Estado del procesamiento: create, update, processed, error"
    },
    {
     "name": "integration_batch_id",

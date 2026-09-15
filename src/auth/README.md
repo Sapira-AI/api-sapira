@@ -1,5 +1,16 @@
 # Autenticación con Supabase
 
+## Endpoints públicos (reCAPTCHA Enterprise)
+
+No requieren Bearer. Las claves secretas viven solo en `api-sapira`.
+
+| Método | Ruta | Uso |
+|--------|------|-----|
+| `GET` | `/auth/public-config` | `{ recaptcha: { enabled, siteKey } }` para login y forms públicos |
+| `POST` | `/auth/recaptcha/verify` | Body `{ token, action }`. Acciones: `LOGIN`, `public_lead` |
+
+Variables: `GOOGLE_RECAPTCHA_API_KEY`, `GOOGLE_RECAPTCHA_PROJECT_ID`, `GOOGLE_RECAPTCHA_SITE_KEY`, `RECAPTCHA_MIN_SCORE` (default `0.5`), `RECAPTCHA_ENABLED` (si es `false`, o si faltan las tres claves, se omite la validación). Hostnames permitidos: `localhost`, `127.0.0.1`, `www.aisapira.com`, `app.aisapira.com`, `aisapira.com` y los hosts de `FRONT_BASE_URL`.
+
 Esta implementación permite validar tokens JWT generados por Supabase en tu backend NestJS.
 
 ## Configuración
