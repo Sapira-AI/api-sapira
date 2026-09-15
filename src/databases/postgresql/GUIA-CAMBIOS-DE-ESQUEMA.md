@@ -81,7 +81,7 @@ Los permisos viven en `public.permissions` y se asignan por rol en `public.role_
    - Backfill de `role_permissions` para holdings existentes (roles que ya tenían permisos equivalentes).
 2. **Constante en los fronts** si el permiso controla un ítem de navegación (`lib/sapira-permissions.ts` en Next, `permission` en `navigation-config.ts` en Vite).
 3. **Holdings nuevos**: edita `functions/create_default_roles_for_holding.sql` **en su lugar**, agregando el permiso a los roles que correspondan. El runner re-aplica un asset de `functions/` que cambió (ver abajo): no crees un archivo nuevo.
-4. Aplica con `yarn postgres:assets --apply --only seed/<archivo>.sql --target qa` y luego el asset de función.
+4. Aplica **primero el seed y después la función**, con `--only`, en el entorno que corresponda — ver [Elegir el entorno](#elegir-el-entorno-qa-o-producción).
 
 Ejemplo de referencia: `seed/002-view-documentacion-permission.sql` + el cambio de `VIEW_DOCUMENTACION` dentro de `functions/create_default_roles_for_holding.sql`.
 
@@ -98,6 +98,44 @@ Un archivo `.sql` por objeto, en su carpeta, y `yarn postgres:assets --apply --o
 
 > `--only` no es opcional mientras el runner no tenga historial en esa base: un `--apply` sin filtro
 > intentaría aplicar **los 885 assets**, incluidos triggers y policies que ya existen, y fallaría.
+
+### Elegir el entorno: QA o producción
+
+**`--target` no cambia a qué base te conectás.** Declara a cuál *creés* apuntar, y el runner aborta si
+no coincide con el project ref real de `SUPABASE_DATABASE_URL`. Se cambia de entorno cambiando la
+conexión.
+
+**Producción** está declarada en el código (`connection-target.ts`); solo exige las confirmaciones:
+
+```bash
+yarn postgres:assets --apply --only <ruta> \
+  --target production --allow-production --confirm-target production
+```
+
+**Cualquier otro entorno** se opera con un archivo de conexión de dos líneas, no con un `.env`
+completo. Ejemplo `.env.qa.db` (ignorado por git, como todo `.env*`):
+
+```bash
+SUPABASE_DATABASE_URL=postgresql://postgres.<ref-qa>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+SUPABASE_PROJECT_ENVIRONMENTS={"<ref-qa>":"qa"}
+```
+
+```bash
+DOTENV_CONFIG_PATH=.env.qa.db yarn postgres:assets --apply --only <ruta> --target qa
+```
+
+Funciona con todos los scripts de esquema —`postgres:assets`, `migration:*`, `schema:log`,
+`schema:audit`, `schema:verify-policies`— porque todos cargan `dotenv/config`.
+
+| Por qué un archivo de dos líneas y no un `.env.qa` | |
+|---|---|
+| Duplicar el `.env` copia ~40 secretos (`ENCRYPTION_KEY`, `STRIPE_SECRET_KEY`, `SUPABASE_JWT_SECRET`…) que estos comandos no usan | si se filtra, comprometés una base, no el stack |
+| `DOTENV_CONFIG_PATH` **reemplaza** a `.env`, no lo mezcla | por eso dos variables alcanzan |
+| No sirve para levantar la app: el `ConfigModule` de Nest no lee esa variable | no pretende hacerlo |
+
+> ⚠️ **Si la base de destino está vacía, los assets no alcanzan.** Un seed que inserta en
+> `public.permissions` falla si la tabla no existe. Levantar el esquema desde cero en una base nueva
+> no está probado todavía; el camino confiable para QA hoy es un clon o restore de producción.
 
 ### Promover un espejo
 
