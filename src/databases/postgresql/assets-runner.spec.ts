@@ -156,13 +156,24 @@ describe('Corpus de assets SQL', () => {
 		//
 		// Antes esto miraba el directorio `tables/`, que dejó de existir cuando las tablas pasaron
 		// a definirse por entity: la guarda pasaba sin verificar nada.
+		// Solo se mira el `up()`: un `down()` que restaura una tabla borrada tiene que devolverla al
+		// estado que tenía, y si esa tabla no tenía RLS, exigírselo sería restaurarla mal.
+		const cuerpoDelUp = (source: string): string => {
+			const desde = source.indexOf('async up(');
+			if (desde < 0) return '';
+			const hasta = source.indexOf('async down(', desde);
+			return source.slice(desde, hasta < 0 ? undefined : hasta);
+		};
+
 		const migrationsDir = path.join(assetsRoot, 'migrations');
 		const sinRls = fs
 			.readdirSync(migrationsDir)
 			.filter((file) => file.endsWith('.ts'))
 			.map((file) => path.join('migrations', file))
-			.filter((file) => /CREATE\s+TABLE/i.test(sinComentarios(read(file))))
-			.filter((file) => !/ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(read(file)));
+			.map((file) => ({ file, up: cuerpoDelUp(read(file)) }))
+			.filter(({ up }) => /CREATE\s+TABLE/i.test(sinComentarios(up)))
+			.filter(({ up }) => !/ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(up))
+			.map(({ file }) => file);
 
 		expect(sinRls).toEqual([]);
 	});
@@ -227,5 +238,31 @@ describe('Corpus de assets SQL', () => {
 			.filter((file) => /CREATE\s+(TYPE|EXTENSION)/i.test(read(file)));
 
 		expect(fueraDeFase).toEqual([]);
+	});
+
+	it('las tablas deny-all por diseño no reciben policies', () => {
+		// Estas cuatro tienen RLS activo y CERO policies en producción, y eso es correcto, no un
+		// descuido: para anon y authenticated son deny-all, que es el estado más cerrado posible.
+		// Verificado el 2026-09-14: ninguna tiene consumidor `supabase-js`; `claude_skills` no tiene
+		// consumidor en absoluto; y las tres de SII las usa `modules/sii/sii.service.ts` con
+		// repositorios TypeORM, es decir con un rol que tiene BYPASSRLS. `sii_certificates` guarda
+		// `key_vault_secret_name` y `thumbprint`: metadata de credenciales tributarias.
+		//
+		// La guarda existe porque el linter de Supabase reporta "RLS enabled, no policy" como
+		// hallazgo, y la reacción natural es escribir una policy — que acá sería AMPLIAR acceso que
+		// nadie pidió, sobre tablas de secretos.
+		//
+		// Si algún día aparece un consumidor `supabase-js`, se quita la tabla de esta lista y la
+		// policy es `tenant_isolation_select_<tabla>`; para `sii_certificates` y `sii_cafs`, que no
+		// tienen holding_id, va vía `EXISTS` sobre `sii_configurations.holding_id`, con
+		// `get_current_user_holding_id()` y no con la versión pesada `get_user_holding_id()`.
+		const TABLAS_DENY_ALL_POR_DISENO = ['claude_skills', 'sii_cafs', 'sii_certificates', 'sii_configurations'];
+
+		const ofensores = listSql('rls').filter((file) => {
+			const contenido = sinComentarios(read(file));
+			return TABLAS_DENY_ALL_POR_DISENO.some((tabla) => new RegExp(`\\b${tabla}\\b`).test(contenido));
+		});
+
+		expect(ofensores).toEqual([]);
 	});
 });

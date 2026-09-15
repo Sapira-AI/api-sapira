@@ -9,7 +9,7 @@ import { SubscriptionItem } from '../suscripciones/subscription-item.entity';
 import { Subscription } from '../suscripciones/subscription.entity';
 
 /**
- * Espejo de `public.revenue_schedule_monthly` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 19514 filas · RLS on.
+ * Espejo de `public.revenue_schedule_monthly` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 20144 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule(); update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at().

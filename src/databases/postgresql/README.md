@@ -247,6 +247,14 @@ algo que debía existir. Funciones huérfanas: `calculate_monthly_avg_fx`,
 `set_invoice_processing_status`, `trigger_revenue_schedule_on_credit_note`, `trigger_rsm_on_churn`,
 `update_monthly_avg_on_rate_change`.
 
+> ⚠️ **Confirmado el 2026-09-14, y con consecuencia.** `set_invoice_processing_status` y
+> `classify_invoice_line_before_insert` están efectivamente ausentes de producción: las tablas
+> `odoo_invoices_stg` y `odoo_invoice_lines_stg` tienen **un solo trigger cada una**, el de
+> `updated_at`. El comentario de la migración `AlignStagingProcessingStatusDefault` afirmaba lo
+> contrario y basaba en eso su análisis de riesgo — se había escrito leyendo el corpus en vez de la
+> base. Ya está corregido. **Las otras 5 funciones huérfanas merecen la misma verificación antes de
+> usarlas como premisa de cualquier razonamiento.**
+
 **1b. `integration_logs` está sin uso desde el 2026-04-27** (verificado en producción el 2026-09-09).
 1378 filas históricas, **0 escrituras en los últimos 30 días**. Los logs de integración se migraron a
 MongoDB: `OdooIntegrationLogService` y `StripeIntegrationLogService` están inyectados en
@@ -258,14 +266,29 @@ front no la menciona. Lo único que la referencia son 6 funciones SQL que hacen 
 ninguno de los dos repos**. Pendiente: confirmar que nadie las ejecuta a mano antes de eliminar la
 tabla, sus 2 policies, 7 índices y 3 FKs.
 
-**1d. Auditoría de objetos sin uso — pendiente.** Con `yarn schema:audit` (ver más abajo):
-- **`cleanup_duplicate_partners_by_vat` y `cleanup_duplicate_pending_records`**: sin referencias
-  aparentes, pero **no dejan rastro** al ejecutarse (no escriben en ninguna tabla de log) y **no están
-  rotas**, así que no hay dato que pruebe que no corren. Auditar antes de decidir.
+**1d. Auditoría de objetos sin uso — parcialmente resuelta el 2026-09-14.**
+- ✅ **`cleanup_duplicate_pending_records`: eliminada.** No hacía falta auditarla: borra
+  `WHERE processing_status = 'pending'` sobre una tabla cuyo CHECK no admite ese valor (verificado:
+  0 filas con él). Era un **no-op estructural** — no podía borrar nada y nunca pudo.
+- 🟡 **`cleanup_duplicate_partners_by_vat`: en ventana de observación.** Sí borra filas de forma
+  irreversible y sin log, y su `EXECUTE` estaba concedido a **PUBLIC** —o sea invocable con la anon
+  key—, porque es el default de `CREATE FUNCTION`. Se revocó con
+  `grants/010-cleanup-functions-execute.sql`; ahora solo `postgres` y `service_role`. **El REVOKE es
+  lo que fabrica la evidencia que `track_functions = 'none'` impide obtener**: durante la ventana,
+  cualquier caller real aparece como un 42501 en los logs de PostgREST. Cerrada la ventana sin
+  incidentes, va el `DROP` en una migración con `down()` que la recrea.
+  Nota para cuando llegue: **está mal escrita, no solo sin uso** — agrupa solo por
+  `raw_data->>'vat'`, así que dos partners legítimamente distintos con el mismo VAT (matriz y
+  sucursal) se tratan como duplicados y se pierde el más antiguo.
   ⚠️ Su hermana `cleanup_old_processed_records` **sí se usa**: el front la invoca con
-  `supabase.rpc()` desde `OdooIntegrationClientes.tsx`. No eliminar.
-- **Barrido `--unused-tables`**: ninguna tabla se ha revisado con `seq_scan + idx_scan = 0`, que es la
-  señal más fuerte (prueba que la tabla nunca se leyó desde el reinicio de estadísticas, hace 490 días).
+  `supabase.rpc()` desde `OdooIntegrationClientes.tsx`. No eliminar, y su GRANT quedó intacto.
+- ⚠️ **El `EXECUTE` a PUBLIC lo tienen las 458 funciones de `public`**: es el default de
+  `CREATE FUNCTION`, no una anomalía de estas dos. Endurecerlo en bloque
+  (`REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC`) es un cambio aparte con su propia
+  prueba; no rompería las 64 que el front llama por rpc, porque `anon` y `authenticated` tienen el
+  `EXECUTE` también de forma explícita.
+- **Barrido `--unused-tables`**: pendiente. `seq_scan + idx_scan = 0` es la señal más fuerte — prueba
+  que la tabla nunca se leyó desde el reinicio de estadísticas (`stats_reset` = 2025-05-06).
 - **`track_functions` está en `none`**, así que `pg_stat_user_functions` no tiene datos. Activarlo
   (`ALTER DATABASE postgres SET track_functions = 'pl'`) daría certeza positiva sobre funciones en
   unas semanas.
@@ -279,16 +302,48 @@ SECURITY`**, `CREATE INDEX`, `CREATE`/`DROP POLICY`. Hoy es **código muerto** (
 ningún módulo y nadie importa `configs/rls-configurations.ts`), pero contradice que el runner sea el
 único mecanismo de DDL y contiene un camino para apagar RLS. Candidato a eliminar.
 
-**2. Siete tablas sin RLS, con `GRANT` completo a `anon`.** Los permisos son uniformes en las 132
-tablas: `ALL PRIVILEGES` para `anon`, `authenticated`, `postgres` y `service_role`. La contención la
-hace RLS, no el GRANT — y estas siete no tienen RLS ni policies:
-`client_entity_tax_id_normalization_conflicts`, `generic_export_vats`, `indicadores_economicos`,
-`invoice_trigger_debug_logs`, `odoo_product_mappings`, `stripe_product_mappings`, `stripe_sync_jobs`.
-Sobre ellas no hay ninguna capa de contención. Activar RLS es un cambio de comportamiento en
-producción y puede romper lecturas legítimas del front: requiere revisar caso por caso.
+**2. Tablas sin RLS, con `GRANT` completo a `anon`** — ✅ **resuelto el 2026-09-14. Las 131 tablas de
+`public` tienen RLS.**
+
+Los permisos son uniformes: `ALL PRIVILEGES` para `anon`, `authenticated`, `postgres` y
+`service_role`, así que la contención la hace RLS y no el GRANT. Eran 9 las tablas sin ninguna capa:
+las 7 conocidas más `sapira_sql_asset_history` y `sapira_typeorm_migrations` —las del propio tooling,
+con `INSERT/UPDATE/DELETE/TRUNCATE` abiertos a `anon`, o sea el registro con el que se decide qué
+aplicar—. Medido con la anon key: las 9 devolvían filas por PostgREST.
+
+Se resolvió con `1789041000000-HabilitaRlsEnTablasSinContencion` (8 tablas; la novena,
+`invoice_trigger_debug_logs`, se eliminó en `RetiraObjetosDebugMuertos`). Seis quedan **deny-all a
+propósito** —ningún consumidor `supabase-js`, solo el backend, que tiene `rolbypassrls`— y los dos
+catálogos globales llevan policy de lectura `TO authenticated`
+(`rls/generic_export_vats_select_active.sql`, `rls/indicadores_economicos_select.sql`).
+
+> **No podía romper el backend, y es medición y no suposición**: el rol de la conexión es `postgres`
+> con `rolbypassrls = true`, y ya convivía con `FORCE ROW LEVEL SECURITY` en `invoices`, `products` y
+> `workflow_step_documents` —`FORCE` somete incluso al dueño de la tabla a sus propias policies— sin
+> ningún problema. Verificado además antes de aplicar con `yarn schema:verify-policies`, que simula
+> la identidad de dos usuarios reales de holdings distintos dentro de una transacción de solo lectura.
 
 **3. Cuatro tablas con RLS activo y cero policies** (`claude_skills`, `sii_cafs`, `sii_certificates`,
-`sii_configurations`): solo accesibles por `service_role`. Verificar si es intencional.
+`sii_configurations`) — ✅ **verificado el 2026-09-14: es intencional y correcto. No es una deuda.**
+
+RLS activo sin policies no es una tabla desprotegida: es **deny-all**. Para `anon` y `authenticated`,
+`SELECT`/`INSERT`/`UPDATE`/`DELETE` devuelven cero o se rechazan. Son las cuatro tablas más cerradas
+del esquema, y el estado corresponde con sus consumidores: ninguna tiene consumidor `supabase-js`;
+`claude_skills` no tiene consumidor en absoluto (2 filas, sin entity viva); y las tres de SII las usa
+solo `modules/sii/sii.service.ts` con repositorios TypeORM —o sea con el rol `postgres`, que tiene
+`rolbypassrls`— y ya filtra por holding en la capa de aplicación. `sii_certificates` guarda
+`key_vault_secret_name` y `thumbprint`: metadata de credenciales tributarias.
+
+> 🚫 **Escribirles una policy sería ampliar acceso que nadie pidió, sobre tablas de secretos.** El
+> linter de Supabase reporta «RLS enabled, no policy» como hallazgo y la reacción natural es
+> «arreglarlo». `assets-runner.spec.ts` → *las tablas deny-all por diseño no reciben policies* falla
+> si aparece un archivo en `rls/` que las mencione.
+>
+> Condición de reapertura: si aparece un consumidor `supabase-js`, se quita la tabla de esa lista y la
+> policy es `tenant_isolation_select_<tabla>`. Para `sii_certificates` y `sii_cafs`, que no tienen
+> `holding_id`, va vía `EXISTS` sobre `sii_configurations.holding_id`. Para `claude_skills` hay que
+> decidir antes qué significa su `holding_id` nullable —probablemente «skill global»—, y eso es una
+> decisión de producto, no de RLS.
 
 **4. Anomalías de FK heredadas de producción.** Se replican tal cual; corregirlas es decisión de
 negocio y va en su propio cambio:

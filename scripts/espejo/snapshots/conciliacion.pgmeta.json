@@ -2,7 +2,7 @@
  "bank_movements": {
   "name": "public.bank_movements",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 158,
   "columns": [
    {
     "name": "id",
@@ -283,7 +283,7 @@
  "bank_upload_batches": {
   "name": "public.bank_upload_batches",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 10,
   "columns": [
    {
     "name": "id",

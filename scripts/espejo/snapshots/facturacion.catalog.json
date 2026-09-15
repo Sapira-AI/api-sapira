@@ -61,187 +61,52 @@
    "value_mapping"
   ]
  },
- "invoices": {
-  "comment": "Tabla de facturas del sistema. \nIMPORTANTE: tax_rate se auto-completa desde companies.tax_rate en formato decimal (0.19 = 19%).",
+ "billing_references": {
+  "comment": null,
   "rls": true,
-  "rls_forced": true,
-  "columns": {
-   "amount_contract_currency": {
-    "precision": 18,
-    "scale": 6
-   }
-  },
+  "rls_forced": false,
+  "columns": {},
   "constraints": [
    {
-    "name": "fk_invoices_holding_id",
+    "name": "billing_references_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "billing_references_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "billing_references_holding_id_fkey",
     "type": "f",
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
-    "name": "invoices_client_entity_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id)"
-   },
-   {
-    "name": "invoices_client_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (client_id) REFERENCES clients(id)"
-   },
-   {
-    "name": "invoices_company_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
-   },
-   {
-    "name": "invoices_consolidated_into_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "n",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (consolidated_into_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
-   },
-   {
-    "name": "invoices_contract_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id)"
-   },
-   {
-    "name": "invoices_credit_reason_check",
-    "type": "c",
-    "expr": "(credit_reason IS NULL) OR (credit_reason = ANY (ARRAY['downsell'::text, 'churn'::text, 'reschedule'::text, 'issue_error'::text, 'prompt_payment_discount'::text, 'one_time_discount'::text, 'compensation'::text, 'other'::text]))"
-   },
-   {
-    "name": "invoices_credit_type_check",
-    "type": "c",
-    "expr": "(credit_type IS NULL) OR (credit_type = ANY (ARRAY['cancellation'::text, 'discount'::text]))"
-   },
-   {
-    "name": "invoices_document_type_check",
-    "type": "c",
-    "expr": "document_type = ANY (ARRAY['FACTURA'::text, 'NC'::text, 'ND'::text, 'FACTURA_EXPORTACION'::text, 'Invoice'::text])"
-   },
-   {
-    "name": "invoices_export_type_check",
-    "type": "c",
-    "expr": "export_type = ANY (ARRAY[0, 1])"
-   },
-   {
-    "name": "invoices_holding_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
-   },
-   {
-    "name": "invoices_invoice_type_check",
-    "type": "c",
-    "expr": "invoice_type = ANY (ARRAY['Manual'::text, 'Automatica'::text, 'Consolidada'::text, 'Importada'::text, 'Suscripción'::text, 'Unificada'::text])"
-   },
-   {
-    "name": "invoices_legacy_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "n",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (legacy_invoice_id) REFERENCES invoices_legacy(id) ON DELETE SET NULL"
-   },
-   {
-    "name": "invoices_nc_revenue_treatment_check",
-    "type": "c",
-    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))"
-   },
-   {
-    "name": "invoices_payment_method_check",
-    "type": "c",
-    "expr": "payment_method = ANY (ARRAY['CONTADO'::text, 'CREDITO'::text])"
-   },
-   {
-    "name": "invoices_pkey",
+    "name": "billing_references_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
-   },
-   {
-    "name": "invoices_related_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (related_invoice_id) REFERENCES invoices(id)"
-   },
-   {
-    "name": "invoices_split_from_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "n",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (split_from_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
-   },
-   {
-    "name": "invoices_status_check",
-    "type": "c",
-    "expr": "status = ANY (ARRAY['Por Emitir'::text, 'Emitida'::text, 'Enviada'::text, 'Pagada'::text, 'Vencida'::text, 'Cancelada'::text, 'Consolidada'::text, 'Dividida'::text])"
-   },
-   {
-    "name": "invoices_subscription_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)"
    }
   ],
   "indexes": [
    {
-    "name": "idx_invoices_active_contract_period",
+    "name": "idx_billing_references_contract",
     "cols": [
-     "contract_id",
-     "scheduled_at",
-     "is_active"
+     "contract_id"
     ],
     "unique": false,
-    "where": "is_active = true"
+    "where": null
    },
    {
-    "name": "idx_invoices_auto_invoice",
-    "cols": [
-     "auto_invoice",
-     "status"
-    ],
-    "unique": false,
-    "where": "auto_invoice = true"
-   },
-   {
-    "name": "idx_invoices_consolidated_into",
-    "cols": [
-     "consolidated_into_invoice_id"
-    ],
-    "unique": false,
-    "where": "consolidated_into_invoice_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_custom_fields",
-    "cols": null,
-    "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_invoices_custom_fields ON public.invoices USING gin (custom_fields)"
-   },
-   {
-    "name": "idx_invoices_group_id",
-    "cols": [
-     "invoice_group_id"
-    ],
-    "unique": false,
-    "where": "invoice_group_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_holding_id",
+    "name": "idx_billing_references_holding",
     "cols": [
      "holding_id"
     ],
@@ -249,134 +114,24 @@
     "where": null
    },
    {
-    "name": "idx_invoices_invoice_type",
+    "name": "idx_billing_references_status",
     "cols": [
-     "invoice_type"
+     "status"
     ],
     "unique": false,
     "where": null
-   },
-   {
-    "name": "idx_invoices_odoo_invoice_id",
-    "cols": [
-     "odoo_invoice_id"
-    ],
-    "unique": false,
-    "where": "odoo_invoice_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_overdue_check",
-    "cols": [
-     "due_date",
-     "status"
-    ],
-    "unique": false,
-    "where": "status = ANY (ARRAY['Enviada'::text, 'Emitida'::text])"
-   },
-   {
-    "name": "idx_invoices_related_invoice_id",
-    "cols": [
-     "related_invoice_id"
-    ],
-    "unique": false,
-    "where": "related_invoice_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_requires_references",
-    "cols": [
-     "requires_references_for_billing",
-     "status"
-    ],
-    "unique": false,
-    "where": "requires_references_for_billing = true"
-   },
-   {
-    "name": "idx_invoices_split_from",
-    "cols": [
-     "split_from_invoice_id"
-    ],
-    "unique": false,
-    "where": "split_from_invoice_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_stripe_id_holding_id",
-    "cols": [
-     "stripe_id",
-     "holding_id"
-    ],
-    "unique": false,
-    "where": "stripe_id IS NOT NULL"
-   },
-   {
-    "name": "idx_invoices_subscription_id",
-    "cols": [
-     "subscription_id"
-    ],
-    "unique": false,
-    "where": "subscription_id IS NOT NULL"
    }
   ],
-  "triggers": [
-   "invoices_fill_terms_from_contract_trigger · BEFORE INSERT FOR EACH ROW → invoices_fill_terms_from_contract()",
-   "trg_assign_invoice_group_id · BEFORE INSERT FOR EACH ROW → assign_invoice_group_id()",
-   "trg_rsm_on_invoice_change · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → trigger_rsm_on_invoice_change()",
-   "trigger_auto_populate_invoice_fx_to_system · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_invoice_fx_to_system()",
-   "trigger_auto_populate_invoice_tax_rate · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_invoice_tax_rate()",
-   "trigger_sync_invoice_items_on_invoice_update · AFTER UPDATE FOR EACH ROW → sync_invoice_items_on_invoice_update()"
-  ],
+  "triggers": [],
   "policies": [
-   "invoices_delete_access (DELETE, public)",
-   "invoices_holding_isolation (SELECT, public)",
-   "invoices_manage_access (INSERT, public)",
-   "invoices_update_access (UPDATE, public)",
-   "tenant_isolation_delete_invoices (DELETE, public)",
-   "tenant_isolation_insert_invoices (INSERT, public)",
-   "tenant_isolation_select_invoices (SELECT, public)",
-   "tenant_isolation_update_invoices (UPDATE, public)"
+   "tenant_isolation_delete_billing_references (DELETE, public)",
+   "tenant_isolation_insert_billing_references (INSERT, public)",
+   "tenant_isolation_select_billing_references (SELECT, public)",
+   "tenant_isolation_update_billing_references (UPDATE, public)"
   ],
   "policies_detail": [
    {
-    "name": "invoices_delete_access",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "DELETE",
-    "qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
-    "with_check": null
-   },
-   {
-    "name": "invoices_holding_isolation",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "((holding_id = get_current_user_holding_id()) AND (user_has_permission('VIEW_FACTURACION'::text) OR user_has_permission('EDIT_FACTURACION'::text)))",
-    "with_check": null
-   },
-   {
-    "name": "invoices_manage_access",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
-   },
-   {
-    "name": "invoices_update_access",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))",
-    "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
-   },
-   {
-    "name": "tenant_isolation_delete_invoices",
+    "name": "tenant_isolation_delete_billing_references",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -386,7 +141,7 @@
     "with_check": null
    },
    {
-    "name": "tenant_isolation_insert_invoices",
+    "name": "tenant_isolation_insert_billing_references",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -396,7 +151,7 @@
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
-    "name": "tenant_isolation_select_invoices",
+    "name": "tenant_isolation_select_billing_references",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -406,7 +161,403 @@
     "with_check": null
    },
    {
-    "name": "tenant_isolation_update_invoices",
+    "name": "tenant_isolation_update_billing_references",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_adjustments": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "amount_diff": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "invoice_adjustments_adjusted_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (adjusted_by) REFERENCES users(id)"
+   },
+   {
+    "name": "invoice_adjustments_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_adjustments_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_adjustments_type_check",
+    "type": "c",
+    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_adjustments_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_adjustments_invoice_id",
+    "cols": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_adjustments_type",
+    "cols": [
+     "type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_invoice_adjustments (DELETE, public)",
+   "tenant_isolation_insert_invoice_adjustments (INSERT, public)",
+   "tenant_isolation_select_invoice_adjustments (SELECT, public)",
+   "tenant_isolation_update_invoice_adjustments (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoice_adjustments",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoice_adjustments",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_adjustments",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_adjustments",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_collection_logs": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_collection_logs_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_collection_logs_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_collection_logs_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_collection_logs_invoice_id",
+    "cols": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_invoice_collection_logs (DELETE, public)",
+   "tenant_isolation_insert_invoice_collection_logs (INSERT, public)",
+   "tenant_isolation_select_invoice_collection_logs (SELECT, public)",
+   "tenant_isolation_update_invoice_collection_logs (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoice_collection_logs",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoice_collection_logs",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_collection_logs",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_collection_logs",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_collection_settings": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_collection_settings_holding_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id"
+    ]
+   },
+   {
+    "name": "invoice_collection_settings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_collection_settings_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()",
+   "trg_update_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_invoice_collection_settings (DELETE, public)",
+   "tenant_isolation_insert_invoice_collection_settings (INSERT, public)",
+   "tenant_isolation_select_invoice_collection_settings (SELECT, public)",
+   "tenant_isolation_update_invoice_collection_settings (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoice_collection_settings",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoice_collection_settings",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_collection_settings",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_collection_settings",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_emails": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_emails_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_emails_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_emails_sent_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (sent_by) REFERENCES users(id)"
+   },
+   {
+    "name": "invoice_emails_template_check",
+    "type": "c",
+    "expr": "template = ANY (ARRAY['proforma'::text, 'invoice'::text, 'reminder'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_emails_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_emails_invoice_id",
+    "cols": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_emails_template",
+    "cols": [
+     "template"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_delete_invoice_emails (DELETE, public)",
+   "tenant_isolation_insert_invoice_emails (INSERT, public)",
+   "tenant_isolation_select_invoice_emails (SELECT, public)",
+   "tenant_isolation_update_invoice_emails (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_invoice_emails",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_invoice_emails",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_emails",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_emails",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -791,6 +942,91 @@
    }
   ]
  },
+ "invoice_reference_links": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_reference_links_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_reference_links_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_reference_links_invoice_id_reference_id_key",
+    "type": "u",
+    "cols": [
+     "invoice_id",
+     "reference_id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_linked_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (linked_by) REFERENCES users(id)"
+   },
+   {
+    "name": "invoice_reference_links_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_reference_links_reference_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (reference_id) REFERENCES billing_references(id) ON DELETE CASCADE"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_reference_links_invoice",
+    "cols": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoice_reference_links_reference",
+    "cols": [
+     "reference_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tenant_isolation_invoice_reference_links (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_invoice_reference_links",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
  "invoice_references": {
   "comment": "Referencias cruzadas de documentos para facturacion electronica (SII DTE). Cada factura puede tener multiples referencias a OC, facturas previas, etc.",
   "rls": true,
@@ -889,35 +1125,35 @@
    }
   ]
  },
- "billing_references": {
+ "invoice_reschedules": {
   "comment": null,
   "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [
    {
-    "name": "billing_references_contract_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "billing_references_created_by_fkey",
+    "name": "invoice_reschedules_changed_by_fkey",
     "type": "f",
     "ondelete": "a",
     "onupdate": "a",
-    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+    "def": "FOREIGN KEY (changed_by) REFERENCES users(id)"
    },
    {
-    "name": "billing_references_holding_id_fkey",
+    "name": "invoice_reschedules_holding_id_fkey",
     "type": "f",
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
-    "name": "billing_references_pkey",
+    "name": "invoice_reschedules_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_reschedules_pkey",
     "type": "p",
     "cols": [
      "id"
@@ -926,25 +1162,9 @@
   ],
   "indexes": [
    {
-    "name": "idx_billing_references_contract",
+    "name": "idx_invoice_reschedules_invoice_id",
     "cols": [
-     "contract_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_billing_references_holding",
-    "cols": [
-     "holding_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_billing_references_status",
-    "cols": [
-     "status"
+     "invoice_id"
     ],
     "unique": false,
     "where": null
@@ -952,14 +1172,436 @@
   ],
   "triggers": [],
   "policies": [
-   "tenant_isolation_delete_billing_references (DELETE, public)",
-   "tenant_isolation_insert_billing_references (INSERT, public)",
-   "tenant_isolation_select_billing_references (SELECT, public)",
-   "tenant_isolation_update_billing_references (UPDATE, public)"
+   "tenant_isolation_insert_invoice_reschedules (INSERT, public)",
+   "tenant_isolation_select_invoice_reschedules (SELECT, public)",
+   "tenant_isolation_update_invoice_reschedules (UPDATE, public)"
   ],
   "policies_detail": [
    {
-    "name": "tenant_isolation_delete_billing_references",
+    "name": "tenant_isolation_insert_invoice_reschedules",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))"
+   },
+   {
+    "name": "tenant_isolation_select_invoice_reschedules",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_invoice_reschedules",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "with_check": null
+   }
+  ]
+ },
+ "invoice_restructure_log": {
+  "comment": null,
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_restructure_log_action_check",
+    "type": "c",
+    "expr": "action = ANY (ARRAY['update_item_descriptions'::text, 'update_terms'::text, 'reassign_entity'::text, 'restructure'::text, 'split'::text, 'merge'::text, 'item_sync'::text, 'item_delete_sync'::text])"
+   },
+   {
+    "name": "invoice_restructure_log_actor_user_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (actor_user_id) REFERENCES auth.users(id)"
+   },
+   {
+    "name": "invoice_restructure_log_contract_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id)"
+   },
+   {
+    "name": "invoice_restructure_log_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_restructure_log_contract",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_invoice_restructure_log_contract ON public.invoice_restructure_log USING btree (contract_id, created_at DESC)"
+   },
+   {
+    "name": "idx_invoice_restructure_log_holding_action",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_invoice_restructure_log_holding_action ON public.invoice_restructure_log USING btree (holding_id, action, created_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "restructure_log_insert (INSERT, public)",
+   "restructure_log_select (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "restructure_log_insert",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((holding_id = get_current_user_holding_id()) AND user_has_permission('EDIT_FACTURACION'::text))"
+   },
+   {
+    "name": "restructure_log_select",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (user_has_permission('VIEW_FACTURACION'::text) OR user_has_permission('EDIT_FACTURACION'::text)))",
+    "with_check": null
+   }
+  ]
+ },
+ "invoices": {
+  "comment": "Tabla de facturas del sistema. \nIMPORTANTE: tax_rate se auto-completa desde companies.tax_rate en formato decimal (0.19 = 19%).",
+  "rls": true,
+  "rls_forced": true,
+  "columns": {
+   "amount_contract_currency": {
+    "precision": 18,
+    "scale": 6
+   }
+  },
+  "constraints": [
+   {
+    "name": "fk_invoices_holding_id",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoices_client_entity_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id)"
+   },
+   {
+    "name": "invoices_client_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+   },
+   {
+    "name": "invoices_company_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+   },
+   {
+    "name": "invoices_consolidated_into_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (consolidated_into_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_contract_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id)"
+   },
+   {
+    "name": "invoices_credit_reason_check",
+    "type": "c",
+    "expr": "(credit_reason IS NULL) OR (credit_reason = ANY (ARRAY['downsell'::text, 'churn'::text, 'reschedule'::text, 'issue_error'::text, 'prompt_payment_discount'::text, 'one_time_discount'::text, 'compensation'::text, 'other'::text]))"
+   },
+   {
+    "name": "invoices_credit_type_check",
+    "type": "c",
+    "expr": "(credit_type IS NULL) OR (credit_type = ANY (ARRAY['cancellation'::text, 'discount'::text]))"
+   },
+   {
+    "name": "invoices_document_type_check",
+    "type": "c",
+    "expr": "document_type = ANY (ARRAY['FACTURA'::text, 'NC'::text, 'ND'::text, 'FACTURA_EXPORTACION'::text, 'Invoice'::text])"
+   },
+   {
+    "name": "invoices_export_type_check",
+    "type": "c",
+    "expr": "export_type = ANY (ARRAY[0, 1])"
+   },
+   {
+    "name": "invoices_holding_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id)"
+   },
+   {
+    "name": "invoices_invoice_type_check",
+    "type": "c",
+    "expr": "invoice_type = ANY (ARRAY['Manual'::text, 'Automatica'::text, 'Consolidada'::text, 'Importada'::text, 'Suscripción'::text, 'Unificada'::text])"
+   },
+   {
+    "name": "invoices_legacy_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (legacy_invoice_id) REFERENCES invoices_legacy(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_nc_revenue_treatment_check",
+    "type": "c",
+    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))"
+   },
+   {
+    "name": "invoices_payment_method_check",
+    "type": "c",
+    "expr": "payment_method = ANY (ARRAY['CONTADO'::text, 'CREDITO'::text])"
+   },
+   {
+    "name": "invoices_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoices_related_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (related_invoice_id) REFERENCES invoices(id)"
+   },
+   {
+    "name": "invoices_split_from_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (split_from_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "invoices_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['Por Emitir'::text, 'Emitida'::text, 'Enviada'::text, 'Pagada'::text, 'Vencida'::text, 'Cancelada'::text, 'Consolidada'::text, 'Dividida'::text])"
+   },
+   {
+    "name": "invoices_subscription_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoices_active_contract_period",
+    "cols": [
+     "contract_id",
+     "scheduled_at",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   },
+   {
+    "name": "idx_invoices_auto_invoice",
+    "cols": [
+     "auto_invoice",
+     "status"
+    ],
+    "unique": false,
+    "where": "auto_invoice = true"
+   },
+   {
+    "name": "idx_invoices_consolidated_into",
+    "cols": [
+     "consolidated_into_invoice_id"
+    ],
+    "unique": false,
+    "where": "consolidated_into_invoice_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_custom_fields",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_invoices_custom_fields ON public.invoices USING gin (custom_fields)"
+   },
+   {
+    "name": "idx_invoices_group_id",
+    "cols": [
+     "invoice_group_id"
+    ],
+    "unique": false,
+    "where": "invoice_group_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_invoice_type",
+    "cols": [
+     "invoice_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_invoices_odoo_invoice_id",
+    "cols": [
+     "odoo_invoice_id"
+    ],
+    "unique": false,
+    "where": "odoo_invoice_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_overdue_check",
+    "cols": [
+     "due_date",
+     "status"
+    ],
+    "unique": false,
+    "where": "status = ANY (ARRAY['Enviada'::text, 'Emitida'::text])"
+   },
+   {
+    "name": "idx_invoices_related_invoice_id",
+    "cols": [
+     "related_invoice_id"
+    ],
+    "unique": false,
+    "where": "related_invoice_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_requires_references",
+    "cols": [
+     "requires_references_for_billing",
+     "status"
+    ],
+    "unique": false,
+    "where": "requires_references_for_billing = true"
+   },
+   {
+    "name": "idx_invoices_split_from",
+    "cols": [
+     "split_from_invoice_id"
+    ],
+    "unique": false,
+    "where": "split_from_invoice_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_stripe_id_holding_id",
+    "cols": [
+     "stripe_id",
+     "holding_id"
+    ],
+    "unique": false,
+    "where": "stripe_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoices_subscription_id",
+    "cols": [
+     "subscription_id"
+    ],
+    "unique": false,
+    "where": "subscription_id IS NOT NULL"
+   }
+  ],
+  "triggers": [
+   "invoices_fill_terms_from_contract_trigger · BEFORE INSERT FOR EACH ROW → invoices_fill_terms_from_contract()",
+   "trg_assign_invoice_group_id · BEFORE INSERT FOR EACH ROW → assign_invoice_group_id()",
+   "trg_rsm_on_invoice_change · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → trigger_rsm_on_invoice_change()",
+   "trigger_auto_populate_invoice_fx_to_system · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_invoice_fx_to_system()",
+   "trigger_auto_populate_invoice_tax_rate · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_invoice_tax_rate()",
+   "trigger_sync_invoice_items_on_invoice_update · AFTER UPDATE FOR EACH ROW → sync_invoice_items_on_invoice_update()"
+  ],
+  "policies": [
+   "invoices_delete_access (DELETE, public)",
+   "invoices_holding_isolation (SELECT, public)",
+   "invoices_manage_access (INSERT, public)",
+   "invoices_update_access (UPDATE, public)",
+   "tenant_isolation_delete_invoices (DELETE, public)",
+   "tenant_isolation_insert_invoices (INSERT, public)",
+   "tenant_isolation_select_invoices (SELECT, public)",
+   "tenant_isolation_update_invoices (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "invoices_delete_access",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(is_holding_admin() AND (holding_id = get_current_user_holding_id()))",
+    "with_check": null
+   },
+   {
+    "name": "invoices_holding_isolation",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (user_has_permission('VIEW_FACTURACION'::text) OR user_has_permission('EDIT_FACTURACION'::text)))",
+    "with_check": null
+   },
+   {
+    "name": "invoices_manage_access",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "invoices_update_access",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))",
+    "with_check": "(user_has_permission('EDIT_FACTURACION'::text) AND (holding_id = get_current_user_holding_id()))"
+   },
+   {
+    "name": "tenant_isolation_delete_invoices",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -969,7 +1611,7 @@
     "with_check": null
    },
    {
-    "name": "tenant_isolation_insert_billing_references",
+    "name": "tenant_isolation_insert_invoices",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -979,7 +1621,7 @@
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
-    "name": "tenant_isolation_select_billing_references",
+    "name": "tenant_isolation_select_invoices",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -989,7 +1631,7 @@
     "with_check": null
    },
    {
-    "name": "tenant_isolation_update_billing_references",
+    "name": "tenant_isolation_update_invoices",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
@@ -1000,151 +1642,126 @@
    }
   ]
  },
- "reference_requests": {
-  "comment": null,
+ "overdue_check_log": {
+  "comment": "Registro de ejecuciones de la verificación automática de facturas vencidas. \n   Tabla de auditoría del sistema con RLS habilitado. \n   holding_id NULL indica ejecución global que afecta múltiples holdings.",
   "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [
    {
-    "name": "reference_requests_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
-    "name": "reference_requests_reference_type_check",
-    "type": "c",
-    "expr": "reference_type = ANY (ARRAY['OC'::text, 'HES'::text, 'Aceptación'::text])"
-   },
-   {
-    "name": "reference_requests_status_check",
-    "type": "c",
-    "expr": "status = ANY (ARRAY['requested'::text, 'received'::text, 'rejected'::text])"
-   }
-  ],
-  "indexes": [
-   {
-    "name": "reference_requests_holding_idx",
-    "cols": [
-     "holding_id",
-     "contract_id",
-     "invoice_id"
-    ],
-    "unique": false,
-    "where": null
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "Reference requests - manage own holding (ALL, public)",
-   "Reference requests - select own holding (SELECT, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "Reference requests - manage own holding",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "ALL",
-    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
-    "with_check": null
-   },
-   {
-    "name": "Reference requests - select own holding",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
-    "with_check": null
-   }
-  ]
- },
- "invoice_reference_links": {
-  "comment": null,
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_reference_links_holding_id_fkey",
+    "name": "overdue_check_log_holding_id_fkey",
     "type": "f",
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
-    "name": "invoice_reference_links_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "invoice_reference_links_invoice_id_reference_id_key",
-    "type": "u",
-    "cols": [
-     "invoice_id",
-     "reference_id"
-    ]
-   },
-   {
-    "name": "invoice_reference_links_linked_by_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (linked_by) REFERENCES users(id)"
-   },
-   {
-    "name": "invoice_reference_links_pkey",
+    "name": "overdue_check_log_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
    },
    {
-    "name": "invoice_reference_links_reference_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (reference_id) REFERENCES billing_references(id) ON DELETE CASCADE"
+    "name": "overdue_check_log_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text])"
    }
   ],
   "indexes": [
    {
-    "name": "idx_invoice_reference_links_invoice",
-    "cols": [
-     "invoice_id"
-    ],
+    "name": "idx_overdue_check_log_date",
+    "cols": null,
     "unique": false,
-    "where": null
+    "where": null,
+    "expr": "CREATE INDEX idx_overdue_check_log_date ON public.overdue_check_log USING btree (check_date DESC)"
    },
    {
-    "name": "idx_invoice_reference_links_reference",
-    "cols": [
-     "reference_id"
-    ],
+    "name": "idx_overdue_check_log_holding_id",
+    "cols": null,
     "unique": false,
-    "where": null
+    "where": null,
+    "expr": "CREATE INDEX idx_overdue_check_log_holding_id ON public.overdue_check_log USING btree (holding_id, created_at DESC)"
+   },
+   {
+    "name": "idx_overdue_check_log_status",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_overdue_check_log_status ON public.overdue_check_log USING btree (status, created_at DESC)"
    }
   ],
   "triggers": [],
   "policies": [
-   "tenant_isolation_invoice_reference_links (ALL, public)"
+   "Service role can manage all overdue check logs (ALL, service_role)",
+   "Users can view overdue check logs from their holding (SELECT, authenticated)"
   ],
   "policies_detail": [
    {
-    "name": "tenant_isolation_invoice_reference_links",
+    "name": "Service role can manage all overdue check logs",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "service_role"
+    ],
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true"
+   },
+   {
+    "name": "Users can view overdue check logs from their holding",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) OR (holding_id IS NULL))",
+    "with_check": null
+   }
+  ]
+ },
+ "period_guard_warnings": {
+  "comment": "Registro de operaciones que el guard de cierre de períodos hubiera bloqueado, durante el modo \"warn\" del soft launch.",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "period_guard_warnings_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "period_guard_warnings_triggered_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (triggered_by) REFERENCES users(id) ON DELETE SET NULL"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_pgw_company_time",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX idx_pgw_company_time ON public.period_guard_warnings USING btree (holding_id, company_id, occurred_at DESC)"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "pgw_select (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "pgw_select",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "cmd": "ALL",
-    "qual": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
     "with_check": null
    }
   ]
@@ -1313,122 +1930,36 @@
    }
   ]
  },
- "invoice_restructure_log": {
+ "reference_requests": {
   "comment": null,
   "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [
    {
-    "name": "invoice_restructure_log_action_check",
+    "name": "reference_requests_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "reference_requests_reference_type_check",
     "type": "c",
-    "expr": "action = ANY (ARRAY['update_item_descriptions'::text, 'update_terms'::text, 'reassign_entity'::text, 'restructure'::text, 'split'::text, 'merge'::text, 'item_sync'::text, 'item_delete_sync'::text])"
+    "expr": "reference_type = ANY (ARRAY['OC'::text, 'HES'::text, 'Aceptación'::text])"
    },
    {
-    "name": "invoice_restructure_log_actor_user_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (actor_user_id) REFERENCES auth.users(id)"
-   },
-   {
-    "name": "invoice_restructure_log_contract_id_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id)"
-   },
-   {
-    "name": "invoice_restructure_log_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
+    "name": "reference_requests_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['requested'::text, 'received'::text, 'rejected'::text])"
    }
   ],
   "indexes": [
    {
-    "name": "idx_invoice_restructure_log_contract",
-    "cols": null,
-    "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_invoice_restructure_log_contract ON public.invoice_restructure_log USING btree (contract_id, created_at DESC)"
-   },
-   {
-    "name": "idx_invoice_restructure_log_holding_action",
-    "cols": null,
-    "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_invoice_restructure_log_holding_action ON public.invoice_restructure_log USING btree (holding_id, action, created_at DESC)"
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "restructure_log_insert (INSERT, public)",
-   "restructure_log_select (SELECT, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "restructure_log_insert",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "((holding_id = get_current_user_holding_id()) AND user_has_permission('EDIT_FACTURACION'::text))"
-   },
-   {
-    "name": "restructure_log_select",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "((holding_id = get_current_user_holding_id()) AND (user_has_permission('VIEW_FACTURACION'::text) OR user_has_permission('EDIT_FACTURACION'::text)))",
-    "with_check": null
-   }
-  ]
- },
- "invoice_reschedules": {
-  "comment": null,
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_reschedules_changed_by_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (changed_by) REFERENCES users(id)"
-   },
-   {
-    "name": "invoice_reschedules_holding_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "invoice_reschedules_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "invoice_reschedules_pkey",
-    "type": "p",
+    "name": "reference_requests_holding_idx",
     "cols": [
-     "id"
-    ]
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_invoice_reschedules_invoice_id",
-    "cols": [
+     "holding_id",
+     "contract_id",
      "invoice_id"
     ],
     "unique": false,
@@ -1437,515 +1968,160 @@
   ],
   "triggers": [],
   "policies": [
-   "tenant_isolation_insert_invoice_reschedules (INSERT, public)",
-   "tenant_isolation_select_invoice_reschedules (SELECT, public)",
-   "tenant_isolation_update_invoice_reschedules (UPDATE, public)"
+   "Reference requests - manage own holding (ALL, public)",
+   "Reference requests - select own holding (SELECT, public)"
   ],
   "policies_detail": [
    {
-    "name": "tenant_isolation_insert_invoice_reschedules",
+    "name": "Reference requests - manage own holding",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))"
+    "cmd": "ALL",
+    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
+    "with_check": null
    },
    {
-    "name": "tenant_isolation_select_invoice_reschedules",
+    "name": "Reference requests - select own holding",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
     "cmd": "SELECT",
-    "qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_update_invoice_reschedules",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(holding_id IN ( SELECT uh.holding_id\n   FROM (user_holdings uh\n     JOIN users u ON ((u.id = uh.user_id)))\n  WHERE (u.auth_id = auth.uid())))",
+    "qual": "(holding_id = ( SELECT get_user_holding_id() AS get_user_holding_id))",
     "with_check": null
    }
   ]
  },
- "invoice_adjustments": {
-  "comment": null,
+ "sapira_quantity_imports": {
+  "comment": "Tabla intermedia del canal automático DWH → quantities. Registra cada fila de finance.sapira_base con el resultado de su mapeo (integration_status) para auditoría y reproceso sin re-consultar BigQuery.",
   "rls": true,
   "rls_forced": false,
   "columns": {
-   "amount_diff": {
+   "quantity": {
+    "precision": 18,
+    "scale": 6
+   },
+   "unit_price": {
+    "precision": 18,
+    "scale": 6
+   },
+   "unit_of_measure": {
+    "length": 32
+   },
+   "gross_local_amount": {
     "precision": 18,
     "scale": 2
    }
   },
   "constraints": [
    {
-    "name": "invoice_adjustments_adjusted_by_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (adjusted_by) REFERENCES users(id)"
-   },
-   {
-    "name": "invoice_adjustments_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "invoice_adjustments_pkey",
+    "name": "PK_sapira_quantity_imports",
     "type": "p",
     "cols": [
      "id"
     ]
    },
    {
-    "name": "invoice_adjustments_type_check",
-    "type": "c",
-    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_invoice_adjustments_holding_id",
-    "cols": [
-     "holding_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_invoice_adjustments_invoice_id",
-    "cols": [
-     "invoice_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_invoice_adjustments_type",
-    "cols": [
-     "type"
-    ],
-    "unique": false,
-    "where": null
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "tenant_isolation_delete_invoice_adjustments (DELETE, public)",
-   "tenant_isolation_insert_invoice_adjustments (INSERT, public)",
-   "tenant_isolation_select_invoice_adjustments (SELECT, public)",
-   "tenant_isolation_update_invoice_adjustments (UPDATE, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "tenant_isolation_delete_invoice_adjustments",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "DELETE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_insert_invoice_adjustments",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(holding_id = get_current_user_holding_id())"
-   },
-   {
-    "name": "tenant_isolation_select_invoice_adjustments",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_update_invoice_adjustments",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   }
-  ]
- },
- "invoice_emails": {
-  "comment": null,
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_emails_invoice_id_fkey",
+    "name": "sapira_quantity_imports_contract_item_id_fkey",
     "type": "f",
-    "ondelete": "c",
+    "ondelete": "n",
     "onupdate": "a",
-    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+    "def": "FOREIGN KEY (resolved_contract_item_id) REFERENCES contract_items(id) ON DELETE SET NULL"
    },
    {
-    "name": "invoice_emails_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
-    "name": "invoice_emails_sent_by_fkey",
-    "type": "f",
-    "ondelete": "a",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (sent_by) REFERENCES users(id)"
-   },
-   {
-    "name": "invoice_emails_template_check",
-    "type": "c",
-    "expr": "template = ANY (ARRAY['proforma'::text, 'invoice'::text, 'reminder'::text])"
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_invoice_emails_holding_id",
-    "cols": [
-     "holding_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_invoice_emails_invoice_id",
-    "cols": [
-     "invoice_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_invoice_emails_template",
-    "cols": [
-     "template"
-    ],
-    "unique": false,
-    "where": null
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "tenant_isolation_delete_invoice_emails (DELETE, public)",
-   "tenant_isolation_insert_invoice_emails (INSERT, public)",
-   "tenant_isolation_select_invoice_emails (SELECT, public)",
-   "tenant_isolation_update_invoice_emails (UPDATE, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "tenant_isolation_delete_invoice_emails",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "DELETE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_insert_invoice_emails",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(holding_id = get_current_user_holding_id())"
-   },
-   {
-    "name": "tenant_isolation_select_invoice_emails",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_update_invoice_emails",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   }
-  ]
- },
- "invoice_collection_settings": {
-  "comment": null,
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_collection_settings_holding_id_key",
-    "type": "u",
-    "cols": [
-     "holding_id"
-    ]
-   },
-   {
-    "name": "invoice_collection_settings_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_invoice_collection_settings_holding_id",
-    "cols": [
-     "holding_id"
-    ],
-    "unique": false,
-    "where": null
-   }
-  ],
-  "triggers": [
-   "trg_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()",
-   "trg_update_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
-  ],
-  "policies": [
-   "tenant_isolation_delete_invoice_collection_settings (DELETE, public)",
-   "tenant_isolation_insert_invoice_collection_settings (INSERT, public)",
-   "tenant_isolation_select_invoice_collection_settings (SELECT, public)",
-   "tenant_isolation_update_invoice_collection_settings (UPDATE, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "tenant_isolation_delete_invoice_collection_settings",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "DELETE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_insert_invoice_collection_settings",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(holding_id = get_current_user_holding_id())"
-   },
-   {
-    "name": "tenant_isolation_select_invoice_collection_settings",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_update_invoice_collection_settings",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   }
-  ]
- },
- "invoice_collection_logs": {
-  "comment": null,
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_collection_logs_invoice_id_fkey",
-    "type": "f",
-    "ondelete": "c",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "invoice_collection_logs_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_invoice_collection_logs_holding_id",
-    "cols": [
-     "holding_id"
-    ],
-    "unique": false,
-    "where": null
-   },
-   {
-    "name": "idx_invoice_collection_logs_invoice_id",
-    "cols": [
-     "invoice_id"
-    ],
-    "unique": false,
-    "where": null
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "tenant_isolation_delete_invoice_collection_logs (DELETE, public)",
-   "tenant_isolation_insert_invoice_collection_logs (INSERT, public)",
-   "tenant_isolation_select_invoice_collection_logs (SELECT, public)",
-   "tenant_isolation_update_invoice_collection_logs (UPDATE, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "tenant_isolation_delete_invoice_collection_logs",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "DELETE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_insert_invoice_collection_logs",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "INSERT",
-    "qual": null,
-    "with_check": "(holding_id = get_current_user_holding_id())"
-   },
-   {
-    "name": "tenant_isolation_select_invoice_collection_logs",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   },
-   {
-    "name": "tenant_isolation_update_invoice_collection_logs",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "UPDATE",
-    "qual": "(holding_id = get_current_user_holding_id())",
-    "with_check": null
-   }
-  ]
- },
- "invoice_trigger_debug_logs": {
-  "comment": "Tabla temporal para debugging de triggers de facturas. ELIMINAR después del debugging.",
-  "rls": false,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "invoice_trigger_debug_logs_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   }
-  ],
-  "indexes": [],
-  "triggers": [],
-  "policies": [],
-  "policies_detail": []
- },
- "overdue_check_log": {
-  "comment": "Registro de ejecuciones de la verificación automática de facturas vencidas. \n   Tabla de auditoría del sistema con RLS habilitado. \n   holding_id NULL indica ejecución global que afecta múltiples holdings.",
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "overdue_check_log_holding_id_fkey",
+    "name": "sapira_quantity_imports_holding_id_fkey",
     "type": "f",
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
-    "name": "overdue_check_log_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
+    "name": "sapira_quantity_imports_period_check",
+    "type": "c",
+    "expr": "period = (date_trunc('month'::text, (period)::timestamp with time zone))::date"
    },
    {
-    "name": "overdue_check_log_status_check",
+    "name": "sapira_quantity_imports_quantity_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (quantity_id) REFERENCES quantities(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "sapira_quantity_imports_resolution_source_check",
     "type": "c",
-    "expr": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text])"
+    "expr": "(resolution_source IS NULL) OR (resolution_source = ANY (ARRAY['sapira_ids'::text, 'salesforce_ids'::text]))"
+   },
+   {
+    "name": "sapira_quantity_imports_status_check",
+    "type": "c",
+    "expr": "integration_status = ANY (ARRAY['pending'::text, 'integrated'::text, 'no_quantity_data'::text, 'unmapped'::text, 'not_variable'::text, 'currency_mismatch'::text, 'blocked'::text, 'ambiguous'::text, 'conflict'::text, 'changed_in_source'::text])"
    }
   ],
   "indexes": [
    {
-    "name": "idx_overdue_check_log_date",
-    "cols": null,
+    "name": "sapira_quantity_imports_item_idx",
+    "cols": [
+     "resolved_contract_item_id"
+    ],
     "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_overdue_check_log_date ON public.overdue_check_log USING btree (check_date DESC)"
+    "where": null
    },
    {
-    "name": "idx_overdue_check_log_holding_id",
-    "cols": null,
+    "name": "sapira_quantity_imports_period_idx",
+    "cols": [
+     "period"
+    ],
     "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_overdue_check_log_holding_id ON public.overdue_check_log USING btree (holding_id, created_at DESC)"
+    "where": null
    },
    {
-    "name": "idx_overdue_check_log_status",
-    "cols": null,
+    "name": "sapira_quantity_imports_quantity_idx",
+    "cols": [
+     "quantity_id"
+    ],
     "unique": false,
+    "where": null
+   },
+   {
+    "name": "sapira_quantity_imports_source_key",
+    "cols": null,
+    "unique": true,
     "where": null,
-    "expr": "CREATE INDEX idx_overdue_check_log_status ON public.overdue_check_log USING btree (status, created_at DESC)"
+    "expr": "CREATE UNIQUE INDEX sapira_quantity_imports_source_key ON public.sapira_quantity_imports USING btree (holding_id, sf_id, billing_date, product, COALESCE(quote_line_id, ''::text))"
+   },
+   {
+    "name": "sapira_quantity_imports_status_idx",
+    "cols": [
+     "holding_id",
+     "integration_status"
+    ],
+    "unique": false,
+    "where": null
    }
   ],
-  "triggers": [],
+  "triggers": [
+   "sapira_quantity_imports_set_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()"
+  ],
   "policies": [
-   "Service role can manage all overdue check logs (ALL, service_role)",
-   "Users can view overdue check logs from their holding (SELECT, authenticated)"
+   "sapira_quantity_imports_select (SELECT, public)",
+   "sapira_quantity_imports_service_role (ALL, service_role)"
   ],
   "policies_detail": [
    {
-    "name": "Service role can manage all overdue check logs",
+    "name": "sapira_quantity_imports_select",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "sapira_quantity_imports_service_role",
     "permissive": "PERMISSIVE",
     "roles": [
      "service_role"
@@ -1953,63 +2129,6 @@
     "cmd": "ALL",
     "qual": "true",
     "with_check": "true"
-   },
-   {
-    "name": "Users can view overdue check logs from their holding",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "authenticated"
-    ],
-    "cmd": "SELECT",
-    "qual": "((holding_id = get_current_user_holding_id()) OR (holding_id IS NULL))",
-    "with_check": null
-   }
-  ]
- },
- "period_guard_warnings": {
-  "comment": "Registro de operaciones que el guard de cierre de períodos hubiera bloqueado, durante el modo \"warn\" del soft launch.",
-  "rls": true,
-  "rls_forced": false,
-  "columns": {},
-  "constraints": [
-   {
-    "name": "period_guard_warnings_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
-    "name": "period_guard_warnings_triggered_by_fkey",
-    "type": "f",
-    "ondelete": "n",
-    "onupdate": "a",
-    "def": "FOREIGN KEY (triggered_by) REFERENCES users(id) ON DELETE SET NULL"
-   }
-  ],
-  "indexes": [
-   {
-    "name": "idx_pgw_company_time",
-    "cols": null,
-    "unique": false,
-    "where": null,
-    "expr": "CREATE INDEX idx_pgw_company_time ON public.period_guard_warnings USING btree (holding_id, company_id, occurred_at DESC)"
-   }
-  ],
-  "triggers": [],
-  "policies": [
-   "pgw_select (SELECT, public)"
-  ],
-  "policies_detail": [
-   {
-    "name": "pgw_select",
-    "permissive": "PERMISSIVE",
-    "roles": [
-     "public"
-    ],
-    "cmd": "SELECT",
-    "qual": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
-    "with_check": null
    }
   ]
  }

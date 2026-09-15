@@ -1174,7 +1174,7 @@
  "company_bank_accounts": {
   "name": "public.company_bank_accounts",
   "rls_enabled": true,
-  "rows": 2,
+  "rows": 9,
   "columns": [
    {
     "name": "id",

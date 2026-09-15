@@ -4,19 +4,24 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Alinea el default de `processing_status` con su propio CHECK en las dos tablas de
  * staging de facturas de Odoo.
  *
- * `odoo_invoices_stg` y `odoo_invoice_lines_stg` tenían `DEFAULT 'pending'`, pero su
+ * `odoo_invoices_stg` y `odoo_invoice_lines_stg` tienen `DEFAULT 'pending'`, pero su
  * CHECK solo admite `create | update | processed | error`. Un INSERT que omita la
  * columna produce una fila que el CHECK rechaza con 23514.
  *
- * Por qué hoy no se manifiesta en producción: Postgres evalúa defaults → triggers
- * BEFORE ROW → CHECK, y ambas tablas tienen un BEFORE INSERT que asigna la columna en
- * todas sus rutas de salida, incluido el `EXCEPTION WHEN OTHERS`:
- *  - `invoice_processing_status_classifier` → `set_invoice_processing_status()`
- *  - `classify_invoice_line_trigger` → `classify_invoice_line_before_insert()`
- * El default nunca sobrevive hasta la validación. La trampa se arma cuando el trigger
- * no corre: `session_replication_role = 'replica'` (apply de replicación lógica,
- * `pg_restore --disable-triggers`), un `ALTER TABLE ... DISABLE TRIGGER`, o un esquema
- * creado desde las entities sin aplicar todavía los assets de `triggers/`.
+ * ⚠️ CORRECCIÓN (verificado en producción el 2026-09-14). La versión anterior de este
+ * comentario decía que el default nunca llegaba al CHECK porque ambas tablas tenían un
+ * BEFORE INSERT que asignaba la columna, y nombraba `set_invoice_processing_status()` y
+ * `classify_invoice_line_before_insert()`. **Eso es falso: ni esas funciones ni esos
+ * triggers existen en producción.** Las dos tablas tienen un solo trigger cada una, el de
+ * `updated_at` (`update_invoice_timestamp_trigger` y
+ * `update_invoice_line_timestamp_trigger`). Las dos funciones son 2 de los 7 assets
+ * huérfanos del corpus: el comentario se escribió leyendo `functions/`, no la base.
+ *
+ * Lo real, entonces: **el default sí llega al CHECK. Cualquier INSERT que omita
+ * `processing_status` falla hoy, en producción, con 23514.** No se manifiesta porque
+ * todos los escritores fijan la columna explícitamente —`InvoiceProcessingService` y el
+ * pipeline de staging—, pero la trampa está armada y se dispara en cuanto alguien inserte
+ * sin especificarla. Esto no es una precaución: es la corrección de un defecto activo.
  *
  * Se corrige el default en vez de ampliar el CHECK porque `'pending'` es vocabulario
  * muerto: ningún trigger lo emite y sus tres lectores (`get_invoice_staging_stats`,
@@ -26,13 +31,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `In(['create','update','error'])`: admitir `'pending'` en el CHECK dejaría filas
  * invisibles para el pipeline en vez de fallar de forma visible.
  *
- * `'create'` —y no `DROP DEFAULT`— porque coincide con el fallback del propio
- * clasificador ("no puedo identificar la factura → create") y deja la fila procesable
- * si el trigger llegara a faltar; un NULL tampoco viola el CHECK, pero queda fuera del
- * loop de procesamiento y se pierde en silencio.
+ * `'create'` —y no `DROP DEFAULT`— porque es el valor que deja la fila procesable: el loop
+ * de `InvoiceProcessingService` filtra `In(['create','update','error'])`, así que una fila
+ * que entre con `'create'` se procesa. Un NULL tampoco viola el CHECK, pero queda fuera de
+ * ese filtro y se pierde en silencio, que es el modo de falla que hay que evitar.
  *
- * No toca datos existentes: ninguna fila puede tener `'pending'`, porque el CHECK lo
- * viene rechazando desde siempre.
+ * No toca datos existentes: verificado en producción, las dos tablas tienen 0 filas con
+ * `'pending'` —imposible por el CHECK— y sus valores reales son `processed` y `update`.
  *
  * Escrita a mano: `migration:generate` no detecta cambios de default sobre columnas
  * que ya existen con el mismo tipo y nulabilidad.

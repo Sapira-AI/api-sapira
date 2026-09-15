@@ -136,7 +136,7 @@
  "stripe_customers_stg": {
   "name": "public.stripe_customers_stg",
   "rls_enabled": true,
-  "rows": 411,
+  "rows": 414,
   "columns": [
    {
     "name": "id",
@@ -278,7 +278,7 @@
  "stripe_invoices_stg": {
   "name": "public.stripe_invoices_stg",
   "rls_enabled": true,
-  "rows": 3924,
+  "rows": 4768,
   "columns": [
    {
     "name": "id",
@@ -420,7 +420,7 @@
  "stripe_subscriptions_stg": {
   "name": "public.stripe_subscriptions_stg",
   "rls_enabled": true,
-  "rows": 475,
+  "rows": 483,
   "columns": [
    {
     "name": "id",
@@ -677,7 +677,7 @@
  "stripe_sync_jobs": {
   "name": "public.stripe_sync_jobs",
   "rls_enabled": false,
-  "rows": 192,
+  "rows": 200,
   "columns": [
    {
     "name": "id",

@@ -76,7 +76,6 @@
   "invoice_references",
   "invoice_reschedules",
   "invoice_restructure_log",
-  "invoice_trigger_debug_logs",
   "invoices",
   "overdue_check_log",
   "period_guard_warnings",

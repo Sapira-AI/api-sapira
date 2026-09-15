@@ -8,7 +8,7 @@ import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.ent
 import { BankUploadBatch } from './bank-upload-batch.espejo';
 
 /**
- * Espejo de `public.bank_movements` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
+ * Espejo de `public.bank_movements` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 158 filas · RLS on.
  * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
  * Referenciada por FK desde 1 tabla(s): invoice_payments.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).

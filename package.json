@@ -1,6 +1,6 @@
 {
 	"name": "api-sapira",
-	"version": "0.0.11",
+	"version": "0.0.12",
 	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,
@@ -22,6 +22,7 @@
 		"audit": "yarn audit --level moderate",
 		"schema:log": "ts-node -r tsconfig-paths/register scripts/schema-log.ts",
 		"schema:audit": "ts-node -r tsconfig-paths/register scripts/schema-as-code/audit-usage.ts",
+		"schema:verify-policies": "ts-node -r tsconfig-paths/register scripts/schema-as-code/verify-policies.ts",
 		"migration:create": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:create",
 		"migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate -d src/databases/postgresql/data-source.ts",
 		"migration:show": "ts-node -r tsconfig-paths/register scripts/run-migrations.ts show",
