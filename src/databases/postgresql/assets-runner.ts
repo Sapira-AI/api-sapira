@@ -13,6 +13,32 @@ import * as path from 'path';
 export const ASSET_DIRECTORIES = ['types', 'functions', 'special-index', 'triggers', 'rls', 'grants', 'seed'] as const;
 export const HISTORY_TABLE = 'public.sapira_sql_asset_history';
 
+/**
+ * Fases donde **re-aplicar un asset modificado hace que la base coincida con el archivo**.
+ *
+ * Es el criterio exacto, no una preferencia: `functions/` usa `CREATE OR REPLACE`, `triggers/` y
+ * `rls/` usan `DROP … IF EXISTS` + `CREATE`, y `grants/` son sentencias absolutas. En las cuatro,
+ * correr el archivo de nuevo deja el objeto tal como lo describe el archivo.
+ *
+ * Sin esto, cambiar una función obligaba a crear un archivo nuevo —`<objeto>_<motivo>.sql`— y
+ * dejar el viejo para siempre. Eso rompe dos cosas: el corpus deja de describir el estado deseado
+ * (para saber qué hace una función hay que saber cuál de N archivos ganó, que es exactamente el
+ * problema de las 465 migraciones del front), y **el que gana lo decide el orden alfabético, que no
+ * es el cronológico**: un arreglo posterior llamado `…_arreglo.sql` se aplicaría ANTES que un
+ * `…_view_documentacion.sql` anterior, y quedaría pisado por él.
+ *
+ * El historial sigue registrando el checksum vigente, así que un asset sin cambios se sigue
+ * omitiendo. Lo que cambia es que un asset modificado se re-aplica en vez de hacer fallar la corrida.
+ */
+export const REAPPLICABLE_DIRECTORIES = ['functions', 'triggers', 'rls', 'grants'] as const;
+
+/** Por qué las otras tres fases NO se pueden re-aplicar: el archivo cambiaría y la base no. */
+const MOTIVO_NO_REAPLICABLE: Record<string, string> = {
+	types: 'los enums llevan guarda `DO … pg_type` y las extensiones `IF NOT EXISTS`, así que no modifican un tipo que ya existe',
+	'special-index': '`CREATE INDEX IF NOT EXISTS` no redefine un índice existente: lo saltea',
+	seed: '`ON CONFLICT DO NOTHING` no actualiza ni borra filas ya insertadas',
+};
+
 export type AssetMode = 'plan' | 'dry-run' | 'apply';
 
 export interface SqlAsset {
@@ -54,6 +80,8 @@ export interface AssetRunResult {
 	applied: string[];
 	skipped: string[];
 	pending: string[];
+	/** Assets que ya estaban aplicados, cambiaron, y se volvieron a aplicar (solo fases re-aplicables). */
+	reapplied: string[];
 }
 
 interface HistoryRow {
@@ -122,7 +150,7 @@ export function filterAssetsByOnly(assets: SqlAsset[], only?: string[]): SqlAsse
 export async function runSqlAssets(executor: SqlExecutor | undefined, options: AssetRunnerOptions): Promise<AssetRunResult> {
 	assertTargetAllowed(options);
 	const assets = filterAssetsByOnly(discoverSqlAssets(options.assetsRoot), options.only);
-	const result: AssetRunResult = { assets, applied: [], skipped: [], pending: [] };
+	const result: AssetRunResult = { assets, applied: [], skipped: [], pending: [], reapplied: [] };
 
 	if (options.mode === 'plan') {
 		result.pending = assets.map((asset) => asset.path);
@@ -141,10 +169,30 @@ export async function runSqlAssets(executor: SqlExecutor | undefined, options: A
 
 		const history = await readHistory(executor, asset.path);
 		if (history) {
-			if (history.checksum !== asset.checksum) {
-				throw new Error(`El checksum de ${asset.path} cambió después de aplicarse. Crea un nuevo asset en vez de editarlo.`);
+			if (history.checksum === asset.checksum) {
+				result.skipped.push(asset.path);
+				continue;
 			}
-			result.skipped.push(asset.path);
+
+			// El asset cambió después de aplicarse. Si su fase converge al re-aplicarlo, se
+			// re-aplica; si no, el archivo cambiaría y la base no, y registrar el checksum nuevo
+			// sería que el historial mienta.
+			const fase = asset.path.split('/')[0];
+			if (!(REAPPLICABLE_DIRECTORIES as readonly string[]).includes(fase)) {
+				throw new Error(
+					`El checksum de ${asset.path} cambió después de aplicarse, y la fase \`${fase}\` no se puede re-aplicar: ` +
+						`${MOTIVO_NO_REAPLICABLE[fase] ?? 'la fase no es idempotente'}. ` +
+						`Ese cambio es una transición, no un estado: va en una migración.`
+				);
+			}
+
+			if (options.mode === 'dry-run') {
+				result.pending.push(asset.path);
+				continue;
+			}
+
+			await applyAsset(executor, asset, options.target);
+			result.reapplied.push(asset.path);
 			continue;
 		}
 
@@ -187,7 +235,13 @@ async function applyAsset(executor: SqlExecutor, asset: SqlAsset, target: string
 	await executor.query('BEGIN');
 	try {
 		await executor.query(asset.sql);
-		await executor.query(`INSERT INTO ${HISTORY_TABLE} (asset_path, checksum, target) VALUES ($1, $2, $3)`, [asset.path, asset.checksum, target]);
+		// UPSERT y no INSERT: un asset re-aplicado tiene que dejar registrado su checksum NUEVO,
+		// para que la siguiente corrida lo omita en vez de volver a aplicarlo.
+		await executor.query(
+			`INSERT INTO ${HISTORY_TABLE} (asset_path, checksum, target) VALUES ($1, $2, $3)
+			 ON CONFLICT (asset_path) DO UPDATE SET checksum = EXCLUDED.checksum, target = EXCLUDED.target, applied_at = now()`,
+			[asset.path, asset.checksum, target]
+		);
 		await executor.query('COMMIT');
 	} catch (error) {
 		await executor.query('ROLLBACK');

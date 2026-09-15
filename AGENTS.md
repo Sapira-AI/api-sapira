@@ -39,7 +39,9 @@
 - Todo índice de producción va declarado: `@Index` en la entity si es btree sobre columnas simples
   (los parciales también, con `@Index({ where })`), o `special-index/` si no. Lo verifica
   `entities/indices-declarados.spec.ts`.
-- Nunca edites un asset `.sql` ya aplicado (checksum registrado): corrige con un asset nuevo.
+- Un archivo por objeto, con su definición vigente. En `functions/`, `triggers/`, `rls/` y `grants/`
+  se edita en su lugar y el runner re-aplica; en `types/`, `special-index/` y `seed/` un cambio va en
+  una migración. Nunca dupliques un asset como `<objeto>_<motivo>.sql`.
 - **Para eliminar algo**: borrar el archivo del repo no borra nada de la base, y borrar la entity no
   borra la tabla. Son dos acciones: una migración escrita a mano con los `DROP` y borrar los
   archivos. Procedimiento: `src/databases/postgresql/README.md`.

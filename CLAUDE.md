@@ -27,8 +27,11 @@ El DDL no se escribe en `front-sapira-vite/supabase/migrations/`.
   **Ninguna migración con `DROP COLUMN` se aplica sin autorización explícita.** Los `DROP INDEX`
   legítimos son solo los de `special-index/`; cualquier otro significa que falta declarar el índice
   en la entity, y `entities/indices-declarados.spec.ts` lo detecta antes.
-- **Nunca edites un asset `.sql` ya aplicado.** Su SHA-256 queda en `sapira_sql_asset_history` y el
-  runner falla. Las correcciones van en un asset nuevo.
+- **Un archivo por objeto, con su definición vigente.** En `functions/`, `triggers/`, `rls/` y
+  `grants/` se edita el mismo archivo: el runner detecta el checksum nuevo y **re-aplica**. En
+  `types/`, `special-index/` y `seed/` falla a propósito —ahí el archivo cambiaría y la base no— y el
+  cambio va en una migración. **Nunca dupliques un asset como `<objeto>_<motivo>.sql`**: quién gana lo
+  decide el orden alfabético, que no es el cronológico.
 - **Todo comando contra la base lleva `--target` y se verifica contra la conexión real.** El target
   sale de `NODE_ENV` y es independiente de `SUPABASE_DATABASE_URL`; `connection-target.ts` aborta si
   no coinciden. Un project ref desconocido se declara en `SUPABASE_PROJECT_ENVIRONMENTS`.

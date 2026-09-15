@@ -104,7 +104,7 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 | `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 133 |
 | `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 389 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 1 |
-| `seed/` | Datos semilla idempotentes. | 1 |
+| `seed/` | Datos semilla idempotentes. | 2 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
 >
@@ -112,7 +112,12 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 
 El corpus se regenera desde producción con `scripts/schema-as-code/fetch-catalog.ts` (captura, solo lectura) y `scripts/schema-as-code/generate-assets.ts` (emite los assets faltantes; nunca sobreescribe uno existente).
 
-Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su SHA-256. Un asset con el mismo checksum se omite en ejecuciones posteriores; si cambia, el runner falla para evitar reaplicar SQL mutable. Crea un archivo nuevo para cambios posteriores.
+Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su SHA-256. Un asset con el mismo checksum se omite en ejecuciones posteriores.
+
+**Si el contenido cambió**, el runner distingue por fase:
+
+- `functions/`, `triggers/`, `rls/`, `grants/` → **lo re-aplica** y actualiza el checksum (`REAPLICADO` en la salida). Re-aplicar converge: son `CREATE OR REPLACE` y `DROP … IF EXISTS` + `CREATE`. **Se edita el mismo archivo; el corpus describe el estado deseado y el historial lo lleva git.**
+- `types/`, `special-index/`, `seed/` → **falla a propósito**. Ahí el archivo cambiaría y la base no (`DO … pg_type`, `CREATE INDEX IF NOT EXISTS`, `ON CONFLICT DO NOTHING`), así que registrar el checksum nuevo sería que el historial mienta. Ese cambio es una transición: va en una migración.
 
 ```bash
 # Solo descubre y muestra el orden; no requiere conexión.

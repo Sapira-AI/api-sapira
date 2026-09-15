@@ -21,8 +21,10 @@ alwaysApply: true
   simples (incluidos los parciales, con `@Index({ where })`), o como asset en `special-index/` si
   no. Un `DROP INDEX` en una migración generada sobre un índice que no está en `special-index/`
   es un índice sin declarar, no un cambio. Lo verifica `entities/indices-declarados.spec.ts`.
-- Nunca edites un asset `.sql` ya aplicado: su checksum está registrado y el runner falla. Corrige
-  con un asset nuevo.
+- Un archivo por objeto, con su definición vigente. En `functions/`, `triggers/`, `rls/` y `grants/`
+  se edita en su lugar: el runner ve el checksum nuevo y re-aplica. En `types/`, `special-index/` y
+  `seed/` falla a propósito y el cambio va en una migración. **Nunca dupliques un asset como
+  `<objeto>_<motivo>.sql`**: el que queda vivo lo decide el orden alfabético, no el cronológico.
 - Todo comando contra la base lleva `--target`, que se verifica contra la conexión real.
 
 ## Para eliminar una tabla, función, trigger o policy

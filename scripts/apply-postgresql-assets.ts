@@ -82,7 +82,15 @@ async function main(): Promise<void> {
 function printResult(result: Awaited<ReturnType<typeof runSqlAssets>>, options: AssetRunnerOptions): void {
 	console.log(`Modo: ${options.mode}; target: ${options.target}; assets descubiertos: ${result.assets.length}`);
 	for (const asset of result.assets) {
-		const status = result.applied.includes(asset.path) ? 'APLICADO' : result.skipped.includes(asset.path) ? 'OMITIDO' : 'PENDIENTE';
+		// REAPLICADO: ya estaba en el historial, su contenido cambió y su fase converge al
+		// re-aplicarlo. Se distingue de APLICADO porque es el caso que conviene mirar en un diff.
+		const status = result.reapplied.includes(asset.path)
+			? 'REAPLICADO'
+			: result.applied.includes(asset.path)
+				? 'APLICADO'
+				: result.skipped.includes(asset.path)
+					? 'OMITIDO'
+					: 'PENDIENTE';
 		console.log(`${status} ${asset.path} ${asset.checksum}`);
 	}
 }

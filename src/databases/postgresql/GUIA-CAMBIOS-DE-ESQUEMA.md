@@ -72,6 +72,21 @@ Hay una guarda que lo verifica por vos: `entities/indices-declarados.spec.ts`.
 generó TypeORM) + `special-index/sapira_quantity_imports_source_key.sql` (índice con `COALESCE`) +
 `triggers/sapira_quantity_imports_set_updated_at.sql` + las 2 policies en `rls/`.
 
+### Agregar un permiso al catálogo
+
+Los permisos viven en `public.permissions` y se asignan por rol en `public.role_permissions`.
+
+1. **Seed idempotente** en `seed/<NNN>-<descripcion>.sql`:
+   - `INSERT INTO public.permissions (code, description) … ON CONFLICT (code) DO NOTHING`
+   - Backfill de `role_permissions` para holdings existentes (roles que ya tenían permisos equivalentes).
+2. **Constante en los fronts** si el permiso controla un ítem de navegación (`lib/sapira-permissions.ts` en Next, `permission` en `navigation-config.ts` en Vite).
+3. **Holdings nuevos**: edita `functions/create_default_roles_for_holding.sql` **en su lugar**, agregando el permiso a los roles que correspondan. El runner re-aplica un asset de `functions/` que cambió (ver abajo): no crees un archivo nuevo.
+4. Aplica con `yarn postgres:assets --apply --only seed/<archivo>.sql --target qa` y luego el asset de función.
+
+Ejemplo de referencia: `seed/002-view-documentacion-permission.sql` + el cambio de `VIEW_DOCUMENTACION` dentro de `functions/create_default_roles_for_holding.sql`.
+
+> ⚠️ El seed no basta por sí solo: la función filtra `WHERE code IN (…)` contra `permissions`, así que si el permiso no existe todavía, no asigna nada. Aplica el seed **antes** que la función.
+
 ### Una función, un trigger o una policy
 
 Un archivo `.sql` por objeto, en su carpeta, y `yarn postgres:assets --apply --only <ruta>`.
@@ -174,12 +189,22 @@ Revisa el `down()` antes de confiar en él.
 
 ### Fue un asset ya aplicado
 
-> 🔴 **Nunca edites un asset aplicado.** Su SHA-256 quedó en `public.sapira_sql_asset_history`; si el
-> contenido cambia, el runner **falla** en la siguiente corrida. Es a propósito: evita reaplicar SQL
-> mutable sin que nadie lo note.
+**Edita el mismo archivo.** En `functions/`, `triggers/`, `rls/` y `grants/` el runner detecta que el
+checksum cambió y **re-aplica** el asset, registrando el checksum nuevo. Lo reporta como `REAPLICADO`.
 
-La corrección va en un **asset nuevo**. Para funciones, triggers y policies eso es natural, porque son
-`CREATE OR REPLACE` / `DROP … IF EXISTS` + `CREATE`: el asset nuevo pisa al viejo.
+Funciona porque en esas cuatro fases re-aplicar converge: son `CREATE OR REPLACE` y
+`DROP … IF EXISTS` + `CREATE`, así que correr el archivo otra vez deja el objeto como el archivo lo
+describe. **El corpus es el estado deseado; el historial lo lleva git.**
+
+> 🔴 **En `types/`, `special-index/` y `seed/` NO.** Ahí el runner falla a propósito, porque el
+> archivo cambiaría y la base no: `CREATE TYPE` va con guarda `DO … pg_type`, `CREATE INDEX` con
+> `IF NOT EXISTS` y los seeds con `ON CONFLICT DO NOTHING` — ninguno redefine algo que ya existe.
+> Un cambio ahí es una **transición** y va en una migración.
+
+> 🚫 **No crees `<objeto>_<motivo>.sql` para versionar un cambio.** Además de inflar el corpus, el
+> archivo que queda vivo lo decide el **orden alfabético, que no es el cronológico**: un arreglo
+> posterior llamado `…_arreglo.sql` se aplicaría antes que un `…_view_documentacion.sql` anterior y
+> quedaría pisado por él. Es el mismo problema que hace inservibles las 465 migraciones del front.
 
 **No borres la fila del historial.** Es el registro de lo que corrió; falsearlo deja la base y el
 corpus contando historias distintas.
@@ -218,7 +243,8 @@ a borrar a mano — pero aplicado a ciegas.
 | `synchronize`, `dropSchema` o `migrationsRun` en `true` | Aplica DDL sin que nadie lo revise |
 | Commitear una migración generada sin recortarla | Arrastra toda la deriva pendiente del resto del esquema |
 | Aplicar un `DROP COLUMN` que no pusiste vos | Es una columna real de producción que ninguna entity declara |
-| Editar un asset `.sql` ya aplicado | Su checksum está registrado: el runner falla |
+| Duplicar un asset como `<objeto>_<motivo>.sql` para cambiarlo | El corpus deja de describir el estado deseado, y quién gana lo decide el orden alfabético |
+| Editar un asset aplicado de `types/`, `special-index/` o `seed/` | El archivo cambia y la base no: el runner falla a propósito |
 | Borrar una fila de `sapira_sql_asset_history` | Falsea el registro de lo que corrió |
 | Escribir DDL de `public` en `front-sapira-vite/supabase/migrations/` | Ahí ya no vive el esquema |
 | Dejar la URL de producción fija en tu `.env` | Cualquier comando que abra conexión —incluido levantar la app— habla con prod |

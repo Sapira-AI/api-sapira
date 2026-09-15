@@ -8,6 +8,7 @@ import {
 	checksumSql,
 	discoverSqlAssets,
 	filterAssetsByOnly,
+	HISTORY_TABLE,
 	runSqlAssets,
 	SqlExecutor,
 } from './assets-runner';
@@ -15,14 +16,24 @@ import {
 class InMemoryExecutor implements SqlExecutor {
 	readonly queries: string[] = [];
 	private readonly history = new Map<string, string>();
+	private historyTableCreated = false;
 
 	async query(query: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }> {
 		this.queries.push(query);
+		if (query.includes(`CREATE TABLE IF NOT EXISTS ${HISTORY_TABLE}`)) {
+			this.historyTableCreated = true;
+		}
+		// Sin esto, `historyTableExists` daba siempre false y un dry-run reportaba TODO como
+		// pendiente, incluso lo ya aplicado: el fake no podía distinguir base nueva de base con
+		// historial.
+		if (query.includes('to_regclass')) {
+			return { rows: [{ history_table: this.historyTableCreated ? HISTORY_TABLE : null }] };
+		}
 		if (query.includes('SELECT asset_path, checksum')) {
 			const checksum = this.history.get(values?.[0] as string);
 			return { rows: checksum ? [{ asset_path: values?.[0], checksum }] : [] };
 		}
-		if (query.includes('INSERT INTO public.sapira_sql_asset_history')) {
+		if (query.includes(`INSERT INTO ${HISTORY_TABLE}`)) {
 			this.history.set(values?.[0] as string, values?.[1] as string);
 		}
 		return { rows: [] };
@@ -75,6 +86,52 @@ describe('PostgreSQL SQL assets runner', () => {
 		expect(firstRun.applied).toHaveLength(5);
 		expect(secondRun.skipped).toEqual(firstRun.applied);
 		expect(executor.queries.filter((query) => query === 'SELECT 1;\n')).toHaveLength(1);
+	});
+
+	it('re-aplica un asset modificado si su fase converge', async () => {
+		// El caso que resuelve: cambiar una función obligaba a crear `<objeto>_<motivo>.sql` y dejar
+		// el viejo para siempre. Además de inflar el corpus, el que quedaba vivo lo decidía el orden
+		// alfabético, que no es el cronológico.
+		const executor = new InMemoryExecutor();
+		const options = { assetsRoot, mode: 'apply' as const, target: 'development' };
+
+		await runSqlAssets(executor, options);
+		fs.writeFileSync(path.join(assetsRoot, 'functions', 'a.sql'), 'SELECT 1 AS cambiada;\n');
+		const segunda = await runSqlAssets(executor, options);
+
+		expect(segunda.reapplied).toEqual(['functions/a.sql']);
+		expect(segunda.skipped).not.toContain('functions/a.sql');
+		expect(executor.queries).toContain('SELECT 1 AS cambiada;\n');
+
+		// El historial se actualiza al checksum nuevo: la tercera corrida ya lo omite.
+		const tercera = await runSqlAssets(executor, options);
+		expect(tercera.reapplied).toEqual([]);
+		expect(tercera.skipped).toContain('functions/a.sql');
+	});
+
+	it('rechaza el cambio de un asset cuya fase NO converge', async () => {
+		// `CREATE INDEX IF NOT EXISTS` no redefine un índice existente: lo saltea. Re-aplicarlo
+		// dejaría el archivo cambiado y la base igual, y registrar el checksum nuevo sería que el
+		// historial mienta. Ese cambio es una transición y va en una migración.
+		const executor = new InMemoryExecutor();
+		const options = { assetsRoot, mode: 'apply' as const, target: 'development' };
+
+		await runSqlAssets(executor, options);
+		fs.writeFileSync(path.join(assetsRoot, 'special-index', 'index.sql'), 'CREATE INDEX IF NOT EXISTS sample_index ON sample (otra);\n');
+
+		await expect(runSqlAssets(executor, options)).rejects.toThrow(/special-index.*no se puede re-aplicar.*migración/s);
+	});
+
+	it('un dry-run reporta como pendiente el asset modificado, sin aplicarlo', async () => {
+		const executor = new InMemoryExecutor();
+
+		await runSqlAssets(executor, { assetsRoot, mode: 'apply' as const, target: 'development' });
+		fs.writeFileSync(path.join(assetsRoot, 'functions', 'a.sql'), 'SELECT 1 AS otra;\n');
+		const seco = await runSqlAssets(executor, { assetsRoot, mode: 'dry-run' as const, target: 'development' });
+
+		expect(seco.pending).toEqual(['functions/a.sql']);
+		expect(seco.reapplied).toEqual([]);
+		expect(executor.queries).not.toContain('SELECT 1 AS otra;\n');
 	});
 
 	it('filtra por --only y valida paths inexistentes', () => {

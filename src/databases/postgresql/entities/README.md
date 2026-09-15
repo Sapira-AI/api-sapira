@@ -56,7 +56,7 @@ Ojo al leer esta carpeta: no todo `.entity.ts` suelto en la raíz es una promoci
 > `sapira_quantity_imports`, que ahora cubre el canal con una sola consulta a BigQuery. La tabla física
 > no se elimina automáticamente (conserva el histórico); darla de baja es una decisión aparte.
 
-Su DDL vive en dos lados: la migración canónica en `front-sapira-vite/supabase/migrations/` y un asset espejo en `src/databases/postgresql/tables/` que aplica `yarn postgres:assets`.
+Su DDL vive en `api-sapira`: entity en `entities/`, migración TypeORM revisada en `migrations/`, y assets complementarios (índices, triggers, policies) en `src/databases/postgresql/` aplicados con `yarn postgres:assets`.
 
 ## Convención de un espejo (tablas sin entity)
 
