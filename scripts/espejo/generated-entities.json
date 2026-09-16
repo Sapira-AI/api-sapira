@@ -2,62 +2,62 @@
  "accounting_period_cutoff": {
   "class": "AccountingPeriodCutoff",
   "module": "revenue",
-  "file": "accounting-period-cutoff.espejo.ts"
+  "file": "accounting-period-cutoff.entity.ts"
  },
  "accounting_period_events": {
   "class": "AccountingPeriodEvent",
   "module": "revenue",
-  "file": "accounting-period-event.espejo.ts"
+  "file": "accounting-period-event.entity.ts"
  },
  "agent_logs": {
   "class": "AgentLog",
   "module": "automatizaciones-ia",
-  "file": "agent-log.espejo.ts"
+  "file": "agent-log.entity.ts"
  },
  "agents": {
   "class": "Agent",
   "module": "automatizaciones-ia",
-  "file": "agent.espejo.ts"
+  "file": "agent.entity.ts"
  },
  "ai_agent_configs": {
   "class": "AiAgentConfig",
   "module": "automatizaciones-ia",
-  "file": "ai-agent-config.espejo.ts"
+  "file": "ai-agent-config.entity.ts"
  },
  "ai_agents": {
   "class": "AiAgent",
   "module": "automatizaciones-ia",
-  "file": "ai-agent.espejo.ts"
+  "file": "ai-agent.entity.ts"
  },
  "ai_messages": {
   "class": "AiMessage",
   "module": "automatizaciones-ia",
-  "file": "ai-message.espejo.ts"
+  "file": "ai-message.entity.ts"
  },
  "ai_runs": {
   "class": "AiRun",
   "module": "automatizaciones-ia",
-  "file": "ai-run.espejo.ts"
+  "file": "ai-run.entity.ts"
  },
  "bank_column_mappings": {
   "class": "BankColumnMapping",
   "module": "conciliacion",
-  "file": "bank-column-mapping.espejo.ts"
+  "file": "bank-column-mapping.entity.ts"
  },
  "bank_movements": {
   "class": "BankMovement",
   "module": "conciliacion",
-  "file": "bank-movement.espejo.ts"
+  "file": "bank-movement.entity.ts"
  },
  "bank_upload_batches": {
   "class": "BankUploadBatch",
   "module": "conciliacion",
-  "file": "bank-upload-batch.espejo.ts"
+  "file": "bank-upload-batch.entity.ts"
  },
  "billing_references": {
   "class": "BillingReference",
   "module": "facturacion",
-  "file": "billing-reference.espejo.ts"
+  "file": "billing-reference.entity.ts"
  },
  "churn_reasons": {
   "class": "ChurnReason",
@@ -67,87 +67,87 @@
  "claude_skills": {
   "class": "ClaudeSkill",
   "module": "base-tenancy",
-  "file": "claude-skill.espejo.ts"
+  "file": "claude-skill.entity.ts"
  },
  "client_agent_configs": {
   "class": "ClientAgentConfig",
   "module": "automatizaciones-ia",
-  "file": "client-agent-config.espejo.ts"
+  "file": "client-agent-config.entity.ts"
  },
  "client_documents": {
   "class": "ClientDocument",
   "module": "clientes",
-  "file": "client-document.espejo.ts"
+  "file": "client-document.entity.ts"
  },
  "client_entity_tax_id_normalization_conflicts": {
   "class": "ClientEntityTaxIdNormalizationConflict",
   "module": "clientes",
-  "file": "client-entity-tax-id-normalization-conflict.espejo.ts"
+  "file": "client-entity-tax-id-normalization-conflict.entity.ts"
  },
  "company_account_mappings": {
   "class": "CompanyAccountMapping",
   "module": "clientes",
-  "file": "company-account-mapping.espejo.ts"
+  "file": "company-account-mapping.entity.ts"
  },
  "company_bank_accounts": {
   "class": "CompanyBankAccount",
   "module": "clientes",
-  "file": "company-bank-account.espejo.ts"
+  "file": "company-bank-account.entity.ts"
  },
  "company_legal_documents": {
   "class": "CompanyLegalDocument",
   "module": "clientes",
-  "file": "company-legal-document.espejo.ts"
+  "file": "company-legal-document.entity.ts"
  },
  "contact_preferences": {
   "class": "ContactPreference",
   "module": "clientes",
-  "file": "contact-preference.espejo.ts"
+  "file": "contact-preference.entity.ts"
  },
  "contract_amendment_items": {
   "class": "ContractAmendmentItem",
   "module": "contratos",
-  "file": "contract-amendment-item.espejo.ts"
+  "file": "contract-amendment-item.entity.ts"
  },
  "contract_amendments": {
   "class": "ContractAmendment",
   "module": "contratos",
-  "file": "contract-amendment.espejo.ts"
+  "file": "contract-amendment.entity.ts"
  },
  "contract_billing_splits": {
   "class": "ContractBillingSplit",
   "module": "contratos",
-  "file": "contract-billing-split.espejo.ts"
+  "file": "contract-billing-split.entity.ts"
  },
  "contract_change_log": {
   "class": "ContractChangeLog",
   "module": "contratos",
-  "file": "contract-change-log.espejo.ts"
+  "file": "contract-change-log.entity.ts"
  },
  "contract_clauses": {
   "class": "ContractClaus",
   "module": "contratos",
-  "file": "contract-claus.espejo.ts"
+  "file": "contract-claus.entity.ts"
  },
  "contract_documents": {
   "class": "ContractDocument",
   "module": "contratos",
-  "file": "contract-document.espejo.ts"
+  "file": "contract-document.entity.ts"
  },
  "contract_fx_period_rates": {
   "class": "ContractFxPeriodRate",
   "module": "fx",
-  "file": "contract-fx-period-rate.espejo.ts"
+  "file": "contract-fx-period-rate.entity.ts"
  },
  "contract_invoices": {
   "class": "ContractInvoice",
   "module": "contratos",
-  "file": "contract-invoice.espejo.ts"
+  "file": "contract-invoice.entity.ts"
  },
  "contract_item_change_log": {
   "class": "ContractItemChangeLog",
   "module": "contratos",
-  "file": "contract-item-change-log.espejo.ts"
+  "file": "contract-item-change-log.entity.ts"
  },
  "contract_items": {
   "class": "ContractItem",
@@ -157,82 +157,82 @@
  "contract_lifecycle_events": {
   "class": "ContractLifecycleEvent",
   "module": "contratos",
-  "file": "contract-lifecycle-event.espejo.ts"
+  "file": "contract-lifecycle-event.entity.ts"
  },
  "contract_notifications": {
   "class": "ContractNotification",
   "module": "contratos",
-  "file": "contract-notification.espejo.ts"
+  "file": "contract-notification.entity.ts"
  },
  "contract_templates": {
   "class": "ContractTemplate",
   "module": "contratos",
-  "file": "contract-template.espejo.ts"
+  "file": "contract-template.entity.ts"
  },
  "contract_workflow_history": {
   "class": "ContractWorkflowHistory",
   "module": "contratos",
-  "file": "contract-workflow-history.espejo.ts"
+  "file": "contract-workflow-history.entity.ts"
  },
  "custom_field_definitions": {
   "class": "CustomFieldDefinition",
   "module": "base-tenancy",
-  "file": "custom-field-definition.espejo.ts"
+  "file": "custom-field-definition.entity.ts"
  },
  "email_sender_addresses": {
   "class": "EmailSenderAddress",
   "module": "automatizaciones-ia",
-  "file": "email-sender-address.espejo.ts"
+  "file": "email-sender-address.entity.ts"
  },
  "financial_settings": {
   "class": "FinancialSettings",
   "module": "base-tenancy",
-  "file": "financial-settings.espejo.ts"
+  "file": "financial-settings.entity.ts"
  },
  "fx_api_sync_log": {
   "class": "FxApiSyncLog",
   "module": "fx",
-  "file": "fx-api-sync-log.espejo.ts"
+  "file": "fx-api-sync-log.entity.ts"
  },
  "holding_email_sender_settings": {
   "class": "HoldingEmailSenderSettings",
   "module": "automatizaciones-ia",
-  "file": "holding-email-sender-settings.espejo.ts"
+  "file": "holding-email-sender-settings.entity.ts"
  },
  "holding_fx_period_rates": {
   "class": "HoldingFxPeriodRate",
   "module": "fx",
-  "file": "holding-fx-period-rate.espejo.ts"
+  "file": "holding-fx-period-rate.entity.ts"
  },
  "holding_settings": {
   "class": "HoldingSettings",
   "module": "base-tenancy",
-  "file": "holding-settings.espejo.ts"
+  "file": "holding-settings.entity.ts"
  },
  "integration_configs": {
   "class": "IntegrationConfig",
   "module": "integraciones/otras",
-  "file": "integration-config.espejo.ts"
+  "file": "integration-config.entity.ts"
  },
  "invoice_adjustments": {
   "class": "InvoiceAdjustment",
   "module": "facturacion",
-  "file": "invoice-adjustment.espejo.ts"
+  "file": "invoice-adjustment.entity.ts"
  },
  "invoice_collection_logs": {
   "class": "InvoiceCollectionLog",
   "module": "facturacion",
-  "file": "invoice-collection-log.espejo.ts"
+  "file": "invoice-collection-log.entity.ts"
  },
  "invoice_collection_settings": {
   "class": "InvoiceCollectionSettings",
   "module": "facturacion",
-  "file": "invoice-collection-settings.espejo.ts"
+  "file": "invoice-collection-settings.entity.ts"
  },
  "invoice_emails": {
   "class": "InvoiceEmail",
   "module": "facturacion",
-  "file": "invoice-email.espejo.ts"
+  "file": "invoice-email.entity.ts"
  },
  "invoice_items_legacy": {
   "class": "InvoiceItemsLegacy",
@@ -247,22 +247,22 @@
  "invoice_payments": {
   "class": "InvoicePayment",
   "module": "facturacion",
-  "file": "invoice-payment.espejo.ts"
+  "file": "invoice-payment.entity.ts"
  },
  "invoice_reference_links": {
   "class": "InvoiceReferenceLink",
   "module": "facturacion",
-  "file": "invoice-reference-link.espejo.ts"
+  "file": "invoice-reference-link.entity.ts"
  },
  "invoice_reschedules": {
   "class": "InvoiceReschedule",
   "module": "facturacion",
-  "file": "invoice-reschedule.espejo.ts"
+  "file": "invoice-reschedule.entity.ts"
  },
  "invoice_restructure_log": {
   "class": "InvoiceRestructureLog",
   "module": "facturacion",
-  "file": "invoice-restructure-log.espejo.ts"
+  "file": "invoice-restructure-log.entity.ts"
  },
  "invoice_trigger_debug_logs": {
   "class": "InvoiceTriggerDebugLog",
@@ -277,27 +277,27 @@
  "mrr_adjustments": {
   "class": "MrrAdjustment",
   "module": "revenue",
-  "file": "mrr-adjustment.espejo.ts"
+  "file": "mrr-adjustment.entity.ts"
  },
  "mrr_legacy": {
   "class": "MrrLegacy",
   "module": "legacy",
-  "file": "mrr-legacy.espejo.ts"
+  "file": "mrr-legacy.entity.ts"
  },
  "odoo_object_mappings": {
   "class": "OdooObjectMapping",
   "module": "integraciones/odoo",
-  "file": "odoo-object-mapping.espejo.ts"
+  "file": "odoo-object-mapping.entity.ts"
  },
  "overdue_check_log": {
   "class": "OverdueCheckLog",
   "module": "facturacion",
-  "file": "overdue-check-log.espejo.ts"
+  "file": "overdue-check-log.entity.ts"
  },
  "period_guard_warnings": {
   "class": "PeriodGuardWarning",
   "module": "facturacion",
-  "file": "period-guard-warning.espejo.ts"
+  "file": "period-guard-warning.entity.ts"
  },
  "permissions": {
   "class": "Permission",
@@ -312,32 +312,32 @@
  "quote_attachments": {
   "class": "QuoteAttachment",
   "module": "cotizaciones-catalogo",
-  "file": "quote-attachment.espejo.ts"
+  "file": "quote-attachment.entity.ts"
  },
  "rag_documents": {
   "class": "RagDocument",
   "module": "automatizaciones-ia",
-  "file": "rag-document.espejo.ts"
+  "file": "rag-document.entity.ts"
  },
  "reference_requests": {
   "class": "ReferenceRequest",
   "module": "facturacion",
-  "file": "reference-request.espejo.ts"
+  "file": "reference-request.entity.ts"
  },
  "revenue_rules": {
   "class": "RevenueRule",
   "module": "revenue",
-  "file": "revenue-rule.espejo.ts"
+  "file": "revenue-rule.entity.ts"
  },
  "revenue_schedule_monthly": {
   "class": "RevenueScheduleMonthly",
   "module": "revenue",
-  "file": "revenue-schedule-monthly.espejo.ts"
+  "file": "revenue-schedule-monthly.entity.ts"
  },
  "role_permissions": {
   "class": "RolePermission",
   "module": "base-tenancy",
-  "file": "role-permission.espejo.ts"
+  "file": "role-permission.entity.ts"
  },
  "roles": {
   "class": "Role",
@@ -347,7 +347,7 @@
  "salesforce_sync_logs": {
   "class": "SalesforceSyncLog",
   "module": "integraciones/salesforce",
-  "file": "salesforce-sync-log.espejo.ts"
+  "file": "salesforce-sync-log.entity.ts"
  },
  "subscription_items": {
   "class": "SubscriptionItem",
@@ -362,12 +362,12 @@
  "user_view_preferences": {
   "class": "UserViewPreference",
   "module": "base-tenancy",
-  "file": "user-view-preference.espejo.ts"
+  "file": "user-view-preference.entity.ts"
  },
  "workflow_step_documents": {
   "class": "WorkflowStepDocument",
   "module": "contratos",
-  "file": "workflow-step-document.espejo.ts"
+  "file": "workflow-step-document.entity.ts"
  },
  "workflow_steps": {
   "class": "WorkflowStep",

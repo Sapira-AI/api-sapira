@@ -4,17 +4,21 @@
 > hasta que `yarn schema:log` no emita nada. Mientras emita algo, la entity **no** es todavía
 > la definición de la tabla.
 
-> Medición base: 2026-09-09, **1102 sentencias** de deriva · **104 al día de hoy**
-> (`TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log` contra producción).
+> Medición base: 2026-09-09, **1102 sentencias** de deriva · **94 al 2026-09-16**
+> (`yarn schema:log` contra producción; desde que no quedan espejos ya no hace falta
+> `TYPEORM_LOAD_MIRROR_ENTITIES=true`, y con o sin el flag la salida es idéntica).
 >
-> **Las 104 están todas clasificadas y ninguna cambiaría producción**: 41 índices de
-> `special-index/`, 28 FKs que TypeORM dropea y vuelve a crear idénticas, 14 sentencias del churn
-> de `gen_random_uuid()`, 10 índices que se dropean y recrean igual, 4 defaults `CURRENT_DATE` que
-> TypeORM normaliza a `('now'::text)::date`, 3 defaults `ARRAY[]` equivalentes y las 4 de la
-> migración `AlignStagingProcessingStatusDefault`, que está escrita y espera autorización.
+> **Las 94 están todas clasificadas y ninguna cambiaría producción**: 41 índices de
+> `special-index/`, 28 FKs que TypeORM dropea y vuelve a crear idénticas (14 pares), 14 sentencias
+> del churn de `gen_random_uuid()`, 4 de 2 índices que se dropean y recrean igual
+> (`idx_client_entities_odoo_partner_holding`, `idx_invoice_payments_holding_date`), 4 defaults
+> `CURRENT_DATE` que TypeORM normaliza a `('now'::text)::date` y 3 defaults `ARRAY[]` equivalentes.
+> Las 4 de `AlignStagingProcessingStatusDefault` desaparecieron: esa migración ya se aplicó.
 >
-> Inventario: **132 tablas en producción** = 66 con entity activa + 64 con espejo inerte + 2 de
-> contabilidad interna (`sapira_sql_asset_history`, `sapira_typeorm_migrations`), que no llevan entity.
+> Inventario: **131 tablas en producción** = 129 con entity activa (74 de ellas promovidas desde
+> espejo; **ningún espejo inerte** desde el 2026-09-16) + 2 de contabilidad interna
+> (`sapira_sql_asset_history`, `sapira_typeorm_migrations`), que no llevan entity.
+> `database.module.spec.ts` falla si aparece una tabla de producción sin entity viva.
 
 > ⚠️ **Corrección de método (2026-09-13).** Hasta esta fecha las cifras por tabla se calculaban
 > atribuyendo cada sentencia por su `ALTER TABLE "x"`. Un `DROP INDEX "public"."idx_..."` no

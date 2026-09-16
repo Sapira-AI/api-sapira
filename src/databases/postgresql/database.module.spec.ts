@@ -26,7 +26,75 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 			['legacy', 'invoice-items-legacy.entity.ts'],
 			['legacy', 'invoice-items-legacy-match.entity.ts'],
 			['suscripciones', 'subscription-item.entity.ts'],
-		].map(([dir, file]) => path.join(entitiesDir, dir, file))
+			// Lote 3 (2026-09-16): los 63 restantes, juntos. Promoverlos todos a la vez vuelve irrelevante
+			// el orden de dependencias entre espejos: no queda ningún `.espejo.ts` que una entity pueda
+			// importar. Verificado: `schema:log` sin espejos cargados emite exactamente las mismas 94
+			// sentencias que antes emitía con `TYPEORM_LOAD_MIRROR_ENTITIES=true`, y ninguna tabla viva
+			// tenía una FK sin declarar hacia un espejo.
+			['automatizaciones-ia', 'agent-log.entity.ts'],
+			['automatizaciones-ia', 'agent.entity.ts'],
+			['automatizaciones-ia', 'ai-agent-config.entity.ts'],
+			['automatizaciones-ia', 'ai-agent.entity.ts'],
+			['automatizaciones-ia', 'ai-message.entity.ts'],
+			['automatizaciones-ia', 'ai-run.entity.ts'],
+			['automatizaciones-ia', 'client-agent-config.entity.ts'],
+			['automatizaciones-ia', 'email-sender-address.entity.ts'],
+			['automatizaciones-ia', 'holding-email-sender-settings.entity.ts'],
+			['automatizaciones-ia', 'rag-document.entity.ts'],
+			['base-tenancy', 'claude-skill.entity.ts'],
+			['base-tenancy', 'custom-field-definition.entity.ts'],
+			['base-tenancy', 'financial-settings.entity.ts'],
+			['base-tenancy', 'holding-settings.entity.ts'],
+			['base-tenancy', 'role-permission.entity.ts'],
+			['base-tenancy', 'user-view-preference.entity.ts'],
+			['clientes', 'client-document.entity.ts'],
+			['clientes', 'client-entity-tax-id-normalization-conflict.entity.ts'],
+			['clientes', 'company-account-mapping.entity.ts'],
+			['clientes', 'company-bank-account.entity.ts'],
+			['clientes', 'company-legal-document.entity.ts'],
+			['clientes', 'contact-preference.entity.ts'],
+			['conciliacion', 'bank-column-mapping.entity.ts'],
+			['conciliacion', 'bank-movement.entity.ts'],
+			['conciliacion', 'bank-upload-batch.entity.ts'],
+			['contratos', 'contract-amendment-item.entity.ts'],
+			['contratos', 'contract-amendment.entity.ts'],
+			['contratos', 'contract-billing-split.entity.ts'],
+			['contratos', 'contract-change-log.entity.ts'],
+			['contratos', 'contract-claus.entity.ts'],
+			['contratos', 'contract-document.entity.ts'],
+			['contratos', 'contract-invoice.entity.ts'],
+			['contratos', 'contract-item-change-log.entity.ts'],
+			['contratos', 'contract-lifecycle-event.entity.ts'],
+			['contratos', 'contract-notification.entity.ts'],
+			['contratos', 'contract-template.entity.ts'],
+			['contratos', 'contract-workflow-history.entity.ts'],
+			['contratos', 'workflow-step-document.entity.ts'],
+			['cotizaciones-catalogo', 'quote-attachment.entity.ts'],
+			['facturacion', 'billing-reference.entity.ts'],
+			['facturacion', 'invoice-adjustment.entity.ts'],
+			['facturacion', 'invoice-collection-log.entity.ts'],
+			['facturacion', 'invoice-collection-settings.entity.ts'],
+			['facturacion', 'invoice-email.entity.ts'],
+			['facturacion', 'invoice-payment.entity.ts'],
+			['facturacion', 'invoice-reference-link.entity.ts'],
+			['facturacion', 'invoice-reschedule.entity.ts'],
+			['facturacion', 'invoice-restructure-log.entity.ts'],
+			['facturacion', 'overdue-check-log.entity.ts'],
+			['facturacion', 'period-guard-warning.entity.ts'],
+			['facturacion', 'reference-request.entity.ts'],
+			['fx', 'contract-fx-period-rate.entity.ts'],
+			['fx', 'fx-api-sync-log.entity.ts'],
+			['fx', 'holding-fx-period-rate.entity.ts'],
+			['integraciones/odoo', 'odoo-object-mapping.entity.ts'],
+			['integraciones/otras', 'integration-config.entity.ts'],
+			['integraciones/salesforce', 'salesforce-sync-log.entity.ts'],
+			['legacy', 'mrr-legacy.entity.ts'],
+			['revenue', 'accounting-period-cutoff.entity.ts'],
+			['revenue', 'accounting-period-event.entity.ts'],
+			['revenue', 'mrr-adjustment.entity.ts'],
+			['revenue', 'revenue-rule.entity.ts'],
+			['revenue', 'revenue-schedule-monthly.entity.ts'],
+		].map(([dir, file]) => path.join(entitiesDir, ...dir.split('/'), file))
 	);
 
 	const listTypeScriptFiles = (dir: string): string[] =>
@@ -98,6 +166,37 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 			.filter((file) => file.endsWith('.entity.ts'))
 			.filter((file) => !promotedMirrorEntities.has(file) && !reubicadas.has(file));
 		expect(offenders).toEqual([]);
+	});
+
+	it('toda tabla de producción tiene una entity viva: no quedan espejos inertes', () => {
+		// Desde el lote 3 (2026-09-16) el esquema como código cubre todas las tablas: una tabla se
+		// crea o altera con entity + migración, y eso solo funciona si TypeORM la ve. Un espejo
+		// inerte vuelve invisible a su tabla para `migration:generate`.
+		//
+		// Si esto falla, apareció en el catálogo una tabla sin entity: se creó por fuera del proceso.
+		// No se "arregla" con un espejo: se promueve (README → Promover un espejo) o se decide
+		// eliminarla con una migración.
+		const catalogo = leerJson<{ tables: Record<string, unknown> }>('scripts', 'espejo', 'snapshots', 'raw', 'catalog.json');
+		// Contabilidad del propio tooling: la crea y evoluciona su runner, no una entity.
+		const sinEntityPorDiseno = new Set(['sapira_sql_asset_history', 'sapira_typeorm_migrations']);
+
+		const tablasConEntity = new Set(
+			listTypeScriptFiles(srcDir)
+				.filter((file) => file.endsWith('.entity.ts'))
+				.flatMap((file) =>
+					[...fs.readFileSync(file, 'utf8').matchAll(/@Entity\(\s*(?:\{([^)]*?)name:\s*)?'([a-z_0-9]+)'/g)]
+						.filter(([, opciones]) => !opciones || !/schema:/.test(opciones) || /schema:\s*'public'/.test(opciones))
+						.map(([, , tabla]) => tabla)
+				)
+		);
+		const espejosInertes = fs
+			.readdirSync(entitiesDir, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory())
+			.flatMap((dir) => listTypeScriptFiles(path.join(entitiesDir, dir.name)))
+			.filter((file) => file.endsWith('.espejo.ts'));
+
+		expect(Object.keys(catalogo.tables).filter((tabla) => !tablasConEntity.has(tabla) && !sinEntityPorDiseno.has(tabla))).toEqual([]);
+		expect(espejosInertes).toEqual([]);
 	});
 
 	it('ninguna tabla queda con espejo y entity a la vez', () => {

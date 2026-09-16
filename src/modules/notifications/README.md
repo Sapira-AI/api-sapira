@@ -4,12 +4,13 @@ El módulo expone `notifications` para eventos de aplicación persistentes y sus
 
 ## Endpoints
 
-- `POST /notifications`: crea un evento. Puede incluir `recipients.user_ids`, `recipients.role_ids` y `recipients.include_super_admins`. Los destinatarios se limitan a usuarios con estado `Activo` y membresía activa en el holding. También se agregan las suscripciones activas del mismo `type`.
+No hay endpoint HTTP de creación: las notificaciones se crean desde el backend con `NotificationsService.create` / `createOrUpdate`. Los destinatarios (`recipients.user_ids`, `recipients.role_ids`, `recipients.include_super_admins` más las suscripciones activas del mismo `type`) se limitan a usuarios con estado `Activo` y membresía activa en el holding.
+
 - `GET /notifications?page=1&limit=20`: devuelve las notificaciones del usuario autenticado, su paginación y `unread_count`.
 - `GET /notifications/:notificationId`: devuelve únicamente una notificación asignada al usuario autenticado.
 - `PATCH /notifications/:notificationId/read`: marca como leída únicamente la asignación del usuario autenticado.
-- `GET /notifications/subscriptions/salesforce-staging-blocked`: lista las suscripciones de rol de `salesforce_staging_blocked`.
-- `PUT /notifications/subscriptions/salesforce-staging-blocked`: reemplaza esas suscripciones con `{ role_ids, include_super_admins }`.
+- `GET /notifications/subscriptions/salesforce-staging-blocked`: lista las suscripciones de rol de todos los tipos suscribibles (ver tabla), pese al nombre de la ruta.
+- `PUT /notifications/subscriptions/salesforce-staging-blocked`: reemplaza esas suscripciones, para los tres tipos, con `{ role_ids, include_super_admins }`.
 
 La gestión de suscripciones requiere una membresía activa en el holding y puede ser realizada por Super Admin o por usuarios con rol `Administrador` en ese holding.
 
@@ -27,7 +28,20 @@ Los endpoints de suscripción operan sobre todos los tipos de `ROLE_SUBSCRIPTION
 
 ## Entrega en tiempo real
 
-`NotificationsGateway` expone el namespace WebSocket `/notifications`. El cliente se autentica con el token de Supabase en el handshake y queda unido a la sala `user:<id>`. Al crearse una notificación, cada destinatario recibe el evento `notification:created` con la notificación y `is_read: false`. La actualización de una notificación ya abierta por `deduplication_key` no reemite el evento.
+`NotificationsGateway` expone el namespace Socket.IO `/notifications` en el mismo servidor HTTP. Lo consumen `front-sapira` (Next) y `front-sapira-vite`.
+
+- **Handshake**: token de Supabase en `auth.token` (o header `Authorization: Bearer`). El cliente queda en la sala `user:<users.id>`, de modo que recibe eventos de todos sus holdings y **debe filtrar por `holdingId`**.
+- **CORS**: mismos orígenes que HTTP (`src/core/config/cors-origins.ts`: `FRONT_BASE_URL` + previews `*.vercel.app`). En producción `FRONT_BASE_URL` debe incluir `https://app.aisapira.com` y `https://www.aisapira.com`.
+
+| Evento (servidor → cliente) | Payload | Cuándo |
+| --- | --- | --- |
+| `connected` | `{ userId }` (id de Supabase Auth) | handshake válido |
+| `unauthorized` | `{ message }` | token ausente, inválido o usuario inexistente; el servidor desconecta a continuación y el cliente debe reconectar con un token nuevo |
+| `notification:created` | `{ holdingId, notification }` (con `is_read: false`) | `create` inserta una notificación con destinatarios |
+| `notification:read` | `{ holdingId, notificationId, read_at }` | `PATCH /notifications/:id/read` marca una pendiente (solo a la sala del usuario, para sincronizar sus otras pestañas y el otro front) |
+| `notification:updated` | `{ holdingId, notificationId }` | `createOrUpdate` actualiza una notificación abierta por `deduplication_key`, o `resolveByDeduplicationKey` la resuelve |
+
+El gateway no escucha eventos del cliente. Los fronts usan los eventos como **señal para recargar** por REST (`GET /notifications`), que sigue siendo la fuente de verdad; así una reconexión no pierde cambios.
 
 ## Dependencias de datos
 

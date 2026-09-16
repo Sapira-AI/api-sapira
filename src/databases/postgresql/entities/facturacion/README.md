@@ -14,31 +14,31 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `invoices` (9460) | `src/databases/postgresql/entities/facturacion/invoice.entity.ts` · `Invoice` | ⚠️ difiere de prod | `credit_type` text<br>`credit_reason` text<br>`nc_revenue_treatment` text | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `invoices_pkey`<br>CHECK `invoices_credit_reason_check`<br>CHECK `invoices_credit_type_check`<br>CHECK `invoices_document_type_check`<br>CHECK `invoices_export_type_check`<br>CHECK `invoices_invoice_type_check`<br>CHECK `invoices_nc_revenue_treatment_check`<br>CHECK `invoices_payment_method_check`<br>CHECK `invoices_status_check`<br>FK `fk_invoices_holding_id` → company_holdings ON DELETE CASCADE<br>FK `invoices_client_entity_id_fkey` → client_entities<br>FK `invoices_client_id_fkey` → clients<br>FK `invoices_company_id_fkey` → companies<br>FK `invoices_consolidated_into_invoice_id_fkey` → invoices ON DELETE SET NULL<br>FK `invoices_contract_id_fkey` → contracts<br>FK `invoices_holding_id_fkey` → company_holdings<br>FK `invoices_legacy_invoice_id_fkey` → invoices_legacy ON DELETE SET NULL<br>FK `invoices_related_invoice_id_fkey` → invoices<br>FK `invoices_split_from_invoice_id_fkey` → invoices ON DELETE SET NULL<br>FK `invoices_subscription_id_fkey` → subscriptions<br>índice `idx_invoices_active_contract_period` (parcial)<br>índice `idx_invoices_auto_invoice` (parcial)<br>índice `idx_invoices_consolidated_into` (parcial)<br>índice `idx_invoices_group_id` (parcial)<br>índice `idx_invoices_holding_id`<br>índice `idx_invoices_invoice_type`<br>índice `idx_invoices_odoo_invoice_id` (parcial)<br>índice `idx_invoices_overdue_check` (parcial)<br>índice `idx_invoices_related_invoice_id` (parcial)<br>índice `idx_invoices_requires_references` (parcial)<br>índice `idx_invoices_split_from` (parcial)<br>índice `idx_invoices_stripe_id_holding_id` (parcial)<br>índice `idx_invoices_subscription_id` (parcial)<br>índice con expresión `idx_invoices_custom_fields` |
 | `sapira_quantity_imports` (0) | `src/databases/postgresql/entities/facturacion/sapira-quantity-import.entity.ts` · `SapiraQuantityImport` | ❔ sin metadata | — | — | — | — |
 
-## B · Tablas SIN entity → espejos creados (13), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (13): 13 promovidas, 0 apagadas
 
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `billing_references` (0, RLS on) | `billing-reference.espejo.ts` · `BillingReference` | 17 | `billing_references_pkey` (id) | — | — | `billing_references_contract_id_fkey` → contracts (CASCADE)<br>`billing_references_created_by_fkey` → users<br>`billing_references_holding_id_fkey` → company_holdings (CASCADE) | `idx_billing_references_contract`, `idx_billing_references_holding`, `idx_billing_references_status` | — | 4 |
-| `invoice_adjustments` (0, RLS on) | `invoice-adjustment.espejo.ts` · `InvoiceAdjustment` | 9 | `invoice_adjustments_pkey` (id) | — | `invoice_adjustments_type_check` | `invoice_adjustments_adjusted_by_fkey` → users<br>`invoice_adjustments_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_adjustments_holding_id`, `idx_invoice_adjustments_invoice_id`, `idx_invoice_adjustments_type` | — | 4 |
-| `invoice_collection_logs` (0, RLS on) | `invoice-collection-log.espejo.ts` · `InvoiceCollectionLog` | 11 | `invoice_collection_logs_pkey` (id) | — | — | `invoice_collection_logs_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_collection_logs_holding_id`, `idx_invoice_collection_logs_invoice_id` | — | 4 |
-| `invoice_collection_settings` (1, RLS on) | `invoice-collection-settings.espejo.ts` · `InvoiceCollectionSettings` | 11 | `invoice_collection_settings_pkey` (id) | `invoice_collection_settings_holding_id_key` | — | — | `idx_invoice_collection_settings_holding_id` | trg_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()<br>trg_update_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `invoice_emails` (0, RLS on) | `invoice-email.espejo.ts` · `InvoiceEmail` | 10 | `invoice_emails_pkey` (id) | — | `invoice_emails_template_check` | `invoice_emails_invoice_id_fkey` → invoices (CASCADE)<br>`invoice_emails_sent_by_fkey` → users | `idx_invoice_emails_holding_id`, `idx_invoice_emails_invoice_id`, `idx_invoice_emails_template` | — | 4 |
-| `invoice_payments` (243, RLS on) | `invoice-payment.espejo.ts` · `InvoicePayment` | 13 | `invoice_payments_pkey` (id) | — | — | `invoice_payments_bank_movement_id_fkey` → bank_movements<br>`invoice_payments_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_payments_bank_movement`, `idx_invoice_payments_holding_date` | trg_recalc_after_delete · AFTER DELETE FOR EACH ROW → after_invoice_payment_change()<br>trg_recalc_after_insert · AFTER INSERT FOR EACH ROW → after_invoice_payment_change()<br>trg_recalc_after_update · AFTER UPDATE FOR EACH ROW → after_invoice_payment_change()<br>trg_set_invoice_payment_defaults · BEFORE INSERT FOR EACH ROW → set_invoice_payment_defaults() | 4 |
-| `invoice_reference_links` (0, RLS on) | `invoice-reference-link.espejo.ts` · `InvoiceReferenceLink` | 6 | `invoice_reference_links_pkey` (id) | `invoice_reference_links_invoice_id_reference_id_key` | — | `invoice_reference_links_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_reference_links_invoice_id_fkey` → invoices (CASCADE)<br>`invoice_reference_links_linked_by_fkey` → users<br>`invoice_reference_links_reference_id_fkey` → billing_references (CASCADE) | `idx_invoice_reference_links_invoice`, `idx_invoice_reference_links_reference` | — | 1 |
-| `invoice_reschedules` (1, RLS on) | `invoice-reschedule.espejo.ts` · `InvoiceReschedule` | 9 | `invoice_reschedules_pkey` (id) | — | — | `invoice_reschedules_changed_by_fkey` → users<br>`invoice_reschedules_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_reschedules_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_reschedules_invoice_id` | — | 3 |
-| `invoice_restructure_log` (312, RLS on) | `invoice-restructure-log.espejo.ts` · `InvoiceRestructureLog` | 7 | `invoice_restructure_log_pkey` (id) | — | `invoice_restructure_log_action_check` | `invoice_restructure_log_actor_user_id_fkey` → users<br>`invoice_restructure_log_contract_id_fkey` → contracts | `idx_invoice_restructure_log_contract` (expresión, no declarado), `idx_invoice_restructure_log_holding_action` (expresión, no declarado) | — | 2 |
-| `overdue_check_log` (51, RLS on) | `overdue-check-log.espejo.ts` · `OverdueCheckLog` | 10 | `overdue_check_log_pkey` (id) | — | `overdue_check_log_status_check` | `overdue_check_log_holding_id_fkey` → company_holdings (CASCADE) | `idx_overdue_check_log_date` (expresión, no declarado), `idx_overdue_check_log_holding_id` (expresión, no declarado), `idx_overdue_check_log_status` (expresión, no declarado) | — | 2 |
-| `period_guard_warnings` (0, RLS on) | `period-guard-warning.espejo.ts` · `PeriodGuardWarning` | 13 | `period_guard_warnings_pkey` (id) | — | — | `period_guard_warnings_triggered_by_fkey` → users (SET NULL) | `idx_pgw_company_time` (expresión, no declarado) | — | 1 |
+| `billing_references` (0, RLS on) | `billing-reference.entity.ts` · `BillingReference` | 17 | `billing_references_pkey` (id) | — | — | `billing_references_contract_id_fkey` → contracts (CASCADE)<br>`billing_references_created_by_fkey` → users<br>`billing_references_holding_id_fkey` → company_holdings (CASCADE) | `idx_billing_references_contract`, `idx_billing_references_holding`, `idx_billing_references_status` | — | 4 |
+| `invoice_adjustments` (0, RLS on) | `invoice-adjustment.entity.ts` · `InvoiceAdjustment` | 9 | `invoice_adjustments_pkey` (id) | — | `invoice_adjustments_type_check` | `invoice_adjustments_adjusted_by_fkey` → users<br>`invoice_adjustments_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_adjustments_holding_id`, `idx_invoice_adjustments_invoice_id`, `idx_invoice_adjustments_type` | — | 4 |
+| `invoice_collection_logs` (0, RLS on) | `invoice-collection-log.entity.ts` · `InvoiceCollectionLog` | 11 | `invoice_collection_logs_pkey` (id) | — | — | `invoice_collection_logs_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_collection_logs_holding_id`, `idx_invoice_collection_logs_invoice_id` | — | 4 |
+| `invoice_collection_settings` (1, RLS on) | `invoice-collection-settings.entity.ts` · `InvoiceCollectionSettings` | 11 | `invoice_collection_settings_pkey` (id) | `invoice_collection_settings_holding_id_key` | — | — | `idx_invoice_collection_settings_holding_id` | trg_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()<br>trg_update_invoice_collection_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `invoice_emails` (0, RLS on) | `invoice-email.entity.ts` · `InvoiceEmail` | 10 | `invoice_emails_pkey` (id) | — | `invoice_emails_template_check` | `invoice_emails_invoice_id_fkey` → invoices (CASCADE)<br>`invoice_emails_sent_by_fkey` → users | `idx_invoice_emails_holding_id`, `idx_invoice_emails_invoice_id`, `idx_invoice_emails_template` | — | 4 |
+| `invoice_payments` (243, RLS on) | `invoice-payment.entity.ts` · `InvoicePayment` | 13 | `invoice_payments_pkey` (id) | — | — | `invoice_payments_bank_movement_id_fkey` → bank_movements<br>`invoice_payments_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_payments_bank_movement`, `idx_invoice_payments_holding_date` | trg_recalc_after_delete · AFTER DELETE FOR EACH ROW → after_invoice_payment_change()<br>trg_recalc_after_insert · AFTER INSERT FOR EACH ROW → after_invoice_payment_change()<br>trg_recalc_after_update · AFTER UPDATE FOR EACH ROW → after_invoice_payment_change()<br>trg_set_invoice_payment_defaults · BEFORE INSERT FOR EACH ROW → set_invoice_payment_defaults() | 4 |
+| `invoice_reference_links` (0, RLS on) | `invoice-reference-link.entity.ts` · `InvoiceReferenceLink` | 6 | `invoice_reference_links_pkey` (id) | `invoice_reference_links_invoice_id_reference_id_key` | — | `invoice_reference_links_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_reference_links_invoice_id_fkey` → invoices (CASCADE)<br>`invoice_reference_links_linked_by_fkey` → users<br>`invoice_reference_links_reference_id_fkey` → billing_references (CASCADE) | `idx_invoice_reference_links_invoice`, `idx_invoice_reference_links_reference` | — | 1 |
+| `invoice_reschedules` (1, RLS on) | `invoice-reschedule.entity.ts` · `InvoiceReschedule` | 9 | `invoice_reschedules_pkey` (id) | — | — | `invoice_reschedules_changed_by_fkey` → users<br>`invoice_reschedules_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_reschedules_invoice_id_fkey` → invoices (CASCADE) | `idx_invoice_reschedules_invoice_id` | — | 3 |
+| `invoice_restructure_log` (312, RLS on) | `invoice-restructure-log.entity.ts` · `InvoiceRestructureLog` | 7 | `invoice_restructure_log_pkey` (id) | — | `invoice_restructure_log_action_check` | `invoice_restructure_log_actor_user_id_fkey` → users<br>`invoice_restructure_log_contract_id_fkey` → contracts | `idx_invoice_restructure_log_contract` (expresión, no declarado), `idx_invoice_restructure_log_holding_action` (expresión, no declarado) | — | 2 |
+| `overdue_check_log` (51, RLS on) | `overdue-check-log.entity.ts` · `OverdueCheckLog` | 10 | `overdue_check_log_pkey` (id) | — | `overdue_check_log_status_check` | `overdue_check_log_holding_id_fkey` → company_holdings (CASCADE) | `idx_overdue_check_log_date` (expresión, no declarado), `idx_overdue_check_log_holding_id` (expresión, no declarado), `idx_overdue_check_log_status` (expresión, no declarado) | — | 2 |
+| `period_guard_warnings` (0, RLS on) | `period-guard-warning.entity.ts` · `PeriodGuardWarning` | 13 | `period_guard_warnings_pkey` (id) | — | — | `period_guard_warnings_triggered_by_fkey` → users (SET NULL) | `idx_pgw_company_time` (expresión, no declarado) | — | 1 |
 | `quantities` (252, RLS on) | `quantity.entity.ts` · `Quantity` | 16 | `quantities_pkey` (id) | `quantities_unique_item_period` | `quantities_period_check`, `quantities_quantity_check`, `quantities_unit_price_check` | `quantities_contract_id_fkey` → contracts<br>`quantities_contract_item_id_fkey` → contract_items (CASCADE)<br>`quantities_created_by_fkey` → users<br>`quantities_holding_id_fkey` → company_holdings (CASCADE) | `quantities_contract_item_idx`, `quantities_holding_idx`, `quantities_period_idx` | trg_quantities_set_holding · BEFORE INSERT FOR EACH ROW → quantities_set_holding_from_contract_item()<br>trg_restore_invoice_items_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_invoice_items_amounts_on_quantity_delete()<br>trg_restore_rsm_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_rsm_on_quantity_delete()<br>trg_rsm_on_quantity_change · AFTER INSERT OR UPDATE FOR EACH ROW → trigger_rsm_on_quantity_change()<br>trg_sync_invoice_items_from_quantities · AFTER INSERT OR UPDATE FOR EACH ROW → sync_invoice_items_amounts_from_quantities()<br>trg_validate_quantity_invoice_status · BEFORE INSERT OR DELETE OR UPDATE FOR EACH ROW → validate_invoice_status_for_quantity_change() | 4 |
-| `reference_requests` (0, RLS on) | `reference-request.espejo.ts` · `ReferenceRequest` | 11 | `reference_requests_pkey` (id) | — | `reference_requests_reference_type_check`, `reference_requests_status_check` | — | `reference_requests_holding_idx` | — | 2 |
+| `reference_requests` (0, RLS on) | `reference-request.entity.ts` · `ReferenceRequest` | 11 | `reference_requests_pkey` (id) | — | `reference_requests_reference_type_check`, `reference_requests_status_check` | — | `reference_requests_holding_idx` | — | 2 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/facturacion.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (13 tablas)
 
-<details><summary><code>billing_references</code> → <code>billing-reference.espejo.ts</code> · 17 columnas</summary>
+<details><summary><code>billing_references</code> → <code>billing-reference.entity.ts</code> · 17 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -61,7 +61,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>invoice_adjustments</code> → <code>invoice-adjustment.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>invoice_adjustments</code> → <code>invoice-adjustment.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -76,7 +76,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>invoice_collection_logs</code> → <code>invoice-collection-log.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>invoice_collection_logs</code> → <code>invoice-collection-log.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -93,7 +93,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `metadata` | jsonb | no | '{}'::jsonb |  |
 
 </details>
-<details><summary><code>invoice_collection_settings</code> → <code>invoice-collection-settings.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>invoice_collection_settings</code> → <code>invoice-collection-settings.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -110,7 +110,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>invoice_emails</code> → <code>invoice-email.espejo.ts</code> · 10 columnas</summary>
+<details><summary><code>invoice_emails</code> → <code>invoice-email.entity.ts</code> · 10 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -126,7 +126,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>invoice_payments</code> → <code>invoice-payment.espejo.ts</code> · 13 columnas</summary>
+<details><summary><code>invoice_payments</code> → <code>invoice-payment.entity.ts</code> · 13 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -145,7 +145,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `bank_movement_id` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>invoice_reference_links</code> → <code>invoice-reference-link.espejo.ts</code> · 6 columnas</summary>
+<details><summary><code>invoice_reference_links</code> → <code>invoice-reference-link.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -157,7 +157,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `linked_by` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>invoice_reschedules</code> → <code>invoice-reschedule.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>invoice_reschedules</code> → <code>invoice-reschedule.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -172,7 +172,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp with time zone | sí | now() |  |
 
 </details>
-<details><summary><code>invoice_restructure_log</code> → <code>invoice-restructure-log.espejo.ts</code> · 7 columnas</summary>
+<details><summary><code>invoice_restructure_log</code> → <code>invoice-restructure-log.entity.ts</code> · 7 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -185,7 +185,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>overdue_check_log</code> → <code>overdue-check-log.espejo.ts</code> · 10 columnas</summary>
+<details><summary><code>overdue_check_log</code> → <code>overdue-check-log.entity.ts</code> · 10 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -201,7 +201,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | sí | — | ID del holding. NULL indica ejecución global del sistema que afecta múltiples holdings. |
 
 </details>
-<details><summary><code>period_guard_warnings</code> → <code>period-guard-warning.espejo.ts</code> · 13 columnas</summary>
+<details><summary><code>period_guard_warnings</code> → <code>period-guard-warning.entity.ts</code> · 13 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -242,7 +242,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `account` | text | sí | — | Cuenta contable proveniente del DWH (campo account_name en finance.sapira).  Texto libre, se almacena tal como llega del DWH sin mapeo adicional. |
 
 </details>
-<details><summary><code>reference_requests</code> → <code>reference-request.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>reference_requests</code> → <code>reference-request.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -263,4 +263,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `facturacion.entities.spec.ts`: metadata TypeORM en memoria vs `facturacion.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

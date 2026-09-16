@@ -53,6 +53,11 @@ actualizar todo lo que no es tabla.**
 - Un asset no contiene transiciones: nada de `ALTER TABLE`, `RENAME`, ni `UPDATE`/`DELETE` de datos.
   El único `DROP` permitido es `DROP … IF EXISTS` seguido del `CREATE` del mismo objeto.
 - Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
+- **Toda tabla de `public` tiene entity viva; no hay espejos** (`database.module.spec.ts` lo exige).
+  Una tabla nueva nace como entity + migración, nunca como `.espejo.ts`.
+- **74 entities son generadas** (cabecera "PROMOVIDA desde espejo"). Se editan para cambiar su tabla,
+  pero no se corre `scripts/espejo/generate-espejo.py` sin antes refrescar los snapshots desde prod:
+  regenerar con snapshots viejos revierte el cambio en silencio.
 
 ### Reglas
 - Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`. `yarn schema:log` es el único uso de

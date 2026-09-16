@@ -82,6 +82,10 @@ src/databases/postgresql/
 
 ### Promover un espejo
 
+> ✅ **Al 2026-09-16 no queda ningún espejo por promover**: los 74 son `.entity.ts` y toda tabla de
+> `public` tiene entity viva (lo exige `database.module.spec.ts`). Este procedimiento aplica si
+> reaparece un espejo, es decir, si alguien crea una tabla en prod por fuera de entity + migración.
+
 Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el runtime lo carga ni
 `schema:log` lo mira. Promoverlo lo convierte en la definición viva de su tabla.
 
@@ -95,9 +99,16 @@ Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el
 5. Declara en las entities activas las FKs que ese espejo bloqueaba.
 6. `yarn jest` y `TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log`.
 
-> ⚠️ El generador **reescribe** el `.entity.ts` de un espejo promovido en cada corrida: sigue siendo
-> un archivo generado. Lo que se edite a mano ahí se pierde. Si una tabla promovida necesita algo que
-> el generador no produce, va en el generador, no en el archivo.
+> ⚠️ El generador **reescribe** el `.entity.ts` de un espejo promovido en cada corrida, desde los
+> snapshots de prod: sigue siendo un archivo generado. Un cambio de tabla sí se hace editando la
+> entity (→ `migration:generate` → `migration:run`), pero **antes de volver a correr el generador
+> hay que refrescar los snapshots** (`fetch-catalog.ts` + `build-snapshots.py`), o la regeneración
+> lo revierte. Si una tabla promovida necesita algo que el generador no produce, va en el generador,
+> no en el archivo. Retirar el generador sobre las entities promovidas está pendiente.
+>
+> Pipeline: el generador escribe comillas dobles y el repo formatea con prettier, así que después de
+> regenerar va `yarn eslint --fix "src/databases/postgresql/entities/**/*.ts"`. Generador + eslint es
+> idempotente: correrlo sobre un árbol al día no deja diff.
 
 ## 🧱 Assets SQL no-TypeORM
 

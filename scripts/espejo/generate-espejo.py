@@ -482,12 +482,19 @@ for table in order:
             jc = f"@JoinColumn({{ name: '{src[0]}', referencedColumnName: '{ref[0]}', foreignKeyConstraintName: '{f['name']}' }})"
         else:
             jc = '@JoinColumn([' + ', '.join(f"{{ name: '{s}', referencedColumnName: '{r}', foreignKeyConstraintName: '{f['name']}' }}" for s, r in zip(src, ref)) + '])'
-        note = {'internal': ' // entity existente (no se duplica)', 'parent': ' // espejo de otro módulo', 'sibling': ''}[group]
+        note = {'internal': ' // entity existente (no se duplica)', 'parent': ' // de otro módulo', 'sibling': ''}[group]
         body.append(f'\t{rel}\n\t{jc}\n\t{prop}?: {tcls};{note}')
 
     filas = f"{t['rows']} filas" if t.get('rows', -1) >= 0 else 'filas desconocidas (tabla sin ANALYZE)'
-    header = [f"Espejo de `public.{table}` — generado desde prod en vivo (`{PROJECT}`, MCP Supabase, {DATE}). {filas} · RLS {'on' if rls else 'OFF'}{' (forzado)' if c_tab.get('rls_forced') else ''}."]
-    header.append('APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.')
+    origen = f"`public.{table}` — generado desde prod en vivo (`{PROJECT}`, MCP Supabase, {DATE}). {filas} · RLS {'on' if rls else 'OFF'}{' (forzado)' if c_tab.get('rls_forced') else ''}."
+    if promovido:
+        # Sin esta rama, los 74 espejos promovidos decían "APAGADO en runtime … termina en `.espejo.ts`"
+        # en su propia cabecera: falso, y es lo primero que lee quien abre el archivo (o un agente).
+        header = [f"Entity de {origen}"]
+        header.append('PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.')
+    else:
+        header = [f"Espejo de {origen}"]
+        header.append('APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.')
     comment = t.get('comment') or c_tab.get('comment')
     if comment:
         header += jsdoc_lines(comment)
@@ -534,7 +541,12 @@ for table in order:
     registry[table] = {'class': cls, 'module': MODULE, 'file': fname}
 
 # ---------- barrel del módulo, snapshot y spec ----------
-barrel = f'/**\n * Espejo del módulo `{MODULE}`: {len(generated)} tablas de `public` SIN entity previa en el repo, generadas desde prod en vivo.\n * APAGADAS en runtime (`*.espejo.ts`: el glob de entities de database.module.ts solo carga `*.entity.ts`). Las tablas que ya tenían entity no se duplican: ver README.md.\n */\n'
+n_promovidos = sum(1 for t in generated if sufijo_espejo(CLASS[t]) == '.entity')
+barrel = (
+    f'/**\n * Espejo del módulo `{MODULE}`: {len(generated)} tablas de `public` SIN entity previa en el repo, generadas desde prod en vivo.\n'
+    f' * Promovidas a `.entity.ts` (las carga el glob de database.module.ts): {n_promovidos}. Apagadas (`*.espejo.ts`, fuera del glob): {len(generated) - n_promovidos}.\n'
+    ' * Las tablas que ya tenían entity no se duplican: ver README.md.\n */\n'
+)
 barrel += ('\n'.join(f"export {{ {CLASS[t]} }} from './{kebab(CLASS[t])}{sufijo_espejo(CLASS[t])}';" for t in sorted(generated, key=lambda x: kebab(CLASS[x]))) if generated else 'export {};') + '\n'
 open(os.path.join(OUTDIR, 'index.ts'), 'w', encoding='utf-8').write(barrel)
 
@@ -657,15 +669,26 @@ if existing_rows:
                '| Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |', '|---|---|---|---|---|---|---|'] + existing_rows + ['']
 else:
     readme += ['Ninguna: todas las tablas de este módulo carecían de entity.', '']
-readme += [f"## B · Tablas SIN entity → espejos creados ({n_new}), APAGADOS", '']
+n_prom = sum(1 for t in generated if sufijo_espejo(CLASS[t]) == '.entity')
+if n_prom == n_new:
+    estado_b = ('**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob '
+                '`entities: [__dirname + \'/../../**/*.entity{.ts,.js}\']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. '
+                'Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: '
+                'este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.')
+else:
+    estado_b = (f'**Estado: {n_prom} promovidas, {n_new - n_prom} apagadas.** Un espejo apagado termina en `.espejo.ts`: `database.module.ts` carga entities con '
+                '`entities: [__dirname + \'/../../**/*.entity{.ts,.js}\']`, así que no lo ve, y ningún módulo lo incluye en `TypeOrmModule.forFeature([...])`. '
+                'Para promoverlo: renombrar a `.entity.ts`, regenerar y registrarlo en `promotedMirrorEntities` de `database.module.spec.ts` '
+                '(procedimiento en `src/databases/postgresql/README.md` → Promover un espejo).')
+readme += [f"## B · Tablas SIN entity previa → espejos generados ({n_new}): {n_prom} promovidas, {n_new - n_prom} apagadas", '']
 if created_rows:
-    readme += ['| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |', '|---|---|---|---|---|---|---|---|---|---|'] + created_rows + ['',
+    readme += ['| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |', '|---|---|---|---|---|---|---|---|---|---|'] + created_rows + ['',
                'Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/' + MOD_ID + '.catalog.json` (`policies_detail`) para el paso 4.', '',
-               '**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + \'/../../**/*.entity{.ts,.js}\']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.', '',
+               estado_b, '',
                f"## C · Columnas exactas de cada espejo ({n_new} tablas)", ''] + column_sections + ['',
                '## Verificación (sin conexión a la DB)', '',
                f"- `{MOD_ID}.entities.spec.ts`: metadata TypeORM en memoria vs `{MOD_ID}.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.",
-               f"- `{UP}../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.", '']
+               f"- `{UP}../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.", '']
 else:
     readme += ['Ninguna: todas las tablas de este módulo ya tienen entity en el repo; este módulo solo documenta el diff (sección A). No hay espejos, snapshot ni spec.', '']
 open(os.path.join(OUTDIR, 'README.md'), 'w', encoding='utf-8').write('\n'.join(readme))

@@ -13,28 +13,28 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `app_notification_recipients` (54) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity.ts` · `AppNotificationRecipient` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notification_recipients_pkey`<br>UNIQUE `app_notification_recipients_notification_id_user_id_key` (notification_id, user_id)<br>FK `app_notification_recipients_user_id_fkey` → users ON DELETE CASCADE<br>índice con expresión `app_notification_recipients_user_unread_idx` |
 | `notification_role_subscriptions` (18) | `src/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity.ts` · `NotificationRoleSubscription` | ⚠️ difiere de prod | — | — | — | nombre de PK `notification_role_subscriptions_pkey`<br>UNIQUE `notification_role_subscriptio_holding_id_role_id_notificati_key` (holding_id, role_id, notification_type)<br>FK `notification_role_subscriptions_holding_id_fkey` → company_holdings ON DELETE CASCADE<br>FK `notification_role_subscriptions_role_id_fkey` → roles ON DELETE CASCADE<br>índice `notification_role_subscriptions_holding_type_idx` (parcial) |
 
-## B · Tablas SIN entity → espejos creados (10), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (10): 10 promovidas, 0 apagadas
 
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `ai_agents` (16, RLS on) | `ai-agent.espejo.ts` · `AiAgent` | 11 | `ai_agents_pkey` (id) | — | `ai_agents_type_check` | — | `ai_agents_holding_type_idx` | update_ai_agents_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 2 |
-| `ai_agent_configs` (90, RLS on) | `ai-agent-config.espejo.ts` · `AiAgentConfig` | 6 | `ai_agent_configs_pkey` (id) | `ai_agent_configs_agent_id_key_key` | — | `ai_agent_configs_agent_id_fkey` → ai_agents (CASCADE) | `ai_agent_configs_agent_idx` | update_ai_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 2 |
-| `client_agent_configs` (0, RLS on) | `client-agent-config.espejo.ts` · `ClientAgentConfig` | 9 | `client_agent_configs_pkey` (id) | `client_agent_configs_holding_id_client_id_agent_type_key` | `client_agent_configs_agent_type_check` | `client_agent_configs_client_id_fkey` → clients (CASCADE)<br>`client_agent_configs_created_by_fkey` → users<br>`client_agent_configs_holding_id_fkey` → company_holdings (CASCADE) | `idx_client_agent_configs_agent_type`, `idx_client_agent_configs_enabled` (parcial), `idx_client_agent_configs_holding_client`, `idx_client_agent_configs_holding_global` (UNIQUE, parcial), `idx_client_agent_configs_holding_type` | trigger_update_client_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_client_agent_configs_updated_at()<br>trigger_validate_client_agent_config_email_sender · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_client_agent_config_email_sender() | 4 |
-| `agents` (0, RLS on) | `agent.espejo.ts` · `Agent` | 10 | `agents_pkey` (id) | — | — | `agents_company_id_fkey` → companies<br>`fk_agents_holding_id` → company_holdings (CASCADE) | `idx_agents_holding_id` | — | 4 |
-| `agent_logs` (0, RLS on) | `agent-log.espejo.ts` · `AgentLog` | 6 | `agent_logs_pkey` (id) | — | — | `agent_logs_agent_id_fkey` → agents<br>`agent_logs_user_id_fkey` → users<br>`fk_agent_logs_holding_id` → company_holdings (CASCADE) | `idx_agent_logs_holding_id` | — | 2 |
-| `ai_runs` (0, RLS on) | `ai-run.espejo.ts` · `AiRun` | 10 | `ai_runs_pkey` (id) | — | `ai_runs_status_check` | `ai_runs_agent_id_fkey` → ai_agents (CASCADE)<br>`ai_runs_holding_id_fkey` → company_holdings (CASCADE) | `ai_runs_agent_idx` (expresión, no declarado), `ai_runs_holding_idx` (expresión, no declarado) | — | 2 |
-| `ai_messages` (0, RLS on) | `ai-message.espejo.ts` · `AiMessage` | 9 | `ai_messages_pkey` (id) | — | `ai_messages_channel_check`, `ai_messages_direction_check` | `ai_messages_run_id_fkey` → ai_runs (CASCADE) | `ai_messages_run_idx` (expresión, no declarado) | — | 2 |
-| `rag_documents` (0, RLS on) | `rag-document.espejo.ts` · `RagDocument` | 9 | `rag_documents_pkey` (id) | — | — | `rag_documents_holding_id_fkey` → company_holdings (CASCADE) | `rag_documents_holding_id_idx`, `rag_documents_source_idx`, `rag_documents_embedding_ivfflat_idx` (expresión, no declarado), `rag_documents_metadata_gin_idx` (expresión, no declarado) | — | 1 |
-| `email_sender_addresses` (0, RLS on) | `email-sender-address.espejo.ts` · `EmailSenderAddress` | 11 | `email_sender_addresses_pkey` (id) | — | — | `email_sender_addresses_created_by_fkey` → users<br>`email_sender_addresses_domain_config_id_fkey` → holding_email_sender_settings (CASCADE) | `idx_email_sender_addresses_active` (parcial), `idx_email_sender_addresses_default` (parcial), `idx_email_sender_addresses_domain`, `unique_default_sender_per_domain` (UNIQUE, parcial) | trigger_update_email_sender_addresses_updated_at · BEFORE UPDATE FOR EACH ROW → update_email_sender_addresses_updated_at()<br>trigger_validate_email_matches_domain · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_email_matches_domain() | 4 |
-| `holding_email_sender_settings` (0, RLS on) | `holding-email-sender-settings.espejo.ts` · `HoldingEmailSenderSettings` | 13 | `holding_email_sender_settings_pkey` (id) | — | — | `holding_email_sender_settings_created_by_fkey` → users<br>`holding_email_sender_settings_holding_id_fkey` → company_holdings (CASCADE) | `idx_holding_email_sender_active` (parcial), `idx_holding_email_sender_default` (parcial), `idx_holding_email_sender_holding`, `idx_holding_email_sender_status`, `unique_default_domain_per_holding` (UNIQUE, parcial) | trigger_update_holding_email_sender_updated_at · BEFORE UPDATE FOR EACH ROW → update_holding_email_sender_updated_at() | 4 |
+| `ai_agents` (16, RLS on) | `ai-agent.entity.ts` · `AiAgent` | 11 | `ai_agents_pkey` (id) | — | `ai_agents_type_check` | — | `ai_agents_holding_type_idx` | update_ai_agents_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 2 |
+| `ai_agent_configs` (90, RLS on) | `ai-agent-config.entity.ts` · `AiAgentConfig` | 6 | `ai_agent_configs_pkey` (id) | `ai_agent_configs_agent_id_key_key` | — | `ai_agent_configs_agent_id_fkey` → ai_agents (CASCADE) | `ai_agent_configs_agent_idx` | update_ai_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 2 |
+| `client_agent_configs` (0, RLS on) | `client-agent-config.entity.ts` · `ClientAgentConfig` | 9 | `client_agent_configs_pkey` (id) | `client_agent_configs_holding_id_client_id_agent_type_key` | `client_agent_configs_agent_type_check` | `client_agent_configs_client_id_fkey` → clients (CASCADE)<br>`client_agent_configs_created_by_fkey` → users<br>`client_agent_configs_holding_id_fkey` → company_holdings (CASCADE) | `idx_client_agent_configs_agent_type`, `idx_client_agent_configs_enabled` (parcial), `idx_client_agent_configs_holding_client`, `idx_client_agent_configs_holding_global` (UNIQUE, parcial), `idx_client_agent_configs_holding_type` | trigger_update_client_agent_configs_updated_at · BEFORE UPDATE FOR EACH ROW → update_client_agent_configs_updated_at()<br>trigger_validate_client_agent_config_email_sender · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_client_agent_config_email_sender() | 4 |
+| `agents` (0, RLS on) | `agent.entity.ts` · `Agent` | 10 | `agents_pkey` (id) | — | — | `agents_company_id_fkey` → companies<br>`fk_agents_holding_id` → company_holdings (CASCADE) | `idx_agents_holding_id` | — | 4 |
+| `agent_logs` (0, RLS on) | `agent-log.entity.ts` · `AgentLog` | 6 | `agent_logs_pkey` (id) | — | — | `agent_logs_agent_id_fkey` → agents<br>`agent_logs_user_id_fkey` → users<br>`fk_agent_logs_holding_id` → company_holdings (CASCADE) | `idx_agent_logs_holding_id` | — | 2 |
+| `ai_runs` (0, RLS on) | `ai-run.entity.ts` · `AiRun` | 10 | `ai_runs_pkey` (id) | — | `ai_runs_status_check` | `ai_runs_agent_id_fkey` → ai_agents (CASCADE)<br>`ai_runs_holding_id_fkey` → company_holdings (CASCADE) | `ai_runs_agent_idx` (expresión, no declarado), `ai_runs_holding_idx` (expresión, no declarado) | — | 2 |
+| `ai_messages` (0, RLS on) | `ai-message.entity.ts` · `AiMessage` | 9 | `ai_messages_pkey` (id) | — | `ai_messages_channel_check`, `ai_messages_direction_check` | `ai_messages_run_id_fkey` → ai_runs (CASCADE) | `ai_messages_run_idx` (expresión, no declarado) | — | 2 |
+| `rag_documents` (0, RLS on) | `rag-document.entity.ts` · `RagDocument` | 9 | `rag_documents_pkey` (id) | — | — | `rag_documents_holding_id_fkey` → company_holdings (CASCADE) | `rag_documents_holding_id_idx`, `rag_documents_source_idx`, `rag_documents_embedding_ivfflat_idx` (expresión, no declarado), `rag_documents_metadata_gin_idx` (expresión, no declarado) | — | 1 |
+| `email_sender_addresses` (0, RLS on) | `email-sender-address.entity.ts` · `EmailSenderAddress` | 11 | `email_sender_addresses_pkey` (id) | — | — | `email_sender_addresses_created_by_fkey` → users<br>`email_sender_addresses_domain_config_id_fkey` → holding_email_sender_settings (CASCADE) | `idx_email_sender_addresses_active` (parcial), `idx_email_sender_addresses_default` (parcial), `idx_email_sender_addresses_domain`, `unique_default_sender_per_domain` (UNIQUE, parcial) | trigger_update_email_sender_addresses_updated_at · BEFORE UPDATE FOR EACH ROW → update_email_sender_addresses_updated_at()<br>trigger_validate_email_matches_domain · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_email_matches_domain() | 4 |
+| `holding_email_sender_settings` (0, RLS on) | `holding-email-sender-settings.entity.ts` · `HoldingEmailSenderSettings` | 13 | `holding_email_sender_settings_pkey` (id) | — | — | `holding_email_sender_settings_created_by_fkey` → users<br>`holding_email_sender_settings_holding_id_fkey` → company_holdings (CASCADE) | `idx_holding_email_sender_active` (parcial), `idx_holding_email_sender_default` (parcial), `idx_holding_email_sender_holding`, `idx_holding_email_sender_status`, `unique_default_domain_per_holding` (UNIQUE, parcial) | trigger_update_holding_email_sender_updated_at · BEFORE UPDATE FOR EACH ROW → update_holding_email_sender_updated_at() | 4 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/automatizaciones-ia.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (10 tablas)
 
-<details><summary><code>ai_agents</code> → <code>ai-agent.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>ai_agents</code> → <code>ai-agent.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -51,7 +51,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `require_approval` | boolean | sí | true | Indica si los mensajes generados requieren aprobación manual antes de enviarse |
 
 </details>
-<details><summary><code>ai_agent_configs</code> → <code>ai-agent-config.espejo.ts</code> · 6 columnas</summary>
+<details><summary><code>ai_agent_configs</code> → <code>ai-agent-config.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -63,7 +63,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>client_agent_configs</code> → <code>client-agent-config.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>client_agent_configs</code> → <code>client-agent-config.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -78,7 +78,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>agents</code> → <code>agent.espejo.ts</code> · 10 columnas</summary>
+<details><summary><code>agents</code> → <code>agent.entity.ts</code> · 10 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -94,7 +94,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>agent_logs</code> → <code>agent-log.espejo.ts</code> · 6 columnas</summary>
+<details><summary><code>agent_logs</code> → <code>agent-log.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -106,7 +106,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>ai_runs</code> → <code>ai-run.espejo.ts</code> · 10 columnas</summary>
+<details><summary><code>ai_runs</code> → <code>ai-run.entity.ts</code> · 10 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -122,7 +122,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | no | — | ID del holding al que pertenece esta ejecución |
 
 </details>
-<details><summary><code>ai_messages</code> → <code>ai-message.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>ai_messages</code> → <code>ai-message.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -137,7 +137,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>rag_documents</code> → <code>rag-document.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>rag_documents</code> → <code>rag-document.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -152,7 +152,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>email_sender_addresses</code> → <code>email-sender-address.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>email_sender_addresses</code> → <code>email-sender-address.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -169,7 +169,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>holding_email_sender_settings</code> → <code>holding-email-sender-settings.espejo.ts</code> · 13 columnas</summary>
+<details><summary><code>holding_email_sender_settings</code> → <code>holding-email-sender-settings.entity.ts</code> · 13 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -192,4 +192,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `automatizaciones-ia.entities.spec.ts`: metadata TypeORM en memoria vs `automatizaciones-ia.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

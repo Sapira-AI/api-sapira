@@ -7,8 +7,8 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
 import { ContractItem } from '../contratos/contract-item.entity';
 
 /**
- * Espejo de `public.quantities` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 252 filas · RLS on.
- * APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.
+ * Entity de `public.quantities` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 252 filas · RLS on.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
  * Overrides de precio unitario y cantidad por período mensual para contract_items variables. Permite cambios mensuales en precio/cantidad sin alterar el contrato base.
  * Referenciada por FK desde 1 tabla(s): sapira_quantity_imports.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
@@ -122,7 +122,7 @@ export class Quantity {
 
 	@ManyToOne(() => ContractItem, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'quantities_contract_item_id_fkey' })
-	contractItem?: ContractItem; // espejo de otro módulo
+	contractItem?: ContractItem; // de otro módulo
 
 	@ManyToOne(() => User)
 	@JoinColumn({ name: 'created_by', referencedColumnName: 'id', foreignKeyConstraintName: 'quantities_created_by_fkey' })

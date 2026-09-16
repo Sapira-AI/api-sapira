@@ -14,21 +14,21 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `indicadores_economicos` (34) | `src/databases/postgresql/entities/fx/indicador-economico.entity.ts` · `IndicadorEconomicoEntity` | ⚠️ difiere de prod | — | — | `status_code`: NOT NULL en la entity vs nullable en DB | nombre de PK `indicadores_economicos_pkey`<br>índice `idx_indicadores_economicos_codigo`<br>índice `idx_indicadores_economicos_fecha` |
 | `generic_export_vats` (8) | `src/databases/postgresql/entities/fx/generic-export-vat.entity.ts` · `GenericExportVat` | ⚠️ difiere de prod | `description` text<br>`country_code` varchar | `holding_id`<br>`tax_id`<br>`company_name`<br>`address`<br>`country`<br>`vat_rate`<br>`metadata` | `vat`: tipo `text` vs DB `varchar`<br>`vat`: length `None` vs DB `50`<br>`updated_at`: nullable en la entity vs NOT NULL en DB<br>`updated_at`: default `None` vs DB `now()` | nombre de PK `generic_export_vats_pkey`<br>UNIQUE `generic_export_vats_vat_key` (vat)<br>índice `idx_generic_export_vats_is_active`<br>índice `idx_generic_export_vats_vat` |
 
-## B · Tablas SIN entity → espejos creados (3), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (3): 3 promovidas, 0 apagadas
 
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `holding_fx_period_rates` (63, RLS on) | `holding-fx-period-rate.espejo.ts` · `HoldingFxPeriodRate` | 11 | `holding_fx_period_rates_pkey` (id) | `holding_fx_period_rates_unique_period` | `holding_fx_period_rates_period_check`, `holding_fx_period_rates_rate_check` | `holding_fx_period_rates_created_by_fkey` → users<br>`holding_fx_period_rates_holding_id_fkey` → company_holdings (CASCADE) | `idx_holding_fx_period_rates_currencies`, `idx_holding_fx_period_rates_holding`, `idx_holding_fx_period_rates_period` | update_holding_fx_period_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()<br>validate_holding_fx_period_rates_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_holding_fx_period_rates() | 4 |
-| `contract_fx_period_rates` (6, RLS on) | `contract-fx-period-rate.espejo.ts` · `ContractFxPeriodRate` | 12 | `contract_fx_period_rates_pkey` (id) | — | `contract_fx_period_rates_check`, `contract_fx_period_rates_rate_check` | `contract_fx_period_rates_contract_id_fkey` → contracts (CASCADE)<br>`fk_contract_fx_period_rates_holding_id` → company_holdings (CASCADE) | `idx_contract_fx_rates_contract_id`, `idx_contract_fx_rates_currencies`, `idx_contract_fx_rates_holding_contract`, `idx_contract_fx_rates_period` | trg_contract_fx_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `fx_api_sync_log` (3, RLS on) | `fx-api-sync-log.espejo.ts` · `FxApiSyncLog` | 10 | `fx_api_sync_log_pkey` (id) | — | `fx_api_sync_log_status_check` | `fx_api_sync_log_holding_id_fkey` → company_holdings | — | — | 2 |
+| `holding_fx_period_rates` (63, RLS on) | `holding-fx-period-rate.entity.ts` · `HoldingFxPeriodRate` | 11 | `holding_fx_period_rates_pkey` (id) | `holding_fx_period_rates_unique_period` | `holding_fx_period_rates_period_check`, `holding_fx_period_rates_rate_check` | `holding_fx_period_rates_created_by_fkey` → users<br>`holding_fx_period_rates_holding_id_fkey` → company_holdings (CASCADE) | `idx_holding_fx_period_rates_currencies`, `idx_holding_fx_period_rates_holding`, `idx_holding_fx_period_rates_period` | update_holding_fx_period_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()<br>validate_holding_fx_period_rates_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_holding_fx_period_rates() | 4 |
+| `contract_fx_period_rates` (6, RLS on) | `contract-fx-period-rate.entity.ts` · `ContractFxPeriodRate` | 12 | `contract_fx_period_rates_pkey` (id) | — | `contract_fx_period_rates_check`, `contract_fx_period_rates_rate_check` | `contract_fx_period_rates_contract_id_fkey` → contracts (CASCADE)<br>`fk_contract_fx_period_rates_holding_id` → company_holdings (CASCADE) | `idx_contract_fx_rates_contract_id`, `idx_contract_fx_rates_currencies`, `idx_contract_fx_rates_holding_contract`, `idx_contract_fx_rates_period` | trg_contract_fx_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `fx_api_sync_log` (3, RLS on) | `fx-api-sync-log.entity.ts` · `FxApiSyncLog` | 10 | `fx_api_sync_log_pkey` (id) | — | `fx_api_sync_log_status_check` | `fx_api_sync_log_holding_id_fkey` → company_holdings | — | — | 2 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/fx.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (3 tablas)
 
-<details><summary><code>holding_fx_period_rates</code> → <code>holding-fx-period-rate.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>holding_fx_period_rates</code> → <code>holding-fx-period-rate.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -45,7 +45,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>contract_fx_period_rates</code> → <code>contract-fx-period-rate.espejo.ts</code> · 12 columnas</summary>
+<details><summary><code>contract_fx_period_rates</code> → <code>contract-fx-period-rate.entity.ts</code> · 12 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -63,7 +63,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | sí | now() |  |
 
 </details>
-<details><summary><code>fx_api_sync_log</code> → <code>fx-api-sync-log.espejo.ts</code> · 10 columnas</summary>
+<details><summary><code>fx_api_sync_log</code> → <code>fx-api-sync-log.entity.ts</code> · 10 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -83,4 +83,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `fx.entities.spec.ts`: metadata TypeORM en memoria vs `fx.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

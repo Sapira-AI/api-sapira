@@ -13,6 +13,6 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `sii_certificates` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCertificate` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_certificates_pkey`<br>FK `sii_certificates_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
 | `sii_cafs` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCaf` | ⚠️ difiere de prod | — | — | `created_at`: tipo `timestamp` vs DB `timestamp with time zone` | nombre de PK `sii_cafs_pkey`<br>FK `sii_cafs_configuration_id_fkey` → sii_configurations ON DELETE CASCADE |
 
-## B · Tablas SIN entity → espejos creados (0), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (0): 0 promovidas, 0 apagadas
 
 Ninguna: todas las tablas de este módulo ya tienen entity en el repo; este módulo solo documenta el diff (sección A). No hay espejos, snapshot ni spec.

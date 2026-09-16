@@ -93,7 +93,7 @@ Cada carril se trabaja en **sesiones separadas y frescas**; su kickoff vive aqu�
 - [ ] **Paso 1 (carril B)** — en curso: entities espejo por módulo en `api-sapira` rama `domi`, **tal cual existen hoy en prod (solo lectura en vivo vía MCP)**, inertes en runtime y sin tocar las entities existentes. ✅ convención + verificación + carpeta limpia · ✅ **130/130 tablas**: 75 espejos nuevos apagados + 55 entities existentes documentadas con su diff vs prod, en los 16 módulos (base-tenancy, fx, clientes, cotizaciones-catalogo, contratos, facturacion, revenue, legacy, conciliacion, integraciones/{salesforce,odoo,stripe,otras}, automatizaciones-ia, suscripciones, sii) · ⏳ revisión de Domi + autorización del commit
 - [ ] **Revisión detallada de Domi (entre el paso 1 y el paso 2)**: sobre las entities ya generadas — veredictos del 04/00, qué se mejora y qué entidades nuevas entran
 - [ ] Paso 2: entidades nuevas por sección de spec (primera: Pricing — modelos de precio, tramos y billable metric/consumo como parte del precio)
-- [ ] Paso 3: conexión TypeORM ↔ Supabase actual (validación con Leon)
+- [ ] Paso 3: conexión TypeORM ↔ Supabase actual (validación con Leon) — en curso: ✅ **los 74 espejos promovidos a entity viva** (2026-09-16; ninguna tabla de `public` queda sin entity, `schema:log` contra prod idéntico a antes: 94 sentencias, todas ruido clasificado) · ⏳ retirar el generador de espejos sobre las entities promovidas, para que la entity sea la fuente de verdad
 - [ ] Paso 4: sesión estratégica de funciones y triggers (inventario completo ya censado)
 - [ ] Paso 5: set final de funciones/triggers
 - [ ] Paso 6 (carril C): front — primera pasada al repo + landing COMPLETA (publicación de www.aisapira.com), luego módulos empezando por Configuraciones

@@ -154,10 +154,15 @@ Para llevarlo a una base, ver [🔄 Sincronizar cambios a QA y producción](#-si
 
 ### Promover un espejo
 
-Un `.espejo.ts` es una tabla que existe en producción y todavía no tiene entity viva. El
-procedimiento está en [`README.md` → Promover un espejo](./README.md#promover-un-espejo). Lo único
-que no se puede improvisar: **no promuevas uno que importe otro `.espejo.ts`** sin promover, porque
-lo cargaría en runtime salteándose el propio control.
+**Al 2026-09-16 no quedan espejos: toda tabla de `public` tiene entity viva.** Si reaparece un
+`.espejo.ts` (una tabla creada en producción por fuera de entity + migración), `database.module.spec.ts`
+falla y el procedimiento está en [`README.md` → Promover un espejo](./README.md#promover-un-espejo).
+Lo único que no se puede improvisar: **no promuevas uno que importe otro `.espejo.ts`** sin promover,
+porque lo cargaría en runtime salteándose el propio control.
+
+> ⚠️ **74 entities son generadas** (cabecera "PROMOVIDA desde espejo"). Editarlas para cambiar su
+> tabla está bien; lo que no se hace es correr `generate-espejo.py` antes de refrescar los snapshots
+> desde prod, porque revierte el cambio en silencio.
 
 ---
 
@@ -518,7 +523,7 @@ Corren con `yarn test`, todas offline y sin conexión a ninguna base:
 
 | Guarda | Qué impide |
 |---|---|
-| `database.module.spec.ts` | `synchronize`/`dropSchema`/`migrationsRun` en `true`; que un espejo se promueva sin decisión explícita; que una tabla quede con espejo y entity a la vez; que el barrel `espejo.existing.ts` se desincronice del disco; **un script que conecta sin verificar el `--target`**; que `schema:status` pueda escribir; que `migration:show` vuelva a usar `showMigrations()`, que crea la tabla |
+| `database.module.spec.ts` | `synchronize`/`dropSchema`/`migrationsRun` en `true`; **una tabla de producción sin entity viva** (o un espejo inerte); que un espejo se promueva sin decisión explícita; que una tabla quede con espejo y entity a la vez; que el barrel `espejo.existing.ts` se desincronice del disco; **un script que conecta sin verificar el `--target`**; que `schema:status` pueda escribir; que `migration:show` vuelva a usar `showMigrations()`, que crea la tabla |
 | `entities/indices-declarados.spec.ts` | Que un índice de producción quede sin declarar, ni en la entity ni en `special-index/`. Eran 161 |
 | `assets-runner.spec.ts` | Assets de `functions/` que no declaran la función o no cierran su dollar-quote; `types/` no re-ejecutable; `special-index/` con índices que sí eran declarables; fases del manifest desalineadas de `ASSET_DIRECTORIES`; **una migración que crea una tabla sin activar RLS**; **una policy sobre una tabla que es deny-all por diseño**; que `--baseline` ejecute SQL, pise una fila existente, registre `grants/`/`seed/` o corra en prod sin confirmar |
 | `schema-status.spec.ts` | Que la verificación confunda una diferencia real con una de formato; que una acción de `schema:status` se clasifique mal; que una migración declare un `name` distinto de su clase; que `fetch-catalog`, `generate-assets` y la comparación dejen de encajar |
