@@ -18,6 +18,31 @@ El DDL no se escribe en `front-sapira-vite/supabase/migrations/`.
 | Índices `gin`/`ivfflat` o con orden explícito (`DESC`, `NULLS`) | `special-index/` | idem |
 | Funciones, triggers, policies RLS, permisos, semillas | `functions/`, `triggers/`, `rls/`, `grants/`, `seed/` | idem |
 
+## Migración o asset: la regla
+
+**Migraciones para tablas y para eliminar o renombrar cualquier objeto. Assets para crear y
+actualizar todo lo que no es tabla.**
+
+| Cambio | Va en |
+|---|---|
+| Crear o alterar una tabla (columnas, PK, FK, UNIQUE, CHECK, índice btree) o activar su RLS | entity + **migración** |
+| Crear o modificar una función, trigger, policy o grant | **asset**: se edita el mismo archivo |
+| Crear un enum, extensión, special-index o seed | **asset** |
+| Modificar un enum, extensión, special-index o seed **ya aplicado** | **migración** |
+| **Eliminar o renombrar** cualquier objeto (tabla, función, trigger, policy, índice, tipo) | **migración** escrita a mano + borrar o renombrar el archivo |
+| Cambiar parámetros o tipo de retorno de una función | **migración** que borra la firma vieja + asset con la nueva |
+| Corregir o transformar datos existentes | **migración** |
+
+- Una migración no crea ni redefine funciones, triggers, policies ni grants (salvo en su `down()`).
+- Un asset no contiene transiciones: nada de `ALTER TABLE`, `RENAME`, ni `UPDATE`/`DELETE` de datos.
+  El único `DROP` permitido es `DROP … IF EXISTS` seguido del `CREATE` del mismo objeto.
+- Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
+- **Toda tabla de `public` tiene entity viva; no hay espejos** (`database.module.spec.ts` lo exige).
+  Una tabla nueva nace como entity + migración, nunca como `.espejo.ts`.
+- **74 entities son generadas** (cabecera "PROMOVIDA desde espejo"). Se editan para cambiar su tabla,
+  pero no se corre `scripts/espejo/generate-espejo.py` sin antes refrescar los snapshots desde prod:
+  regenerar con snapshots viejos revierte el cambio en silencio.
+
 ## Reglas duras
 
 - **Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`.** TypeORM es ORM y detector de
@@ -27,11 +52,19 @@ El DDL no se escribe en `front-sapira-vite/supabase/migrations/`.
   **Ninguna migración con `DROP COLUMN` se aplica sin autorización explícita.** Los `DROP INDEX`
   legítimos son solo los de `special-index/`; cualquier otro significa que falta declarar el índice
   en la entity, y `entities/indices-declarados.spec.ts` lo detecta antes.
-- **Nunca edites un asset `.sql` ya aplicado.** Su SHA-256 queda en `sapira_sql_asset_history` y el
-  runner falla. Las correcciones van en un asset nuevo.
+- **Un archivo por objeto, con su definición vigente.** En `functions/`, `triggers/`, `rls/` y
+  `grants/` se edita el mismo archivo: el runner detecta el checksum nuevo y **re-aplica**. En
+  `types/`, `special-index/` y `seed/` falla a propósito —ahí el archivo cambiaría y la base no— y el
+  cambio va en una migración. **Nunca dupliques un asset como `<objeto>_<motivo>.sql`**: quién gana lo
+  decide el orden alfabético, que no es el cronológico.
 - **Todo comando contra la base lleva `--target` y se verifica contra la conexión real.** El target
   sale de `NODE_ENV` y es independiente de `SUPABASE_DATABASE_URL`; `connection-target.ts` aborta si
-  no coinciden. Un project ref desconocido se declara en `SUPABASE_PROJECT_ENVIRONMENTS`.
+  no coinciden. Producción y QA están declaradas en `connection-target.ts`; cualquier otro project ref se declara en `SUPABASE_PROJECT_ENVIRONMENTS`.
+- **Sincronizar a una base empieza y termina con `yarn schema:status --target <entorno>`** (solo
+  lectura), primero en QA y después en producción, con la conexión por `DOTENV_CONFIG_PATH=.env.<qa|prod>.db`.
+  Migraciones antes que assets. `--apply` va con `--only` mientras `schema:status` muestre
+  `SIN CONTRAPARTE` ajenos a tu cambio. `--baseline` solo registra lo verificado idéntico a la base;
+  nunca se registra a mano una fila del historial. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
 - **La fuente de verdad de hoy es producción.** Ni `supabase/schema.sql`, ni las migraciones del
   front, ni los `.espejo.ts` lo son: son fotos con fecha. Verifica contra la base antes de escribir SQL.
 

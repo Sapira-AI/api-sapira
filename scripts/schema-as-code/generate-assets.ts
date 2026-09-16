@@ -26,7 +26,7 @@ const ASSETS = path.resolve(__dirname, '../../src/databases/postgresql');
 /** Roles de Supabase a los que se otorgan permisos. `postgres` es el dueño y los tiene por serlo. */
 const GRANT_ROLES = ['anon', 'authenticated', 'service_role'] as const;
 
-interface Catalog {
+export interface Catalog {
 	tables: Record<string, TableEntry>;
 	enums: Record<string, string[]>;
 	extensions: { name: string; version: string; schema: string }[];
@@ -217,6 +217,27 @@ function emitirPolicies(catalog: Catalog): Map<string, string> {
 	return salida;
 }
 
+/** Emisores en orden de fase. `emitirCorpus` y `main()` comparten esta lista para no divergir. */
+const EMISORES: [string, (catalog: Catalog) => Map<string, string>][] = [
+	['types', emitirTypes],
+	['special-index', emitirSpecialIndex],
+	['grants', emitirGrants],
+	['functions', emitirFunciones],
+	['triggers', emitirTriggers],
+	['rls', emitirPolicies],
+];
+
+/**
+ * Todo lo que el generador produce desde un catálogo, indexado por ruta relativa del asset.
+ *
+ * Es la referencia contra la que `schema:status` y `postgres:assets --baseline` comparan
+ * los archivos del repo: si un archivo es idéntico a lo que la base viva genera, el objeto
+ * existe en esa base tal como lo describe el archivo.
+ */
+function emitirCorpus(catalog: Catalog): Map<string, string> {
+	return new Map(EMISORES.flatMap(([, emisor]) => [...emisor(catalog)]));
+}
+
 function main(): void {
 	const escribir = process.argv.includes('--write');
 	// Realinea con producción los assets que quedaron desfasados. Solo es seguro
@@ -224,14 +245,7 @@ function main(): void {
 	const reescribir = process.argv.includes('--overwrite-stale');
 	const catalog = JSON.parse(fs.readFileSync(CATALOG, 'utf8')) as Catalog;
 
-	const fases: [string, Map<string, string>][] = [
-		['types', emitirTypes(catalog)],
-		['special-index', emitirSpecialIndex(catalog)],
-		['grants', emitirGrants(catalog)],
-		['functions', emitirFunciones(catalog)],
-		['triggers', emitirTriggers(catalog)],
-		['rls', emitirPolicies(catalog)],
-	];
+	const fases: [string, Map<string, string>][] = EMISORES.map(([fase, emisor]) => [fase, emisor(catalog)]);
 
 	const difieren: string[] = [];
 	for (const [fase, archivos] of fases) {
@@ -275,4 +289,4 @@ function main(): void {
 
 if (require.main === module) main();
 
-export { emitirGrants, emitirPolicies, emitirSpecialIndex, emitirTriggers, emitirTypes, esDeclarable, idempotente };
+export { emitirCorpus, emitirFunciones, emitirGrants, emitirPolicies, emitirSpecialIndex, emitirTriggers, emitirTypes, esDeclarable, idempotente };

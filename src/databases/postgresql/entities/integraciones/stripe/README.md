@@ -17,6 +17,6 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `stripe_sync_jobs` (200) | `src/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity.ts` · `StripeSyncJob` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_sync_jobs_pkey`<br>índice `idx_stripe_sync_jobs_holding_id`<br>índice `idx_stripe_sync_jobs_status`<br>índice con expresión `idx_stripe_sync_jobs_created_at` |
 | `stripe_customers_bigquery` (26350) | `src/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity.ts` · `StripeCustomerBigQuery` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: default `None` vs DB `now()` | nombre de PK `stripe_customers_bigquery_pkey`<br>FK `stripe_customers_bigquery_holding_id_fkey` → company_holdings ON DELETE CASCADE<br>índice `idx_stripe_customers_bigquery_holding_id`<br>índice `idx_stripe_customers_bigquery_salesforce_account_id`<br>índice `idx_stripe_customers_bigquery_stripe_customer_id` |
 
-## B · Tablas SIN entity → espejos creados (0), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (0): 0 promovidas, 0 apagadas
 
 Ninguna: todas las tablas de este módulo ya tienen entity en el repo; este módulo solo documenta el diff (sección A). No hay espejos, snapshot ni spec.

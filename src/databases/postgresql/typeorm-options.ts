@@ -57,8 +57,8 @@ export function createPostgreSqlOptions(environment: PostgreSqlEnvironment): Typ
 	}
 
 	const synchronize = resolveSchemaSynchronization(environment);
-	// Los espejos se habilitan por lote mediante un flag independiente. No se
-	// promueven masivamente solo por activar synchronize en QA.
+	// Carga además los espejos apagados (`*.espejo.ts`), para medir uno nuevo con `schema:log`
+	// antes de promoverlo. Desde el 2026-09-16 no queda ninguno apagado, así que hoy no cambia nada.
 	const loadMirrors = isEnabled(environment.TYPEORM_LOAD_MIRROR_ENTITIES);
 
 	return {

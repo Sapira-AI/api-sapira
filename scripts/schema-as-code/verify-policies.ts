@@ -2,8 +2,9 @@
  * Verifica los predicados de las policies RLS **sin aplicar nada y sin activar RLS**.
  *
  * El problema que resuelve: el backend se conecta con un rol que tiene `rolbypassrls`, así que
- * ninguna prueba que pase por la API ejercita una policy. Y no hay entorno intermedio —
- * `KNOWN_SUPABASE_PROJECTS` declara un solo project ref, el de producción.
+ * ninguna prueba que pase por la API ejercita una policy. Desde 2026-09-16 hay un proyecto de QA
+ * declarado (`KNOWN_SUPABASE_PROJECTS`), pero es un clon de prod sin datos de prueba propios, así
+ * que sigue siendo más barato verificar el predicado acá que montar un caso end-to-end.
  *
  * Cómo lo resuelve: dentro de una transacción `READ ONLY`, simula la identidad de un usuario real
  * con `set_config('request.jwt.claims', ...)`, baja de privilegio con `SET LOCAL ROLE authenticated`

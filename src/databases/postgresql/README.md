@@ -30,6 +30,12 @@ SUPABASE_LOGGING=false      # true para debug
 
 ### Obtener credenciales de Supabase
 
+> **Para sincronizar el esquema con QA o producción no se usa el `.env` de la app.** Cada entorno
+> tiene un archivo de conexión de una línea (`.env.qa.db`, `.env.prod.db`) cuyas URLs se le piden a
+> Leon. Procedimiento completo: [`GUIA-CAMBIOS-DE-ESQUEMA.md` → 🔄 Sincronizar cambios a QA y producción](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción).
+
+Para una base propia:
+
 1. Ve a tu proyecto en [Supabase Dashboard](https://app.supabase.com)
 2. Navega a **Settings** > **Database**
 3. En la sección **Connection info**, encontrarás:
@@ -60,7 +66,8 @@ src/databases/postgresql/
 ├── database.module.spec.ts     # Guard: sync protegido y el espejo (*.espejo.ts) no entra al glob de runtime
 ├── assets-runner.ts             # Runner de SQL no gestionado por TypeORM
 ├── assets.manifest.json         # Orden de directorios y overrides explícitos de assets
-├── migrations/                  # Migraciones TypeORM: el DDL de tablas vive acá
+├── migrations/                  # Transiciones que corren una vez por base: aplican los cambios de entities y todo borrado/renombre
+│                                # (ver GUIA-CAMBIOS-DE-ESQUEMA.md → "Crear, modificar y eliminar, por carpeta")
 ├── types/                       # Extensiones y enums (van antes que cualquier tabla)
 ├── functions/                   # Funciones PostgreSQL
 ├── special-index/               # Índices que TypeORM no puede declarar (gin/ivfflat, orden explícito)
@@ -75,6 +82,10 @@ src/databases/postgresql/
 
 ### Promover un espejo
 
+> ✅ **Al 2026-09-16 no queda ningún espejo por promover**: los 74 son `.entity.ts` y toda tabla de
+> `public` tiene entity viva (lo exige `database.module.spec.ts`). Este procedimiento aplica si
+> reaparece un espejo, es decir, si alguien crea una tabla en prod por fuera de entity + migración.
+
 Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el runtime lo carga ni
 `schema:log` lo mira. Promoverlo lo convierte en la definición viva de su tabla.
 
@@ -88,9 +99,16 @@ Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el
 5. Declara en las entities activas las FKs que ese espejo bloqueaba.
 6. `yarn jest` y `TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log`.
 
-> ⚠️ El generador **reescribe** el `.entity.ts` de un espejo promovido en cada corrida: sigue siendo
-> un archivo generado. Lo que se edite a mano ahí se pierde. Si una tabla promovida necesita algo que
-> el generador no produce, va en el generador, no en el archivo.
+> ⚠️ El generador **reescribe** el `.entity.ts` de un espejo promovido en cada corrida, desde los
+> snapshots de prod: sigue siendo un archivo generado. Un cambio de tabla sí se hace editando la
+> entity (→ `migration:generate` → `migration:run`), pero **antes de volver a correr el generador
+> hay que refrescar los snapshots** (`fetch-catalog.ts` + `build-snapshots.py`), o la regeneración
+> lo revierte. Si una tabla promovida necesita algo que el generador no produce, va en el generador,
+> no en el archivo. Retirar el generador sobre las entities promovidas está pendiente.
+>
+> Pipeline: el generador escribe comillas dobles y el repo formatea con prettier, así que después de
+> regenerar va `yarn eslint --fix "src/databases/postgresql/entities/**/*.ts"`. Generador + eslint es
+> idempotente: correrlo sobre un árbol al día no deja diff.
 
 ## 🧱 Assets SQL no-TypeORM
 
@@ -104,7 +122,7 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 | `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 133 |
 | `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 389 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 1 |
-| `seed/` | Datos semilla idempotentes. | 1 |
+| `seed/` | Datos semilla idempotentes. | 2 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
 >
@@ -112,31 +130,28 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 
 El corpus se regenera desde producción con `scripts/schema-as-code/fetch-catalog.ts` (captura, solo lectura) y `scripts/schema-as-code/generate-assets.ts` (emite los assets faltantes; nunca sobreescribe uno existente).
 
-Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su SHA-256. Un asset con el mismo checksum se omite en ejecuciones posteriores; si cambia, el runner falla para evitar reaplicar SQL mutable. Crea un archivo nuevo para cambios posteriores.
+Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su SHA-256. Un asset con el mismo checksum se omite en ejecuciones posteriores. La columna `modo` distingue lo ejecutado (`apply`) de lo registrado sin ejecutar porque ya estaba en la base (`baseline`). La tabla la crea y evoluciona el propio runner (con RLS activo), no una migración: `HabilitaRlsEnTablasSinContencion` necesita que ya exista.
 
-```bash
-# Solo descubre y muestra el orden; no requiere conexión.
-yarn postgres:assets --plan
+**Si el contenido cambió**, el runner distingue por fase:
 
-# Consulta el historial y muestra pendientes; no ejecuta DDL/DML.
-SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --dry-run --target qa
+- `functions/`, `triggers/`, `rls/`, `grants/` → **lo re-aplica** y actualiza el checksum (`REAPLICADO` en la salida). Re-aplicar converge: son `CREATE OR REPLACE` y `DROP … IF EXISTS` + `CREATE`. **Se edita el mismo archivo; el corpus describe el estado deseado y el historial lo lleva git.**
+- `types/`, `special-index/`, `seed/` → **falla a propósito**. Ahí el archivo cambiaría y la base no (`DO … pg_type`, `CREATE INDEX IF NOT EXISTS`, `ON CONFLICT DO NOTHING`), así que registrar el checksum nuevo sería que el historial mienta. Ese cambio es una transición: va en una migración.
 
-# Crea el historial y ejecuta los assets pendientes.
-SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --target qa
+| Comando | Qué hace | Escribe |
+|---|---|---|
+| `yarn postgres:assets --plan` | Descubre y ordena los assets; no conecta | No |
+| `yarn schema:status --target <e>` | Migraciones pendientes, estado de cada asset contra la base real, objetos solo en la base | No (READ ONLY) |
+| `yarn postgres:assets --dry-run --target <e>` | Lee el historial y lista pendientes | No |
+| `yarn postgres:assets --apply [--only <ruta>…] --target <e>` | Ejecuta lo pendiente y lo registra | Sí |
+| `yarn postgres:assets --baseline --target <e>` | Registra sin ejecutar lo que ya coincide con la base | Solo el historial |
 
-# Producción requiere ambas confirmaciones explícitas.
-SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --target production --allow-production --confirm-target production
+**Cómo se usan, en qué orden y contra qué base: [`GUIA-CAMBIOS-DE-ESQUEMA.md` → 🔄 Sincronizar cambios a QA y producción](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción).**
+Ahí están las conexiones por entorno, el procedimiento, qué significa cada estado, la línea base y los
+errores frecuentes. En producción, todo lo que escribe exige `--allow-production --confirm-target production`.
 
-# Aplicar UN asset puntual sin tocar el manifest (repetible). El path debe coincidir
-# exacto con la ruta relativa mostrada por --dry-run; si no existe, falla.
-SUPABASE_DATABASE_URL=postgresql://... yarn postgres:assets --apply --only rls/sapira_quantity_imports_select.sql
-```
+`SUPABASE_DATABASE_URL` es la variable preferida; `DATABASE_URL` se acepta como alternativa.
 
-> `--only` es clave cuando el historial del runner aún no existe: un `--apply` sin filtro intentaría aplicar **todos** los assets ya presentes en la BD (RLS/triggers no idempotentes) y fallaría. Con `--only` aplicas y registras solo el asset nuevo.
-
-`SUPABASE_DATABASE_URL` es la variable preferida; `DATABASE_URL` se acepta como alternativa. No ejecutes `apply` en producción sin verificar el plan y el respaldo de la base.
-
-> **El `--target` se verifica contra la conexión real.** Antes de conectar, el CLI resuelve el project ref de Supabase desde la cadena de conexión y aborta si no corresponde al target declarado. Como `--target` sale de `DATABASE_TARGET ?? NODE_ENV ?? 'development'`, sin esta verificación un `.env` apuntando a producción dejaba `--apply` corriendo contra prod sin ninguna confirmación. Para operar contra un proyecto nuevo, decláralo primero en `SUPABASE_PROJECT_ENVIRONMENTS`.
+> **El `--target` se verifica contra la conexión real.** Antes de conectar, el CLI resuelve el project ref de Supabase desde la cadena de conexión y aborta si no corresponde al target declarado. Como `--target` sale de `DATABASE_TARGET ?? NODE_ENV ?? 'development'`, sin esta verificación un `.env` apuntando a producción dejaba `--apply` corriendo contra prod sin ninguna confirmación. Producción y QA están declaradas en el código; para operar contra un proyecto distinto de esos dos, decláralo primero en `SUPABASE_PROJECT_ENVIRONMENTS`.
 
 ### Crear una tabla nueva
 
@@ -205,8 +220,9 @@ policies nunca estuvieron en su modelo.
 6. **Borrar del repo**: assets de `functions/`, `triggers/`, `rls/`, `special-index/`; la entity y su
    export en `entities/espejo.existing.ts`; la entrada en `scripts/espejo/module-map.json`; y
    cualquier servicio o script que los importe.
-7. **Aplicar**: `yarn migration:show --target <entorno>` → `yarn migration:run --target qa` → y en
-   producción con `--allow-production --confirm-target production`.
+7. **Aplicar**: primero QA y después producción, siguiendo
+   [🔄 Sincronizar cambios](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción)
+   (`schema:status` → `migration:show` → `migration:run` → `schema:status`).
 8. **Verificar**: `yarn postgres:assets --plan` ya no lista los assets, `yarn test` en verde, y una
    captura nueva con `fetch-catalog.ts` confirma que el objeto no está.
 
@@ -228,8 +244,8 @@ policies nunca estuvieron en su modelo.
 ### Deudas conocidas del corpus
 
 > Estado del corpus tras la captura del 2026-09-09 (`scripts/schema-as-code/fetch-catalog.ts`).
-> Ningún asset se ha aplicado todavía a producción: `--dry-run --target production` los reporta
-> **todos como PENDIENTE**, así que ningún checksum está congelado y todo sigue siendo editable.
+> Desde el 2026-09-09 hay assets aplicados en producción (7 al 2026-09-16). El estado vigente de
+> cada base no se documenta acá: se mide con `yarn schema:status --target <entorno>`.
 
 > ✅ **Resuelto (2026-09-09)**: 11 assets de `functions/` y 9 de `rls/` contenían versiones anteriores
 > a las de producción, y aplicarlos habría causado regresiones silenciosas —`get_user_holding_id()`
@@ -238,10 +254,12 @@ policies nunca estuvieron en su modelo.
 > vez por consulta en vez de una por fila. Los 120 assets desalineados se realinearon con
 > `generate-assets.ts --overwrite-stale`. **El corpus ahora reproduce producción exactamente**, así
 > que cualquier diferencia futura es deriva real. Esto solo fue posible porque ningún checksum estaba
-> registrado; a partir del primer `--apply`, una corrección va en un asset nuevo.
+> registrado. (Superado: hoy una corrección en `functions/`, `triggers/`, `rls/` o `grants/` se hace
+> editando el mismo archivo, que el runner re-aplica.)
 
-**1. Assets que apuntan a objetos que ya no existen en producción.** 7 funciones, 13 triggers y 6
-policies. Un `--apply` los crearía de vuelta. Hay que decidir si se eliminan o si producción perdió
+**1. Assets que apuntan a objetos que ya no existen en producción.** 7 funciones, 12 triggers y 4
+policies (medido con `schema:status` el 2026-09-16, donde figuran como `SIN CONTRAPARTE`). Un
+`--apply` sin `--only` los crearía de vuelta. Hay que decidir si se eliminan o si producción perdió
 algo que debía existir. Funciones huérfanas: `calculate_monthly_avg_fx`,
 `check_partner_by_tax_id_before_insert`, `classify_invoice_line_before_insert`,
 `set_invoice_processing_status`, `trigger_revenue_schedule_on_credit_note`, `trigger_rsm_on_churn`,
@@ -510,7 +528,7 @@ try {
 ### Seguridad
 - `synchronize` está en `false` **en todos los entornos, sin excepción**. TypeORM no gestiona el esquema: lo audita con `yarn schema:log`.
 - Todo comando que abre conexión verifica que el `--target` declarado corresponda al proyecto Supabase real (`connection-target.ts`). El identificador es el **project ref**, no el host: el pooler `aws-0-<region>.pooler.supabase.com` es compartido por todos los proyectos de la región.
-- Un project ref desconocido no se opera: hay que declararlo en `SUPABASE_PROJECT_ENVIRONMENTS` (JSON `{"<ref>":"qa"}`).
+- Un project ref desconocido no se opera: hay que declararlo en `SUPABASE_PROJECT_ENVIRONMENTS` (JSON `{"<ref>":"development"}`). Producción (`hklompkypzqtglprfobu`) y QA (`obvwrhvyuimjoejqmuqf`) ya están en `KNOWN_SUPABASE_PROJECTS`, así que operar QA no depende de esa variable.
 - No dejes la URL de producción fija en tu `.env` de trabajo: pásala inline (`SUPABASE_DATABASE_URL=… yarn …`). Con la URL fija, cualquier comando que abra conexión —incluido levantar la app en local— habla con producción.
 - Usa variables de entorno para las credenciales
 - Supabase requiere SSL (ya configurado)

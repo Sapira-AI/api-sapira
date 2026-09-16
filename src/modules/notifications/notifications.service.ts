@@ -114,6 +114,10 @@ export class NotificationsService {
 					metadata: dto.metadata || {},
 				});
 				const notification = await this.notificationRepository.findOneByOrFail({ id: existing.id });
+				this.notificationsGateway.emitNotificationUpdated(
+					(existing.recipients || []).map((recipient) => recipient.user_id),
+					{ holdingId, notificationId: existing.id }
+				);
 				return {
 					notification,
 					recipient_count: existing.recipients?.length || 0,
@@ -125,10 +129,24 @@ export class NotificationsService {
 	}
 
 	async resolveByDeduplicationKey(holdingId: string, deduplicationKey: string): Promise<void> {
+		const openNotifications = await this.notificationRepository.find({
+			where: { holding_id: holdingId, deduplication_key: deduplicationKey, status: 'open' },
+			relations: { recipients: true },
+		});
+		if (!openNotifications.length) {
+			return;
+		}
+
 		await this.notificationRepository.update(
-			{ holding_id: holdingId, deduplication_key: deduplicationKey, status: 'open' },
+			{ id: In(openNotifications.map((notification) => notification.id)) },
 			{ status: 'resolved', resolved_at: new Date() }
 		);
+		for (const notification of openNotifications) {
+			this.notificationsGateway.emitNotificationUpdated(
+				(notification.recipients || []).map((recipient) => recipient.user_id),
+				{ holdingId, notificationId: notification.id }
+			);
+		}
 	}
 
 	async listForAuthenticatedUser(
@@ -199,10 +217,14 @@ export class NotificationsService {
 			throw new NotFoundException('Notificación no encontrada');
 		}
 
-		if (!recipient.is_read) {
-			await this.recipientRepository.update(recipient.id, { is_read: true, read_at: new Date() });
+		if (recipient.is_read) {
+			return { ...recipient.notification, is_read: true, read_at: recipient.read_at };
 		}
-		return { ...recipient.notification, is_read: true, read_at: recipient.read_at || new Date() };
+
+		const readAt = new Date();
+		await this.recipientRepository.update(recipient.id, { is_read: true, read_at: readAt });
+		this.notificationsGateway.emitNotificationRead(userId, { holdingId, notificationId, read_at: readAt });
+		return { ...recipient.notification, is_read: true, read_at: readAt };
 	}
 
 	async listSalesforceStagingBlockedSubscriptions(holdingId: string): Promise<NotificationRoleSubscription[]> {

@@ -8,22 +8,40 @@ import {
 	checksumSql,
 	discoverSqlAssets,
 	filterAssetsByOnly,
+	HISTORY_TABLE,
 	runSqlAssets,
 	SqlExecutor,
 } from './assets-runner';
 
 class InMemoryExecutor implements SqlExecutor {
 	readonly queries: string[] = [];
-	private readonly history = new Map<string, string>();
+	readonly history = new Map<string, { checksum: string; modo: string }>();
+	private historyTableCreated = false;
+
+	/** Simula una base que ya tiene historial (p. ej. prod, con filas previas al baseline). */
+	registrar(assetPath: string, checksum: string, modo = 'apply'): void {
+		this.historyTableCreated = true;
+		this.history.set(assetPath, { checksum, modo });
+	}
 
 	async query(query: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }> {
 		this.queries.push(query);
-		if (query.includes('SELECT asset_path, checksum')) {
-			const checksum = this.history.get(values?.[0] as string);
-			return { rows: checksum ? [{ asset_path: values?.[0], checksum }] : [] };
+		if (query.includes(`CREATE TABLE IF NOT EXISTS ${HISTORY_TABLE}`)) {
+			this.historyTableCreated = true;
 		}
-		if (query.includes('INSERT INTO public.sapira_sql_asset_history')) {
-			this.history.set(values?.[0] as string, values?.[1] as string);
+		// Sin esto, `historyTableExists` daba siempre false y un dry-run reportaba TODO como
+		// pendiente, incluso lo ya aplicado: el fake no podía distinguir base nueva de base con
+		// historial.
+		if (query.includes('to_regclass')) {
+			return { rows: [{ history_table: this.historyTableCreated ? HISTORY_TABLE : null }] };
+		}
+		if (query.includes('SELECT asset_path, checksum')) {
+			return { rows: [...this.history].map(([asset_path, fila]) => ({ asset_path, checksum: fila.checksum })) };
+		}
+		if (query.includes(`INSERT INTO ${HISTORY_TABLE}`)) {
+			const [assetPath, checksum, , modo] = values as string[];
+			// `ON CONFLICT DO NOTHING` (baseline) no pisa; `DO UPDATE` (apply) sí.
+			if (!(query.includes('DO NOTHING') && this.history.has(assetPath))) this.history.set(assetPath, { checksum, modo });
 		}
 		return { rows: [] };
 	}
@@ -77,6 +95,52 @@ describe('PostgreSQL SQL assets runner', () => {
 		expect(executor.queries.filter((query) => query === 'SELECT 1;\n')).toHaveLength(1);
 	});
 
+	it('re-aplica un asset modificado si su fase converge', async () => {
+		// El caso que resuelve: cambiar una función obligaba a crear `<objeto>_<motivo>.sql` y dejar
+		// el viejo para siempre. Además de inflar el corpus, el que quedaba vivo lo decidía el orden
+		// alfabético, que no es el cronológico.
+		const executor = new InMemoryExecutor();
+		const options = { assetsRoot, mode: 'apply' as const, target: 'development' };
+
+		await runSqlAssets(executor, options);
+		fs.writeFileSync(path.join(assetsRoot, 'functions', 'a.sql'), 'SELECT 1 AS cambiada;\n');
+		const segunda = await runSqlAssets(executor, options);
+
+		expect(segunda.reapplied).toEqual(['functions/a.sql']);
+		expect(segunda.skipped).not.toContain('functions/a.sql');
+		expect(executor.queries).toContain('SELECT 1 AS cambiada;\n');
+
+		// El historial se actualiza al checksum nuevo: la tercera corrida ya lo omite.
+		const tercera = await runSqlAssets(executor, options);
+		expect(tercera.reapplied).toEqual([]);
+		expect(tercera.skipped).toContain('functions/a.sql');
+	});
+
+	it('rechaza el cambio de un asset cuya fase NO converge', async () => {
+		// `CREATE INDEX IF NOT EXISTS` no redefine un índice existente: lo saltea. Re-aplicarlo
+		// dejaría el archivo cambiado y la base igual, y registrar el checksum nuevo sería que el
+		// historial mienta. Ese cambio es una transición y va en una migración.
+		const executor = new InMemoryExecutor();
+		const options = { assetsRoot, mode: 'apply' as const, target: 'development' };
+
+		await runSqlAssets(executor, options);
+		fs.writeFileSync(path.join(assetsRoot, 'special-index', 'index.sql'), 'CREATE INDEX IF NOT EXISTS sample_index ON sample (otra);\n');
+
+		await expect(runSqlAssets(executor, options)).rejects.toThrow(/special-index.*no se puede re-aplicar.*migración/s);
+	});
+
+	it('un dry-run reporta como pendiente el asset modificado, sin aplicarlo', async () => {
+		const executor = new InMemoryExecutor();
+
+		await runSqlAssets(executor, { assetsRoot, mode: 'apply' as const, target: 'development' });
+		fs.writeFileSync(path.join(assetsRoot, 'functions', 'a.sql'), 'SELECT 1 AS otra;\n');
+		const seco = await runSqlAssets(executor, { assetsRoot, mode: 'dry-run' as const, target: 'development' });
+
+		expect(seco.pending).toEqual(['functions/a.sql']);
+		expect(seco.reapplied).toEqual([]);
+		expect(executor.queries).not.toContain('SELECT 1 AS otra;\n');
+	});
+
 	it('filtra por --only y valida paths inexistentes', () => {
 		const assets = discoverSqlAssets(assetsRoot);
 
@@ -99,6 +163,108 @@ describe('PostgreSQL SQL assets runner', () => {
 		expect(() => assertTargetAllowed({ mode: 'apply', target: 'production' })).toThrow(/allow-production/);
 		expect(() => assertTargetAllowed({ mode: 'apply', target: 'production', allowProduction: true, confirmTarget: 'production' })).not.toThrow();
 		expect(() => assertTargetAllowed({ mode: 'dry-run', target: 'production' })).not.toThrow();
+	});
+
+	it('deja la tabla de historial con la columna modo y RLS activado', async () => {
+		// Sin RLS, en un entorno nuevo la tabla nace abierta a `anon` por los default privileges.
+		const executor = new InMemoryExecutor();
+		await runSqlAssets(executor, { assetsRoot, mode: 'apply' as const, target: 'development' });
+
+		expect(executor.queries.some((query) => /ADD COLUMN IF NOT EXISTS modo text NOT NULL DEFAULT 'apply'/.test(query))).toBe(true);
+		expect(executor.queries.some((query) => query.includes(`ALTER TABLE ${HISTORY_TABLE} ENABLE ROW LEVEL SECURITY`))).toBe(true);
+		expect([...executor.history.values()].every((fila) => fila.modo === 'apply')).toBe(true);
+	});
+
+	describe('modo baseline', () => {
+		const baseline = (extra: Record<string, unknown> = {}) => ({ assetsRoot, mode: 'baseline' as const, target: 'qa', ...extra });
+
+		it('registra sin ejecutar solo los assets verificados', async () => {
+			const executor = new InMemoryExecutor();
+			const run = await runSqlAssets(executor, baseline({ verified: new Set(['functions/a.sql', 'rls/policy.sql']) }));
+
+			expect(run.baselined).toEqual(['functions/a.sql', 'rls/policy.sql']);
+			expect(run.pending).toEqual(['functions/z.sql', 'special-index/index.sql', 'triggers/trigger.sql']);
+			// Ni una línea del SQL de los assets llegó a la base.
+			expect(executor.queries).not.toContain('SELECT 1;\n');
+			expect(executor.queries).not.toContain('SELECT 4;\n');
+			expect(executor.history.get('functions/a.sql')).toEqual({ checksum: checksumSql('SELECT 1;\n'), modo: 'baseline' });
+
+			// El apply siguiente omite lo registrado y ejecuta solo el resto.
+			const apply = await runSqlAssets(executor, { assetsRoot, mode: 'apply' as const, target: 'qa' });
+			expect(apply.skipped).toEqual(['functions/a.sql', 'rls/policy.sql']);
+			expect(apply.applied).toEqual(['functions/z.sql', 'special-index/index.sql', 'triggers/trigger.sql']);
+		});
+
+		it('no toca una fila ya registrada, aunque su checksum difiera del archivo', async () => {
+			// Un asset registrado que cambió lo resuelve apply (re-aplica o falla según la fase).
+			// Si baseline lo pisara, el cambio del archivo quedaría registrado sin haberse ejecutado.
+			const executor = new InMemoryExecutor();
+			executor.registrar('functions/a.sql', 'checksum-de-otra-version');
+
+			const run = await runSqlAssets(executor, baseline({ verified: new Set(['functions/a.sql']) }));
+
+			expect(run.skipped).toEqual(['functions/a.sql']);
+			expect(run.baselined).toEqual([]);
+			expect(executor.history.get('functions/a.sql')).toEqual({ checksum: 'checksum-de-otra-version', modo: 'apply' });
+		});
+
+		it('nunca registra grants ni seed, aunque vengan como verificados', async () => {
+			// Que `grants/000` coincida con lo generado no prueba nada: el emisor escribe sentencias fijas.
+			fs.mkdirSync(path.join(assetsRoot, 'grants'));
+			fs.mkdirSync(path.join(assetsRoot, 'seed'));
+			fs.writeFileSync(path.join(assetsRoot, 'grants', '000.sql'), 'SELECT 5;\n');
+			fs.writeFileSync(path.join(assetsRoot, 'seed', '001.sql'), 'SELECT 6;\n');
+			fs.writeFileSync(
+				path.join(assetsRoot, 'assets.manifest.json'),
+				JSON.stringify({ version: 1, directories: ['functions', 'grants', 'seed'] })
+			);
+
+			const executor = new InMemoryExecutor();
+			const run = await runSqlAssets(executor, baseline({ verified: new Set(['functions/a.sql', 'grants/000.sql', 'seed/001.sql']) }));
+
+			expect(run.baselined).toEqual(['functions/a.sql']);
+			expect(run.pending).toEqual(expect.arrayContaining(['grants/000.sql', 'seed/001.sql']));
+		});
+
+		it('exige la verificación contra la base, y no escribe nada sin ella', async () => {
+			const executor = new InMemoryExecutor();
+
+			await expect(runSqlAssets(executor, baseline())).rejects.toThrow(/requiere la verificación/);
+			expect(executor.queries).toEqual([]);
+		});
+
+		it('en producción exige las dos confirmaciones', async () => {
+			// No ejecuta DDL, pero un baseline equivocado hace que un asset nunca aplicado se omita para siempre.
+			expect(() => assertTargetAllowed({ mode: 'baseline', target: 'production' })).toThrow(/línea base.*allow-production/);
+			expect(() =>
+				assertTargetAllowed({ mode: 'baseline', target: 'production', allowProduction: true, confirmTarget: 'production' })
+			).not.toThrow();
+			await expect(runSqlAssets(new InMemoryExecutor(), baseline({ target: 'production', verified: new Set() }))).rejects.toThrow(
+				/allow-production/
+			);
+		});
+
+		it('respeta --only', async () => {
+			const executor = new InMemoryExecutor();
+			const run = await runSqlAssets(
+				executor,
+				baseline({ only: ['rls/policy.sql'], verified: new Set(['functions/a.sql', 'rls/policy.sql']) })
+			);
+
+			expect(run.baselined).toEqual(['rls/policy.sql']);
+			expect(executor.history.has('functions/a.sql')).toBe(false);
+		});
+
+		it('una fila de línea base que después se re-aplica pasa a modo apply', async () => {
+			const executor = new InMemoryExecutor();
+			await runSqlAssets(executor, baseline({ verified: new Set(['functions/a.sql']) }));
+			fs.writeFileSync(path.join(assetsRoot, 'functions', 'a.sql'), 'SELECT 1 AS nueva;\n');
+
+			const apply = await runSqlAssets(executor, { assetsRoot, mode: 'apply' as const, target: 'qa', only: ['functions/a.sql'] });
+
+			expect(apply.reapplied).toEqual(['functions/a.sql']);
+			expect(executor.history.get('functions/a.sql')).toEqual({ checksum: checksumSql('SELECT 1 AS nueva;\n'), modo: 'apply' });
+		});
 	});
 });
 

@@ -39,11 +39,11 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+# Cualquier `.env*` queda fuera, no solo una lista de nombres: `.env.qa.db` o
+# `.env.prod.db` no matcheaban la lista anterior y git los ofrecía para commitear
+# con las credenciales adentro. Solo se versiona la plantilla.
+.env*
+!.env.example
 
 # temp directory
 .temp
@@ -74,3 +74,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 !/graphify-out/wiki/
 !/graphify-out/wiki/**
 !/graphify-out/.graphify_labels.json
+
+# Claude Code: archivos locales de cada dev, no se comparten
+.claude/worktrees/
+.claude/settings.local.json
+CLAUDE.local.md

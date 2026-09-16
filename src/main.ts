@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
+import { getCorsOrigins } from './core/config/cors-origins';
 import { swaggerConfig } from './core/config/site.config';
 import { GlobalExceptionFilter } from './core/filters/global-exception.filter';
 import { AppLoggerService } from './logger/app-logger.service';
@@ -17,10 +18,6 @@ process.env.TZ = 'America/Santiago';
 
 async function bootstrap() {
 	const app = await NestFactory.create<NestExpressApplication>(AppModule);
-	const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
-		.split(',')
-		.map((origin) => origin.trim())
-		.filter(Boolean);
 
 	// Obtener servicios necesarios para el filtro de excepciones
 	const logger = app.get(AppLoggerService);
@@ -111,7 +108,7 @@ async function bootstrap() {
 
 	// Configuración específica de CORS
 	app.enableCors({
-		origin: [/\.vercel\.app$/, ...frontendOrigins],
+		origin: getCorsOrigins(),
 		methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 		allowedHeaders: [
 			'Origin',
