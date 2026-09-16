@@ -141,14 +141,39 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 
 		expect(Object.keys(packageJson.scripts).filter((script) => script.startsWith('schema:sync'))).toEqual([]);
 		expect(packageJson.scripts['schema:log']).toBeDefined();
+		expect(packageJson.scripts['schema:status']).toBeDefined();
 		expect(packageJson.scripts['postgres:assets']).toBeDefined();
 	});
 
-	it('el CLI de assets verifica que la conexión corresponda al target declarado', () => {
+	it('todo script que conecta a la base verifica que la conexión corresponda al target declarado', () => {
 		// `target` sale de DATABASE_TARGET ?? NODE_ENV ?? 'development' y es
 		// independiente de SUPABASE_DATABASE_URL: sin esta verificación las guardas
-		// de producción no protegen nada.
-		const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', 'apply-postgresql-assets.ts'), 'utf8');
-		expect(source).toContain('assertConnectionMatchesTarget');
+		// de producción no protegen nada. `schema-log.ts` queda fuera: no recibe
+		// target, solo informa a qué base se conectó.
+		const scripts = [
+			'apply-postgresql-assets.ts',
+			'run-migrations.ts',
+			'schema-status.ts',
+			'schema-as-code/fetch-catalog.ts',
+			'schema-as-code/audit-usage.ts',
+			'schema-as-code/verify-policies.ts',
+		];
+		for (const script of scripts) {
+			const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', script), 'utf8');
+			expect({ script, verifica: source.includes('assertConnectionMatchesTarget(') }).toEqual({ script, verifica: true });
+		}
+	});
+
+	it('schema:status es de solo lectura', () => {
+		// Es el comando que se corre ANTES de decidir nada, contra prod incluida: no puede escribir.
+		const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', 'schema-status.ts'), 'utf8');
+
+		expect(source).toContain('BEGIN TRANSACTION READ ONLY');
+		expect(source).not.toMatch(/runSqlAssets|ensureHistoryTable|\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bALTER\b|\bCREATE\b/);
+	});
+
+	it('migration:show no usa showMigrations() de TypeORM, que crea la tabla de migraciones', () => {
+		const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', 'run-migrations.ts'), 'utf8');
+		expect(source).not.toMatch(/\.showMigrations\(/);
 	});
 });

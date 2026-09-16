@@ -27,6 +27,36 @@ alwaysApply: true
   `<objeto>_<motivo>.sql`**: el que queda vivo lo decide el orden alfabético, no el cronológico.
 - Todo comando contra la base lleva `--target`, que se verifica contra la conexión real.
 
+## Migración o asset: la regla
+
+**Migraciones para tablas y para eliminar o renombrar cualquier objeto. Assets para crear y
+actualizar todo lo que no es tabla.**
+
+| Cambio | Va en |
+|---|---|
+| Crear o alterar una tabla (columnas, PK, FK, UNIQUE, CHECK, índice btree) o activar su RLS | entity + **migración** |
+| Crear o modificar una función, trigger, policy o grant | **asset**: se edita el mismo archivo |
+| Crear un enum, extensión, special-index o seed | **asset** |
+| Modificar un enum, extensión, special-index o seed **ya aplicado** | **migración** |
+| **Eliminar o renombrar** cualquier objeto (tabla, función, trigger, policy, índice, tipo) | **migración** escrita a mano + borrar o renombrar el archivo |
+| Cambiar parámetros o tipo de retorno de una función | **migración** que borra la firma vieja + asset con la nueva |
+| Corregir o transformar datos existentes | **migración** |
+
+- Una migración no crea ni redefine funciones, triggers, policies ni grants (salvo en su `down()`).
+- Un asset no contiene transiciones: nada de `ALTER TABLE`, `RENAME`, ni `UPDATE`/`DELETE` de datos.
+  El único `DROP` permitido es `DROP … IF EXISTS` seguido del `CREATE` del mismo objeto.
+- Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
+
+## Sincronizar con QA o producción
+
+- Empieza y termina con `yarn schema:status --target <entorno>` (solo lectura). Primero QA, después prod.
+- Conexión por archivo, desde `api-sapira/`: `DOTENV_CONFIG_PATH=.env.qa.db` o `.env.prod.db`. Las URLs
+  se le piden a Leon y nunca se commitean.
+- Migraciones antes que assets. `--apply` va con `--only` mientras `schema:status` muestre
+  `SIN CONTRAPARTE` ajenos al cambio. En producción, todo lo que escribe exige
+  `--allow-production --confirm-target production`.
+- Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
+
 ## Para eliminar una tabla, función, trigger o policy
 
 - **Borrar el archivo del repo NO borra nada de la base**: el runner solo aplica, nunca deduce

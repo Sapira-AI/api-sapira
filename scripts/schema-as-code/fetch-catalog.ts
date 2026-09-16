@@ -24,7 +24,10 @@ import * as path from 'path';
 import 'dotenv/config';
 import { Client } from 'pg';
 
+import type { SqlExecutor } from '@/databases/postgresql/assets-runner';
 import { assertConnectionMatchesTarget } from '@/databases/postgresql/connection-target';
+
+import type { Catalog } from './generate-assets';
 
 const RAW_DIR = path.resolve(__dirname, '../espejo/snapshots/raw');
 
@@ -169,14 +172,33 @@ const QUERIES = {
 
 type QueryName = keyof typeof QUERIES;
 
-async function fetchAll(client: Client): Promise<Record<QueryName, Row[]>> {
+/**
+ * Corre las consultas del catálogo. No abre transacción: quien llama decide, y
+ * `schema:status` necesita meterlas en la misma transacción READ ONLY que el resto.
+ */
+async function consultarCatalogo(executor: SqlExecutor, log: (mensaje: string) => void = () => undefined): Promise<Record<QueryName, Row[]>> {
 	const result = {} as Record<QueryName, Row[]>;
 	for (const [name, sql] of Object.entries(QUERIES) as [QueryName, string][]) {
-		const { rows } = await client.query<Row>(sql);
+		const { rows } = await executor.query(sql);
 		result[name] = rows;
-		console.log(`  ${name}: ${rows.length} filas`);
+		log(`  ${name}: ${rows.length} filas`);
 	}
 	return result;
+}
+
+/** Consultas del catálogo dentro de una transacción READ ONLY: el motor rechaza cualquier escritura. */
+async function capturarDatos(executor: SqlExecutor, log?: (mensaje: string) => void): Promise<Record<QueryName, Row[]>> {
+	await executor.query('BEGIN TRANSACTION READ ONLY');
+	try {
+		return await consultarCatalogo(executor, log);
+	} finally {
+		await executor.query('ROLLBACK');
+	}
+}
+
+/** Catálogo de una base viva, en memoria, en el formato que consumen los emisores de `generate-assets`. */
+async function capturarCatalogo(executor: SqlExecutor): Promise<Catalog> {
+	return buildCatalog(await capturarDatos(executor)) as Catalog;
 }
 
 /** Agrupa filas por su columna `table`, quitando esa columna del resultado. */
@@ -295,10 +317,7 @@ async function main(): Promise<void> {
 	const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
 	await client.connect();
 	try {
-		// El motor rechaza cualquier escritura dentro de esta transacción.
-		await client.query('BEGIN TRANSACTION READ ONLY');
-		const data = await fetchAll(client);
-		await client.query('ROLLBACK');
+		const data = await capturarDatos(client, console.log);
 
 		fs.mkdirSync(RAW_DIR, { recursive: true });
 		writeJson(path.join(RAW_DIR, 'catalog.json'), buildCatalog(data));
@@ -320,4 +339,4 @@ if (require.main === module) {
 	});
 }
 
-export { buildCatalog, buildListTables, groupByTable, QUERIES };
+export { buildCatalog, buildListTables, capturarCatalogo, capturarDatos, consultarCatalogo, groupByTable, QUERIES };

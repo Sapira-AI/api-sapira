@@ -22,12 +22,17 @@ export type ResolvedEnvironment = SchemaEnvironment | typeof LOCAL_ENVIRONMENT;
 
 /**
  * Proyectos Supabase con rol confirmado. Solo se declara aquí lo que está
- * verificado: `entities/NOTAS-ESPEJO.md` documenta que existen otros dos refs
- * cuyo rol nadie confirmó, y clasificarlos a ciegas sería peor que exigir que
- * se declaren.
+ * verificado: `entities/NOTAS-ESPEJO.md` documenta un ref más cuyo rol nadie
+ * confirmó, y clasificarlo a ciegas sería peor que exigir que se declare.
  */
 export const KNOWN_SUPABASE_PROJECTS: Readonly<Record<string, SchemaEnvironment>> = {
 	hklompkypzqtglprfobu: 'production',
+	// Rol confirmado por Leon el 2026-09-16: es el ref al que estaba linkeado el CLI
+	// de `sapira-ai`. Declararlo acá y no en `SUPABASE_PROJECT_ENVIRONMENTS` es lo que
+	// hace que operar QA no dependa de que cada archivo de conexión traiga el JSON
+	// bien escrito: un typo en el ref declarado lo resolvería como base local, y ese
+	// caso pasa cualquier target que no sea producción, o sea que la guarda no avisa.
+	obvwrhvyuimjoejqmuqf: 'qa',
 };
 
 export interface ResolvedConnection {

@@ -1,4 +1,9 @@
--- Quita el EXECUTE a PUBLIC de las dos funciones `cleanup_duplicate_*`.
+-- Quita el EXECUTE a PUBLIC de `cleanup_duplicate_partners_by_vat`.
+--
+-- Originalmente cubría también `cleanup_duplicate_pending_records(integer)`, que la migración
+-- `RetiraObjetosDebugMuertos1789040000000` eliminó el 2026-09-10. Su REVOKE se quitó el
+-- 2026-09-16: en prod ya había corrido antes del DROP, pero en cualquier base que corra las
+-- migraciones primero (QA, un entorno nuevo) este asset fallaba con "function does not exist".
 --
 -- `CREATE FUNCTION` otorga EXECUTE a PUBLIC por defecto, así que estas dos quedaron
 -- invocables por `supabase.rpc()` con la anon key —la que viaja en el bundle JavaScript
@@ -24,8 +29,6 @@
 -- funciones de `public`. Endurecerlo en bloque es un cambio aparte, con su propia prueba
 -- (nota: `anon` y `authenticated` tienen el EXECUTE también de forma explícita, así que un
 -- REVOKE a PUBLIC no rompería las 64 funciones que el front llama por rpc).
-
-REVOKE ALL ON FUNCTION public.cleanup_duplicate_pending_records(integer) FROM PUBLIC, anon, authenticated;
 
 REVOKE ALL ON FUNCTION public.cleanup_duplicate_partners_by_vat(uuid, integer) FROM PUBLIC, anon, authenticated;
 
