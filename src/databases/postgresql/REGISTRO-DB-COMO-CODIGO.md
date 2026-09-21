@@ -19,9 +19,9 @@ desarme (GUIA → Guardas automáticas).
 
 | # | Pendiente | Estado | Cerrado |
 |---|---|---|---|
-| 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) (2 de 5 resueltas; 2 casos nuevos) | ⬜ | |
+| 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) | ✅ | 2026-09-21 |
 | 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
-| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ⬜ | |
+| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) (quedan 3 decisiones chicas, ver el punto) | 🔶 | 2026-09-21 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ⬜ | |
 | 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
@@ -36,35 +36,33 @@ tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|pro
 
 ## 1. Funciones con deriva real en producción
 
-> ✅ **Parcialmente resuelto el 2026-09-18** (commit `8846d14`): `apply_quote_downsell_to_contract` y
-> `prevent_end_date_update_when_active` se recapturaron desde producción al repo, así que esas dos
-> ya no tienen deriva. **Quedan tres casos**, y dos son nuevos.
+> ✅ **CERRADO el 2026-09-21** (sesión Domi+Claude, todo por el flujo de la GUIA):
+> `rsm_metrics(jsonb)` re-aplicada en prod (tenía `\r\n` de Windows; ahora byte-idéntica al repo) ·
+> `create_default_roles_for_holding` **revertida en el repo** a la versión de prod (la edición
+> v0.0.15 regalaba `VIEW_DOCUMENTACION` a roles de cliente, contradiciendo el diseño de permisos
+> internos del 21-09: commits `07cf64d` sapira-ai / `ce38839` front-sapira — el permiso interno NO
+> lo cubre el comodín y solo lo otorga un super admin explícitamente) · `seed/002` reescrito para
+> solo registrar el permiso en el catálogo (bootstrap), **sin otorgamientos y sin aplicar** por
+> decisión de Domi (todo funciona sin la fila; se aplica cuando se quiera otorgar a un rol) ·
+> `grants/010` re-aplicado en prod (Leon lo editó tras aplicarlo). `schema:status --target
+> production`: migraciones 0 · pendientes 0 · solo-en-base 0.
+> **De paso se cerró un bug del corpus**: los archivos con funciones sobrecargadas no tenían `;`
+> entre definiciones (pg_get_functiondef no lo emite) y el runner no podía aplicarlos — corregido
+> el emisor (`generate-assets.ts`) y los 11 archivos afectados.
 
-| Asset | Estado hoy | Quién tiene la versión buena |
-|---|---|---|
-| `functions/create_default_roles_for_holding.sql` | `PENDIENTE` | **el repo**: agrega `VIEW_DOCUMENTACION` a los roles por defecto. Se cierra aplicándolo con `--only` |
-| `functions/check_contract_item_continuity.sql` | `REAPLICAR` | **la base**: prod y QA tienen una versión con overrides de Cantidades Variables que **no está en ninguna rama** |
-| `functions/invoice_reschedule_items.sql` | `REAPLICAR` | **la base**: prod y QA tienen el cálculo de cantidad y unitario por ítem que **no está en ninguna rama** |
+**Historial del punto** (cómo se llegó al cierre):
 
-**Los dos casos nuevos, medidos el 2026-09-21.** Las dos funciones se aplicaron ese día a QA (12:39 y
-12:45) y a producción (12:41 y 12:46), siguiendo el orden correcto, pero **desde una copia de trabajo
-sin commitear**: el checksum del historial no coincide con ningún commit de `main`, `domi` ni `leon`.
-Los comentarios de las definiciones vivas citan casos reales ("CEFA S08540", "STG CTR-2026-38").
+- 2026-09-18 (`8846d14`): recapturadas `apply_quote_downsell_to_contract` y
+  `prevent_end_date_update_when_active` (prod tenía código más nuevo que el repo).
+- 2026-09-21 AM (`a2647bc`, Domi): `check_contract_item_continuity` e `invoice_reschedule_items`
+  commiteadas y aplicadas a QA y prod por el flujo de la GUIA — los checksums del historial hoy
+  coinciden con el repo (el párrafo anterior de este punto las daba como "aplicadas desde copia
+  sin commitear"; quedó resuelto con ese commit).
+- 2026-09-21 PM: el resto (banner de arriba). Regla que queda de todo esto: **aplicar solo
+  contenido commiteado**; si se aplica desde el working tree, el commit va inmediatamente después.
 
-**Por qué importa:** el runner las marca `REAPLICAR`, así que **un `--apply --only` sobre cualquiera
-de esas dos rutas reemplazaría la definición viva por la del repo y borraría el arreglo**. Y como el
-código nunca las recibió, un entorno nuevo tampoco las tendría.
-
-**Cómo se cierra:** commitear esas dos definiciones al repo (quien las aplicó, o recapturándolas de
-prod con `fetch-catalog.ts` + `generate-assets.ts`), y aplicar `create_default_roles_for_holding.sql`
-con `--only` en QA y después en prod.
-
-**Cómo se evita que vuelva a pasar:** aplicar solo contenido que ya esté commiteado. Si se aplica
-desde el working tree, el commit va inmediatamente después, porque hasta entonces el repo describe
-otra cosa que la base y el propio runner ofrece revertirlo.
-
-**Cómo se verifica:** `schema:status --target production` no muestra `PENDIENTE` ni `REAPLICAR`
-(salvo lo `NO VERIFICABLE`, que siempre se aplica a conciencia).
+**Cómo se verifica:** `schema:status --target production` sin `PENDIENTE` ni `REAPLICAR`
+(salvo lo `NO VERIFICABLE`, que siempre se aplica a conciencia). Medido así el 2026-09-21.
 
 ## 2. Línea base de producción sin registrar
 
@@ -81,6 +79,23 @@ aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4
 **Cómo se verifica:** `schema:status --target production` no muestra `LINEA BASE`.
 
 ## 3. QA sin alinear
+
+> 🔶 **CASI CERRADO el 2026-09-21** (sesión Domi+Claude, procedimiento §6 de la GUIA en el orden
+> documentado): 2 policies del paso 1 → **las 5 migraciones TypeORM** → 24 assets con `--only`
+> (las 16 funciones donde dev tenía versiones viejas de fixes ya vivos en prod, los 7 de
+> `sapira_quantity_imports`/quote-stages y `grants/010`). También: tablas de prueba `example`/
+> `examples` eliminadas (0 filas, 0 FKs, 0 referencias). `schema:status --target qa`:
+> migraciones 0 · PENDIENTE 0 · SIN CONTRAPARTE 0. **Contexto clave**: QA es la rama `dev`
+> PERSISTENTE del mismo proyecto Supabase (parent = `main`); el flujo viejo del front la mantenía
+> en paridad y lo único que le faltaba era el carril api, estrenado directo en `main`.
+> ⚠️ Mientras convivan ambos mecanismos: ninguna operación de rama por Supabase
+> (merge/rebase/reset) sin acuerdo Domi+Leon — un reset reconstruiría dev sin el carril api.
+>
+> **Quedan 3 decisiones (Leon)**: (a) `types/000-extensions` NO CONVERGE (extensiones de dev
+> difieren; va por migración o se acepta); (b) 5 policies viejas de `salesforce_connections` +
+> mappings que solo existen en dev (prod las eliminó; dropearlas = paridad); (c) la
+> mini-divergencia de migraciones del front del 16-09 (dev +2 / main +1).
+
 
 Medido en QA el 2026-09-21: **5 migraciones pendientes** (la base nunca corrió ninguna), 17 funciones
 con otra definición, 2 `REAPLICAR` (las del punto 1), 1 asset que `NO CONVERGE`

@@ -74,8 +74,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.calculate_contract_fx_amounts(p_contract_id uuid)
  RETURNS TABLE(success boolean, message text)
@@ -164,4 +163,3 @@ EXCEPTION WHEN OTHERS THEN
     RETURN QUERY SELECT false, 'Error calculating FX amounts: ' || SQLERRM;
 END;
 $function$
-

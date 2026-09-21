@@ -151,8 +151,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RETURN QUERY SELECT false, NULL::uuid, 'Error al crear renovación: ' || SQLERRM;
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.create_contract_renewal(p_contract_id uuid, p_effective_date date, p_term_months integer DEFAULT NULL::integer, p_new_end_date date DEFAULT NULL::date, p_copy_items boolean DEFAULT true, p_metadata jsonb DEFAULT '{}'::jsonb, p_approval_required boolean DEFAULT false)
  RETURNS jsonb
@@ -610,4 +609,3 @@ EXCEPTION WHEN OTHERS THEN
   RAISE EXCEPTION 'Error en renovación: %', SQLERRM;
 END;
 $function$
-

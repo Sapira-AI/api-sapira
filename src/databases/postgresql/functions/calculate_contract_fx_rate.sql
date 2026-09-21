@@ -207,8 +207,7 @@ BEGIN
     COALESCE(v_source, 'fallback'),
     COALESCE(v_ref_date, p_date);
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.calculate_contract_fx_rate(p_contract_id uuid, p_conversion_type text, p_period_date date, p_from_currency text, p_to_currency text)
  RETURNS TABLE(rate numeric, source text, reference_date date)
@@ -304,8 +303,7 @@ BEGIN
 
   RETURN QUERY SELECT v_rate, v_source, v_ref_date;
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.calculate_contract_fx_rate(p_contract_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text DEFAULT 'monthly_avg'::text)
  RETURNS TABLE(rate numeric, source text, reference_date date)
@@ -405,4 +403,3 @@ BEGIN
   RETURN QUERY SELECT v_rate, v_source, v_ref_date;
 END;
 $function$
-

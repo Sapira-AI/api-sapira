@@ -59,8 +59,7 @@ BEGIN
     -- No se detectaron cambios
     RETURN FALSE;
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.detect_partner_changes(new_data jsonb, old_data jsonb, relevant_fields text[] DEFAULT ARRAY['name'::text, 'email'::text, 'vat'::text])
  RETURNS boolean
@@ -85,4 +84,3 @@ BEGIN
     RETURN FALSE;
 END;
 $function$
-

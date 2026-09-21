@@ -20,8 +20,7 @@ BEGIN
     
     RETURN series_param || '-' || current_year || '-' || LPAD(next_number::text, 4, '0');
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.get_next_invoice_number(company_id_param uuid)
  RETURNS text
@@ -55,4 +54,3 @@ BEGIN
     RETURN company_prefix || current_year || '-' || LPAD(next_number::text, 4, '0');
 END;
 $function$
-
