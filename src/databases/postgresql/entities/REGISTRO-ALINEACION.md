@@ -1,5 +1,9 @@
 # REGISTRO-ALINEACION — entities que se alinean contra producción
 
+> Este registro cubre la deriva entity↔producción. Lo que falta para que **todo** el esquema sea
+> código (incluidos los 41 índices que producen 41 de las 94 sentencias de abajo) se sigue en
+> [`REGISTRO-DB-COMO-CODIGO.md`](../REGISTRO-DB-COMO-CODIGO.md).
+
 > Estado del paso E3: llevar cada entity a reflejar exactamente su tabla en producción,
 > hasta que `yarn schema:log` no emita nada. Mientras emita algo, la entity **no** es todavía
 > la definición de la tabla.

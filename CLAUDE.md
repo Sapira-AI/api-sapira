@@ -3,6 +3,9 @@
 Convenciones de stack, estructura de módulo y estilo: `AGENTS.md`.
 **Procedimiento para cambiar el esquema: `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`.**
 Referencia del corpus y su estado: `src/databases/postgresql/README.md`.
+Lo que falta para que la base sea código, con estado por punto:
+`src/databases/postgresql/REGISTRO-DB-COMO-CODIGO.md` — **si resolvés uno de esos 9 puntos, márcalo ahí
+en el mismo commit**.
 
 ## Esquema de base de datos
 
@@ -62,9 +65,15 @@ actualizar todo lo que no es tabla.**
   no coinciden. Producción y QA están declaradas en `connection-target.ts`; cualquier otro project ref se declara en `SUPABASE_PROJECT_ENVIRONMENTS`.
 - **Sincronizar a una base empieza y termina con `yarn schema:status --target <entorno>`** (solo
   lectura), primero en QA y después en producción, con la conexión por `DOTENV_CONFIG_PATH=.env.<qa|prod>.db`.
-  Migraciones antes que assets. `--apply` va con `--only` mientras `schema:status` muestre
-  `SIN CONTRAPARTE` ajenos a tu cambio. `--baseline` solo registra lo verificado idéntico a la base;
-  nunca se registra a mano una fila del historial. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
+  Migraciones antes que assets. `--baseline` solo registra lo verificado idéntico a la base; nunca se
+  registra a mano una fila del historial. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
+- 🔴 **`--apply` SIEMPRE lleva un `--only <ruta>` por cada asset que tocaste. Nunca corras
+  `postgres:assets --apply` sin filtro**, en ningún entorno. Sin filtro aplica todo lo que no esté
+  registrado en el historial: hoy son 23 assets huérfanos, y **13 de ellos se aplican sin error y
+  reactivan en producción comportamiento que se eliminó a propósito** (clasificación del staging de
+  Odoo, recálculo de revenue por churn, promedios de FX). Los otros 10 fallan. Si creés que tu caso
+  es la excepción, no lo es: la excepción se habilita recién cuando el punto 4 de
+  `REGISTRO-DB-COMO-CODIGO.md` figure como cerrado.
 - **La fuente de verdad de hoy es producción.** Ni `supabase/schema.sql`, ni las migraciones del
   front, ni los `.espejo.ts` lo son: son fotos con fecha. Verifica contra la base antes de escribir SQL.
 
