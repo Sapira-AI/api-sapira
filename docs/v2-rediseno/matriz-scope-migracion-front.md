@@ -3,11 +3,11 @@
 > Cruza las cuatro fuentes para ordenar el desarrollo del front nuevo consumiendo la API:
 > **(A)** lo que existe en el front viejo (`sapira-ai`, 27 páginas), **(B)** el inventario de
 > `rpc()` y el barrido de endpoints ([`inventario-rpc-front-viejo.md`](./inventario-rpc-front-viejo.md)),
-> **(C)** el roadmap pausado (`sapira-ai/docs/ROADMAP.md`, act. 31-08) y **(D)** lo declarado en la
+> **(C)** el roadmap pausado (`sapira-ai/docs/ROADMAP-OPERATIVO.md`, act. 31-08) y **(D)** lo declarado en la
 > web pública de `front-sapira` (`/plataforma/*`: contratos, facturación, cobranza,
 > precios-y-consumo, revenue; más `/agentes` e `/integraciones`).
 >
-> Fecha: 2026-09-14 · working tree, sin commit · decisión previa (Domi): primero paridad con UX
+> Fecha: 2026-09-14 · revisión de vigencia: 2026-09-21 (capa 1 ejecutada, decisión Legacy marcada) · decisión previa (Domi): primero paridad con UX
 > mejorada, después roadmap estratégico. La limpieza del corpus corre como paso previo/paralelo.
 
 ## Arquitectura ya decidida (verificada en código)
@@ -40,7 +40,7 @@ Tipo **P** = paridad + mejoras UX · **R** = rediseño.
 | 12 | **Períodos contables** | (hooks en varias páginas) | 3 rpc · 0 endpoints | Complejos #8 (choque con cierre) | — | P | **2** (módulo API chico, transversal) |
 | 13 | **Revenue / RSM** | Revenue | 5 rpc · 0 endpoints | Complejos #6 (sesión RSM: sub-bugs, duplicados, overrides) | ✓ | P | **2–3** (sanear RSM antes de UI nueva) |
 | 14 | **Reportes / MRR** | Reportes (hooks useMRR*) | rpc solo tenancy; consultas directas a tablas | Medios #9 (panel vendedores) | — | P/R | **2–3** (son "query → endpoint de reporte") |
-| 15 | **Legacy / MRR legacy** | FacturasLegacy + flujos en contratos | ~11 rpc · 0 endpoints | V9 en validación | — | **Decisión pendiente**: ¿UI nueva completa o admin mínimo si es transitorio? | **2** (mínimo) |
+| 15 | **Legacy / MRR legacy** | FacturasLegacy + flujos en contratos | ~11 rpc · 0 endpoints | V9 en validación | — | ✅ decidido (14-09): UI nueva como todo, funcionalidad mínima primero | **2** (mínimo) |
 | 16 | **Cobranza / AR** | Tab AR v1 (en validación V7) | 0 rpc propios · 0 endpoints | V7 + calendario cobros | ✓ **prometida** | R (es v1 aún) | **3** con diseño |
 | 17 | **Pricing / precios y consumo** | overrides de cantidades (parcial) | (usa quantities/bigquery) | Estratégico #20 (rangos/tramos) + carril B paso 2 (esquema Pricing) | ✓ **prometida** | R | **3** — diseño UX + esquema |
 | 18 | **Copilot** | (componentes) | 6 endpoints ✓ + BFF copilot ✓ | Estratégico #21 (MCP) | — | P | **1** |
@@ -63,8 +63,9 @@ se absorbe en Integraciones/Configuración), `documentacion` (ya migrada al fron
 
 ## La limpieza tiene dos capas (decisión Domi 14-09)
 
-**Capa 1 — huérfanos** (borrado seguro, casi mecánico): 7 funciones, 12 triggers y 4 policies que
-apuntan a objetos inexistentes. Puede correr ya, en paralelo a todo.
+**Capa 1 — huérfanos** — ✅ **EJECUTADA el 21-09**: los 23 archivos (7 funciones, 12 triggers, 4
+policies que apuntaban a objetos inexistentes) se eliminaron del corpus sin migración. Evidencia
+por familia: `src/databases/postgresql/REGISTRO-DB-COMO-CODIGO.md` → punto 4.
 
 **Capa 2 — familias duplicadas/solapadas**: acá viven varios bugs del roadmap, y por eso **no es
 una limpieza previa global sino el paso 0 de cada módulo del Tren 2**. Método por familia: mapa de

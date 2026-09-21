@@ -87,8 +87,7 @@ BEGIN
     
     RETURN result;
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.apply_field_mapping_to_data(source_data jsonb, mapping_config jsonb, target_table text)
  RETURNS jsonb
@@ -210,4 +209,3 @@ BEGIN
     RETURN result;
 END;
 $function$
-

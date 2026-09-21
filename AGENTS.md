@@ -20,6 +20,7 @@
 - Evita refactors o simplificaciones no pedidas.
 - No hagas commits ni cambios destructivos de git sin instruccion explicita.
 - Toda funcionalidad nueva o modificada debe actualizar su documentación funcional en la misma tarea.
+- `ROADMAP-V2.md` (raíz) es el único índice del plan v2: un documento de planificación nuevo se linkea desde ahí o no existe. El backlog operativo de fixes vive en copia espejo doble: `docs/ROADMAP-OPERATIVO.md` y `sapira-ai/docs/ROADMAP-OPERATIVO.md` — todo cambio se replica en ambos (convención en el propio archivo).
 - Prioriza documentar en la ubicación más cercana del módulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `docs/` para documentación transversal.
 - Toda funcionalidad nueva o modificada en backend debe incluir tests unitarios nuevos o actualizados.
 - Usa Jest para pruebas unitarias y manten las specs dentro de `src/` con sufijo `.spec.ts`, idealmente cerca del modulo afectado.
@@ -80,6 +81,6 @@ actualizar todo lo que no es tabla.**
   Migraciones antes que assets. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
 - 🔴 **`--apply` SIEMPRE lleva un `--only <ruta>` por cada asset que tocaste. Nunca corras
   `postgres:assets --apply` sin filtro**, en ningún entorno. Sin filtro aplica todo lo que no esté
-  registrado en el historial: hoy son 23 assets huérfanos, y **13 de ellos se aplican sin error y
-  reactivan en producción comportamiento que se eliminó a propósito**. Los otros 10 fallan. La
-  excepción se habilita recién cuando el punto 4 de `REGISTRO-DB-COMO-CODIGO.md` figure como cerrado.
+  registrado en el historial. (Los 23 assets huérfanos ya se eliminaron — punto 4 del
+  `REGISTRO-DB-COMO-CODIGO.md`, cerrado el 21-09 — pero la regla sigue mientras la línea base de
+  cada entorno no esté registrada: punto 2 del mismo registro.)
