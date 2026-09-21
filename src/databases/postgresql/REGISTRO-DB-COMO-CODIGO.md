@@ -19,7 +19,7 @@ desarme (GUIA → Guardas automáticas).
 
 | # | Pendiente | Estado | Cerrado |
 |---|---|---|---|
-| 1 | [3 funciones donde prod y el repo difieren de verdad](#1-tres-funciones-con-deriva-real-en-producción) | ⬜ | |
+| 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) (2 de 5 resueltas; 2 casos nuevos) | ⬜ | |
 | 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
 | 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ⬜ | |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ⬜ | |
@@ -29,35 +29,47 @@ desarme (GUIA → Guardas automáticas).
 | 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) | ⬜ | |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
 
-Las cifras de abajo se midieron el **2026-09-16**. La fuente vigente siempre es el comando, no esta
+Las cifras de abajo se midieron el **2026-09-21**. La fuente vigente siempre es el comando, no esta
 tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|production>`.
 
 ---
 
-## 1. Tres funciones con deriva real en producción
+## 1. Funciones con deriva real en producción
 
-`schema:status --target production` las marca `PENDIENTE`:
+> ✅ **Parcialmente resuelto el 2026-09-18** (commit `8846d14`): `apply_quote_downsell_to_contract` y
+> `prevent_end_date_update_when_active` se recapturaron desde producción al repo, así que esas dos
+> ya no tienen deriva. **Quedan tres casos**, y dos son nuevos.
 
-| Función | Quién tiene la versión buena |
-|---|---|
-| `apply_quote_downsell_to_contract` | **prod**: tiene 24 variables y lógica de renovación que el archivo no tiene |
-| `prevent_end_date_update_when_active` | **prod**: tiene una guarda `current_setting('sapira.bypass_end_date_guard')` que el archivo no tiene |
-| `create_default_roles_for_holding` | **el repo**: agrega `VIEW_DOCUMENTACION` a los roles por defecto |
+| Asset | Estado hoy | Quién tiene la versión buena |
+|---|---|---|
+| `functions/create_default_roles_for_holding.sql` | `PENDIENTE` | **el repo**: agrega `VIEW_DOCUMENTACION` a los roles por defecto. Se cierra aplicándolo con `--only` |
+| `functions/check_contract_item_continuity.sql` | `REAPLICAR` | **la base**: prod y QA tienen una versión con overrides de Cantidades Variables que **no está en ninguna rama** |
+| `functions/invoice_reschedule_items.sql` | `REAPLICAR` | **la base**: prod y QA tienen el cálculo de cantidad y unitario por ítem que **no está en ninguna rama** |
 
-**Por qué importa:** en las dos primeras, alguien arregló la función directamente en la base. Aplicar
-el archivo **borraría ese arreglo**, y el runner no avisa porque para él es un asset pendiente como
-cualquier otro.
+**Los dos casos nuevos, medidos el 2026-09-21.** Las dos funciones se aplicaron ese día a QA (12:39 y
+12:45) y a producción (12:41 y 12:46), siguiendo el orden correcto, pero **desde una copia de trabajo
+sin commitear**: el checksum del historial no coincide con ningún commit de `main`, `domi` ni `leon`.
+Los comentarios de las definiciones vivas citan casos reales ("CEFA S08540", "STG CTR-2026-38").
 
-**Cómo se cierra:** traer la definición de prod al archivo en los dos primeros casos (capturarla con
-`scripts/schema-as-code/fetch-catalog.ts` y comparar con `generate-assets.ts`), y aplicar el tercero
-con `--only`. Al terminar, esos tres pasan a `LINEA BASE` o `APLICADO`.
+**Por qué importa:** el runner las marca `REAPLICAR`, así que **un `--apply --only` sobre cualquiera
+de esas dos rutas reemplazaría la definición viva por la del repo y borraría el arreglo**. Y como el
+código nunca las recibió, un entorno nuevo tampoco las tendría.
 
-**Cómo se verifica:** `schema:status --target production` no muestra `PENDIENTE`.
+**Cómo se cierra:** commitear esas dos definiciones al repo (quien las aplicó, o recapturándolas de
+prod con `fetch-catalog.ts` + `generate-assets.ts`), y aplicar `create_default_roles_for_holding.sql`
+con `--only` en QA y después en prod.
+
+**Cómo se evita que vuelva a pasar:** aplicar solo contenido que ya esté commiteado. Si se aplica
+desde el working tree, el commit va inmediatamente después, porque hasta entonces el repo describe
+otra cosa que la base y el propio runner ofrece revertirlo.
+
+**Cómo se verifica:** `schema:status --target production` no muestra `PENDIENTE` ni `REAPLICAR`
+(salvo lo `NO VERIFICABLE`, que siempre se aplica a conciencia).
 
 ## 2. Línea base de producción sin registrar
 
-`public.sapira_sql_asset_history` tiene **7 filas de 887 assets**; 851 están verificados idénticos a
-la base y esperan registro.
+`public.sapira_sql_asset_history` tiene **9 filas de 887 assets** (7 entre el 2026-09-09 y el 09-15,
+más las 2 del 09-21); **851** están verificados idénticos a la base y esperan registro.
 
 **Por qué importa:** sin historial nadie sabe qué está aplicado. Todo `--apply` depende de que el
 desarrollador recuerde qué archivo tocó, y `--dry-run` no informa nada útil.
@@ -70,9 +82,11 @@ aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4
 
 ## 3. QA sin alinear
 
-Medido en QA: **5 migraciones pendientes**, sin tabla de historial, 19 funciones con otra definición,
-1 asset que `NO CONVERGE` (`types/000-extensions.sql`: sus extensiones difieren) y **15 objetos que
-existen solo ahí** (policies de salesforce, funciones legacy de `integration_logs`).
+Medido en QA el 2026-09-21: **5 migraciones pendientes** (la base nunca corrió ninguna), 17 funciones
+con otra definición, 2 `REAPLICAR` (las del punto 1), 1 asset que `NO CONVERGE`
+(`types/000-extensions.sql`: sus extensiones difieren), 32 `SIN CONTRAPARTE` y **15 objetos que
+existen solo ahí** (policies de salesforce, funciones legacy de `integration_logs`). Desde el
+2026-09-21 ya tiene tabla de historial, con las 2 filas de ese día.
 
 **Por qué importa:** QA es el paso previo obligatorio antes de prod. Mientras no refleje el repo, lo
 que se pruebe ahí no dice nada sobre lo que va a pasar en producción.
