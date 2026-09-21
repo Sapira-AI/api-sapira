@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Client } from '@/databases/postgresql/entities/client.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
 
 @Injectable()
@@ -15,7 +15,7 @@ export class StripeClientsService {
 		private readonly bigQueryService: BigQueryService
 	) {}
 
-	async syncStripeCustomerIds(): Promise<{
+	async syncStripeCustomerIds(holdingId: string): Promise<{
 		success: boolean;
 		message: string;
 		stats: {
@@ -28,7 +28,7 @@ export class StripeClientsService {
 		this.logger.log('Iniciando sincronización de stripe_customer_id desde BigQuery...');
 
 		try {
-			const result = await this.bigQueryService.executeQuery({
+			const result = await this.bigQueryService.executeQuery(holdingId, {
 				query: 'SELECT * FROM `datawarehouse-a2e2.finance.sapira_stripe`',
 				params: {},
 			});

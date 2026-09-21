@@ -185,6 +185,12 @@ for mod, tabs in modmap.items():
             e = {}
             if col.get('char_len'):
                 e['length'] = col['char_len']
+            # pgvector: la dimensión viene en format_type (`vector(1536)`) y no en char_len.
+            # Sin ella TypeORM declara `vector` a secas y propone DROP COLUMN + ADD.
+            if col['udt'] == 'vector':
+                dim = re.search(r'vector\((\d+)\)', col.get('type') or '')
+                if dim:
+                    e['length'] = int(dim.group(1))
             if col['udt'] == 'numeric' and col.get('num_prec') is not None:
                 e['precision'] = col['num_prec']
                 e['scale'] = col.get('num_scale')

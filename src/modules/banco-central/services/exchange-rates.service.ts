@@ -3,12 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { Between, Repository } from 'typeorm';
 
+import { ExchangeRateMonthlyAvgEntity } from '@/databases/postgresql/entities/fx/exchange-rate-monthly-avg.entity';
+import { ExchangeRateEntity } from '@/databases/postgresql/entities/fx/exchange-rate.entity';
+
 import { BancoCentralService } from '../banco-central.service';
 import { CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto } from '../dtos/calculate-monthly-avg.dto';
 import { ExchangeRateResponseDto, GetExchangeRatesDto, GetLatestExchangeRatesDto, MonthlyAvgResponseDto } from '../dtos/get-exchange-rates.dto';
 import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from '../dtos/sync-exchange-rates.dto';
-import { ExchangeRateMonthlyAvgEntity } from '../entities/exchange-rate-monthly-avg.entity';
-import { ExchangeRateEntity } from '../entities/exchange-rate.entity';
 import { IndicadorEconomico } from '../interfaces/banco-central.interface';
 
 import { BancoCentralSchemaService } from './banco-central-schema.service';

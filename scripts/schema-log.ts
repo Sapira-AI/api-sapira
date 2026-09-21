@@ -1,7 +1,16 @@
+import { resolveConnectionEnvironment } from '../src/databases/postgresql/connection-target';
 import dataSource from '../src/databases/postgresql/data-source';
 
 async function logSchemaChanges(): Promise<void> {
 	try {
+		// Solo informa: `log()` no escribe nada. Pero conviene saber contra qué base
+		// se está midiendo la deriva antes de leer el resultado.
+		const connectionString = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
+		if (connectionString) {
+			const { environment, projectRef } = resolveConnectionEnvironment(connectionString);
+			console.log(`-- Midiendo contra ${projectRef ? `proyecto ${projectRef}` : 'base local'} (${environment})`);
+		}
+
 		await dataSource.initialize();
 		const sqlInMemory = await dataSource.driver.createSchemaBuilder().log();
 

@@ -417,6 +417,11 @@ El módulo utiliza las siguientes tablas de Supabase (sin modificar):
 -   `salesforce_connections` - Credenciales y tokens por holding
 -   `salesforce_opportunities_cache` - Cache de oportunidades
 
+### Colecciones de MongoDB
+
+-   `salesforce_scheduler_jobs` - Resumen de cada corrida del scheduler (TTL 30 días)
+-   `salesforce_sync_logs` - Bitácora detallada de la sincronización automática (TTL 90 días)
+
 ## Servicios
 
 ### SalesforceAuthService
@@ -429,7 +434,16 @@ Gestiona el refresh automático de tokens.
 
 ### SalesforceQueryService
 
-Ejecuta queries SOQL con auto-refresh.
+Ejecuta queries SOQL resolviendo el token de la conexión del holding, con paginación completa (`fetchAllQueryPages` recorre `nextRecordsUrl` hasta agotarlo, por lo que la respuesta siempre llega con `done: true`).
+
+La revalidación de token opera en dos niveles:
+
+1. **Proactivo (por reloj).** `SalesforceTokenService.ensureValidToken` re-autentica antes de la consulta si `isTokenExpired` lo indica. Ese chequeo usa `token_expires_at` cuando existe y, si no, un heurístico de 2 horas sobre `token_issued_at`. El flujo SOAP no devuelve `expires_in`, así que en ese caso gobierna el heurístico.
+2. **Reactivo (por respuesta de Salesforce).** Si Salesforce responde `401` a un token que localmente parecía vigente —sesión revocada, `Session Timeout` de la org menor al heurístico, cambio de política de la Connected App o restricción de IP—, se fuerza `refreshAccessToken` y **se reintenta la consulta una única vez**. El reintento vuelve a leer la conexión, por lo que toma el token recién guardado.
+
+Si el `401` persiste tras re-autenticar, la consulta falla con `Salesforce authentication failed. Please reconnect.` pero **la conexión no se desactiva**. Dejar `is_active = false` sacaba al holding de `syncAllActiveConnectionsDaily` de forma permanente y silenciosa, lo que convertía un fallo transitorio de sesión en una interrupción indefinida de la integración. El fallo se notifica como `salesforce_sync_failure` y queda en la bitácora, y la corrida del día siguiente vuelve a intentar.
+
+Si la re-autenticación misma falla (credenciales guardadas inválidas, security token vencido), el error lo dice explícitamente y no se reintenta la consulta.
 
 ### SalesforceSyncService
 
@@ -443,6 +457,10 @@ Maneja pruebas de conexión usando SOAP API.
 
 Servicio principal que orquesta todos los demás.
 
+### SalesforceSyncLogService
+
+Escribe y consulta la bitácora de la sincronización automática en MongoDB. La escritura es tolerante a fallos: nunca propaga un error al flujo de sincronización. Expone `record`, `recordMany` y `recordError` para la escritura, y `list`, `listJobs` y `getJob` para la consulta filtrada por holding y entorno.
+
 ### SalesforceSyncCompleteService
 
 Ahora también expone el flujo explícito de clientes:
@@ -453,9 +471,59 @@ Ahora también expone el flujo explícito de clientes:
 
 #### Contrato de sincronización automática
 
-El scheduler diario consulta las oportunidades modificadas durante los últimos siete días calendario, incluido el día actual, usando la zona horaria `America/Santiago`.
+El scheduler diario (`SalesforceScheduler`, cron `30 8 * * *` en `America/Santiago`) selecciona las oportunidades en etapa ganadora cuya `CloseDate` cae en los **últimos 30 días calendario** de `America/Santiago`, incluido el día actual. El criterio es el mismo que usa la integración manual, de modo que ambas rutas comparten la definición de qué oportunidad es candidata.
+
+La ventana se reevalúa completa en cada corrida. Una oportunidad que quedó bloqueada un día se vuelve a intentar los días siguientes mientras siga dentro de los 30 días, sin depender de que alguien la modifique en Salesforce.
+
+La ventana y el tamaño de lote se controlan con las constantes `DAILY_SYNC_WINDOW_DAYS` y `DAILY_SYNC_CHUNK_SIZE` de `SalesforceSyncCompleteService`; las etapas consideradas ganadoras están en `SALESFORCE_WON_STAGES`.
 
 La corrida automática es exclusivamente de inserción: si ya existe una cotización Sapira para una oportunidad de Salesforce —por `quotes.salesforce_opportunity_id` o por su `SalesforceObjectMapping`— la oportunidad y sus ítems se registran como omitidos. No se actualizan la cotización, ítems, cliente, entidad legal ni contactos asociados. Los flujos manuales de actualización y reintento mantienen su comportamiento administrativo y pueden clasificar o procesar actualizaciones de forma explícita.
+
+**Aislamiento de fallos.** Las oportunidades se procesan en lotes de `DAILY_SYNC_CHUNK_SIZE`. El fallo de un lote no interrumpe los lotes restantes del holding: se registra en la bitácora, se emite una notificación y la corrida continúa. Solo el fallo de la consulta de selección aborta el tramo del holding, porque sin IDs no hay nada que procesar. El resultado del holding se marca `success: false` cuando al menos un lote falló, e incluye el detalle en `error`.
+
+**Exclusión entre réplicas.** El `jobId` es determinista: `salesforce-daily-sync:<entorno>:<día calendario de Santiago>`. Como `salesforce_scheduler_jobs.jobId` tiene índice único, con varias réplicas gana la primera que inserta el documento y las demás salen sin hacer trabajo. Eso además vuelve la corrida idempotente por día: un reinicio del proceso a las 8:31 no la dispara de nuevo.
+
+Si la réplica dueña muere a mitad de la corrida, otra puede retomarla una vez que la corrida `running` supera `RUN_LEASE_MS` (3 horas), mediante un `findOneAndUpdate` condicionado a `startedAt`. Incluir el entorno en la clave evita que dos entornos que comparten el mismo MongoDB se bloqueen entre sí.
+
+`runManualSync()` fuerza un `jobId` con sufijo único (`:manual:<uuid>`), de modo que una ejecución fuera de horario no compite con la corrida del día ni queda bloqueada por ella.
+
+#### Bitácora de la sincronización automática
+
+Cada corrida deja dos rastros en MongoDB:
+
+| Colección | Contenido | Retención |
+| --- | --- | --- |
+| `salesforce_scheduler_jobs` | Resumen de la corrida: estado, duración, `summary` agregado y `holdingResults[]` por holding | 30 días |
+| `salesforce_sync_logs` | Evento por evento, incluido el desenlace individual de cada oportunidad | 90 días |
+
+Los eventos de `salesforce_sync_logs` se clasifican por `stage`:
+
+-   `run`: apertura y cierre de la corrida completa del scheduler.
+-   `holding`: apertura y cierre del tramo de un holding, con la ventana de `CloseDate` aplicada.
+-   `selection`: resultado de la consulta SOQL que determina las oportunidades candidatas.
+-   `staging`: carga de cada lote en las tablas `*_stg`, incluido el conteo de oportunidades descartadas por no tener ítems.
+-   `processing`: paso de staging hacia las tablas finales.
+-   `opportunity`: estado final de cada oportunidad del lote, con `processingStatus`, `integrationNotes` y `errorMessage`. Una oportunidad bloqueada queda con `level: 'error'` y el motivo exacto de la clasificación.
+
+Todo evento incluye `jobId`, `holdingId` y `executionEnvironment` (tomado de `NODE_ENV`), que son los ejes de filtrado indexados.
+
+La escritura de la bitácora nunca interrumpe la sincronización: un fallo al escribir se degrada a un log de aplicación para no perder oportunidades por un problema de observabilidad.
+
+El único invocador del flujo diario es `SalesforceScheduler`, que siempre aporta el contexto (`jobId` y `executionEnvironment`). Cuando `syncDailyModifiedOpportunities` se llama sin contexto —hoy solo en pruebas— se omiten los eventos informativos, porque los flujos manuales ya se auditan en `salesforce_sync_run` y `salesforce_sync_run_item`. Los errores se registran siempre, con `jobId: 'manual'`, para no perder nunca el rastro de un fallo.
+
+##### Endpoints de consulta
+
+Todos requieren `SupabaseAuthGuard` + `HoldingAccessGuard` y el header `x-holding-id`.
+
+-   `GET /salesforce/sync-logs` — Eventos del holding activo. Filtros: `environment`, `level` (`info|warning|error`), `stage`, `jobId`, `opportunityId`, `dateFrom`, `dateTo`, `page`, `limit` (máx. 200).
+-   `GET /salesforce/sync-logs/jobs` — Corridas del scheduler que tocaron el holding activo. Filtros: `environment`, `status` (`pending|running|completed|failed`), `page`, `limit` (máx. 100). Con `allHoldings=true` devuelve las corridas de todos los holdings.
+-   `GET /salesforce/sync-logs/jobs/:jobId` — Una corrida con su resumen y los eventos del holding activo. Responde `404` si la corrida no existe.
+
+#### Notificaciones de fallo
+
+Los bloqueos de una oportunidad individual siguen notificándose con el tipo `salesforce_staging_blocked` y su acción `retry_salesforce_opportunity`.
+
+Los fallos que afectan a la corrida completa de un holding emiten el tipo `salesforce_sync_failure` a través del módulo centralizado de notificaciones, que los envía por WebSocket a los destinatarios suscritos. La clave de deduplicación es `salesforce:daily-sync:<holding>:<stage>`, de modo que un fallo recurrente actualiza la notificación abierta en lugar de duplicarla. La acción asociada es `review_salesforce_sync_log` y su `action_payload` incluye `job_id` y `execution_environment` para abrir la bitácora de la corrida.
 
 ## Uso desde Frontend
 

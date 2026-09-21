@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.classify_invoice_line_before_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     line_name TEXT;
     existing_line RECORD;
@@ -95,3 +98,5 @@ EXCEPTION WHEN OTHERS THEN
     NEW.integration_notes := 'Error general en trigger: ' || SQLERRM;
     RETURN NEW;
 END;
+$function$
+

@@ -1,8 +1,8 @@
 1. Speak to me in Spanish
 2. Esto usando yarn 4.5.1
-3. Este proyecto esta sobre NestJS 14+
+3. Este proyecto esta sobre NestJS 10
 4. Este proyecto usa TypeScript 5.6.2
-5. Este proyecto usa MSAL para la autenticación
+5. La autenticación es de Supabase (JWT): `src/auth/strategies/supabase.strategy.ts`. `'msal'` solo aparece como valor de `provider` en telemetría, no es el mecanismo de auth de este proyecto
 6. Es muy importante que te limites a no quitar o agregar codigo o logica que no te este pidiendo, ya que muchas veces que estamos haciendo una modificación, eliminas código que no tienes que eliminar, esto es grave porque tenemos que reprocesar y recuperar codigo todo el tiempo
 7. No elimines codigo a menos que te lo pida explicitamente
 8. La estructura de los modulos en general es:
@@ -16,3 +16,10 @@
 	h. helpers folder
 9. Considerar crear los provider similar a los modulos ya existentes
 10. Considerar crear los controladores similar a los controladores ya existentes
+
+Base de datos — el esquema `public` es código en este repo:
+18. Antes de tocar el esquema, lee `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`. El DDL de `public` no va en `front-sapira-vite/supabase/migrations/`.
+19. La entity TypeORM define la tabla y se aplica con `migration:generate` → revisar y recortar → `migration:run`. Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`.
+20. Lo que TypeORM no puede declarar es un asset `.sql` en `src/databases/postgresql/` (`types/`, `functions/`, `special-index/`, `triggers/`, `rls/`, `grants/`, `seed/`), aplicado con `yarn postgres:assets`.
+21. Un archivo por objeto, con su definición vigente. En `functions/`, `triggers/`, `rls/` y `grants/` se edita el mismo archivo y el runner re-aplica; en `types/`, `special-index/` y `seed/` un cambio va en una migración. Nunca dupliques un asset como `<objeto>_<motivo>.sql`: el que queda vivo lo decide el orden alfabético, no el cronológico.
+22. La fuente de verdad es producción, no `supabase/schema.sql` ni las migraciones del front ni los `.espejo.ts`: son fotos con fecha.

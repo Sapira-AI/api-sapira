@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 
-import { OdooInvoiceLinesStg } from './entities/odoo-invoice-lines-stg.entity';
-import { OdooInvoicesStg } from './entities/odoo-invoices-stg.entity';
+import { OdooInvoiceLinesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoice-lines-stg.entity';
+import { OdooInvoicesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoices-stg.entity';
+
 import { FieldMappingService } from './services/field-mapping.service';
 import { FieldTransformationService } from './services/field-transformation.service';
 import { areValuesEqual } from './utils/value-comparison.util';

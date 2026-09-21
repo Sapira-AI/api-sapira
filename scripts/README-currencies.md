@@ -6,7 +6,7 @@ Este directorio contiene los scripts necesarios para crear y poblar la tabla `cu
 
 ### 1. Entidad TypeORM
 
--   **Ubicación**: `src/modules/banco-central/entities/currency.entity.ts`
+-   **Ubicación**: `src/databases/postgresql/entities/base-tenancy/currency.entity.ts`
 -   **Descripción**: Definición de la entidad Currency para TypeORM
 
 ### 2. Migración de Supabase

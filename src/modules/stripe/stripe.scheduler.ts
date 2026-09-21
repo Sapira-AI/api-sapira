@@ -4,9 +4,9 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
 import { AppLoggerService } from '@/logger/app-logger.service';
 
-import { StripeConnection } from './entities/stripe-connection.entity';
 import { StripeSyncService } from './services/stripe-sync.service';
 import { StripeIngestionService } from './stripe-ingestion.service';
 

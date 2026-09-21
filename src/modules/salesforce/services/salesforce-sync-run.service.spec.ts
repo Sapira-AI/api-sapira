@@ -38,10 +38,7 @@ describe('SalesforceSyncRunService', () => {
 		const result = await service.requestCancellation('holding-1', 'run-1');
 
 		expect(runRepository.update).toHaveBeenCalledWith('run-1', { status: 'cancellation_requested' });
-		expect(itemRepository.update).toHaveBeenCalledWith(
-			expect.objectContaining({ run_id: 'run-1' }),
-			{ status: 'cancelled' }
-		);
+		expect(itemRepository.update).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'run-1' }), { status: 'cancelled' });
 		expect(result.status).toBe('cancellation_requested');
 	});
 

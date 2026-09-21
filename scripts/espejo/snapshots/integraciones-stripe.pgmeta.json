@@ -3,12 +3,12 @@
   "name": "public.stripe_connections",
   "rls_enabled": true,
   "rows": 1,
-  "comment": "Almacena las credenciales de conexión a Stripe por holding",
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -18,6 +18,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -26,6 +27,7 @@
     "name": "user_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -34,6 +36,7 @@
     "name": "name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -42,6 +45,7 @@
     "name": "secret_key",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -51,6 +55,7 @@
     "name": "publishable_key",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -60,17 +65,18 @@
     "name": "mode",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
     "default_value": "'test'::text",
-    "check": "mode = ANY (ARRAY['test'::text, 'live'::text])",
     "comment": "Modo de operación: test o live"
    },
    {
     "name": "is_active",
     "data_type": "boolean",
     "format": "bool",
+    "type": "boolean",
     "options": [
      "nullable",
      "updatable"
@@ -81,6 +87,7 @@
     "name": "last_sync_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -90,6 +97,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -100,6 +108,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -127,13 +136,13 @@
  "stripe_customers_stg": {
   "name": "public.stripe_customers_stg",
   "rls_enabled": true,
-  "rows": 407,
-  "comment": "Tabla staging para clientes importados desde Stripe",
+  "rows": 414,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -143,6 +152,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -151,6 +161,7 @@
     "name": "stripe_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -159,6 +170,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -168,6 +180,7 @@
     "name": "sync_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -177,6 +190,7 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -187,6 +201,7 @@
     "name": "integration_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -196,6 +211,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -205,6 +221,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -214,6 +231,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -223,6 +241,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -233,6 +252,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -243,6 +263,7 @@
     "name": "connection_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -251,18 +272,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "stripe_invoices_stg": {
   "name": "public.stripe_invoices_stg",
   "rls_enabled": true,
-  "rows": 3795,
-  "comment": "Tabla staging para facturas importadas desde Stripe",
+  "rows": 4768,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -272,6 +294,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -280,6 +303,7 @@
     "name": "stripe_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -288,6 +312,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -297,6 +322,7 @@
     "name": "sync_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -306,6 +332,7 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -316,6 +343,7 @@
     "name": "integration_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -325,6 +353,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -334,6 +363,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -343,6 +373,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -352,6 +383,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -362,6 +394,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -372,6 +405,7 @@
     "name": "connection_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -380,18 +414,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "stripe_subscriptions_stg": {
   "name": "public.stripe_subscriptions_stg",
   "rls_enabled": true,
-  "rows": 533,
-  "comment": "Tabla staging para suscripciones importadas desde Stripe",
+  "rows": 483,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -401,6 +436,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -409,6 +445,7 @@
     "name": "stripe_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -417,6 +454,7 @@
     "name": "raw_data",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "updatable"
     ],
@@ -426,6 +464,7 @@
     "name": "sync_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -435,6 +474,7 @@
     "name": "processing_status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -445,6 +485,7 @@
     "name": "integration_batch_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -454,6 +495,7 @@
     "name": "last_integrated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -463,6 +505,7 @@
     "name": "integration_notes",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -472,6 +515,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -481,6 +525,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -491,6 +536,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -501,6 +547,7 @@
     "name": "connection_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -509,18 +556,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "stripe_product_mappings": {
   "name": "public.stripe_product_mappings",
   "rls_enabled": false,
-  "rows": 75,
-  "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Stripe",
+  "rows": 73,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -530,6 +578,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -538,6 +587,7 @@
     "name": "sapira_product_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -546,6 +596,7 @@
     "name": "stripe_product_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ]
@@ -554,6 +605,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -564,6 +616,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -574,6 +627,7 @@
     "name": "created_by",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "nullable",
      "updatable"
@@ -583,6 +637,7 @@
     "name": "metadata",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -622,13 +677,13 @@
  "stripe_sync_jobs": {
   "name": "public.stripe_sync_jobs",
   "rls_enabled": false,
-  "rows": 177,
-  "comment": "Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira",
+  "rows": 200,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -638,6 +693,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -646,6 +702,7 @@
     "name": "status",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -656,6 +713,7 @@
     "name": "progress",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -666,6 +724,7 @@
     "name": "stats",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -676,6 +735,7 @@
     "name": "errors",
     "data_type": "jsonb",
     "format": "jsonb",
+    "type": "jsonb",
     "options": [
      "nullable",
      "updatable"
@@ -686,6 +746,7 @@
     "name": "error_message",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -695,6 +756,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -704,6 +766,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "updatable"
     ],
@@ -713,6 +776,7 @@
     "name": "completed_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -721,18 +785,19 @@
   ],
   "primary_keys": [
    "id"
-  ]
+  ],
+  "foreign_key_constraints": []
  },
  "stripe_customers_bigquery": {
   "name": "public.stripe_customers_bigquery",
   "rls_enabled": true,
-  "rows": 26351,
-  "comment": "Tabla de clientes Stripe sincronizados desde BigQuery",
+  "rows": 26350,
   "columns": [
    {
     "name": "id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ],
@@ -742,6 +807,7 @@
     "name": "holding_id",
     "data_type": "uuid",
     "format": "uuid",
+    "type": "uuid",
     "options": [
      "updatable"
     ]
@@ -750,6 +816,7 @@
     "name": "salesforce_account_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -759,6 +826,7 @@
     "name": "stripe_customer_id",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "updatable"
     ],
@@ -768,6 +836,7 @@
     "name": "salesforce_account_country",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -778,6 +847,7 @@
     "name": "client_name",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -788,6 +858,7 @@
     "name": "salesforce_account_segment",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -798,6 +869,7 @@
     "name": "salesforce_account_industry",
     "data_type": "text",
     "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -808,6 +880,7 @@
     "name": "created_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"
@@ -818,6 +891,7 @@
     "name": "updated_at",
     "data_type": "timestamp with time zone",
     "format": "timestamptz",
+    "type": "timestamp with time zone",
     "options": [
      "nullable",
      "updatable"

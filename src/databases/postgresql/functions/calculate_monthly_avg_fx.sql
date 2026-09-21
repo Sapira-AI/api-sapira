@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.calculate_monthly_avg_fx()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 BEGIN
   INSERT INTO exchange_rates_monthly_avg (
     from_currency, to_currency, year, month, 
@@ -30,3 +33,5 @@ BEGIN
   
   RETURN NEW;
 END;
+$function$
+

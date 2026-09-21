@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Connection, Model } from 'mongoose';
 import { DataSource } from 'typeorm';
 
-import { Invoice } from '../invoices/entities/invoice.entity';
+import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 
 import { OdooInvoiceUpdateLog, OdooInvoiceUpdateLogSchema } from './schemas/odoo-invoice-update-log.schema';
 import { OdooWebhookLog, OdooWebhookLogSchema } from './schemas/odoo-webhook.schema';

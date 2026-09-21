@@ -5,8 +5,8 @@ import { firstValueFrom } from 'rxjs';
 import { Repository } from 'typeorm';
 
 import { EncryptionService } from '@/common/services/encryption.service';
+import { SalesforceAuthType, SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 
-import { SalesforceAuthType, SalesforceConnection } from '../entities/salesforce-connection.entity';
 import { SalesforceAuthResponse } from '../interfaces/salesforce.interface';
 
 import { SalesforceSoapService } from './salesforce-soap.service';

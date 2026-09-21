@@ -35,7 +35,7 @@ export class UsersController {
 	@Get('me/context')
 	@ApiOperation({
 		summary: 'Obtener contexto del menú del usuario autenticado',
-		description: 'Retorna perfil, rol visible y holdings asociados, incluyendo el holding seleccionado.',
+		description: 'Retorna perfil, rol visible, códigos de permiso del catálogo Sapira y holdings asociados, incluyendo el holding seleccionado.',
 	})
 	@ApiResponse({
 		status: HttpStatus.OK,

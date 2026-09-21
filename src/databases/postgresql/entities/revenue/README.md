@@ -7,23 +7,23 @@
 
 Ninguna: todas las tablas de este módulo carecían de entity.
 
-## B · Tablas SIN entity → espejos creados (5), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (5): 5 promovidas, 0 apagadas
 
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `revenue_schedule_monthly` (18415, RLS on) | `revenue-schedule-monthly.espejo.ts` · `RevenueScheduleMonthly` | 57 | `revenue_schedule_monthly_pkey` (id) | `revenue_schedule_monthly_contract_item_period_momentum_key` | `revenue_schedule_monthly_momentum_check`, `rsm_contract_or_subscription_required` | `revenue_schedule_monthly_subscription_item_id_fkey` → subscription_items<br>`fk_revenue_schedule_holding` → company_holdings<br>`fk_revenue_schedule_contract` → contracts<br>`fk_revenue_schedule_company` → companies<br>`fk_revenue_schedule_item` → contract_items<br>`revenue_schedule_monthly_subscription_id_fkey` → subscriptions | `idx_revenue_schedule_momentum`, `idx_revenue_schedule_monthly_company_period`, `idx_revenue_schedule_monthly_contract`, `idx_revenue_schedule_monthly_holding_period`, `idx_revenue_schedule_monthly_is_total_row`, `idx_rsm_cmrr_period` (parcial), `idx_rsm_company_period`, `idx_rsm_contract_period`, `idx_rsm_mrr_contracted_period` (parcial), `idx_rsm_subscription_id` (parcial), `idx_rsm_subscription_item_id` (parcial) | trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule()<br>update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at() | 4 |
-| `revenue_rules` (0, RLS on) | `revenue-rule.espejo.ts` · `RevenueRule` | 6 | `revenue_rules_pkey` (id) | — | `revenue_rules_target_type_check` | `revenue_rules_company_id_fkey` → companies | — | — | 4 |
-| `mrr_adjustments` (1, RLS on) | `mrr-adjustment.espejo.ts` · `MrrAdjustment` | 15 | `mrr_adjustments_pkey` (id) | — | — | `mrr_adjustments_company_id_fkey` → companies (CASCADE)<br>`mrr_adjustments_contract_id_fkey` → contracts (CASCADE) | `idx_mrr_adj_company`, `idx_mrr_adj_contract`, `idx_mrr_adj_effective_date` | trg_mrr_adjustments_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `accounting_period_cutoff` (18, RLS on) | `accounting-period-cutoff.espejo.ts` · `AccountingPeriodCutoff` | 12 | `accounting_period_cutoff_pkey` (id) | `accounting_period_cutoff_holding_id_company_id_key` | `accounting_period_cutoff_last_action_check` | `accounting_period_cutoff_last_action_by_fkey` → users (SET NULL)<br>`accounting_period_cutoff_holding_id_fkey` → company_holdings (RESTRICT)<br>`accounting_period_cutoff_company_id_fkey` → companies (RESTRICT) | `idx_cutoff_lookup` | trg_accounting_period_cutoff_updated_at · BEFORE UPDATE FOR EACH ROW → trg_set_updated_at_accounting_period_cutoff()<br>trg_cutoff_validate_company_holding · BEFORE INSERT OR UPDATE OF holding_id, company_id FOR EACH ROW → trg_validate_cutoff_company_holding_match() | 3 |
-| `accounting_period_events` (14, RLS on) | `accounting-period-event.espejo.ts` · `AccountingPeriodEvent` | 12 | `accounting_period_events_pkey` (id) | — | `accounting_period_events_action_check`, `accounting_period_events_reason_check` | `accounting_period_events_holding_id_fkey` → company_holdings (RESTRICT)<br>`accounting_period_events_company_id_fkey` → companies (RESTRICT)<br>`accounting_period_events_performed_by_fkey` → users (RESTRICT) | `idx_period_events_company_time` (expresión, no declarado), `idx_period_events_performed_by` (expresión, no declarado) | trg_events_validate_company_holding · BEFORE INSERT FOR EACH ROW → trg_validate_cutoff_company_holding_match() | 2 |
+| `revenue_schedule_monthly` (20144, RLS on) | `revenue-schedule-monthly.entity.ts` · `RevenueScheduleMonthly` | 57 | `revenue_schedule_monthly_pkey` (id) | `revenue_schedule_monthly_contract_item_period_momentum_key` | `revenue_schedule_monthly_momentum_check`, `rsm_contract_or_subscription_required` | `fk_revenue_schedule_company` → companies<br>`fk_revenue_schedule_contract` → contracts<br>`fk_revenue_schedule_holding` → company_holdings<br>`fk_revenue_schedule_item` → contract_items<br>`revenue_schedule_monthly_subscription_id_fkey` → subscriptions<br>`revenue_schedule_monthly_subscription_item_id_fkey` → subscription_items | `idx_revenue_schedule_momentum`, `idx_revenue_schedule_monthly_company_period`, `idx_revenue_schedule_monthly_contract`, `idx_revenue_schedule_monthly_holding_period`, `idx_revenue_schedule_monthly_is_total_row`, `idx_rsm_cmrr_period` (parcial), `idx_rsm_company_period`, `idx_rsm_contract_period`, `idx_rsm_mrr_contracted_period` (parcial), `idx_rsm_subscription_id` (parcial), `idx_rsm_subscription_item_id` (parcial) | trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule()<br>update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at() | 4 |
+| `revenue_rules` (0, RLS on) | `revenue-rule.entity.ts` · `RevenueRule` | 6 | `revenue_rules_pkey` (id) | — | `revenue_rules_target_type_check` | `revenue_rules_company_id_fkey` → companies | — | — | 4 |
+| `mrr_adjustments` (1, RLS on) | `mrr-adjustment.entity.ts` · `MrrAdjustment` | 15 | `mrr_adjustments_pkey` (id) | — | — | `mrr_adjustments_company_id_fkey` → companies (CASCADE)<br>`mrr_adjustments_contract_id_fkey` → contracts (CASCADE) | `idx_mrr_adj_company`, `idx_mrr_adj_contract`, `idx_mrr_adj_effective_date` | trg_mrr_adjustments_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `accounting_period_cutoff` (18, RLS on) | `accounting-period-cutoff.entity.ts` · `AccountingPeriodCutoff` | 12 | `accounting_period_cutoff_pkey` (id) | `accounting_period_cutoff_holding_id_company_id_key` | `accounting_period_cutoff_last_action_check` | `accounting_period_cutoff_company_id_fkey` → companies (RESTRICT)<br>`accounting_period_cutoff_holding_id_fkey` → company_holdings (RESTRICT)<br>`accounting_period_cutoff_last_action_by_fkey` → users (SET NULL) | `idx_cutoff_lookup` | trg_accounting_period_cutoff_updated_at · BEFORE UPDATE FOR EACH ROW → trg_set_updated_at_accounting_period_cutoff()<br>trg_cutoff_validate_company_holding · BEFORE INSERT OR UPDATE OF holding_id, company_id FOR EACH ROW → trg_validate_cutoff_company_holding_match() | 3 |
+| `accounting_period_events` (15, RLS on) | `accounting-period-event.entity.ts` · `AccountingPeriodEvent` | 12 | `accounting_period_events_pkey` (id) | — | `accounting_period_events_action_check`, `accounting_period_events_reason_check` | `accounting_period_events_company_id_fkey` → companies (RESTRICT)<br>`accounting_period_events_holding_id_fkey` → company_holdings (RESTRICT)<br>`accounting_period_events_performed_by_fkey` → users (RESTRICT) | `idx_period_events_company_time` (expresión, no declarado), `idx_period_events_performed_by` (expresión, no declarado) | trg_events_validate_company_holding · BEFORE INSERT FOR EACH ROW → trg_validate_cutoff_company_holding_match() | 2 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/revenue.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (5 tablas)
 
-<details><summary><code>revenue_schedule_monthly</code> → <code>revenue-schedule-monthly.espejo.ts</code> · 57 columnas</summary>
+<details><summary><code>revenue_schedule_monthly</code> → <code>revenue-schedule-monthly.entity.ts</code> · 57 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -86,7 +86,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `subscription_item_id` | uuid | sí | — | FK a subscription_items. Permite desglose de RSM por item de suscripción. |
 
 </details>
-<details><summary><code>revenue_rules</code> → <code>revenue-rule.espejo.ts</code> · 6 columnas</summary>
+<details><summary><code>revenue_rules</code> → <code>revenue-rule.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -98,7 +98,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_at` | timestamp without time zone | sí | now() |  |
 
 </details>
-<details><summary><code>mrr_adjustments</code> → <code>mrr-adjustment.espejo.ts</code> · 15 columnas</summary>
+<details><summary><code>mrr_adjustments</code> → <code>mrr-adjustment.entity.ts</code> · 15 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -119,7 +119,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>accounting_period_cutoff</code> → <code>accounting-period-cutoff.espejo.ts</code> · 12 columnas</summary>
+<details><summary><code>accounting_period_cutoff</code> → <code>accounting-period-cutoff.entity.ts</code> · 12 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -137,7 +137,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>accounting_period_events</code> → <code>accounting-period-event.espejo.ts</code> · 12 columnas</summary>
+<details><summary><code>accounting_period_events</code> → <code>accounting-period-event.entity.ts</code> · 12 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -159,4 +159,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `revenue.entities.spec.ts`: metadata TypeORM en memoria vs `revenue.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

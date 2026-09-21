@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.resolve_field_transformation(p_transformation_type transformation_type_enum, p_transformation_config jsonb, p_source_value text, p_holding_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     v_result TEXT;
     v_lookup_table TEXT;
@@ -90,3 +93,5 @@ BEGIN
     -- Por defecto, retornar el valor original
     RETURN p_source_value;
 END;
+$function$
+

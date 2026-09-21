@@ -80,10 +80,6 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 		},
 		primary: ['id'],
 		foreignKeys: {
-			client_agent_configs_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			client_agent_configs_client_id_fkey: {
 				table: 'clients',
 				onDelete: 'CASCADE',
@@ -91,6 +87,10 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 			client_agent_configs_created_by_fkey: {
 				table: 'users',
 				onDelete: 'NO ACTION',
+			},
+			client_agent_configs_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {
@@ -140,13 +140,13 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 		},
 		primary: ['id'],
 		foreignKeys: {
-			fk_agents_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			agents_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'NO ACTION',
+			},
+			fk_agents_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},
@@ -170,6 +170,10 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 		},
 		primary: ['id'],
 		foreignKeys: {
+			agent_logs_agent_id_fkey: {
+				table: 'agents',
+				onDelete: 'NO ACTION',
+			},
 			agent_logs_user_id_fkey: {
 				table: 'users',
 				onDelete: 'NO ACTION',
@@ -177,10 +181,6 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 			fk_agent_logs_holding_id: {
 				table: 'company_holdings',
 				onDelete: 'CASCADE',
-			},
-			agent_logs_agent_id_fkey: {
-				table: 'agents',
-				onDelete: 'NO ACTION',
 			},
 		},
 		uniques: {},
@@ -294,13 +294,13 @@ export const AUTOMATIZACIONES_IA_PROD_SNAPSHOT: Record<string, ProdTableSnapshot
 		},
 		primary: ['id'],
 		foreignKeys: {
-			email_sender_addresses_domain_config_id_fkey: {
-				table: 'holding_email_sender_settings',
-				onDelete: 'CASCADE',
-			},
 			email_sender_addresses_created_by_fkey: {
 				table: 'users',
 				onDelete: 'NO ACTION',
+			},
+			email_sender_addresses_domain_config_id_fkey: {
+				table: 'holding_email_sender_settings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},

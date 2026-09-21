@@ -3,9 +3,9 @@ import { UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 
 import { CreateOdooConnectionDto, UpdateOdooConnectionDto } from './dtos/odoo-connection.dto';
-import { OdooConnection } from './entities/odoo-connection.entity';
 import { OdooConnectionService } from './odoo-connection.service';
 
 @ApiTags('Odoo Connections')

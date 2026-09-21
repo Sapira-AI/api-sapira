@@ -48,12 +48,12 @@ export const CLIENTES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			fk_client_documents_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			client_documents_client_id_fkey: {
 				table: 'clients',
+				onDelete: 'CASCADE',
+			},
+			fk_client_documents_holding_id: {
+				table: 'company_holdings',
 				onDelete: 'CASCADE',
 			},
 		},

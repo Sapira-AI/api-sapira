@@ -6,8 +6,9 @@ import {
 	SalesforceFieldMapping,
 	SalesforceFieldMappingObjectType,
 	SalesforceFieldTransformationKey,
-} from '../entities/salesforce-field-mapping.entity';
-import { SalesforceQuoteTypeMapping } from '../entities/salesforce-quote-type-mapping.entity';
+} from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-field-mapping.entity';
+import { SalesforceQuoteTypeMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-quote-type-mapping.entity';
+
 import {
 	buildCustomFields,
 	formatAddress,

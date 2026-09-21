@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { GenericExportVat } from '@/databases/postgresql/entities/generic-export-vat.entity';
+import { GenericExportVat } from '@/databases/postgresql/entities/fx/generic-export-vat.entity';
 
 @Injectable()
 export class GenericVatsService {
@@ -51,7 +51,9 @@ export class GenericVatsService {
 			return null;
 		}
 
-		const normalized = String(vat).replace(/[\s.]+/gu, '').toUpperCase();
+		const normalized = String(vat)
+			.replace(/[\s.]+/gu, '')
+			.toUpperCase();
 		return normalized || null;
 	}
 

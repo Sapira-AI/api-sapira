@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.update_monthly_avg_on_rate_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
   v_year INT;
   v_month INT;
@@ -34,3 +37,5 @@ BEGIN
     
   RETURN NEW;
 END;
+$function$
+

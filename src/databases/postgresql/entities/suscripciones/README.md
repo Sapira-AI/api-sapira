@@ -7,20 +7,20 @@
 
 Ninguna: todas las tablas de este módulo carecían de entity.
 
-## B · Tablas SIN entity → espejos creados (2), APAGADOS
+## B · Tablas SIN entity previa → espejos generados (2): 2 promovidas, 0 apagadas
 
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `subscriptions` (434, RLS on) | `subscription.espejo.ts` · `Subscription` | 31 | `subscriptions_pkey` (id) | `uq_subscriptions_holding_external` | `subscriptions_status_check` | `subscriptions_company_id_fkey` → companies (RESTRICT)<br>`subscriptions_holding_id_fkey` → company_holdings (CASCADE)<br>`subscriptions_connection_id_fkey` → stripe_connections<br>`subscriptions_client_entity_id_fkey` → client_entities (RESTRICT)<br>`subscriptions_client_id_fkey` → clients (RESTRICT) | `idx_subscriptions_client_entity_id`, `idx_subscriptions_client_id`, `idx_subscriptions_company_id`, `idx_subscriptions_connection_id`, `idx_subscriptions_external_id`, `idx_subscriptions_holding_id`, `idx_subscriptions_source`, `idx_subscriptions_status` | update_subscriptions_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column() | 4 |
-| `subscription_items` (456, RLS on) | `subscription-item.espejo.ts` · `SubscriptionItem` | 28 | `subscription_items_pkey` (id) | `uq_subscription_items_holding_external` | — | `subscription_items_holding_id_fkey` → company_holdings (CASCADE)<br>`subscription_items_subscription_id_fkey` → subscriptions (CASCADE)<br>`subscription_items_product_id_fkey` → products (RESTRICT) | `idx_subscription_items_external_id`, `idx_subscription_items_holding_id`, `idx_subscription_items_product_id`, `idx_subscription_items_stripe_product_id`, `idx_subscription_items_subscription_id` | update_subscription_items_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column() | 4 |
+| `subscriptions` (435, RLS on) | `subscription.entity.ts` · `Subscription` | 31 | `subscriptions_pkey` (id) | `uq_subscriptions_holding_external` | `subscriptions_status_check` | `subscriptions_client_entity_id_fkey` → client_entities (RESTRICT)<br>`subscriptions_client_id_fkey` → clients (RESTRICT)<br>`subscriptions_company_id_fkey` → companies (RESTRICT)<br>`subscriptions_connection_id_fkey` → stripe_connections<br>`subscriptions_holding_id_fkey` → company_holdings (CASCADE) | `idx_subscriptions_client_entity_id`, `idx_subscriptions_client_id`, `idx_subscriptions_company_id`, `idx_subscriptions_connection_id`, `idx_subscriptions_external_id`, `idx_subscriptions_holding_id`, `idx_subscriptions_source`, `idx_subscriptions_status` | update_subscriptions_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column() | 4 |
+| `subscription_items` (458, RLS on) | `subscription-item.entity.ts` · `SubscriptionItem` | 28 | `subscription_items_pkey` (id) | `uq_subscription_items_holding_external` | — | `subscription_items_holding_id_fkey` → company_holdings (CASCADE)<br>`subscription_items_product_id_fkey` → products (RESTRICT)<br>`subscription_items_subscription_id_fkey` → subscriptions (CASCADE) | `idx_subscription_items_external_id`, `idx_subscription_items_holding_id`, `idx_subscription_items_product_id`, `idx_subscription_items_stripe_product_id`, `idx_subscription_items_subscription_id` | update_subscription_items_updated_at · BEFORE UPDATE FOR EACH ROW → update_stripe_updated_at_column() | 4 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/suscripciones.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: el archivo termina en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` falla si aparece un `.entity.ts` dentro de `entities/<modulo>/`. Para encenderlos en el paso 3: renombrar a `.entity.ts` y registrarlos en el `forFeature` del módulo que los use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (2 tablas)
 
-<details><summary><code>subscriptions</code> → <code>subscription.espejo.ts</code> · 31 columnas</summary>
+<details><summary><code>subscriptions</code> → <code>subscription.entity.ts</code> · 31 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -57,7 +57,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `last_synced_at` | timestamp with time zone | sí | — |  |
 
 </details>
-<details><summary><code>subscription_items</code> → <code>subscription-item.espejo.ts</code> · 28 columnas</summary>
+<details><summary><code>subscription_items</code> → <code>subscription-item.entity.ts</code> · 28 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -95,4 +95,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `suscripciones.entities.spec.ts`: metadata TypeORM en memoria vs `suscripciones.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

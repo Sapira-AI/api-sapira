@@ -2,19 +2,24 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
-import { UserHolding } from '@/modules/holdings/entities/user-holding.entity';
-import { User } from '@/modules/users/entities/user.entity';
+import { AppNotificationRecipient } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity';
+import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
+import { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
+import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { CreateAppNotificationDto } from './dtos/create-app-notification.dto';
 import { ListNotificationsDto, ReplaceSalesforceStagingBlockedSubscriptionsDto } from './dtos/notifications.dto';
-import { AppNotification } from './entities/app-notification.entity';
-import { AppNotificationRecipient } from './entities/app-notification-recipient.entity';
-import { NotificationRoleSubscription } from './entities/notification-role-subscription.entity';
 import { NotificationsGateway } from './notifications.gateway';
 
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
+export const SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE = 'salesforce_sync_failure';
 export const INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE = 'invoice_odoo_failure';
-const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE, INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE];
+const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [
+	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
+	SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
+	INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE,
+];
 type NotificationForRecipient = AppNotification & { is_read: boolean; read_at?: Date | null };
 
 @Injectable()
@@ -48,7 +53,10 @@ export class NotificationsService {
 		});
 		const recipientUserIds = dto.recipients?.user_ids || [];
 		const roleIds = [
-			...new Set([...(dto.recipients?.role_ids || []), ...subscriptionRecipients.flatMap((subscription) => (subscription.role_id ? [subscription.role_id] : []))]),
+			...new Set([
+				...(dto.recipients?.role_ids || []),
+				...subscriptionRecipients.flatMap((subscription) => (subscription.role_id ? [subscription.role_id] : [])),
+			]),
 		];
 		const includeSuperAdmins =
 			Boolean(dto.recipients?.include_super_admins) || subscriptionRecipients.some((subscription) => subscription.role_id === null);
@@ -106,6 +114,10 @@ export class NotificationsService {
 					metadata: dto.metadata || {},
 				});
 				const notification = await this.notificationRepository.findOneByOrFail({ id: existing.id });
+				this.notificationsGateway.emitNotificationUpdated(
+					(existing.recipients || []).map((recipient) => recipient.user_id),
+					{ holdingId, notificationId: existing.id }
+				);
 				return {
 					notification,
 					recipient_count: existing.recipients?.length || 0,
@@ -117,10 +129,24 @@ export class NotificationsService {
 	}
 
 	async resolveByDeduplicationKey(holdingId: string, deduplicationKey: string): Promise<void> {
+		const openNotifications = await this.notificationRepository.find({
+			where: { holding_id: holdingId, deduplication_key: deduplicationKey, status: 'open' },
+			relations: { recipients: true },
+		});
+		if (!openNotifications.length) {
+			return;
+		}
+
 		await this.notificationRepository.update(
-			{ holding_id: holdingId, deduplication_key: deduplicationKey, status: 'open' },
+			{ id: In(openNotifications.map((notification) => notification.id)) },
 			{ status: 'resolved', resolved_at: new Date() }
 		);
+		for (const notification of openNotifications) {
+			this.notificationsGateway.emitNotificationUpdated(
+				(notification.recipients || []).map((recipient) => recipient.user_id),
+				{ holdingId, notificationId: notification.id }
+			);
+		}
 	}
 
 	async listForAuthenticatedUser(
@@ -191,10 +217,14 @@ export class NotificationsService {
 			throw new NotFoundException('Notificación no encontrada');
 		}
 
-		if (!recipient.is_read) {
-			await this.recipientRepository.update(recipient.id, { is_read: true, read_at: new Date() });
+		if (recipient.is_read) {
+			return { ...recipient.notification, is_read: true, read_at: recipient.read_at };
 		}
-		return { ...recipient.notification, is_read: true, read_at: recipient.read_at || new Date() };
+
+		const readAt = new Date();
+		await this.recipientRepository.update(recipient.id, { is_read: true, read_at: readAt });
+		this.notificationsGateway.emitNotificationRead(userId, { holdingId, notificationId, read_at: readAt });
+		return { ...recipient.notification, is_read: true, read_at: readAt };
 	}
 
 	async listSalesforceStagingBlockedSubscriptions(holdingId: string): Promise<NotificationRoleSubscription[]> {

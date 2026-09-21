@@ -3,19 +3,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { GenericVatsService } from '@/common/services/generic-vats.service';
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { Client } from '@/databases/postgresql/entities/client.entity';
-import { NotificationsService, SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE } from '@/modules/notifications/notifications.service';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
+import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity';
+import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
+import { SalesforceAccountsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-accounts-stg.entity';
+import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
+import { SalesforceLineItemsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-line-items-stg.entity';
+import { SalesforceOpportunitiesStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-opportunities-stg.entity';
+import {
+	NotificationsService,
+	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
+	SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
+} from '@/modules/notifications/notifications.service';
 import { OdooPartnersService } from '@/modules/odoo/odoo-partners.service';
 
 import { SyncCompleteResponseDto, SyncCompleteStats } from '../dtos/salesforce-sync-complete.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from '../dtos/salesforce-tax-id-normalization.dto';
-import { QuoteItem } from '../entities/quote-item.entity';
-import { Quote } from '../entities/quote.entity';
-import { SalesforceAccountsStg } from '../entities/salesforce-accounts-stg.entity';
-import { SalesforceConnection } from '../entities/salesforce-connection.entity';
-import { SalesforceLineItemsStg } from '../entities/salesforce-line-items-stg.entity';
-import { SalesforceOpportunitiesStg } from '../entities/salesforce-opportunities-stg.entity';
 import {
 	SalesforceAccount,
 	SalesforceOpportunityLineItem,
@@ -23,12 +27,23 @@ import {
 	SalesforceQuote,
 	SalesforceQuoteLineItem,
 } from '../interfaces/salesforce.interface';
+import { SalesforceSyncLogStage } from '../schemas/salesforce-sync-log.schema';
 import * as transformers from '../utils/salesforce-transformers';
 
 import { SalesforceFieldMappingEngineService } from './salesforce-field-mapping-engine.service';
 import { SalesforceQueryService } from './salesforce-query.service';
 import { SalesforceStagingService } from './salesforce-staging.service';
+import { SalesforceSyncLogContext, SalesforceSyncLogEntry, SalesforceSyncLogService } from './salesforce-sync-log.service';
 import { SalesforceTypeOrmService } from './salesforce-typeorm.service';
+
+/** Días calendario de `CloseDate` que revisa la sincronización automática, hoy incluido. */
+export const DAILY_SYNC_WINDOW_DAYS = 30;
+
+/** Oportunidades por lote de la sincronización automática. */
+export const DAILY_SYNC_CHUNK_SIZE = 500;
+
+/** Etapas ganadoras que la integración considera integrables. */
+export const SALESFORCE_WON_STAGES = ['Ganado', 'Closed Won', 'Cerrada Win'];
 
 interface AccountImportFilters {
 	letter?: string;
@@ -120,7 +135,8 @@ export class SalesforceSyncCompleteService {
 		private readonly stagingService: SalesforceStagingService,
 		private readonly genericVatsService: GenericVatsService,
 		private readonly odooPartnersService: OdooPartnersService,
-		private readonly notificationsService: NotificationsService
+		private readonly notificationsService: NotificationsService,
+		private readonly syncLogService: SalesforceSyncLogService
 	) {}
 
 	async syncOpportunitiesComplete(
@@ -178,7 +194,7 @@ export class SalesforceSyncCompleteService {
 
 			await this.classifyAccountStaging(holdingId, batchId);
 			await this.processAccountStaging(holdingId, batchId, stats);
-		await this.classifyOpportunityStaging(holdingId, batchId, options);
+			await this.classifyOpportunityStaging(holdingId, batchId, options);
 			await this.processOpportunityStaging(holdingId, batchId, stats);
 
 			await this.connectionRepository.update({ holding_id: holdingId }, { last_sync_at: new Date() });
@@ -384,7 +400,10 @@ export class SalesforceSyncCompleteService {
 
 					if (!stagedOpportunity) {
 						reasons.push('La oportunidad no existe en staging');
-					} else if (this.stagingService.getSourceHash(stagedOpportunity.raw_data) !== this.stagingService.getSourceHash(opportunity as unknown as Record<string, unknown>)) {
+					} else if (
+						this.stagingService.getSourceHash(stagedOpportunity.raw_data) !==
+						this.stagingService.getSourceHash(opportunity as unknown as Record<string, unknown>)
+					) {
 						reasons.push('La oportunidad cambió en Salesforce');
 						differences.push(
 							...this.getStagingFieldDifferences(
@@ -400,7 +419,10 @@ export class SalesforceSyncCompleteService {
 						opportunity.AccountId && opportunity.Account ? { Id: opportunity.AccountId, ...opportunity.Account } : null;
 					if (!stagedAccount) {
 						reasons.push('El cliente no existe en staging');
-					} else if (accountPayload && this.stagingService.getSourceHash(stagedAccount.raw_data) !== this.stagingService.getSourceHash(accountPayload)) {
+					} else if (
+						accountPayload &&
+						this.stagingService.getSourceHash(stagedAccount.raw_data) !== this.stagingService.getSourceHash(accountPayload)
+					) {
 						reasons.push('El cliente cambió en Salesforce');
 						differences.push(...this.getStagingFieldDifferences('Cliente', accountPayload, stagedAccount.raw_data));
 					}
@@ -478,42 +500,84 @@ export class SalesforceSyncCompleteService {
 		return results;
 	}
 
-	async syncAllActiveConnectionsDaily(): Promise<SyncCompleteResponseDto[]> {
+	async syncAllActiveConnectionsDaily(context?: SalesforceSyncLogContext): Promise<SyncCompleteResponseDto[]> {
 		const connections = await this.connectionRepository.find({
 			where: { is_active: true },
 		});
 
 		const results: SyncCompleteResponseDto[] = [];
 		for (const connection of connections) {
-			results.push(await this.syncDailyModifiedOpportunities(connection.holding_id));
+			results.push(await this.syncDailyModifiedOpportunities(connection.holding_id, context));
 		}
 
 		return results;
 	}
 
-	async syncDailyModifiedOpportunities(holdingId: string): Promise<SyncCompleteResponseDto> {
+	async syncDailyModifiedOpportunities(holdingId: string, context?: SalesforceSyncLogContext): Promise<SyncCompleteResponseDto> {
 		const startTime = new Date();
 		const stats = this.createEmptyStats();
+		const { start, end } = this.getSantiagoCloseDateRange(DAILY_SYNC_WINDOW_DAYS);
+		const log = this.buildLogRecorder(context, holdingId);
 
+		await log({
+			stage: 'holding',
+			message: `Inicio de sincronización automática del holding con ventana CloseDate ${start} → ${end}`,
+			metadata: { closeDateFrom: start, closeDateTo: end, windowDays: DAILY_SYNC_WINDOW_DAYS },
+		});
+
+		let opportunityIds: string[];
 		try {
-			const { start, end } = this.getSantiagoCalendarDayRange(7);
-			const opportunityIds = await this.fetchDailyChangedOpportunityIds(holdingId, start, end);
-			if (!opportunityIds.length) {
-				return {
-					holding_id: holdingId,
-					success: true,
-					stats,
-					started_at: startTime,
-					completed_at: new Date(),
-					duration_seconds: (Date.now() - startTime.getTime()) / 1000,
-				};
-			}
+			opportunityIds = await this.fetchDailyTargetOpportunityIds(holdingId, start, end);
+		} catch (error: any) {
+			// La selección es el único paso que sigue siendo fatal: sin IDs no hay nada que procesar.
+			return this.buildFailedDailyResult(holdingId, stats, startTime, error, 'selection', { closeDateFrom: start, closeDateTo: end }, context);
+		}
 
-			for (const opportunityIdsChunk of this.chunk(opportunityIds, 500)) {
+		await log({
+			stage: 'selection',
+			message: `Salesforce devolvió ${opportunityIds.length} oportunidades ganadas en la ventana`,
+			metadata: { opportunityCount: opportunityIds.length, closeDateFrom: start, closeDateTo: end },
+		});
+
+		if (!opportunityIds.length) {
+			return {
+				holding_id: holdingId,
+				success: true,
+				stats,
+				started_at: startTime,
+				completed_at: new Date(),
+				duration_seconds: (Date.now() - startTime.getTime()) / 1000,
+			};
+		}
+
+		const chunks = this.chunk(opportunityIds, DAILY_SYNC_CHUNK_SIZE);
+		const chunkErrors: string[] = [];
+
+		for (const [chunkIndex, opportunityIdsChunk] of chunks.entries()) {
+			// Cada lote se aísla: una falla de red, de API o de datos no puede
+			// dejar sin procesar a los lotes restantes del holding.
+			try {
 				const staging = await this.syncOpportunitiesToStaging(holdingId, undefined, undefined, opportunityIdsChunk, {
 					insertOnly: true,
 				});
 				stats.opportunities += staging.importedOpportunities;
+
+				await log({
+					stage: 'staging',
+					message: `Lote ${chunkIndex + 1}/${chunks.length} cargado en staging`,
+					batchId: staging.batchId,
+					metadata: {
+						chunkIndex: chunkIndex + 1,
+						chunkTotal: chunks.length,
+						requestedOpportunities: opportunityIdsChunk.length,
+						importedOpportunities: staging.importedOpportunities,
+						importedAccounts: staging.importedAccounts,
+						importedLineItems: staging.importedLineItems,
+						discardedWithoutLineItems: opportunityIdsChunk.length - staging.importedOpportunities,
+						summary: staging.summary,
+						unmappedProducts: staging.unmappedProducts,
+					},
+				});
 
 				await this.processAccountStaging(holdingId, staging.batchId, stats, {
 					processingStatuses: ['create'],
@@ -523,28 +587,175 @@ export class SalesforceSyncCompleteService {
 					processingStatuses: ['create'],
 					insertOnly: true,
 				});
-			}
 
-			return {
-				holding_id: holdingId,
-				success: true,
-				stats,
-				started_at: startTime,
-				completed_at: new Date(),
-				duration_seconds: (Date.now() - startTime.getTime()) / 1000,
-			};
-		} catch (error: any) {
-			this.logger.error(`❌ Daily staging sync failed for holding ${holdingId}:`, error.message);
-			return {
-				holding_id: holdingId,
-				success: false,
-				stats,
-				error: error.message,
-				started_at: startTime,
-				completed_at: new Date(),
-				duration_seconds: (Date.now() - startTime.getTime()) / 1000,
-			};
+				await this.recordOpportunityOutcomes(holdingId, staging.batchId, context);
+			} catch (error: any) {
+				const message = error?.message || 'Error desconocido';
+				chunkErrors.push(`Lote ${chunkIndex + 1}/${chunks.length}: ${message}`);
+				stats.errors.push(`Chunk ${chunkIndex + 1}: ${message}`);
+				this.logger.error(`❌ Falló el lote ${chunkIndex + 1}/${chunks.length} del holding ${holdingId}: ${message}`);
+
+				await this.syncLogService.recordError(
+					{
+						...this.buildLogBase(context, holdingId),
+						stage: 'staging',
+						message: `Falló el lote ${chunkIndex + 1}/${chunks.length}; sus oportunidades no llegaron a staging`,
+						metadata: {
+							chunkIndex: chunkIndex + 1,
+							chunkTotal: chunks.length,
+							opportunityIds: opportunityIdsChunk,
+						},
+					},
+					error
+				);
+				await this.notifyDailySyncFailure(holdingId, message, {
+					stage: 'staging',
+					chunk_index: chunkIndex + 1,
+					chunk_total: chunks.length,
+					job_id: context?.jobId,
+					execution_environment: context?.executionEnvironment,
+				});
+			}
 		}
+
+		const success = chunkErrors.length === 0;
+		await log({
+			stage: 'holding',
+			level: success ? 'info' : 'error',
+			message: success
+				? 'Sincronización automática del holding finalizada sin errores de lote'
+				: `Sincronización automática del holding finalizada con ${chunkErrors.length} de ${chunks.length} lotes fallidos`,
+			errorMessage: success ? undefined : chunkErrors.join(' | '),
+			durationMs: Date.now() - startTime.getTime(),
+			metadata: { stats, chunkTotal: chunks.length, failedChunks: chunkErrors.length },
+		});
+
+		return {
+			holding_id: holdingId,
+			success,
+			stats,
+			error: success ? undefined : chunkErrors.join(' | '),
+			started_at: startTime,
+			completed_at: new Date(),
+			duration_seconds: (Date.now() - startTime.getTime()) / 1000,
+		};
+	}
+
+	private async buildFailedDailyResult(
+		holdingId: string,
+		stats: SyncCompleteStats,
+		startTime: Date,
+		error: any,
+		stage: SalesforceSyncLogStage,
+		metadata: Record<string, unknown>,
+		context?: SalesforceSyncLogContext
+	): Promise<SyncCompleteResponseDto> {
+		const message = error?.message || 'Error desconocido';
+		this.logger.error(`❌ Daily staging sync failed for holding ${holdingId}:`, message);
+
+		await this.syncLogService.recordError(
+			{
+				...this.buildLogBase(context, holdingId),
+				stage,
+				message: 'La sincronización automática del holding no pudo iniciarse',
+				metadata,
+			},
+			error
+		);
+		await this.notifyDailySyncFailure(holdingId, message, {
+			stage,
+			job_id: context?.jobId,
+			execution_environment: context?.executionEnvironment,
+			...metadata,
+		});
+
+		return {
+			holding_id: holdingId,
+			success: false,
+			stats,
+			error: message,
+			started_at: startTime,
+			completed_at: new Date(),
+			duration_seconds: (Date.now() - startTime.getTime()) / 1000,
+		};
+	}
+
+	/**
+	 * Emite un evento de bitácora por cada oportunidad del lote con el estado y
+	 * el motivo exacto con el que quedó en staging, para que un fallo individual
+	 * sea auditable sin revisar la base.
+	 */
+	private async recordOpportunityOutcomes(holdingId: string, batchId: string, context?: SalesforceSyncLogContext): Promise<void> {
+		if (!context) {
+			return;
+		}
+
+		const records = await this.opportunitiesStgRepository.find({
+			where: { holding_id: holdingId, batch_id: batchId },
+		});
+
+		await this.syncLogService.recordMany(
+			records.map((record) => ({
+				...this.buildLogBase(context, holdingId),
+				stage: 'opportunity' as SalesforceSyncLogStage,
+				level: record.processing_status === 'error' ? ('error' as const) : ('info' as const),
+				message:
+					record.processing_status === 'error'
+						? `Oportunidad bloqueada: ${record.integration_notes || 'sin detalle de clasificación'}`
+						: `Oportunidad en estado ${record.processing_status || 'sin estado'}`,
+				salesforceOpportunityId: record.salesforce_id,
+				salesforceOpportunityName: record.salesforce_name || undefined,
+				salesforceAccountId: record.salesforce_account_id || undefined,
+				processingStatus: record.processing_status || undefined,
+				integrationNotes: record.integration_notes || undefined,
+				errorMessage: record.error_message || undefined,
+				batchId,
+			}))
+		);
+	}
+
+	private async notifyDailySyncFailure(holdingId: string, errorMessage: string, metadata: Record<string, unknown>): Promise<void> {
+		try {
+			await this.notificationsService.createOrUpdate(holdingId, {
+				source: 'salesforce',
+				type: SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
+				severity: 'error',
+				title: 'Falló la sincronización automática de Salesforce',
+				message: errorMessage,
+				recommendation:
+					'Revisa la bitácora de la corrida en Salesforce → Bitácora de sincronización. Si el error persiste, valida la conexión con Salesforce y vuelve a integrar las oportunidades afectadas.',
+				action_type: 'review_salesforce_sync_log',
+				action_payload: {
+					job_id: metadata.job_id,
+					execution_environment: metadata.execution_environment,
+				},
+				metadata,
+				deduplication_key: `salesforce:daily-sync:${holdingId}:${metadata.stage}`,
+			});
+		} catch (error: any) {
+			this.logger.error(`No se pudo notificar el fallo de sincronización del holding ${holdingId}: ${error.message}`);
+		}
+	}
+
+	private buildLogBase(context: SalesforceSyncLogContext | undefined, holdingId: string) {
+		return {
+			jobId: context?.jobId || 'manual',
+			executionEnvironment: context?.executionEnvironment || 'unknown',
+			holdingId,
+		};
+	}
+
+	/**
+	 * Devuelve un registrador que no hace nada cuando la sincronización se
+	 * invoca fuera del scheduler (por ejemplo desde un endpoint manual).
+	 */
+	private buildLogRecorder(context: SalesforceSyncLogContext | undefined, holdingId: string) {
+		return async (entry: Omit<SalesforceSyncLogEntry, 'jobId' | 'executionEnvironment' | 'holdingId'>): Promise<void> => {
+			if (!context) {
+				return;
+			}
+			await this.syncLogService.record({ ...this.buildLogBase(context, holdingId), ...entry });
+		};
 	}
 
 	async reclassifyStaging(holdingId: string): Promise<void> {
@@ -605,7 +816,10 @@ export class SalesforceSyncCompleteService {
 		return stats;
 	}
 
-	async getOpportunityStagingStatus(holdingId: string, opportunityId: string): Promise<{ status: string | null; errorMessage: string | null } | null> {
+	async getOpportunityStagingStatus(
+		holdingId: string,
+		opportunityId: string
+	): Promise<{ status: string | null; errorMessage: string | null } | null> {
 		const opportunity = await this.opportunitiesStgRepository.findOne({
 			where: { holding_id: holdingId, salesforce_id: opportunityId },
 			select: ['processing_status', 'error_message'],
@@ -670,35 +884,26 @@ export class SalesforceSyncCompleteService {
 		return this.fetchOpportunitiesWithLineItems(holdingId, dateFrom, dateTo, stages, opportunityIds);
 	}
 
-	private async fetchDailyChangedOpportunityIds(holdingId: string, start: string, end: string): Promise<string[]> {
-		const allowedStages = ['Ganado', 'Closed Won', 'Cerrada Win'];
-		const stageConditions = allowedStages.map((stage) => `StageName = '${stage.replace(/'/g, "\\'")}'`).join(' OR ');
-		const changedSince = `LastModifiedDate >= ${start} AND LastModifiedDate < ${end}`;
+	/**
+	 * Selecciona las oportunidades ganadas cuya `CloseDate` cae en la ventana.
+	 *
+	 * Usa el mismo criterio que la integración manual (`CloseDate`) en lugar de
+	 * `LastModifiedDate`: al reevaluar toda la ventana en cada corrida, una
+	 * oportunidad que quedó bloqueada un día se vuelve a intentar los días
+	 * siguientes sin depender de que alguien la modifique en Salesforce.
+	 */
+	private async fetchDailyTargetOpportunityIds(holdingId: string, start: string, end: string): Promise<string[]> {
+		const stageConditions = SALESFORCE_WON_STAGES.map((stage) => `StageName = '${stage.replace(/'/g, "\\'")}'`).join(' OR ');
 		const soql = `
 			SELECT Id
 			FROM Opportunity
 			WHERE IsDeleted = false
 				AND (${stageConditions})
-				AND (
-					${changedSince}
-					OR (Account.LastModifiedDate >= ${start} AND Account.LastModifiedDate < ${end})
-					OR Id IN (
-						SELECT OpportunityId
-						FROM Quote
-						WHERE ${changedSince}
-					)
-					OR Id IN (
-						SELECT OpportunityId
-						FROM OpportunityLineItem
-						WHERE ${changedSince}
-					)
-				)
-			ORDER BY LastModifiedDate ASC
+				AND CloseDate >= ${start}
+				AND CloseDate <= ${end}
+			ORDER BY CloseDate DESC
 		`.trim();
 		const { data } = await this.queryService.executeQuery(soql, holdingId);
-		if (!data.done) {
-			this.logger.warn(`La consulta diaria Salesforce del holding ${holdingId} excedió la primera página; se procesarán ${data.records.length} oportunidades`);
-		}
 		return [...new Set((data.records || []).map((record) => record.Id).filter(Boolean))];
 	}
 
@@ -863,8 +1068,7 @@ export class SalesforceSyncCompleteService {
 
 			const comparableClientEntityPayload = this.removeBlankFields(clientEntityPayload);
 			const hasChanges =
-				this.hasRecordChanges(clientPayload, existingClient) ||
-				this.hasRecordChanges(comparableClientEntityPayload, existingEntity);
+				this.hasRecordChanges(clientPayload, existingClient) || this.hasRecordChanges(comparableClientEntityPayload, existingEntity);
 			await this.accountsStgRepository.update(record.id, {
 				processing_status: hasChanges ? 'update' : 'processed',
 				integration_notes: hasChanges ? 'Cliente existente con cambios pendientes' : 'Cliente staging sincronizado',
@@ -905,7 +1109,9 @@ export class SalesforceSyncCompleteService {
 					where: { holding_id: holdingId, salesforce_account_id: record.salesforce_id },
 				});
 				await Promise.all(
-					relatedOpportunities.map((opportunity) => this.resolveOpportunityBlock(holdingId, opportunity.salesforce_id, 'account_final_processing'))
+					relatedOpportunities.map((opportunity) =>
+						this.resolveOpportunityBlock(holdingId, opportunity.salesforce_id, 'account_final_processing')
+					)
 				);
 			} catch (error: any) {
 				stats.errors.push(`Account ${record.salesforce_id}: ${error.message}`);
@@ -976,11 +1182,7 @@ export class SalesforceSyncCompleteService {
 		await this.notificationsService.resolveByDeduplicationKey(holdingId, `salesforce:${opportunityId}:${reason}`);
 	}
 
-	private async classifyOpportunityStaging(
-		holdingId: string,
-		batchId?: string,
-		options: OpportunityClassificationOptions = {}
-	): Promise<void> {
+	private async classifyOpportunityStaging(holdingId: string, batchId?: string, options: OpportunityClassificationOptions = {}): Promise<void> {
 		const records = await this.opportunitiesStgRepository.find({
 			where: batchId ? { holding_id: holdingId, batch_id: batchId } : { holding_id: holdingId },
 			order: { updated_at: 'ASC' },
@@ -1584,11 +1786,7 @@ export class SalesforceSyncCompleteService {
 		const protectedFields = ['legal_name', 'legal_address', 'country'];
 		return {
 			...candidate,
-			...Object.fromEntries(
-				protectedFields
-					.filter((field) => !this.isBlankValue(existing[field]))
-					.map((field) => [field, existing[field]])
-			),
+			...Object.fromEntries(protectedFields.filter((field) => !this.isBlankValue(existing[field])).map((field) => [field, existing[field]])),
 		};
 	}
 
@@ -1808,9 +2006,7 @@ export class SalesforceSyncCompleteService {
 	}
 
 	async resolveClientEntityPreview(holdingId: string, account: SalesforceAccount): Promise<ResolvedSalesforceClientEntityPreview> {
-		const payload = this.normalizeClientEntityPayload(
-			await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account)
-		);
+		const payload = this.normalizeClientEntityPayload(await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account));
 		const legalName = payload.legal_name || account.Name || null;
 		const taxId = payload.tax_id || null;
 
@@ -1930,13 +2126,22 @@ export class SalesforceSyncCompleteService {
 		return false;
 	}
 
+	/**
+	 * Fecha de "ayer" en el calendario de `America/Santiago`.
+	 * Se usa como valor por defecto de los flujos manuales que no reciben rango.
+	 */
 	private getYesterdayDate(): string {
-		const yesterday = new Date();
-		yesterday.setDate(yesterday.getDate() - 1);
-		return yesterday.toISOString().split('T')[0];
+		const { start } = this.getSantiagoCloseDateRange(2);
+		return start;
 	}
 
-	private getSantiagoCalendarDayRange(days: number, reference = new Date()): { start: string; end: string } {
+	/**
+	 * Ventana de `CloseDate` expresada como fechas calendario de `America/Santiago`.
+	 *
+	 * `CloseDate` es un campo `Date` en Salesforce, por lo que el literal SOQL
+	 * debe ser `YYYY-MM-DD` sin hora ni zona. Ambos extremos son inclusivos.
+	 */
+	private getSantiagoCloseDateRange(days: number, reference = new Date()): { start: string; end: string } {
 		if (!Number.isInteger(days) || days < 1) {
 			throw new Error('El rango de sincronización debe contener al menos un día calendario.');
 		}
@@ -1951,23 +2156,12 @@ export class SalesforceSyncCompleteService {
 		const endDate = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
 		const startDate = new Date(endDate);
 		startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
-		endDate.setUTCDate(endDate.getUTCDate() + 1);
-		const toSantiagoMidnightUtc = (date: Date) => {
-			const offsetFormatter = new Intl.DateTimeFormat('en-US', {
-				timeZone: 'America/Santiago',
-				timeZoneName: 'longOffset',
-			});
-			const offset = offsetFormatter.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || 'GMT-00:00';
-			const match = offset.match(/^GMT([+-])(\d{2}):(\d{2})$/);
-			const offsetMinutes = match
-				? (match[1] === '+' ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3]))
-				: 0;
-			return new Date(date.getTime() - offsetMinutes * 60 * 1000).toISOString();
-		};
+
+		const toCalendarDate = (date: Date) => date.toISOString().split('T')[0];
 
 		return {
-			start: toSantiagoMidnightUtc(startDate),
-			end: toSantiagoMidnightUtc(endDate),
+			start: toCalendarDate(startDate),
+			end: toCalendarDate(endDate),
 		};
 	}
 

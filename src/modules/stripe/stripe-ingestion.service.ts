@@ -4,11 +4,12 @@ import Stripe from 'stripe';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
+import { StripeCustomersStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customers-stg.entity';
+import { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-invoices-stg.entity';
+import { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
+
 import { CountStripeRecordsDto, SyncStripeDataDto } from './dtos/sync-stripe-data.dto';
-import { StripeConnection } from './entities/stripe-connection.entity';
-import { StripeCustomersStg } from './entities/stripe-customers-stg.entity';
-import { StripeInvoicesStg } from './entities/stripe-invoices-stg.entity';
-import { StripeSubscriptionsStg } from './entities/stripe-subscriptions-stg.entity';
 import { StripeIntegrationLogService } from './services/stripe-integration-log.service';
 import { StripeConnectionService } from './stripe-connection.service';
 import { STRIPE_CLIENT } from './stripe.provider';

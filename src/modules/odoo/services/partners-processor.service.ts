@@ -2,11 +2,11 @@ import { forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nest
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ClientEntity } from '@/databases/postgresql/entities/client-entity.entity';
-import { FieldMapping } from '@/databases/postgresql/entities/field-mapping.entity';
+import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
+import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from '../dtos/process-partners.dto';
-import { OdooPartnersStg } from '../entities/odoo-partners-stg.entity';
 import { OdooPartnersService } from '../odoo-partners.service';
 
 @Injectable()

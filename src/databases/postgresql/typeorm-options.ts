@@ -57,14 +57,24 @@ export function createPostgreSqlOptions(environment: PostgreSqlEnvironment): Typ
 	}
 
 	const synchronize = resolveSchemaSynchronization(environment);
-	// Los espejos se habilitan por lote mediante un flag independiente. No se
-	// promueven masivamente solo por activar synchronize en QA.
+	// Carga además los espejos apagados (`*.espejo.ts`), para medir uno nuevo con `schema:log`
+	// antes de promoverlo. Desde el 2026-09-16 no queda ninguno apagado, así que hoy no cambia nada.
 	const loadMirrors = isEnabled(environment.TYPEORM_LOAD_MIRROR_ENTITIES);
 
 	return {
 		type: 'postgres',
 		url,
+		// Producción genera UUIDs con `gen_random_uuid()` (pgcrypto). Sin esto TypeORM
+		// emite `uuid_generate_v4()` y toda columna con @PrimaryGeneratedColumn('uuid')
+		// aparece como diferencia en `schema:log` sin serlo.
+		uuidExtension: 'pgcrypto',
 		entities: [__dirname + '/../../**/*.entity{.ts,.js}', ...(loadMirrors ? Object.values(mirrorEntities) : [])],
+		migrations: [__dirname + '/migrations/*{.ts,.js}'],
+		// Nombre explícito: `public` es un esquema compartido con el front y una tabla
+		// llamada `migrations` a secas no dice de quién es.
+		migrationsTableName: 'sapira_typeorm_migrations',
+		// Las migraciones se aplican con un comando revisado, nunca al arrancar la app.
+		migrationsRun: false,
 		autoLoadEntities: true,
 		synchronize,
 		logging: isEnabled(environment.SUPABASE_LOGGING) ? ['error', 'schema', 'warn', 'info', 'log'] : false,
@@ -86,8 +96,12 @@ export function createPostgreSqlOptions(environment: PostgreSqlEnvironment): Typ
 }
 
 export function createPostgreSqlCliOptions(environment: PostgreSqlEnvironment): DataSourceOptions {
-	const { autoLoadEntities: _autoLoadEntities, retryAttempts: _retryAttempts, retryDelay: _retryDelay, ...options } =
-		createPostgreSqlOptions(environment);
+	const {
+		autoLoadEntities: _autoLoadEntities,
+		retryAttempts: _retryAttempts,
+		retryDelay: _retryDelay,
+		...options
+	} = createPostgreSqlOptions(environment);
 
 	return options as DataSourceOptions;
 }

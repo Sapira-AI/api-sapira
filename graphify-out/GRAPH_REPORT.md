@@ -1,16 +1,16 @@
-# Graph Report - api-sapira  (2026-08-23)
+# Graph Report - api-sapira  (2026-09-15)
 
 ## Corpus Check
-- 1272 files · ~387,379 words
+- 1618 files · ~514,616 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6171 nodes · 12887 edges · 301 communities (279 shown, 22 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 247 edges (avg confidence: 0.78)
+- 6635 nodes · 13989 edges · 322 communities (296 shown, 26 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 249 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `45d4b72d`
+- Built from commit: `cfdcdcee`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -217,7 +217,7 @@
 - [[_COMMUNITY_HoldingSettings|HoldingSettings]]
 - [[_COMMUNITY_ContactPreference|ContactPreference]]
 - [[_COMMUNITY_ChurnReason|ChurnReason]]
-- [[_COMMUNITY_ContractLifecycleEvent|ContractLifecycleEvent]]
+- [[_COMMUNITY_BancoCentralService|BancoCentralService]]
 - [[_COMMUNITY_ContractNotification|ContractNotification]]
 - [[_COMMUNITY_InvoiceCollectionSettings|InvoiceCollectionSettings]]
 - [[_COMMUNITY_AgentsScheduler|AgentsScheduler]]
@@ -233,22 +233,22 @@
 - [[_COMMUNITY_package.json|package.json]]
 - [[_COMMUNITY_business.exception.ts|business.exception.ts]]
 - [[_COMMUNITY_Análisis de Triggers y Funciones de Contratos|Análisis de Triggers y Funciones de Contratos]]
-- [[_COMMUNITY_FinancialSettings|FinancialSettings]]
-- [[_COMMUNITY_ContractClaus|ContractClaus]]
-- [[_COMMUNITY_ContractTemplate|ContractTemplate]]
+- [[_COMMUNITY_CreateOdooConnectionDto|CreateOdooConnectionDto]]
+- [[_COMMUNITY_fetch-catalog.ts|fetch-catalog.ts]]
+- [[_COMMUNITY_AuditService|AuditService]]
 - [[_COMMUNITY_FxApiSyncLog|FxApiSyncLog]]
-- [[_COMMUNITY_invoice-skills.ts|invoice-skills.ts]]
-- [[_COMMUNITY_.assignEntity|.assignEntity]]
+- [[_COMMUNITY_AiAgentConfig|AiAgentConfig]]
+- [[_COMMUNITY_UserViewPreference|UserViewPreference]]
 - [[_COMMUNITY_ListDomainsDto|ListDomainsDto]]
 - [[_COMMUNITY_ListSenderAddressesDto|ListSenderAddressesDto]]
 - [[_COMMUNITY_invoice-scheduler.scheduler.ts|invoice-scheduler.scheduler.ts]]
 - [[_COMMUNITY_GetInvoicesDto|GetInvoicesDto]]
 - [[_COMMUNITY_GetSubscriptionsDto|GetSubscriptionsDto]]
 - [[_COMMUNITY_validate-file.pipe.ts|validate-file.pipe.ts]]
-- [[_COMMUNITY_log.interface.ts|log.interface.ts]]
+- [[_COMMUNITY_CreateClientAgentConfigDto|CreateClientAgentConfigDto]]
 - [[_COMMUNITY_Panorama Global de las Lógicas|Panorama Global de las Lógicas]]
-- [[_COMMUNITY_ContractChangeLog|ContractChangeLog]]
-- [[_COMMUNITY_ContractItemChangeLog|ContractItemChangeLog]]
+- [[_COMMUNITY_apply-postgresql-assets.ts|apply-postgresql-assets.ts]]
+- [[_COMMUNITY_AuditFilterDTO|AuditFilterDTO]]
 - [[_COMMUNITY_Entities espejo de la base de datos (rediseño v2 · paso 1 · carril B)|Entities espejo de la base de datos (rediseño v2 · paso 1 · carril B)]]
 - [[_COMMUNITY_client.interface.ts|client.interface.ts]]
 - [[_COMMUNITY_NotificationsController|NotificationsController]]
@@ -273,9 +273,9 @@
 - [[_COMMUNITY_Módulo 12 · Suscripciones (Stripe) — 2 tablas de prod (2026-08-22)|Módulo 12 · Suscripciones (Stripe) — 2 tablas de prod (2026-08-22)]]
 - [[_COMMUNITY_log-event.interface.ts|log-event.interface.ts]]
 - [[_COMMUNITY_agent.interface.ts|agent.interface.ts]]
-- [[_COMMUNITY_cmrr-momentum-skills.ts|cmrr-momentum-skills.ts]]
+- [[_COMMUNITY_odoo-integration-log.service.ts|odoo-integration-log.service.ts]]
 - [[_COMMUNITY_revenue-skills.ts|revenue-skills.ts]]
-- [[_COMMUNITY_OdooInvoicesStg|OdooInvoicesStg]]
+- [[_COMMUNITY_ReferenceRequest|ReferenceRequest]]
 - [[_COMMUNITY_StripeService|StripeService]]
 - [[_COMMUNITY_CryptoService|CryptoService]]
 - [[_COMMUNITY_ValidateImagesPipe|ValidateImagesPipe]]
@@ -285,7 +285,7 @@
 - [[_COMMUNITY_validation.decorator.ts|validation.decorator.ts]]
 - [[_COMMUNITY_📋 Resumen de Triggers por Timing|📋 Resumen de Triggers por Timing]]
 - [[_COMMUNITY_paths|paths]]
-- [[_COMMUNITY_SupabaseStrategy|SupabaseStrategy]]
+- [[_COMMUNITY_indices-declarados.spec.ts|indices-declarados.spec.ts]]
 - [[_COMMUNITY_3. VALIDACIONES DE INTEGRIDAD|3. VALIDACIONES DE INTEGRIDAD]]
 - [[_COMMUNITY_Módulo 10 · Integraciones — Stripe — 7 tablas de prod (2026-08-22)|Módulo 10 · Integraciones — Stripe — 7 tablas de prod (2026-08-22)]]
 - [[_COMMUNITY_Módulo 13 · Emisión fiscal nativa (SII) — 3 tablas de prod (2026-08-22)|Módulo 13 · Emisión fiscal nativa (SII) — 3 tablas de prod (2026-08-22)]]
@@ -306,115 +306,136 @@
 - [[_COMMUNITY_audit-event.interface.ts|audit-event.interface.ts]]
 - [[_COMMUNITY_database.provider.ts|database.provider.ts]]
 - [[_COMMUNITY_event-type.enum.ts|event-type.enum.ts]]
+- [[_COMMUNITY_Cambio `false` de Odoo tapaba el error de cliente sin email al enviar facturas|Cambio: `false` de Odoo tapaba el error de "cliente sin email" al enviar facturas]]
+- [[_COMMUNITY_audit-usage.ts|audit-usage.ts]]
+- [[_COMMUNITY_DeleteDomainDto|DeleteDomainDto]]
+- [[_COMMUNITY_GetSubscriptionByIdDto|GetSubscriptionByIdDto]]
+- [[_COMMUNITY_GuardsModule|GuardsModule]]
+- [[_COMMUNITY_ClientEntityTaxIdNormalizationConflict|ClientEntityTaxIdNormalizationConflict]]
+- [[_COMMUNITY_🧱 Assets SQL no-TypeORM|🧱 Assets SQL no-TypeORM]]
+- [[_COMMUNITY_DeleteSenderAddressDto|DeleteSenderAddressDto]]
+- [[_COMMUNITY_api-sapira — Reglas obligatorias|api-sapira — Reglas obligatorias]]
+- [[_COMMUNITY_AuditController|AuditController]]
+- [[_COMMUNITY_REGISTRO-ALINEACION — entities que se alinean contra producción|REGISTRO-ALINEACION — entities que se alinean contra producción]]
+- [[_COMMUNITY_DeviceInfoInterceptor|DeviceInfoInterceptor]]
+- [[_COMMUNITY_📝 Recetas|📝 Recetas]]
+- [[_COMMUNITY_🔍 Cómo se revisa una migración generada|🔍 Cómo se revisa una migración generada]]
+- [[_COMMUNITY_⚠️ Consideraciones Importantes|⚠️ Consideraciones Importantes]]
+- [[_COMMUNITY_SupabaseStrategy|SupabaseStrategy]]
+- [[_COMMUNITY_DropIntegrationLogs1757390000000|DropIntegrationLogs1757390000000]]
+- [[_COMMUNITY_CreateSapiraQuantityImports1788949477104|CreateSapiraQuantityImports1788949477104]]
+- [[_COMMUNITY_AlignStagingProcessingStatusDefault1788953100000|AlignStagingProcessingStatusDefault1788953100000]]
+- [[_COMMUNITY_RetiraObjetosDebugMuertos1789040000000|RetiraObjetosDebugMuertos1789040000000]]
+- [[_COMMUNITY_.syncStripeCustomerIds|.syncStripeCustomerIds]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CompanyHolding` - 104 edges
-2. `User` - 78 edges
-3. `SalesforceSyncCompleteService` - 71 edges
-4. `AppLoggerService` - 61 edges
-5. `Company` - 52 edges
-6. `SupabaseAuthGuard` - 47 edges
-7. `Contract` - 44 edges
-8. `OdooService` - 43 edges
-9. `Invoice` - 42 edges
-10. `ClientEntity` - 41 edges
+1. `CompanyHolding` - 167 edges
+2. `User` - 89 edges
+3. `SalesforceSyncCompleteService` - 77 edges
+4. `Company` - 62 edges
+5. `AppLoggerService` - 61 edges
+6. `Contract` - 59 edges
+7. `Client` - 54 edges
+8. `Invoice` - 54 edges
+9. `BigQueryService` - 53 edges
+10. `ClientEntity` - 52 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `applyRLSPolicies()` --indirect_call--> `AppModule`  [INFERRED]
-  scripts/apply-rls-policies.ts → src/app.module.ts
-- `main()` --references--> `Client`  [EXTRACTED]
-  scripts/apply-postgresql-assets.ts → src/databases/postgresql/entities/client.entity.ts
-- `CliArguments` --references--> `AssetMode`  [EXTRACTED]
-  scripts/apply-postgresql-assets.ts → src/databases/postgresql/assets-runner.ts
-- `main()` --calls--> `assertTargetAllowed()`  [EXTRACTED]
-  scripts/apply-postgresql-assets.ts → src/databases/postgresql/assets-runner.ts
 - `main()` --calls--> `runSqlAssets()`  [EXTRACTED]
   scripts/apply-postgresql-assets.ts → src/databases/postgresql/assets-runner.ts
+- `main()` --calls--> `assertConnectionMatchesTarget()`  [EXTRACTED]
+  scripts/apply-postgresql-assets.ts → src/databases/postgresql/connection-target.ts
+- `main()` --references--> `Client`  [EXTRACTED]
+  scripts/apply-postgresql-assets.ts → src/databases/postgresql/entities/clientes/client.entity.ts
+- `auditarTabla()` --references--> `Client`  [EXTRACTED]
+  scripts/schema-as-code/audit-usage.ts → src/databases/postgresql/entities/clientes/client.entity.ts
+- `auditarFuncion()` --references--> `Client`  [EXTRACTED]
+  scripts/schema-as-code/audit-usage.ts → src/databases/postgresql/entities/clientes/client.entity.ts
 
 ## Import Cycles
-- None detected.
+- 4-file cycle: `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts -> src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts -> src/databases/postgresql/entities/base-tenancy/user.entity.ts -> src/databases/postgresql/entities/base-tenancy/role.entity.ts -> src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts`
 
-## Communities (301 total, 22 thin omitted)
+## Communities (322 total, 26 thin omitted)
 
 ### Community 0 - "espejo.existing.ts"
-Cohesion: 0.04
-Nodes (72): Client, ClientEntityClient, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, ClientEntity, Column (+64 more)
+Cohesion: 0.09
+Nodes (23): ClientEntityClient, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+15 more)
 
 ### Community 1 - "CompanyHolding"
-Cohesion: 0.06
-Nodes (37): ContractDocument, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+29 more)
+Cohesion: 0.08
+Nodes (14): CompanyHolding, Column, Entity, OneToMany, PrimaryGeneratedColumn, Client, Check, Column (+6 more)
 
 ### Community 2 - "invoice-scheduler.service.ts"
-Cohesion: 0.03
-Nodes (79): InvoiceAdjustment, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+71 more)
+Cohesion: 0.07
+Nodes (22): AuthController, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get, Post (+14 more)
 
 ### Community 3 - "odoo-partners.service.ts"
-Cohesion: 0.04
-Nodes (65): FieldMapping, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ClassifyPartnersResponseDto, ProcessPartnersDto (+57 more)
+Cohesion: 0.08
+Nodes (28): Currency, Column, Entity, Index, PrimaryColumn, ExchangeRateEntity, Column, Entity (+20 more)
 
 ### Community 4 - "SalesforceSyncCompleteService"
-Cohesion: 0.07
-Nodes (6): SyncCompleteStats, SalesforceAccount, SalesforceOpportunityWithLineItems, SalesforceQuoteLineItem, SalesforceSyncCompleteService, Injectable
+Cohesion: 0.09
+Nodes (10): SyncCompleteAllResponseDto, SyncCompleteResponseDto, SyncCompleteStats, ApiProperty, SalesforceOpportunityWithLineItems, SalesforceQuoteLineItem, Cron, SalesforceSyncCompleteService (+2 more)
 
 ### Community 5 - "Device"
-Cohesion: 0.06
-Nodes (32): AuditConfigService, AuditEndpointConfig, Injectable, DeviceInfoDto, DeviceBlockGuard, Injectable, AuditInterceptor, Inject (+24 more)
+Cohesion: 0.08
+Nodes (26): DeviceInfoDto, DeviceBlockGuard, Injectable, DevicesController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags (+18 more)
 
 ### Community 6 - "espejo.index.ts"
-Cohesion: 0.03
-Nodes (50): CONTRATOS_PROD_SNAPSHOT, ProdTableSnapshot, COTIZACIONES_CATALOGO_PROD_SNAPSHOT, ProdTableSnapshot, QuoteAttachment, Check, Column, CreateDateColumn (+42 more)
+Cohesion: 0.04
+Nodes (36): AUTOMATIZACIONES_IA_PROD_SNAPSHOT, ProdTableSnapshot, BASE_TENANCY_PROD_SNAPSHOT, ProdTableSnapshot, CONTRATOS_PROD_SNAPSHOT, ProdTableSnapshot, COTIZACIONES_CATALOGO_PROD_SNAPSHOT, ProdTableSnapshot (+28 more)
 
 ### Community 7 - "index.ts"
-Cohesion: 0.03
-Nodes (64): BillingReference, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+56 more)
+Cohesion: 0.04
+Nodes (57): MasterData, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+49 more)
 
 ### Community 8 - "index.ts"
-Cohesion: 0.04
-Nodes (61): Agent, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+53 more)
+Cohesion: 0.03
+Nodes (77): Agent, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+69 more)
 
 ### Community 9 - "app-logger.service.ts"
-Cohesion: 0.06
-Nodes (33): Catch, AppModule, Module, swaggerConfig, GlobalExceptionFilter, Injectable, BaseError, BaseResponse (+25 more)
+Cohesion: 0.09
+Nodes (26): BaseError, BaseResponse, PaginatedResponse, ErrorCode, ErrorCodes, ErrorSeverity, ServiceError, SecurityEventInput (+18 more)
 
 ### Community 10 - "SiiService"
-Cohesion: 0.07
-Nodes (42): ApiConsumes, CompanyQueryDto, CreateCafDto, ReserveFolioDto, ArrayNotEmpty, IsArray, IsDateString, IsEnum (+34 more)
+Cohesion: 0.05
+Nodes (51): ApiConsumes, SiiCaf, SiiCertificate, SiiConfiguration, Column, Entity, JoinColumn, ManyToOne (+43 more)
 
 ### Community 11 - "invoices.service.ts"
 Cohesion: 0.06
 Nodes (45): Length, BulkUpdateCurrencyDto, ApiProperty, ApiPropertyOptional, IsArray, IsBoolean, IsNotEmpty, IsOptional (+37 more)
 
 ### Community 12 - "notifications.service.ts"
-Cohesion: 0.05
-Nodes (44): PostgreSQLDatabaseModule, Module, HoldingAccessGuard, Injectable, InjectRepository, Column, CreateDateColumn, Entity (+36 more)
+Cohesion: 0.06
+Nodes (35): ContractAmendment, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+27 more)
 
 ### Community 13 - "app.module.ts"
-Cohesion: 0.05
-Nodes (44): AuthModule, Module, AuthService, Injectable, eventConfig, GuardsModule, Global, Module (+36 more)
+Cohesion: 0.14
+Nodes (13): AuthModule, Module, AuthService, Injectable, AgentsModule, Module, AgentsProviders, EmailModule (+5 more)
 
 ### Community 14 - "dependencies"
 Cohesion: 0.03
 Nodes (60): dependencies, @anthropic-ai/sdk, axios, @azure/cognitiveservices-computervision, @azure/identity, @azure/keyvault-secrets, @azure/ms-rest-azure-js, @azure/ms-rest-js (+52 more)
 
 ### Community 15 - "audit.controller.ts"
-Cohesion: 0.06
-Nodes (44): AuditController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Body, Controller (+36 more)
+Cohesion: 0.28
+Nodes (10): ApiOperation, ApiParam, ApiResponse, Delete, Get, Param, Query, Audit (+2 more)
 
 ### Community 16 - "SecurityController"
 Cohesion: 0.09
-Nodes (21): Ip, SecurityController, ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags (+13 more)
+Nodes (21): Ip, Retry, SecurityController, ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiResponse (+13 more)
 
 ### Community 17 - "event.interface.ts"
-Cohesion: 0.08
-Nodes (38): IsIP, Identifiable, AuditAction, AuditEvent, AuthEvent, BaseEvent, BusinessCategory, DocumentEvent (+30 more)
+Cohesion: 0.07
+Nodes (40): IsIP, AuditAction, AuditEvent, BusinessCategory, EventSeverity, EventStatus, EventType, SecurityAction (+32 more)
 
 ### Community 18 - "SapiraCopilotService"
-Cohesion: 0.07
-Nodes (38): ChatMessageDto, MessageHistoryDto, ApiProperty, ApiPropertyOptional, IsArray, IsNotEmpty, IsOptional, IsString (+30 more)
+Cohesion: 0.19
+Nodes (15): SapiraCopilotController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete (+7 more)
 
 ### Community 19 - "exchange-rates.service.ts"
-Cohesion: 0.07
-Nodes (42): CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto, IsInt, IsOptional, Max, Min, Type, ExchangeRateResponseDto (+34 more)
+Cohesion: 0.15
+Nodes (18): GetSeriesDto, ApiProperty, ApiPropertyOptional, IsDateString, IsEnum, IsNotEmpty, IsOptional, SyncExchangeRatesResponseDto (+10 more)
 
 ### Community 20 - "email.controller.ts"
 Cohesion: 0.07
@@ -426,123 +447,123 @@ Nodes (31): StripeStagingController, ApiBearerAuth, ApiHeader, ApiOperation, Api
 
 ### Community 22 - "AppLoggerService"
 Cohesion: 0.07
-Nodes (16): Optional, Retry(), ErrorContext, ErrorLevel, ErrorResponse, BusinessEvent, EventsService, Injectable (+8 more)
+Nodes (16): Optional, Retry(), ErrorContext, ErrorLevel, ErrorResponse, AppLoggerService, Inject, Injectable (+8 more)
 
 ### Community 23 - "cities.controller.ts"
-Cohesion: 0.08
-Nodes (33): ResponseDTO, ApiProperty, CitiesController, ApiBearerAuth, ApiBody, ApiExcludeController, ApiOkResponse, ApiOperation (+25 more)
+Cohesion: 0.11
+Nodes (25): ResponseDTO, ApiProperty, CitiesController, ApiBearerAuth, ApiBody, ApiExcludeController, ApiOkResponse, ApiOperation (+17 more)
 
 ### Community 24 - "salesforce.service.ts"
-Cohesion: 0.09
-Nodes (19): EncryptionService, Injectable, SalesforceAuthType, SalesforceConnection, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn (+11 more)
+Cohesion: 0.06
+Nodes (28): EncryptionService, Injectable, SalesforceAuthType, SalesforceConnection, Check, Column, Entity, Index (+20 more)
 
 ### Community 25 - ".error"
 Cohesion: 0.08
-Nodes (5): getFilenameFromUrl(), PostgreSQLDatabaseProvider, Injectable, OdooInvoicesService, Injectable
+Nodes (7): getFilenameFromUrl(), PostgreSQLDatabaseProvider, Injectable, OdooIntegrationLogDocument, OdooIntegrationLogService, Injectable, InjectModel
 
 ### Community 26 - "index.ts"
-Cohesion: 0.05
-Nodes (43): BASE_TENANCY_PROD_SNAPSHOT, ProdTableSnapshot, CustomFieldDefinition, Check, Column, CreateDateColumn, Entity, Index (+35 more)
+Cohesion: 0.04
+Nodes (50): ClaudeSkill, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+42 more)
 
 ### Community 27 - "SalesforceSyncRun"
-Cohesion: 0.08
-Nodes (26): Interval, SalesforceSyncRun, SalesforceSyncRunStatus, SalesforceSyncRunType, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn (+18 more)
+Cohesion: 0.09
+Nodes (4): SalesforceService, Injectable, SalesforceSoapService, Injectable
 
 ### Community 28 - "events.module.ts"
-Cohesion: 0.08
-Nodes (17): BaseEntity, BusinessHandler, Injectable, SecurityHandler, Injectable, EventHandler, EventDispatcherService, Injectable (+9 more)
+Cohesion: 0.07
+Nodes (20): BaseEntity, AuthEvent, BaseEvent, DocumentEvent, BusinessHandler, Injectable, SecurityHandler, Injectable (+12 more)
 
 ### Community 29 - "InvoicesLegacy"
-Cohesion: 0.04
-Nodes (48): ContractInvoice, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+40 more)
+Cohesion: 0.05
+Nodes (39): ContractInvoice, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+31 more)
 
 ### Community 30 - "OdooService"
-Cohesion: 0.13
-Nodes (7): StartAsyncJobDTO, Injectable, XmlRpcClientHelper, OdooConnectionConfig, OdooInvoice, OdooService, Injectable
+Cohesion: 0.16
+Nodes (5): StartAsyncJobDTO, OdooConnectionConfig, OdooInvoice, OdooService, Injectable
 
 ### Community 31 - "BankMovement"
-Cohesion: 0.05
-Nodes (39): CompanyBankAccount, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, BankColumnMapping (+31 more)
+Cohesion: 0.03
+Nodes (81): BillingReference, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+73 more)
 
 ### Community 32 - "salesforce.controller.ts"
 Cohesion: 0.07
-Nodes (37): SalesforceClientEntityPreviewDto, ApiProperty, IsArray, IsObject, SalesforceLineItemPreviewDto, SalesforceLineItemPreviewRequestDto, ApiProperty, IsArray (+29 more)
+Nodes (31): SalesforceLineItemsStg, Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+23 more)
 
 ### Community 33 - "OdooWebhookService"
-Cohesion: 0.06
-Nodes (28): OdooWebhookController, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, Body (+20 more)
+Cohesion: 0.08
+Nodes (18): OdooWebhookController, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, Body (+10 more)
 
 ### Community 34 - "OdooPartnersService"
-Cohesion: 0.09
-Nodes (14): GenericVatsService, Injectable, InjectRepository, GenericExportVat, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn (+6 more)
+Cohesion: 0.05
+Nodes (63): Interval, SalesforceSyncRun, SalesforceSyncRunStatus, SalesforceSyncRunType, Check, Column, Entity, Index (+55 more)
 
 ### Community 35 - "AccountingPeriodCutoff"
-Cohesion: 0.05
-Nodes (38): AccountingPeriodCutoff, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+30 more)
+Cohesion: 0.02
+Nodes (85): Company, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, ClientDocument (+77 more)
 
 ### Community 36 - "odoo.dto.ts"
-Cohesion: 0.15
+Cohesion: 0.16
 Nodes (38): CompanyMappingItemDTO, ConnectionInfoDTO, CountRecordsDTO, CountRecordsResponseDTO, CreateDraftInvoiceDTO, CreateDraftInvoiceResponseDTO, GetCompaniesDTO, GetCompaniesResponseDTO (+30 more)
 
 ### Community 37 - "StripeConnection"
-Cohesion: 0.10
-Nodes (27): StripeConnection, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, StripeConnectionController, ApiBearerAuth (+19 more)
+Cohesion: 0.11
+Nodes (25): StripeConnection, Check, Column, Entity, Index, PrimaryGeneratedColumn, StripeConnectionController, ApiBearerAuth (+17 more)
 
 ### Community 38 - "Análisis Detallado de Triggers y Funciones de Invoices e Invoice_Items"
 Cohesion: 0.05
 Nodes (40): 10. `standardize_invoice_items()` - BEFORE INSERT, 11. `refresh_revenue_schedule_for_invoice_contract()` - AFTER INSERT/UPDATE/DELETE, 1. `assign_invoice_group_id()` - BEFORE INSERT, 1. **Duplicación de Lógica de Revenue Schedule** ⚠️, 1. Estandarizar formato de tax_rate, 2. `auto_populate_invoice_tax_rate()` - BEFORE INSERT/UPDATE, 2. Consolidar funciones de revenue schedule, 2. **Inconsistencia en tax_rate: Porcentaje vs Decimal** ⚠️ (+32 more)
 
 ### Community 39 - "stripe.module.ts"
-Cohesion: 0.09
-Nodes (27): StripeCustomersStg, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, StripeInvoicesStg, Column (+19 more)
+Cohesion: 0.08
+Nodes (30): StripeCustomersStg, Column, Entity, Index, PrimaryGeneratedColumn, Unique, StripeInvoicesStg, Column (+22 more)
 
 ### Community 40 - "SalesforceMappingService"
-Cohesion: 0.06
-Nodes (22): SalesforceObjectMapping, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, SalesforceProductMapping, Column (+14 more)
+Cohesion: 0.07
+Nodes (20): SalesforceObjectMapping, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+12 more)
 
 ### Community 41 - "banco-central.module.ts"
-Cohesion: 0.07
-Nodes (28): BaseEntity, CreateDateColumn, PrimaryGeneratedColumn, UpdateDateColumn, InjectRepository, Currency, Column, CreateDateColumn (+20 more)
+Cohesion: 0.18
+Nodes (10): BaseEntity, CreateDateColumn, PrimaryGeneratedColumn, UpdateDateColumn, IndicadorEconomicoEntity, Column, Entity, Index (+2 more)
 
 ### Community 42 - "Subscription"
 Cohesion: 0.06
 Nodes (34): RevenueScheduleMonthly, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+26 more)
 
 ### Community 43 - "fiscal-positions.service.ts"
-Cohesion: 0.12
-Nodes (21): FiscalPositionsController, ApiBearerAuth, Controller, Get, Headers, Param, Query, UseGuards (+13 more)
+Cohesion: 0.14
+Nodes (19): FiscalPositionsController, ApiBearerAuth, Controller, Get, Headers, Param, Query, UseGuards (+11 more)
 
 ### Community 44 - "SyncStripeDataDto"
 Cohesion: 0.12
 Nodes (25): CountStripeRecordsDto, SyncStripeDataDto, ApiProperty, ApiPropertyOptional, IsDateString, IsNumber, IsOptional, IsUUID (+17 more)
 
 ### Community 45 - "SalesforceController"
-Cohesion: 0.19
-Nodes (15): SupabaseUser, GetSupabaseUser, SalesforceController, ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags (+7 more)
+Cohesion: 0.16
+Nodes (17): SupabaseStrategy, SupabaseUser, Injectable, GetSupabaseUser, SalesforceController, ApiBearerAuth, ApiHeader, ApiOperation (+9 more)
 
 ### Community 46 - "index.ts"
 Cohesion: 0.06
-Nodes (31): ClientDocument, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, ClientEntityTaxIdNormalizationConflict (+23 more)
+Nodes (31): CompanyBankAccount, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, BankColumnMapping (+23 more)
 
 ### Community 47 - "devDependencies"
 Cohesion: 0.06
 Nodes (34): devDependencies, eslint, eslint-config-prettier, eslint-plugin-import, eslint-plugin-prettier, eslint-plugin-unused-imports, jest, @nestjs/cli (+26 more)
 
 ### Community 48 - "odoo.service.ts"
-Cohesion: 0.08
-Nodes (27): IntegrationLog, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, CompaniesResult, CreateDraftInvoiceResult, EstimateResult (+19 more)
+Cohesion: 0.18
+Nodes (10): StripeProductMapping, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+2 more)
 
 ### Community 49 - "Módulo de indicadores y tipos de cambio"
 Cohesion: 0.06
 Nodes (33): 10. Obtener Promedios Mensuales, 1. Obtener Serie de Tiempo, 2. Sincronizar Indicadores, 3. Obtener Últimos Valores, 4. Obtener Historial de Indicador, 5. Sincronizar Tipos de Cambio, 6. Sincronizar Tipos de Cambio Históricos, 7. Calcular Promedios Mensuales (+25 more)
 
 ### Community 50 - "DatabaseAnalyzerService"
-Cohesion: 0.08
-Nodes (20): DatabaseAnalyzerModule, Module, DatabaseAnalyzerService, ForeignKey, PrimaryUniqueKey, TableColumn, TableIndex, TablePermission (+12 more)
+Cohesion: 0.12
+Nodes (14): ForeignKey, PrimaryUniqueKey, TableColumn, TableIndex, TablePermission, TablePolicy, TableSize, TableTrigger (+6 more)
 
 ### Community 51 - "Módulo Salesforce"
-Cohesion: 0.06
-Nodes (33): Autenticación, Características, 📋 Checklist Final, Configuración Requerida en Salesforce (Client Credentials), Endpoints, ❌ Errores Comunes y Soluciones, Gestión de Conexión, Migración desde Edge Functions (+25 more)
+Cohesion: 0.05
+Nodes (39): Autenticación, Bitácora de la sincronización automática, Características, 📋 Checklist Final, Colecciones de MongoDB, Configuración Requerida en Salesforce (Client Credentials), Contrato de sincronización automática, Endpoints (+31 more)
 
 ### Community 52 - "SalesforceMappingController"
 Cohesion: 0.21
@@ -561,24 +582,24 @@ Cohesion: 0.06
 Nodes (30): 1. Ejecutar Migración, 1. **Migración de Base de Datos**, 2. **Migración de Invoice Items**, 2. Re-mapear Compañías, 3. **Entidad Company**, 3. Probar Envío de Factura, 3. **Servicio Odoo - Mapeo de Compañías**, 4. **Entidad InvoiceItem** (+22 more)
 
 ### Community 56 - "assets-runner.ts"
-Cohesion: 0.13
-Nodes (26): CliArguments, main(), parseArguments(), printResult(), requireValue(), applyAsset(), assertTargetAllowed(), ASSET_DIRECTORIES (+18 more)
+Cohesion: 0.17
+Nodes (19): applyAsset(), ASSET_DIRECTORIES, AssetManifest, AssetRunResult, checksumSql(), discoverSqlAssets(), ensureHistoryTable(), filterAssetsByOnly() (+11 more)
 
 ### Community 57 - "uuid"
 Cohesion: 0.11
 Nodes (10): EventEnricherService, Injectable, EventEnricherService, Injectable, EventProcessorService, Injectable, Express, File (+2 more)
 
 ### Community 58 - "emails.service.ts"
-Cohesion: 0.11
-Nodes (23): CheckStatusDto, ApiProperty, IsNotEmpty, IsUUID, DeleteDomainDto, ApiProperty, IsNotEmpty, IsUUID (+15 more)
+Cohesion: 0.17
+Nodes (16): CheckStatusDto, ApiProperty, IsNotEmpty, IsUUID, SendTestEmailDto, ApiProperty, IsEmail, IsNotEmpty (+8 more)
 
 ### Community 59 - "OdooPartnersController"
-Cohesion: 0.14
-Nodes (18): OdooPartnersController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiResponse (+10 more)
+Cohesion: 0.26
+Nodes (15): OdooController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags (+7 more)
 
 ### Community 60 - "SalesforceStagingService"
 Cohesion: 0.12
-Nodes (9): SalesforceAccountsStg, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, SalesforceStagingService, Injectable (+1 more)
+Nodes (10): SalesforceAccountsStg, Check, Column, Entity, Index, PrimaryGeneratedColumn, Unique, SalesforceStagingService (+2 more)
 
 ### Community 61 - "SubscriptionQueryDto"
 Cohesion: 0.11
@@ -597,24 +618,24 @@ Cohesion: 0.11
 Nodes (3): Cron, InvoiceSchedulerService, Injectable
 
 ### Community 65 - "SalesforceStagingController"
-Cohesion: 0.24
-Nodes (12): SalesforceStagingController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Headers (+4 more)
+Cohesion: 0.08
+Nodes (23): OdooPartnersStg, Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+15 more)
 
 ### Community 66 - "StripeSyncService"
 Cohesion: 0.16
 Nodes (6): EntitySyncStatsDto, SyncResponseDto, SyncStatsDto, ApiProperty, StripeSyncService, Injectable
 
 ### Community 67 - "GenericRLSService"
-Cohesion: 0.15
-Nodes (6): applyRLSPolicies(), RLSConfigurations, GenericRLSService, RLSPolicy, TableRLSConfig, Injectable
+Cohesion: 0.11
+Nodes (20): ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsInt, IsOptional, Max (+12 more)
 
 ### Community 68 - "DashboardService"
 Cohesion: 0.10
 Nodes (15): DashboardController, DashboardQueryDto, ApiBearerAuth, ApiOperation, ApiTags, Controller, Get, IsDateString (+7 more)
 
 ### Community 69 - "OdooController"
-Cohesion: 0.26
-Nodes (15): OdooController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags (+7 more)
+Cohesion: 0.17
+Nodes (13): QuantityImportResolutionSource, QuantityImportStatus, SapiraQuantityImport, Check, Column, CreateDateColumn, Entity, Index (+5 more)
 
 ### Community 70 - "BancoCentralController"
 Cohesion: 0.23
@@ -633,16 +654,20 @@ Cohesion: 0.07
 Nodes (26): 1. Array de VATs Genéricos, 2. Función de Validación, 3. Lógica de Procesamiento Modificada, Agregar Nuevo País, Agregar Nuevos VATs Genéricos, Beneficios, Caso 1: Nuevo Cliente de Exportación, Caso 2: Actualización de Cliente Existente (+18 more)
 
 ### Community 74 - "bigquery.module.ts"
-Cohesion: 0.10
-Nodes (18): BigQueryConnection, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, StripeCustomerBigQuery, Column (+10 more)
+Cohesion: 0.07
+Nodes (22): BigQueryConnection, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+14 more)
 
 ### Community 75 - "AgentsController"
 Cohesion: 0.25
 Nodes (14): AgentsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get (+6 more)
 
+### Community 76 - "ExchangeRatesService"
+Cohesion: 0.19
+Nodes (3): ExchangeRateResponseDto, ExchangeRatesService, Injectable
+
 ### Community 77 - "Módulo BigQuery"
-Cohesion: 0.08
-Nodes (25): 1. Ejecutar Consulta SQL, 1. Variables de Entorno, 2. Instalación de Dependencias, 2. Listar Datasets, 3. Listar Tablas de un Dataset, API Endpoints, Características, Configuración (+17 more)
+Cohesion: 0.05
+Nodes (39): 1. Credenciales por holding (fuente de verdad), 1. Ejecutar Consulta SQL, 2. Instalación de Dependencias, 2. Listar Datasets, 2. Variables de Entorno (solo scheduler), 3. Listar Tablas de un Dataset, API Endpoints, Arquitectura: dos fases con tabla intermedia (+31 more)
 
 ### Community 78 - "salesforce-field-mapping-engine.service.ts"
 Cohesion: 0.15
@@ -653,19 +678,23 @@ Cohesion: 0.10
 Nodes (19): StripeSyncController, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get, Headers (+11 more)
 
 ### Community 80 - "audit.module.ts"
-Cohesion: 0.10
-Nodes (18): AuditModule, Global, Module, AuditProviders, AuditSchema, MongooseModules, Global, Module (+10 more)
+Cohesion: 0.06
+Nodes (46): AuditModule, Global, Module, eventConfig, PostgreSQLDatabaseModule, Module, EventsModule, Module (+38 more)
 
 ### Community 81 - "Módulo Claude API"
 Cohesion: 0.08
 Nodes (24): Base de Datos, Características, Configuración, Conversación con contexto, Crear y usar skills, DELETE `/claude/skills/:skillId`, Endpoints, Enviar un mensaje simple (+16 more)
 
 ### Community 82 - "InvoiceProcessingController"
-Cohesion: 0.20
-Nodes (16): InvoiceProcessingController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags, Body (+8 more)
+Cohesion: 0.07
+Nodes (24): OdooInvoiceLinesStg, Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+16 more)
+
+### Community 83 - "InvoiceProcessingService"
+Cohesion: 0.03
+Nodes (76): AuthUser, Column, Entity, PrimaryColumn, Product, Column, Entity, Index (+68 more)
 
 ### Community 84 - "salesforce-mapping.service.ts"
-Cohesion: 0.33
+Cohesion: 0.35
 Nodes (21): CreateFieldMappingDto, CreateObjectMappingDto, CreateProductMappingDto, CreateQuoteTypeMappingDto, SalesforceFieldMappingDto, SalesforceObjectMappingDto, SalesforceProductMappingDto, SalesforceQuoteTypeMappingDto (+13 more)
 
 ### Community 85 - "Stripe Scheduler - Sincronización Automática Diaria"
@@ -673,16 +702,12 @@ Cohesion: 0.08
 Nodes (24): Arquitectura, Características, Configuración, Desactivar Sincronización Automática, Descripción, El scheduler no se ejecuta, Errores de timeout, Fase 1: Ingesta (Stripe → Staging) (+16 more)
 
 ### Community 86 - "salesforce-staging.controller.ts"
-Cohesion: 0.26
-Nodes (22): Matches, SalesforceAccountImportDto, SalesforceAccountMappingViewDto, SalesforceAccountProcessDto, SalesforceBulkOpportunityProcessDto, SalesforceOpportunityImportDto, SalesforceOpportunityPreviewDto, SalesforceOpportunityProcessDto (+14 more)
+Cohesion: 0.13
+Nodes (22): SalesforceSyncJobListDto, SalesforceSyncLogListDto, ApiPropertyOptional, IsDateString, IsIn, IsInt, IsOptional, IsString (+14 more)
 
 ### Community 87 - "Descripción de Funciones Clave"
 Cohesion: 0.08
 Nodes (23): 10. **validate_contract_currency_consistency()**, 11. **validate_fx_confirmation_before_firmado()**, 1. **auto_calculate_contract_fx()**, 2. **log_contract_workflow_transition()**, 3. **prevent_end_date_update_when_active()**, 4. **set_booking_date_on_activate()**, 5. **set_contract_company_currency()**, 6. **trigger_generate_invoices_on_contract_signed()** (+15 more)
-
-### Community 88 - "ExchangeRatesNotificationService"
-Cohesion: 0.15
-Nodes (5): ExchangeRatesScheduler, Cron, Injectable, ExchangeRatesNotificationService, Injectable
 
 ### Community 89 - "StripeController"
 Cohesion: 0.23
@@ -693,31 +718,31 @@ Cohesion: 0.09
 Nodes (22): 1. Base de Datos, 1. Ejecutar Migraciones, 2. Entidades TypeORM, 2. Probar Envío de Factura, 3. Servicio de Facturas (MODIFICADO), 3. Verificar en BD, ✨ Beneficios, 📦 Cambios Implementados (+14 more)
 
 ### Community 91 - "security.module.ts"
-Cohesion: 0.10
-Nodes (14): CoreModule, Global, Module, ipListProviders, IpList, IpListSchema, Prop, Schema (+6 more)
+Cohesion: 0.12
+Nodes (11): CoreModule, Global, Module, ipListProviders, IpList, IpListSchema, Prop, Schema (+3 more)
 
 ### Community 92 - "WorkflowStepDocument"
-Cohesion: 0.09
-Nodes (23): ContractWorkflowHistory, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+15 more)
+Cohesion: 0.22
+Nodes (9): ContractWorkflowHistory, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+1 more)
 
 ### Community 93 - "agents.controller.ts"
 Cohesion: 0.10
 Nodes (18): ApproveRunDto, ApiProperty, IsUUID, RenderEmailDto, ApiProperty, IsEnum, IsObject, IsString (+10 more)
 
 ### Community 94 - "BigQueryConnectionController"
-Cohesion: 0.21
-Nodes (16): BigQueryConnectionController, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete, Get (+8 more)
+Cohesion: 0.11
+Nodes (25): BigQueryConnectionController, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete, Get (+17 more)
 
 ### Community 95 - "clients.controller.ts"
-Cohesion: 0.11
-Nodes (18): AssignEntityResponseDto, AssignEntityToClientDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsUUID (+10 more)
+Cohesion: 0.16
+Nodes (11): AssignEntityResponseDto, AssignEntityToClientDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsUUID (+3 more)
 
 ### Community 96 - "ClientsController"
 Cohesion: 0.21
 Nodes (14): ClientsController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Controller, Delete (+6 more)
 
 ### Community 97 - "DatabaseAnalyzerController"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (15): DatabaseAnalyzerController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiQuery, ApiTags (+7 more)
 
 ### Community 98 - "EmailsController"
@@ -725,20 +750,20 @@ Cohesion: 0.26
 Nodes (13): EmailsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get (+5 more)
 
 ### Community 99 - "InvoiceSchedulerController"
-Cohesion: 0.16
-Nodes (14): InvoiceSchedulerController, ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, Body, Controller (+6 more)
+Cohesion: 0.15
+Nodes (15): InvoiceSchedulerController, ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, Body, Controller (+7 more)
 
 ### Community 100 - "OdooIntegrationLogService"
-Cohesion: 0.13
-Nodes (11): OdooIntegrationLog, OdooIntegrationLogDocument, OdooIntegrationLogSchema, Prop, Schema, CreateOdooIntegrationLogDto, JobStatusResponse, OdooIntegrationLogService (+3 more)
+Cohesion: 0.12
+Nodes (17): Injectable, XmlRpcClientHelper, CompaniesResult, CreateDraftInvoiceResult, EstimateResult, OdooCompany, OdooCompanyFormatted, OdooInvoiceLine (+9 more)
 
 ### Community 101 - "SalesforceTypeOrmService"
-Cohesion: 0.13
-Nodes (3): SalesforceOpportunityLineItem, SalesforceTypeOrmService, Injectable
+Cohesion: 0.07
+Nodes (4): SalesforceAccount, SalesforceOpportunityLineItem, SalesforceTypeOrmService, Injectable
 
 ### Community 102 - "SalesforceService"
-Cohesion: 0.11
-Nodes (5): SalesforceSyncResult, SalesforceService, Injectable, SalesforceSyncService, Injectable
+Cohesion: 0.03
+Nodes (73): AppNotification, AppNotificationSeverity, AppNotificationStatus, Check, Column, Entity, Index, JoinColumn (+65 more)
 
 ### Community 103 - "Módulo Stripe"
 Cohesion: 0.09
@@ -753,8 +778,8 @@ Cohesion: 0.09
 Nodes (22): compilerOptions, allowSyntheticDefaultImports, baseUrl, declaration, emitDecoratorMetadata, esModuleInterop, experimentalDecorators, forceConsistentCasingInFileNames (+14 more)
 
 ### Community 106 - "index.ts"
-Cohesion: 0.11
-Nodes (17): CLIENT_SKILLS, GET_ACTIVE_CLIENTS, CONTRACT_SKILLS, GET_CHURN_REASONS, GET_CHURNED_CLIENTS, GET_CONTRACTS_BY_CLIENT, GET_CONTRACTS_BY_COMPANY, GET_CONTRACTS_EXPIRING (+9 more)
+Cohesion: 0.06
+Nodes (38): CLIENT_SKILLS, GET_ACTIVE_CLIENTS, CMRR_MOMENTUM_SKILLS, GET_CMRR_BY_COMPANY_SKILL, GET_CMRR_SKILL, GET_MRR_MOMENTUM_BY_PRODUCT_SKILL, GET_MRR_MOMENTUM_SKILL, COHORT_SKILLS (+30 more)
 
 ### Community 107 - "OdooConnectionController"
 Cohesion: 0.16
@@ -777,8 +802,8 @@ Cohesion: 0.14
 Nodes (18): IsBooleanString, IsISO8601, SchedulerDistinctErrorDto, SchedulerErrorInvoiceDto, SchedulerInvoiceResultDto, SchedulerReportItemDto, SchedulerReportQueryDto, SchedulerReportResponseDto (+10 more)
 
 ### Community 112 - "SupabaseAuthGuard"
-Cohesion: 0.17
-Nodes (13): SupabaseAuthGuard, Injectable, Public(), AnalyzeTableDTO, ListTablesDTO, ApiProperty, IsOptional, IsString (+5 more)
+Cohesion: 0.28
+Nodes (10): AnalyzeTableDTO, ListTablesDTO, ApiProperty, IsOptional, IsString, GenerateAllTablesDTO, GenerateFromTableDTO, ApiProperty (+2 more)
 
 ### Community 113 - "Resumen de Actualización: Triggers y Funciones de Invoices"
 Cohesion: 0.10
@@ -789,76 +814,76 @@ Cohesion: 0.17
 Nodes (11): ClaudeService, Injectable, SkillExecutor, ClaudeMessage, ClaudeResponse, ConversationContext, Skill, SkillExecutionContext (+3 more)
 
 ### Community 116 - "SalesforceQueryService"
-Cohesion: 0.13
-Nodes (11): SalesforceOpportunityCache, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, SalesforceQueryResult, SalesforceQueryService (+3 more)
+Cohesion: 0.18
+Nodes (18): OdooPartnersController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiResponse (+10 more)
 
 ### Community 117 - "scripts"
-Cohesion: 0.10
-Nodes (20): scripts, audit, build, format, lint, postgres:assets, schema:log, schema:sync (+12 more)
+Cohesion: 0.08
+Nodes (24): scripts, audit, build, format, lint, migration:create, migration:generate, migration:revert (+16 more)
 
 ### Community 118 - "SecurityService"
-Cohesion: 0.15
-Nodes (7): Retry, IpFilterMiddleware, Injectable, SecurityMiddleware, Injectable, SecurityService, Injectable
+Cohesion: 0.16
+Nodes (6): BusinessEvent, EventsService, Injectable, RequestContextMiddleware, Injectable, InjectRepository
 
 ### Community 119 - "StripeClientsController"
-Cohesion: 0.12
-Nodes (11): StripeClientsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Controller, Post, UseGuards (+3 more)
+Cohesion: 0.13
+Nodes (10): StripeClientsController, ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags, Controller, Headers (+2 more)
 
 ### Community 120 - "invoice-processing.controller.ts"
-Cohesion: 0.23
-Nodes (18): ClassifyInvoicesResponseDto, GetInvoicesQueryDto, GetInvoicesResponseDto, GetSampleLinesResponseDto, InvoiceDetailDto, InvoiceLineDto, InvoiceStatsResponseDto, InvoiceStatusCountsResponseDto (+10 more)
+Cohesion: 0.16
+Nodes (6): AuditConfigService, AuditEndpointConfig, Injectable, AuditInterceptor, Inject, Injectable
 
 ### Community 121 - "OdooConnection"
-Cohesion: 0.15
-Nodes (11): OdooConnection, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, Headers, OdooConnectionService (+3 more)
+Cohesion: 0.09
+Nodes (25): ClassifyPartnersResponseDto, ProcessPartnersDto, ProcessPartnersResponseDto, ApiProperty, IsArray, IsNotEmpty, IsOptional, IsString (+17 more)
 
 ### Community 122 - "invoice-processing.service.ts"
-Cohesion: 0.12
-Nodes (16): OdooInvoiceLinesStg, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, InvoiceClassification, InvoiceProcessingProgress (+8 more)
+Cohesion: 0.21
+Nodes (16): InvoiceProcessingController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags, Body (+8 more)
 
 ### Community 123 - "UsersController"
 Cohesion: 0.19
 Nodes (13): ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags, Controller, Get (+5 more)
 
 ### Community 124 - "bigquery.service.ts"
-Cohesion: 0.19
-Nodes (13): QueryDto, ApiProperty, IsNotEmpty, IsOptional, IsString, SyncStripeCustomersRequestDto, SyncStripeCustomersResponseDto, ApiProperty (+5 more)
+Cohesion: 0.07
+Nodes (35): HOLDING_ID_HEADER, ContractItemCandidate, NormalizedQuantityRow, QUANTITY_INTEGRATED_FIELDS, QuantityImportDiff, RETRYABLE_IMPORT_STATUSES, INTEGRATE_QUANTITIES_EXAMPLES, IntegrateQuantitiesDto (+27 more)
 
 ### Community 125 - "DatabaseGeneratorService"
-Cohesion: 0.22
+Cohesion: 0.20
 Nodes (3): TableAnalysisResult, DatabaseGeneratorService, Injectable
 
 ### Community 126 - "salesforce-sync-complete.service.ts"
-Cohesion: 0.12
-Nodes (14): SalesforceTaxIdNormalizationResponseDto, ApiProperty, SalesforceOpportunitiesStg, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn (+6 more)
+Cohesion: 0.21
+Nodes (4): DatabaseAnalyzerService, Injectable, InjectDataSource, InjectDataSource
 
 ### Community 127 - "HoldingEmailSenderSettings"
-Cohesion: 0.11
-Nodes (18): EmailSenderAddress, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+10 more)
+Cohesion: 0.27
+Nodes (15): ASSETS, CATALOG, comillas(), emitirFunciones(), emitirGrants(), emitirPolicies(), emitirSpecialIndex(), emitirTriggers() (+7 more)
 
 ### Community 128 - "PostgreSQL Database Module (Supabase)"
-Cohesion: 0.11
-Nodes (17): 1. Importar el módulo, 2. Usar en servicios, 🧱 Assets SQL no-TypeORM, 🔧 Configuración, ⚠️ Consideraciones Importantes, 🏗️ Crear Entidades, 🔗 Enlaces Útiles, 📁 Estructura (+9 more)
+Cohesion: 0.15
+Nodes (13): 1. Importar el módulo, 2. Usar en servicios, 🔧 Configuración, 🏗️ Crear Entidades, 🔗 Enlaces Útiles, 📁 Estructura, Extender de BaseEntity, 🔍 Métodos del Provider (+5 more)
 
 ### Community 129 - "BigQueryController"
-Cohesion: 0.22
-Nodes (12): BigQueryController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get (+4 more)
+Cohesion: 0.27
+Nodes (16): BigQueryController, ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags, Body (+8 more)
 
 ### Community 130 - "1. Refactorizar ClaudeService"
 Cohesion: 0.11
 Nodes (17): 1. Refactorizar ClaudeService, 2. Actualizar ClaudeModule, 3. Actualizar ClaudeController, a) Actualizar imports, b) Actualizar constructor, c) Reemplazar método `getActiveSkills`, ✅ Completado, Cómo Agregar Nuevas Skills (+9 more)
 
 ### Community 131 - "SalesforceFieldMapping"
-Cohesion: 0.16
-Nodes (11): SALESFORCE_FIELD_MAPPING_DEFAULTS, SALESFORCE_FIELD_MAPPING_OBJECT_TYPES, SalesforceFieldMappingDefault, SalesforceFieldMapping, SalesforceFieldMappingObjectType, SalesforceFieldTransformationKey, Column, CreateDateColumn (+3 more)
+Cohesion: 0.14
+Nodes (12): SalesforceFieldMapping, SalesforceFieldMappingObjectType, SalesforceFieldTransformationKey, Check, Column, Entity, Index, PrimaryGeneratedColumn (+4 more)
 
 ### Community 132 - "salesforce.scheduler.ts"
-Cohesion: 0.16
-Nodes (12): SalesforceScheduler, Cron, Injectable, InjectModel, HoldingResult, JobStatus, JobSummary, SalesforceSchedulerJob (+4 more)
+Cohesion: 0.09
+Nodes (24): SalesforceScheduler, Injectable, InjectModel, HoldingResult, JobStatus, JobSummary, SalesforceSchedulerJob, SalesforceSchedulerJobDocument (+16 more)
 
 ### Community 133 - "CreateStripeConnectionDto"
-Cohesion: 0.15
-Nodes (14): CreateStripeConnectionDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsIn, IsOptional, IsString, IsUUID (+6 more)
+Cohesion: 0.16
+Nodes (10): INTEGRACIONES_SALESFORCE_PROD_SNAPSHOT, ProdTableSnapshot, SalesforceSyncLog, Column, CreateDateColumn, Entity, Index, JoinColumn (+2 more)
 
 ### Community 134 - "Correcciones Aplicadas - Sincronización Stripe"
 Cohesion: 0.12
@@ -873,20 +898,16 @@ Cohesion: 0.12
 Nodes (16): 1. Entidad TypeORM, 2. Migración de Supabase, 3. Script SQL directo, 4. Script de verificación, Archivos, Cómo ejecutar la migración, Estructura de la tabla, Monedas incluidas (+8 more)
 
 ### Community 137 - ".replaceSalesforceStagingBlockedSubscriptions"
-Cohesion: 0.21
-Nodes (10): ApiOperation, Body, Get, Headers, HttpCode, Param, Patch, Put (+2 more)
+Cohesion: 0.05
+Nodes (44): MaxLength, RequestWithUser, CreateAppNotificationDto, NotificationRecipientsDto, ArrayUnique, IsArray, IsBoolean, IsIn (+36 more)
 
 ### Community 138 - "InvoiceTaxValidatorController"
-Cohesion: 0.18
-Nodes (11): InvoiceTaxValidatorController, ApiBearerAuth, ApiOperation, ApiTags, Controller, Get, Headers, Param (+3 more)
-
-### Community 140 - "notifications.controller.ts"
-Cohesion: 0.17
-Nodes (12): RequestWithUser, ListNotificationsDto, ReplaceSalesforceStagingBlockedSubscriptionsDto, ArrayUnique, IsArray, IsBoolean, IsInt, IsOptional (+4 more)
+Cohesion: 0.35
+Nodes (8): createPostgreSqlCliOptions(), createPostgreSqlOptions(), getSchemaSyncEnvironment(), isEnabled(), PostgreSqlEnvironment, resolveSchemaSynchronization(), SchemaSyncEnvironment, toNumber()
 
 ### Community 141 - "ContractAmendment"
-Cohesion: 0.12
-Nodes (16): ContractAmendment, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+8 more)
+Cohesion: 0.21
+Nodes (10): OdooInvoiceUpdateLog, OdooInvoiceUpdateLogDocument, OdooInvoiceUpdateLogSchema, Prop, Schema, OdooWebhookLog, OdooWebhookLogDocument, OdooWebhookLogSchema (+2 more)
 
 ### Community 142 - "SalesforceDuplicateClientEntitiesQueryDto"
 Cohesion: 0.18
@@ -901,40 +922,36 @@ Cohesion: 0.13
 Nodes (14): Acceder al holdingId validado, Aplicar a un controlador completo, Aplicar a un endpoint específico, Archivos relacionados, Consideraciones, Descripción, Ejemplo completo, Funcionamiento (+6 more)
 
 ### Community 145 - "HealthController"
-Cohesion: 0.18
-Nodes (8): HealthCheck, HealthController, ApiTags, Controller, Get, Public, HealthModule, Module
+Cohesion: 0.12
+Nodes (11): HealthCheck, SupabaseAuthGuard, Injectable, Public(), HealthController, ApiTags, Controller, Get (+3 more)
 
 ### Community 146 - "generate-espejo.py"
-Cohesion: 0.15
-Nodes (6): class_name(), kebab(), Generador del ESPEJO de entities (rediseño v2, paso 1 · carril B).  Reglas:   -, (clase, import, grupo) de la tabla destino de una FK: entity existente, espejo d, singular(), target_ref()
+Cohesion: 0.11
+Nodes (12): class_name(), cols_fk(), existing_en_disco(), kebab(), Generador del ESPEJO de entities (rediseño v2, paso 1 · carril B).  Reglas:   -, Inventario de las entities del repo leído del DISCO: tabla → {class, file, impor, `.entity` si el espejo ya fue promovido (existe el archivo), `.espejo` si sigue, (clase, import, grupo) de la tabla destino de una FK: entity existente, espejo d (+4 more)
 
 ### Community 147 - "typeorm-options.ts"
-Cohesion: 0.25
-Nodes (9): syncEntities(), createPostgreSqlCliOptions(), createPostgreSqlOptions(), getSchemaSyncEnvironment(), isEnabled(), PostgreSqlEnvironment, resolveSchemaSynchronization(), SchemaSyncEnvironment (+1 more)
+Cohesion: 0.15
+Nodes (11): MongooseModules, Global, Module, CitiesModule, Module, CitiesProviders, Cities, CitiesSchema (+3 more)
 
 ### Community 148 - "PeruApiController"
-Cohesion: 0.14
-Nodes (11): PeruApiController, ApiBearerAuth, ApiOperation, ApiTags, Body, Controller, Get, HttpCode (+3 more)
+Cohesion: 0.08
+Nodes (25): GetExchangeRatesDto, GetLatestExchangeRatesDto, MonthlyAvgResponseDto, IsDateString, IsInt, IsOptional, IsString, Min (+17 more)
 
 ### Community 149 - "mrr-skills.ts"
-Cohesion: 0.13
-Nodes (14): GET_ARR_SKILL, GET_MRR_BY_CLIENT_SKILL, GET_MRR_BY_COMPANY_SKILL, GET_MRR_BY_CONTRACT_TYPE_SKILL, GET_MRR_BY_COUNTRY_SKILL, GET_MRR_BY_CURRENCY_SKILL, GET_MRR_BY_INDUSTRY_SKILL, GET_MRR_BY_ITEM_TYPE_SKILL (+6 more)
+Cohesion: 0.14
+Nodes (13): GET_ARR_SKILL, GET_MRR_BY_CLIENT_SKILL, GET_MRR_BY_COMPANY_SKILL, GET_MRR_BY_CONTRACT_TYPE_SKILL, GET_MRR_BY_COUNTRY_SKILL, GET_MRR_BY_CURRENCY_SKILL, GET_MRR_BY_INDUSTRY_SKILL, GET_MRR_BY_ITEM_TYPE_SKILL (+5 more)
 
 ### Community 150 - "Módulo Emails (SendGrid)"
 Cohesion: 0.13
 Nodes (14): 1. Obtener Configuración, 2. Verificar Dominio, 3. Verificar Estado, 4. Enviar Email de Prueba, Base de Datos, Características, Configuración, Diferencias con el Módulo Email (Resend) (+6 more)
 
 ### Community 151 - "NotificationsService"
-Cohesion: 0.20
-Nodes (3): NotificationsService, ROLE_SUBSCRIPTION_NOTIFICATION_TYPES, Injectable
-
-### Community 152 - "invoice-tax-validator.service.ts"
-Cohesion: 0.20
-Nodes (8): InvoiceTaxValidationResult, TaxMappingValidationLine, TaxMappingValidationResult, TaxValidationLine, AppliedTaxMapping, TaxMappingResult, TaxMappingService, Injectable
+Cohesion: 0.16
+Nodes (14): Accion, main(), parseArgs(), logSchemaChanges(), assertConnectionMatchesTarget(), extractProjectRef(), KNOWN_SUPABASE_PROJECTS, LOCAL_ENVIRONMENT (+6 more)
 
 ### Community 153 - ".createDraftInvoice"
-Cohesion: 0.13
-Nodes (13): OdooInvoicesController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags (+5 more)
+Cohesion: 0.15
+Nodes (12): OdooConnection, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+4 more)
 
 ### Community 154 - "odoo.schema.ts"
 Cohesion: 0.19
@@ -945,20 +962,20 @@ Cohesion: 0.14
 Nodes (13): Actualizar Tax IDs de Compañías Existentes, Limpiar Mapeos de Productos (Opcional), Notas Importantes, Opción 1: Re-mapear las Compañías (Recomendado), Opción 2: Script SQL Manual, Para Chile (SIMPLIT SPA), Para Colombia (Simpliroute SAS), Para México (SimpliRoute S.A.P.I DE C.V) (+5 more)
 
 ### Community 156 - "CreateAppNotificationDto"
-Cohesion: 0.16
-Nodes (13): MaxLength, CreateAppNotificationDto, NotificationRecipientsDto, ArrayUnique, IsArray, IsBoolean, IsIn, IsObject (+5 more)
+Cohesion: 0.23
+Nodes (18): ClassifyInvoicesResponseDto, GetInvoicesQueryDto, GetInvoicesResponseDto, GetSampleLinesResponseDto, InvoiceDetailDto, InvoiceLineDto, InvoiceStatsResponseDto, InvoiceStatusCountsResponseDto (+10 more)
 
 ### Community 157 - "API Sapi - Gestión de Ingresos Recurrentes para SaaS"
 Cohesion: 0.14
 Nodes (13): API Sapi - Gestión de Ingresos Recurrentes para SaaS, Características Principales, Características Principales, Configuración, Descripción, Documentación API, Ejecución, Estructura del Proyecto (+5 more)
 
 ### Community 158 - "bigquery-connection.controller.ts"
-Cohesion: 0.20
-Nodes (9): CreateBigQueryConnectionDto, ApiProperty, IsBoolean, IsNotEmpty, IsOptional, IsString, TestConnectionResponseDto, ApiProperty (+1 more)
+Cohesion: 0.16
+Nodes (17): ChatMessageDto, MessageHistoryDto, ApiProperty, ApiPropertyOptional, IsArray, IsNotEmpty, IsOptional, IsString (+9 more)
 
 ### Community 159 - "BigQueryService"
-Cohesion: 0.21
-Nodes (4): InjectRepository, BigQueryService, Injectable, InjectRepository
+Cohesion: 0.12
+Nodes (5): BigQueryService, QUANTITY_IMPORT_HASH_FIELDS, Injectable, QuantitiesDateRange, QuantitiesIntegrationResult
 
 ### Community 160 - "🚀 Guía Rápida: Corregir Error de Taxes Incompatibles"
 Cohesion: 0.15
@@ -968,20 +985,24 @@ Nodes (12): 🎯 Alternativa: Validar Antes de Actualizar, 📋 Checklist, ✅ E
 Cohesion: 0.19
 Nodes (7): defaultOptions, RetryOnTimeout(), RetryOptions, Inject, Injectable, RetryOnTimeout, UserIdInterceptor
 
+### Community 162 - "BancoCentralService"
+Cohesion: 0.31
+Nodes (3): ExchangeRatesScheduler, Cron, Injectable
+
 ### Community 163 - ".sendMessage"
-Cohesion: 0.15
-Nodes (11): ClaudeController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, HttpCode (+3 more)
+Cohesion: 0.10
+Nodes (21): ClaudeController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, HttpCode (+13 more)
 
 ### Community 164 - "CreateOdooConnectionDto"
-Cohesion: 0.29
-Nodes (9): CreateOdooConnectionDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID (+1 more)
+Cohesion: 0.17
+Nodes (11): QUANTITY_IMPORT_STATUSES, ListQuantityImportsDto, ApiPropertyOptional, IsIn, IsInt, IsOptional, IsString, Matches (+3 more)
 
 ### Community 165 - "StripeScheduler"
 Cohesion: 0.23
 Nodes (5): StripeInitService, Injectable, StripeScheduler, Cron, Injectable
 
 ### Community 166 - "UserResponseDto"
-Cohesion: 0.28
+Cohesion: 0.26
 Nodes (5): ApiPropertyOptional, UserResponseDto, Injectable, InjectRepository, UsersService
 
 ### Community 167 - "Hallazgos Críticos - Sincronización Stripe"
@@ -989,16 +1010,20 @@ Cohesion: 0.17
 Nodes (11): 🔴 CRÍTICO #1: Campos NOT NULL Faltantes en Subscriptions, 🔴 CRÍTICO #2: Campos NOT NULL Faltantes en Invoices, ✅ Fase 1 Completada: Logs de Debugging, Hallazgos Críticos - Sincronización Stripe, 🟡 IMPORTANTE #3: company_id Hardcodeado, 🟡 IMPORTANTE #4: client_id en client_entities, Inmediatas (Bloquean sincronización):, 🟢 MENOR #5: legal_name usa email (+3 more)
 
 ### Community 168 - "SendMessageDto"
-Cohesion: 0.23
-Nodes (10): MessageDto, SendMessageDto, ApiProperty, ApiPropertyOptional, IsArray, IsNotEmpty, IsOptional, IsString (+2 more)
+Cohesion: 0.16
+Nodes (11): InvoiceTaxValidatorController, ApiBearerAuth, ApiOperation, ApiTags, Controller, Get, Headers, Param (+3 more)
 
 ### Community 169 - "skill-definition.interface.ts"
-Cohesion: 0.17
-Nodes (10): COHORT_SKILLS, GET_COHORT_BOOKING_TO_INVOICE, GET_COHORT_BOOKING_TO_PAYMENT, GET_COHORT_RETENTION, DatabaseFilter, SkillDatabase, SkillParameter, SkillParametersSchema (+2 more)
+Cohesion: 0.15
+Nodes (5): ResolveOdooPartnerByTaxIdResponseDto, OdooPartner, OdooPartnersService, Injectable, normalizeTaxId()
+
+### Community 170 - "InvoiceNotificationService"
+Cohesion: 0.15
+Nodes (11): ProcessInvoicesResponseDto, ExchangeRateInfo, InvoiceNotificationService, Injectable, ExecutionEnvironment, ExecutionSource, InvoiceSchedulerJob, InvoiceSchedulerJobSchema (+3 more)
 
 ### Community 171 - "InvoiceSchedulerGateway"
-Cohesion: 0.21
-Nodes (3): InvoiceSchedulerGateway, WebSocketGateway, WebSocketServer
+Cohesion: 0.15
+Nodes (14): CreateStripeConnectionDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsIn, IsOptional, IsString, IsUUID (+6 more)
 
 ### Community 172 - "🏗️ Sapira v2 — Plan y método del rediseño"
 Cohesion: 0.18
@@ -1009,16 +1034,16 @@ Cohesion: 0.31
 Nodes (8): balanced_end(), ident_cols(), parse_constraint(), parse_index(), build-snapshots.py — convierte las lecturas EN VIVO de prod (MCP de Supabase) en, índice del ')' que cierra el '(' en s[start], split_top(), strip_outer_parens()
 
 ### Community 174 - "Autenticación con Supabase"
-Cohesion: 0.18
-Nodes (10): Autenticación con Supabase, Configuración, Estructura del Usuario, Manejo de Errores, Obtener las Credenciales, Proteger Rutas, Uso del Token desde el Frontend, Uso en Controladores (+2 more)
+Cohesion: 0.17
+Nodes (11): Autenticación con Supabase, Configuración, Endpoints públicos (reCAPTCHA Enterprise), Estructura del Usuario, Manejo de Errores, Obtener las Credenciales, Proteger Rutas, Uso del Token desde el Frontend (+3 more)
 
 ### Community 175 - "🔍 Análisis Detallado por Función"
 Cohesion: 0.18
 Nodes (11): 1.1 `set_contract_company_currency()`, 1.2 `auto_calculate_contract_fx()`, 1.3 `validate_fx_confirmation_before_firmado()`, 1. GESTIÓN DE MONEDAS Y FX, 2.1 `trigger_generate_invoices_on_contract_signed()`, 2.2 `trigger_generate_invoices_on_status_change()`, 2. GENERACIÓN DE FACTURAS, 4.1 `log_contract_workflow_transition()` (+3 more)
 
 ### Community 176 - "HoldingFxPeriodRate"
-Cohesion: 0.18
-Nodes (11): HoldingFxPeriodRate, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+3 more)
+Cohesion: 0.06
+Nodes (31): ContractFxPeriodRate, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+23 more)
 
 ### Community 177 - "EventsController"
 Cohesion: 0.18
@@ -1029,48 +1054,44 @@ Cohesion: 0.18
 Nodes (10): Configuración, Endpoints, Flujo de uso, GET `/email/sender-config`, Módulo Email, POST `/email/check-status`, POST `/email/send-test`, POST `/email/verify-domain` (+2 more)
 
 ### Community 179 - "VerifyDomainDto"
-Cohesion: 0.18
+Cohesion: 0.20
 Nodes (9): ApiProperty, ApiPropertyOptional, IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID (+1 more)
 
-### Community 180 - "EmailsService"
-Cohesion: 0.24
-Nodes (3): EmailsService, Injectable, EmailSenderAddress
-
 ### Community 181 - "invoice-scheduler.controller.ts"
-Cohesion: 0.29
-Nodes (9): SchedulerJobListItemDto, SchedulerJobProgressDto, SchedulerJobStatusDto, StartSchedulerJobResponseDto, ApiProperty, SendInvoicesDto, IsBoolean, IsOptional (+1 more)
+Cohesion: 0.19
+Nodes (15): SchedulerJobListItemDto, SchedulerJobProgressDto, SchedulerJobStatusDto, StartSchedulerJobResponseDto, ApiProperty, InvoiceResultDto, ProcessInvoicesSummaryDto, SchedulerStatusDto (+7 more)
 
 ### Community 182 - "StripeProductMapping"
 Cohesion: 0.18
-Nodes (10): StripeProductMapping, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn (+2 more)
+Nodes (9): GenericVatsService, Injectable, InjectRepository, GenericExportVat, Column, Entity, Index, PrimaryGeneratedColumn (+1 more)
 
 ### Community 183 - "users.controller.ts"
-Cohesion: 0.31
+Cohesion: 0.27
 Nodes (7): GetUserByAuthIdQueryDto, GetUserByEmailQueryDto, ApiProperty, IsEmail, IsUUID, UserMenuContextResponseDto, AppRequest
 
 ### Community 184 - "AiAgentConfig"
-Cohesion: 0.20
-Nodes (10): AiAgentConfig, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+2 more)
+Cohesion: 0.25
+Nodes (7): GET_ACCOUNTS_RECEIVABLE, GET_BILLED_BY_PRODUCT_MONTH, GET_BILLING_SUMMARY, GET_INVOICES_ISSUED_MONTH, GET_INVOICES_OVERDUE, GET_INVOICES_TO_ISSUE, INVOICE_SKILLS
 
 ### Community 185 - "ClaudeSkill"
-Cohesion: 0.20
-Nodes (10): ClaudeSkill, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+2 more)
+Cohesion: 0.18
+Nodes (11): InvoiceClassification, InvoiceProcessingProgress, InvoiceStatus, JobStatus, ProcessInvoicesResult, MappingConfig, MappingEntry, FieldTransformationService (+3 more)
 
 ### Community 186 - "ContractBillingSplit"
-Cohesion: 0.20
-Nodes (10): ContractBillingSplit, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+2 more)
+Cohesion: 0.07
+Nodes (34): SalesforceClientEntityPreviewDto, ApiProperty, IsArray, IsObject, SalesforceLineItemPreviewDto, SalesforceLineItemPreviewRequestDto, ApiProperty, IsArray (+26 more)
 
 ### Community 187 - "ContractFxPeriodRate"
-Cohesion: 0.20
-Nodes (10): ContractFxPeriodRate, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+2 more)
+Cohesion: 0.27
+Nodes (6): CopilotContext, CopilotMessage, CopilotResponse, CopilotSession, SapiraCopilotService, Injectable
 
 ### Community 189 - "CreateClientAgentConfigDto"
-Cohesion: 0.38
-Nodes (9): CreateClientAgentConfigDto, CreateHoldingAgentConfigDto, ApiProperty, IsBoolean, IsEnum, IsObject, IsOptional, IsUUID (+1 more)
+Cohesion: 0.13
+Nodes (13): OdooInvoicesController, ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags (+5 more)
 
 ### Community 191 - "CreateClientDto"
-Cohesion: 0.20
-Nodes (10): CreateClientDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsDateString, IsNotEmpty, IsObject, IsOptional (+2 more)
+Cohesion: 0.14
+Nodes (13): ApiBody, Body, Patch, CreateClientDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsDateString (+5 more)
 
 ### Community 192 - "CreateSenderAddressDto"
 Cohesion: 0.20
@@ -1101,28 +1122,24 @@ Cohesion: 0.22
 Nodes (9): 🟡 ADVERTENCIA: Condición de Churn Podría Ser Más Robusta, 🟡 ADVERTENCIA: Manejo de Errores Inconsistente, 🟡 ADVERTENCIA: Orden de Ejecución de Triggers, 🟡 ADVERTENCIA: Trigger de Workflow Solo en UPDATE, 🟡 ADVERTENCIA: Validación de Moneda Puede Fallar en INSERT, 🔴 CRÍTICO: Duplicación de Lógica de Generación de Facturas, 🟢 INFORMACIÓN: Campo `is_total_row` en Revenue Schedule, 🟢 INFORMACIÓN: Dependencias Externas No Verificadas (+1 more)
 
 ### Community 199 - "HoldingSettings"
-Cohesion: 0.22
-Nodes (9): HoldingSettings, Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn (+1 more)
+Cohesion: 0.27
+Nodes (3): FiscalPositionsService, Injectable, InjectRepository
 
 ### Community 200 - "ContactPreference"
-Cohesion: 0.22
-Nodes (8): ContactPreference, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn
+Cohesion: 0.18
+Nodes (7): Catch, AppModule, Module, swaggerConfig, GlobalExceptionFilter, Injectable, bootstrap()
 
 ### Community 201 - "ChurnReason"
-Cohesion: 0.22
-Nodes (8): ChurnReason, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn
-
-### Community 202 - "ContractLifecycleEvent"
-Cohesion: 0.22
-Nodes (9): ContractLifecycleEvent, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+1 more)
+Cohesion: 0.14
+Nodes (14): 10 · Comentarios en los espejos (2026-09-14) — 343 → 118 sentencias, 11 · E4 — promoción de espejos (2026-09-14) — 118 → 104 sentencias, 1 · `salesforce_opportunities_cache` (2026-09-09) — 45 → 1 sentencia, 2 · `integration_logs` (2026-09-09) — 26 → 0 sentencias, 3 · `exchange_rates` (2026-09-09) — 20 → 0 sentencias, 4 · Los 161 índices sin declarar (2026-09-13) — 218 → 66 sentencias de índice, 5 · `salesforce_connections` (2026-09-13) — 17 → 0 sentencias, 6 · `invoices` (2026-09-13) — 58 → 3 sentencias (+6 more)
 
 ### Community 203 - "ContractNotification"
-Cohesion: 0.22
-Nodes (9): ContractNotification, Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+1 more)
+Cohesion: 0.03
+Nodes (75): ChurnReason, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn (+67 more)
 
 ### Community 204 - "InvoiceCollectionSettings"
-Cohesion: 0.22
-Nodes (8): InvoiceCollectionSettings, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn
+Cohesion: 0.17
+Nodes (12): Apliqué algo al entorno equivocado, 🗑️ Borrar algo, 🗺️ Deudas conocidas, 🧭 ¿Dónde va mi cambio?, 🤝 Frontera con `front-sapira-vite`, Fue un asset ya aplicado, Fue una migración ya aplicada, 🧪 Guardas automáticas (+4 more)
 
 ### Community 205 - "AgentsScheduler"
 Cohesion: 0.31
@@ -1133,8 +1150,8 @@ Cohesion: 0.33
 Nodes (8): CreateSkillDto, ApiProperty, ApiPropertyOptional, IsNotEmpty, IsObject, IsOptional, IsString, UpdateSkillDto
 
 ### Community 207 - "QueryClientsDto"
-Cohesion: 0.22
-Nodes (8): QueryClientsDto, ApiPropertyOptional, IsInt, IsOptional, IsString, IsUUID, Min, Type
+Cohesion: 0.14
+Nodes (13): QueryClientsDto, ApiPropertyOptional, IsInt, IsOptional, IsString, IsUUID, Min, Type (+5 more)
 
 ### Community 208 - "CreateDomainDto"
 Cohesion: 0.22
@@ -1149,8 +1166,8 @@ Cohesion: 0.36
 Nodes (7): GetUserHoldingsQueryDto, ApiProperty, ApiPropertyOptional, IsOptional, IsUUID, UpdateSelectedHoldingDto, UserHoldingResponseDto
 
 ### Community 211 - ".getAccounts"
-Cohesion: 0.44
-Nodes (3): ApiQuery, Get, Query
+Cohesion: 0.21
+Nodes (3): InvoiceSchedulerGateway, WebSocketGateway, WebSocketServer
 
 ### Community 212 - "ValidateProductImagesPipe"
 Cohesion: 0.28
@@ -1176,41 +1193,41 @@ Nodes (4): BusinessException, BusinessExceptionResponse, DuplicateEntityExceptio
 Cohesion: 0.25
 Nodes (7): Análisis de Triggers y Funciones de Contratos, 🔗 Dependencias entre Triggers, Fortalezas del Sistema, 📊 Matriz de Impacto por Estado del Contrato, 📝 Notas Finales, Próximos Pasos Sugeridos, Áreas de Mejora
 
-### Community 218 - "FinancialSettings"
-Cohesion: 0.25
-Nodes (7): FinancialSettings, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique, UpdateDateColumn
+### Community 218 - "CreateOdooConnectionDto"
+Cohesion: 0.32
+Nodes (9): CreateOdooConnectionDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID (+1 more)
 
-### Community 219 - "ContractClaus"
-Cohesion: 0.25
-Nodes (8): ContractClaus, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn
+### Community 219 - "fetch-catalog.ts"
+Cohesion: 0.29
+Nodes (10): buildCatalog(), buildListTables(), fetchAll(), groupByTable(), main(), QUERIES, QueryName, RAW_DIR (+2 more)
 
-### Community 220 - "ContractTemplate"
-Cohesion: 0.25
-Nodes (8): ContractTemplate, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn
+### Community 220 - "AuditService"
+Cohesion: 0.22
+Nodes (7): Body, Post, Req, AuditService, Inject, Injectable, AuditDocument
 
 ### Community 221 - "FxApiSyncLog"
-Cohesion: 0.25
-Nodes (8): FxApiSyncLog, Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn
+Cohesion: 0.27
+Nodes (8): PaginatedResponseDTO, PaginationDTO, ApiProperty, IsInt, IsOptional, IsString, Min, Type
 
-### Community 222 - "invoice-skills.ts"
-Cohesion: 0.25
-Nodes (7): GET_ACCOUNTS_RECEIVABLE, GET_BILLED_BY_PRODUCT_MONTH, GET_BILLING_SUMMARY, GET_INVOICES_ISSUED_MONTH, GET_INVOICES_OVERDUE, GET_INVOICES_TO_ISSUE, INVOICE_SKILLS
+### Community 222 - "AiAgentConfig"
+Cohesion: 0.20
+Nodes (10): AiAgentConfig, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+2 more)
 
-### Community 223 - ".assignEntity"
-Cohesion: 0.32
-Nodes (4): ApiBody, Body, Post, Request
+### Community 223 - "UserViewPreference"
+Cohesion: 0.20
+Nodes (10): Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique (+2 more)
 
 ### Community 224 - "ListDomainsDto"
 Cohesion: 0.25
 Nodes (7): ListDomainsDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsUUID
 
 ### Community 225 - "ListSenderAddressesDto"
-Cohesion: 0.25
+Cohesion: 0.22
 Nodes (7): ListSenderAddressesDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsNotEmpty, IsOptional, IsUUID
 
 ### Community 226 - "invoice-scheduler.scheduler.ts"
-Cohesion: 0.32
-Nodes (4): InvoiceSchedulerInitService, Injectable, InvoiceSchedulerScheduler, Injectable
+Cohesion: 0.20
+Nodes (10): OdooObjectMapping, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+2 more)
 
 ### Community 227 - "GetInvoicesDto"
 Cohesion: 0.25
@@ -1224,33 +1241,33 @@ Nodes (8): GetSubscriptionsDto, ApiPropertyOptional, IsInt, IsOptional, IsString
 Cohesion: 0.32
 Nodes (4): Injectable, ValidateFilePipe, ValidateFilePipeTransform, ValidateFilesPipe
 
-### Community 230 - "log.interface.ts"
-Cohesion: 0.52
-Nodes (6): ApiLogProperties, AuthLogProperties, BaseLogProperties, DocumentLogProperties, ErrorLogProperties, SecurityLogProperties
+### Community 230 - "CreateClientAgentConfigDto"
+Cohesion: 0.38
+Nodes (9): CreateClientAgentConfigDto, CreateHoldingAgentConfigDto, ApiProperty, IsBoolean, IsEnum, IsObject, IsOptional, IsUUID (+1 more)
 
 ### Community 231 - "Panorama Global de las Lógicas"
 Cohesion: 0.29
 Nodes (7): 1. **Gestión de Monedas y FX** (3 triggers), 2. **Generación de Facturas** (2 triggers), 3. **Validaciones de Integridad** (3 triggers), 4. **Gestión de Workflow y Fechas** (2 triggers), 5. **Revenue Schedule** (2 triggers), Panorama Global de las Lógicas, 📊 Resumen Ejecutivo
 
-### Community 232 - "ContractChangeLog"
-Cohesion: 0.29
-Nodes (7): ContractChangeLog, Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn
+### Community 232 - "apply-postgresql-assets.ts"
+Cohesion: 0.36
+Nodes (8): CliArguments, main(), parseArguments(), printResult(), requireValue(), assertTargetAllowed(), AssetMode, AssetRunnerOptions
 
-### Community 233 - "ContractItemChangeLog"
-Cohesion: 0.29
-Nodes (7): ContractItemChangeLog, Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn
+### Community 233 - "AuditFilterDTO"
+Cohesion: 0.22
+Nodes (8): AuditFilterDTO, ApiProperty, IsDateString, IsInt, IsOptional, IsString, Min, Type
 
 ### Community 234 - "Entities espejo de la base de datos (rediseño v2 · paso 1 · carril B)"
-Cohesion: 0.29
-Nodes (6): Convención de un espejo (tablas sin entity), Cómo se genera (reproducible, sin tocar la DB), Entities espejo de la base de datos (rediseño v2 · paso 1 · carril B), Estructura (una subcarpeta por módulo del doc 04/00) — 130 tablas = 55 con entity existente + 75 espejos creados, Las tres lecturas (todas sin escribir nada), 🔴 Reglas que no se negocian
+Cohesion: 0.25
+Nodes (7): Convención de un espejo (tablas sin entity), Cómo se genera (reproducible, sin tocar la DB), Entities espejo de la base de datos (rediseño v2 · paso 1 · carril B), Estructura (una subcarpeta por módulo del doc 04/00) — 130 tablas = 55 con entity existente + 75 espejos creados, Las tres lecturas (todas sin escribir nada), 🔴 Reglas que no se negocian, Tablas propias de api-sapira (NO son espejos)
 
 ### Community 235 - "client.interface.ts"
-Cohesion: 0.33
-Nodes (5): IClient, IClientEntity, IClientEntityClient, IClientWithEntities, IPaginatedClients
+Cohesion: 0.22
+Nodes (8): ContactPreference, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn
 
 ### Community 236 - "NotificationsController"
-Cohesion: 0.29
-Nodes (6): NotificationsController, ApiBearerAuth, ApiHeader, ApiTags, Controller, UseGuards
+Cohesion: 0.22
+Nodes (8): InvoiceCollectionSettings, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn
 
 ### Community 237 - "UpdateSecurityPolicyDto"
 Cohesion: 0.29
@@ -1261,8 +1278,8 @@ Cohesion: 0.33
 Nodes (5): collection, compilerOptions, deleteOutDir, $schema, sourceRoot
 
 ### Community 239 - "common.interface.ts"
-Cohesion: 0.40
-Nodes (5): Auditable, FilterParams, Metadata, PaginationParams, Timestampable
+Cohesion: 0.33
+Nodes (6): Auditable, FilterParams, Identifiable, Metadata, PaginationParams, Timestampable
 
 ### Community 240 - "🎯 Recomendaciones Prioritarias"
 Cohesion: 0.33
@@ -1306,7 +1323,7 @@ Nodes (5): A · Tablas que YA tenían entity en el repo (5) — no se tocaron ni
 
 ### Community 250 - "Módulo 10 · Integraciones — otras — 4 tablas de prod (2026-08-22)"
 Cohesion: 0.33
-Nodes (5): A · Tablas que YA tenían entity en el repo (3) — no se tocaron ni se duplicaron, B · Tablas SIN entity → espejos creados (1), APAGADOS, C · Columnas exactas de cada espejo (1 tablas), Módulo 10 · Integraciones — otras — 4 tablas de prod (2026-08-22), Verificación (sin conexión a la DB)
+Nodes (5): A · Tablas que YA tenían entity en el repo (2) — no se tocaron ni se duplicaron, B · Tablas SIN entity → espejos creados (1), APAGADOS, C · Columnas exactas de cada espejo (1 tablas), Módulo 10 · Integraciones — otras — 3 tablas de prod (2026-08-22), Verificación (sin conexión a la DB)
 
 ### Community 251 - "Módulo 10 · Integraciones — Salesforce — 12 tablas de prod (2026-08-22)"
 Cohesion: 0.33
@@ -1329,24 +1346,24 @@ Cohesion: 0.33
 Nodes (5): A · Tablas que YA tenían entity en el repo (0) — no se tocaron ni se duplicaron, B · Tablas SIN entity → espejos creados (2), APAGADOS, C · Columnas exactas de cada espejo (2 tablas), Módulo 12 · Suscripciones (Stripe) — 2 tablas de prod (2026-08-22), Verificación (sin conexión a la DB)
 
 ### Community 256 - "log-event.interface.ts"
-Cohesion: 0.53
-Nodes (5): ApiLogProperties, BaseLogProperties, DocumentLogProperties, LogType, SecurityLogProperties
+Cohesion: 0.22
+Nodes (9): SalesforceOpportunityCache, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+1 more)
 
 ### Community 257 - "agent.interface.ts"
 Cohesion: 0.33
 Nodes (5): Agent, AgentConfig, AgentMessage, AgentRun, ClientAgentConfig
 
-### Community 258 - "cmrr-momentum-skills.ts"
-Cohesion: 0.33
-Nodes (5): CMRR_MOMENTUM_SKILLS, GET_CMRR_BY_COMPANY_SKILL, GET_CMRR_SKILL, GET_MRR_MOMENTUM_BY_PRODUCT_SKILL, GET_MRR_MOMENTUM_SKILL
+### Community 258 - "odoo-integration-log.service.ts"
+Cohesion: 0.25
+Nodes (7): OdooIntegrationLog, OdooIntegrationLogSchema, Prop, Schema, CreateOdooIntegrationLogDto, JobStatusResponse, UpdateOdooIntegrationLogDto
 
 ### Community 259 - "revenue-skills.ts"
-Cohesion: 0.33
-Nodes (5): GET_DEFERRED_BALANCE_SKILL, GET_RECOGNIZED_NON_RECURRING_BY_CLIENT_SKILL, GET_RECOGNIZED_REVENUE_SKILL, GET_UNBILLED_BALANCE_SKILL, REVENUE_SKILLS
+Cohesion: 0.25
+Nodes (7): FinancialSettings, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique, UpdateDateColumn
 
-### Community 260 - "OdooInvoicesStg"
-Cohesion: 0.33
-Nodes (6): OdooInvoicesStg, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn
+### Community 260 - "ReferenceRequest"
+Cohesion: 0.25
+Nodes (7): ReferenceRequest, Check, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn
 
 ### Community 261 - "StripeService"
 Cohesion: 0.60
@@ -1357,8 +1374,8 @@ Cohesion: 0.33
 Nodes (3): Injectable, ValidateImagePipe, ValidateImagesPipe
 
 ### Community 264 - "Sapira API Guide"
-Cohesion: 0.40
-Nodes (4): Convenciones, Reglas base, Sapira API Guide, Stack
+Cohesion: 0.33
+Nodes (5): Base de datos y esquema, Convenciones, Reglas base, Sapira API Guide, Stack
 
 ### Community 265 - "Regla de referencias por pais en payload Odoo"
 Cohesion: 0.40
@@ -1380,6 +1397,10 @@ Nodes (5): AFTER INSERT OR UPDATE, AFTER UPDATE, BEFORE INSERT OR UPDATE, BEFORE
 Cohesion: 0.50
 Nodes (4): tsconfig-paths, paths, @/*, @types/*
 
+### Community 270 - "indices-declarados.spec.ts"
+Cohesion: 0.25
+Nodes (5): CATALOGO, IndiceCatalogo, RAIZ, SPECIAL_INDEX, TablaCatalogo
+
 ### Community 271 - "3. VALIDACIONES DE INTEGRIDAD"
 Cohesion: 0.50
 Nodes (4): 3.1 `prevent_end_date_update_when_active()`, 3.2 `validate_contract_currency_consistency()`, 3.3 `validate_fx_confirmation_before_firmado()`, 3. VALIDACIONES DE INTEGRIDAD
@@ -1397,8 +1418,8 @@ Cohesion: 0.50
 Nodes (3): Estructura, Generación Automática, Políticas RLS (Row Level Security)
 
 ### Community 275 - "Notificaciones generales"
-Cohesion: 0.50
-Nodes (3): Dependencias de datos, Endpoints, Notificaciones generales
+Cohesion: 0.33
+Nodes (5): Dependencias de datos, Endpoints, Entrega en tiempo real, Notificaciones generales, Tipos suscribibles por rol
 
 ### Community 278 - "multer.d.ts"
 Cohesion: 0.50
@@ -1408,29 +1429,97 @@ Nodes (3): Express, File, Multer
 Cohesion: 0.50
 Nodes (3): Express, Request, User
 
+### Community 280 - "apply-rls-policies.md"
+Cohesion: 0.25
+Nodes (7): ApiPropertyOptional, IsBoolean, IsDateString, IsObject, IsOptional, IsString, UpdateClientDto
+
 ### Community 282 - "5. REVENUE SCHEDULE"
 Cohesion: 0.67
 Nodes (3): 5.1 `trigger_revenue_schedule_on_contract_activation()`, 5.2 `trigger_rsm_on_churn()`, 5. REVENUE SCHEDULE
 
+### Community 301 - "Cambio: `false` de Odoo tapaba el error de "cliente sin email" al enviar facturas"
+Cohesion: 0.29
+Nodes (6): Cambio: `false` de Odoo tapaba el error de "cliente sin email" al enviar facturas, Cobertura, Contexto, Contrato de errores, Corrección, Impacto observable
+
+### Community 302 - "audit-usage.ts"
+Cohesion: 0.52
+Nodes (6): auditarFuncion(), auditarTabla(), main(), referenciasEnCodigo(), REPOS, tablasSinLecturas()
+
+### Community 303 - "DeleteDomainDto"
+Cohesion: 0.33
+Nodes (4): DeleteDomainDto, ApiProperty, IsNotEmpty, IsUUID
+
+### Community 304 - "GetSubscriptionByIdDto"
+Cohesion: 0.52
+Nodes (6): ApiLogProperties, AuthLogProperties, BaseLogProperties, DocumentLogProperties, ErrorLogProperties, SecurityLogProperties
+
+### Community 305 - "GuardsModule"
+Cohesion: 0.29
+Nodes (6): CreateAuditDto, ApiProperty, IsNotEmpty, IsObject, IsOptional, IsString
+
+### Community 306 - "ClientEntityTaxIdNormalizationConflict"
+Cohesion: 0.33
+Nodes (5): ClientEntityTaxIdNormalizationConflict, Column, Entity, PrimaryGeneratedColumn, Unique
+
+### Community 307 - "🧱 Assets SQL no-TypeORM"
+Cohesion: 0.33
+Nodes (6): 🧱 Assets SQL no-TypeORM, Crear una tabla nueva, Deudas conocidas del corpus, Eliminar una tabla, una función u otro objeto, Guardas del corpus, Procedimiento
+
+### Community 308 - "DeleteSenderAddressDto"
+Cohesion: 0.33
+Nodes (4): DeleteSenderAddressDto, ApiProperty, IsNotEmpty, IsUUID
+
+### Community 309 - "api-sapira — Reglas obligatorias"
+Cohesion: 0.40
+Nodes (4): api-sapira — Reglas obligatorias, Eliminar una tabla, función, trigger o policy, Esquema de base de datos, Reglas duras
+
+### Community 310 - "AuditController"
+Cohesion: 0.40
+Nodes (5): AuditController, ApiBearerAuth, ApiTags, Controller, UseGuards
+
+### Community 311 - "REGISTRO-ALINEACION — entities que se alinean contra producción"
+Cohesion: 0.20
+Nodes (7): Cómo se usa este registro, Divergencia deliberada pendiente de aplicar, Espejos (64 inertes tras E4), Falsos positivos conocidos de `schema:log`, Notas, Orden sugerido, REGISTRO-ALINEACION — entities que se alinean contra producción
+
+### Community 312 - "DeviceInfoInterceptor"
+Cohesion: 0.40
+Nodes (3): DeviceInfo, DeviceInfoInterceptor, Injectable
+
+### Community 313 - "📝 Recetas"
+Cohesion: 0.40
+Nodes (5): Agregar una columna, Crear una tabla nueva, Promover un espejo, 📝 Recetas, Una función, un trigger o una policy
+
+### Community 314 - "🔍 Cómo se revisa una migración generada"
+Cohesion: 0.40
+Nodes (5): 🔍 Cómo se revisa una migración generada, Cómo verifico que quedó bien, El procedimiento, Lo que nunca se aplica sin autorización explícita, Qué vas a ver que NO es tu cambio
+
+### Community 315 - "⚠️ Consideraciones Importantes"
+Cohesion: 0.40
+Nodes (5): ⚠️ Consideraciones Importantes, Migraciones, `migration:generate` vs `migration:create`, Performance, Seguridad
+
+### Community 321 - ".syncStripeCustomerIds"
+Cohesion: 0.50
+Nodes (3): ApiHeader, Headers, Post
+
 ## Knowledge Gaps
-- **963 isolated node(s):** `$schema`, `collection`, `sourceRoot`, `deleteOutDir`, `name` (+958 more)
+- **1065 isolated node(s):** `$schema`, `collection`, `sourceRoot`, `deleteOutDir`, `name` (+1060 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **26 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `SupabaseAuthGuard` connect `SupabaseAuthGuard` to `odoo-partners.service.ts`, `Device`, `CreateStripeConnectionDto`, `invoices.service.ts`, `notifications.controller.ts`, `app.module.ts`, `audit.controller.ts`, `event.interface.ts`, `SapiraCopilotService`, `exchange-rates.service.ts`, `email.controller.ts`, `StripeStagingController`, `cities.controller.ts`, `invoice-tax-validator.service.ts`, `bigquery-connection.controller.ts`, `salesforce.controller.ts`, `CreateOdooConnectionDto`, `odoo.dto.ts`, `SendMessageDto`, `fiscal-positions.service.ts`, `SyncStripeDataDto`, `invoice-scheduler.controller.ts`, `stripe.service.ts`, `users.controller.ts`, `emails.service.ts`, `SubscriptionQueryDto`, `DashboardService`, `stripe-sync.controller.ts`, `UserHoldingResponseDto`, `salesforce-mapping.service.ts`, `salesforce-staging.controller.ts`, `agents.controller.ts`, `clients.controller.ts`, `StripeClientsController`, `invoice-processing.controller.ts`, `bigquery.service.ts`?**
-  _High betweenness centrality (0.078) - this node is a cross-community bridge._
-- **Why does `CompanyHolding` connect `CompanyHolding` to `espejo.existing.ts`, `invoice-scheduler.service.ts`, `espejo.index.ts`, `index.ts`, `index.ts`, `notifications.service.ts`, `ContractAmendment`, `index.ts`, `InvoicesLegacy`, `BankMovement`, `AccountingPeriodCutoff`, `Subscription`, `index.ts`, `HoldingFxPeriodRate`, `ClaudeSkill`, `ContractBillingSplit`, `ContractFxPeriodRate`, `HoldingSettings`, `HoldingsService`, `ContractLifecycleEvent`, `ContractNotification`, `bigquery.module.ts`, `ContractClaus`, `WorkflowStepDocument`, `ContractTemplate`, `FxApiSyncLog`, `HoldingEmailSenderSettings`?**
-  _High betweenness centrality (0.061) - this node is a cross-community bridge._
-- **Why does `User` connect `CompanyHolding` to `espejo.existing.ts`, `invoice-scheduler.service.ts`, `AccountingPeriodCutoff`, `espejo.index.ts`, `index.ts`, `index.ts`, `ContractChangeLog`, `ContractItemChangeLog`, `ContractNotification`, `notifications.service.ts`, `UserResponseDto`, `WorkflowStepDocument`, `HoldingFxPeriodRate`, `users.controller.ts`, `index.ts`, `HoldingEmailSenderSettings`, `InvoicesLegacy`, `BankMovement`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+- **Why does `SupabaseAuthGuard` connect `HealthController` to `espejo.existing.ts`, `Device`, `.replaceSalesforceStagingBlockedSubscriptions`, `invoices.service.ts`, `app.module.ts`, `event.interface.ts`, `exchange-rates.service.ts`, `PeruApiController`, `email.controller.ts`, `StripeStagingController`, `cities.controller.ts`, `CreateAppNotificationDto`, `bigquery-connection.controller.ts`, `OdooPartnersService`, `.sendMessage`, `odoo.dto.ts`, `fiscal-positions.service.ts`, `InvoiceSchedulerGateway`, `SyncStripeDataDto`, `invoice-scheduler.controller.ts`, `stripe.service.ts`, `users.controller.ts`, `emails.service.ts`, `ContractBillingSplit`, `SubscriptionQueryDto`, `GenericRLSService`, `DashboardService`, `stripe-sync.controller.ts`, `audit.module.ts`, `UserHoldingResponseDto`, `InvoiceProcessingService`, `salesforce-mapping.service.ts`, `salesforce-staging.controller.ts`, `CreateOdooConnectionDto`, `FxApiSyncLog`, `agents.controller.ts`, `BigQueryConnectionController`, `clients.controller.ts`, `SupabaseAuthGuard`, `OdooConnection`, `bigquery.service.ts`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `CompanyHolding` connect `CompanyHolding` to `espejo.existing.ts`, `log-event.interface.ts`, `CreateStripeConnectionDto`, `espejo.index.ts`, `index.ts`, `index.ts`, `SiiService`, `notifications.service.ts`, `salesforce.service.ts`, `.createDraftInvoice`, `index.ts`, `InvoicesLegacy`, `BankMovement`, `AccountingPeriodCutoff`, `SalesforceMappingService`, `Subscription`, `index.ts`, `HoldingFxPeriodRate`, `odoo.service.ts`, `SalesforceStagingController`, `OdooController`, `HoldingsService`, `bigquery.module.ts`, `ContractNotification`, `audit.module.ts`, `InvoiceProcessingController`, `InvoiceProcessingService`, `invoice-scheduler.scheduler.ts`, `SalesforceService`?**
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
+- **Why does `User` connect `SalesforceService` to `CompanyHolding`, `SalesforceStagingController`, `AccountingPeriodCutoff`, `espejo.index.ts`, `UserResponseDto`, `index.ts`, `ContractNotification`, `notifications.service.ts`, `index.ts`, `HoldingFxPeriodRate`, `audit.module.ts`, `InvoiceProcessingService`, `users.controller.ts`, `index.ts`, `BankMovement`, `InvoicesLegacy`, `UserViewPreference`?**
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
 - **What connects `$schema`, `collection`, `sourceRoot` to the rest of the system?**
-  _967 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1072 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `espejo.existing.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.03791218479985893 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08602150537634409 - nodes in this community are weakly interconnected._
 - **Should `CompanyHolding` be split into smaller, more focused modules?**
-  _Cohesion score 0.060399917542774684 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08488241881298993 - nodes in this community are weakly interconnected._
 - **Should `invoice-scheduler.service.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.03414948453608247 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07195121951219512 - nodes in this community are weakly interconnected._

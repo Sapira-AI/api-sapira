@@ -81,11 +81,6 @@
   },
   "constraints": [
    {
-    "name": "subscriptions_status_check",
-    "type": "c",
-    "expr": "status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'paused'::text, 'unpaid'::text, 'trialing'::text, 'incomplete'::text, 'incomplete_expired'::text])"
-   },
-   {
     "name": "subscriptions_client_entity_id_fkey",
     "type": "f",
     "ondelete": "r",
@@ -126,6 +121,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "subscriptions_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'paused'::text, 'unpaid'::text, 'trialing'::text, 'incomplete'::text, 'incomplete_expired'::text])"
    },
    {
     "name": "uq_subscriptions_holding_external",
@@ -214,42 +214,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's subscriptions",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can insert subscriptions for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "Users can update their holding's subscriptions",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can view their holding's subscriptions",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -293,6 +293,13 @@
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
+    "name": "subscription_items_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
     "name": "subscription_items_product_id_fkey",
     "type": "f",
     "ondelete": "r",
@@ -305,13 +312,6 @@
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE"
-   },
-   {
-    "name": "subscription_items_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
    },
    {
     "name": "uq_subscription_items_holding_external",
@@ -376,42 +376,42 @@
   "policies_detail": [
    {
     "name": "Users can delete their holding's subscription items",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can insert subscription items for their holdings",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "Users can update their holding's subscription items",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "Users can view their holding's subscription items",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]

@@ -17,11 +17,7 @@ export class NotificationsController {
 
 	@Get()
 	@ApiOperation({ summary: 'Listar las notificaciones del usuario autenticado' })
-	async list(
-		@Headers('x-holding-id') holdingId: string,
-		@Request() request: RequestWithUser,
-		@Query() query: ListNotificationsDto
-	) {
+	async list(@Headers('x-holding-id') holdingId: string, @Request() request: RequestWithUser, @Query() query: ListNotificationsDto) {
 		return this.notificationsService.listForAuthenticatedUser(holdingId, request.user?.id || request.user?.sub, query);
 	}
 
@@ -45,11 +41,7 @@ export class NotificationsController {
 
 	@Get(':notificationId')
 	@ApiOperation({ summary: 'Obtener el detalle de una notificación propia' })
-	async getOne(
-		@Headers('x-holding-id') holdingId: string,
-		@Request() request: RequestWithUser,
-		@Param('notificationId') notificationId: string
-	) {
+	async getOne(@Headers('x-holding-id') holdingId: string, @Request() request: RequestWithUser, @Param('notificationId') notificationId: string) {
 		return this.notificationsService.getForAuthenticatedUser(holdingId, request.user?.id || request.user?.sub, notificationId);
 	}
 

@@ -27,11 +27,12 @@ import { BancoCentralModule } from './modules/banco-central/banco-central.module
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { ClaudeModule } from './modules/claude/claude.module';
 import { ClientsModule } from './modules/clients';
-import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { EmailModule } from './modules/email/email.module';
 import { EmailsModule } from './modules/emails/emails.module';
+import { FacturaModule } from './modules/factura/factura.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -89,6 +90,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		DatabaseAnalyzerModule,
 		DashboardModule,
 		PostgreSQLDatabaseModule,
+		FacturaModule,
 		HoldingsModule,
 		InvoicesModule,
 		NotificationsModule,

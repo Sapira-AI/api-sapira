@@ -2,9 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
+
 import { CreateStripeConnectionDto } from './dtos/create-stripe-connection.dto';
 import { UpdateStripeConnectionDto } from './dtos/update-stripe-connection.dto';
-import { StripeConnection } from './entities/stripe-connection.entity';
 
 @Injectable()
 export class StripeConnectionService {

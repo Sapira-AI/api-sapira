@@ -3,22 +3,25 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
+import { Repository } from 'typeorm';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { getCorsOrigins } from '@/core/config/cors-origins';
+import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
-import { AppNotification } from './entities/app-notification.entity';
-
-const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
-	.split(',')
-	.map((origin) => origin.trim())
-	.filter(Boolean);
+export const NOTIFICATION_EVENTS = {
+	connected: 'connected',
+	unauthorized: 'unauthorized',
+	created: 'notification:created',
+	read: 'notification:read',
+	updated: 'notification:updated',
+} as const;
 
 @WebSocketGateway({
 	namespace: '/notifications',
 	cors: {
-		origin: frontendOrigins,
+		origin: getCorsOrigins(),
 		credentials: true,
 	},
 })
@@ -48,27 +51,27 @@ export class NotificationsGateway implements OnGatewayConnection {
 	async handleConnection(client: Socket) {
 		const token = this.getAccessToken(client);
 		if (!token) {
-			return client.disconnect(true);
+			return this.rejectConnection(client, 'Token de acceso requerido');
 		}
 
 		const { data, error } = await this.supabase.auth.getUser(token);
 		if (error || !data.user) {
-			return client.disconnect(true);
+			return this.rejectConnection(client, 'Sesión expirada o inválida');
 		}
 
 		const user = await this.userRepository.findOne({ where: { auth_id: data.user.id } });
 		if (!user) {
-			return client.disconnect(true);
+			return this.rejectConnection(client, 'Usuario autenticado no encontrado');
 		}
 
 		await client.join(this.userRoom(user.id));
-		client.emit('connected', { userId: data.user.id });
+		client.emit(NOTIFICATION_EVENTS.connected, { userId: data.user.id });
 		this.logger.debug(`Cliente ${client.id} conectado a notificaciones para usuario ${user.id}`);
 	}
 
 	emitNotificationCreated(holdingId: string, recipientUserIds: string[], notification: AppNotification) {
 		for (const userId of recipientUserIds) {
-			this.server.to(this.userRoom(userId)).emit('notification:created', {
+			this.server.to(this.userRoom(userId)).emit(NOTIFICATION_EVENTS.created, {
 				holdingId,
 				notification: {
 					...notification,
@@ -76,6 +79,23 @@ export class NotificationsGateway implements OnGatewayConnection {
 				},
 			});
 		}
+	}
+
+	/** Avisa a las otras pestañas/fronts del mismo usuario que una notificación quedó leída. */
+	emitNotificationRead(userId: string, payload: { holdingId: string; notificationId: string; read_at: Date }) {
+		this.server.to(this.userRoom(userId)).emit(NOTIFICATION_EVENTS.read, payload);
+	}
+
+	/** Avisa a los destinatarios que una notificación abierta cambió de contenido o quedó resuelta. */
+	emitNotificationUpdated(recipientUserIds: string[], payload: { holdingId: string; notificationId: string }) {
+		for (const userId of new Set(recipientUserIds)) {
+			this.server.to(this.userRoom(userId)).emit(NOTIFICATION_EVENTS.updated, payload);
+		}
+	}
+
+	private rejectConnection(client: Socket, message: string) {
+		client.emit(NOTIFICATION_EVENTS.unauthorized, { message });
+		client.disconnect(true);
 	}
 
 	private getAccessToken(client: Socket) {

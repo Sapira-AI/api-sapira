@@ -57,18 +57,6 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			fk_contract_items_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
-			contract_items_renewed_by_item_id_fkey: {
-				table: 'contract_items',
-				onDelete: 'NO ACTION',
-			},
-			contract_items_renews_item_id_fkey: {
-				table: 'contract_items',
-				onDelete: 'NO ACTION',
-			},
 			contract_items_contract_id_fkey: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
@@ -84,6 +72,18 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			contract_items_related_item_id_fkey: {
 				table: 'contract_items',
 				onDelete: 'SET NULL',
+			},
+			contract_items_renewed_by_item_id_fkey: {
+				table: 'contract_items',
+				onDelete: 'NO ACTION',
+			},
+			contract_items_renews_item_id_fkey: {
+				table: 'contract_items',
+				onDelete: 'NO ACTION',
+			},
+			fk_contract_items_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},
@@ -215,15 +215,15 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				table: 'contract_amendments',
 				onDelete: 'CASCADE',
 			},
-			contract_amendment_items_original_item_id_fkey: {
-				table: 'contract_items',
-				onDelete: 'NO ACTION',
-			},
 			contract_amendment_items_holding_id_fkey: {
 				table: 'company_holdings',
 				onDelete: 'RESTRICT',
 			},
 			contract_amendment_items_new_item_id_fkey: {
+				table: 'contract_items',
+				onDelete: 'NO ACTION',
+			},
+			contract_amendment_items_original_item_id_fkey: {
 				table: 'contract_items',
 				onDelete: 'NO ACTION',
 			},
@@ -282,13 +282,13 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			contract_lifecycle_events_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'RESTRICT',
-			},
 			contract_lifecycle_events_contract_id_fkey: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
+			},
+			contract_lifecycle_events_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'RESTRICT',
 			},
 		},
 		uniques: {},
@@ -462,21 +462,17 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				table: 'contracts',
 				onDelete: 'CASCADE',
 			},
-			workflow_step_documents_uploaded_by_fkey: {
-				table: 'users',
-				onDelete: 'NO ACTION',
-			},
-			fk_wsd_uploaded_by: {
-				table: 'users',
-				onDelete: 'SET NULL',
-			},
 			fk_wsd_holding: {
 				table: 'company_holdings',
 				onDelete: 'RESTRICT',
 			},
-			workflow_step_documents_workflow_step_id_fkey: {
+			fk_wsd_step: {
 				table: 'workflow_steps',
-				onDelete: 'CASCADE',
+				onDelete: 'SET NULL',
+			},
+			fk_wsd_uploaded_by: {
+				table: 'users',
+				onDelete: 'SET NULL',
 			},
 			workflow_step_documents_contract_id_fkey: {
 				table: 'contracts',
@@ -486,9 +482,13 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				table: 'company_holdings',
 				onDelete: 'RESTRICT',
 			},
-			fk_wsd_step: {
+			workflow_step_documents_uploaded_by_fkey: {
+				table: 'users',
+				onDelete: 'NO ACTION',
+			},
+			workflow_step_documents_workflow_step_id_fkey: {
 				table: 'workflow_steps',
-				onDelete: 'SET NULL',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},
@@ -523,13 +523,13 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			fk_contract_clauses_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
-			},
 			contract_clauses_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'NO ACTION',
+			},
+			fk_contract_clauses_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},
@@ -631,16 +631,16 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			contract_notifications_user_id_fkey: {
-				table: 'users',
-				onDelete: 'NO ACTION',
-			},
 			contract_notifications_contract_id_fkey: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
 			},
 			contract_notifications_holding_id_fkey: {
 				table: 'company_holdings',
+				onDelete: 'NO ACTION',
+			},
+			contract_notifications_user_id_fkey: {
+				table: 'users',
 				onDelete: 'NO ACTION',
 			},
 		},
@@ -689,13 +689,13 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				table: 'companies',
 				onDelete: 'NO ACTION',
 			},
-			contract_billing_splits_holding_id_fkey: {
-				table: 'company_holdings',
-				onDelete: 'NO ACTION',
-			},
 			contract_billing_splits_contract_id_fkey: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
+			},
+			contract_billing_splits_holding_id_fkey: {
+				table: 'company_holdings',
+				onDelete: 'NO ACTION',
 			},
 		},
 		uniques: {},
@@ -740,17 +740,17 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		},
 		primary: ['id'],
 		foreignKeys: {
-			fk_contract_invoices_holding_id: {
-				table: 'company_holdings',
-				onDelete: 'CASCADE',
+			contract_invoices_satisfied_by_legacy_id_fkey: {
+				table: 'invoices_legacy',
+				onDelete: 'SET NULL',
 			},
 			fk_contract_invoices_contract_id: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
 			},
-			contract_invoices_satisfied_by_legacy_id_fkey: {
-				table: 'invoices_legacy',
-				onDelete: 'SET NULL',
+			fk_contract_invoices_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
 		},
 		uniques: {},

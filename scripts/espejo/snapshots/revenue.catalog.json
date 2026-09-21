@@ -177,16 +177,6 @@
   },
   "constraints": [
    {
-    "name": "revenue_schedule_monthly_momentum_check",
-    "type": "c",
-    "expr": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
-   },
-   {
-    "name": "rsm_contract_or_subscription_required",
-    "type": "c",
-    "expr": "(contract_id IS NOT NULL) OR (subscription_id IS NOT NULL)"
-   },
-   {
     "name": "fk_revenue_schedule_company",
     "type": "f",
     "ondelete": "a",
@@ -215,6 +205,28 @@
     "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id)"
    },
    {
+    "name": "revenue_schedule_monthly_contract_item_period_momentum_key",
+    "type": "u",
+    "cols": [
+     "contract_id",
+     "contract_item_id",
+     "period_month",
+     "momentum"
+    ]
+   },
+   {
+    "name": "revenue_schedule_monthly_momentum_check",
+    "type": "c",
+    "expr": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
+   },
+   {
+    "name": "revenue_schedule_monthly_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
     "name": "revenue_schedule_monthly_subscription_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -229,21 +241,9 @@
     "def": "FOREIGN KEY (subscription_item_id) REFERENCES subscription_items(id)"
    },
    {
-    "name": "revenue_schedule_monthly_pkey",
-    "type": "p",
-    "cols": [
-     "id"
-    ]
-   },
-   {
-    "name": "revenue_schedule_monthly_contract_item_period_momentum_key",
-    "type": "u",
-    "cols": [
-     "contract_id",
-     "contract_item_id",
-     "period_month",
-     "momentum"
-    ]
+    "name": "rsm_contract_or_subscription_required",
+    "type": "c",
+    "expr": "(contract_id IS NOT NULL) OR (subscription_id IS NOT NULL)"
    }
   ],
   "indexes": [
@@ -360,42 +360,42 @@
   "policies_detail": [
    {
     "name": "tenant_isolation_delete_revenue_schedule_monthly",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_insert_revenue_schedule_monthly",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "tenant_isolation_select_revenue_schedule_monthly",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_update_revenue_schedule_monthly",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -406,11 +406,6 @@
   "rls_forced": false,
   "columns": {},
   "constraints": [
-   {
-    "name": "revenue_rules_target_type_check",
-    "type": "c",
-    "expr": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
-   },
    {
     "name": "revenue_rules_company_id_fkey",
     "type": "f",
@@ -424,6 +419,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "revenue_rules_target_type_check",
+    "type": "c",
+    "expr": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
    }
   ],
   "indexes": [],
@@ -437,42 +437,42 @@
   "policies_detail": [
    {
     "name": "Users can delete revenue rules from their holding companies",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "cmd": "DELETE",
+    "qual": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
     "with_check": null
    },
    {
     "name": "Users can insert revenue rules for their holding companies",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))"
    },
    {
     "name": "Users can update revenue rules from their holding companies",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "cmd": "UPDATE",
+    "qual": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
     "with_check": null
    },
    {
     "name": "Users can view revenue rules from their holding companies",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
+    "cmd": "SELECT",
+    "qual": "(company_id IN ( SELECT c.id\n   FROM (companies c\n     JOIN user_holdings uh ON ((c.holding_id = uh.holding_id)))\n  WHERE (uh.user_id = get_current_user_id())))",
     "with_check": null
    }
   ]
@@ -543,42 +543,42 @@
   "policies_detail": [
    {
     "name": "tenant_isolation_delete_mrr_adjustments",
-    "cmd": "DELETE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_insert_mrr_adjustments",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "(holding_id = get_current_user_holding_id())"
    },
    {
     "name": "tenant_isolation_select_mrr_adjustments",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    },
    {
     "name": "tenant_isolation_update_mrr_adjustments",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(holding_id = get_current_user_holding_id())",
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }
   ]
@@ -590,16 +590,19 @@
   "columns": {},
   "constraints": [
    {
-    "name": "accounting_period_cutoff_last_action_check",
-    "type": "c",
-    "expr": "last_action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
-   },
-   {
     "name": "accounting_period_cutoff_company_id_fkey",
     "type": "f",
     "ondelete": "r",
     "onupdate": "a",
     "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT"
+   },
+   {
+    "name": "accounting_period_cutoff_holding_id_company_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "company_id"
+    ]
    },
    {
     "name": "accounting_period_cutoff_holding_id_fkey",
@@ -616,18 +619,15 @@
     "def": "FOREIGN KEY (last_action_by) REFERENCES users(id) ON DELETE SET NULL"
    },
    {
+    "name": "accounting_period_cutoff_last_action_check",
+    "type": "c",
+    "expr": "last_action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   },
+   {
     "name": "accounting_period_cutoff_pkey",
     "type": "p",
     "cols": [
      "id"
-    ]
-   },
-   {
-    "name": "accounting_period_cutoff_holding_id_company_id_key",
-    "type": "u",
-    "cols": [
-     "holding_id",
-     "company_id"
     ]
    }
   ],
@@ -654,32 +654,32 @@
   "policies_detail": [
    {
     "name": "cutoff_insert",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))"
    },
    {
     "name": "cutoff_select",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "cmd": "SELECT",
+    "qual": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
     "with_check": null
    },
    {
     "name": "cutoff_update",
-    "cmd": "UPDATE",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))",
+    "cmd": "UPDATE",
+    "qual": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))",
     "with_check": null
    }
   ]
@@ -694,11 +694,6 @@
     "name": "accounting_period_events_action_check",
     "type": "c",
     "expr": "action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
-   },
-   {
-    "name": "accounting_period_events_reason_check",
-    "type": "c",
-    "expr": "length(TRIM(BOTH FROM reason)) >= 10"
    },
    {
     "name": "accounting_period_events_company_id_fkey",
@@ -727,6 +722,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "accounting_period_events_reason_check",
+    "type": "c",
+    "expr": "length(TRIM(BOTH FROM reason)) >= 10"
    }
   ],
   "indexes": [
@@ -755,22 +755,22 @@
   "policies_detail": [
    {
     "name": "events_insert",
-    "cmd": "INSERT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": null,
+    "cmd": "INSERT",
+    "qual": null,
     "with_check": "((rls_is_super_admin() OR rls_is_holding_admin()) AND (rls_is_super_admin() OR (holding_id = get_current_user_holding_id())))"
    },
    {
     "name": "events_select",
-    "cmd": "SELECT",
     "permissive": "PERMISSIVE",
     "roles": [
      "public"
     ],
-    "using": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
+    "cmd": "SELECT",
+    "qual": "(rls_is_super_admin() OR (holding_id = get_current_user_holding_id()))",
     "with_check": null
    }
   ]

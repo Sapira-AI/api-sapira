@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
-import { BigQueryConnection } from '@/databases/postgresql/entities/bigquery-connection.entity';
+import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 
 import { BigQueryService } from './bigquery.service';
 import { BigQueryConnectionResponseDto } from './dtos/bigquery-connection-response.dto';

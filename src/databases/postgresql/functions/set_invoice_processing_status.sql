@@ -1,4 +1,7 @@
-
+CREATE OR REPLACE FUNCTION public.set_invoice_processing_status()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     invoice_number_from_odoo TEXT;
     existing_invoice RECORD;
@@ -70,3 +73,5 @@ EXCEPTION WHEN OTHERS THEN
     NEW.integration_notes := 'Error en trigger de clasificación: ' || SQLERRM;
     RETURN NEW;
 END;
+$function$
+

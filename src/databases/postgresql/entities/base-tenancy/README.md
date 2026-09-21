@@ -9,35 +9,33 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `users` (28) | `src/modules/users/entities/user.entity.ts` · `User` | ⚠️ difiere de prod | `last_invitation_sent_at` timestamp with time zone<br>`last_invitation_email_id` text<br>`last_invitation_status` text | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `users_pkey`<br>CHECK `users_status_check`<br>FK `users_role_id_fkey` → roles<br>índice `idx_users_auth_id`<br>índice `idx_users_role_id` |
-| `user_holdings` (38) | `src/modules/holdings/entities/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `user_holdings_pkey`<br>FK `fk_user_holdings_user_id` → users ON DELETE CASCADE<br>índice `idx_user_holdings_holding_id`<br>índice `idx_user_holdings_one_selected_per_user` (UNIQUE, parcial)<br>índice `idx_user_holdings_selected` (parcial)<br>índice `idx_user_holdings_user_id` |
-| `company_holdings` (7) | `src/modules/holdings/entities/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `company_holdings_pkey` |
-| `companies` (22) | `src/modules/odoo/entities/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `companies_pkey`<br>FK `companies_holding_fk` → company_holdings ON DELETE SET NULL<br>índice `idx_companies_odoo_integration_id`<br>índice `unique_odoo_integration_id_per_holding` (UNIQUE, parcial) |
-| `master_data` (264) | `src/modules/salesforce/entities/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>UNIQUE `master_data_holding_id_category_value_key` (holding_id, category, value)<br>CHECK `master_data_category_check`<br>FK `fk_master_data_holding_id` → company_holdings ON DELETE CASCADE<br>índice `idx_master_data_category_active` (parcial)<br>índice `idx_master_data_holding_id` |
-| `currencies` (10) | `src/modules/banco-central/entities/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | `decimal_places`: NOT NULL en la entity vs nullable en DB<br>`is_active`: NOT NULL en la entity vs nullable en DB<br>`created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `currencies_pkey`<br>índice `idx_currencies_is_active`<br>índice `idx_currencies_odoo_id` |
+| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | `last_invitation_sent_at` timestamp with time zone<br>`last_invitation_email_id` text<br>`last_invitation_status` text | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `users_pkey`<br>CHECK `users_status_check`<br>FK `users_role_id_fkey` → roles<br>índice `idx_users_auth_id`<br>índice `idx_users_role_id` |
+| `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `user_holdings_pkey`<br>FK `fk_user_holdings_user_id` → users ON DELETE CASCADE<br>índice `idx_user_holdings_holding_id`<br>índice `idx_user_holdings_one_selected_per_user` (UNIQUE, parcial)<br>índice `idx_user_holdings_selected` (parcial)<br>índice `idx_user_holdings_user_id` |
+| `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `company_holdings_pkey` |
+| `companies` (22) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `companies_pkey`<br>FK `companies_holding_fk` → company_holdings ON DELETE SET NULL<br>índice `idx_companies_odoo_integration_id`<br>índice `unique_odoo_integration_id_per_holding` (UNIQUE, parcial) |
+| `master_data` (244) | `src/databases/postgresql/entities/base-tenancy/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>UNIQUE `master_data_holding_id_category_value_key` (holding_id, category, value)<br>CHECK `master_data_category_check`<br>FK `fk_master_data_holding_id` → company_holdings ON DELETE CASCADE<br>índice `idx_master_data_category_active` (parcial)<br>índice `idx_master_data_holding_id` |
+| `currencies` (10) | `src/databases/postgresql/entities/base-tenancy/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | `decimal_places`: NOT NULL en la entity vs nullable en DB<br>`is_active`: NOT NULL en la entity vs nullable en DB<br>`created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `currencies_pkey`<br>índice `idx_currencies_is_active`<br>índice `idx_currencies_odoo_id` |
 
-## B · Tablas SIN entity → espejos creados (8)
+## B · Tablas SIN entity previa → espejos generados (8): 8 promovidas, 0 apagadas
 
-`permissions` fue promovida a `permission.entity.ts` como primer lote de runtime. Su metadata conserva el mismo snapshot de producción y no depende de otras entidades nuevas. Las siete tablas restantes permanecen apagadas hasta completar su verificación y QA.
-
-| Tabla (filas, RLS) | Espejo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
+| Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `roles` (70, RLS on) | `role.espejo.ts` · `Role` | 5 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
+| `roles` (50, RLS on) | `role.entity.ts` · `Role` | 5 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
 | `permissions` (22, RLS on) | `permission.entity.ts` · `Permission` | 3 | `permissions_pkey` (id) | `permissions_code_key` | — | — | — | — | 3 |
-| `role_permissions` (638, RLS on) | `role-permission.espejo.ts` · `RolePermission` | 3 | `role_permissions_pkey` (role_id, permission_id) | — | — | `role_permissions_role_id_fkey` → roles<br>`role_permissions_permission_id_fkey` → permissions<br>`fk_role_permissions_holding_id` → company_holdings (CASCADE) | `idx_role_permissions_holding_id`, `idx_role_permissions_permission_id`, `idx_role_permissions_role_id` | — | 5 |
-| `financial_settings` (4, RLS on) | `financial-settings.espejo.ts` · `FinancialSettings` | 8 | `financial_settings_pkey` (id) | `financial_settings_holding_id_key` | — | — | — | trg_financial_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `holding_settings` (4, RLS on) | `holding-settings.espejo.ts` · `HoldingSettings` | 6 | `holding_settings_pkey` (holding_id) | — | `holding_settings_fx_system_policy_check` | `holding_settings_holding_id_fkey` → company_holdings (CASCADE) | — | trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `custom_field_definitions` (16, RLS on) | `custom-field-definition.espejo.ts` · `CustomFieldDefinition` | 11 | `custom_field_definitions_pkey` (id) | `unique_field_per_entity` | `custom_field_definitions_field_type_check`, `valid_entity_type` | `custom_field_definitions_holding_id_fkey` → company_holdings (CASCADE)<br>`custom_field_definitions_created_by_fkey` → users | `idx_custom_field_defs_active` (parcial), `idx_custom_field_defs_holding_entity`, `idx_custom_field_defs_order` | — | 4 |
-| `user_view_preferences` (8, RLS on) | `user-view-preference.espejo.ts` · `UserViewPreference` | 9 | `user_view_preferences_pkey` (id) | `user_view_preferences_user_id_entity_type_view_name_key` | — | `user_view_preferences_user_id_fkey` → users (CASCADE) | `idx_user_view_prefs_one_default_per_entity` (UNIQUE, parcial), `idx_user_view_prefs_user_entity` | user_view_preferences_updated_at · BEFORE UPDATE FOR EACH ROW → update_user_view_preferences_updated_at() | 4 |
-| `claude_skills` (2, RLS on) | `claude-skill.espejo.ts` · `ClaudeSkill` | 8 | `claude_skills_pkey` (id) | `claude_skills_name_holding_id_key` | — | `claude_skills_holding_id_fkey` → company_holdings (CASCADE) | `idx_claude_skills_holding_id`, `idx_claude_skills_is_active`, `idx_claude_skills_name` | — | 0 |
+| `role_permissions` (637, RLS on) | `role-permission.entity.ts` · `RolePermission` | 3 | `role_permissions_pkey` (role_id, permission_id) | — | — | `fk_role_permissions_holding_id` → company_holdings (CASCADE)<br>`role_permissions_permission_id_fkey` → permissions<br>`role_permissions_role_id_fkey` → roles | `idx_role_permissions_holding_id`, `idx_role_permissions_permission_id`, `idx_role_permissions_role_id` | — | 5 |
+| `financial_settings` (4, RLS on) | `financial-settings.entity.ts` · `FinancialSettings` | 8 | `financial_settings_pkey` (id) | `financial_settings_holding_id_key` | — | — | — | trg_financial_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `holding_settings` (4, RLS on) | `holding-settings.entity.ts` · `HoldingSettings` | 6 | `holding_settings_pkey` (holding_id) | — | `holding_settings_fx_system_policy_check` | `holding_settings_holding_id_fkey` → company_holdings (CASCADE) | — | trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `custom_field_definitions` (16, RLS on) | `custom-field-definition.entity.ts` · `CustomFieldDefinition` | 11 | `custom_field_definitions_pkey` (id) | `unique_field_per_entity` | `custom_field_definitions_field_type_check`, `valid_entity_type` | `custom_field_definitions_created_by_fkey` → users<br>`custom_field_definitions_holding_id_fkey` → company_holdings (CASCADE) | `idx_custom_field_defs_active` (parcial), `idx_custom_field_defs_holding_entity`, `idx_custom_field_defs_order` | — | 4 |
+| `user_view_preferences` (9, RLS on) | `user-view-preference.entity.ts` · `UserViewPreference` | 9 | `user_view_preferences_pkey` (id) | `user_view_preferences_user_id_entity_type_view_name_key` | — | `user_view_preferences_user_id_fkey` → users (CASCADE) | `idx_user_view_prefs_one_default_per_entity` (UNIQUE, parcial), `idx_user_view_prefs_user_entity` | user_view_preferences_updated_at · BEFORE UPDATE FOR EACH ROW → update_user_view_preferences_updated_at() | 4 |
+| `claude_skills` (2, RLS on) | `claude-skill.entity.ts` · `ClaudeSkill` | 8 | `claude_skills_pkey` (id) | `claude_skills_name_holding_id_key` | — | `claude_skills_holding_id_fkey` → company_holdings (CASCADE) | `idx_claude_skills_holding_id`, `idx_claude_skills_is_active`, `idx_claude_skills_name` | — | 0 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/base-tenancy.catalog.json` (`policies_detail`) para el paso 4.
 
-**Cómo están apagados (código técnico)**: los siete archivos restantes terminan en `.espejo.ts`, no en `.entity.ts`. `database.module.ts` carga entities con `entities: [__dirname + '/../../**/*.entity{.ts,.js}']`, así que no los ve, y ningún módulo los incluye en `TypeOrmModule.forFeature([...])`. `database.module.spec.ts` permite únicamente entidades promovidas de forma explícita. Para encender el siguiente lote: validar el snapshot y QA, renombrar a `.entity.ts` y registrarlo en el `forFeature` del módulo que lo use.
+**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob `entities: [__dirname + '/../../**/*.entity{.ts,.js}']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.
 
 ## C · Columnas exactas de cada espejo (8 tablas)
 
-<details><summary><code>roles</code> → <code>role.espejo.ts</code> · 5 columnas</summary>
+<details><summary><code>roles</code> → <code>role.entity.ts</code> · 5 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -48,7 +46,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>permissions</code> → <code>permission.espejo.ts</code> · 3 columnas</summary>
+<details><summary><code>permissions</code> → <code>permission.entity.ts</code> · 3 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -57,7 +55,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `description` | text | sí | — |  |
 
 </details>
-<details><summary><code>role_permissions</code> → <code>role-permission.espejo.ts</code> · 3 columnas</summary>
+<details><summary><code>role_permissions</code> → <code>role-permission.entity.ts</code> · 3 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -66,7 +64,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>financial_settings</code> → <code>financial-settings.espejo.ts</code> · 8 columnas</summary>
+<details><summary><code>financial_settings</code> → <code>financial-settings.entity.ts</code> · 8 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -80,7 +78,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `revenue_schedule_monthly_enabled` | boolean | no | false |  |
 
 </details>
-<details><summary><code>holding_settings</code> → <code>holding-settings.espejo.ts</code> · 6 columnas</summary>
+<details><summary><code>holding_settings</code> → <code>holding-settings.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -92,7 +90,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `currencies_in_use` | text[] | sí | ARRAY[]::text[] | Monedas utilizadas en el holding |
 
 </details>
-<details><summary><code>custom_field_definitions</code> → <code>custom-field-definition.espejo.ts</code> · 11 columnas</summary>
+<details><summary><code>custom_field_definitions</code> → <code>custom-field-definition.entity.ts</code> · 11 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -109,7 +107,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 
 </details>
-<details><summary><code>user_view_preferences</code> → <code>user-view-preference.espejo.ts</code> · 9 columnas</summary>
+<details><summary><code>user_view_preferences</code> → <code>user-view-preference.entity.ts</code> · 9 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -124,7 +122,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>claude_skills</code> → <code>claude-skill.espejo.ts</code> · 8 columnas</summary>
+<details><summary><code>claude_skills</code> → <code>claude-skill.entity.ts</code> · 8 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -142,4 +140,4 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 ## Verificación (sin conexión a la DB)
 
 - `base-tenancy.entities.spec.ts`: metadata TypeORM en memoria vs `base-tenancy.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.
-- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, ningún `.entity.ts` dentro de `entities/<modulo>/`.
+- `../../database.module.spec.ts`: `synchronize: false`, nadie habilita sincronización, y un espejo solo se carga en runtime si su promoción figura en `promotedMirrorEntities`.

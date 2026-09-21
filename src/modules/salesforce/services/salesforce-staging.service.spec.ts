@@ -9,7 +9,13 @@ describe('SalesforceStagingService', () => {
 			findAndCount: jest.fn(),
 		};
 
-		const service = new SalesforceStagingService(accountsStgRepository as any, opportunitiesStgRepository as any, {} as any, {} as any, {} as any);
+		const service = new SalesforceStagingService(
+			accountsStgRepository as any,
+			opportunitiesStgRepository as any,
+			{} as any,
+			{} as any,
+			{} as any
+		);
 
 		return {
 			service,
