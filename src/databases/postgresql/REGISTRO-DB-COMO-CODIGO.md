@@ -1,0 +1,240 @@
+# REGISTRO — lo que falta para que la base sea código
+
+> Registro vivo. **Se actualiza en el mismo commit que resuelve un punto**: se cambia su ⬜ por ✅,
+> se anota la fecha y qué quedó como evidencia. Si un punto se decide NO hacer, va a ❌ con el motivo.
+
+**Qué significa "la base es código" acá:** el repo describe el estado deseado del esquema `public`,
+cada entorno se lleva a ese estado con un procedimiento repetible
+([GUIA → Sincronizar cambios](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción)),
+y cuando el código y una base difieren, **manda el código**. Hoy eso último no es cierto en todos
+los casos: los puntos 1, 5 y 7 son exactamente donde la base todavía manda.
+
+**Lo que ya está** (no se repite abajo): las 129 tablas de `public` con datos de negocio tienen
+entity viva y no queda ningún espejo inerte; 887 assets cubren enums, extensiones, índices
+especiales, funciones, triggers, policies, permisos y semillas; `yarn schema:status --target <e>`
+mide cualquier base en solo lectura; y hay guardas en las pruebas para que nada de eso se
+desarme (GUIA → Guardas automáticas).
+
+## Estado
+
+| # | Pendiente | Estado | Cerrado |
+|---|---|---|---|
+| 1 | [3 funciones donde prod y el repo difieren de verdad](#1-tres-funciones-con-deriva-real-en-producción) | ⬜ | |
+| 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
+| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ⬜ | |
+| 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ⬜ | |
+| 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ⬜ | |
+| 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
+| 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) | ⬜ | |
+| 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) | ⬜ | |
+| 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
+
+Las cifras de abajo se midieron el **2026-09-16**. La fuente vigente siempre es el comando, no esta
+tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|production>`.
+
+---
+
+## 1. Tres funciones con deriva real en producción
+
+`schema:status --target production` las marca `PENDIENTE`:
+
+| Función | Quién tiene la versión buena |
+|---|---|
+| `apply_quote_downsell_to_contract` | **prod**: tiene 24 variables y lógica de renovación que el archivo no tiene |
+| `prevent_end_date_update_when_active` | **prod**: tiene una guarda `current_setting('sapira.bypass_end_date_guard')` que el archivo no tiene |
+| `create_default_roles_for_holding` | **el repo**: agrega `VIEW_DOCUMENTACION` a los roles por defecto |
+
+**Por qué importa:** en las dos primeras, alguien arregló la función directamente en la base. Aplicar
+el archivo **borraría ese arreglo**, y el runner no avisa porque para él es un asset pendiente como
+cualquier otro.
+
+**Cómo se cierra:** traer la definición de prod al archivo en los dos primeros casos (capturarla con
+`scripts/schema-as-code/fetch-catalog.ts` y comparar con `generate-assets.ts`), y aplicar el tercero
+con `--only`. Al terminar, esos tres pasan a `LINEA BASE` o `APLICADO`.
+
+**Cómo se verifica:** `schema:status --target production` no muestra `PENDIENTE`.
+
+## 2. Línea base de producción sin registrar
+
+`public.sapira_sql_asset_history` tiene **7 filas de 887 assets**; 851 están verificados idénticos a
+la base y esperan registro.
+
+**Por qué importa:** sin historial nadie sabe qué está aplicado. Todo `--apply` depende de que el
+desarrollador recuerde qué archivo tocó, y `--dry-run` no informa nada útil.
+
+**Cómo se cierra:** `postgres:assets --baseline --target production --allow-production --confirm-target production`
+(solo escribe filas de historial, no ejecuta SQL), y después `schema:status` para confirmar que no
+aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4-línea-base).
+
+**Cómo se verifica:** `schema:status --target production` no muestra `LINEA BASE`.
+
+## 3. QA sin alinear
+
+Medido en QA: **5 migraciones pendientes**, sin tabla de historial, 19 funciones con otra definición,
+1 asset que `NO CONVERGE` (`types/000-extensions.sql`: sus extensiones difieren) y **15 objetos que
+existen solo ahí** (policies de salesforce, funciones legacy de `integration_logs`).
+
+**Por qué importa:** QA es el paso previo obligatorio antes de prod. Mientras no refleje el repo, lo
+que se pruebe ahí no dice nada sobre lo que va a pasar en producción.
+
+**Cómo se cierra:** el orden está en
+[GUIA → Puesta al día de QA](./GUIA-CAMBIOS-DE-ESQUEMA.md#6-estado-de-las-bases), que no es el
+procedimiento genérico: primero dos policies con `--only` (crean la tabla de historial que la
+migración de RLS necesita), después `migration:run`, después `--baseline`, y por último lo pendiente
+por lotes. Los 15 objetos que solo existen en QA se deciden caso a caso.
+
+**Cómo se verifica:** `schema:status --target qa` sin migraciones pendientes y con los mismos
+pendientes que prod.
+
+## 4. 23 assets huérfanos
+
+23 archivos describen objetos que **no existen en prod ni en QA**, y en los 23 casos el objeto se
+eliminó a propósito con una migración del front (hoy archivo congelado), sin borrar el asset:
+
+| Grupo | Assets | Quién los eliminó |
+|---|---|---|
+| Notas de crédito legacy (`invoice_credit_notes`) | 4 policies + 2 triggers + 1 función | `20260727195654_nc_drop_invoice_credit_notes_legacy.sql` |
+| Revenue schedule por triggers | 5 triggers + 1 función | `20260226120000_rsm_consolidate_triggers.sql`, `20260419190000_unified_contraction.sql` |
+| Clasificación del staging de Odoo | 3 triggers + 3 funciones | `20260204083003_remove_invoice_classification_triggers.sql`, `20260202090037_drop_trigger_check_partner_by_tax_id.sql` |
+| Promedio mensual de tipos de cambio | 2 triggers + 2 funciones | `20260219112216_remove_exchange_rates_triggers.sql` |
+
+**Por qué importa:** un `--apply` sin `--only` hoy **fallaría en 10** (tabla o función inexistente) y,
+peor, **aplicaría 13 sin error, reactivando en prod comportamiento que se eliminó a propósito**:
+clasificación del staging, recálculo de revenue por churn y promedios de FX.
+
+### Los 23 archivos
+
+El runner aplica `functions/` **antes** que `triggers/`, así que en una corrida sin filtro las
+funciones huérfanas se crean primero y sus triggers dejan de fallar: por eso 13 se aplican y
+10 fallan. Aplicado de a uno con `--only`, un trigger cuya función todavía no existe falla.
+
+**Notas de crédito legacy** (7) — eliminado por `20260727195654_nc_drop_invoice_credit_notes_legacy.sql` (borró la tabla y la función)
+
+| Asset | Objeto que describe | En un `--apply` sin filtro |
+|---|---|---|
+| `rls/tenant_isolation_select_invoice_credit_notes.sql` | policy sobre `invoice_credit_notes` | ❌ falla: `invoice_credit_notes` no existe |
+| `rls/tenant_isolation_insert_invoice_credit_notes.sql` | policy sobre `invoice_credit_notes` | ❌ falla: `invoice_credit_notes` no existe |
+| `rls/tenant_isolation_update_invoice_credit_notes.sql` | policy sobre `invoice_credit_notes` | ❌ falla: `invoice_credit_notes` no existe |
+| `rls/tenant_isolation_delete_invoice_credit_notes.sql` | policy sobre `invoice_credit_notes` | ❌ falla: `invoice_credit_notes` no existe |
+| `triggers/trg_update_invoice_credit_notes_updated_at.sql` | trigger sobre `invoice_credit_notes` → `update_updated_at_column()` | ❌ falla: `invoice_credit_notes` no existe |
+| `triggers/trigger_revenue_schedule_after_credit_note.sql` | trigger sobre `invoice_credit_notes` → `trigger_revenue_schedule_on_credit_note()` | ❌ falla: `invoice_credit_notes` no existe |
+| `functions/trigger_revenue_schedule_on_credit_note.sql` | función | ⚠️ **se crea la función** |
+
+**Recálculo de revenue schedule por triggers** (6) — eliminado por `20260226120000_rsm_consolidate_triggers.sql` (los 4 de facturas) y `20260419190000_unified_contraction.sql` (el de churn)
+
+| Asset | Objeto que describe | En un `--apply` sin filtro |
+|---|---|---|
+| `triggers/invoices_revenue_schedule_trigger.sql` | trigger sobre `invoices` → `trigger_revenue_schedule_update()` | ❌ falla: `trigger_revenue_schedule_update()` no existe ni tiene asset |
+| `triggers/trg_invoice_status_change.sql` | trigger sobre `invoices` → `refresh_revenue_schedule_for_invoice_contract()` | ❌ falla: `refresh_revenue_schedule_for_invoice_contract()` no existe ni tiene asset |
+| `triggers/trg_invoice_item_change.sql` | trigger sobre `invoice_items` → `refresh_revenue_schedule_for_invoice_contract()` | ❌ falla: `refresh_revenue_schedule_for_invoice_contract()` no existe ni tiene asset |
+| `triggers/trigger_revenue_schedule_after_invoice_change.sql` | trigger sobre `invoices` → `trigger_revenue_schedule_on_invoice_change()` | ❌ falla: `trigger_revenue_schedule_on_invoice_change()` no existe ni tiene asset |
+| `triggers/trg_rsm_on_churn.sql` | trigger sobre `contracts` → `trigger_rsm_on_churn()` | ⚠️ **se crea el trigger en `contracts`** |
+| `functions/trigger_rsm_on_churn.sql` | función | ⚠️ **se crea la función** |
+
+**Clasificación del staging de Odoo** (6) — eliminado por `20260204083003_remove_invoice_classification_triggers.sql` y `20260202090037_drop_trigger_check_partner_by_tax_id.sql`
+
+| Asset | Objeto que describe | En un `--apply` sin filtro |
+|---|---|---|
+| `triggers/invoice_processing_status_classifier.sql` | trigger sobre `odoo_invoices_stg` → `set_invoice_processing_status()` | ⚠️ **se crea el trigger en `odoo_invoices_stg`** |
+| `functions/set_invoice_processing_status.sql` | función | ⚠️ **se crea la función** |
+| `triggers/classify_invoice_line_trigger.sql` | trigger sobre `odoo_invoice_lines_stg` → `classify_invoice_line_before_insert()` | ⚠️ **se crea el trigger en `odoo_invoice_lines_stg`** |
+| `functions/classify_invoice_line_before_insert.sql` | función | ⚠️ **se crea la función** |
+| `triggers/trigger_check_partner_by_tax_id_before_insert.sql` | trigger sobre `odoo_partners_stg` → `check_partner_by_tax_id_before_insert()` | ⚠️ **se crea el trigger en `odoo_partners_stg`** |
+| `functions/check_partner_by_tax_id_before_insert.sql` | función | ⚠️ **se crea la función** |
+
+**Promedio mensual de tipos de cambio** (4) — eliminado por `20260219112216_remove_exchange_rates_triggers.sql`
+
+| Asset | Objeto que describe | En un `--apply` sin filtro |
+|---|---|---|
+| `triggers/trigger_calculate_monthly_avg.sql` | trigger sobre `exchange_rates` → `calculate_monthly_avg_fx()` | ⚠️ **se crea el trigger en `exchange_rates`** |
+| `functions/calculate_monthly_avg_fx.sql` | función | ⚠️ **se crea la función** |
+| `triggers/trigger_update_monthly_avg.sql` | trigger sobre `exchange_rates` → `update_monthly_avg_on_rate_change()` | ⚠️ **se crea el trigger en `exchange_rates`** |
+| `functions/update_monthly_avg_on_rate_change.sql` | función | ⚠️ **se crea la función** |
+
+**Cómo se cierra:** borrar los 23 archivos. **No hace falta migración**: no hay nada que eliminar en
+ninguna base. Para regenerar esta lista: `schema:status --target production`, sección `SIN CONTRAPARTE`.
+
+**Cómo se verifica:** `schema:status --target production` no muestra `SIN CONTRAPARTE`, y con eso
+`--apply` sin `--only` deja de ser peligroso.
+
+## 5. El generador de espejos todavía manda sobre 74 entities
+
+Las 74 entities promovidas desde espejo (cabecera "PROMOVIDA desde espejo") las reescribe
+`scripts/espejo/generate-espejo.py` desde los snapshots de prod.
+
+**Por qué importa:** para esas tablas la fuente de verdad sigue siendo prod. Se pueden editar para
+cambiar su tabla, pero **regenerar con snapshots anteriores al cambio lo revierte en silencio**.
+
+**Cómo se cierra:** que el generador deje de emitir las entities promovidas y solo documente su
+diferencia con prod (como ya hace con las entities del repo en la sección A de cada README), más
+actualizar sus pruebas y `entities/README.md`.
+
+**Cómo se verifica:** regenerar todos los módulos no modifica ningún `.entity.ts`.
+
+## 6. 94 sentencias de ruido al generar una migración
+
+`yarn schema:log` contra prod emite 94 sentencias, todas clasificadas y ninguna cambiaría la base:
+41 índices de `special-index/`, 28 FKs que TypeORM elimina y recrea idénticas, 14 del churn de
+`gen_random_uuid()`, 4 de dos índices que recrea igual, 4 defaults `CURRENT_DATE` y 3 `ARRAY[]`.
+Desglose y evidencia: [`entities/REGISTRO-ALINEACION.md`](./entities/REGISTRO-ALINEACION.md).
+
+**Por qué importa:** `migration:generate` emite ese ruido dentro de cada migración nueva, y hay que
+recortarlo a mano. Es el paso donde se cuela un `DROP` real sin que nadie lo note.
+
+**Cómo se cierra:** declarar los 41 índices especiales en su entity con
+`@Index('<nombre>', { synchronize: false })`, que le dice a TypeORM que el índice existe y no lo
+toca (verificado en `RdbmsSchemaBuilder`: no lo borra ni lo crea). Las otras 53 son churn del propio
+TypeORM y no tienen arreglo desde el repo.
+
+**Cómo se verifica:** `yarn schema:log` baja de 94 a 53 sentencias.
+
+## 7. Dos vistas fuera del código
+
+`invoices_with_net_amounts` e `invoice_items_consolidated` existen en prod y no tienen asset ni
+entity. `fetch-catalog.ts` ya las captura (consulta `views`), pero no hay fase que las aplique.
+
+**Por qué importa:** son objetos de `public` que ningún archivo describe, así que un entorno nuevo no
+los tendría y nadie revisa sus cambios.
+
+**Cómo se cierra:** decidir si se modelan como fase nueva de assets (`views/`, con
+`CREATE OR REPLACE VIEW`, que converge al re-aplicarse) o si se reemplazan por consultas del backend.
+
+**Cómo se verifica:** la consulta `views` del catálogo no devuelve nada sin contraparte en el repo.
+
+## 8. No hay bootstrap desde cero
+
+Las 131 tablas de prod existían antes de este sistema y `migrations/` solo tiene las 5 posteriores:
+**ninguna migración las crea**. Un entorno nuevo solo se puede levantar clonando prod.
+
+**Por qué importa:** es el límite real de "la base es código": el código describe el estado, pero no
+alcanza para construir la base desde vacío. Además, los seeds fallan sobre una base vacía.
+
+**Cómo se cierra:** o se genera una migración inicial que cree las 131 tablas desde las entities
+(`migration:generate` sobre una base vacía) y se prueba en un entorno desechable, o se decide
+explícitamente que el camino oficial es clonar prod. Las dos son respuestas válidas; hoy no hay
+ninguna escrita.
+
+**Cómo se verifica:** `migration:run` + `postgres:assets --apply` sobre una base vacía la dejan
+igual a prod.
+
+## 9. Rotar las contraseñas
+
+Las contraseñas de QA y de producción quedaron escritas en una conversación con un asistente el
+2026-09-16.
+
+**Cómo se cierra:** rotarlas en Supabase → Settings → Database y actualizar `.env.qa.db`,
+`.env.prod.db`, el `.env` de cada desarrollador y el entorno donde está desplegada la API.
+
+**Relacionado, sin resolver:** el `.env` local de la app apunta a producción. `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` y `SUPABASE_DATABASE_URL` van juntas, así que cambiar
+solo la URL rompe la validación de tokens. Los scripts de esquema no dependen de eso si se usa
+`DOTENV_CONFIG_PATH`.
+
+---
+
+## Orden recomendado
+
+1, 2 y 3 dan una base operable: se resuelve la deriva real, el historial pasa a ser confiable y QA
+sirve como paso previo. 4 y 6 la dejan limpia, y recién ahí `--apply` sin `--only` y
+`migration:generate` dejan de necesitar cuidado manual. 5 y 7 cierran "el código manda". 8 es una
+decisión de alcance y 9 es independiente: se puede hacer cuando quieras.

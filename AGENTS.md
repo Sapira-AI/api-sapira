@@ -28,6 +28,8 @@
 
 - **Procedimiento completo: `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`** — dónde va cada
   cambio, las recetas y cómo se revisa una migración generada.
+- **Pendientes para que la base sea código: `src/databases/postgresql/REGISTRO-DB-COMO-CODIGO.md`**
+  (9 puntos con estado). Si resolvés uno, márcalo ahí en el mismo commit.
 - `api-sapira` es el schema-as-code de todo el esquema `public`. El DDL no va en
   `front-sapira-vite/supabase/migrations/`.
 - **La entity define la tabla**; lo que TypeORM no puede declarar (enums, extensiones, índices
@@ -75,5 +77,9 @@ actualizar todo lo que no es tabla.**
 - **Sincronizar con QA o producción** empieza y termina con `yarn schema:status --target <entorno>`
   (solo lectura), primero QA y después prod, con la conexión por
   `DOTENV_CONFIG_PATH=.env.<qa|prod>.db` (las URLs se le piden a Leon; nunca se commitean).
-  Migraciones antes que assets. `--apply` va con `--only` mientras `schema:status` muestre
-  `SIN CONTRAPARTE` ajenos al cambio. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
+  Migraciones antes que assets. Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
+- 🔴 **`--apply` SIEMPRE lleva un `--only <ruta>` por cada asset que tocaste. Nunca corras
+  `postgres:assets --apply` sin filtro**, en ningún entorno. Sin filtro aplica todo lo que no esté
+  registrado en el historial: hoy son 23 assets huérfanos, y **13 de ellos se aplican sin error y
+  reactivan en producción comportamiento que se eliminó a propósito**. Los otros 10 fallan. La
+  excepción se habilita recién cuando el punto 4 de `REGISTRO-DB-COMO-CODIGO.md` figure como cerrado.

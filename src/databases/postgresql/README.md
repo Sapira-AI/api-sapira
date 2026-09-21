@@ -259,7 +259,9 @@ policies nunca estuvieron en su modelo.
 
 **1. Assets que apuntan a objetos que ya no existen en producción.** 7 funciones, 12 triggers y 4
 policies (medido con `schema:status` el 2026-09-16, donde figuran como `SIN CONTRAPARTE`). Un
-`--apply` sin `--only` los crearía de vuelta. Hay que decidir si se eliminan o si producción perdió
+`--apply` sin `--only` los crearía de vuelta. Los 23 están agrupados por funcionalidad, con la
+migración del front que eliminó cada objeto, en
+[`REGISTRO-DB-COMO-CODIGO.md` → punto 4](./REGISTRO-DB-COMO-CODIGO.md#4-23-assets-huérfanos). Hay que decidir si se eliminan o si producción perdió
 algo que debía existir. Funciones huérfanas: `calculate_monthly_avg_fx`,
 `check_partner_by_tax_id_before_insert`, `classify_invoice_line_before_insert`,
 `set_invoice_processing_status`, `trigger_revenue_schedule_on_credit_note`, `trigger_rsm_on_churn`,

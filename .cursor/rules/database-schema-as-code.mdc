@@ -7,6 +7,8 @@ alwaysApply: true
 
 - **Antes de tocar el esquema, lee `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`**: tiene la
   tabla de decisión, las recetas y el procedimiento de revisión de una migración generada.
+- **Pendientes para que la base sea código: `src/databases/postgresql/REGISTRO-DB-COMO-CODIGO.md`**
+  (9 puntos con estado). Si resolvés uno, márcalo ahí en el mismo commit.
 - Todo el DDL de `public` vive en `api-sapira`, no en `front-sapira-vite/supabase/migrations/`.
 - **La entity define la tabla** (columnas, PK, FK, UNIQUE, CHECK, índices simples y parciales) y se
   aplica con `migration:generate` → **revisar** → `migration:run`.
@@ -57,9 +59,13 @@ actualizar todo lo que no es tabla.**
 - Empieza y termina con `yarn schema:status --target <entorno>` (solo lectura). Primero QA, después prod.
 - Conexión por archivo, desde `api-sapira/`: `DOTENV_CONFIG_PATH=.env.qa.db` o `.env.prod.db`. Las URLs
   se le piden a Leon y nunca se commitean.
-- Migraciones antes que assets. `--apply` va con `--only` mientras `schema:status` muestre
-  `SIN CONTRAPARTE` ajenos al cambio. En producción, todo lo que escribe exige
+- Migraciones antes que assets. En producción, todo lo que escribe exige
   `--allow-production --confirm-target production`.
+- 🔴 **`--apply` SIEMPRE lleva un `--only <ruta>` por cada asset que tocaste. Nunca corras
+  `postgres:assets --apply` sin filtro**, en ningún entorno. Sin filtro aplica todo lo que no esté
+  registrado en el historial: hoy son 23 assets huérfanos, y **13 de ellos se aplican sin error y
+  reactivan en producción comportamiento que se eliminó a propósito**. Los otros 10 fallan. La
+  excepción se habilita recién cuando el punto 4 de `REGISTRO-DB-COMO-CODIGO.md` figure como cerrado.
 - Procedimiento: GUIA → **Sincronizar cambios a QA y producción**.
 
 ## Para eliminar una tabla, función, trigger o policy
