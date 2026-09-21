@@ -115,7 +115,7 @@ QA y producción: [🔄 Sincronizar cambios](#-sincronizar-cambios-a-qa-y-produc
 | 7 | `rls/<nombre_policy>.sql` | Una policy por archivo. Nombre de archivo = nombre de policy |
 | 8 | el módulo que la use | `TypeOrmModule.forFeature([...])` |
 
-> ⚠️ **`ENABLE ROW LEVEL SECURITY` es tuyo.** Los 389 archivos de `rls/` se obtuvieron por ingeniería
+> ⚠️ **`ENABLE ROW LEVEL SECURITY` es tuyo.** Los 387 archivos de `rls/` se obtuvieron por ingeniería
 > inversa desde producción, donde RLS ya estaba activo: **ninguno lo activa**, solo declaran policies.
 > En una tabla nueva eso deja RLS apagado y **las policies quedan inertes** — la tabla es legible por
 > cualquiera con el `GRANT`, que en esta base es `ALL PRIVILEGES` para `anon`. Va en la migración.
@@ -231,10 +231,9 @@ Si un asset depende de otro (un seed antes que la función que lo usa, una funci
 trigger), ponelos en ese orden o en corridas separadas: cada asset se aplica en su propia transacción,
 y si falla se revierte sin quedar registrado.
 
-> 🔴 **`--apply` va con `--only` hasta que se limpien los huérfanos.** Sin filtro aplica todo lo que no
-> está registrado, y hoy eso incluye 23 assets `SIN CONTRAPARTE` —objetos que prod no tiene— que se
-> crearían. `schema:status` es lo que te dice si ya es seguro: sin filtro solo cuando todo lo que
-> quede pendiente sea tuyo.
+> 🔴 **`--apply` va con `--only` mientras `schema:status` muestre pendientes que no son tuyos.**
+> Los 23 assets huérfanos ya se eliminaron del corpus (2026-09-21), pero la regla sigue: sin filtro
+> solo cuando la línea base esté registrada y todo lo que quede pendiente sea tu cambio.
 
 ### 3. Cómo leer `schema:status`
 
@@ -349,7 +348,7 @@ Los tres que más afectan una sincronización hoy:
 - **3 funciones con deriva real en prod** (punto 1): en dos, la base tiene código que el repo no tiene,
   así que aplicar el archivo borraría un arreglo hecho en prod.
 - **La línea base de prod no está registrada** (punto 2): por eso `--apply` sigue necesitando `--only`.
-- **23 assets huérfanos** (punto 4): un `--apply` sin filtro reactivaría comportamiento eliminado a propósito.
+- ~~**23 assets huérfanos** (punto 4)~~ — ✅ eliminados del corpus el 2026-09-21.
 
 ---
 

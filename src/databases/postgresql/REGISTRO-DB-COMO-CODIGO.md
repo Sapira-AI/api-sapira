@@ -22,7 +22,7 @@ desarme (GUIA → Guardas automáticas).
 | 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) (2 de 5 resueltas; 2 casos nuevos) | ⬜ | |
 | 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
 | 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ⬜ | |
-| 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ⬜ | |
+| 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ⬜ | |
 | 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
 | 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) | ⬜ | |
@@ -102,7 +102,19 @@ pendientes que prod.
 
 ## 4. 23 assets huérfanos
 
-23 archivos describen objetos que **no existen en prod ni en QA**, y en los 23 casos el objeto se
+> ✅ **CERRADO el 2026-09-21** (autorizado por Domi): los 23 archivos se eliminaron del corpus en un
+> solo commit, **sin migración** — no había nada que dropear en ninguna base. Antes de borrar se
+> verificó en vivo (prod y QA) que ningún objeto existe, que ninguna de las 79 funciones que el
+> front llama por `rpc()` está en la lista, y que cada familia tiene su reemplazo operando:
+> promedios FX → servicio `banco-central` (API); clasificación del staging →
+> `invoice-processing.service.ts`; partner por tax_id → `process_partner_staging_*` + endpoints de
+> `odoo-partners`; triggers RSM viejos → `trg_rsm_on_{invoice,contract_item,quantity}_change` +
+> `apply_contract_contraction`; NC legacy → `invoices.document_type='NC'` + `create_credit_note_safe`.
+> Origen del arrastre: scripts sueltos de feb-2026 (commits `efdccff`, `45f1a06`) que la
+> reorganización de v0.0.9 movió al corpus sin contrastar contra prod. Las tablas de abajo quedan
+> como registro histórico de qué era cada uno.
+
+23 archivos describían objetos que **no existen en prod ni en QA**, y en los 23 casos el objeto se
 eliminó a propósito con una migración del front (hoy archivo congelado), sin borrar el asset:
 
 | Grupo | Assets | Quién los eliminó |

@@ -117,11 +117,11 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 | Fase | Contiene | Cuenta |
 |---|---|---|
 | `types/` | Extensiones y enums. Van primero porque una columna puede referenciarlos. | 10 |
-| `functions/` | Una función por archivo, `CREATE OR REPLACE`. | 310 |
+| `functions/` | Una función por archivo, `CREATE OR REPLACE`. | 301 |
 | `special-index/` | Índices que TypeORM **no puede** declarar con `@Index`: método no btree (`gin`, `ivfflat`) u orden explícito (`DESC`, `NULLS`). Los parciales sí se declaran con `@Index({ where })` y **no** van acá. | 41 |
-| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 133 |
-| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 389 |
-| `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 1 |
+| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 121 |
+| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 387 |
+| `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 2 |
 | `seed/` | Datos semilla idempotentes. | 2 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
@@ -165,7 +165,7 @@ Lo que no se puede improvisar, resumido:
 > como entity y se aplica con una migración revisada (`migration:generate` → **revisar y recortar** →
 > `migration:run`). El resto de las piezas sí son assets.
 
-> ⚠️ **`ENABLE ROW LEVEL SECURITY` va a mano en la migración.** Los 389 archivos de `rls/` salieron de
+> ⚠️ **`ENABLE ROW LEVEL SECURITY` va a mano en la migración.** Los 387 archivos de `rls/` salieron de
 > producción, donde RLS ya estaba activo: **ninguno lo activa**, solo declaran policies. En una tabla
 > nueva eso deja RLS apagado y las policies inertes, sobre una base donde el `GRANT` es
 > `ALL PRIVILEGES` para `anon`.
@@ -257,15 +257,17 @@ policies nunca estuvieron en su modelo.
 > registrado. (Superado: hoy una corrección en `functions/`, `triggers/`, `rls/` o `grants/` se hace
 > editando el mismo archivo, que el runner re-aplica.)
 
-**1. Assets que apuntan a objetos que ya no existen en producción.** 7 funciones, 12 triggers y 4
-policies (medido con `schema:status` el 2026-09-16, donde figuran como `SIN CONTRAPARTE`). Un
-`--apply` sin `--only` los crearía de vuelta. Los 23 están agrupados por funcionalidad, con la
-migración del front que eliminó cada objeto, en
-[`REGISTRO-DB-COMO-CODIGO.md` → punto 4](./REGISTRO-DB-COMO-CODIGO.md#4-23-assets-huérfanos). Hay que decidir si se eliminan o si producción perdió
-algo que debía existir. Funciones huérfanas: `calculate_monthly_avg_fx`,
-`check_partner_by_tax_id_before_insert`, `classify_invoice_line_before_insert`,
-`set_invoice_processing_status`, `trigger_revenue_schedule_on_credit_note`, `trigger_rsm_on_churn`,
-`update_monthly_avg_on_rate_change`.
+**1. Assets que apuntan a objetos que ya no existen en producción — ✅ RESUELTO el 2026-09-21.**
+Los 23 archivos (7 funciones, 12 triggers, 4 policies) se **eliminaron del corpus** con autorización
+de Domi. Ninguno era un error de creación: los 23 objetos existieron en prod y fueron eliminados a
+propósito con migraciones del front (feb–jul 2026), cada familia con su reemplazo hoy vigente
+(promedios FX → servicio `banco-central`; clasificación de staging → `InvoiceProcessingService`;
+partner por tax_id → `process_partner_staging_*`; triggers RSM viejos → tríada `trg_rsm_on_*` +
+`apply_contract_contraction`; NC legacy → `invoices.document_type='NC'`). Los archivos habían
+entrado al corpus por arrastre de scripts de febrero, no desde la captura de prod. Detalle completo,
+con la migración que eliminó cada objeto:
+[`REGISTRO-DB-COMO-CODIGO.md` → punto 4](./REGISTRO-DB-COMO-CODIGO.md#4-23-assets-huérfanos).
+Sin migración propia: no había nada que dropear en ninguna base.
 
 > ⚠️ **Confirmado el 2026-09-14, y con consecuencia.** `set_invoice_processing_status` y
 > `classify_invoice_line_before_insert` están efectivamente ausentes de producción: las tablas
