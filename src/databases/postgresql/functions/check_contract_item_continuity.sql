@@ -10,11 +10,31 @@ DECLARE
   v_prev_end date; v_prev_item_start date; v_prev_item_end date;
   v_item record; v_n_items int := 0; v_tolerance numeric; v_contract_id uuid;
   v_has_unified boolean := false;
+  v_theoretical_monthly numeric; v_override_adjustment numeric := 0;
 BEGIN
-  SELECT id, start_date, end_date, final_price, contract_id INTO v_ci
+  SELECT id, start_date, end_date, final_price, contract_id, term_months, monthly_price INTO v_ci
   FROM contract_items WHERE id = p_contract_item_id;
   IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'error', 'contract_item no existe'); END IF;
-  v_expected_total := COALESCE(v_ci.final_price, 0);
+  -- Esperado considerando overrides de Cantidades Variables (tabla quantities):
+  -- para cada período con override dentro del rango del ítem se reemplaza la cuota
+  -- teórica (final_price / term_months) por el monto del override. Sin esto, un
+  -- ítem variable con consumos reales (o con emisiones ajustadas a real, que viven
+  -- como overrides) queda con delta permanente contra su total teórico y bloquea
+  -- guardar cualquier cambio del cronograma aunque no toque montos. Misma fórmula
+  -- que la validación del header en el front (useRestructureDraft, fix Turboboy
+  -- 09-09-2026); casos que destaparon este lado SQL: Farmacias Eos CTR-2026-218 y
+  -- STG-Prosegur CTR-2026-38 (Fernanda, 17/18-09-2026).
+  v_theoretical_monthly := CASE
+    WHEN COALESCE(v_ci.term_months, 0) > 0 THEN v_ci.final_price / v_ci.term_months
+    ELSE COALESCE(v_ci.monthly_price, 0) END;
+  SELECT COALESCE(SUM(COALESCE(q.amount, q.quantity * q.unit_price) - v_theoretical_monthly), 0)
+    INTO v_override_adjustment
+  FROM quantities q
+  WHERE q.contract_item_id = p_contract_item_id
+    AND COALESCE(q.amount, q.quantity * q.unit_price) IS NOT NULL
+    AND q.period >= date_trunc('month', v_ci.start_date)::date
+    AND (v_ci.end_date IS NULL OR q.period <= v_ci.end_date);
+  v_expected_total := ROUND(COALESCE(v_ci.final_price, 0) + v_override_adjustment, 2);
   v_contract_id := v_ci.contract_id;
   v_prev_end := v_ci.start_date - INTERVAL '1 day';
   v_prev_item_start := NULL; v_prev_item_end := NULL;
