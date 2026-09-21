@@ -28,6 +28,7 @@ DECLARE
   v_validation_errors jsonb := '[]'::jsonb;
   v_tax_rate numeric;
   v_subtotal numeric;
+  v_ci_qty numeric; v_ci_unit numeric;
   v_vat numeric;
   v_total numeric;
 BEGIN
@@ -154,6 +155,14 @@ BEGIN
         v_subtotal := ROUND(v_total / (1 + v_tax_rate / 100), 2);
         v_vat := v_total - v_subtotal;
       END IF;
+      -- Detalle real del ítem: cantidad del contract_item y unitario derivado
+      -- (subtotal / cantidad) en vez de aplanar a 1 × total. Mantiene p×q =
+      -- subtotal y conserva el detalle que viaja a Odoo. Antes esta función
+      -- colapsaba toda línea tocada a quantity=1 (origen del 1×1.000 de CEFA
+      -- S08540 y del riesgo 1×2.240 en STG CTR-2026-38; Fernanda 17/18-09-2026).
+      SELECT COALESCE(NULLIF(quantity, 0), 1) INTO v_ci_qty
+      FROM contract_items WHERE id = (v_target_item->>'contract_item_id')::uuid;
+      v_ci_unit := ROUND(v_subtotal / v_ci_qty, 6);
 
       IF v_item_id IS NOT NULL THEN
         UPDATE invoice_items SET
@@ -162,8 +171,8 @@ BEGIN
           description = v_target_item->>'description',
           billing_period_start = NULLIF(v_target_item->>'billing_period_start', '')::date,
           billing_period_end = NULLIF(v_target_item->>'billing_period_end', '')::date,
-          quantity = 1,
-          unit_price_contract_currency = v_subtotal,
+          quantity = v_ci_qty,
+          unit_price_contract_currency = v_ci_unit,
           subtotal_contract_currency = v_subtotal,
           tax_amount_contract_currency = v_vat,
           total_contract_currency = v_total,
@@ -183,8 +192,8 @@ BEGIN
           v_target_item->>'description',
           NULLIF(v_target_item->>'billing_period_start', '')::date,
           NULLIF(v_target_item->>'billing_period_end', '')::date,
-          1, COALESCE(ci.unit_of_measure, 'UND'),
-          v_subtotal, v_subtotal, v_vat, v_total,
+          v_ci_qty, COALESCE(ci.unit_of_measure, 'UND'),
+          v_ci_unit, v_subtotal, v_vat, v_total,
           v_contract.contract_currency, v_contract.invoice_currency,
           COALESCE(v_tax_rate::text, '0')
         FROM contract_items ci
@@ -195,12 +204,12 @@ BEGIN
         -- del item recién insertado (los recalcula desde el contract_item).
         -- Como NO se dispara en UPDATE, restauramos aquí los montos del restructure.
         UPDATE invoice_items SET
-          quantity = 1,
-          unit_price_contract_currency = v_subtotal,
+          quantity = v_ci_qty,
+          unit_price_contract_currency = v_ci_unit,
           subtotal_contract_currency = v_subtotal,
           tax_amount_contract_currency = v_vat,
           total_contract_currency = v_total,
-          unit_price_invoice_currency = v_subtotal,
+          unit_price_invoice_currency = v_ci_unit,
           subtotal_invoice_currency = v_subtotal,
           tax_amount_invoice_currency = v_vat,
           total_invoice_currency = v_total
