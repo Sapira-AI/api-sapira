@@ -1903,11 +1903,19 @@ export class InvoiceSchedulerService {
 			.exec();
 	}
 
-	async getJobsReport(query: SchedulerReportQueryDto): Promise<SchedulerReportResponseDto> {
+	async getJobsReport(query: SchedulerReportQueryDto, allowedHoldingIds?: string[]): Promise<SchedulerReportResponseDto> {
 		const match: Record<string, any> = {};
 		if (query.environment) match.executionEnvironment = query.environment;
 		if (query.source) match.executionSource = query.source;
-		if (query.holdingId) match.holdingId = query.holdingId;
+		if (allowedHoldingIds) {
+			// Usuario no super admin: solo ejecuciones de SUS holdings. Si además pidió un
+			// holding puntual, se respeta solo si le pertenece; si no, resultado vacío.
+			if (query.holdingId) {
+				match.holdingId = allowedHoldingIds.includes(query.holdingId) ? query.holdingId : '__sin_acceso__';
+			} else {
+				match.holdingId = { $in: allowedHoldingIds };
+			}
+		} else if (query.holdingId) match.holdingId = query.holdingId;
 		if (query.dryRun !== undefined) match.dryRun = query.dryRun === 'true';
 
 		if (query.from || query.to) {

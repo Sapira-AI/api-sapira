@@ -2,6 +2,8 @@ import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } fr
 import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { HoldingsService } from '@/modules/holdings/holdings.service';
+import { UsersService } from '@/modules/users/users.service';
 
 import { SchedulerJobListItemDto, SchedulerJobStatusDto, StartSchedulerJobResponseDto } from './dtos/scheduler-job.dto';
 import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
@@ -13,7 +15,11 @@ import { InvoiceSchedulerService } from './invoice-scheduler.service';
 @UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class InvoiceSchedulerController {
-	constructor(private readonly invoiceSchedulerService: InvoiceSchedulerService) {}
+	constructor(
+		private readonly invoiceSchedulerService: InvoiceSchedulerService,
+		private readonly usersService: UsersService,
+		private readonly holdingsService: HoldingsService
+	) {}
 
 	@Post('send')
 	@ApiOperation({
@@ -160,7 +166,17 @@ export class InvoiceSchedulerController {
 		description: 'Lista ejecuciones de scheduler con totales, entorno de despliegue y errores distintos.',
 	})
 	@ApiOkResponse({ type: SchedulerReportResponseDto })
-	async getReport(@Query() query: SchedulerReportQueryDto): Promise<SchedulerReportResponseDto> {
-		return await this.invoiceSchedulerService.getJobsReport(query);
+	async getReport(@Query() query: SchedulerReportQueryDto, @Req() req: any): Promise<SchedulerReportResponseDto> {
+		// El reporte se acota a los holdings del usuario: un usuario de cliente solo ve
+		// las ejecuciones de sus holdings (las corridas cross-holding "all" contienen
+		// facturas de otros clientes y quedan fuera). Un super admin ve todo.
+		const authId = req.user?.sub || req.user?.id;
+		const user = authId ? await this.usersService.getUserByAuthId(authId).catch(() => null) : null;
+		let allowedHoldingIds: string[] | undefined;
+		if (!user?.is_super_admin) {
+			const holdings = authId ? await this.holdingsService.getUserHoldings(authId) : [];
+			allowedHoldingIds = holdings.map((holding) => holding.id);
+		}
+		return await this.invoiceSchedulerService.getJobsReport(query, allowedHoldingIds);
 	}
 }
