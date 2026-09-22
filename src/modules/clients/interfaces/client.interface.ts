@@ -46,6 +46,15 @@ export interface IClientWithEntities extends IClient {
 	primary_entity?: IClientEntity;
 }
 
+/** `GET /clients/filter-options`: valores distintos por campo filtrable, ordenados. */
+export interface IClientFilterOptions {
+	segment: string[];
+	industry: string[];
+	market: string[];
+	country: string[];
+	status: string[];
+}
+
 export interface IPaginatedClients {
 	data: IClient[];
 	items: number;

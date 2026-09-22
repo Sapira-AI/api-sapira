@@ -11,7 +11,7 @@ import { AssignEntityToClientDto } from './dtos/assign-entity.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
-import { IClientWithEntities, IPaginatedClients } from './interfaces/client.interface';
+import { IClientFilterOptions, IClientWithEntities, IPaginatedClients } from './interfaces/client.interface';
 
 @Injectable()
 export class ClientsService {
@@ -33,7 +33,19 @@ export class ClientsService {
 	}
 
 	async findAll(queryDto: QueryClientsDto): Promise<IPaginatedClients> {
-		const { page = 1, limit = 20, search, holding_id, segment, industry, market, status, country } = queryDto;
+		const {
+			page = 1,
+			limit = 20,
+			search,
+			holding_id,
+			segment,
+			industry,
+			market,
+			status,
+			country,
+			sort_by = 'created_at',
+			sort_order = 'desc',
+		} = queryDto;
 
 		const skip = (page - 1) * limit;
 
@@ -71,7 +83,8 @@ export class ClientsService {
 			where,
 			skip,
 			take: limit,
-			order: { created_at: 'DESC' },
+			// `id` desempata para que la paginación sea estable con valores repetidos; los vacíos van al final.
+			order: { [sort_by]: { direction: sort_order === 'asc' ? 'ASC' : 'DESC', nulls: 'LAST' }, id: 'ASC' },
 		});
 
 		return {
@@ -83,12 +96,38 @@ export class ClientsService {
 		};
 	}
 
-	async findOne(id: string): Promise<Client> {
+	/** Valores distintos (no vacíos) de los campos filtrables de clientes del holding, para armar los filtros. */
+	async getFilterOptions(holdingId: string): Promise<IClientFilterOptions> {
+		const [row] = (await this.clientRepository.query(
+			`SELECT
+				array_agg(DISTINCT btrim(segment)) FILTER (WHERE btrim(coalesce(segment, '')) <> '') AS segment,
+				array_agg(DISTINCT btrim(industry)) FILTER (WHERE btrim(coalesce(industry, '')) <> '') AS industry,
+				array_agg(DISTINCT btrim(market)) FILTER (WHERE btrim(coalesce(market, '')) <> '') AS market,
+				array_agg(DISTINCT btrim(country)) FILTER (WHERE btrim(coalesce(country, '')) <> '') AS country,
+				array_agg(DISTINCT btrim(status)) FILTER (WHERE btrim(coalesce(status, '')) <> '') AS status
+			FROM clients
+			WHERE holding_id = $1`,
+			[holdingId]
+		)) as Array<Record<keyof IClientFilterOptions, string[] | null>>;
+
+		const sorted = (values?: string[] | null) => [...(values ?? [])].sort((a, b) => a.localeCompare(b, 'es'));
+
+		return {
+			segment: sorted(row?.segment),
+			industry: sorted(row?.industry),
+			market: sorted(row?.market),
+			country: sorted(row?.country),
+			status: sorted(row?.status),
+		};
+	}
+
+	/** Cliente por id; con `holdingIds`, solo si es de uno de esos holdings (si no, 404 como si no existiera). */
+	async findOne(id: string, holdingIds?: string[]): Promise<Client> {
 		const client = await this.clientRepository.findOne({
 			where: { id },
 		});
 
-		if (!client) {
+		if (!client || (holdingIds && !holdingIds.includes(client.holding_id))) {
 			throw new NotFoundException(`Cliente con id ${id} no encontrado`);
 		}
 
