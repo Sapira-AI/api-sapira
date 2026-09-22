@@ -283,8 +283,7 @@ BEGIN
     'total_pending', v_total_pending
   );
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.bulk_reconcile_legacy_invoices(p_invoice_ids uuid[], p_contract_id uuid, p_user_id uuid)
  RETURNS jsonb
@@ -603,4 +602,3 @@ BEGIN
   );
 END;
 $function$
-

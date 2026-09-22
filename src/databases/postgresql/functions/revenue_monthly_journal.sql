@@ -98,8 +98,7 @@ BEGIN
   END LOOP;
   
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.revenue_monthly_journal(p_company_id uuid, p_from date, p_to date)
  RETURNS TABLE(period_start text, account_code text, account_name text, debit numeric, credit numeric)
@@ -179,4 +178,3 @@ BEGIN
     ORDER BY period_start, account_code;
 END;
 $function$
-

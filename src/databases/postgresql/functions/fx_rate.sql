@@ -84,8 +84,7 @@ BEGIN
 
   RETURN COALESCE(v_rate, 1);
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.fx_rate(p_from_currency text, p_to_currency text, p_date date DEFAULT CURRENT_DATE)
  RETURNS numeric
@@ -147,4 +146,3 @@ BEGIN
   RETURN COALESCE(v_rate, 1.0);
 END;
 $function$
-

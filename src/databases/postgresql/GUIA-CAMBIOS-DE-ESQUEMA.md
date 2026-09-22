@@ -115,7 +115,7 @@ QA y producción: [🔄 Sincronizar cambios](#-sincronizar-cambios-a-qa-y-produc
 | 7 | `rls/<nombre_policy>.sql` | Una policy por archivo. Nombre de archivo = nombre de policy |
 | 8 | el módulo que la use | `TypeOrmModule.forFeature([...])` |
 
-> ⚠️ **`ENABLE ROW LEVEL SECURITY` es tuyo.** Los 389 archivos de `rls/` se obtuvieron por ingeniería
+> ⚠️ **`ENABLE ROW LEVEL SECURITY` es tuyo.** Los 387 archivos de `rls/` se obtuvieron por ingeniería
 > inversa desde producción, donde RLS ya estaba activo: **ninguno lo activa**, solo declaran policies.
 > En una tabla nueva eso deja RLS apagado y **las policies quedan inertes** — la tabla es legible por
 > cualquiera con el `GRANT`, que en esta base es `ALL PRIVILEGES` para `anon`. Va en la migración.
@@ -231,10 +231,9 @@ Si un asset depende de otro (un seed antes que la función que lo usa, una funci
 trigger), ponelos en ese orden o en corridas separadas: cada asset se aplica en su propia transacción,
 y si falla se revierte sin quedar registrado.
 
-> 🔴 **`--apply` va con `--only` hasta que se limpien los huérfanos.** Sin filtro aplica todo lo que no
-> está registrado, y hoy eso incluye 23 assets `SIN CONTRAPARTE` —objetos que prod no tiene— que se
-> crearían. `schema:status` es lo que te dice si ya es seguro: sin filtro solo cuando todo lo que
-> quede pendiente sea tuyo.
+> 🔴 **`--apply` va con `--only` mientras `schema:status` muestre pendientes que no son tuyos.**
+> Los 23 assets huérfanos ya se eliminaron del corpus (2026-09-21), pero la regla sigue: sin filtro
+> solo cuando la línea base esté registrada y todo lo que quede pendiente sea tu cambio.
 
 ### 3. Cómo leer `schema:status`
 
@@ -339,16 +338,17 @@ ni `ALTER TYPE … ADD VALUE`, que romperían dentro del `BEGIN/COMMIT`.
 
 ### 7. Pendientes conocidos
 
-- **Rotar las contraseñas de QA y de producción.** El 2026-09-16 quedaron escritas en una conversación
-  con un asistente. Al rotarlas: actualizar `.env.qa.db`, `.env.prod.db`, el `.env` de cada dev y el
-  entorno donde está desplegada la API.
-- **Limpiar los 23 assets huérfanos**, para que `--apply` sin `--only` sea seguro.
-- **Decidir las 3 funciones `PENDIENTE` de prod.** En dos de ellas la base tiene código que el repo no
-  tiene: aplicar el archivo **borraría un arreglo hecho en prod**. Primero se trae la versión de prod
-  al archivo.
-- **El `.env` de la app en local apunta a producción** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_JWT_SECRET` y `SUPABASE_DATABASE_URL` van juntas: cambiar solo la URL rompe la validación
-  de tokens). Los scripts de esquema no dependen de eso si se usa `DOTENV_CONFIG_PATH`.
+Los 9 pendientes para que la base sea código de punta a punta —con su estado, cómo se cierra cada uno
+y cómo se verifica— viven en un solo lugar:
+**[`REGISTRO-DB-COMO-CODIGO.md`](./REGISTRO-DB-COMO-CODIGO.md)**. Se marca ahí, en el mismo commit que
+resuelve el punto.
+
+Los tres que más afectan una sincronización hoy:
+
+- **3 funciones con deriva real en prod** (punto 1): en dos, la base tiene código que el repo no tiene,
+  así que aplicar el archivo borraría un arreglo hecho en prod.
+- **La línea base de prod no está registrada** (punto 2): por eso `--apply` sigue necesitando `--only`.
+- ~~**23 assets huérfanos** (punto 4)~~ — ✅ eliminados del corpus el 2026-09-21.
 
 ---
 
@@ -538,8 +538,10 @@ encontrar. Cada una nació de un problema real que está documentado en su propi
 
 ## 🗺️ Deudas conocidas
 
-Están en [`README.md` → Deudas conocidas del corpus](./README.md#deudas-conocidas-del-corpus), con su
-evidencia. Las que más te pueden afectar al tocar algo:
+Lo que falta para que la base sea código, con estado por punto:
+[`REGISTRO-DB-COMO-CODIGO.md`](./REGISTRO-DB-COMO-CODIGO.md). Las deudas del corpus, con su evidencia,
+están en [`README.md` → Deudas conocidas del corpus](./README.md#deudas-conocidas-del-corpus). Las que
+más te pueden afectar al tocar algo:
 
 - **23 assets apuntan a objetos que no existen en producción** (7 funciones, 12 triggers, 4
   policies; `schema:status` los lista como `SIN CONTRAPARTE`). Dos de esas funciones —`set_invoice_processing_status` y

@@ -154,8 +154,7 @@ begin
     value desc;
 
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.rsm_metrics(params jsonb)
  RETURNS TABLE(period_month date, company_id uuid, client_id uuid, segment text, market text, industry text, momentum text, product_name text, value numeric, currency text)
@@ -221,4 +220,3 @@ begin
   );
 end;
 $function$
-

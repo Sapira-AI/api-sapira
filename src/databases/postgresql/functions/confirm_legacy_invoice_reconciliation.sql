@@ -339,8 +339,7 @@ BEGIN
       v_legacy_invoice.invoice_number, v_items_created)
   );
 END;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.confirm_legacy_invoice_reconciliation(p_invoice_legacy_id uuid)
  RETURNS jsonb
@@ -523,4 +522,3 @@ BEGIN
   );
 END;
 $function$
-

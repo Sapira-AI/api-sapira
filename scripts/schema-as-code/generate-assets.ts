@@ -169,8 +169,13 @@ function emitirFunciones(catalog: Catalog): Map<string, string> {
 
 	const salida = new Map<string, string>();
 	for (const [nombre, defs] of [...porNombre].sort(([a], [b]) => a.localeCompare(b))) {
-		// Las sobrecargas comparten nombre: todas van al mismo asset, en orden estable.
-		salida.set(`functions/${nombreArchivo(nombre)}.sql`, `${defs.sort((a, b) => a.localeCompare(b)).join('\n\n')}\n`);
+		// Las sobrecargas comparten nombre: todas van al mismo asset, en orden estable, separadas
+		// por `;` — sin él, el runner no puede aplicar un archivo con más de una definición
+		// (pg_get_functiondef no lo emite y dos CREATE seguidos son un error de sintaxis).
+		salida.set(
+			`functions/${nombreArchivo(nombre)}.sql`,
+			`${defs.map((def) => def.trimEnd()).sort((a, b) => a.localeCompare(b)).join(';\n\n')}\n`
+		);
 	}
 	return salida;
 }

@@ -4,7 +4,7 @@
 > (cada rpc debe convertirse en endpoint, absorberse en el contexto de sesión, o descartarse), y
 > (2) la **limpieza del corpus**: una función rpc-eada desde el front no se puede tocar sin mirar acá.
 >
-> Fecha del barrido: 2026-09-14, sobre el working tree del front viejo.
+> Fecha del barrido: 2026-09-14 · revisión de vigencia: 2026-09-21 (endpoints re-contados: siguen 272/40; recaptura de funciones marcada abajo).
 > **Repos**: el front viejo es la carpeta local `sapira-ai` (la docu lo llama `front-sapira-vite`);
 > el front nuevo es `front-sapira` (Next.js). **El front nuevo tiene cero llamadas `rpc()`** —
 > verificado en `app/`, `lib/` y `components/`.
@@ -30,10 +30,9 @@ No quedan sitios de llamada sin resolver.
 > La cifra "64 funciones" que circula en la docu del corpus quedó corta: son **79**. La diferencia
 > son el wrapper `runRpc` (3), los 2 nombres dinámicos y llamadas agregadas después de ese conteo.
 
-⚠️ **`apply_quote_downsell_to_contract`** (rpc-eada desde contratos y cotizaciones) es una de las
-2 funciones cuyo asset del corpus quedó **desactualizado respecto de producción** (migraciones de
-Domi del 14-09: `renewed_by_item_id`, bypass del guard de end_date). Recapturar antes de cualquier
-`--apply`. La otra es `prevent_end_date_update_when_active` (trigger, no rpc-eada).
+> ✅ *(Resuelto 16-09, verificado contra prod el 21-09)*: `apply_quote_downsell_to_contract` y
+> `prevent_end_date_update_when_active` habían quedado desactualizadas en el corpus tras las
+> migraciones de Domi del 14-09; se recapturaron desde producción (`8846d14`) y hoy son idénticas.
 
 ## Clasificación por destino en la API
 
@@ -64,7 +63,7 @@ Todas van al módulo `contracts` de la API como endpoints de acción. Grupos nat
 
 - **Movimientos comerciales**: `create_contract_renewal`, `create_contract_upsell`,
   `create_contract_downsell`, `create_contract_cross_sell`, `create_contract_churn`,
-  `apply_quote_downsell_to_contract` ⚠️, `apply_contract_contraction`, `register_item_non_renewal`,
+  `apply_quote_downsell_to_contract`, `apply_contract_contraction`, `register_item_non_renewal`,
   `approve_contract_amendment`.
 - **Estado y flujo**: `mark_contract_signed_safe`, `bulk_activate_contracts`,
   `migrate_contracts_to_new_workflow`, `bulk_restructure_contract_start_dates`.
@@ -90,8 +89,7 @@ Módulo `legacy` (o dentro de contratos): `activate_legacy_contract`,
 `derive_contract_items_from_legacy`, `validate_legacy_activation`, `reconcile_legacy_invoice`,
 `reconcile_legacy_with_por_emitir`, `confirm_legacy_invoice_reconciliation`,
 `update_legacy_reconciliation_pct`, `mark_mrr_legacy_skip_activation`, `delete_mrr_legacy_group`.
-Decisión de scope: si el legacy se considera transitorio, evaluar si merece UI nueva o solo
-endpoints mínimos de administración.
+Decisión de scope ✅ (Domi 14-09): UI nueva como todo lo demás; funcionalidad mínima primero.
 
 ### 5 · Revenue / Reportes / Períodos (≈7 funciones)
 
@@ -117,8 +115,8 @@ Módulo `clients`: `get_entities_by_client`, `get_clients_by_entity`,
 
 ## Implicancias para la limpieza del corpus
 
-- Ninguna de las 7 funciones huérfanas del corpus aparece en este inventario → siguen siendo
-  candidatas a eliminación sin riesgo por el lado del front viejo.
+- Ninguna de las funciones huérfanas del corpus aparecía en este inventario → se eliminaron sin
+  riesgo el 21-09 (REGISTRO-DB-COMO-CODIGO punto 4).
 - Toda auditoría de no-uso de una función debe cruzar contra **este archivo** además del grep en
   ambos repos: el nombre viaja como string.
 - Cuando un módulo del front nuevo reemplace al viejo, las funciones de su sección quedan con un
