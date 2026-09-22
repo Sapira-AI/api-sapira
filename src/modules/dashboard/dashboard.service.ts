@@ -8,7 +8,7 @@ export class DashboardService {
 	constructor(private readonly dataSource: DataSource) {}
 
 	async getHome(authId: string, asOf = new Date()): Promise<Record<string, unknown>> {
-		const holdingId = await this.getSelectedHoldingId(authId);
+		const holdingId = await this.getUserHoldingId(authId);
 		const date = asOf.toISOString().slice(0, 10);
 
 		if (!holdingId) {
@@ -43,12 +43,21 @@ export class DashboardService {
 		};
 	}
 
-	private async getSelectedHoldingId(authId: string): Promise<string | null> {
+	/**
+	 * Holding del usuario con el criterio canónico del sistema (el mismo de las funciones
+	 * `get_user_holding_id`/`rls_user_holding_id` de la base): el holding con `selected = true`
+	 * si existe y, si no, el activo más antiguo. `selected` solo lo escribe el selector de
+	 * holdings (super admins / multi-holding vía POST /holdings/select): exigirlo aquí dejaba
+	 * el dashboard en cero (emptyHome silencioso) para todo usuario de cliente que nunca
+	 * cambió de holding — 26 de 28 usuarios de producción al 22-09-2026.
+	 */
+	private async getUserHoldingId(authId: string): Promise<string | null> {
 		const [row] = await this.dataSource.query<{ holding_id: string }[]>(
 			`SELECT uh.holding_id
 			 FROM user_holdings uh
 			 JOIN users u ON u.id = uh.user_id
-			 WHERE u.auth_id = $1 AND uh.selected = true AND uh.is_active = true
+			 WHERE u.auth_id = $1 AND uh.is_active = true
+			 ORDER BY uh.selected DESC, uh.created_at ASC
 			 LIMIT 1`,
 			[authId]
 		);
