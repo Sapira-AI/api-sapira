@@ -34,5 +34,6 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."trigger_generate_invoices_on_contract_signed"() IS 'Trigger para generar facturas cuando un contrato pasa a estado Firmado o Activo desde el workflow de aprobación. Verifica que no existan facturas previas antes de generar.';

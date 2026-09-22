@@ -83,4 +83,7 @@ BEGIN
     
     RETURN FALSE;
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."detect_partner_changes"(new_data jsonb, old_data jsonb, holding_id_param uuid) IS 'Función para detectar cambios en partners, compatible con formato antiguo y nuevo de mapeos. Versión limpia sin conflictos.';
+COMMENT ON FUNCTION public."detect_partner_changes"(new_data jsonb, old_data jsonb, relevant_fields text[]) IS 'Función de compatibilidad para detectar cambios con campos específicos';

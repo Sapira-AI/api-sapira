@@ -100,5 +100,8 @@ BEGIN
     'message', format('Cliente comercial cambiado de "%s" a "%s"', v_old_client_name, v_new_client_name)
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."change_contract_commercial_client"(p_contract_id uuid, p_new_client_id uuid) IS 'Cambia el cliente comercial de un contrato que NO está en estado Activo, Firmado, Cancelado o Expirado.
+Ahora valida usando la junction table client_entity_clients que exista una razón social con el mismo tax_id asignada al nuevo cliente comercial.
+Estados permitidos: En revisión, En proceso.';

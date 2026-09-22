@@ -278,5 +278,6 @@ BEGIN
     'warnings', v_warnings
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_legacy_activation"(p_contract_id uuid) IS 'Valida si un contrato legacy puede ser activado. Retorna blockers (errores críticos) y warnings (riesgos informativos). No requiere % mínimo de reconciliación.';

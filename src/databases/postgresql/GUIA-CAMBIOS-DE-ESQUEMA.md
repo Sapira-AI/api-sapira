@@ -25,7 +25,7 @@ Estado de la alineación entity↔producción: [`entities/REGISTRO-ALINEACION.md
 | Índice `gin`, `ivfflat`, con orden explícito (`DESC`, `NULLS`) o con expresión | `special-index/` | `yarn postgres:assets` |
 | Comentario de tabla o de columna | la entity, con `comment:` | `migration:generate` |
 | Activar RLS en una tabla | **a mano en la migración** (TypeORM no lo modela) | `migration:run` |
-| Enum de Postgres, extensión | `types/` | `yarn postgres:assets` |
+| Enum de Postgres, extensión, secuencia suelta | `types/` | `yarn postgres:assets` |
 | Función | `functions/` | idem |
 | Trigger | `triggers/` | idem |
 | Policy RLS | `rls/` | idem |
@@ -68,7 +68,7 @@ QA y producción: [🔄 Sincronizar cambios](#-sincronizar-cambios-a-qa-y-produc
 | Carpeta | Crear | Modificar | Eliminar |
 |---|---|---|---|
 | **`entities/`**<br>tablas, columnas, PK, FK, UNIQUE, CHECK, índices btree | Entity nueva → `migration:generate` → **recortar** lo que no sea tuyo → agregar a mano `ENABLE ROW LEVEL SECURITY` → `migration:run` | Editar la entity → `migration:generate` → recortar → `migration:run`. Si la migración ya se aplicó en alguna base, **no se edita**: se escribe otra | **Columna**: quitarla de la entity → `migration:generate` (emite el `DROP COLUMN`; requiere autorización explícita). **Tabla**: `migration:create` con `DROP TABLE` sin `CASCADE` + borrar la entity, su export en `espejo.existing.ts` y su entrada en `module-map.json`. `generate` no sirve: sin entity la tabla sale de su radar |
-| **`types/`**<br>enums, extensiones | Archivo nuevo: enum con guarda `DO $$ … pg_type … $$`, extensión con `IF NOT EXISTS` → `apply` | **No se edita el archivo** una vez aplicado: la guarda hace que no cambie nada y el runner lo rechaza (`BLOQUEADO`). Migración: `ALTER TYPE … ADD VALUE IF NOT EXISTS` / `RENAME VALUE`, `ALTER EXTENSION … UPDATE` | Migración con `DROP TYPE` / `DROP EXTENSION` (sin `CASCADE`: primero las columnas que lo usan) + borrar el archivo |
+| **`types/`**<br>enums, extensiones, secuencias sueltas | Archivo nuevo: enum con guarda `DO $$ … pg_type … $$`, extensión o secuencia con `IF NOT EXISTS` → `apply` | **No se edita el archivo** una vez aplicado: la guarda hace que no cambie nada y el runner lo rechaza (`BLOQUEADO`). Migración: `ALTER TYPE … ADD VALUE IF NOT EXISTS` / `RENAME VALUE`, `ALTER EXTENSION … UPDATE` | Migración con `DROP TYPE` / `DROP EXTENSION` (sin `CASCADE`: primero las columnas que lo usan) + borrar el archivo |
 | **`functions/`** | Archivo `<nombre>.sql` con la función **completa** (`CREATE OR REPLACE FUNCTION`, no solo el cuerpo) → `apply` | **Editar el mismo archivo** → `apply` lo re-ejecuta (`REAPLICAR`). ⚠️ Si cambian los **parámetros** o el **tipo de retorno**, `CREATE OR REPLACE` crea otra sobrecarga o falla: migración con `DROP FUNCTION` de la firma vieja, después `apply` | Migración con `DROP FUNCTION IF EXISTS <nombre>(<tipos>)` + borrar el archivo. Antes buscar el nombre en `front-sapira-vite`: 64 funciones se llaman por `supabase.rpc()` |
 | **`triggers/`** | Archivo `<nombre_trigger>.sql`: `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER` → `apply`. La función que invoca tiene que existir antes | **Editar el mismo archivo** → `apply`. ⚠️ **Renombrar**: el trigger viejo queda vivo; migración con su `DROP TRIGGER` + archivo nuevo + borrar el viejo | Migración con `DROP TRIGGER IF EXISTS <nombre> ON <tabla>` + borrar el archivo |
 | **`rls/`**<br>policies | Archivo `<nombre_policy>.sql`: `DROP POLICY IF EXISTS` + `CREATE POLICY` → `apply`. Activar RLS en la tabla **no** va acá: va en la migración de la tabla | **Editar el mismo archivo** → `apply`. ⚠️ **Renombrar**: igual que triggers, la policy vieja queda activa (y las policies permisivas se suman) | Migración con `DROP POLICY IF EXISTS <nombre> ON <tabla>` + borrar el archivo. No dejes la tabla deny-all sin querer |
@@ -224,6 +224,9 @@ DOTENV_CONFIG_PATH=.env.qa.db yarn postgres:assets --apply --only rls/mi_policy.
 
 # ④ Confirmar que quedó al día.
 DOTENV_CONFIG_PATH=.env.qa.db yarn schema:status --target qa
+
+# ⑤ Solo después de aplicar a PRODUCCIÓN: refrescar el snapshot que mide a las entities.
+DOTENV_CONFIG_PATH=.env.prod.db yarn schema:snapshot --target production
 ```
 
 Las rutas de `--only` son relativas a `src/databases/postgresql/`, como las imprime `schema:status`.
@@ -231,9 +234,15 @@ Si un asset depende de otro (un seed antes que la función que lo usa, una funci
 trigger), ponelos en ese orden o en corridas separadas: cada asset se aplica en su propia transacción,
 y si falla se revierte sin quedar registrado.
 
-> 🔴 **`--apply` va con `--only` mientras `schema:status` muestre pendientes que no son tuyos.**
-> Los 23 assets huérfanos ya se eliminaron del corpus (2026-09-21), pero la regla sigue: sin filtro
-> solo cuando la línea base esté registrada y todo lo que quede pendiente sea tu cambio.
+**El paso ⑤** solo corresponde si tocaste una tabla (entity + migración). Los specs de
+`entities/<módulo>/` comparan la metadata TypeORM contra `<módulo>.prod-snapshot.ts`, que es una foto
+de prod: quedan en rojo desde que commiteás el cambio hasta que lo aplicás. Refrescar antes de aplicar
+tapa la deriva en vez de resolverla.
+
+> 🔴 **Lo que el CLI ahora exige** (antes era solo esta regla escrita, y se rompió igual):
+> `--apply` sin `--only` aborta —o `--all`, a conciencia—; un asset con cambios sin commitear no se
+> aplica —o `--allow-dirty`—; y `--target` es obligatorio en todos los comandos, ya no se infiere de
+> `NODE_ENV`.
 
 ### 3. Cómo leer `schema:status`
 
@@ -252,9 +261,15 @@ Cada asset cae en una de estas acciones. Se listan en este orden, primero lo que
 | `LINEA BASE` | Sin registrar, pero la base ya coincide con el archivo | `--baseline` lo registra sin ejecutar ([paso 4](#4-línea-base)) |
 | `APLICADO` | Registrado y al día | Nada |
 
-Además lista las **migraciones pendientes** por nombre, las ejecutadas que no tienen archivo en el
-repo, y los objetos **solo en la base**: existen ahí y no tienen asset (típicamente algo creado a mano
-en esa base, o que una migración pendiente va a eliminar).
+Además lista:
+
+- las **migraciones pendientes** por nombre y las ejecutadas que no tienen archivo en el repo;
+- **SOLO EN LA BASE**: objetos que existen ahí y no tienen asset (algo creado a mano en esa base, o
+  que una migración pendiente va a eliminar);
+- **FUERA DEL CORPUS**: objetos que **ninguna fase del repo puede describir** —vistas, vistas
+  materializadas, secuencias sueltas sin asset, procedimientos, agregados y tipos compuestos—. No es
+  lo mismo que `SOLO EN LA BASE`: ahí hay un archivo posible y falta; acá no hay ni forma de
+  escribirlo. Si aparece algo, la decisión es modelarlo (fase nueva) o eliminarlo.
 
 **Cómo verifica.** Captura el catálogo de la base, genera cada asset como lo haría
 `generate-assets.ts`, y lo compara con el archivo **ignorando comentarios de línea completa, espacios
@@ -335,6 +350,22 @@ ni `ALTER TYPE … ADD VALUE`, que romperían dentro del `BEGIN/COMMIT`.
 > ⚠️ **Si la base de destino está vacía, los assets no alcanzan.** Un seed que inserta en
 > `public.permissions` falla si la tabla no existe. Levantar el esquema desde cero en una base nueva
 > no está probado todavía; el camino confiable es un clon o restore de producción.
+
+### Crear un entorno nuevo
+
+**Se clona producción.** Es una decisión tomada (2026-09-22), no una limitación pendiente: ninguna
+migración crea las 131 tablas originales —existían antes de este sistema— y escribirla no aporta
+frente a un clon, que además trae los datos con los que se prueba.
+
+1. Clonar prod desde Supabase (branch o restore).
+2. Declarar el project ref del entorno: si no es prod ni QA, va en `SUPABASE_PROJECT_ENVIRONMENTS`
+   del archivo de conexión.
+3. `yarn migration:run --target <entorno>` — deja las migraciones al día.
+4. `yarn postgres:assets --baseline --target <entorno>` — registra lo que ya coincide.
+5. `yarn schema:status --target <entorno>` — a partir de acá se sincroniza como cualquier otra base.
+
+Un entorno levantado desde vacío no está soportado: los seeds insertan en tablas que nadie crea, y
+`types/` y `special-index/` asumen que la tabla existe.
 
 ### 7. Pendientes conocidos
 
@@ -527,6 +558,7 @@ Corren con `yarn test`, todas offline y sin conexión a ninguna base:
 | `entities/indices-declarados.spec.ts` | Que un índice de producción quede sin declarar, ni en la entity ni en `special-index/`. Eran 161 |
 | `assets-runner.spec.ts` | Assets de `functions/` que no declaran la función o no cierran su dollar-quote; `types/` no re-ejecutable; `special-index/` con índices que sí eran declarables; fases del manifest desalineadas de `ASSET_DIRECTORIES`; **una migración que crea una tabla sin activar RLS**; **una policy sobre una tabla que es deny-all por diseño**; que `--baseline` ejecute SQL, pise una fila existente, registre `grants/`/`seed/` o corra en prod sin confirmar |
 | `schema-status.spec.ts` | Que la verificación confunda una diferencia real con una de formato; que una acción de `schema:status` se clasifique mal; que una migración declare un `name` distinto de su clase; que `fetch-catalog`, `generate-assets` y la comparación dejen de encajar |
+| `apply-guards.spec.ts` | Que `--apply` corra sin `--only`; que se aplique o registre un asset con cambios sin commitear; que el `--target` vuelva a inferirse del entorno |
 | `run-migrations.spec.ts` | `migration:run`/`revert` en prod sin las dos confirmaciones; una bandera mal escrita ignorada en silencio |
 | `connection-target.spec.ts` | Que el `--target` se desacople de la conexión real, en prod y en QA |
 | `entities/integraciones/odoo/odoo-stg-processing-status.spec.ts` | Que un default declarado no sea uno de los valores que admite su propio CHECK |

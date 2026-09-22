@@ -61,5 +61,10 @@ BEGIN
     v_blocking.status
     USING ERRCODE = 'P0001';
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_invoice_status_for_quantity_change"() IS 'Trigger BEFORE INSERT/UPDATE/DELETE en quantities. Bloquea la operación si
+la factura del mismo mes calendario que el período del override no está en
+estado "Por Emitir". Permite la operación si no existe factura asociada al
+período (caso pre-activación de contrato). Bypass controlado vía GUC
+sapira.bypass_quantity_invoice_guard (usado por adjust_issued_invoice).';

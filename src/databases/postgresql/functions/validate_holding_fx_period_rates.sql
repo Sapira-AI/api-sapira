@@ -38,5 +38,6 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_holding_fx_period_rates"() IS 'Valida que los períodos de tasas FX no se superpongan y que los datos sean válidos';

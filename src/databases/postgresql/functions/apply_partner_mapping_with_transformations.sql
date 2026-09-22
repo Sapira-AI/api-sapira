@@ -58,5 +58,6 @@ BEGIN
     
     RETURN result;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_partner_mapping_with_transformations"(raw_data jsonb, mapping_config jsonb, holding_id_param uuid) IS 'Aplica mapeos de partners con soporte para transformaciones, compatible con formato antiguo y nuevo';

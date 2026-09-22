@@ -31,5 +31,6 @@ BEGIN
          WHERE processing_status = 'error' 
          AND (holding_id_param IS NULL OR holding_id = holding_id_param)) as error_lines;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_invoice_staging_stats"(holding_id_param uuid) IS 'Obtiene estadísticas del staging de facturas y líneas por holding';

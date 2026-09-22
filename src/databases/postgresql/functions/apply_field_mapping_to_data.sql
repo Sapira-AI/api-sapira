@@ -208,4 +208,6 @@ BEGIN
     
     RETURN result;
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."apply_field_mapping_to_data"(source_data jsonb, mapping_config jsonb, target_table text) IS 'Aplica mapeo de campos con soporte para arrays y transformaciones complejas';

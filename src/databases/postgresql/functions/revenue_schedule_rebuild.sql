@@ -11,5 +11,7 @@ BEGIN
   -- Step 2: Aplicar FX
   PERFORM public.revenue_schedule_apply_fx_for_contract(p_contract_id, p_from_month);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."revenue_schedule_rebuild"(p_contract_id uuid, p_from_month date) IS 'Wrapper: Rebuilds revenue schedule by calling contract_ccy calculation and FX application sequentially.
+Compatible with existing triggers (p_from_month defaults to NULL for full rebuild).';

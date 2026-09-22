@@ -87,5 +87,6 @@ BEGIN
   END IF;
   RETURN jsonb_build_object('status', CASE WHEN v_items_processed = 0 THEN 'no_action' ELSE 'applied' END,
     'items_processed', v_items_processed, 'rows_upserted', v_rows_upserted);
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."apply_pending_renewal_tail"(p_contract_id uuid) IS 'Genera filas RSM con momentum=PENDING_RENEWAL para items del contrato en estado limbo (end_date vencido sin renewal ni churn). v1.2: excluye items categoria DOWNSELL/CHURN (son contracciones ya resueltas, no items en limbo). Idempotente. Proyecta desde end_date+1 hasta end_date+term_months. Ver docs/contratos/mrr-pending-renewal.md.';

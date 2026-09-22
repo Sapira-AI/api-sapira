@@ -29,5 +29,6 @@ BEGIN
     
     RETURN deleted_count;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."cleanup_old_processed_records"(days_old integer, batch_size integer) IS 'Elimina registros procesados antiguos para mantener el staging limpio';

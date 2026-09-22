@@ -169,6 +169,54 @@ function esNoVerificable(fase: string): boolean {
 	return (UNVERIFIABLE_DIRECTORIES as readonly string[]).includes(fase);
 }
 
+// ── Objetos que ninguna fase del corpus modela ─────────────────────────────────
+
+export interface ObjetoNoModelado {
+	tipo: string;
+	nombre: string;
+}
+
+/**
+ * Objetos de `public` que existen en la base y **ninguna fase del corpus puede describir**.
+ *
+ * `soloEnBase` no alcanza: se deriva de lo que los emisores producen, así que una vista, una
+ * secuencia suelta o un procedimiento son invisibles para él —no hay contra qué compararlos—.
+ * Esto los nombra explícitamente, que es la diferencia entre "el repo describe todo el esquema" y
+ * "el repo describe lo que sabe describir".
+ *
+ * Una secuencia deja de figurar acá en cuanto el emisor la produce: se compara contra `generado`,
+ * no contra una lista fija.
+ */
+export function objetosNoModelados(
+	catalogo: {
+		views?: { name: string; kind: string }[];
+		sequences?: { name: string }[];
+		otherRoutines?: { name: string; kind: string }[];
+		otherTypes?: { name: string; kind: string }[];
+	},
+	generado: ReadonlyMap<string, string>
+): ObjetoNoModelado[] {
+	const emitido = new Set(generado.keys());
+	const fuera: ObjetoNoModelado[] = [];
+
+	for (const vista of catalogo.views ?? []) {
+		fuera.push({ tipo: vista.kind === 'm' ? 'vista materializada' : 'vista', nombre: vista.name });
+	}
+	for (const secuencia of catalogo.sequences ?? []) {
+		if (![...emitido].some((ruta) => ruta.endsWith(`sequence-${secuencia.name}.sql`))) {
+			fuera.push({ tipo: 'secuencia', nombre: secuencia.name });
+		}
+	}
+	for (const rutina of catalogo.otherRoutines ?? []) {
+		fuera.push({ tipo: rutina.kind === 'p' ? 'procedimiento' : 'agregado o función de ventana', nombre: rutina.name });
+	}
+	for (const tipo of catalogo.otherTypes ?? []) {
+		fuera.push({ tipo: tipo.kind === 'd' ? 'dominio' : tipo.kind === 'r' ? 'rango' : 'tipo compuesto', nombre: tipo.name });
+	}
+
+	return fuera.sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
+}
+
 // ── Migraciones ────────────────────────────────────────────────────────────────
 
 export const MIGRATIONS_TABLE = 'public.sapira_typeorm_migrations';

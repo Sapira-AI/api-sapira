@@ -56,5 +56,10 @@ BEGIN
 
   RETURN OLD;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."restore_rsm_on_quantity_delete"() IS 'Trigger AFTER DELETE en quantities. Cuando se elimina un override, restaura
+el revenue_schedule_monthly del período al amount base del contract_item
+(unit_price × quantity × (1 - discount/100)). Reusa la RPC
+revenue_schedule_update_period_quantities. Mismo guard que
+trigger_rsm_on_quantity_change: financial_settings habilitado + contrato Activo.';

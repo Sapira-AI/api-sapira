@@ -152,5 +152,6 @@ AS $function$
   UNION ALL
   SELECT * FROM total_per_month
   ORDER BY 1, 3 DESC, 2;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_monthly_revenue_schedule_by_product"(p_contract_id uuid) IS 'Devuelve el schedule mensual de RSM consolidado por producto + fila TOTAL por mes. Recomputa deferred/unbilled EOM con GREATEST(SUM(cum_a) - SUM(cum_b), 0) porque los EOM crudos usan max() y no son sumables cuando original + fantasma de contraccion tienen signos opuestos. Usado por el tab Revenue Schedule del contrato.';

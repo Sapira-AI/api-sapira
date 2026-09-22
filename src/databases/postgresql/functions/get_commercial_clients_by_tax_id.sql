@@ -34,5 +34,8 @@ BEGIN
     AND c.holding_id = v_holding_id
   ORDER BY cec.is_primary DESC, c.name_commercial;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_commercial_clients_by_tax_id"(p_tax_id text, p_holding_id uuid) IS 'Obtiene todos los clientes comerciales asociados a razones sociales con el mismo tax_id.
+Ahora usa la junction table client_entity_clients para soportar múltiples clientes por razón social.
+Útil para el módulo de MRR legacy donde se necesita seleccionar entre múltiples clientes comerciales del mismo tax_id.';

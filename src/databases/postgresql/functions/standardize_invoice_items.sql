@@ -78,5 +78,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."standardize_invoice_items"() IS 'Trigger que estandariza invoice_items al INSERT usando campos reales de contract_items.
+ACTUALIZADO 2026-04-23: Preserva quantity del contrato, ajusta unit_price = unit_price_contrato x frequency_months.';

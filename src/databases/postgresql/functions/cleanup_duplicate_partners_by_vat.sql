@@ -39,5 +39,6 @@ BEGIN
     
     RETURN deleted_count;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."cleanup_duplicate_partners_by_vat"(holding_id_param uuid, batch_size integer) IS 'Función para limpiar registros duplicados por VAT, manteniendo el más reciente';

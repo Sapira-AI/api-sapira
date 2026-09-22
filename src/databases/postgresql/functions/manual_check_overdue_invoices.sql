@@ -25,5 +25,6 @@ BEGIN
   -- Retornar resultado
   RETURN QUERY SELECT v_updated_count, v_updated_ids;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."manual_check_overdue_invoices"() IS 'Función helper para ejecutar manualmente la verificación de facturas vencidas. Útil para testing.';

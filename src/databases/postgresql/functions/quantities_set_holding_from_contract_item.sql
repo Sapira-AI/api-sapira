@@ -73,5 +73,16 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."quantities_set_holding_from_contract_item"() IS 'Trigger BEFORE INSERT en quantities.
+Resuelve y puebla contract_id, contract_item_id y holding_id antes de insertar.
+
+Caso A (contratos históricos): el DWH provee sapira_contract_id / sapira_contracts_item_id
+  → el trigger solo deriva holding_id desde contract_items → contracts.
+Caso B (contratos nuevos): el DWH provee salesforce_opportunity_id / salesforce_line_item_id
+  → el trigger resuelve contract_id desde contracts.salesforce_opportunity_id
+  → y contract_item_id desde contract_items.quote_item_number (= salesforce_quote_lineitem_id).
+
+Si después de ambos intentos contract_item_id sigue NULL, lanza excepción para evitar
+registros huérfanos.';

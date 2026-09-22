@@ -304,5 +304,15 @@ BEGIN
     'total_with_vat', v_total_with_vat
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."reconcile_legacy_invoice"(p_legacy_invoice_id uuid, p_contract_id uuid, p_matches jsonb) IS 'Reconcilia una factura legacy contra facturas programadas (contract_invoices) del contrato.
+   Soporta cobertura parcial (split automático) y muchos-a-muchos.
+   FIX 20260303000000: agrega invoice_number, due_date, status real, client_id desde contrato,
+   client_tax_id, vat proporcional, total con IVA, tax_rate para trigger sistema.
+   FIX 20260303010000: invoice_items se insertan SIN contract_item_id para evitar que el
+   trigger standardize_invoice_items sobreescriba quantity y _invoice_currency fields.
+   Se hace UPDATE separado para asignar contract_item_id. unit_price = monto/quantity correcto.
+   FIX 20260309120000: restaura fixes de 20260303010000 que 20260303030000 perdió por regresión.
+   Único cambio respecto a 20260303010000: eliminada restricción AND is_legacy = true del
+   WHERE del contrato, para soportar contratos sin ese flag (ej.: Borrador, En revisión).';

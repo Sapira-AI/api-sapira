@@ -349,5 +349,6 @@ BEGIN
     END;
   END LOOP;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item.';

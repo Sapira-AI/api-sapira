@@ -19,5 +19,6 @@ BEGIN
   
   RETURN is_admin;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."is_holding_admin"() IS 'SOLO PARA USO EN APLICACIÓN - No usar en políticas RLS (causa recursión)';

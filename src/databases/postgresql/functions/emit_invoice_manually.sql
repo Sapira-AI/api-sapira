@@ -510,5 +510,6 @@ BEGIN
 
   END IF;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."emit_invoice_manually"(p_invoice_id uuid, p_emission_data jsonb) IS 'Emite una factura manualmente con datos reales del ERP. Soporta división si el monto emitido es menor al programado.';

@@ -110,5 +110,6 @@ BEGIN
     'gaps', v_gaps, 'overlaps', v_overlaps,
     'has_unified_lines', v_has_unified,
     'contract_item_start', v_ci.start_date, 'contract_item_end', v_ci.end_date);
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."check_contract_item_continuity"(p_contract_item_id uuid) IS 'Valida continuidad de períodos y conservación de monto de un contract_item contra sus facturas activas. Busca las líneas por contract_item_id (incluye documentos unificados de otro header) y expone has_unified_lines. Tolerancia GREATEST(0.01, 0.01*n).';

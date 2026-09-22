@@ -441,5 +441,6 @@ EXCEPTION
       'error', SQLERRM
     );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."unify_invoices_multi_contract"(p_invoice_ids uuid[], p_notes text, p_fx_policy text, p_fx_rates jsonb) IS 'Unifica facturas Por Emitir de >=2 contratos en un documento Unificada. El FX queda SIEMPRE definido al unificar (Opción A 2026-08-28): spot = tasa del día por par (modal, fallback exchange_rates), fixed = tasa por par en p_fx_rates; sin tasa disponible la unificación se rechaza con mensaje explicativo. Solo afecta al documento; no cambia la política FX de los contratos.';

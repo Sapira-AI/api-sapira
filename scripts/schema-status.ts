@@ -30,6 +30,7 @@ import {
 	contarPorAccion,
 	leerMigracionesDeclaradas,
 	leerMigracionesEjecutadas,
+	objetosNoModelados,
 } from '../src/databases/postgresql/schema-status';
 
 import { buildCatalog, consultarCatalogo } from './schema-as-code/fetch-catalog';
@@ -105,7 +106,8 @@ async function main(): Promise<void> {
 
 	// ── Assets ──
 	const assets = discoverSqlAssets(ASSETS_ROOT);
-	const comparacion = compararConCorpusGenerado(assets, emitirCorpus(catalogo));
+	const generado = emitirCorpus(catalogo);
+	const comparacion = compararConCorpusGenerado(assets, generado);
 	const estados = clasificarAssets(assets, historial, comparacion);
 	const conteo = contarPorAccion(estados);
 
@@ -125,6 +127,14 @@ async function main(): Promise<void> {
 	if (comparacion.soloEnBase.length > 0) {
 		console.log(`\n### SOLO EN LA BASE (${comparacion.soloEnBase.length}) — el objeto existe en la base y no tiene asset en el repo`);
 		for (const ruta of comparacion.soloEnBase) console.log(`  ${ruta}`);
+	}
+
+	// Lo que ninguna fase del corpus sabe describir: sin esto, una vista o un procedimiento nuevo
+	// no aparece en ningún lado, porque `SOLO EN LA BASE` se deriva de lo que los emisores producen.
+	const noModelados = objetosNoModelados(catalogo, generado);
+	if (noModelados.length > 0) {
+		console.log(`\n### FUERA DEL CORPUS (${noModelados.length}) — ninguna fase del repo puede describir estos objetos`);
+		for (const objeto of noModelados) console.log(`  ${objeto.tipo}: ${objeto.nombre}`);
 	}
 
 	console.log(

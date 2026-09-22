@@ -561,5 +561,6 @@ BEGIN
     'items',v_items
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."approve_contract_amendment"(p_amendment_id uuid, p_approved boolean, p_comments text) IS 'Aprueba enmiendas. UPSELL crea nuevo item con delta. DOWNSELL soporta reducción parcial usando price_delta o eliminación completa.';

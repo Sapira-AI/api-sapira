@@ -14,6 +14,13 @@ import * as modulo from './index';
  * Verifica que los espejos del módulo `automatizaciones-ia` coinciden con el snapshot de prod (columnas + nullabilidad, PK,
  * FKs con ON DELETE, UNIQUE, CHECK e índices) y que no duplican tablas que ya tienen entity en el repo.
  * Construye la metadata en memoria con TODOS los espejos + todas las entities existentes (destinos de FK): NO abre conexión.
+ *
+ * ⚠️ SI ESTE SPEC FALLA, el repo y prod difieren. Son dos casos distintos:
+ *   1. Cambiaste una entity y todavía no aplicaste su migración a prod → aplicala (GUIA → Sincronizar
+ *      cambios) y DESPUÉS refrescá el snapshot con `yarn schema:snapshot`.
+ *   2. Nadie tocó el repo → prod cambió por fuera del proceso: hay que revisar qué pasó antes de
+ *      refrescar nada.
+ * El snapshot es una foto de prod a propósito: sirve de detector de deriva. No lo edites a mano.
  */
 describe('Espejo automatizaciones-ia (TypeORM ↔ prod public)', () => {
 	const mirrorEntities = Object.values(modulo);
@@ -60,16 +67,14 @@ describe('Espejo automatizaciones-ia (TypeORM ↔ prod public)', () => {
 
 		it('tiene las mismas FKs (nombre → tabla, ON DELETE) que prod', () => {
 			expect(
-				Object.fromEntries(
-					metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }])
-				)
+				Object.fromEntries(metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }]))
 			).toEqual(expected.foreignKeys);
 		});
 
 		it('tiene los mismos UNIQUE (nombre → columnas) que prod', () => {
-			expect(
-				Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))
-			).toEqual(expected.uniques);
+			expect(Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual(
+				expected.uniques
+			);
 		});
 
 		it('tiene los mismos CHECK (nombres) que prod', () => {

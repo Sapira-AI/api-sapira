@@ -15,6 +15,8 @@ especiales, funciones, triggers, policies, permisos y semillas; `yarn schema:sta
 mide cualquier base en solo lectura; y hay guardas en las pruebas para que nada de eso se
 desarme (GUIA → Guardas automáticas).
 
+Desde el 2026-09-22 se suma: los **140 comentarios de función** y la secuencia suelta `invoice_number_seq` están en el corpus; `schema:status` reporta **FUERA DEL CORPUS** (lo que ninguna fase puede describir); y el CLI **exige** `--only` en `--apply`, rechaza aplicar archivos sin commitear y ya no infiere el `--target`.
+
 ## Estado
 
 | # | Pendiente | Estado | Cerrado |
@@ -23,10 +25,10 @@ desarme (GUIA → Guardas automáticas).
 | 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
 | 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) (quedan 3 decisiones chicas, ver el punto) | 🔶 | 2026-09-21 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
-| 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ⬜ | |
+| 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
 | 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
-| 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) | ⬜ | |
-| 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) | ⬜ | |
+| 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) (eliminadas; falta confirmar con Domi) | 🔶 | 2026-09-21 |
+| 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) — decidido: se clona prod | ✅ | 2026-09-22 |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
 
 Las cifras de abajo se midieron el **2026-09-21**. La fuente vigente siempre es el comando, no esta
@@ -200,6 +202,14 @@ ninguna base. Para regenerar esta lista: `schema:status --target production`, se
 
 ## 5. El generador de espejos todavía manda sobre 74 entities
 
+> ✅ **CERRADO el 2026-09-22.** El generador ya no escribe los `.entity.ts` promovidos: solo emite
+> para ellos el snapshot de prod, el barrel, el registro y el README. Verificado con el criterio de
+> este punto —regenerar los 16 módulos no modifica ningún `.entity.ts`—. Además: la fecha de los
+> archivos generados salía de una constante `2026-08-22` y ahora se deriva del catálogo, y el
+> refresco (4 pasos sueltos) quedó en un solo comando, `yarn schema:snapshot --target <entorno>`,
+> que se corre **después** de aplicar a prod. Las 74 cabeceras se reescribieron para que ningún
+> archivo siga afirmando que se regenera.
+
 Las 74 entities promovidas desde espejo (cabecera "PROMOVIDA desde espejo") las reescribe
 `scripts/espejo/generate-espejo.py` desde los snapshots de prod.
 
@@ -231,6 +241,12 @@ TypeORM y no tienen arreglo desde el repo.
 
 ## 7. Dos vistas fuera del código
 
+> 🔶 **Sin objeto desde el 2026-09-21**: las dos vistas **ya no existen** ni en prod ni en QA (se
+> midió en vivo a las ~10:30 y a las ~11:30 del 21-09; entre medio desaparecieron). Falta que Domi
+> confirme que fue a propósito y el punto se cierra. Lo que queda del punto está resuelto por otro
+> lado: `schema:status` ahora lista **FUERA DEL CORPUS**, así que una vista nueva se reporta sola en
+> vez de pasar inadvertida, y crear la fase `views/` dejó de tener sentido sin archivos que poner.
+
 `invoices_with_net_amounts` e `invoice_items_consolidated` existen en prod y no tienen asset ni
 entity. `fetch-catalog.ts` ya las captura (consulta `views`), pero no hay fase que las aplique.
 
@@ -243,6 +259,13 @@ los tendría y nadie revisa sus cambios.
 **Cómo se verifica:** la consulta `views` del catálogo no devuelve nada sin contraparte en el repo.
 
 ## 8. No hay bootstrap desde cero
+
+> ✅ **CERRADO el 2026-09-22 como decisión, no como desarrollo** (Leon): **el camino oficial para un
+> entorno nuevo es clonar producción**, no reconstruir desde el repo. No se escribe la migración
+> inicial de las 131 tablas. La receta quedó en
+> [GUIA → Crear un entorno nuevo](./GUIA-CAMBIOS-DE-ESQUEMA.md#crear-un-entorno-nuevo).
+> Consecuencia aceptada: el repo describe el estado y las transiciones, pero no construye la base
+> desde vacío; los assets pueden asumir que las tablas existen.
 
 Las 131 tablas de prod existían antes de este sistema y `migrations/` solo tiene las 5 posteriores:
 **ninguna migración las crea**. Un entorno nuevo solo se puede levantar clonando prod.

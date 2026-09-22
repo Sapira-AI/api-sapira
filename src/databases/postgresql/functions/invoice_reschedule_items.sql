@@ -301,5 +301,6 @@ BEGIN
     'deleted_invoices', v_deleted_invoices, 'created_items', v_created_items,
     'updated_items', v_updated_items, 'deleted_items', v_deleted_items);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."invoice_reschedule_items"(p_contract_id uuid, p_target_state jsonb) IS 'Motor de Reestructurar Cronograma: aplica un target_state sobre las Por Emitir del contrato. Los documentos Unificada/Consolidada quedan fuera del alcance (revertir la agrupación primero). Emitidas son ancla inmutable; valida con check_contract_item_continuity.';

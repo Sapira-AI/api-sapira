@@ -33,5 +33,6 @@ BEGIN
     AND i.scheduled_at <= v_period_end
   ORDER BY i.scheduled_at, i.created_at;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_consolidable_invoices_for_period"(p_contract_id uuid, p_period date) IS 'Obtiene facturas de un contrato en un período, indicando cuáles pueden consolidarse.';

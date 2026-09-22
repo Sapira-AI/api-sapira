@@ -27,5 +27,7 @@ BEGIN
             ELSE true
         END as requires_config;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_available_transformation_types"() IS 'Función que retorna todos los tipos de transformación disponibles para que el frontend los pueda mostrar en la UI.
+Incluye el nuevo tipo value_mapping junto con los existentes.';

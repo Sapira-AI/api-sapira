@@ -13,5 +13,6 @@ BEGIN
   
   RETURN COALESCE(is_super, FALSE);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."is_super_admin"() IS 'Retorna TRUE si el usuario es Super Admin (puede ver todos los holdings)';

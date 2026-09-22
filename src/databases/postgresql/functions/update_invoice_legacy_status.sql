@@ -54,5 +54,6 @@ BEGIN
 
   RETURN COALESCE(NEW, OLD);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."update_invoice_legacy_status"() IS 'Trigger function que actualiza reconciliation_status de invoices_legacy basado en los matches confirmados';

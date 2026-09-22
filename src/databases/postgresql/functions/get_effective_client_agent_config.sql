@@ -37,5 +37,6 @@ BEGIN
   -- 5. Si no hay configuración del cliente, retornar global
   RETURN v_global_config;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_effective_client_agent_config"(p_agent_id uuid, p_client_id uuid, p_agent_type text, p_holding_id uuid) IS 'Obtiene la configuración efectiva para un cliente. Retorna NULL si está deshabilitado, merge de global + cliente si existe config personalizada, o solo global si no hay config del cliente.';

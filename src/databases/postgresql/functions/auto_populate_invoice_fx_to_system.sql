@@ -89,5 +89,8 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."auto_populate_invoice_fx_to_system"() IS 'Trigger que auto-completa fx_contract_to_system, system_currency, amount_system_currency y total_system_currency en invoices.
+CORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).
+Ejemplo: MXN 7,440 con FX 18.29 = 7,440 / 18.29 = 406.78 USD';

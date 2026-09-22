@@ -6,7 +6,7 @@
 >
 > Verificación de la promoción: `yarn schema:log` contra producción emite exactamente las mismas 94 sentencias que antes emitía con los espejos cargados, todas clasificadas como ruido (`REGISTRO-ALINEACION.md`).
 >
-> ⚠️ **Las entities promovidas siguen siendo archivos generados** (su cabecera dice "PROMOVIDA desde espejo"): `scripts/espejo/generate-espejo.py` las reescribe desde los snapshots de prod. Se pueden editar para cambiar su tabla (entity → `migration:generate` → revisar → `migration:run`), pero **antes de volver a correr el generador hay que refrescar los snapshots desde prod** (`fetch-catalog.ts` + `build-snapshots.py`): regenerar con snapshots anteriores al cambio lo revierte en silencio. Retirar el generador sobre las entities promovidas —para que la entity mande sin esa condición— es el punto 5 de [`REGISTRO-DB-COMO-CODIGO.md`](../REGISTRO-DB-COMO-CODIGO.md). Las reglas 1 y 3 de abajo describen cómo se construyó el espejo, no cómo se trabaja hoy.
+> ✅ **Las entities promovidas ya NO se regeneran** (desde el 2026-09-22). Son la fuente de verdad de su tabla y se editan como cualquier entity: entity → `migration:generate` → revisar → `migration:run`. El generador sigue emitiendo para ellas el snapshot de prod contra el que su spec las mide, el barrel y el README, así que la deriva se sigue detectando: si `<modulo>.entities.spec.ts` queda en rojo, el repo y prod difieren. Después de aplicar el cambio a producción se refresca el snapshot con `yarn schema:snapshot --target production` — nunca antes, o se tapa la deriva en vez de resolverla. Las reglas 1 y 3 de abajo describen cómo se construyó el espejo, no cómo se trabaja hoy.
 
 ## 🔴 Reglas que no se negocian
 

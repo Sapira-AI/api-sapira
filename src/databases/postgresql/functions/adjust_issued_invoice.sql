@@ -419,5 +419,11 @@ BEGIN
     'contracts_rebuilt',            v_contract_ids
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."adjust_issued_invoice"(p_invoice_id uuid, p_items jsonb, p_remainder_target text, p_new_invoice_date date, p_target_invoice_id uuid, p_notes text) IS 'P1 #3 (a): ajusta una factura ya emitida al detalle realmente emitido en el
+ERP conservando la continuidad del cronograma: la diferencia con lo programado
+se reprograma a una factura Por Emitir (nueva o existente del mismo contrato)
+o se justifica como cantidad real del período (override en quantities). Header
+tributario inmovible; suma de netos emitidos = neto del header exacto. Corrige
+la cara en moneda de contrato/sistema del header y dispara rebuild de RSM.';

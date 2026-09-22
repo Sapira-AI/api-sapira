@@ -68,5 +68,6 @@ BEGIN
     'result', v_renewal_result
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."execute_auto_renewal_for_item"(p_item_id uuid) IS 'Ejecuta manualmente la auto-renovación de un item específico. Útil para testing o casos especiales.';

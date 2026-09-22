@@ -1,9 +1,18 @@
+import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 import 'dotenv/config';
 import { Client } from 'pg';
 
-import { assertTargetAllowed, AssetMode, AssetRunnerOptions, discoverSqlAssets, runSqlAssets } from '@/databases/postgresql/assets-runner';
+import { assertAssetsCommiteados, assertFiltroExplicito, rutasModificadas } from '@/databases/postgresql/apply-guards';
+import {
+	assertTargetAllowed,
+	AssetMode,
+	AssetRunnerOptions,
+	discoverSqlAssets,
+	filterAssetsByOnly,
+	runSqlAssets,
+} from '@/databases/postgresql/assets-runner';
 import { assertConnectionMatchesTarget } from '@/databases/postgresql/connection-target';
 import { assetsVerificados, compararConCorpusGenerado } from '@/databases/postgresql/schema-status';
 
@@ -18,13 +27,20 @@ interface CliArguments {
 	allowProduction: boolean;
 	confirmTarget?: string;
 	only?: string[];
+	all: boolean;
+	allowDirty: boolean;
 }
 
-function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArguments {
+function parseArguments(args: string[]): CliArguments {
 	let mode: AssetMode = 'plan';
-	let target = environment.DATABASE_TARGET ?? environment.NODE_ENV ?? 'development';
+	// Sin default: `DATABASE_TARGET ?? NODE_ENV ?? 'development'` era el último lugar donde el target
+	// se INFERÍA. Para dry-run/apply/baseline lo cachaba `assertConnectionMatchesTarget`, pero en
+	// `--plan` etiquetaba la corrida en silencio con un entorno que nadie declaró.
+	let target: string | undefined;
 	let allowProduction = false;
 	let confirmTarget: string | undefined;
+	let all = false;
+	let allowDirty = false;
 	const only: string[] = [];
 
 	for (let index = 0; index < args.length; index += 1) {
@@ -34,6 +50,8 @@ function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArgu
 		else if (argument === '--apply') mode = 'apply';
 		else if (argument === '--baseline') mode = 'baseline';
 		else if (argument === '--allow-production') allowProduction = true;
+		else if (argument === '--all') all = true;
+		else if (argument === '--allow-dirty') allowDirty = true;
 		else if (argument === '--mode') {
 			const value = args[++index] as AssetMode;
 			if (!MODOS.includes(value)) throw new Error(`--mode debe ser ${MODOS.join(', ')}.`);
@@ -49,11 +67,36 @@ function parseArguments(args: string[], environment: NodeJS.ProcessEnv): CliArgu
 		}
 	}
 
-	return { mode, target, allowProduction, confirmTarget, only: only.length > 0 ? only : undefined };
+	if (!target) throw new Error('Falta --target <entorno>. Debe coincidir con la base de SUPABASE_DATABASE_URL.');
+
+	return { mode, target, allowProduction, confirmTarget, only: only.length > 0 ? only : undefined, all, allowDirty };
+}
+
+/** Assets seleccionados con cambios sin commitear. El I/O de git vive acá, no en las guardas. */
+function assertSeleccionCommiteada(arguments_: CliArguments, options: AssetRunnerOptions): void {
+	if (arguments_.allowDirty) return;
+
+	const raizRepo = path.resolve(__dirname, '..');
+	let porcelain: string;
+	try {
+		porcelain = execFileSync('git', ['status', '--porcelain', '-z', '--untracked-files=all'], {
+			cwd: raizRepo,
+			encoding: 'utf8',
+		});
+	} catch (error) {
+		// Falla cerrado: si no se puede saber qué está sin commitear, no se aplica.
+		throw new Error(
+			`No se pudo verificar el estado de git (${(error as Error).message}). ` +
+				'Corré el comando dentro del repo, o pasá --allow-dirty si sabés lo que estás haciendo.'
+		);
+	}
+
+	const seleccionados = filterAssetsByOnly(discoverSqlAssets(options.assetsRoot), options.only);
+	assertAssetsCommiteados(rutasModificadas(porcelain), path.relative(raizRepo, options.assetsRoot), seleccionados);
 }
 
 async function main(): Promise<void> {
-	const arguments_ = parseArguments(process.argv.slice(2), process.env);
+	const arguments_ = parseArguments(process.argv.slice(2));
 	const options: AssetRunnerOptions = {
 		assetsRoot: path.resolve(__dirname, '../src/databases/postgresql'),
 		mode: arguments_.mode,
@@ -62,7 +105,12 @@ async function main(): Promise<void> {
 		confirmTarget: arguments_.confirmTarget,
 		only: arguments_.only,
 	};
+	// Antes de conectar: las dos guardas que no dependen de la base.
+	assertFiltroExplicito({ mode: arguments_.mode, only: arguments_.only, all: arguments_.all });
 	assertTargetAllowed(options);
+	// `baseline` también: registra el checksum del archivo en disco, así que sin commitear el
+	// historial guardaría un checksum que no existe en ninguna rama.
+	if (options.mode === 'apply' || options.mode === 'baseline') assertSeleccionCommiteada(arguments_, options);
 
 	if (options.mode === 'plan') {
 		printResult(await runSqlAssets(undefined, options), options);

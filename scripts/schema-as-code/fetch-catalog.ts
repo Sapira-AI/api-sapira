@@ -143,14 +143,51 @@ const QUERIES = {
 
 	// `extension` distingue las funciones propias de las que instaló una extensión
 	// (pg_trgm y vector viven en public): sin eso el conteo de cobertura miente.
+	// `pg_get_functiondef` NO incluye el COMMENT ON: sin capturarlo aparte, los 140 comentarios de
+	// funciones de prod no existen en el repo y se pierden en un entorno reconstruido.
+	// `identity_args` es la firma mínima que `COMMENT ON FUNCTION` necesita para desambiguar sobrecargas.
 	functions: `
-		SELECT p.proname AS name, pg_get_functiondef(p.oid) AS def, e.extname AS extension
+		SELECT p.proname AS name, pg_get_functiondef(p.oid) AS def, e.extname AS extension,
+		       obj_description(p.oid, 'pg_proc') AS comment,
+		       pg_get_function_identity_arguments(p.oid) AS identity_args
 		FROM pg_proc p
 		JOIN pg_namespace n ON n.oid = p.pronamespace
 		LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass
 		LEFT JOIN pg_extension e ON e.oid = d.refobjid
 		WHERE n.nspname = 'public' AND p.prokind = 'f'
 		ORDER BY p.proname, p.oid`,
+
+	// Secuencias SUELTAS: las que no pertenecen a una columna `serial`/`identity` (esas llegan con
+	// su tabla, por entity + migración). Hoy es una sola, `invoice_number_seq`, y sin esto ningún
+	// archivo del repo la describe.
+	sequences: `
+		SELECT cl.relname AS name, s.seqstart AS start, s.seqincrement AS increment,
+		       s.seqmin AS minvalue, s.seqmax AS maxvalue, s.seqcache AS cache, s.seqcycle AS cycle
+		FROM pg_sequence s
+		JOIN pg_class cl ON cl.oid = s.seqrelid
+		JOIN pg_namespace n ON n.oid = cl.relnamespace
+		WHERE n.nspname = 'public'
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = cl.oid AND d.deptype = 'a')
+		ORDER BY cl.relname`,
+
+	// Objetos de `public` que ninguna fase del corpus modela. Se capturan para que
+	// `schema:status` los liste en FUERA DEL CORPUS en vez de que pasen inadvertidos.
+	otherRoutines: `
+		SELECT p.proname AS name, p.prokind::text AS kind
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass
+		WHERE n.nspname = 'public' AND p.prokind <> 'f' AND d.objid IS NULL
+		ORDER BY p.proname`,
+
+	otherTypes: `
+		SELECT t.typname AS name, t.typtype::text AS kind
+		FROM pg_type t
+		JOIN pg_namespace n ON n.oid = t.typnamespace
+		LEFT JOIN pg_class cl ON cl.oid = t.typrelid
+		WHERE n.nspname = 'public' AND t.typtype IN ('c', 'd', 'r')
+		  AND (cl.oid IS NULL OR cl.relkind NOT IN ('r', 'v', 'm', 'p'))
+		ORDER BY t.typname`,
 
 	// Las vistas no las modela TypeORM ni tienen fase propia todavía: se capturan
 	// para que la brecha quede medida y no supuesta.
@@ -246,7 +283,10 @@ function buildCatalog(data: Record<QueryName, Row[]>): unknown {
 		extensions: data.extensions,
 		grants,
 		functions: data.functions,
+		sequences: data.sequences,
 		views: data.views,
+		otherRoutines: data.otherRoutines,
+		otherTypes: data.otherTypes,
 		partitioned: data.partitioned.map((row) => row.table),
 		server: data.server[0],
 	};

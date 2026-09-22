@@ -27,5 +27,6 @@ BEGIN
 
   RETURN true;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_custom_fields"(p_entity_type text, p_holding_id uuid, p_custom_fields jsonb) IS 'Valida que los campos personalizados requeridos estén presentes y no vacíos';

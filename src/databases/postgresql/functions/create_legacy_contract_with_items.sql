@@ -240,5 +240,9 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RETURN jsonb_build_object('success', false, 'error', SQLERRM);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."create_legacy_contract_with_items"(p_contract_data jsonb, p_items jsonb[], p_client_entity_id uuid, p_user_id uuid, p_company_id uuid, p_group_by_period boolean) IS 'Crea un contrato legacy con sus items y genera contract_invoices programadas.
+FIX 20260302140000: Eliminado SET updated_at = NOW() en client_entities (columna inexistente).
+FIX 20260302150000: Generacion per-item usando term_months y billing_frequency propios de cada item.
+FIX 20260316120000: Inserta en client_entity_clients (junction table) ademas de actualizar client_entities.client_id.';

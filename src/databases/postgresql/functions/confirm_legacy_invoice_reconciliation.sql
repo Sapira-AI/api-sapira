@@ -521,4 +521,7 @@ BEGIN
       v_legacy_invoice.invoice_number, v_items_created)
   );
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."confirm_legacy_invoice_reconciliation"(p_invoice_legacy_id uuid, p_force_rereconcile boolean) IS 'Confirma la reconciliación de una factura legacy, creando registros en invoices e invoice_items. Soporta re-reconciliación si el contrato no está activo. Actualiza reconciliation_pct del contrato.';
+COMMENT ON FUNCTION public."confirm_legacy_invoice_reconciliation"(p_invoice_legacy_id uuid) IS 'Confirma la reconciliación de una factura legacy, creando registros formales en invoices e invoice_items. Actualiza reconciliation_pct del contrato.';

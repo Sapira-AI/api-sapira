@@ -15,5 +15,6 @@ BEGIN
   
   RETURN role_name;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_current_user_role"() IS 'SOLO PARA USO EN APLICACIÓN - No usar en políticas RLS (causa recursión)';

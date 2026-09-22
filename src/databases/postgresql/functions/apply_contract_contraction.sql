@@ -525,5 +525,6 @@ BEGIN
     'pe_adjusted_count', v_pe_adjusted_count
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_contract_contraction"(p_contract_id uuid, p_type text, p_items jsonb, p_effective_date date, p_reason_id uuid, p_notes text) IS 'RPC unificada de contracción (CHURN/DOWNSELL). Reemplaza register_item_non_renewal + create_contract_churn. Ver docs/contratos/contraccion-unificada.md';

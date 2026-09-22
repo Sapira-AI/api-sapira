@@ -63,5 +63,6 @@ BEGIN
   -- Por defecto, denegar
   RETURN FALSE;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."rls_can_see_user_no_rls"(target_user_id uuid) IS 'Helper con owner postgres - FIXED obtención de rol sin JOIN';

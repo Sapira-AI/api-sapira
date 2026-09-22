@@ -6,7 +6,7 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
 
 /**
  * Entity de `public.contract_billing_splits` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
  * Policies (4): tenant_isolation_delete_billing_splits (DELETE, public); tenant_isolation_insert_billing_splits (INSERT, public); tenant_isolation_select_billing_splits (SELECT, public); tenant_isolation_update_billing_splits (UPDATE, public).

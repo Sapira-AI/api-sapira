@@ -27,5 +27,6 @@ BEGIN
     AND cec.holding_id = v_holding_id
   ORDER BY cec.is_primary DESC, c.name_commercial;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_clients_by_entity"(p_entity_id uuid) IS 'Obtiene todos los clientes comerciales asignados a una razón social, ordenados por primary primero.';
