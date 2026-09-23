@@ -13,6 +13,7 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 @Index('idx_odoo_partners_stg_odoo_id_status', ['odoo_id', 'processing_status'])
 @Index('idx_odoo_partners_stg_processed_at', ['processed_at'])
 @Index('idx_odoo_partners_stg_processing_status', ['processing_status'])
+@Index('idx_odoo_partners_stg_raw_data_gin', { synchronize: false })
 @Entity({
 	name: 'odoo_partners_stg',
 	comment: 'Tabla de staging para partners de Odoo con JSON híbrido',

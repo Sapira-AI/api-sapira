@@ -109,5 +109,8 @@ BEGIN
     'results', v_results
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."process_auto_renewals"(p_days_before_expiry integer) IS 'Procesa renovaciones automáticas de items de contrato que están próximos a vencer. 
+Por defecto se ejecuta 90 días (3 meses) antes del vencimiento.
+Retorna un resumen JSON con los resultados de la ejecución.';

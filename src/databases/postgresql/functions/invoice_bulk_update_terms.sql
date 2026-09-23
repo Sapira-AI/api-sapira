@@ -39,5 +39,6 @@ BEGIN
       'new_terms', v_terms, 'new_terms_normalized_from_empty', p_terms IS NOT NULL AND v_terms IS NULL,
       'invoice_count', v_count, 'old', v_old));
   RETURN jsonb_build_object('success', true, 'updated_count', v_count, 'invoice_ids', to_jsonb(v_ids));
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."invoice_bulk_update_terms"(p_contract_id uuid, p_invoice_ids uuid[], p_terms text) IS 'Actualiza invoice_terms_and_conditions de facturas Por Emitir. Normaliza '''' o whitespace a NULL para que invoices_fill_terms_from_contract_trigger pueda heredar del contrato en futuras inserciones. p_invoice_ids NULL = todas las Por Emitir del contrato. Requiere permiso EDIT_FACTURACION.';

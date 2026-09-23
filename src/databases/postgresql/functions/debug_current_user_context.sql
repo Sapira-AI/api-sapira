@@ -20,5 +20,6 @@ BEGIN
   LEFT JOIN public.company_holdings ch ON uh.holding_id = ch.id
   WHERE u.auth_id = auth.uid();
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."debug_current_user_context"() IS 'Retorna el contexto del usuario actual para debugging';

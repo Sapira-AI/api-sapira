@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
@@ -6,7 +6,7 @@ import { AiAgent } from './ai-agent.entity';
 
 /**
  * Entity de `public.ai_runs` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Referenciada por FK desde 1 tabla(s): ai_messages.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
@@ -14,6 +14,8 @@ import { AiAgent } from './ai-agent.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX ai_runs_agent_idx ON public.ai_runs USING btree (agent_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX ai_runs_holding_idx ON public.ai_runs USING btree (holding_id, created_at DESC)
  */
+@Index('ai_runs_agent_idx', { synchronize: false })
+@Index('ai_runs_holding_idx', { synchronize: false })
 @Entity('ai_runs')
 @Check('ai_runs_status_check', "status = ANY (ARRAY['queued'::text, 'approved'::text, 'sent'::text, 'error'::text, 'cancelled'::text])")
 export class AiRun {

@@ -31,7 +31,18 @@ export interface Catalog {
 	enums: Record<string, string[]>;
 	extensions: { name: string; version: string; schema: string }[];
 	grants: Record<string, { grantee: string; privilege: string }[]>;
-	functions: { name: string; def: string; extension: string | null }[];
+	functions: { name: string; def: string; extension: string | null; comment?: string | null; identity_args?: string }[];
+	/** Secuencias sueltas (sin columna dueña): las de `serial`/`identity` vienen con su tabla. */
+	sequences?: { name: string; start: string; increment: string; minvalue: string; maxvalue: string; cache: string; cycle: boolean }[];
+	/** Objetos de `public` que ninguna fase modela; los reporta `schema:status` en FUERA DEL CORPUS. */
+	views?: { name: string; kind: string; def: string }[];
+	otherRoutines?: { name: string; kind: string }[];
+	otherTypes?: { name: string; kind: string }[];
+	/** Permisos reales, agrupados por firma; `grants/` no es verificable, así que esto es el reporte. */
+	aclSignatures?: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	defaultAcls?: { rol: string; esquema: string; tipo: string; concede: string }[];
+	/** Jobs de pg_cron. Vacío si la base no tiene la extensión. */
+	cron?: { name: string; schedule: string; command: string; active: boolean; username: string; database: string }[];
 }
 
 interface TableEntry {
@@ -111,6 +122,64 @@ function emitirTypes(catalog: Catalog): Map<string, string> {
 	return salida;
 }
 
+/**
+ * Secuencias sueltas. Van en `types/` —fase no re-aplicable— porque `CREATE SEQUENCE IF NOT EXISTS`
+ * no redefine una que ya existe: cambiar el paso o el máximo es una transición y va en migración.
+ *
+ * No se emite el valor actual (`last_value`): eso es dato, no estado del esquema.
+ */
+function emitirSequences(catalog: Catalog): Map<string, string> {
+	const salida = new Map<string, string>();
+	for (const secuencia of [...(catalog.sequences ?? [])].sort((a, b) => a.name.localeCompare(b.name))) {
+		salida.set(
+			`types/020-sequence-${nombreArchivo(secuencia.name)}.sql`,
+			[
+				`-- Secuencia public.${secuencia.name}, sin columna dueña (no viene de un serial/identity),`,
+				'-- así que ninguna entity la declara. El valor actual es dato y no se versiona.',
+				'',
+				`CREATE SEQUENCE IF NOT EXISTS "public".${comillas(secuencia.name)}`,
+				`\tINCREMENT BY ${secuencia.increment}`,
+				`\tMINVALUE ${secuencia.minvalue}`,
+				`\tMAXVALUE ${secuencia.maxvalue}`,
+				`\tSTART WITH ${secuencia.start}`,
+				`\tCACHE ${secuencia.cache}`,
+				`\t${secuencia.cycle ? 'CYCLE' : 'NO CYCLE'};`,
+				'',
+			].join('\n')
+		);
+	}
+	return salida;
+}
+
+/**
+ * Jobs de pg_cron. `cron.schedule` actualiza el job si ya existe uno con ese nombre, así que el
+ * asset converge al re-aplicarlo (verificado en QA el 2026-09-22).
+ *
+ * Dos cosas que no son cosméticas:
+ *  - **El rol importa**: la clave del upsert es `(jobname, username)`. Aplicado con otro rol, se
+ *    crea un segundo job con el mismo nombre y los dos corren. Por eso el rol esperado va en la
+ *    cabecera: los assets se aplican con `postgres`.
+ *  - `cron.schedule` no puede dejar un job pausado, así que `active = false` se expresa aparte con
+ *    `cron.alter_job`. Se emite solo en ese caso, para que el ida y vuelta sea exacto.
+ */
+function emitirCron(catalog: Catalog): Map<string, string> {
+	const salida = new Map<string, string>();
+	for (const job of [...(catalog.cron ?? [])].sort((a, b) => a.name.localeCompare(b.name))) {
+		const lineas = [
+			`-- Job pg_cron ${job.name} (${job.schedule}). Se aplica con el rol ${job.username}:`,
+			'-- cron.schedule hace upsert por (jobname, username), así que otro rol crearía un job paralelo.',
+			'',
+			`SELECT cron.schedule('${job.name.replace(/'/g, "''")}', '${job.schedule.replace(/'/g, "''")}', $cron$${job.command.trim()}$cron$);`,
+		];
+		if (!job.active) {
+			lineas.push('', '-- El job está pausado en la base; cron.schedule no puede expresarlo.');
+			lineas.push(`SELECT cron.alter_job((SELECT jobid FROM cron.job WHERE jobname = '${job.name.replace(/'/g, "''")}'), active := false);`);
+		}
+		salida.set(`cron/${nombreArchivo(job.name)}.sql`, `${lineas.join('\n')}\n`);
+	}
+	return salida;
+}
+
 function emitirSpecialIndex(catalog: Catalog): Map<string, string> {
 	const salida = new Map<string, string>();
 	for (const [tabla, entry] of Object.entries(catalog.tables).sort(([a], [b]) => a.localeCompare(b))) {
@@ -161,23 +230,34 @@ function emitirGrants(catalog: Catalog): Map<string, string> {
 }
 
 function emitirFunciones(catalog: Catalog): Map<string, string> {
-	const porNombre = new Map<string, string[]>();
+	const porNombre = new Map<string, Catalog['functions']>();
 	for (const funcion of catalog.functions) {
 		if (funcion.extension) continue; // la instaló una extensión, no es nuestra
-		porNombre.set(funcion.name, [...(porNombre.get(funcion.name) ?? []), funcion.def]);
+		porNombre.set(funcion.name, [...(porNombre.get(funcion.name) ?? []), funcion]);
 	}
 
 	const salida = new Map<string, string>();
-	for (const [nombre, defs] of [...porNombre].sort(([a], [b]) => a.localeCompare(b))) {
+	for (const [nombre, funciones] of [...porNombre].sort(([a], [b]) => a.localeCompare(b))) {
 		// Las sobrecargas comparten nombre: todas van al mismo asset, en orden estable, separadas
 		// por `;` — sin él, el runner no puede aplicar un archivo con más de una definición
 		// (pg_get_functiondef no lo emite y dos CREATE seguidos son un error de sintaxis).
-		salida.set(
-			`functions/${nombreArchivo(nombre)}.sql`,
-			`${defs.map((def) => def.trimEnd()).sort((a, b) => a.localeCompare(b)).join(';\n\n')}\n`
-		);
+		const ordenadas = [...funciones].sort((a, b) => a.def.localeCompare(b.def));
+		const cuerpo = ordenadas.map((funcion) => funcion.def.trimEnd()).join(';\n\n');
+
+		// Los COMMENT ON van todos al final, después de las definiciones, y no intercalados: así un
+		// archivo con cabecera escrita a mano se actualiza agregando líneas al final, sin reescribirlo.
+		const comentarios = ordenadas
+			.filter((funcion) => funcion.comment)
+			.map((funcion) => `COMMENT ON FUNCTION public.${comillas(nombre)}(${funcion.identity_args ?? ''}) IS ${ts_sql(funcion.comment)};`);
+
+		salida.set(`functions/${nombreArchivo(nombre)}.sql`, comentarios.length > 0 ? `${cuerpo};\n\n${comentarios.join('\n')}\n` : `${cuerpo}\n`);
 	}
 	return salida;
+}
+
+/** Literal SQL de un texto: comilla simple duplicada, saltos de línea tal cual. */
+function ts_sql(valor: string | null | undefined): string {
+	return `'${(valor ?? '').replace(/'/g, "''")}'`;
 }
 
 function emitirTriggers(catalog: Catalog): Map<string, string> {
@@ -225,11 +305,14 @@ function emitirPolicies(catalog: Catalog): Map<string, string> {
 /** Emisores en orden de fase. `emitirCorpus` y `main()` comparten esta lista para no divergir. */
 const EMISORES: [string, (catalog: Catalog) => Map<string, string>][] = [
 	['types', emitirTypes],
+	// Misma fase `types/`; la etiqueta solo separa el conteo que imprime main().
+	['types (secuencias)', emitirSequences],
 	['special-index', emitirSpecialIndex],
 	['grants', emitirGrants],
 	['functions', emitirFunciones],
 	['triggers', emitirTriggers],
 	['rls', emitirPolicies],
+	['cron', emitirCron],
 ];
 
 /**
@@ -294,4 +377,16 @@ function main(): void {
 
 if (require.main === module) main();
 
-export { emitirCorpus, emitirFunciones, emitirGrants, emitirPolicies, emitirSpecialIndex, emitirTriggers, emitirTypes, esDeclarable, idempotente };
+export {
+	emitirCorpus,
+	emitirCron,
+	emitirFunciones,
+	emitirGrants,
+	emitirPolicies,
+	emitirSequences,
+	emitirSpecialIndex,
+	emitirTriggers,
+	emitirTypes,
+	esDeclarable,
+	idempotente,
+};

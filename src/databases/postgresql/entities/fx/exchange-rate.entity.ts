@@ -9,6 +9,7 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index('idx_exchange_rates_currencies', ['from_currency', 'to_currency'])
 @Index('idx_exchange_rates_date', ['rate_date'])
 @Index('idx_exchange_rates_pair_date', ['from_currency', 'to_currency', 'rate_date'])
+@Index('idx_exchange_rates_lookup', { synchronize: false })
 @Entity({
 	name: 'exchange_rates',
 	comment:

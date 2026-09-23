@@ -58,9 +58,16 @@ actualizar todo lo que no es tabla.**
 - Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
 - **Toda tabla de `public` tiene entity viva; no hay espejos** (`database.module.spec.ts` lo exige).
   Una tabla nueva nace como entity + migración, nunca como `.espejo.ts`.
-- **74 entities son generadas** (cabecera "PROMOVIDA desde espejo"). Se editan para cambiar su tabla,
-  pero no se corre `scripts/espejo/generate-espejo.py` sin antes refrescar los snapshots desde prod:
-  regenerar con snapshots viejos revierte el cambio en silencio.
+- **Los jobs de pg_cron son assets** (`cron/`), y **nunca llevan un secreto en el comando**: si llaman
+  una edge function, van por `public.cron_invoke_edge_function`, que lee la URL y la clave de Vault.
+  Hay una prueba que falla si aparece un token en el corpus o en los snapshots.
+- **Las 74 entities promovidas (cabecera "PROMOVIDA desde espejo") ya NO se regeneran**: son la
+  fuente de verdad de su tabla y se editan como cualquier entity. El generador solo refresca el
+  snapshot de prod contra el que su spec las mide. Si ese spec queda en rojo, el repo y prod
+  difieren: se aplica el cambio y DESPUÉS se corre `yarn schema:snapshot --target production`.
+- **El CLI exige lo que antes era solo regla escrita**: `--apply` sin `--only` aborta (o `--all` a
+  conciencia), no se aplica un asset con cambios sin commitear (o `--allow-dirty`), y `--target` es
+  obligatorio: ya no se infiere de `NODE_ENV`.
 
 ### Reglas
 - Nunca actives `synchronize`, `dropSchema` ni `migrationsRun`. `yarn schema:log` es el único uso de

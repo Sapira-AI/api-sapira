@@ -422,5 +422,6 @@ BEGIN
     'grouped_invoices_dates_kept', v_grouped_kept,
     'validation', v_continuity);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."sync_invoices_for_contract_item"(p_item_id uuid, p_action text) IS 'P1 #4: sincroniza las facturas Por Emitir de un contract_item tras crearlo/editarlo (sync) o al eliminarlo (delete). Emitidas como ancla; bloqueos explicativos para documentos unificados, cantidades variables y exceso emitido. Valida con check_contract_item_continuity solo el ítem tocado.';

@@ -61,5 +61,6 @@ BEGIN
     END IF;
   END IF;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."recalc_invoice_status"(p_invoice_id uuid) IS 'Recalcula el estado de una factura según sus pagos confirmados. Facturas con total 0 (períodos sin cobro) pasan a Pagada al registrar un pago confirmado (monto 0 permitido); sin pagos, el estado no se toca automáticamente.';

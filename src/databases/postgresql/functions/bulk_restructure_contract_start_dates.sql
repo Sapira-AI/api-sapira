@@ -146,5 +146,6 @@ BEGIN
     'errors',    v_errors
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."bulk_restructure_contract_start_dates"(p_contract_ids uuid[], p_cutoff_date date) IS 'Reestructura masivamente fechas de inicio de contratos. SECURITY DEFINER con holding check por contrato (skipea forbidden_holding). Propaga errores de regenerate como entries en errors[].';

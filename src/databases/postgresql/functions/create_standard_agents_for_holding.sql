@@ -82,5 +82,6 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."create_standard_agents_for_holding"() IS 'Crea automáticamente 2 agentes estándar (Proformas y Cobranzas) con configuración por defecto al crear un nuevo holding.';

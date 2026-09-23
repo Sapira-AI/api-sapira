@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 
 @Index('idx_stripe_sync_jobs_holding_id', ['holding_id'])
 @Index('idx_stripe_sync_jobs_status', ['status'])
+@Index('idx_stripe_sync_jobs_created_at', { synchronize: false })
 @Entity({ name: 'stripe_sync_jobs', comment: 'Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira' })
 export class StripeSyncJob {
 	@PrimaryGeneratedColumn('uuid')

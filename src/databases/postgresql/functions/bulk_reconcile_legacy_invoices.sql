@@ -601,4 +601,22 @@ BEGIN
     'errors', v_errors
   );
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."bulk_reconcile_legacy_invoices"(p_contract_id uuid) IS 'Reconcilia masivamente facturas legacy de un contrato, creando registros en invoices e invoice_items.
+FIX 2026-02-15: 
+- Usa amount_invoice_currency del match cuando existe (para items divididos)
+- Corregido invoice_currency (antes usaba currency)
+- Calcula correctamente unit_price_invoice_currency desde el match';
+COMMENT ON FUNCTION public."bulk_reconcile_legacy_invoices"(p_invoice_ids uuid[], p_contract_id uuid, p_user_id uuid) IS 'Reconcilia múltiples facturas legacy con un contrato. 
+VERSIÓN CORREGIDA v2: 
+- invoice_currency usa la moneda de la factura legacy
+- amount_system_currency se calcula desde amount_contract_currency
+- total_system_currency = (amount_contract + tax_contract) * fx_to_system
+- tax_amount_contract_currency se convierte desde tax_amount_invoice_currency usando el FX
+- invoice_items usa valores de reconciliación (cantidad, unidad de medida, montos)
+- unit_price_contract_currency usa el precio BASE del contract_item (sin descuento)
+- discount_pct se guarda del contract_item
+- subtotal_contract_currency viene de la reconciliación (ya con descuento aplicado)
+- fx_contract_to_invoice se calcula a nivel de factura (no por item)
+- NO modifica datos en invoice_items_legacy ni invoices_legacy (solo status)';

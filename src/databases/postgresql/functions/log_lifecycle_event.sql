@@ -48,5 +48,6 @@ BEGIN
 
   RETURN v_id;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."log_lifecycle_event"(p_contract_id uuid, p_event_type text, p_title text, p_effective_date date, p_amount_delta numeric, p_summary text, p_description text, p_items_affected jsonb, p_event_subtype text, p_status text) IS 'Registra un evento de ciclo de vida del contrato con metadatos opcionales y devuelve el id del evento';

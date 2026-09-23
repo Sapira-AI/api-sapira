@@ -219,5 +219,10 @@ BEGIN
     'matches_count',  v_matches_count
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."reconcile_legacy_with_por_emitir"(p_legacy_invoice_id uuid, p_matches jsonb) IS 'Reconcilia una factura legacy contra facturas "Por Emitir" del contrato (contratos activos).
+   Soporta cobertura parcial (split automático con split_from_invoice_id) y muchos-a-muchos.
+   Actualiza la Por Emitir con datos reales del ERP y crea remainder si hay diferencia.
+   FX se calcula como implied: legacy.amount_invoice_currency / sum(coverage_contract).
+   Fix v20260303040000: eliminado updated_at del UPDATE invoices (columna no existe en esa tabla).';

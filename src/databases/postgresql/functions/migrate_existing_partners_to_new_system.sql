@@ -48,5 +48,6 @@ BEGIN
     
     RETURN QUERY SELECT migrated, errors;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."migrate_existing_partners_to_new_system"(holding_id_param uuid) IS 'Migra partners existentes para usar nuevas transformaciones (opcional, para casos específicos)';

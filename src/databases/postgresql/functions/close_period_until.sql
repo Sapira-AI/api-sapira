@@ -90,5 +90,6 @@ BEGIN
   RETURNING id INTO v_event_id;
 
   RETURN v_event_id;
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."close_period_until"(p_holding_id uuid, p_company_id uuid, p_until_date date, p_reason text) IS 'Cierra el período hasta p_until_date (último día del mes). Solo admin/super_admin. Avanza cutoff_date adelante e inserta evento. Si retrocedería el cutoff, error.';

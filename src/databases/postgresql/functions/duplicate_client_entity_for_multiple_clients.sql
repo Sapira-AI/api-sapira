@@ -96,5 +96,7 @@ BEGIN
     END IF;
   END IF;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."duplicate_client_entity_for_multiple_clients"(p_source_entity_id uuid, p_client_ids uuid[]) IS 'Duplica una client_entity para asignarla a múltiples clientes comerciales. 
+La primera asignación actualiza la entidad original, las siguientes crean duplicados.';

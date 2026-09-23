@@ -36,5 +36,6 @@ BEGIN
     'contract_id', p_contract_id
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."reconcile_contract_status"(p_contract_id uuid) IS 'Revisa eventos del ciclo de vida y ajusta el status del contrato cuando corresponde. Devuelve JSON con el resultado.';

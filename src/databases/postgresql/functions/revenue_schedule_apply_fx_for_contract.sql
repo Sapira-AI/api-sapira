@@ -206,5 +206,9 @@ BEGIN
     AND COALESCE(r.is_total_row, false) = false;
 
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."revenue_schedule_apply_fx_for_contract"(p_contract_id uuid, p_from_month date) IS 'Step 2: Apply FX conversion to revenue schedule records using holding FX policies.
+CORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).
+Convierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.
+Ejemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD';

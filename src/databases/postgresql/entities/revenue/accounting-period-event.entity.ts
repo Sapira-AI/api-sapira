@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
@@ -6,7 +6,7 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Entity de `public.accounting_period_events` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 15 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Audit log inmutable de cierres y reaperturas de períodos. Cada fila captura el movimiento de cutoff_date, motivo y snapshot del usuario.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_events_validate_company_holding · BEFORE INSERT FOR EACH ROW → trg_validate_cutoff_company_holding_match().
@@ -14,6 +14,8 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_period_events_company_time ON public.accounting_period_events USING btree (holding_id, company_id, performed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_period_events_performed_by ON public.accounting_period_events USING btree (performed_by, performed_at DESC)
  */
+@Index('idx_period_events_company_time', { synchronize: false })
+@Index('idx_period_events_performed_by', { synchronize: false })
 @Entity({
 	name: 'accounting_period_events',
 	comment:

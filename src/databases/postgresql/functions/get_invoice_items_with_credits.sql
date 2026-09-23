@@ -52,5 +52,6 @@ BEGIN
   SELECT * FROM credit_notes
   ORDER BY item_source, product_name;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_invoice_items_with_credits"(p_invoice_id uuid) IS 'Retorna todos los items de una factura incluyendo los items de sus notas de crédito relacionadas';

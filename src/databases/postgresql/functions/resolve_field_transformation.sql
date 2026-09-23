@@ -93,5 +93,28 @@ BEGIN
     -- Por defecto, retornar el valor original
     RETURN p_source_value;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."resolve_field_transformation"(p_transformation_type transformation_type_enum, p_transformation_config jsonb, p_source_value text, p_holding_id uuid) IS 'Función actualizada que incluye soporte para value_mapping. 
+
+Tipos de transformación soportados:
+- direct: Mapeo directo sin transformación
+- company_mapping: Mapeo de companies Odoo -> Sapira
+- partner_mapping: Mapeo de partners Odoo -> client_entities Sapira  
+- invoice_mapping: Mapeo de invoices Odoo -> invoices_legacy Sapira
+- value_mapping: Mapeo de valores específicos usando tabla de equivalencias
+- lookup_table: Lookup genérico en tabla de referencia
+- custom_function: Función personalizada (placeholder)
+
+Para value_mapping, la configuración debe tener esta estructura:
+{
+  "mappings": {
+    "not_paid": "Enviada",
+    "in_payment": "Enviada", 
+    "paid": "Pagada",
+    "partial": "Enviada",
+    "reversed": "Enviada",
+    "invoicing_legacy": "Pagada"
+  },
+  "default_value": "Enviada"
+}';

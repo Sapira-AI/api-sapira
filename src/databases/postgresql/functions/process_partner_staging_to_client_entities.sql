@@ -125,5 +125,6 @@ BEGIN
     
     RETURN result_summary;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."process_partner_staging_to_client_entities"(holding_id_param uuid, batch_id_param text) IS 'Función actualizada que pasa el holding_id a apply_field_mapping_to_data para soportar transformaciones que requieren contexto de holding.';

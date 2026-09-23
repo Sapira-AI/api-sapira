@@ -49,5 +49,12 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."trigger_rsm_on_quantity_change"() IS 'Trigger AFTER INSERT OR UPDATE en quantities.
+Actualiza revenue_schedule_monthly del período afectado cuando el contrato
+está Activo y revenue_schedule_monthly_enabled = true en financial_settings.
+
+FIX 2026-04-28: ahora deriva amount = unit_price * quantity cuando NEW.amount
+                es NULL. Antes el trigger se saltaba todos los overrides
+                ingresados en formato Opción A (unit_price + quantity).';

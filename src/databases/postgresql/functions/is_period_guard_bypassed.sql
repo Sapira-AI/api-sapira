@@ -15,5 +15,6 @@ BEGIN
     RETURN false;
   END IF;
   RETURN public.is_super_admin();
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."is_period_guard_bypassed"() IS 'TRUE si sapira.bypass_period_guard = "on" Y el usuario actual es super_admin. Usado para operaciones de onboarding masivo.';

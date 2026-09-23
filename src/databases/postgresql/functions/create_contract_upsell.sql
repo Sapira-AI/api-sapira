@@ -75,5 +75,6 @@ BEGIN
 
   RETURN v_id;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."create_contract_upsell"(p_contract_id uuid, p_items jsonb, p_effective_date date, p_reason text, p_metadata jsonb, p_approval_required boolean) IS 'Crea un amendment de tipo UPSELL. Si approval_required=false, se auto-aprueba y registra en historial.';

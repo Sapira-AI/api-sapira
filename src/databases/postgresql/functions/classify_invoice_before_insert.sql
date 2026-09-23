@@ -87,5 +87,6 @@ EXCEPTION WHEN OTHERS THEN
     NEW.integration_notes := 'Error general en trigger: ' || SQLERRM;
     RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."classify_invoice_before_insert"() IS 'Clasifica facturas como create/update/processed basado en existencia y cambios detectados.';

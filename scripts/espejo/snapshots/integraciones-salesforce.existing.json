@@ -92,7 +92,7 @@
    },
    "login_url": {
     "type": "text",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "https://login.salesforce.com",
@@ -146,7 +146,7 @@
     "array": false
    },
    "token_issued_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -157,7 +157,7 @@
     "array": false
    },
    "token_expires_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -168,11 +168,11 @@
     "array": false
    },
    "auth_type": {
-    "type": "enum",
-    "nullable": false,
+    "type": "text",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "password",
+    "default": "client_credentials",
     "length": null,
     "precision": null,
     "scale": null,
@@ -180,7 +180,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -190,7 +190,7 @@
     "array": false
    },
    "last_sync_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -201,8 +201,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -212,8 +212,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -226,11 +226,63 @@
   "uniques": {
    "UQ_0e0e720c8fa768831648e34ffb0": [
     "holding_id"
+   ],
+   "salesforce_connections_holding_id_key": [
+    "holding_id"
    ]
   },
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "indices": {
+   "idx_salesforce_connections_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_connections_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_connections_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_connections_auth_type": {
+    "columns": [
+     "auth_type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_connections_auth_type_check",
+    "expression": "((auth_type = ANY (ARRAY['password'::text, 'client_credentials'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "salesforce_connections_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "salesforce_connections_user_id_fkey": {
+    "columns": [
+     "user_id"
+    ],
+    "table": "users",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "salesforce_accounts_stg": {
   "class": "SalesforceAccountsStg",
@@ -357,7 +409,7 @@
     "array": false
    },
    "processed_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -368,7 +420,7 @@
     "array": false
    },
    "last_integrated_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -379,31 +431,50 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
+  "uniques": {
+   "salesforce_accounts_stg_unique": [
+    "holding_id",
+    "salesforce_id"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_accounts_stg_holding_status": {
+    "columns": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_accounts_stg_status_check",
+    "expression": "(((processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))))"
+   }
+  ],
   "foreignKeys": {}
  },
  "salesforce_opportunities_stg": {
@@ -542,7 +613,7 @@
     "array": false
    },
    "processed_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -553,7 +624,7 @@
     "array": false
    },
    "last_integrated_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -564,31 +635,58 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
+  "uniques": {
+   "salesforce_opportunities_stg_unique": [
+    "holding_id",
+    "salesforce_id"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_opportunities_stg_holding_status": {
+    "columns": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_opportunities_stg_account": {
+    "columns": [
+     "holding_id",
+     "salesforce_account_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_opportunities_stg_status_check",
+    "expression": "(((processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))))"
+   }
+  ],
   "foreignKeys": {}
  },
  "salesforce_line_items_stg": {
@@ -749,7 +847,7 @@
     "array": false
    },
    "processed_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -760,7 +858,7 @@
     "array": false
    },
    "last_integrated_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -771,32 +869,75 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "uniques": {
+   "salesforce_line_items_stg_unique": [
+    "holding_id",
+    "salesforce_id"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_line_items_stg_product": {
+    "columns": [
+     "holding_id",
+     "salesforce_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_line_items_stg_opportunity": {
+    "columns": [
+     "holding_id",
+     "salesforce_opportunity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_line_items_stg_holding_status": {
+    "columns": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_line_items_stg_status_check",
+    "expression": "(((processing_status IS NULL) OR (processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text]))))"
+   }
+  ],
+  "foreignKeys": {
+   "salesforce_line_items_stg_opportunity_staging_id_fkey": {
+    "columns": [
+     "opportunity_staging_id"
+    ],
+    "table": "salesforce_opportunities_stg",
+    "onDelete": "SET NULL"
+   }
+  }
  },
  "salesforce_object_mappings": {
   "class": "SalesforceObjectMapping",
@@ -901,10 +1042,50 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_salesforce_object_per_holding": [
+    "holding_id",
+    "salesforce_object_type",
+    "salesforce_object_id"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_mappings_sapira_lookup": {
+    "columns": [
+     "holding_id",
+     "sapira_table_name",
+     "sapira_record_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_mappings_salesforce_lookup": {
+    "columns": [
+     "holding_id",
+     "salesforce_object_type",
+     "salesforce_object_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_mappings_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "salesforce_object_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "salesforce_field_mappings": {
   "class": "SalesforceFieldMapping",
@@ -966,7 +1147,7 @@
    },
    "is_required": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": false,
@@ -977,7 +1158,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -1032,7 +1213,7 @@
    },
    "created_at": {
     "type": "timestamptz",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1043,7 +1224,7 @@
    },
    "updated_at": {
     "type": "timestamptz",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1053,9 +1234,35 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
+  "uniques": {
+   "salesforce_field_mappings_holding_id_object_type_sapira_fie_key": [
+    "holding_id",
+    "object_type",
+    "sapira_field"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_field_mappings_object_type": {
+    "columns": [
+     "object_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_field_mappings_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_field_mappings_object_type_check",
+    "expression": "((object_type = ANY (ARRAY['client'::text, 'client_entity'::text, 'opportunity'::text, 'line_item'::text, 'product'::text, 'contact'::text])))"
+   }
+  ],
   "foreignKeys": {}
  },
  "salesforce_product_mappings": {
@@ -1172,8 +1379,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamptz",
-    "nullable": false,
+    "type": "timestamp",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1183,8 +1390,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamptz",
-    "nullable": false,
+    "type": "timestamp",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1195,9 +1402,56 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_sf_product_map_unique": {
+    "columns": [
+     "holding_id",
+     "salesforce_product_id"
+    ],
+    "unique": true,
+    "where": null
+   },
+   "idx_sf_product_map_sapira_product": {
+    "columns": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_sf_product_map_family": {
+    "columns": [
+     "holding_id",
+     "salesforce_family"
+    ],
+    "unique": false,
+    "where": "(salesforce_family IS NOT NULL)"
+   },
+   "idx_sf_product_map_active": {
+    "columns": [
+     "holding_id",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "(is_active = true)"
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "salesforce_product_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "salesforce_product_mappings_sapira_product_id_fkey": {
+    "columns": [
+     "sapira_product_id"
+    ],
+    "table": "products",
+    "onDelete": "RESTRICT"
+   }
+  }
  },
  "salesforce_quote_type_mappings": {
   "class": "SalesforceQuoteTypeMapping",
@@ -1248,7 +1502,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -1259,7 +1513,7 @@
    },
    "created_at": {
     "type": "timestamptz",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1270,7 +1524,7 @@
    },
    "updated_at": {
     "type": "timestamptz",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1280,10 +1534,39 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_salesforce_type_per_holding": [
+    "holding_id",
+    "salesforce_type"
+   ]
+  },
+  "indices": {
+   "idx_sf_quote_type_mappings_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_sf_quote_type_mappings_active": {
+    "columns": [
+     "holding_id",
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "salesforce_quote_type_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "salesforce_sync_runs": {
   "class": "SalesforceSyncRun",
@@ -1436,7 +1719,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -1447,7 +1730,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -1455,8 +1738,26 @@
    }
   },
   "uniques": {},
-  "indices": {},
-  "checks": [],
+  "indices": {
+   "idx_salesforce_sync_runs_holding_status": {
+    "columns": [
+     "holding_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_sync_runs_type_check",
+    "expression": "((type = ANY (ARRAY['update_staging'::text, 'process_final'::text, 'retry_full'::text])))"
+   },
+   {
+    "name": "salesforce_sync_runs_status_check",
+    "expression": "((status = ANY (ARRAY['queued'::text, 'running'::text, 'cancellation_requested'::text, 'cancelled'::text, 'completed'::text, 'failed'::text])))"
+   }
+  ],
   "foreignKeys": {}
  },
  "salesforce_sync_run_items": {
@@ -1555,7 +1856,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -1566,7 +1867,142 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "salesforce_sync_run_items_run_opportunity_unique": [
+    "run_id",
+    "salesforce_opportunity_id"
+   ]
+  },
+  "indices": {
+   "idx_salesforce_sync_run_items_run_status": {
+    "columns": [
+     "run_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "salesforce_sync_run_items_status_check",
+    "expression": "((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'error'::text, 'cancelled'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "salesforce_sync_run_items_run_id_fkey": {
+    "columns": [
+     "run_id"
+    ],
+    "table": "salesforce_sync_runs",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "salesforce_sync_logs": {
+  "class": "SalesforceSyncLog",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_date": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_DATE",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "opportunities_count": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "accounts_count": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "success": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "error_message": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "execution_time_ms": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -1575,30 +2011,31 @@
   },
   "uniques": {},
   "indices": {
-   "IDX_40758f89dbc654ed5e263f8c09": {
+   "idx_salesforce_sync_logs_holding_id": {
     "columns": [
-     "run_id",
-     "status"
+     "holding_id"
     ],
     "unique": false,
     "where": null
    },
-   "IDX_7a0e0137f12c8e4f24f8f0ccec": {
-    "columns": [
-     "run_id",
-     "salesforce_opportunity_id"
-    ],
-    "unique": true,
+   "idx_salesforce_sync_logs_sync_date": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_salesforce_sync_logs_created_at": {
+    "columns": [],
+    "unique": false,
     "where": null
    }
   },
   "checks": [],
   "foreignKeys": {
-   "FK_3504f552c86e6218b694f906d4b": {
+   "salesforce_sync_logs_holding_id_fkey": {
     "columns": [
-     "run_id"
+     "holding_id"
     ],
-    "table": "salesforce_sync_runs",
+    "table": "company_holdings",
     "onDelete": "CASCADE"
    }
   }
@@ -1629,85 +2066,85 @@
     "array": false
    },
    "salesforce_id": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "salesforce_account_id": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "opportunity_name": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "500",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "account_name": {
-    "type": "varchar",
-    "nullable": false,
+    "type": "text",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "Sin cuenta",
-    "length": "500",
+    "default": null,
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "account_country": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "100",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "opportunity_type": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "100",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "stage_name": {
-    "type": "varchar",
-    "nullable": false,
+    "type": "text",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "100",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "is_won": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": false,
@@ -1718,7 +2155,7 @@
    },
    "is_closed": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": false,
@@ -1728,30 +2165,30 @@
     "array": false
    },
    "amount": {
-    "type": "decimal",
-    "nullable": false,
+    "type": "numeric",
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": 0,
+    "default": null,
     "length": null,
     "precision": 15,
     "scale": 2,
     "array": false
    },
    "currency_iso_code": {
-    "type": "varchar",
-    "nullable": false,
+    "type": "text",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "USD",
-    "length": "10",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "close_date": {
     "type": "date",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
@@ -1761,85 +2198,85 @@
     "array": false
    },
    "id_largo_oportunidad__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "modalidad_de_pago__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "forma_de_pago__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "contrato__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "orden_de_compra__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "quote_project_manager__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "quote_billing_email__c": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "255",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "line_items_count": {
-    "type": "int",
-    "nullable": false,
+    "type": "integer",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": 0,
@@ -1864,15 +2301,15 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": null,
+    "default": "('now'::text)::date",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1882,8 +2319,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -1894,8 +2331,49 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_sf_opp_cache_sync_date": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_sf_opp_cache_close_date": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_sf_opp_cache_unique": {
+    "columns": [
+     "holding_id",
+     "salesforce_id"
+    ],
+    "unique": true,
+    "where": null
+   },
+   "idx_sf_opp_cache_salesforce_id": {
+    "columns": [
+     "salesforce_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_sf_opp_cache_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "salesforce_opportunities_cache_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

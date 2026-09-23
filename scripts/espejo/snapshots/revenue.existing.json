@@ -1,1 +1,1450 @@
-{}
+{
+ "revenue_schedule_monthly": {
+  "class": "RevenueScheduleMonthly",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_item_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_month": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "system_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "recognized_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "recognized_cum_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_cum_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "deferred_balance_eom_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "unbilled_balance_eom_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "mrr_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "recognized_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "recognized_cum_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_cum_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "deferred_balance_eom_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "unbilled_balance_eom_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "mrr_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "recognized_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "recognized_cum_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "billed_cum_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "deferred_balance_eom_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "unbilled_balance_eom_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "mrr_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "calc_version": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "v1.0",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source_snapshot_hash": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deferred_balance_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unbilled_balance_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "product_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_contract_to_company": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_contract_to_system": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_company_source": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_company_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_system_source": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_system_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_total_row": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deferred_balance_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unbilled_balance_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deferred_balance_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unbilled_balance_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "momentum": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "mrr_period_contracted_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "cmrr_period_contract_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "mrr_period_contracted_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "cmrr_period_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "mrr_period_contracted_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "cmrr_period_system_ccy": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 15,
+    "scale": 2,
+    "array": false
+   },
+   "subscription_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "subscription_item_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "revenue_schedule_monthly_contract_item_period_momentum_key": [
+    "contract_id",
+    "contract_item_id",
+    "period_month",
+    "momentum"
+   ]
+  },
+  "indices": {
+   "idx_rsm_subscription_item_id": {
+    "columns": [
+     "subscription_item_id"
+    ],
+    "unique": false,
+    "where": "subscription_item_id IS NOT NULL"
+   },
+   "idx_rsm_subscription_id": {
+    "columns": [
+     "subscription_id"
+    ],
+    "unique": false,
+    "where": "subscription_id IS NOT NULL"
+   },
+   "idx_rsm_mrr_contracted_period": {
+    "columns": [
+     "holding_id",
+     "period_month",
+     "mrr_period_contracted_contract_ccy"
+    ],
+    "unique": false,
+    "where": "mrr_period_contracted_contract_ccy > (0)::numeric"
+   },
+   "idx_rsm_contract_period": {
+    "columns": [
+     "contract_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_rsm_company_period": {
+    "columns": [
+     "company_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_rsm_cmrr_period": {
+    "columns": [
+     "holding_id",
+     "period_month",
+     "cmrr_period_contract_ccy"
+    ],
+    "unique": false,
+    "where": "cmrr_period_contract_ccy > (0)::numeric"
+   },
+   "idx_revenue_schedule_monthly_is_total_row": {
+    "columns": [
+     "contract_id",
+     "is_total_row",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_revenue_schedule_monthly_holding_period": {
+    "columns": [
+     "holding_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_revenue_schedule_monthly_contract": {
+    "columns": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_revenue_schedule_monthly_company_period": {
+    "columns": [
+     "company_id",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_revenue_schedule_momentum": {
+    "columns": [
+     "momentum",
+     "period_month"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "rsm_contract_or_subscription_required",
+    "expression": "(contract_id IS NOT NULL) OR (subscription_id IS NOT NULL)"
+   },
+   {
+    "name": "revenue_schedule_monthly_momentum_check",
+    "expression": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "fk_revenue_schedule_company": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "NO ACTION"
+   },
+   "fk_revenue_schedule_contract": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "NO ACTION"
+   },
+   "fk_revenue_schedule_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   },
+   "fk_revenue_schedule_item": {
+    "columns": [
+     "contract_item_id"
+    ],
+    "table": "contract_items",
+    "onDelete": "NO ACTION"
+   },
+   "revenue_schedule_monthly_subscription_id_fkey": {
+    "columns": [
+     "subscription_id"
+    ],
+    "table": "subscriptions",
+    "onDelete": "NO ACTION"
+   },
+   "revenue_schedule_monthly_subscription_item_id_fkey": {
+    "columns": [
+     "subscription_item_id"
+    ],
+    "table": "subscription_items",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "revenue_rules": {
+  "class": "RevenueRule",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "target_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "target_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "method": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [
+   {
+    "name": "revenue_rules_target_type_check",
+    "expression": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "revenue_rules_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "mrr_adjustments": {
+  "class": "MrrAdjustment",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "amount_contract_currency": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "effective_date": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "approved": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "approved_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "applied_retroactively": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_mrr_adj_effective_date": {
+    "columns": [
+     "effective_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_mrr_adj_contract": {
+    "columns": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_mrr_adj_company": {
+    "columns": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "mrr_adjustments_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "CASCADE"
+   },
+   "mrr_adjustments_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "accounting_period_cutoff": {
+  "class": "AccountingPeriodCutoff",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cutoff_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action_by_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action_by_email": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_action_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "accounting_period_cutoff_holding_id_company_id_key": [
+    "holding_id",
+    "company_id"
+   ]
+  },
+  "indices": {
+   "idx_cutoff_lookup": {
+    "columns": [
+     "holding_id",
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "accounting_period_cutoff_last_action_check",
+    "expression": "last_action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "accounting_period_cutoff_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "RESTRICT"
+   },
+   "accounting_period_cutoff_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "RESTRICT"
+   },
+   "accounting_period_cutoff_last_action_by_fkey": {
+    "columns": [
+     "last_action_by"
+    ],
+    "table": "users",
+    "onDelete": "SET NULL"
+   }
+  }
+ },
+ "accounting_period_events": {
+  "class": "AccountingPeriodEvent",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "action": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cutoff_date_before": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cutoff_date_after": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "performed_by": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "performed_by_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "performed_by_email": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "performed_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reason": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_period_events_performed_by": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_period_events_company_time": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "accounting_period_events_reason_check",
+    "expression": "length(TRIM(BOTH FROM reason)) >= 10"
+   },
+   {
+    "name": "accounting_period_events_action_check",
+    "expression": "action = ANY (ARRAY['CLOSED'::text, 'REOPENED'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "accounting_period_events_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "RESTRICT"
+   },
+   "accounting_period_events_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "RESTRICT"
+   },
+   "accounting_period_events_performed_by_fkey": {
+    "columns": [
+     "performed_by"
+    ],
+    "table": "users",
+    "onDelete": "RESTRICT"
+   }
+  }
+ }
+}

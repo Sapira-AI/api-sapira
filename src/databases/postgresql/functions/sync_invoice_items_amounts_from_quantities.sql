@@ -130,5 +130,21 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."sync_invoice_items_amounts_from_quantities"() IS 'Trigger AFTER INSERT OR UPDATE en quantities.
+Actualiza invoice_items de la factura ACTIVA "Por Emitir" cuyo billing_period_start
+está en el mismo mes calendario que NEW.period.
+Recalcula subtotal, tax_amount y total en moneda contrato.
+Si la factura tiene FX (item o header), recalcula en moneda factura
+con convención invoice = contract × fx. Si no hay FX, deja invoice_currency en NULL.
+Hereda unit_price o quantity desde contract_items cuando el override solo trae uno.
+PRESERVA caso "solo amount" (cant=1, precio=amount).
+
+FIX 2026-02-27: cambiada condición ii.status (siempre NULL) por i.status.
+FIX 2026-04-28: eliminado updated_at = now() del UPDATE a invoices.
+FIX 2026-06-14: heredar campos del contract_item; FX cascada item→header→NULL;
+                convención FX multiplicativa.
+FIX 2026-06-14: guard del FOR LOOP usa date_trunc(month, bp_start).
+FIX 2026-06-14: agregado filtro is_active = true para no afectar facturas
+                inactivas (consolidadas/reestructuradas).';

@@ -143,14 +143,104 @@ const QUERIES = {
 
 	// `extension` distingue las funciones propias de las que instaló una extensión
 	// (pg_trgm y vector viven en public): sin eso el conteo de cobertura miente.
+	// `pg_get_functiondef` NO incluye el COMMENT ON: sin capturarlo aparte, los 140 comentarios de
+	// funciones de prod no existen en el repo y se pierden en un entorno reconstruido.
+	// `identity_args` es la firma mínima que `COMMENT ON FUNCTION` necesita para desambiguar sobrecargas.
 	functions: `
-		SELECT p.proname AS name, pg_get_functiondef(p.oid) AS def, e.extname AS extension
+		SELECT p.proname AS name, pg_get_functiondef(p.oid) AS def, e.extname AS extension,
+		       obj_description(p.oid, 'pg_proc') AS comment,
+		       pg_get_function_identity_arguments(p.oid) AS identity_args
 		FROM pg_proc p
 		JOIN pg_namespace n ON n.oid = p.pronamespace
 		LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass
 		LEFT JOIN pg_extension e ON e.oid = d.refobjid
 		WHERE n.nspname = 'public' AND p.prokind = 'f'
 		ORDER BY p.proname, p.oid`,
+
+	// Secuencias SUELTAS: las que no pertenecen a una columna `serial`/`identity` (esas llegan con
+	// su tabla, por entity + migración). Hoy es una sola, `invoice_number_seq`, y sin esto ningún
+	// archivo del repo la describe.
+	sequences: `
+		SELECT cl.relname AS name, s.seqstart AS start, s.seqincrement AS increment,
+		       s.seqmin AS minvalue, s.seqmax AS maxvalue, s.seqcache AS cache, s.seqcycle AS cycle
+		FROM pg_sequence s
+		JOIN pg_class cl ON cl.oid = s.seqrelid
+		JOIN pg_namespace n ON n.oid = cl.relnamespace
+		WHERE n.nspname = 'public'
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = cl.oid AND d.deptype = 'a')
+		ORDER BY cl.relname`,
+
+	// Objetos de `public` que ninguna fase del corpus modela. Se capturan para que
+	// `schema:status` los liste en FUERA DEL CORPUS en vez de que pasen inadvertidos.
+	otherRoutines: `
+		SELECT p.proname AS name, p.prokind::text AS kind
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass
+		WHERE n.nspname = 'public' AND p.prokind <> 'f' AND d.objid IS NULL
+		ORDER BY p.proname`,
+
+	otherTypes: `
+		SELECT t.typname AS name, t.typtype::text AS kind
+		FROM pg_type t
+		JOIN pg_namespace n ON n.oid = t.typnamespace
+		LEFT JOIN pg_class cl ON cl.oid = t.typrelid
+		WHERE n.nspname = 'public' AND t.typtype IN ('c', 'd', 'r')
+		  AND (cl.oid IS NULL OR cl.relkind NOT IN ('r', 'v', 'm', 'p'))
+		ORDER BY t.typname`,
+
+	// ── Permisos reales ────────────────────────────────────────────────────────────
+	// `grants/` se emite con sentencias fijas, así que coincidir con el archivo no prueba nada y la
+	// fase es NO VERIFICABLE. Esto captura los ACL de verdad —con `aclexplode`, y con
+	// `COALESCE(acl, acldefault(...))` porque un ACL nulo significa "los permisos por defecto", que
+	// para una función es EXECUTE a PUBLIC: justo lo que `grants/010` existe para corregir—.
+	//
+	// Se agrupa por firma en vez de traer una fila por objeto: 131 tablas y 463 funciones comparten
+	// casi siempre la misma, y lo que importa es cuál es la mayoritaria y quién se aparta.
+	aclSignatures: `
+		WITH objetos AS (
+			SELECT 'tabla' AS tipo, cl.relname AS nombre,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC') AS rol, a.privilege_type AS privilegio
+			FROM pg_class cl
+			JOIN pg_namespace n ON n.oid = cl.relnamespace,
+			     LATERAL aclexplode(coalesce(cl.relacl, acldefault('r', cl.relowner))) a
+			WHERE n.nspname = 'public' AND cl.relkind = 'r'
+			UNION ALL
+			SELECT 'funcion', p.proname,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC'), a.privilege_type
+			FROM pg_proc p
+			JOIN pg_namespace n ON n.oid = p.pronamespace,
+			     LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+			WHERE n.nspname = 'public'
+		), firmas AS (
+			SELECT tipo, nombre, string_agg(DISTINCT rol || ':' || privilegio, ', ' ORDER BY rol || ':' || privilegio) AS firma
+			FROM objetos GROUP BY tipo, nombre
+		)
+		SELECT tipo, firma, count(*)::int AS objetos,
+		       -- ::text como en foreignKeys: el driver no parsea arrays de tipo name y devuelve el literal crudo.
+		       (array_agg(nombre::text ORDER BY nombre))[1:5] AS ejemplos
+		FROM firmas GROUP BY tipo, firma ORDER BY tipo, objetos DESC`,
+
+	// `ALTER DEFAULT PRIVILEGES` sin FOR ROLE aplica al rol actual, así que el rol dueño importa;
+	// y una fila con defaclnamespace = 0 es para toda la base, no para un esquema.
+	defaultAcls: `
+		WITH filas AS (
+			SELECT pg_get_userbyid(d.defaclrole) AS rol, coalesce(n.nspname, '') AS esquema,
+			       d.defaclobjtype::text AS tipo,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC') AS beneficiario, a.privilege_type AS privilegio
+			FROM pg_default_acl d
+			LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace,
+			     LATERAL aclexplode(d.defaclacl) a
+			WHERE n.nspname = 'public' OR d.defaclnamespace = 0
+		), por_beneficiario AS (
+			SELECT rol, esquema, tipo, beneficiario,
+			       string_agg(privilegio, ', ' ORDER BY privilegio) AS privilegios
+			FROM filas GROUP BY rol, esquema, tipo, beneficiario
+		)
+		-- Una fila por (rol, esquema, tipo de objeto): sin agrupar son 84 líneas de ruido.
+		SELECT rol, esquema, tipo,
+		       string_agg(beneficiario || ' (' || privilegios || ')', '; ' ORDER BY beneficiario) AS concede
+		FROM por_beneficiario GROUP BY rol, esquema, tipo ORDER BY rol, esquema, tipo`,
 
 	// Las vistas no las modela TypeORM ni tienen fase propia todavía: se capturan
 	// para que la brecha quede medida y no supuesta.
@@ -170,7 +260,24 @@ const QUERIES = {
 	server: `SELECT version() AS version, current_setting('server_version_num') AS version_num`,
 } as const;
 
-type QueryName = keyof typeof QUERIES;
+/**
+ * Consultas que dependen de algo que puede no existir en la base.
+ *
+ * Van aparte porque todo corre dentro de UNA transacción READ ONLY: un `cron.job` inexistente
+ * aborta la transacción y se lleva puesto el resto de la captura, así que `schema:status` moriría
+ * entero en cualquier base sin pg_cron. Con el pre-chequeo, ahí la lista queda vacía y nada más.
+ */
+const QUERIES_OPCIONALES = {
+	cron: {
+		existe: `SELECT to_regclass('cron.job') AS objeto`,
+		sql: `
+			SELECT jobname AS name, schedule, command, active, username, database
+			FROM cron.job
+			ORDER BY jobname`,
+	},
+} as const;
+
+type QueryName = keyof typeof QUERIES | keyof typeof QUERIES_OPCIONALES;
 
 /**
  * Corre las consultas del catálogo. No abre transacción: quien llama decide, y
@@ -183,6 +290,14 @@ async function consultarCatalogo(executor: SqlExecutor, log: (mensaje: string) =
 		result[name] = rows;
 		log(`  ${name}: ${rows.length} filas`);
 	}
+
+	for (const [name, consulta] of Object.entries(QUERIES_OPCIONALES)) {
+		const existe = await executor.query(consulta.existe);
+		const rows = existe.rows[0]?.objeto ? (await executor.query(consulta.sql)).rows : [];
+		result[name as QueryName] = rows;
+		log(`  ${name}: ${rows.length} filas${existe.rows[0]?.objeto ? '' : ' (no existe en esta base)'}`);
+	}
+
 	return result;
 }
 
@@ -246,7 +361,13 @@ function buildCatalog(data: Record<QueryName, Row[]>): unknown {
 		extensions: data.extensions,
 		grants,
 		functions: data.functions,
+		cron: (data.cron ?? []).map((job) => ({ ...job, command: redactarSecretos(String(job.command)) })),
+		sequences: data.sequences,
+		aclSignatures: data.aclSignatures,
+		defaultAcls: data.defaultAcls,
 		views: data.views,
+		otherRoutines: data.otherRoutines,
+		otherTypes: data.otherTypes,
 		partitioned: data.partitioned.map((row) => row.table),
 		server: data.server[0],
 	};
@@ -297,6 +418,22 @@ function buildListTables(data: Record<QueryName, Row[]>): unknown {
 			};
 		}),
 	};
+}
+
+/**
+ * Enmascara secretos antes de que el catálogo llegue a disco.
+ *
+ * `scripts/espejo/snapshots/raw/catalog.json` está commiteado, así que un `cron.job.command` con la
+ * service role key adentro —como estaban `check-overdue-invoices-daily` y `salesforce-daily-sync`
+ * hasta el 2026-09-22— quedaría en el repo para siempre. La redacción va acá, en la captura, y no
+ * en el emisor: un secreto nunca debería existir en memoria más allá de lo necesario, y menos
+ * llegar a un archivo versionado.
+ *
+ * Un comando redactado no coincide con su asset, así que `schema:status` lo marca y el secreto se
+ * ve; que es exactamente lo que se quiere que pase.
+ */
+function redactarSecretos(comando: string): string {
+	return comando.replace(/Bearer\s+[A-Za-z0-9._-]{20,}/g, 'Bearer <REDACTADO>').replace(/eyJ[A-Za-z0-9._-]{30,}/g, '<JWT-REDACTADO>');
 }
 
 function writeJson(file: string, value: unknown): void {

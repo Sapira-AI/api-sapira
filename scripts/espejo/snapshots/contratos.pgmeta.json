@@ -2,7 +2,7 @@
  "contracts": {
   "name": "public.contracts",
   "rls_enabled": true,
-  "rows": 690,
+  "rows": 694,
   "columns": [
    {
     "name": "id",
@@ -887,7 +887,7 @@
  "contract_items": {
   "name": "public.contract_items",
   "rls_enabled": true,
-  "rows": 1118,
+  "rows": 1182,
   "columns": [
    {
     "name": "id",
@@ -1823,7 +1823,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 209,
+  "rows": 278,
   "columns": [
    {
     "name": "id",
@@ -2254,7 +2254,7 @@
  "contract_item_change_log": {
   "name": "public.contract_item_change_log",
   "rls_enabled": true,
-  "rows": 1189,
+  "rows": 1346,
   "columns": [
    {
     "name": "id",
@@ -3816,7 +3816,7 @@
  "churn_reasons": {
   "name": "public.churn_reasons",
   "rls_enabled": true,
-  "rows": 15,
+  "rows": 16,
   "columns": [
    {
     "name": "id",

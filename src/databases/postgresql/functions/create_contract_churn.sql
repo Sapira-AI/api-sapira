@@ -28,5 +28,6 @@ BEGIN
     COALESCE(NULLIF(p_notes, ''), NULLIF(p_retention_action, ''), NULLIF(p_risk_level, ''))
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."create_contract_churn"(p_contract_id uuid, p_effective_date date, p_reason text, p_risk_level text, p_retention_action text, p_notes text) IS 'Ejecuta churn de contrato directamente. Actualiza contrato, agrega churn_date a items (sin modificar campos originales), y cancela facturas futuras considerando periodos y billing_method.';

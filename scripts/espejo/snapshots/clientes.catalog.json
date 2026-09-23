@@ -618,7 +618,7 @@
  },
  "client_entity_tax_id_normalization_conflicts": {
   "comment": "Registro histórico de tax_id duplicados detectados antes de normalizar. Los duplicados se conservan y la integración debe resolverlos de forma determinista.",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [

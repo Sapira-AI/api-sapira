@@ -14,6 +14,13 @@ import * as modulo from './index';
  * Verifica que los espejos del módulo `cotizaciones-catalogo` coinciden con el snapshot de prod (columnas + nullabilidad, PK,
  * FKs con ON DELETE, UNIQUE, CHECK e índices) y que no duplican tablas que ya tienen entity en el repo.
  * Construye la metadata en memoria con TODOS los espejos + todas las entities existentes (destinos de FK): NO abre conexión.
+ *
+ * ⚠️ SI ESTE SPEC FALLA, el repo y prod difieren. Son dos casos distintos:
+ *   1. Cambiaste una entity y todavía no aplicaste su migración a prod → aplicala (GUIA → Sincronizar
+ *      cambios) y DESPUÉS refrescá el snapshot con `yarn schema:snapshot`.
+ *   2. Nadie tocó el repo → prod cambió por fuera del proceso: hay que revisar qué pasó antes de
+ *      refrescar nada.
+ * El snapshot es una foto de prod a propósito: sirve de detector de deriva. No lo edites a mano.
  */
 describe('Espejo cotizaciones-catalogo (TypeORM ↔ prod public)', () => {
 	const mirrorEntities = Object.values(modulo);
@@ -83,10 +90,14 @@ describe('Espejo cotizaciones-catalogo (TypeORM ↔ prod public)', () => {
 		it('tiene los mismos índices declarables (nombre → columnas, unique, where) que prod', () => {
 			expect(
 				Object.fromEntries(
-					metadata().indices.map((index) => [
-						index.name,
-						{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null },
-					])
+					metadata()
+						// `@Index('x', { synchronize: false })` no declara un índice: avisa que existe y que
+						// TypeORM no lo toque (los de `special-index/`). No tiene columnas y no va contra el snapshot.
+						.indices.filter((index) => index.synchronize !== false)
+						.map((index) => [
+							index.name,
+							{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null },
+						])
 				)
 			).toEqual(expected.indexes);
 		});

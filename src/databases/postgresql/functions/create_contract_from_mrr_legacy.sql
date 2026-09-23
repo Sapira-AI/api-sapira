@@ -384,5 +384,12 @@ EXCEPTION
       'message', 'Error al crear contrato desde MRR Legacy'
     );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."create_contract_from_mrr_legacy"(p_group_data jsonb, p_form_data jsonb) IS 'Crea un contrato completo desde datos de MRR Legacy incluyendo contract_items, contract_invoices y FX rates.
+Incluye soporte para auto_invoice (facturación automática).
+Ejecuta toda la operación en una transacción atómica.
+Parámetros:
+- p_group_data: jsonb con datos del grupo MRR (client_id, contract_currency, record_ids)
+- p_form_data: jsonb con datos del formulario (company_id, start_date, products[], contract_type, requires_references, auto_invoice, etc.)
+Retorna: jsonb con {success: boolean, contract_id: uuid, error?: string}';

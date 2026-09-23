@@ -196,5 +196,6 @@ BEGIN
     'message', v_message
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."activate_legacy_contract"(p_contract_id uuid, p_options jsonb) IS 'Activa un contrato legacy después de validación. Opcionalmente genera revenue schedule post-cutoff. Soporta activación forzada para casos excepcionales.';

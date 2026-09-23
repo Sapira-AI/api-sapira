@@ -61,5 +61,7 @@ BEGIN
   WHERE rsm.contract_id = p_contract_id
   ORDER BY rsm.period_month, rsm.is_total_row DESC, rsm.product_name;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."revenue_schedule_get_monthly"(p_contract_id uuid) IS 'Retorna el revenue schedule con 37 campos calculados.
+Sin LAG(), sin cálculos adicionales, solo expone datos ya procesados.';

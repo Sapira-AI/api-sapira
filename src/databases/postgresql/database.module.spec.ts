@@ -245,10 +245,10 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 	});
 
 	it('todo script que conecta a la base verifica que la conexión corresponda al target declarado', () => {
-		// `target` sale de DATABASE_TARGET ?? NODE_ENV ?? 'development' y es
-		// independiente de SUPABASE_DATABASE_URL: sin esta verificación las guardas
-		// de producción no protegen nada. `schema-log.ts` queda fuera: no recibe
-		// target, solo informa a qué base se conectó.
+		// `--target` es una etiqueta escrita a mano e independiente de SUPABASE_DATABASE_URL: sin
+		// esta verificación las guardas de producción no protegen nada. Desde el 2026-09-22 ningún
+		// script lo infiere (se quitó el default `DATABASE_TARGET ?? NODE_ENV ?? 'development'`);
+		// `schema-log.ts` queda fuera: no recibe target, solo informa a qué base se conectó.
 		const scripts = [
 			'apply-postgresql-assets.ts',
 			'run-migrations.ts',
@@ -261,6 +261,19 @@ describe('Guard: entidades espejo y configuración TypeORM', () => {
 			const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', script), 'utf8');
 			expect({ script, verifica: source.includes('assertConnectionMatchesTarget(') }).toEqual({ script, verifica: true });
 		}
+	});
+
+	it('el CLI de assets exige filtro explícito y contenido commiteado antes de aplicar', () => {
+		// Las dos reglas que estaban solo en la documentación y se rompieron igual: un `--apply` sin
+		// `--only` (23 assets huérfanos, 13 aplicables sin error) y aplicar desde una copia sin
+		// commitear (2026-09-21: el historial quedó con un checksum inexistente en toda rama).
+		const source = fs.readFileSync(path.join(srcDir, '..', 'scripts', 'apply-postgresql-assets.ts'), 'utf8');
+
+		expect(source).toContain('assertFiltroExplicito(');
+		expect(source).toContain('assertSeleccionCommiteada(');
+		// El target ya no se infiere del entorno (la mención en un comentario no cuenta: se busca la
+		// lectura real `environment.X`).
+		expect(source).not.toMatch(/environment\.(DATABASE_TARGET|NODE_ENV)/);
 	});
 
 	it('schema:status es de solo lectura', () => {

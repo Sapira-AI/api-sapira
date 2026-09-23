@@ -162,4 +162,9 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     RETURN QUERY SELECT false, 'Error calculating FX amounts: ' || SQLERRM;
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."calculate_contract_fx_amounts"(p_contract_id uuid) IS 'Calcula montos FX para contratos en system_currency y company_currency.
+CORREGIDO: Usa calculate_system_fx_rate en lugar de fx_rate_v2 (que no existe).
+DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).
+Ejemplo: MXN 29,551,328 con FX 18.29 = 29,551,328 / 18.29 = 1,615,881 USD';

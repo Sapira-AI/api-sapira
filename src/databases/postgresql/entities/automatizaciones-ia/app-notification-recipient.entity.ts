@@ -1,9 +1,10 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
 import { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 @Unique('app_notification_recipients_notification_id_user_id_key', ['notification_id', 'user_id'])
+@Index('app_notification_recipients_user_unread_idx', { synchronize: false })
 @Entity('app_notification_recipients')
 export class AppNotificationRecipient {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notification_recipients_pkey' })

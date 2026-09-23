@@ -10,7 +10,7 @@ import { Subscription } from '../suscripciones/subscription.entity';
 
 /**
  * Entity de `public.revenue_schedule_monthly` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 20144 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_assign_momentum · BEFORE INSERT OR UPDATE OF contract_item_id, period_month FOR EACH ROW → assign_momentum_to_revenue_schedule(); update_revenue_schedule_monthly_updated_at · BEFORE UPDATE FOR EACH ROW → update_revenue_schedule_monthly_updated_at().
  * Policies (4): tenant_isolation_delete_revenue_schedule_monthly (DELETE, public); tenant_isolation_insert_revenue_schedule_monthly (INSERT, public); tenant_isolation_select_revenue_schedule_monthly (SELECT, public); tenant_isolation_update_revenue_schedule_monthly (UPDATE, public).

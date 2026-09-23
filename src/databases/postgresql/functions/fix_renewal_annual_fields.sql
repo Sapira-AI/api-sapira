@@ -41,5 +41,8 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."fix_renewal_annual_fields"() IS 'Copia annual_unit_price, annual_price, price_entry_mode del item original en renovaciones.
+   Si price_entry_mode es annual, recalcula unit_price, monthly_price y billing_period_price
+   para mantener consistencia con los valores anuales copiados.';

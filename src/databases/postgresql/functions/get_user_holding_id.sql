@@ -52,5 +52,7 @@ BEGIN
     
     RETURN holding_id_result;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_user_holding_id"() IS 'Obtiene el holding_id del usuario autenticado. Prioriza el holding con selected=true, 
+y si no existe, retorna el primer holding activo disponible ordenado por fecha de creación.';

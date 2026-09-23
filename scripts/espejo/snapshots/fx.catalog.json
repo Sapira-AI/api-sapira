@@ -460,7 +460,7 @@
  },
  "indicadores_economicos": {
   "comment": null,
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {
    "codigo": {
@@ -516,8 +516,21 @@
    }
   ],
   "triggers": [],
-  "policies": [],
-  "policies_detail": []
+  "policies": [
+   "indicadores_economicos_select (SELECT, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "indicadores_economicos_select",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+   }
+  ]
  },
  "fx_api_sync_log": {
   "comment": "Log de sincronizaciones de tipos de cambio desde APIs externas",
@@ -576,7 +589,7 @@
  },
  "generic_export_vats": {
   "comment": "VATs genéricos utilizados para facturación de exportación. Estos VATs se usan para múltiples clientes y NO deben usarse como identificador único.",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {
    "vat": {
@@ -623,7 +636,20 @@
   "triggers": [
    "trigger_update_generic_export_vats_updated_at · BEFORE UPDATE FOR EACH ROW → update_generic_export_vats_updated_at()"
   ],
-  "policies": [],
-  "policies_detail": []
+  "policies": [
+   "generic_export_vats_select_active (SELECT, authenticated)"
+  ],
+  "policies_detail": [
+   {
+    "name": "generic_export_vats_select_active",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "authenticated"
+    ],
+    "cmd": "SELECT",
+    "qual": "(is_active = true)",
+    "with_check": null
+   }
+  ]
  }
 }

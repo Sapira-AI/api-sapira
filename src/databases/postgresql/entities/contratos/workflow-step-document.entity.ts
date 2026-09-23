@@ -8,7 +8,7 @@ import { WorkflowStep } from './workflow-step.entity';
 
 /**
  * Entity de `public.workflow_step_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 0 filas · RLS on (forzado).
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
  * Policies (4): tenant_isolation_delete_wsd (DELETE, public); tenant_isolation_insert_wsd (INSERT, public); tenant_isolation_select_wsd (SELECT, public); tenant_isolation_update_wsd (UPDATE, public).
@@ -18,6 +18,7 @@ import { WorkflowStep } from './workflow-step.entity';
  * FK duplicada sobre (uploaded_by): workflow_step_documents_uploaded_by_fkey (relación uploadedBy2)
  * FK duplicada sobre (workflow_step_id): workflow_step_documents_workflow_step_id_fkey (relación workflowStep2)
  */
+@Index('idx_wsd_uploaded_at', { synchronize: false })
 @Entity('workflow_step_documents')
 @Index('idx_wsd_contract', ['contract_id'])
 @Index('idx_wsd_holding', ['holding_id'])

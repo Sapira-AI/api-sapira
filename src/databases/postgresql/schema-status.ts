@@ -169,6 +169,92 @@ function esNoVerificable(fase: string): boolean {
 	return (UNVERIFIABLE_DIRECTORIES as readonly string[]).includes(fase);
 }
 
+// ── Objetos que ninguna fase del corpus modela ─────────────────────────────────
+
+export interface ObjetoNoModelado {
+	tipo: string;
+	nombre: string;
+}
+
+/**
+ * Objetos de `public` que existen en la base y **ninguna fase del corpus puede describir**.
+ *
+ * `soloEnBase` no alcanza: se deriva de lo que los emisores producen, así que una vista, una
+ * secuencia suelta o un procedimiento son invisibles para él —no hay contra qué compararlos—.
+ * Esto los nombra explícitamente, que es la diferencia entre "el repo describe todo el esquema" y
+ * "el repo describe lo que sabe describir".
+ *
+ * Una secuencia deja de figurar acá en cuanto el emisor la produce: se compara contra `generado`,
+ * no contra una lista fija.
+ */
+export function objetosNoModelados(
+	catalogo: {
+		views?: { name: string; kind: string }[];
+		sequences?: { name: string }[];
+		otherRoutines?: { name: string; kind: string }[];
+		otherTypes?: { name: string; kind: string }[];
+	},
+	generado: ReadonlyMap<string, string>
+): ObjetoNoModelado[] {
+	const emitido = new Set(generado.keys());
+	const fuera: ObjetoNoModelado[] = [];
+
+	for (const vista of catalogo.views ?? []) {
+		fuera.push({ tipo: vista.kind === 'm' ? 'vista materializada' : 'vista', nombre: vista.name });
+	}
+	for (const secuencia of catalogo.sequences ?? []) {
+		if (![...emitido].some((ruta) => ruta.endsWith(`sequence-${secuencia.name}.sql`))) {
+			fuera.push({ tipo: 'secuencia', nombre: secuencia.name });
+		}
+	}
+	for (const rutina of catalogo.otherRoutines ?? []) {
+		fuera.push({ tipo: rutina.kind === 'p' ? 'procedimiento' : 'agregado o función de ventana', nombre: rutina.name });
+	}
+	for (const tipo of catalogo.otherTypes ?? []) {
+		fuera.push({ tipo: tipo.kind === 'd' ? 'dominio' : tipo.kind === 'r' ? 'rango' : 'tipo compuesto', nombre: tipo.name });
+	}
+
+	return fuera.sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
+}
+
+// ── Permisos ───────────────────────────────────────────────────────────────────
+
+export interface ResumenPermisos {
+	/** Firma mayoritaria por tipo de objeto, con cuántos la comparten. */
+	dominantes: { tipo: string; firma: string; objetos: number }[];
+	/** Objetos que se apartan de la firma mayoritaria de su tipo: lo que hay que mirar. */
+	excepciones: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	/** `ALTER DEFAULT PRIVILEGES` vigentes: deciden qué permisos hereda lo que se cree después. */
+	porDefecto: { rol: string; esquema: string; tipo: string; concede: string }[];
+}
+
+/**
+ * Qué permisos hay de verdad, para lo que `grants/` no puede probar.
+ *
+ * `grants/` se emite con sentencias fijas (`GRANT ALL ON ALL TABLES …`), así que coincidir con el
+ * archivo no dice nada sobre la base: la fase es `NO VERIFICABLE` a propósito. Esto no la vuelve
+ * verificable; la hace **observable**, que es el paso previo: si las 131 tablas comparten una firma,
+ * el asset dice la verdad, y si una se aparta, aparece con nombre.
+ */
+export function resumirPermisos(catalogo: {
+	aclSignatures?: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	defaultAcls?: ResumenPermisos['porDefecto'];
+}): ResumenPermisos {
+	const firmas = catalogo.aclSignatures ?? [];
+	const dominantes: ResumenPermisos['dominantes'] = [];
+	const excepciones: ResumenPermisos['excepciones'] = [];
+
+	for (const tipo of [...new Set(firmas.map((f) => f.tipo))].sort()) {
+		const delTipo = [...firmas.filter((f) => f.tipo === tipo)].sort((a, b) => b.objetos - a.objetos);
+		const [dominante, ...resto] = delTipo;
+		if (!dominante) continue;
+		dominantes.push({ tipo, firma: dominante.firma, objetos: dominante.objetos });
+		excepciones.push(...resto);
+	}
+
+	return { dominantes, excepciones, porDefecto: catalogo.defaultAcls ?? [] };
+}
+
 // ── Migraciones ────────────────────────────────────────────────────────────────
 
 export const MIGRATIONS_TABLE = 'public.sapira_typeorm_migrations';

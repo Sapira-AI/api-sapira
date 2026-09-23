@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { buildCatalog } from '../../../scripts/schema-as-code/fetch-catalog';
-import { Catalog, emitirCorpus } from '../../../scripts/schema-as-code/generate-assets';
+import { buildCatalog, consultarCatalogo } from '../../../scripts/schema-as-code/fetch-catalog';
+import { Catalog, emitirCorpus, emitirCron, emitirSequences } from '../../../scripts/schema-as-code/generate-assets';
 
 import { checksumSql, discoverSqlAssets, SqlAsset, SqlExecutor } from './assets-runner';
 import {
@@ -16,6 +16,8 @@ import {
 	leerMigracionesDeclaradas,
 	leerMigracionesEjecutadas,
 	normalizarSql,
+	objetosNoModelados,
+	resumirPermisos,
 } from './schema-status';
 
 const asset = (ruta: string, sql: string): SqlAsset => ({ path: ruta, sql, checksum: checksumSql(sql) });
@@ -128,6 +130,135 @@ describe('clasificarAssets', () => {
 	});
 });
 
+describe('objetosNoModelados', () => {
+	it('nombra lo que ninguna fase del corpus puede describir', () => {
+		// `soloEnBase` no los ve: se deriva de lo que los emisores producen, así que una vista o un
+		// procedimiento no tienen contra qué compararse y pasarían inadvertidos.
+		const fuera = objetosNoModelados(
+			{
+				views: [
+					{ name: 'invoices_with_net_amounts', kind: 'v' },
+					{ name: 'resumen_mensual', kind: 'm' },
+				],
+				sequences: [{ name: 'invoice_number_seq' }, { name: 'sin_asset_seq' }],
+				otherRoutines: [{ name: 'recalcular', kind: 'p' }],
+				otherTypes: [{ name: 'rango_fechas', kind: 'r' }],
+			},
+			new Map([['types/020-sequence-invoice_number_seq.sql', 'CREATE SEQUENCE …']])
+		);
+
+		expect(fuera).toEqual([
+			{ tipo: 'procedimiento', nombre: 'recalcular' },
+			{ tipo: 'rango', nombre: 'rango_fechas' },
+			// `invoice_number_seq` NO figura: el emisor ya la produce, así que está cubierta.
+			{ tipo: 'secuencia', nombre: 'sin_asset_seq' },
+			{ tipo: 'vista', nombre: 'invoices_with_net_amounts' },
+			{ tipo: 'vista materializada', nombre: 'resumen_mensual' },
+		]);
+	});
+
+	it('un catálogo sin esas claves no rompe', () => {
+		expect(objetosNoModelados({}, new Map())).toEqual([]);
+	});
+});
+
+describe('resumirPermisos', () => {
+	it('separa la firma mayoritaria de las excepciones, que es lo único que hay que mirar', () => {
+		// `grants/` se emite con sentencias fijas, así que coincidir con el archivo no prueba nada.
+		// Esto no lo vuelve verificable: lo vuelve observable.
+		const resumen = resumirPermisos({
+			aclSignatures: [
+				{ tipo: 'tabla', firma: 'anon:SELECT', objetos: 131, ejemplos: ['invoices'] },
+				{ tipo: 'funcion', firma: 'PUBLIC:EXECUTE', objetos: 300, ejemplos: ['f1'] },
+				{ tipo: 'funcion', firma: 'postgres:EXECUTE', objetos: 1, ejemplos: ['cleanup_duplicate_partners_by_vat'] },
+			],
+			defaultAcls: [{ rol: 'postgres', esquema: 'public', tipo: 'r', concede: 'anon (SELECT)' }],
+		});
+
+		expect(resumen.dominantes).toEqual([
+			{ tipo: 'funcion', firma: 'PUBLIC:EXECUTE', objetos: 300 },
+			{ tipo: 'tabla', firma: 'anon:SELECT', objetos: 131 },
+		]);
+		expect(resumen.excepciones.map((e) => e.ejemplos[0])).toEqual(['cleanup_duplicate_partners_by_vat']);
+		expect(resumen.porDefecto).toHaveLength(1);
+	});
+
+	it('una base sin ACL capturados no rompe', () => {
+		expect(resumirPermisos({})).toEqual({ dominantes: [], excepciones: [], porDefecto: [] });
+	});
+});
+
+describe('consultarCatalogo con consultas opcionales', () => {
+	// Todo corre en UNA transacción READ ONLY: si `cron.job` no existe, el error la aborta y se
+	// lleva puesta la captura entera, así que `schema:status` moriría en cualquier base sin pg_cron.
+	const ejecutor = (tieneCron: boolean): SqlExecutor & { consultas: string[] } => {
+		const consultas: string[] = [];
+		return {
+			consultas,
+			async query(sql: string) {
+				consultas.push(sql);
+				if (sql.includes('to_regclass')) return { rows: [{ objeto: tieneCron ? 'cron.job' : null }] };
+				if (sql.includes('FROM cron.job')) return { rows: [{ name: 'un-job', schedule: '0 2 * * *', command: 'SELECT 1', active: true }] };
+				return { rows: [] };
+			},
+		};
+	};
+
+	it('consulta cron.job solo si existe', async () => {
+		const conCron = ejecutor(true);
+		expect((await consultarCatalogo(conCron)).cron).toHaveLength(1);
+		expect(conCron.consultas.some((sql) => sql.includes('FROM cron.job'))).toBe(true);
+
+		const sinCron = ejecutor(false);
+		expect((await consultarCatalogo(sinCron)).cron).toEqual([]);
+		expect(sinCron.consultas.some((sql) => sql.includes('FROM cron.job'))).toBe(false);
+	});
+});
+
+describe('emitirCron', () => {
+	const job = {
+		name: 'check-overdue-invoices-daily',
+		schedule: '1 4 * * *',
+		command: "SELECT public.f('x')",
+		active: true,
+		username: 'postgres',
+		database: 'postgres',
+	};
+
+	it('programa el job con el comando verbatim y deja constancia del rol', () => {
+		// La clave del upsert de pg_cron es (jobname, username): aplicado con otro rol se crea un
+		// segundo job con el mismo nombre y corren los dos.
+		const contenido = emitirCron({ cron: [job] } as never).get('cron/check-overdue-invoices-daily.sql');
+
+		expect(contenido).toContain('Se aplica con el rol postgres');
+		expect(contenido).toContain(`SELECT cron.schedule('check-overdue-invoices-daily', '1 4 * * *', $cron$SELECT public.f('x')$cron$);`);
+		expect(contenido).not.toContain('alter_job');
+	});
+
+	it('un job pausado necesita alter_job: cron.schedule no puede expresarlo', () => {
+		const contenido = emitirCron({ cron: [{ ...job, active: false }] } as never).get('cron/check-overdue-invoices-daily.sql');
+		expect(contenido).toContain('active := false');
+	});
+
+	it('una base sin pg_cron no genera assets de cron', () => {
+		expect(emitirCron({} as never).size).toBe(0);
+	});
+});
+
+describe('emitirSequences', () => {
+	it('emite la secuencia suelta en types/, de forma idempotente y sin el valor actual', () => {
+		// El valor actual (`last_value`) es dato, no estado del esquema.
+		const generado = emitirSequences({
+			sequences: [{ name: 'invoice_number_seq', start: '1', increment: '1', minvalue: '1', maxvalue: '999', cache: '1', cycle: false }],
+		} as never);
+
+		const contenido = generado.get('types/020-sequence-invoice_number_seq.sql');
+		expect(contenido).toContain('CREATE SEQUENCE IF NOT EXISTS "public"."invoice_number_seq"');
+		expect(contenido).toContain('NO CYCLE;');
+		expect(contenido).not.toMatch(/last_value|setval/);
+	});
+});
+
 describe('migraciones', () => {
 	const directorio = path.join(__dirname, 'migrations');
 
@@ -221,6 +352,22 @@ describe('contrato fetch-catalog → generate-assets → schema-status', () => {
 				def: 'CREATE OR REPLACE FUNCTION public.touch()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$ BEGIN RETURN NEW; END $function$\n',
 				extension: null,
 			},
+			// Dos sobrecargas de la misma función, una con comentario multilínea y comilla simple:
+			// `pg_get_functiondef` no incluye el COMMENT ON, así que se captura y emite aparte.
+			{
+				name: 'calcular',
+				def: 'CREATE OR REPLACE FUNCTION public.calcular(a integer)\n RETURNS integer\n LANGUAGE sql\nAS $function$ SELECT a $function$\n',
+				extension: null,
+				comment: "Suma simple.\nNo usa el 'total' del header.",
+				identity_args: 'a integer',
+			},
+			{
+				name: 'calcular',
+				def: 'CREATE OR REPLACE FUNCTION public.calcular(a integer, b integer)\n RETURNS integer\n LANGUAGE sql\nAS $function$ SELECT a + b $function$\n',
+				extension: null,
+				comment: null,
+				identity_args: 'a integer, b integer',
+			},
 		],
 	};
 
@@ -238,6 +385,7 @@ describe('contrato fetch-catalog → generate-assets → schema-status', () => {
 	it('verifica archivos reales contra un catálogo construido como lo hace fetch-catalog', () => {
 		const generado = emitirCorpus(buildCatalog(datos as never) as Catalog);
 		expect([...generado.keys()].sort()).toEqual([
+			'functions/calcular.sql',
 			'functions/touch.sql',
 			'grants/000-table-privileges.sql',
 			'rls/demo_select.sql',
@@ -246,6 +394,21 @@ describe('contrato fetch-catalog → generate-assets → schema-status', () => {
 			'types/000-extensions.sql',
 			'types/010-enum-estado_demo.sql',
 		]);
+
+		// Las sobrecargas van al mismo archivo separadas por `;`, y los COMMENT ON al final —no
+		// intercalados—, para que agregarlos a un archivo con cabecera escrita a mano sea append.
+		// La comilla simple del comentario se duplica; los saltos de línea se conservan.
+		// El orden entre sobrecargas sale de ordenar por la definición (`,` ordena antes que `)`),
+		// que es lo que hace estable el archivo entre capturas.
+		expect(generado.get('functions/calcular.sql')).toBe(
+			'CREATE OR REPLACE FUNCTION public.calcular(a integer, b integer)\n' +
+				' RETURNS integer\n LANGUAGE sql\nAS $function$ SELECT a + b $function$;\n\n' +
+				'CREATE OR REPLACE FUNCTION public.calcular(a integer)\n' +
+				' RETURNS integer\n LANGUAGE sql\nAS $function$ SELECT a $function$;\n\n' +
+				"COMMENT ON FUNCTION public.\"calcular\"(a integer) IS 'Suma simple.\nNo usa el ''total'' del header.';\n"
+		);
+		// Sin comentarios el archivo no termina en `;`: ese es el formato histórico del corpus.
+		expect(generado.get('functions/touch.sql').endsWith('$function$\n')).toBe(true);
 
 		// El trigger escrito a mano (multilínea, con comillas) coincide; la función cambió; la policy falta.
 		escribir(
@@ -267,6 +430,11 @@ describe('contrato fetch-catalog → generate-assets → schema-status', () => {
 			'triggers/demo_touch.sql': 'igual',
 			'triggers/huerfano.sql': 'sin-contraparte',
 		});
-		expect(comparacion.soloEnBase).toEqual(['rls/demo_select.sql', 'types/000-extensions.sql', 'types/010-enum-estado_demo.sql']);
+		expect(comparacion.soloEnBase).toEqual([
+			'functions/calcular.sql',
+			'rls/demo_select.sql',
+			'types/000-extensions.sql',
+			'types/010-enum-estado_demo.sql',
+		]);
 	});
 });

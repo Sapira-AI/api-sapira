@@ -139,5 +139,10 @@ BEGIN
     'grouped',          v_group_by_period
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."regenerate_contract_invoices_from_items"(p_contract_id uuid) IS 'Regenera las contract_invoices de un contrato legacy a partir de sus contract_items.
+   Preserva is_satisfied=true (cubiertas por reconciliación legacy).
+   FIX 20260302170000: salta invoice_dates que ya tienen is_satisfied=true — evita
+   duplicar facturas reconciliadas al re-editar los items.
+   Respeta group_invoices_by_period del contrato.';

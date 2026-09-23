@@ -538,7 +538,19 @@ const queryResult = await api.post('/salesforce/query', { query: 'SELECT Id FROM
 
 ## Migración desde Edge Functions
 
-Este módulo reemplaza las siguientes edge functions:
+**Migración terminada el 2026-09-23.** Las 6 edge functions `salesforce-*` se eliminaron del
+repositorio (`front-sapira-vite/supabase/functions/`) y de los proyectos de QA y producción, junto
+con el job de pg_cron `salesforce-daily-sync` que invocaba la última que seguía programada
+(migración `RetiraSincronizacionSalesforcePorEdgeFunction`). La sincronización diaria es la de este
+módulo y no hay otra.
+
+Además de estar reemplazadas, estaban rotas: `salesforce-daily-sync` solo sabía renovar el token de
+Salesforce por `refresh_token`, y ninguna conexión tiene uno —las activas son `password` y
+`client_credentials`—, así que fallaba en cada holding y devolvía `200` igual porque el `try/catch`
+estaba dentro del loop. Su tabla de salida, `salesforce_opportunities_cache`, quedó en 0 filas y sin
+lectores.
+
+Este módulo reemplazó las siguientes edge functions:
 
 -   `salesforce-auth` → `POST /salesforce/auth`
 -   `salesforce-refresh-token` → `POST /salesforce/connection/refresh`
@@ -551,4 +563,4 @@ Este módulo reemplaza las siguientes edge functions:
 
 -   Los errores de linting relacionados con formato se pueden corregir ejecutando Prettier manualmente
 -   El flujo de clientes ya está integrado con frontend usando staging de `Account`
--   Las edge functions originales siguen funcionando durante la transición
+-   Las edge functions originales ya no existen: se borraron el 2026-09-23 (ver arriba)

@@ -145,4 +145,6 @@ BEGIN
 
   RETURN COALESCE(v_rate, 1.0);
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."fx_rate"(p_date date, p_from text, p_to text, p_contract_id uuid, p_conversion_type text) IS 'Función unificada para obtener tasas de cambio con prioridades: 1) Contract fixed rates, 2) Manual rates, 3) System rates, 4) Historical fallback';

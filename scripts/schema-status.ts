@@ -30,6 +30,8 @@ import {
 	contarPorAccion,
 	leerMigracionesDeclaradas,
 	leerMigracionesEjecutadas,
+	objetosNoModelados,
+	resumirPermisos,
 } from '../src/databases/postgresql/schema-status';
 
 import { buildCatalog, consultarCatalogo } from './schema-as-code/fetch-catalog';
@@ -105,7 +107,8 @@ async function main(): Promise<void> {
 
 	// ── Assets ──
 	const assets = discoverSqlAssets(ASSETS_ROOT);
-	const comparacion = compararConCorpusGenerado(assets, emitirCorpus(catalogo));
+	const generado = emitirCorpus(catalogo);
+	const comparacion = compararConCorpusGenerado(assets, generado);
 	const estados = clasificarAssets(assets, historial, comparacion);
 	const conteo = contarPorAccion(estados);
 
@@ -125,6 +128,36 @@ async function main(): Promise<void> {
 	if (comparacion.soloEnBase.length > 0) {
 		console.log(`\n### SOLO EN LA BASE (${comparacion.soloEnBase.length}) — el objeto existe en la base y no tiene asset en el repo`);
 		for (const ruta of comparacion.soloEnBase) console.log(`  ${ruta}`);
+	}
+
+	// Lo que ninguna fase del corpus sabe describir: sin esto, una vista o un procedimiento nuevo
+	// no aparece en ningún lado, porque `SOLO EN LA BASE` se deriva de lo que los emisores producen.
+	const noModelados = objetosNoModelados(catalogo, generado);
+	if (noModelados.length > 0) {
+		console.log(`\n### FUERA DEL CORPUS (${noModelados.length}) — ninguna fase del repo puede describir estos objetos`);
+		for (const objeto of noModelados) console.log(`  ${objeto.tipo}: ${objeto.nombre}`);
+	}
+
+	// ── Permisos ──
+	// `grants/` es NO VERIFICABLE por diseño; esto hace observable lo que el asset no puede probar.
+	const permisos = resumirPermisos(catalogo);
+	if (permisos.dominantes.length > 0) {
+		console.log('\n## Permisos (informativo: `grants/` no se puede verificar contra la base)');
+		for (const dominante of permisos.dominantes) {
+			console.log(`  ${dominante.objetos} ${dominante.tipo}(s) comparten la firma: ${dominante.firma}`);
+		}
+		if (permisos.excepciones.length === 0) console.log('  Sin excepciones: ningún objeto se aparta de su firma.');
+		for (const excepcion of permisos.excepciones) {
+			console.log(`  ⚠️  ${excepcion.objetos} ${excepcion.tipo}(s) con otra firma: ${excepcion.firma}`);
+			console.log(`      ${excepcion.ejemplos.join(', ')}${excepcion.objetos > excepcion.ejemplos.length ? ', …' : ''}`);
+		}
+		const OBJETO: Record<string, string> = { r: 'tablas', S: 'secuencias', f: 'funciones', T: 'tipos', n: 'esquemas' };
+		for (const porDefecto of permisos.porDefecto) {
+			const donde = porDefecto.esquema === '' ? 'toda la base' : `esquema ${porDefecto.esquema}`;
+			console.log(
+				`  default privileges · lo que cree ${porDefecto.rol} en ${donde} (${OBJETO[porDefecto.tipo] ?? porDefecto.tipo}): ${porDefecto.concede}`
+			);
+		}
 	}
 
 	console.log(

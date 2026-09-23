@@ -31,5 +31,6 @@ BEGIN
         COALESCE(EXTRACT(EPOCH FROM (end_time - start_time))::INTEGER, 0)
     FROM batch_stats;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_invoice_integration_stats"(holding_id_param uuid, batch_id_param uuid) IS 'Obtiene estadísticas de integración de facturas por holding y/o lote';

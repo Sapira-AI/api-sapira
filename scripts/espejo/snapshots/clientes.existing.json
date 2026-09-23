@@ -113,8 +113,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp without time zone",
-    "nullable": false,
+    "type": "timestamp",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -180,9 +180,64 @@
    }
   },
   "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "indices": {
+   "idx_clients_custom_fields": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_clients_stripe_customer_id": {
+    "columns": [
+     "stripe_customer_id"
+    ],
+    "unique": false,
+    "where": "(stripe_customer_id IS NOT NULL)"
+   },
+   "idx_clients_salesforce_account_unique": {
+    "columns": [
+     "salesforce_account_id",
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "(salesforce_account_id IS NOT NULL)"
+   },
+   "idx_clients_salesforce_account_id": {
+    "columns": [
+     "salesforce_account_id"
+    ],
+    "unique": false,
+    "where": "(salesforce_account_id IS NOT NULL)"
+   },
+   "idx_clients_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_clients_client_number": {
+    "columns": [
+     "client_number"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "clients_status_check",
+    "expression": "((status = ANY (ARRAY['Activo'::text, 'Inactivo'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "clients_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "client_entities": {
   "class": "ClientEntity",
@@ -214,7 +269,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": null,
+    "default": "gen_random_uuid()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -343,9 +398,54 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_client_entities_odoo_partner_id": {
+    "columns": [
+     "odoo_partner_id"
+    ],
+    "unique": false,
+    "where": "(odoo_partner_id IS NOT NULL)"
+   },
+   "idx_client_entities_odoo_partner_holding": {
+    "columns": [
+     "odoo_partner_id",
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "(odoo_partner_id IS NOT NULL)"
+   },
+   "idx_client_entities_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_client_entities_client_number": {
+    "columns": [
+     "client_number"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "fk_client_entities_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "client_entities_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "client_entity_clients": {
   "class": "ClientEntityClient",
@@ -406,7 +506,7 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -428,10 +528,73 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_entity_client": [
+    "client_entity_id",
+    "client_id"
+   ]
+  },
+  "indices": {
+   "idx_client_entity_clients_primary": {
+    "columns": [
+     "is_primary"
+    ],
+    "unique": false,
+    "where": "(is_primary = true)"
+   },
+   "idx_client_entity_clients_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_client_entity_clients_entity": {
+    "columns": [
+     "client_entity_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_client_entity_clients_client": {
+    "columns": [
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "client_entity_clients_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "client_entity_clients_client_entity_id_fkey": {
+    "columns": [
+     "client_entity_id"
+    ],
+    "table": "client_entities",
+    "onDelete": "CASCADE"
+   },
+   "client_entity_clients_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "CASCADE"
+   },
+   "client_entity_clients_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "client_contacts": {
   "class": "ClientContact",
@@ -449,7 +612,7 @@
    },
    "client_id": {
     "type": "uuid",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
@@ -463,7 +626,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": null,
+    "default": "gen_random_uuid()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -526,9 +689,748 @@
    }
   },
   "uniques": {},
+  "indices": {
+   "idx_client_contacts_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "fk_client_contacts_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "client_contacts_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "contact_preferences": {
+  "class": "ContactPreference",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contact_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "allow_billing_emails": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "allow_proforma": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "contact_preferences_holding_id_client_id_contact_id_key": [
+    "holding_id",
+    "client_id",
+    "contact_id"
+   ]
+  },
+  "indices": {
+   "contact_preferences_holding_idx": {
+    "columns": [
+     "holding_id",
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "client_documents": {
+  "class": "ClientDocument",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "document_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_url": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "uploaded_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "gen_random_uuid()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_client_documents_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "client_documents_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "CASCADE"
+   },
+   "fk_client_documents_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "company_legal_documents": {
+  "class": "CompanyLegalDocument",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "document_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "document_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "upload_date": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "CURRENT_DATE",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_url": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "company_legal_documents_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "client_entity_tax_id_normalization_conflicts": {
+  "class": "ClientEntityTaxIdNormalizationConflict",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "migration_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_entity_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "conflicting_client_entity_ids": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": true
+   },
+   "tax_id_current": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_id_normalized": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "detected_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "resolved_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "client_entity_tax_id_normaliz_migration_name_client_entity__key": [
+    "migration_name",
+    "client_entity_id"
+   ]
+  },
   "indices": {},
   "checks": [],
   "foreignKeys": {}
+ },
+ "company_bank_accounts": {
+  "class": "CompanyBankAccount",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "bank_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "account_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "account_number": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "account_holder": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "company_bank_accounts_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "company_account_mappings": {
+  "class": "CompanyAccountMapping",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "revenue_account_code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "4.1.01",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "revenue_account_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "Revenue",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unbilled_account_code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "1.1.03",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unbilled_account_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "Unbilled Revenue (Contract Asset)",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deferred_account_code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "2.2.05",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deferred_account_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "Deferred Revenue",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_revenue_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_unbilled_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_deferred_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "unique_company_mapping": [
+    "company_id"
+   ]
+  },
+  "indices": {
+   "idx_company_account_mappings_company": {
+    "columns": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "company_account_mappings_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "sellers": {
   "class": "Seller",
@@ -614,6 +1516,14 @@
   "uniques": {},
   "indices": {},
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "fk_sellers_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

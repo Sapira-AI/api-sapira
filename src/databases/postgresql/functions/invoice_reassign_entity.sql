@@ -63,5 +63,6 @@ BEGIN
     jsonb_build_object('new_client_entity_id', p_new_client_entity_id,
       'new_company_id', p_new_company_id, 'updated_count', v_count, 'old', v_old, 'failed', v_failed));
   RETURN jsonb_build_object('success', true, 'updated_count', v_count, 'failed', v_failed);
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."invoice_reassign_entity"(p_contract_id uuid, p_invoice_ids uuid[], p_new_client_entity_id uuid, p_new_company_id uuid) IS 'Reasigna client_entity_id y/o company_id de facturas Por Emitir. Valida junction con cliente del contrato y recalcula issuer_legal_name/tax_id/address. Requiere permiso EDIT_FACTURACION.';

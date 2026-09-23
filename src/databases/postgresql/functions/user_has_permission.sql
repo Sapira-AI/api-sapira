@@ -19,5 +19,6 @@ BEGIN
   
   RETURN has_perm;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."user_has_permission"(permission_code text) IS 'SOLO PARA USO EN APLICACIÓN - No usar en políticas RLS (causa recursión)';
