@@ -33,14 +33,15 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 - ~~Paso 3 · Conexión TypeORM ↔ Supabase; el esquema se cambia por migraciones/assets~~ ✅ operativo
   (corpus + runner + `schema:status` + guardas)
 - ~~Limpieza capa 1: 23 assets huérfanos~~ ✅ eliminados 21-09
-- ⏳ Lo que queda, punto por punto y con estado: [`REGISTRO-DB-COMO-CODIGO.md`](src/databases/postgresql/REGISTRO-DB-COMO-CODIGO.md)
-  — aplicar a prod `create_default_roles_for_holding` + `seed/002`; llevar el flujo api a la rama `dev` de Supabase
-  ("QA" = rama persistente del MISMO proyecto, atada a git `dev`; el flujo viejo del front la mantiene
-  en paridad con `main`, pero las 5 migraciones TypeORM + assets se aplicaron solo a `main` —
-  [GUIA §6](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md), orden especial la primera vez).
-  ⚠️ Mientras convivan ambos mecanismos: **ninguna operación de rama por Supabase (merge/rebase/reset)
-  sin acuerdo Domi+Leon** — un reset reconstruiría dev sin nada del flujo api;
-  línea base de prod; rotar contraseñas.
+- ~~Deriva real de funciones (REGISTRO punto 1)~~ ✅ cerrada 21-09 (recapturas, `rsm_metrics`,
+  seed/roles corregidos según el diseño de permisos internos — el seed queda solo para bootstrap)
+- ~~Llevar el carril api a la rama `dev`~~ ✅ 21-09 por [GUIA §6](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md):
+  5 migraciones + 26 assets; ambas ramas con `schema:status` sin migraciones, sin PENDIENTE y sin
+  SIN CONTRAPARTE. ("QA" = rama `dev` persistente del MISMO proyecto Supabase; el flujo viejo del
+  front la mantenía en paridad y solo le faltaba el carril api. ⚠️ Regla mientras convivan ambos
+  mecanismos: **ninguna operación de rama por Supabase — merge/rebase/reset — sin acuerdo
+  Domi+Leon**: un reset reconstruiría dev sin el carril api.)
+- ~~2 vistas sin uso~~ ✅ eliminadas de ambas ramas 21-09 (`DropVistasSinUso`, REGISTRO punto 7)
 - 🔴 **PENDIENTE GRANDE — LEON: revisión de cierre de Fase 0** (antes de pasar `domi`→`qa`→`main`).
   Resumen de lo ejecutado en la sesión del 21-09 (Domi + Claude), todo por el flujo de la GUIA y
   verificable con `schema:status`:
@@ -57,10 +58,10 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
      de permisos internos (el seed queda SIN aplicar, solo para bootstrap — decisión Domi).
   4. **Estado medido al cierre**: ambas ramas con migraciones 0 · PENDIENTE 0 · SIN CONTRAPARTE 0.
   Lo que Leon debe revisar/ajustar para cerrar:
-  - [ ] Las 3 decisiones de QA (REGISTRO punto 3): `types/000` NO CONVERGE · 5 policies viejas de
-    `salesforce_connections` solo-en-dev (¿drop?) · divergencia de migraciones del front del 16-09
-    (dev tiene 2 que main no; main 1 que dev no — y **8 migraciones post-01-09 sin archivo en el
-    repo del front**: aplicadas desde copias sin commitear, recuperables de `schema_migrations.statements`).
+  - [ ] `types/000-extensions` NO CONVERGE — la ÚNICA decisión de QA que queda (las otras dos se
+    cerraron el 21-09 PM con OK de Domi: 5 policies viejas eliminadas de dev; migraciones fantasma
+    del front documentadas y NO recreadas — detalle en REGISTRO punto 3). También cerrado ese día:
+    las 2 vistas sin uso, eliminadas de ambas ramas con `DropVistasSinUso` (REGISTRO punto 7 ✅).
   - [ ] Validar el seed/roles de permisos internos (o su retiro definitivo) — REGISTRO punto 1.
   - [ ] 🔶 **Subcarpetas por dominio en `functions/` y `triggers/`** (el runner ya es recursivo; la
     ruta es la identidad en el historial → decidir ANTES del baseline; hoy ~35 filas entre ambas

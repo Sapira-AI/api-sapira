@@ -6,11 +6,13 @@
 **Qué significa "la base es código" acá:** el repo describe el estado deseado del esquema `public`,
 cada entorno se lleva a ese estado con un procedimiento repetible
 ([GUIA → Sincronizar cambios](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción)),
-y cuando el código y una base difieren, **manda el código**. Hoy eso último no es cierto en todos
-los casos: los puntos 1, 5 y 7 son exactamente donde la base todavía manda.
+y cuando el código y una base difieren, **manda el código**. Con los puntos 1, 5 y 7 cerrados eso ya
+es cierto para tablas, funciones, triggers, policies, índices y jobs. Donde todavía no lo es: los 3
+assets `NO VERIFICABLE` de `grants/` y `seed/`, que el runner aplica sin poder comprobar el
+resultado contra la base (punto 10).
 
 **Lo que ya está** (no se repite abajo): las 129 tablas de `public` con datos de negocio tienen
-entity viva y no queda ningún espejo inerte; 887 assets cubren enums, extensiones, índices
+entity viva y no queda ningún espejo inerte; 868 assets cubren enums, extensiones, índices
 especiales, funciones, triggers, policies, permisos y semillas; `yarn schema:status --target <e>`
 mide cualquier base en solo lectura; y hay guardas en las pruebas para que nada de eso se
 desarme (GUIA → Guardas automáticas).
@@ -31,7 +33,7 @@ Ese mismo día quedaron **3 jobs**: se retiró `salesforce-daily-sync` junto con
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
 | 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) → 53 | ✅ | 2026-09-23 |
-| 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) (eliminadas; falta confirmar con Domi) | 🔶 | 2026-09-21 |
+| 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) | ✅ | 2026-09-21 |
 | 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) — decidido: se clona prod | ✅ | 2026-09-22 |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
 | 10 | [Permisos: `grants/` sigue sin ser verificable](#10-permisos-grants-sigue-sin-ser-verificable) | 🔶 | 2026-09-23 |
@@ -117,10 +119,20 @@ aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4
 > ⚠️ Mientras convivan ambos mecanismos: ninguna operación de rama por Supabase
 > (merge/rebase/reset) sin acuerdo Domi+Leon — un reset reconstruiría dev sin el carril api.
 >
-> **Quedan 3 decisiones (Leon)**: (a) `types/000-extensions` NO CONVERGE (extensiones de dev
-> difieren; va por migración o se acepta); (b) 5 policies viejas de `salesforce_connections` +
-> mappings que solo existen en dev (prod las eliminó; dropearlas = paridad); (c) la
-> mini-divergencia de migraciones del front del 16-09 (dev +2 / main +1).
+> **Cierre de las 3 decisiones (21-09 PM, con OK de Domi):**
+> (b) ✅ Las 5 policies viejas eliminadas de dev — eran la generación anterior de RLS
+> (`auth.uid() = user_id`, por usuario) reemplazada por el modelo por holding, y en dev
+> **ampliaban** acceso cross-holding al combinarse por OR. Dev quedó con el mismo modelo que prod.
+> (c) ✅ Las migraciones fantasma del front: **NO se recrean** (decisión Domi). Son 8, todas del
+> trabajo de renegociación de sept, con timestamps GEMELOS distintos por rama porque se aplicaron
+> por separado — recrear archivos haría que la rama contraria intentara re-ejecutarlas en un
+> `db push` futuro. El contenido está superado por el corpus (fuente de verdad de funciones) y el
+> SQL queda preservado en `schema_migrations.statements`. Trazabilidad: dev `20260904130955`
+> (fix_downsell_item_completo), `20260907121024` (descripcion_incluye_cuenta), y los pares
+> dev/main `20260913145527`/`150159` (renegociacion_rama_mixta), `20260913160652`/`161005`
+> (delta_neto), `20260916140354`/`140759` (delta_qty_unit).
+> (a) ⬜ Queda SOLO `types/000-extensions` NO CONVERGE para Leon (extensiones de dev ≠ prod:
+> migración o aceptar+documentar).
 
 
 Medido en QA el 2026-09-21: **5 migraciones pendientes** (la base nunca corrió ninguna), 17 funciones
@@ -272,11 +284,17 @@ TypeORM y no tienen arreglo desde el repo.
 
 ## 7. Dos vistas fuera del código
 
-> 🔶 **Sin objeto desde el 2026-09-21**: las dos vistas **ya no existen** ni en prod ni en QA (se
-> midió en vivo a las ~10:30 y a las ~11:30 del 21-09; entre medio desaparecieron). Falta que Domi
-> confirme que fue a propósito y el punto se cierra. Lo que queda del punto está resuelto por otro
-> lado: `schema:status` ahora lista **FUERA DEL CORPUS**, así que una vista nueva se reporta sola en
-> vez de pasar inadvertida, y crear la fase `views/` dejó de tener sentido sin archivos que poner.
+> ✅ **CERRADO el 2026-09-21** (OK de Domi): `invoices_with_net_amounts` e
+> `invoice_items_consolidated` **eliminadas de ambas ramas** con la migración
+> `1789100000000-DropVistasSinUso` (aplicada dev→prod). Eran prototipos del ejercicio NC/devengo;
+> la lógica reutilizable vive en `get_invoice_net_amount()` / `get_invoice_items_with_credits()`.
+> Evidencia de no-uso en el comentario de la migración (0 referencias en 3 repos, 0 funciones,
+> 0 en el catálogo semántico del copiloto). El `down()` las recrea verbatim.
+>
+> Lo que quedaba del punto se resolvió por otro lado: `schema:status` ahora lista **FUERA DEL
+> CORPUS**, así que una vista nueva se reporta sola en vez de pasar inadvertida, y crear la fase
+> `views/` dejó de tener sentido sin archivos que poner. Medido en vivo el 21-09: las dos vistas ya
+> no estaban ni en prod ni en QA.
 
 `invoices_with_net_amounts` e `invoice_items_consolidated` existen en prod y no tienen asset ni
 entity. `fetch-catalog.ts` ya las captura (consulta `views`), pero no hay fase que las aplique.
