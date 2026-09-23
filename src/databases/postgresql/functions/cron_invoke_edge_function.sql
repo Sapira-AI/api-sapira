@@ -17,7 +17,7 @@
 -- `SECURITY DEFINER` + `search_path = ''`: lo invoca pg_cron y lee `vault.decrypted_secrets`, así que
 -- todo va calificado con su esquema.
 
-CREATE OR REPLACE FUNCTION public.cron_invoke_edge_function(p_function text, p_method text DEFAULT 'POST')
+CREATE OR REPLACE FUNCTION public.cron_invoke_edge_function(p_function text, p_method text DEFAULT 'POST'::text)
  RETURNS bigint
  LANGUAGE plpgsql
  SECURITY DEFINER
