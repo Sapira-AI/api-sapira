@@ -201,6 +201,11 @@
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
    },
    {
+    "name": "client_entities_payment_terms_check",
+    "type": "c",
+    "expr": "(payment_terms IS NULL) OR\nCASE (payment_terms ->> 'kind'::text)\n    WHEN 'net'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'end_of_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'day_of_next_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric))\n        ELSE false\n    END\n    ELSE false\nEND"
+   },
+   {
     "name": "client_entities_pkey",
     "type": "p",
     "cols": [

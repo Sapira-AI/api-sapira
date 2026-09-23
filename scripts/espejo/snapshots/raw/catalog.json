@@ -5402,6 +5402,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Nombre de la posición fiscal en Odoo (ej: \"RC con ICA\", \"RC sin ICA\")"
+				},
+				{
+					"column": "payment_terms",
+					"attnum": 24,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Condición de pago por defecto: {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. NULL = sin condición propia"
 				}
 			],
 			"constraints": [
@@ -5413,6 +5429,15 @@
 					"deferred": false,
 					"ondelete": "c",
 					"onupdate": "a"
+				},
+				{
+					"name": "client_entities_payment_terms_check",
+					"type": "c",
+					"def": "CHECK (((payment_terms IS NULL) OR\nCASE (payment_terms ->> 'kind'::text)\n    WHEN 'net'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'end_of_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'day_of_next_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric))\n        ELSE false\n    END\n    ELSE false\nEND))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
 				},
 				{
 					"name": "client_entities_pkey",

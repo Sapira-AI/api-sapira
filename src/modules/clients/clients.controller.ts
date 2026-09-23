@@ -3,10 +3,12 @@ import {
 	Body,
 	Controller,
 	Delete,
+	ForbiddenException,
 	Get,
 	Headers,
 	HttpStatus,
 	Param,
+	ParseUUIDPipe,
 	Patch,
 	Post,
 	Put,
@@ -14,23 +16,29 @@ import {
 	Request,
 	UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 
+import { ClientsHoldingScopeGuard, type HoldingScopedRequest } from './access/clients-holding-scope.guard';
+import { ClientMetricsService } from './client-metrics.service';
 import { ClientsService } from './clients.service';
 import { AssignEntityResponseDto, AssignEntityToClientDto } from './dtos/assign-entity.dto';
 import { ClientResponseDto } from './dtos/client-response.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
+import { QueryClientInvoicesDto } from './dtos/query-client-invoices.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
 
 @ApiTags('Clients')
 @Controller('clients')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, ClientsHoldingScopeGuard)
 @ApiBearerAuth()
 export class ClientsController {
-	constructor(private readonly clientsService: ClientsService) {}
+	constructor(
+		private readonly clientsService: ClientsService,
+		private readonly clientMetricsService: ClientMetricsService
+	) {}
 
 	@Post()
 	@ApiOperation({
@@ -70,8 +78,74 @@ export class ClientsController {
 			},
 		},
 	})
-	async findAll(@Query() queryDto: QueryClientsDto) {
-		return await this.clientsService.findAll(queryDto);
+	async findAll(@Query() queryDto: QueryClientsDto, @Request() req: HoldingScopedRequest) {
+		// Sin holding explícito, el holding por defecto del usuario (antes devolvía clientes de todos los holdings).
+		const holdingId = queryDto.holding_id ?? req.holdingIds[0];
+
+		if (!holdingId) throw new ForbiddenException('El usuario no tiene un holding activo');
+
+		return await this.clientsService.findAll({ ...queryDto, holding_id: holdingId });
+	}
+
+	// Debe declararse antes de `:id` para que Nest no lo capture como un id.
+	@Get('filter-options')
+	@ApiOperation({
+		summary: 'Opciones de filtro de clientes',
+		description: 'Valores distintos de segmento, industria, mercado, país y estado de los clientes del holding',
+	})
+	@ApiQuery({ name: 'holding_id', type: String, required: true })
+	async getFilterOptions(@Query('holding_id', new ParseUUIDPipe()) holdingId: string) {
+		return await this.clientsService.getFilterOptions(holdingId);
+	}
+
+	@Get('summary')
+	@ApiOperation({
+		summary: 'Totales de la lista de clientes',
+		description: 'MRR del mes, cartera abierta y vencida del holding (moneda del sistema)',
+	})
+	@ApiQuery({ name: 'holding_id', type: String, required: true })
+	async getListSummary(@Query('holding_id', new ParseUUIDPipe()) holdingId: string) {
+		return await this.clientMetricsService.getListSummary(holdingId);
+	}
+
+	@Get(':id/summary')
+	@ApiOperation({
+		summary: 'Resumen del cliente',
+		description: 'Contratos activos, próxima renovación, MRR, por cobrar, vencido y facturado 12 meses',
+	})
+	@ApiParam({ name: 'id', type: String })
+	@ApiQuery({ name: 'holding_id', type: String, required: true })
+	async getSummary(@Param('id', new ParseUUIDPipe()) id: string, @Query('holding_id', new ParseUUIDPipe()) holdingId: string) {
+		return await this.clientMetricsService.getSummary(id, holdingId);
+	}
+
+	@Get(':id/invoices')
+	@ApiOperation({
+		summary: 'Facturas del cliente',
+		description: 'Paginadas, de todas sus razones sociales; filtro por estado, razón social y número, con conteo por estado',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async getInvoices(@Param('id', new ParseUUIDPipe()) id: string, @Query() query: QueryClientInvoicesDto) {
+		return await this.clientMetricsService.getInvoices(id, query.holding_id, {
+			page: query.page,
+			limit: query.limit,
+			status: query.status,
+			entityId: query.client_entity_id,
+			search: query.search,
+			sortBy: query.sort_by,
+			sortOrder: query.sort_order,
+		});
+	}
+
+	@Get(':id/receivables')
+	@ApiOperation({
+		summary: 'Cartera del cliente',
+		description: 'Facturas abiertas con antigüedad por vencimiento (por vencer, 1–30, 31–60, 61–90, +90)',
+	})
+	@ApiParam({ name: 'id', type: String })
+	@ApiQuery({ name: 'holding_id', type: String, required: true })
+	async getReceivables(@Param('id', new ParseUUIDPipe()) id: string, @Query('holding_id', new ParseUUIDPipe()) holdingId: string) {
+		return await this.clientMetricsService.getReceivables(id, holdingId);
 	}
 
 	@Get(':id')
@@ -94,8 +168,8 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async findOne(@Param('id') id: string): Promise<ClientResponseDto> {
-		return await this.clientsService.findOne(id);
+	async findOne(@Param('id') id: string, @Request() req: HoldingScopedRequest): Promise<ClientResponseDto> {
+		return await this.clientsService.findOne(id, req.holdingIds);
 	}
 
 	@Get(':id/with-entities')
@@ -117,7 +191,9 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async findOneWithEntities(@Param('id') id: string) {
+	async findOneWithEntities(@Param('id') id: string, @Request() req: HoldingScopedRequest) {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.findOneWithEntities(id);
 	}
 
@@ -142,7 +218,13 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto): Promise<ClientResponseDto> {
+	async update(
+		@Param('id') id: string,
+		@Body() updateClientDto: UpdateClientDto,
+		@Request() req: HoldingScopedRequest
+	): Promise<ClientResponseDto> {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.update(id, updateClientDto);
 	}
 
@@ -172,7 +254,9 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async remove(@Param('id') id: string) {
+	async remove(@Param('id') id: string, @Request() req: HoldingScopedRequest) {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.remove(id);
 	}
 
@@ -201,10 +285,11 @@ export class ClientsController {
 		status: HttpStatus.CONFLICT,
 		description: 'La razón social ya está asignada al cliente',
 	})
-	async assignEntity(@Param('id') id: string, @Body() assignDto: AssignEntityToClientDto, @Request() req) {
-		const holdingId = req.user?.holdingId;
-		const userId = req.user?.userId;
-		return await this.clientsService.assignEntity(id, assignDto, holdingId, userId);
+	async assignEntity(@Param('id') id: string, @Body() assignDto: AssignEntityToClientDto, @Request() req: HoldingScopedRequest) {
+		// El holding sale del cliente (antes se leía `req.user.holdingId`, que el guard de auth nunca llena).
+		const client = await this.clientsService.findOne(id, req.holdingIds);
+
+		return await this.clientsService.assignEntity(id, assignDto, client.holding_id);
 	}
 
 	@Delete(':id/entities/:entityId')
@@ -239,7 +324,9 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente, razón social o relación no encontrada',
 	})
-	async unassignEntity(@Param('id') id: string, @Param('entityId') entityId: string) {
+	async unassignEntity(@Param('id') id: string, @Param('entityId') entityId: string, @Request() req: HoldingScopedRequest) {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.unassignEntity(id, entityId);
 	}
 
@@ -275,7 +362,9 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente, razón social o relación no encontrada',
 	})
-	async setPrimaryEntity(@Param('id') id: string, @Param('entityId') entityId: string) {
+	async setPrimaryEntity(@Param('id') id: string, @Param('entityId') entityId: string, @Request() req: HoldingScopedRequest) {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.setPrimaryEntity(id, entityId);
 	}
 
@@ -299,7 +388,9 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async getClientEntities(@Param('id') id: string) {
+	async getClientEntities(@Param('id') id: string, @Request() req: HoldingScopedRequest) {
+		await this.clientsService.findOne(id, req.holdingIds);
+
 		return await this.clientsService.getClientEntities(id);
 	}
 
