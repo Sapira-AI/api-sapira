@@ -12,6 +12,8 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_salesforce_sync_logs_created_at ON public.salesforce_sync_logs USING btree (created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_salesforce_sync_logs_sync_date ON public.salesforce_sync_logs USING btree (sync_date DESC)
  */
+@Index('idx_salesforce_sync_logs_created_at', { synchronize: false })
+@Index('idx_salesforce_sync_logs_sync_date', { synchronize: false })
 @Entity({ name: 'salesforce_sync_logs', comment: 'Registro de sincronizaciones automáticas de Salesforce' })
 @Index('idx_salesforce_sync_logs_holding_id', ['holding_id'])
 export class SalesforceSyncLog {

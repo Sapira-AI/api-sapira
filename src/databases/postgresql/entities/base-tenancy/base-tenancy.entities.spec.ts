@@ -67,14 +67,16 @@ describe('Espejo base-tenancy (TypeORM ↔ prod public)', () => {
 
 		it('tiene las mismas FKs (nombre → tabla, ON DELETE) que prod', () => {
 			expect(
-				Object.fromEntries(metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }]))
+				Object.fromEntries(
+					metadata().foreignKeys.map((fk) => [fk.name, { table: fk.referencedEntityMetadata.tableName, onDelete: fk.onDelete }])
+				)
 			).toEqual(expected.foreignKeys);
 		});
 
 		it('tiene los mismos UNIQUE (nombre → columnas) que prod', () => {
-			expect(Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual(
-				expected.uniques
-			);
+			expect(
+				Object.fromEntries(metadata().uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))
+			).toEqual(expected.uniques);
 		});
 
 		it('tiene los mismos CHECK (nombres) que prod', () => {
@@ -88,10 +90,14 @@ describe('Espejo base-tenancy (TypeORM ↔ prod public)', () => {
 		it('tiene los mismos índices declarables (nombre → columnas, unique, where) que prod', () => {
 			expect(
 				Object.fromEntries(
-					metadata().indices.map((index) => [
-						index.name,
-						{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null },
-					])
+					metadata()
+						// `@Index('x', { synchronize: false })` no declara un índice: avisa que existe y que
+						// TypeORM no lo toque (los de `special-index/`). No tiene columnas y no va contra el snapshot.
+						.indices.filter((index) => index.synchronize !== false)
+						.map((index) => [
+							index.name,
+							{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null },
+						])
 				)
 			).toEqual(expected.indexes);
 		});

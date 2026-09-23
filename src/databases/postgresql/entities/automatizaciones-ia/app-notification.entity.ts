@@ -12,6 +12,8 @@ export type AppNotificationStatus = 'open' | 'resolved';
 	unique: true,
 	where: `((status = 'open'::text) AND (deduplication_key IS NOT NULL))`,
 })
+@Index('app_notifications_holding_resource_created_idx', { synchronize: false })
+@Index('app_notifications_holding_status_created_idx', { synchronize: false })
 @Entity('app_notifications')
 export class AppNotification {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notifications_pkey' })

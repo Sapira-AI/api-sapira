@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
@@ -12,6 +12,8 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_invoice_restructure_log_contract ON public.invoice_restructure_log USING btree (contract_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_invoice_restructure_log_holding_action ON public.invoice_restructure_log USING btree (holding_id, action, created_at DESC)
  */
+@Index('idx_invoice_restructure_log_contract', { synchronize: false })
+@Index('idx_invoice_restructure_log_holding_action', { synchronize: false })
 @Entity('invoice_restructure_log')
 @Check(
 	'invoice_restructure_log_action_check',

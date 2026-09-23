@@ -12,6 +12,8 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_contract_lifecycle_events_contract_date ON public.contract_lifecycle_events USING btree (contract_id, effective_date DESC, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_contract_lifecycle_events_contract_effective ON public.contract_lifecycle_events USING btree (contract_id, effective_date DESC)
  */
+@Index('idx_contract_lifecycle_events_contract_date', { synchronize: false })
+@Index('idx_contract_lifecycle_events_contract_effective', { synchronize: false })
 @Entity('contract_lifecycle_events')
 @Index('idx_contract_lifecycle_events_contract_id', ['contract_id'])
 @Index('idx_contract_lifecycle_events_holding_id', ['holding_id'])

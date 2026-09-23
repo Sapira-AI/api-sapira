@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { AiRun } from './ai-run.entity';
 
@@ -10,6 +10,7 @@ import { AiRun } from './ai-run.entity';
  * Policies (2): AI messages - manage via run (ALL, public); AI messages - select via run (SELECT, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX ai_messages_run_idx ON public.ai_messages USING btree (run_id, created_at DESC)
  */
+@Index('ai_messages_run_idx', { synchronize: false })
 @Entity('ai_messages')
 @Check('ai_messages_channel_check', "channel = ANY (ARRAY['email'::text, 'crm'::text, 'webhook'::text])")
 @Check('ai_messages_direction_check', "direction = ANY (ARRAY['out'::text, 'in'::text])")

@@ -1,4 +1,4 @@
-import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
@@ -13,6 +13,9 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_ccl_company ON public.contract_change_log USING btree (company_id, changed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_ccl_contract ON public.contract_change_log USING btree (contract_id, changed_at DESC)
  */
+@Index('idx_ccl_changed_by', { synchronize: false })
+@Index('idx_ccl_company', { synchronize: false })
+@Index('idx_ccl_contract', { synchronize: false })
 @Entity({
 	name: 'contract_change_log',
 	comment: 'Audit log de cambios en contracts para contratos post-firma. Mantiene historial inmutable de qué/quién/cuándo/por qué.',

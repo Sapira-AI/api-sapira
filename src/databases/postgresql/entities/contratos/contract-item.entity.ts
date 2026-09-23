@@ -14,6 +14,7 @@ import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo
  * Policies (5): Users can delete contract items from their holding (DELETE, public); Users can insert contract items for their holding (INSERT, public); Users can update contract items from their holding (UPDATE, public); Users can view contract items from their holding (SELECT, public); holding_access_contract_items (ALL, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_contract_items_custom_fields ON public.contract_items USING gin (custom_fields)
  */
+@Index('idx_contract_items_custom_fields', { synchronize: false })
 @Entity('contract_items')
 @Check('chk_contract_items_price_entry_mode', "price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])")
 @Check(

@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
@@ -14,6 +14,8 @@ import { AiAgent } from './ai-agent.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX ai_runs_agent_idx ON public.ai_runs USING btree (agent_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX ai_runs_holding_idx ON public.ai_runs USING btree (holding_id, created_at DESC)
  */
+@Index('ai_runs_agent_idx', { synchronize: false })
+@Index('ai_runs_holding_idx', { synchronize: false })
 @Entity('ai_runs')
 @Check('ai_runs_status_check', "status = ANY (ARRAY['queued'::text, 'approved'::text, 'sent'::text, 'error'::text, 'cancelled'::text])")
 export class AiRun {

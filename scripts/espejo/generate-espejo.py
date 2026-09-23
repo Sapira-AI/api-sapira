@@ -679,10 +679,14 @@ describe('Espejo {MODULE} (TypeORM ↔ prod public)', () => {{
 		it('tiene los mismos índices declarables (nombre → columnas, unique, where) que prod', () => {{
 			expect(
 				Object.fromEntries(
-					metadata().indices.map((index) => [
-						index.name,
-						{{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null }},
-					])
+					metadata()
+						// `@Index('x', {{ synchronize: false }})` no declara un índice: avisa que existe y que
+						// TypeORM no lo toque (los de `special-index/`). No tiene columnas y no va contra el snapshot.
+						.indices.filter((index) => index.synchronize !== false)
+						.map((index) => [
+							index.name,
+							{{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null }},
+						])
 				)
 			).toEqual(expected.indexes);
 		}});

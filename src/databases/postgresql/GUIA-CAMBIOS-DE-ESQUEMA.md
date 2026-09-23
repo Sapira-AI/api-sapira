@@ -419,12 +419,11 @@ de las que sirvieron 45.
 
 ### Qué vas a ver que NO es tu cambio
 
-Hoy la deriva conocida son **94 sentencias**, todas clasificadas y ninguna de ellas un cambio real.
+Hoy la deriva conocida son **53 sentencias**, todas clasificadas y ninguna de ellas un cambio real. Eran 94 hasta el 2026-09-23: los 41 `DROP INDEX` de `special-index/` desaparecieron al declarar esos índices en su entity con `@Index('<nombre>', { synchronize: false })`, que le dice a TypeORM que existen y que no los toque.
 Si aparecen en tu migración, **bórralas**:
 
 | Vas a ver | Cuántas | Qué es |
 |---|---:|---|
-| `DROP INDEX` sobre un índice que está en `special-index/` | 41 | TypeORM no puede declararlos, así que no los reconoce |
 | `DROP CONSTRAINT` + `ADD CONSTRAINT` con el **mismo nombre y la misma definición** | 28 | Churn de TypeORM al alterar otra cosa de esa tabla. Netean a cero |
 | `DROP DEFAULT` + `SET DEFAULT gen_random_uuid()` sobre una columna FK | 14 | Las 7 columnas FK con ese default, anomalía de producción. Netean a cero |
 | `DROP INDEX` + `CREATE INDEX` con la misma definición | 4 | Idem: TypeORM recrea los índices de las columnas que altera |
@@ -446,7 +445,7 @@ ese es un constraint real de producción que se perdería.
 TYPEORM_LOAD_MIRROR_ENTITIES=true yarn schema:log   # solo lee, no aplica nada
 ```
 
-Debe emitir las 94 conocidas más nada. Si emite algo nuevo que no es tu cambio, la entity y la base
+Debe emitir las 53 conocidas más nada. Si emite algo nuevo que no es tu cambio, la entity y la base
 discreparon: el arreglo es **corregir la entity o escribir el asset**, nunca dejar que TypeORM aplique.
 
 ---
@@ -528,7 +527,7 @@ TypeORM acá es **ORM y detector de deriva**, nunca gestor de esquema.
 `synchronize` está en **`false` en todos los entornos, sin excepción**, y `database.module.spec.ts`
 verifica que nadie lo ponga en `true` en ningún archivo de `src/`.
 
-La diferencia no es teórica: `synchronize` borraría los 41 índices de `special-index/` y todo lo que
+La diferencia no es teórica: `synchronize` borraría todo lo que
 las entities no declaren, sin preguntar. Es exactamente el ruido que la sección de revisión te enseña
 a borrar a mano — pero aplicado a ciegas.
 

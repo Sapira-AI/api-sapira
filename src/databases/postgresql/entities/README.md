@@ -4,7 +4,7 @@
 
 > ✅ **Estado al 2026-09-16: no quedan espejos inertes.** Los 74 espejos están promovidos a `.entity.ts` (11 en los lotes 1 y 2 del 2026-09-14, los 63 restantes juntos el 2026-09-16), así que **las 129 tablas de `public` con datos de negocio tienen entity viva**; solo `sapira_sql_asset_history` y `sapira_typeorm_migrations` no la llevan, por diseño. `database.module.spec.ts` falla si aparece una tabla de producción sin entity viva.
 >
-> Verificación de la promoción: `yarn schema:log` contra producción emite exactamente las mismas 94 sentencias que antes emitía con los espejos cargados, todas clasificadas como ruido (`REGISTRO-ALINEACION.md`).
+> Verificación de la promoción: `yarn schema:log` contra producción emitió exactamente las mismas sentencias que antes emitía con los espejos cargados (94 entonces; 53 desde que los special-index se declaran con `synchronize: false`), todas clasificadas como ruido (`REGISTRO-ALINEACION.md`).
 >
 > ✅ **Las entities promovidas ya NO se regeneran** (desde el 2026-09-22). Son la fuente de verdad de su tabla y se editan como cualquier entity: entity → `migration:generate` → revisar → `migration:run`. El generador sigue emitiendo para ellas el snapshot de prod contra el que su spec las mide, el barrel y el README, así que la deriva se sigue detectando: si `<modulo>.entities.spec.ts` queda en rojo, el repo y prod difieren. Después de aplicar el cambio a producción se refresca el snapshot con `yarn schema:snapshot --target production` — nunca antes, o se tapa la deriva en vez de resolverla. Las reglas 1 y 3 de abajo describen cómo se construyó el espejo, no cómo se trabaja hoy.
 

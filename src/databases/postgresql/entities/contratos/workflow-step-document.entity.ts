@@ -18,6 +18,7 @@ import { WorkflowStep } from './workflow-step.entity';
  * FK duplicada sobre (uploaded_by): workflow_step_documents_uploaded_by_fkey (relación uploadedBy2)
  * FK duplicada sobre (workflow_step_id): workflow_step_documents_workflow_step_id_fkey (relación workflowStep2)
  */
+@Index('idx_wsd_uploaded_at', { synchronize: false })
 @Entity('workflow_step_documents')
 @Index('idx_wsd_contract', ['contract_id'])
 @Index('idx_wsd_holding', ['holding_id'])

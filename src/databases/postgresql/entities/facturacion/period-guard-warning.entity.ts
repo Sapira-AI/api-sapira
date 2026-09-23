@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
@@ -11,6 +11,7 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  * Policies (1): pgw_select (SELECT, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_pgw_company_time ON public.period_guard_warnings USING btree (holding_id, company_id, occurred_at DESC)
  */
+@Index('idx_pgw_company_time', { synchronize: false })
 @Entity({
 	name: 'period_guard_warnings',
 	comment: 'Registro de operaciones que el guard de cierre de períodos hubiera bloqueado, durante el modo "warn" del soft launch.',

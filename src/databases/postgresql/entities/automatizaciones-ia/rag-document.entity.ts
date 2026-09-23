@@ -11,6 +11,8 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
  * Índice no declarado (expresión/orden/método): CREATE INDEX rag_documents_embedding_ivfflat_idx ON public.rag_documents USING ivfflat (embedding vector_cosine_ops) WITH (lists='100')
  * Índice no declarado (expresión/orden/método): CREATE INDEX rag_documents_metadata_gin_idx ON public.rag_documents USING gin (metadata)
  */
+@Index('rag_documents_embedding_ivfflat_idx', { synchronize: false })
+@Index('rag_documents_metadata_gin_idx', { synchronize: false })
 @Entity('rag_documents')
 @Index('rag_documents_holding_id_idx', ['holding_id'])
 @Index('rag_documents_source_idx', ['source_type', 'source_id'])

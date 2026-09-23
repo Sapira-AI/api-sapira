@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
@@ -15,6 +15,9 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_holding_id ON public.overdue_check_log USING btree (holding_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_status ON public.overdue_check_log USING btree (status, created_at DESC)
  */
+@Index('idx_overdue_check_log_date', { synchronize: false })
+@Index('idx_overdue_check_log_holding_id', { synchronize: false })
+@Index('idx_overdue_check_log_status', { synchronize: false })
 @Entity({
 	name: 'overdue_check_log',
 	comment:

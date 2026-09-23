@@ -28,7 +28,7 @@ Desde el 2026-09-23 se suma la fase **`cron/`**: los 4 jobs de pg_cron son asset
 | 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ✅ | 2026-09-23 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
-| 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
+| 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) → 53 | ✅ | 2026-09-23 |
 | 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) (eliminadas; falta confirmar con Domi) | 🔶 | 2026-09-21 |
 | 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) — decidido: se clona prod | ✅ | 2026-09-22 |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
@@ -245,6 +245,13 @@ actualizar sus pruebas y `entities/README.md`.
 **Cómo se verifica:** regenerar todos los módulos no modifica ningún `.entity.ts`.
 
 ## 6. 94 sentencias de ruido al generar una migración
+
+> ✅ **CERRADO el 2026-09-23: 94 → 53.** Los 41 `DROP INDEX` de `special-index/` desaparecieron al
+> declarar cada uno en su entity con `@Index('<nombre>', { synchronize: false })` —TypeORM entonces
+> sabe que el índice existe y no lo crea ni lo borra— en 26 entities. Una guarda nueva en
+> `indices-declarados.spec.ts` exige esa marca para cada asset de `special-index/`, así que el ruido
+> no puede volver. Las 53 restantes son churn del propio TypeORM (28 FKs que elimina y recrea
+> idénticas, 21 de defaults y 4 de dos índices) y no tienen arreglo desde el repo.
 
 `yarn schema:log` contra prod emite 94 sentencias, todas clasificadas y ninguna cambiaría la base:
 41 índices de `special-index/`, 28 FKs que TypeORM elimina y recrea idénticas, 14 del churn de

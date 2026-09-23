@@ -12,41 +12,35 @@ export interface ProdTableSnapshot {
 }
 
 export const INTEGRACIONES_OTRAS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
-	"integration_configs": {
-		"columns": {
-			"id": false,
-			"company_id": true,
-			"service_name": true,
-			"status": true,
-			"last_sync_at": true,
-			"created_at": true,
-			"holding_id": true
+	integration_configs: {
+		columns: {
+			id: false,
+			company_id: true,
+			service_name: true,
+			status: true,
+			last_sync_at: true,
+			created_at: true,
+			holding_id: true,
 		},
-		"primary": [
-			"id"
-		],
-		"foreignKeys": {
-			"fk_integration_configs_holding_id": {
-				"table": "company_holdings",
-				"onDelete": "CASCADE"
+		primary: ['id'],
+		foreignKeys: {
+			fk_integration_configs_holding_id: {
+				table: 'company_holdings',
+				onDelete: 'CASCADE',
 			},
-			"integration_configs_company_id_fkey": {
-				"table": "companies",
-				"onDelete": "NO ACTION"
-			}
+			integration_configs_company_id_fkey: {
+				table: 'companies',
+				onDelete: 'NO ACTION',
+			},
 		},
-		"uniques": {},
-		"checks": [
-			"integration_configs_status_check"
-		],
-		"indexes": {
-			"idx_integration_configs_holding_id": {
-				"columns": [
-					"holding_id"
-				],
-				"unique": false,
-				"where": null
-			}
-		}
-	}
+		uniques: {},
+		checks: ['integration_configs_status_check'],
+		indexes: {
+			idx_integration_configs_holding_id: {
+				columns: ['holding_id'],
+				unique: false,
+				where: null,
+			},
+		},
+	},
 };

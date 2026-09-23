@@ -1,4 +1,4 @@
-import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
@@ -14,6 +14,10 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_cicl_contract ON public.contract_item_change_log USING btree (contract_id, changed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_cicl_item ON public.contract_item_change_log USING btree (contract_item_id, changed_at DESC)
  */
+@Index('idx_cicl_changed_by', { synchronize: false })
+@Index('idx_cicl_company', { synchronize: false })
+@Index('idx_cicl_contract', { synchronize: false })
+@Index('idx_cicl_item', { synchronize: false })
 @Entity({
 	name: 'contract_item_change_log',
 	comment:

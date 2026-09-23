@@ -12,6 +12,7 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
  * Policies (3): tenant_amendments_ins (INSERT, public); tenant_amendments_sel (SELECT, public); tenant_amendments_upd (UPDATE, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_contract_amendments_contract_date ON public.contract_amendments USING btree (contract_id, effective_date DESC, created_at DESC)
  */
+@Index('idx_contract_amendments_contract_date', { synchronize: false })
 @Entity('contract_amendments')
 @Index('idx_contract_amendments_contract', ['contract_id'])
 @Index('idx_contract_amendments_holding', ['holding_id'])

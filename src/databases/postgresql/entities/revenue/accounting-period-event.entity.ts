@@ -1,4 +1,4 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
@@ -14,6 +14,8 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_period_events_company_time ON public.accounting_period_events USING btree (holding_id, company_id, performed_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_period_events_performed_by ON public.accounting_period_events USING btree (performed_by, performed_at DESC)
  */
+@Index('idx_period_events_company_time', { synchronize: false })
+@Index('idx_period_events_performed_by', { synchronize: false })
 @Entity({
 	name: 'accounting_period_events',
 	comment:

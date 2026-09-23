@@ -12,59 +12,49 @@ export interface ProdTableSnapshot {
 }
 
 export const COTIZACIONES_CATALOGO_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
-	"quote_attachments": {
-		"columns": {
-			"id": false,
-			"quote_id": false,
-			"file_name": false,
-			"file_url": false,
-			"file_type": true,
-			"file_size": true,
-			"attachment_type": false,
-			"uploaded_by": true,
-			"uploaded_at": true,
-			"holding_id": false,
-			"created_at": true
+	quote_attachments: {
+		columns: {
+			id: false,
+			quote_id: false,
+			file_name: false,
+			file_url: false,
+			file_type: true,
+			file_size: true,
+			attachment_type: false,
+			uploaded_by: true,
+			uploaded_at: true,
+			holding_id: false,
+			created_at: true,
 		},
-		"primary": [
-			"id"
-		],
-		"foreignKeys": {
-			"quote_attachments_quote_id_fkey": {
-				"table": "quotes",
-				"onDelete": "CASCADE"
+		primary: ['id'],
+		foreignKeys: {
+			quote_attachments_quote_id_fkey: {
+				table: 'quotes',
+				onDelete: 'CASCADE',
 			},
-			"quote_attachments_uploaded_by_fkey": {
-				"table": "users",
-				"onDelete": "NO ACTION"
-			}
+			quote_attachments_uploaded_by_fkey: {
+				table: 'users',
+				onDelete: 'NO ACTION',
+			},
 		},
-		"uniques": {},
-		"checks": [
-			"quote_attachments_attachment_type_check"
-		],
-		"indexes": {
-			"idx_quote_attachments_attachment_type": {
-				"columns": [
-					"attachment_type"
-				],
-				"unique": false,
-				"where": null
+		uniques: {},
+		checks: ['quote_attachments_attachment_type_check'],
+		indexes: {
+			idx_quote_attachments_attachment_type: {
+				columns: ['attachment_type'],
+				unique: false,
+				where: null,
 			},
-			"idx_quote_attachments_holding_id": {
-				"columns": [
-					"holding_id"
-				],
-				"unique": false,
-				"where": null
+			idx_quote_attachments_holding_id: {
+				columns: ['holding_id'],
+				unique: false,
+				where: null,
 			},
-			"idx_quote_attachments_quote_id": {
-				"columns": [
-					"quote_id"
-				],
-				"unique": false,
-				"where": null
-			}
-		}
-	}
+			idx_quote_attachments_quote_id: {
+				columns: ['quote_id'],
+				unique: false,
+				where: null,
+			},
+		},
+	},
 };
