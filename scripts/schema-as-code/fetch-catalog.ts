@@ -207,7 +207,24 @@ const QUERIES = {
 	server: `SELECT version() AS version, current_setting('server_version_num') AS version_num`,
 } as const;
 
-type QueryName = keyof typeof QUERIES;
+/**
+ * Consultas que dependen de algo que puede no existir en la base.
+ *
+ * Van aparte porque todo corre dentro de UNA transacción READ ONLY: un `cron.job` inexistente
+ * aborta la transacción y se lleva puesto el resto de la captura, así que `schema:status` moriría
+ * entero en cualquier base sin pg_cron. Con el pre-chequeo, ahí la lista queda vacía y nada más.
+ */
+const QUERIES_OPCIONALES = {
+	cron: {
+		existe: `SELECT to_regclass('cron.job') AS objeto`,
+		sql: `
+			SELECT jobname AS name, schedule, command, active, username, database
+			FROM cron.job
+			ORDER BY jobname`,
+	},
+} as const;
+
+type QueryName = keyof typeof QUERIES | keyof typeof QUERIES_OPCIONALES;
 
 /**
  * Corre las consultas del catálogo. No abre transacción: quien llama decide, y
@@ -220,6 +237,14 @@ async function consultarCatalogo(executor: SqlExecutor, log: (mensaje: string) =
 		result[name] = rows;
 		log(`  ${name}: ${rows.length} filas`);
 	}
+
+	for (const [name, consulta] of Object.entries(QUERIES_OPCIONALES)) {
+		const existe = await executor.query(consulta.existe);
+		const rows = existe.rows[0]?.objeto ? (await executor.query(consulta.sql)).rows : [];
+		result[name as QueryName] = rows;
+		log(`  ${name}: ${rows.length} filas${existe.rows[0]?.objeto ? '' : ' (no existe en esta base)'}`);
+	}
+
 	return result;
 }
 
@@ -283,6 +308,7 @@ function buildCatalog(data: Record<QueryName, Row[]>): unknown {
 		extensions: data.extensions,
 		grants,
 		functions: data.functions,
+		cron: (data.cron ?? []).map((job) => ({ ...job, command: redactarSecretos(String(job.command)) })),
 		sequences: data.sequences,
 		views: data.views,
 		otherRoutines: data.otherRoutines,
@@ -337,6 +363,24 @@ function buildListTables(data: Record<QueryName, Row[]>): unknown {
 			};
 		}),
 	};
+}
+
+/**
+ * Enmascara secretos antes de que el catálogo llegue a disco.
+ *
+ * `scripts/espejo/snapshots/raw/catalog.json` está commiteado, así que un `cron.job.command` con la
+ * service role key adentro —como estaban `check-overdue-invoices-daily` y `salesforce-daily-sync`
+ * hasta el 2026-09-22— quedaría en el repo para siempre. La redacción va acá, en la captura, y no
+ * en el emisor: un secreto nunca debería existir en memoria más allá de lo necesario, y menos
+ * llegar a un archivo versionado.
+ *
+ * Un comando redactado no coincide con su asset, así que `schema:status` lo marca y el secreto se
+ * ve; que es exactamente lo que se quiere que pase.
+ */
+function redactarSecretos(comando: string): string {
+	return comando
+		.replace(/Bearer\s+[A-Za-z0-9._-]{20,}/g, 'Bearer <REDACTADO>')
+		.replace(/eyJ[A-Za-z0-9._-]{30,}/g, '<JWT-REDACTADO>');
 }
 
 function writeJson(file: string, value: unknown): void {

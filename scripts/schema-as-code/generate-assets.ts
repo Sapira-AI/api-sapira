@@ -38,6 +38,8 @@ export interface Catalog {
 	views?: { name: string; kind: string; def: string }[];
 	otherRoutines?: { name: string; kind: string }[];
 	otherTypes?: { name: string; kind: string }[];
+	/** Jobs de pg_cron. Vacío si la base no tiene la extensión. */
+	cron?: { name: string; schedule: string; command: string; active: boolean; username: string; database: string }[];
 }
 
 interface TableEntry {
@@ -142,6 +144,35 @@ function emitirSequences(catalog: Catalog): Map<string, string> {
 				'',
 			].join('\n')
 		);
+	}
+	return salida;
+}
+
+/**
+ * Jobs de pg_cron. `cron.schedule` actualiza el job si ya existe uno con ese nombre, así que el
+ * asset converge al re-aplicarlo (verificado en QA el 2026-09-22).
+ *
+ * Dos cosas que no son cosméticas:
+ *  - **El rol importa**: la clave del upsert es `(jobname, username)`. Aplicado con otro rol, se
+ *    crea un segundo job con el mismo nombre y los dos corren. Por eso el rol esperado va en la
+ *    cabecera: los assets se aplican con `postgres`.
+ *  - `cron.schedule` no puede dejar un job pausado, así que `active = false` se expresa aparte con
+ *    `cron.alter_job`. Se emite solo en ese caso, para que el ida y vuelta sea exacto.
+ */
+function emitirCron(catalog: Catalog): Map<string, string> {
+	const salida = new Map<string, string>();
+	for (const job of [...(catalog.cron ?? [])].sort((a, b) => a.name.localeCompare(b.name))) {
+		const lineas = [
+			`-- Job pg_cron ${job.name} (${job.schedule}). Se aplica con el rol ${job.username}:`,
+			'-- cron.schedule hace upsert por (jobname, username), así que otro rol crearía un job paralelo.',
+			'',
+			`SELECT cron.schedule('${job.name.replace(/'/g, "''")}', '${job.schedule.replace(/'/g, "''")}', $cron$${job.command.trim()}$cron$);`,
+		];
+		if (!job.active) {
+			lineas.push('', '-- El job está pausado en la base; cron.schedule no puede expresarlo.');
+			lineas.push(`SELECT cron.alter_job((SELECT jobid FROM cron.job WHERE jobname = '${job.name.replace(/'/g, "''")}'), active := false);`);
+		}
+		salida.set(`cron/${nombreArchivo(job.name)}.sql`, `${lineas.join('\n')}\n`);
 	}
 	return salida;
 }
@@ -278,6 +309,7 @@ const EMISORES: [string, (catalog: Catalog) => Map<string, string>][] = [
 	['functions', emitirFunciones],
 	['triggers', emitirTriggers],
 	['rls', emitirPolicies],
+	['cron', emitirCron],
 ];
 
 /**
@@ -344,6 +376,7 @@ if (require.main === module) main();
 
 export {
 	emitirCorpus,
+	emitirCron,
 	emitirFunciones,
 	emitirGrants,
 	emitirPolicies,
