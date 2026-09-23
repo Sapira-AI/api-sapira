@@ -2,7 +2,7 @@
  "quotes": {
   "name": "public.quotes",
   "rls_enabled": true,
-  "rows": 383,
+  "rows": 411,
   "columns": [
    {
     "name": "id",

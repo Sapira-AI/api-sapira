@@ -217,7 +217,7 @@ describe('consultarCatalogo con consultas opcionales', () => {
 
 describe('emitirCron', () => {
 	const job = {
-		name: 'salesforce-daily-sync',
+		name: 'check-overdue-invoices-daily',
 		schedule: '1 4 * * *',
 		command: "SELECT public.f('x')",
 		active: true,
@@ -228,15 +228,15 @@ describe('emitirCron', () => {
 	it('programa el job con el comando verbatim y deja constancia del rol', () => {
 		// La clave del upsert de pg_cron es (jobname, username): aplicado con otro rol se crea un
 		// segundo job con el mismo nombre y corren los dos.
-		const contenido = emitirCron({ cron: [job] } as never).get('cron/salesforce-daily-sync.sql');
+		const contenido = emitirCron({ cron: [job] } as never).get('cron/check-overdue-invoices-daily.sql');
 
 		expect(contenido).toContain('Se aplica con el rol postgres');
-		expect(contenido).toContain(`SELECT cron.schedule('salesforce-daily-sync', '1 4 * * *', $cron$SELECT public.f('x')$cron$);`);
+		expect(contenido).toContain(`SELECT cron.schedule('check-overdue-invoices-daily', '1 4 * * *', $cron$SELECT public.f('x')$cron$);`);
 		expect(contenido).not.toContain('alter_job');
 	});
 
 	it('un job pausado necesita alter_job: cron.schedule no puede expresarlo', () => {
-		const contenido = emitirCron({ cron: [{ ...job, active: false }] } as never).get('cron/salesforce-daily-sync.sql');
+		const contenido = emitirCron({ cron: [{ ...job, active: false }] } as never).get('cron/check-overdue-invoices-daily.sql');
 		expect(contenido).toContain('active := false');
 	});
 

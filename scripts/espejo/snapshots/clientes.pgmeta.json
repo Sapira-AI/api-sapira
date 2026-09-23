@@ -1078,7 +1078,7 @@
  },
  "client_entity_tax_id_normalization_conflicts": {
   "name": "public.client_entity_tax_id_normalization_conflicts",
-  "rls_enabled": false,
+  "rls_enabled": true,
   "rows": 65,
   "columns": [
    {

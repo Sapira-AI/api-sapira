@@ -1,7 +1,7 @@
-# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-09-15)
+# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-09-23)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-15 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-23 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
 
@@ -9,12 +9,12 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | `last_invitation_sent_at` timestamp with time zone<br>`last_invitation_email_id` text<br>`last_invitation_status` text | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `users_pkey`<br>CHECK `users_status_check`<br>FK `users_role_id_fkey` → roles<br>índice `idx_users_auth_id`<br>índice `idx_users_role_id` |
-| `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `user_holdings_pkey`<br>FK `fk_user_holdings_user_id` → users ON DELETE CASCADE<br>índice `idx_user_holdings_holding_id`<br>índice `idx_user_holdings_one_selected_per_user` (UNIQUE, parcial)<br>índice `idx_user_holdings_selected` (parcial)<br>índice `idx_user_holdings_user_id` |
-| `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `company_holdings_pkey` |
-| `companies` (22) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | `created_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `companies_pkey`<br>FK `companies_holding_fk` → company_holdings ON DELETE SET NULL<br>índice `idx_companies_odoo_integration_id`<br>índice `unique_odoo_integration_id_per_holding` (UNIQUE, parcial) |
-| `master_data` (244) | `src/databases/postgresql/entities/base-tenancy/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>UNIQUE `master_data_holding_id_category_value_key` (holding_id, category, value)<br>CHECK `master_data_category_check`<br>FK `fk_master_data_holding_id` → company_holdings ON DELETE CASCADE<br>índice `idx_master_data_category_active` (parcial)<br>índice `idx_master_data_holding_id` |
-| `currencies` (10) | `src/databases/postgresql/entities/base-tenancy/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | `decimal_places`: NOT NULL en la entity vs nullable en DB<br>`is_active`: NOT NULL en la entity vs nullable en DB<br>`created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `currencies_pkey`<br>índice `idx_currencies_is_active`<br>índice `idx_currencies_odoo_id` |
+| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_status_check` |
+| `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `user_holdings_pkey` |
+| `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `company_holdings_pkey` |
+| `companies` (22) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |
+| `master_data` (244) | `src/databases/postgresql/entities/base-tenancy/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>CHECK `master_data_category_check` |
+| `currencies` (10) | `src/databases/postgresql/entities/base-tenancy/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | — | nombre de PK `currencies_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (8): 8 promovidas, 0 apagadas
 

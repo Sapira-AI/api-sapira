@@ -550,7 +550,7 @@
  },
  "odoo_product_mappings": {
   "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Odoo",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [

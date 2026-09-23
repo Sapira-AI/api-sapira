@@ -106,7 +106,7 @@
  "exchange_rates_monthly_avg": {
   "name": "public.exchange_rates_monthly_avg",
   "rls_enabled": true,
-  "rows": 695,
+  "rows": 730,
   "columns": [
    {
     "name": "id",
@@ -499,7 +499,7 @@
  },
  "indicadores_economicos": {
   "name": "public.indicadores_economicos",
-  "rls_enabled": false,
+  "rls_enabled": true,
   "rows": 34,
   "columns": [
    {
@@ -721,7 +721,7 @@
  },
  "generic_export_vats": {
   "name": "public.generic_export_vats",
-  "rls_enabled": false,
+  "rls_enabled": true,
   "rows": 8,
   "columns": [
    {

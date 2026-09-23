@@ -62,7 +62,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "'[]'",
+    "default": [],
     "length": null,
     "precision": null,
     "scale": null,
@@ -128,7 +128,11 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "'[33,34,61]'",
+    "default": [
+     33,
+     34,
+     61
+    ],
     "length": null,
     "precision": null,
     "scale": null,
@@ -146,7 +150,7 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -157,7 +161,7 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -168,17 +172,13 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {
-   "IDX_2eb6c8db5aaa629f1362e8e317": {
-    "columns": [
-     "holding_id",
-     "company_id"
-    ],
-    "unique": true,
-    "where": null
-   }
+  "uniques": {
+   "sii_configurations_holding_id_company_id_key": [
+    "holding_id",
+    "company_id"
+   ]
   },
+  "indices": {},
   "checks": [],
   "foreignKeys": {}
  },
@@ -263,7 +263,7 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -274,18 +274,22 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {
-   "IDX_299dc501af6d963cd4c80eb46f": {
+  "uniques": {
+   "sii_certificates_configuration_id_key": [
+    "configuration_id"
+   ]
+  },
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "sii_certificates_configuration_id_fkey": {
     "columns": [
      "configuration_id"
     ],
-    "unique": true,
-    "where": null
+    "table": "sii_configurations",
+    "onDelete": "CASCADE"
    }
-  },
-  "checks": [],
-  "foreignKeys": {}
+  }
  },
  "sii_cafs": {
   "class": "SiiCaf",
@@ -379,7 +383,7 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -390,20 +394,24 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {
-   "IDX_8f1b12c4ac14e81401c092e259": {
-    "columns": [
-     "configuration_id",
-     "document_type",
-     "folio_start",
-     "folio_end"
-    ],
-    "unique": true,
-    "where": null
-   }
+  "uniques": {
+   "sii_cafs_configuration_id_document_type_folio_start_folio_e_key": [
+    "configuration_id",
+    "document_type",
+    "folio_start",
+    "folio_end"
+   ]
   },
+  "indices": {},
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "sii_cafs_configuration_id_fkey": {
+    "columns": [
+     "configuration_id"
+    ],
+    "table": "sii_configurations",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

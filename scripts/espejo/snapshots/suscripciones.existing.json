@@ -1,1 +1,835 @@
-{}
+{
+ "subscriptions": {
+  "class": "Subscription",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_entity_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "client_name_commercial": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "legal_client_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_id": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "stripe",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "connection_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "start_date": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "canceled_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cancel_at_period_end": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "ended_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "current_period_start": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "current_period_end": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "billing_cycle_anchor": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cancellation_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "cancellation_comment": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "monthly_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "collection_method": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "charge_automatically",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "system_currency": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_system": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "monthly_amount_system_currency": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "metadata": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "{}",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_synced_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "uq_subscriptions_holding_external": [
+    "holding_id",
+    "external_id"
+   ]
+  },
+  "indices": {
+   "idx_subscriptions_status": {
+    "columns": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_source": {
+    "columns": [
+     "source"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_external_id": {
+    "columns": [
+     "external_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_connection_id": {
+    "columns": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_company_id": {
+    "columns": [
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_client_id": {
+    "columns": [
+     "client_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscriptions_client_entity_id": {
+    "columns": [
+     "client_entity_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "subscriptions_status_check",
+    "expression": "status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'paused'::text, 'unpaid'::text, 'trialing'::text, 'incomplete'::text, 'incomplete_expired'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "subscriptions_client_entity_id_fkey": {
+    "columns": [
+     "client_entity_id"
+    ],
+    "table": "client_entities",
+    "onDelete": "RESTRICT"
+   },
+   "subscriptions_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "RESTRICT"
+   },
+   "subscriptions_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "RESTRICT"
+   },
+   "subscriptions_connection_id_fkey": {
+    "columns": [
+     "connection_id"
+    ],
+    "table": "stripe_connections",
+    "onDelete": "NO ACTION"
+   },
+   "subscriptions_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "subscription_items": {
+  "class": "SubscriptionItem",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "subscription_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_id": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "stripe_product_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "stripe_price_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "product_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "product_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "item_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "Digital",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": 18,
+    "scale": 4,
+    "array": false
+   },
+   "unit_price": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "monthly_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "system_currency": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_to_system": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "unit_price_system_currency": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "monthly_amount_system_currency": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "billing_scheme": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "interval": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "month",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "interval_count": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "current_period_start": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "current_period_end": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "start_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "canceled_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "discounts": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "[]",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "metadata": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "{}",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "uq_subscription_items_holding_external": [
+    "holding_id",
+    "external_id"
+   ]
+  },
+  "indices": {
+   "idx_subscription_items_subscription_id": {
+    "columns": [
+     "subscription_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscription_items_stripe_product_id": {
+    "columns": [
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscription_items_product_id": {
+    "columns": [
+     "product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscription_items_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_subscription_items_external_id": {
+    "columns": [
+     "external_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "subscription_items_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "subscription_items_product_id_fkey": {
+    "columns": [
+     "product_id"
+    ],
+    "table": "products",
+    "onDelete": "RESTRICT"
+   },
+   "subscription_items_subscription_id_fkey": {
+    "columns": [
+     "subscription_id"
+    ],
+    "table": "subscriptions",
+    "onDelete": "CASCADE"
+   }
+  }
+ }
+}

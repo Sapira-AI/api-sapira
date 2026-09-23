@@ -92,7 +92,7 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -111,16 +111,297 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "last_invitation_sent_at": {
+    "type": "timestamptz",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_invitation_email_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_invitation_status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
    "UQ_97672ac88f789774dd47f7c8be3": [
     "email"
+   ],
+   "users_email_key": [
+    "email"
+   ]
+  },
+  "indices": {
+   "idx_users_role_id": {
+    "columns": [
+     "role_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_users_auth_id": {
+    "columns": [
+     "auth_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "users_status_check",
+    "expression": "((status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "users_role_id_fkey": {
+    "columns": [
+     "role_id"
+    ],
+    "table": "roles",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "roles": {
+  "class": "Role",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "roles_name_holding_id_key": [
+    "name",
+    "holding_id"
+   ]
+  },
+  "indices": {
+   "idx_roles_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "fk_roles_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "permissions": {
+  "class": "Permission",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "permissions_code_key": [
+    "code"
    ]
   },
   "indices": {},
   "checks": [],
   "foreignKeys": {}
+ },
+ "role_permissions": {
+  "class": "RolePermission",
+  "columns": {
+   "role_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "permission_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_role_permissions_role_id": {
+    "columns": [
+     "role_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_role_permissions_permission_id": {
+    "columns": [
+     "permission_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_role_permissions_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "fk_role_permissions_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "role_permissions_permission_id_fkey": {
+    "columns": [
+     "permission_id"
+    ],
+    "table": "permissions",
+    "onDelete": "NO ACTION"
+   },
+   "role_permissions_role_id_fkey": {
+    "columns": [
+     "role_id"
+    ],
+    "table": "roles",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "user_holdings": {
   "class": "UserHolding",
@@ -149,7 +430,7 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -182,15 +463,52 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_user_holdings_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_user_holdings_selected": {
+    "columns": [
+     "user_id",
+     "selected"
+    ],
+    "unique": false,
+    "where": "(selected = true)"
+   },
+   "idx_user_holdings_one_selected_per_user": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": true,
+    "where": "(selected = true)"
+   },
+   "idx_user_holdings_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {
-   "FK_33667ca270d1cad8895991a4469": {
+   "user_holdings_holding_id_fkey": {
     "columns": [
      "holding_id"
     ],
     "table": "company_holdings",
-    "onDelete": "NO ACTION"
+    "onDelete": "CASCADE"
+   },
+   "fk_user_holdings_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "table": "users",
+    "onDelete": "CASCADE"
    }
   }
  },
@@ -265,7 +583,7 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -461,7 +779,7 @@
    },
    "created_at": {
     "type": "timestamp without time zone",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -549,9 +867,33 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "unique_odoo_integration_id_per_holding": {
+    "columns": [
+     "odoo_integration_id",
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "(odoo_integration_id IS NOT NULL)"
+   },
+   "idx_companies_odoo_integration_id": {
+    "columns": [
+     "odoo_integration_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "companies_holding_fk": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "SET NULL"
+   }
+  }
  },
  "master_data": {
   "class": "MasterData",
@@ -634,10 +976,46 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "uniques": {
+   "master_data_holding_id_category_value_key": [
+    "holding_id",
+    "category",
+    "value"
+   ]
+  },
+  "indices": {
+   "idx_master_data_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_master_data_category_active": {
+    "columns": [
+     "holding_id",
+     "category",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "(is_active = true)"
+   }
+  },
+  "checks": [
+   {
+    "name": "master_data_category_check",
+    "expression": "((category = ANY (ARRAY['markets'::text, 'segments'::text, 'industries'::text, 'item_types'::text, 'units_of_measure'::text, 'quote_types'::text, 'payment_terms'::text, 'contact_types'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "fk_master_data_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "currencies": {
   "class": "Currency",
@@ -688,7 +1066,7 @@
    },
    "decimal_places": {
     "type": "integer",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": 2,
@@ -699,7 +1077,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -731,6 +1109,506 @@
     "array": false
    },
    "created_at": {
+    "type": "timestamptz",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamptz",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_currencies_odoo_id": {
+    "columns": [
+     "odoo_currency_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_currencies_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "financial_settings": {
+  "class": "FinancialSettings",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "recognition_granularity": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "monthly",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "discount_policy": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "from_application_date",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "discounts_require_approval": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "revenue_schedule_monthly_enabled": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "financial_settings_holding_id_key": [
+    "holding_id"
+   ]
+  },
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "holding_settings": {
+  "class": "HoldingSettings",
+  "columns": {
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "system_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "USD",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_system_policy": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "monthly_avg",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currencies_in_use": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "ARRAY[]::text[]",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": true
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [
+   {
+    "name": "holding_settings_fx_system_policy_check",
+    "expression": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "holding_settings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "custom_field_definitions": {
+  "class": "CustomFieldDefinition",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "field_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "field_label": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "field_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_required": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "display_order": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "unique_field_per_entity": [
+    "holding_id",
+    "entity_type",
+    "field_name"
+   ]
+  },
+  "indices": {
+   "idx_custom_field_defs_order": {
+    "columns": [
+     "holding_id",
+     "entity_type",
+     "display_order",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_custom_field_defs_holding_entity": {
+    "columns": [
+     "holding_id",
+     "entity_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_custom_field_defs_active": {
+    "columns": [
+     "holding_id",
+     "entity_type",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "is_active = true"
+   }
+  },
+  "checks": [
+   {
+    "name": "valid_entity_type",
+    "expression": "entity_type = ANY (ARRAY['client'::text, 'contract'::text, 'contract_item'::text, 'quote'::text, 'quote_item'::text, 'invoice'::text, 'invoice_item'::text])"
+   },
+   {
+    "name": "custom_field_definitions_field_type_check",
+    "expression": "field_type = ANY (ARRAY['text'::text, 'number'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "custom_field_definitions_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   },
+   "custom_field_definitions_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "user_view_preferences": {
+  "class": "UserViewPreference",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "user_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "view_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "Mi Vista",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "column_config": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "filter_config": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "{}",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_default": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
     "type": "timestamp with time zone",
     "nullable": false,
     "primary": false,
@@ -753,9 +1631,172 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "user_view_preferences_user_id_entity_type_view_name_key": [
+    "user_id",
+    "entity_type",
+    "view_name"
+   ]
+  },
+  "indices": {
+   "idx_user_view_prefs_user_entity": {
+    "columns": [
+     "user_id",
+     "entity_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_user_view_prefs_one_default_per_entity": {
+    "columns": [
+     "user_id",
+     "entity_type"
+    ],
+    "unique": true,
+    "where": "is_default = true"
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "user_view_preferences_user_id_fkey": {
+    "columns": [
+     "user_id"
+    ],
+    "table": "users",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "claude_skills": {
+  "class": "ClaudeSkill",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "varchar",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "255",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "input_schema": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_active": {
+    "type": "boolean",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "claude_skills_name_holding_id_key": [
+    "name",
+    "holding_id"
+   ]
+  },
+  "indices": {
+   "idx_claude_skills_name": {
+    "columns": [
+     "name"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_claude_skills_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_claude_skills_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "claude_skills_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

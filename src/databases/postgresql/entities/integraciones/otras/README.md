@@ -1,7 +1,7 @@
-# Módulo 10 · Integraciones — otras — 3 tablas de prod (2026-09-15)
+# Módulo 10 · Integraciones — otras — 3 tablas de prod (2026-09-23)
 
 > Convención y reglas: `../../README.md`. Rarezas verificadas: `../../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-15 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-otras.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-otras.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-23 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-otras.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-otras.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (2) — no se tocaron ni se duplicaron
 
@@ -9,8 +9,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `bigquery_connections` (1) | `src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts` · `BigQueryConnection` | ⚠️ difiere de prod | — | — | `is_active`: NOT NULL en la entity vs nullable en DB<br>`created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `bigquery_connections_pkey`<br>UNIQUE `bigquery_connections_holding_id_name_key` (holding_id, name)<br>FK `bigquery_connections_holding_id_fkey` → company_holdings ON DELETE CASCADE<br>FK `bigquery_connections_user_id_fkey` → users ON DELETE CASCADE<br>índice `idx_bigquery_connections_holding_id`<br>índice `idx_bigquery_connections_is_active`<br>índice `idx_bigquery_connections_user_id` |
-| `field_mappings` (4) | `src/databases/postgresql/entities/integraciones/otras/field-mapping.entity.ts` · `FieldMapping` | ⚠️ difiere de prod | — | — | `is_active`: NOT NULL en la entity vs nullable en DB<br>`created_at`: NOT NULL en la entity vs nullable en DB<br>`updated_at`: NOT NULL en la entity vs nullable en DB | nombre de PK `field_mappings_pkey`<br>UNIQUE `unique_field_mapping` (holding_id, mapping_type, source_model, target_table)<br>CHECK `field_mappings_mapping_type_check`<br>FK `field_mappings_created_by_fkey` → users<br>FK `field_mappings_holding_id_fkey` → company_holdings<br>índice `idx_field_mappings_active` (parcial)<br>índice `idx_field_mappings_hierarchical` (parcial)<br>índice `idx_field_mappings_holding_id`<br>índice `idx_field_mappings_mapping_type`<br>índice `idx_field_mappings_source_model`<br>índice `idx_field_mappings_target_table` |
+| `bigquery_connections` (1) | `src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts` · `BigQueryConnection` | ⚠️ difiere de prod | — | — | — | nombre de PK `bigquery_connections_pkey` |
+| `field_mappings` (4) | `src/databases/postgresql/entities/integraciones/otras/field-mapping.entity.ts` · `FieldMapping` | ⚠️ difiere de prod | — | — | — | nombre de PK `field_mappings_pkey`<br>CHECK `field_mappings_mapping_type_check` |
 
 ## B · Tablas SIN entity previa → espejos generados (1): 1 promovidas, 0 apagadas
 
