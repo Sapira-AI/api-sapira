@@ -22,7 +22,7 @@ Desde el 2026-09-22 se suma: los **140 comentarios de función** y la secuencia 
 | # | Pendiente | Estado | Cerrado |
 |---|---|---|---|
 | 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) | ✅ | 2026-09-21 |
-| 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
+| 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ✅ | 2026-09-22 |
 | 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) (quedan 3 decisiones chicas, ver el punto) | 🔶 | 2026-09-21 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
@@ -67,6 +67,15 @@ tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|pro
 (salvo lo `NO VERIFICABLE`, que siempre se aplica a conciencia). Medido así el 2026-09-21.
 
 ## 2. Línea base de producción sin registrar
+
+> ✅ **CERRADO el 2026-09-22.** `--baseline` registró 853 assets en producción y 830 en QA (más los
+> que ya estaban). Antes se re-aplicaron las 2 funciones cuyo archivo había cambiado al incorporar
+> los comentarios. Estado al cierre: **prod 862 APLICADO, 0 pendientes, 0 deriva, 0 solo-en-base**;
+> QA 855 APLICADO. Los 3 `NO VERIFICABLE` (`grants/000`, `seed/001`, `seed/002`) siguen fuera por
+> diseño hasta el punto de permisos verificables.
+>
+> Desde ahora `schema:status` dice la verdad sobre qué está pendiente en cada base: esa es la
+> diferencia entre tener historial y no tenerlo.
 
 `public.sapira_sql_asset_history` tiene **9 filas de 887 assets** (7 entre el 2026-09-09 y el 09-15,
 más las 2 del 09-21); **851** están verificados idénticos a la base y esperan registro.
