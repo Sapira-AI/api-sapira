@@ -31,6 +31,7 @@ Estado de la alineación entity↔producción: [`entities/REGISTRO-ALINEACION.md
 | Policy RLS | `rls/` | idem |
 | `GRANT` por rol | `grants/` | idem |
 | Datos semilla idempotentes | `seed/` | idem |
+| Job programado (pg_cron) | `cron/` | idem |
 | **Borrar** cualquier cosa | migración escrita a mano **y** borrar los archivos | ver [🗑️ Borrar algo](#️-borrar-algo) |
 
 **Cómo sé si TypeORM puede declarar un índice**: mira su definición en producción. Si dice
@@ -74,6 +75,7 @@ QA y producción: [🔄 Sincronizar cambios](#-sincronizar-cambios-a-qa-y-produc
 | **`rls/`**<br>policies | Archivo `<nombre_policy>.sql`: `DROP POLICY IF EXISTS` + `CREATE POLICY` → `apply`. Activar RLS en la tabla **no** va acá: va en la migración de la tabla | **Editar el mismo archivo** → `apply`. ⚠️ **Renombrar**: igual que triggers, la policy vieja queda activa (y las policies permisivas se suman) | Migración con `DROP POLICY IF EXISTS <nombre> ON <tabla>` + borrar el archivo. No dejes la tabla deny-all sin querer |
 | **`special-index/`**<br>gin, ivfflat, orden explícito, expresiones | Archivo `<nombre_indice>.sql` con `CREATE INDEX IF NOT EXISTS` → `apply`. Solo índices que la entity **no** puede declarar (hay guarda) | **No se edita el archivo**: `IF NOT EXISTS` no redefine un índice existente (`BLOQUEADO`). Índice con **nombre nuevo** en archivo nuevo + migración que borra el viejo + borrar el archivo viejo | Migración con `DROP INDEX IF EXISTS <nombre>` + borrar el archivo |
 | **`grants/`**<br>permisos por rol | Archivo `NNN-<descripcion>.sql` con `GRANT` / `REVOKE` → `apply` | **Editar el mismo archivo** → `apply` (`REAPLICAR`). ⚠️ **Borrar una línea `GRANT` no revoca nada**: reemplazala por el `REVOKE` explícito | Igual: **quitar un permiso es un `REVOKE`** en el asset, no borrar el archivo. Borrar el archivo solo evita que un entorno nuevo lo reciba. `schema:status` no puede verificar esta carpeta: aplicá con `--only` a conciencia |
+| **`cron/`**<br>jobs de pg_cron | Archivo `<nombre_job>.sql` con `SELECT cron.schedule('<job>', '<cron>', $cron$<comando>$cron$);` → `apply`. **Nunca escribas un token en el comando**: si llama a una edge function, va por `public.cron_invoke_edge_function`, que lee la URL y la clave de Vault | **Editar el mismo archivo** → `apply` (upsert por nombre). ⚠️ Se aplica con el rol `postgres`: la clave del upsert es `(jobname, username)`, así que otro rol crea un job paralelo con el mismo nombre | Migración con `SELECT cron.unschedule('<job>')` + borrar el archivo |
 | **`seed/`**<br>datos semilla | Archivo `NNN-<descripcion>.sql` con `INSERT … ON CONFLICT DO NOTHING` → `apply`. Si otro asset lo necesita (p. ej. una función que filtra por el permiso), el seed va primero | **No se edita un seed aplicado**: `ON CONFLICT DO NOTHING` no actualiza filas (`BLOQUEADO`). **Agregar** filas: seed nuevo con número siguiente. **Corregir** filas existentes: migración con `UPDATE` | Migración con `DELETE` (revisando FKs, p. ej. `role_permissions` → `permissions`) + borrar el archivo |
 | **`migrations/`** | `migration:generate` (cambios de entities) o `migration:create` (borrados, renombres, datos, lo que TypeORM no modela) → revisar → `migration:run` | **Nunca** se edita una migración ya aplicada en alguna base: no vuelve a correr ahí y las bases divergen. Se escribe una migración correctiva nueva | No se borran. `migration:revert` deshace **solo la última**, y solo si su `down()` es honesto; si no es reversible, `down()` lanza un error |
 
@@ -185,6 +187,20 @@ una línea en `api-sapira/`, que se carga con `DOTENV_CONFIG_PATH`.
 - **Nunca se commitean.** `.gitignore` excluye todo `.env*` salvo `.env.example`; verificalo con `git check-ignore -v .env.prod.db`.
 - **Se corre desde `api-sapira/`.** `DOTENV_CONFIG_PATH` es relativo al directorio actual, y si el
   archivo no existe dotenv no avisa: el script falla después con `SUPABASE_DATABASE_URL o DATABASE_URL debe estar configurada`.
+
+**Secretos de Vault, uno por entorno.** Los jobs de `cron/` que llaman edge functions pasan por
+`public.cron_invoke_edge_function`, que lee de Vault lo único que cambia entre entornos. Una base
+nueva necesita estos dos secretos creados a mano (no están en el repo, y el asset del job no los
+menciona):
+
+| Secreto | Valor |
+|---|---|
+| `edge_functions_base_url` | `https://<project-ref>.supabase.co/functions/v1` |
+| `edge_functions_service_key` | la service role key de ese proyecto |
+
+Se crean con `select vault.create_secret('<valor>', '<nombre>', '<descripción>')`. Rotar la clave es
+actualizar el secreto: los jobs no se tocan. Si falta uno, el job falla ruidoso (`INTO STRICT`) en vez
+de hacer una llamada sin host.
 
 | Por qué un archivo de conexión y no un `.env.qa` | |
 |---|---|

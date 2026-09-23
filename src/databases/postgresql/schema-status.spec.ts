@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { buildCatalog } from '../../../scripts/schema-as-code/fetch-catalog';
-import { Catalog, emitirCorpus, emitirSequences } from '../../../scripts/schema-as-code/generate-assets';
+import { buildCatalog, consultarCatalogo } from '../../../scripts/schema-as-code/fetch-catalog';
+import { Catalog, emitirCorpus, emitirCron, emitirSequences } from '../../../scripts/schema-as-code/generate-assets';
 
 import { checksumSql, discoverSqlAssets, SqlAsset, SqlExecutor } from './assets-runner';
 import {
@@ -158,6 +158,63 @@ describe('objetosNoModelados', () => {
 
 	it('un catálogo sin esas claves no rompe', () => {
 		expect(objetosNoModelados({}, new Map())).toEqual([]);
+	});
+});
+
+describe('consultarCatalogo con consultas opcionales', () => {
+	// Todo corre en UNA transacción READ ONLY: si `cron.job` no existe, el error la aborta y se
+	// lleva puesta la captura entera, así que `schema:status` moriría en cualquier base sin pg_cron.
+	const ejecutor = (tieneCron: boolean): SqlExecutor & { consultas: string[] } => {
+		const consultas: string[] = [];
+		return {
+			consultas,
+			async query(sql: string) {
+				consultas.push(sql);
+				if (sql.includes('to_regclass')) return { rows: [{ objeto: tieneCron ? 'cron.job' : null }] };
+				if (sql.includes('FROM cron.job')) return { rows: [{ name: 'un-job', schedule: '0 2 * * *', command: 'SELECT 1', active: true }] };
+				return { rows: [] };
+			},
+		};
+	};
+
+	it('consulta cron.job solo si existe', async () => {
+		const conCron = ejecutor(true);
+		expect((await consultarCatalogo(conCron)).cron).toHaveLength(1);
+		expect(conCron.consultas.some((sql) => sql.includes('FROM cron.job'))).toBe(true);
+
+		const sinCron = ejecutor(false);
+		expect((await consultarCatalogo(sinCron)).cron).toEqual([]);
+		expect(sinCron.consultas.some((sql) => sql.includes('FROM cron.job'))).toBe(false);
+	});
+});
+
+describe('emitirCron', () => {
+	const job = {
+		name: 'salesforce-daily-sync',
+		schedule: '1 4 * * *',
+		command: "SELECT public.f('x')",
+		active: true,
+		username: 'postgres',
+		database: 'postgres',
+	};
+
+	it('programa el job con el comando verbatim y deja constancia del rol', () => {
+		// La clave del upsert de pg_cron es (jobname, username): aplicado con otro rol se crea un
+		// segundo job con el mismo nombre y corren los dos.
+		const contenido = emitirCron({ cron: [job] } as never).get('cron/salesforce-daily-sync.sql');
+
+		expect(contenido).toContain('Se aplica con el rol postgres');
+		expect(contenido).toContain(`SELECT cron.schedule('salesforce-daily-sync', '1 4 * * *', $cron$SELECT public.f('x')$cron$);`);
+		expect(contenido).not.toContain('alter_job');
+	});
+
+	it('un job pausado necesita alter_job: cron.schedule no puede expresarlo', () => {
+		const contenido = emitirCron({ cron: [{ ...job, active: false }] } as never).get('cron/salesforce-daily-sync.sql');
+		expect(contenido).toContain('active := false');
+	});
+
+	it('una base sin pg_cron no genera assets de cron', () => {
+		expect(emitirCron({} as never).size).toBe(0);
 	});
 });
 

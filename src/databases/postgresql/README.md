@@ -112,7 +112,7 @@ Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el
 
 ## 🧱 Assets SQL no-TypeORM
 
-El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con los archivos ordenados alfabéticamente dentro de cada una. `assets.manifest.json` declara las fases y permite adelantar rutas puntuales con `order`.
+El runner `postgres:assets` aplica los `.sql` en ocho fases, en este orden, con los archivos ordenados alfabéticamente dentro de cada una. `assets.manifest.json` declara las fases y permite adelantar rutas puntuales con `order`.
 
 | Fase | Contiene | Cuenta |
 |---|---|---|
@@ -123,6 +123,7 @@ El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con
 | `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 387 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 2 |
 | `seed/` | Datos semilla idempotentes. | 2 |
+| `cron/` | Jobs de pg_cron (`cron.schedule`, upsert por nombre). Van últimos: un job no debe dispararse antes de que existan sus funciones y datos. | 4 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
 >

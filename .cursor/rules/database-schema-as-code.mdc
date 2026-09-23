@@ -50,6 +50,9 @@ actualizar todo lo que no es tabla.**
 - Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
 - **Toda tabla de `public` tiene entity viva; no hay espejos** (`database.module.spec.ts` lo exige).
   Una tabla nueva nace como entity + migración, nunca como `.espejo.ts`.
+- **Los jobs de pg_cron son assets** (`cron/`), y **nunca llevan un secreto en el comando**: si llaman
+  una edge function, van por `public.cron_invoke_edge_function`, que lee la URL y la clave de Vault.
+  Hay una prueba que falla si aparece un token en el corpus o en los snapshots.
 - **Las 74 entities promovidas (cabecera "PROMOVIDA desde espejo") ya NO se regeneran**: son la
   fuente de verdad de su tabla y se editan como cualquier entity. El generador solo refresca el
   snapshot de prod contra el que su spec las mide. Si ese spec queda en rojo, el repo y prod

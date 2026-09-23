@@ -378,9 +378,7 @@ function buildListTables(data: Record<QueryName, Row[]>): unknown {
  * ve; que es exactamente lo que se quiere que pase.
  */
 function redactarSecretos(comando: string): string {
-	return comando
-		.replace(/Bearer\s+[A-Za-z0-9._-]{20,}/g, 'Bearer <REDACTADO>')
-		.replace(/eyJ[A-Za-z0-9._-]{30,}/g, '<JWT-REDACTADO>');
+	return comando.replace(/Bearer\s+[A-Za-z0-9._-]{20,}/g, 'Bearer <REDACTADO>').replace(/eyJ[A-Za-z0-9._-]{30,}/g, '<JWT-REDACTADO>');
 }
 
 function writeJson(file: string, value: unknown): void {

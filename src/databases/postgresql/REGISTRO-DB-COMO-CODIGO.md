@@ -17,6 +17,8 @@ desarme (GUIA → Guardas automáticas).
 
 Desde el 2026-09-22 se suma: los **140 comentarios de función** y la secuencia suelta `invoice_number_seq` están en el corpus; `schema:status` reporta **FUERA DEL CORPUS** (lo que ninguna fase puede describir); y el CLI **exige** `--only` en `--apply`, rechaza aplicar archivos sin commitear y ya no infiere el `--target`.
 
+Desde el 2026-09-23 se suma la fase **`cron/`**: los 4 jobs de pg_cron son assets verificables. Los 2 que llamaban edge functions tenían la service role key escrita en `cron.job.command`; ahora pasan por `public.cron_invoke_edge_function`, que lee la URL y la clave de **Vault** (un secreto por entorno, fuera del repo). La captura redacta cualquier `Bearer`/JWT antes de escribir el snapshot —que está commiteado— y una prueba falla si aparece un secreto en el corpus o en los snapshots. Validado sin efectos: el wrapper autenticó contra una función inexistente (404) y los dos comandos nuevos se ejecutaron dentro de una transacción revertida.
+
 ## Estado
 
 | # | Pendiente | Estado | Cerrado |
