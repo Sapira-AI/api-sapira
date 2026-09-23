@@ -508,7 +508,7 @@
  },
  "stripe_product_mappings": {
   "comment": "Tabla de mapeo N:N entre productos de Sapira y productos de Stripe",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [
@@ -584,7 +584,7 @@
  },
  "stripe_sync_jobs": {
   "comment": "Tabla para trackear el progreso de jobs de sincronización de Stripe a Sapira",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [

@@ -199,5 +199,6 @@ BEGIN
     'billed_summary', v_billed_summary
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."derive_contract_items_from_legacy"(p_contract_id uuid) IS 'Analiza facturación legacy reconciliada y retorna sugerencias determinísticas para actualizar/crear contract_items. No modifica datos, solo analiza y sugiere.';

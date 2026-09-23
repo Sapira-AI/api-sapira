@@ -17,6 +17,7 @@ import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quo
 @Index('idx_quote_items_salesforce_line_item_id', ['salesforce_line_item_id'], { where: `(salesforce_line_item_id IS NOT NULL)` })
 @Index('idx_quote_items_salesforce_line_item_unique', ['salesforce_line_item_id'], { unique: true, where: `(salesforce_line_item_id IS NOT NULL)` })
 @Index('idx_quote_items_sf_product', ['salesforce_product_id'], { where: `(salesforce_product_id IS NOT NULL)` })
+@Index('idx_quote_items_custom_fields', { synchronize: false })
 @Entity('quote_items')
 export class QuoteItem {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'quote_items_pkey' })

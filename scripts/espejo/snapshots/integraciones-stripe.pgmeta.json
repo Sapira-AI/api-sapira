@@ -136,7 +136,7 @@
  "stripe_customers_stg": {
   "name": "public.stripe_customers_stg",
   "rls_enabled": true,
-  "rows": 414,
+  "rows": 416,
   "columns": [
    {
     "name": "id",
@@ -420,7 +420,7 @@
  "stripe_subscriptions_stg": {
   "name": "public.stripe_subscriptions_stg",
   "rls_enabled": true,
-  "rows": 483,
+  "rows": 544,
   "columns": [
    {
     "name": "id",
@@ -561,7 +561,7 @@
  },
  "stripe_product_mappings": {
   "name": "public.stripe_product_mappings",
-  "rls_enabled": false,
+  "rls_enabled": true,
   "rows": 73,
   "columns": [
    {
@@ -676,8 +676,8 @@
  },
  "stripe_sync_jobs": {
   "name": "public.stripe_sync_jobs",
-  "rls_enabled": false,
-  "rows": 200,
+  "rls_enabled": true,
+  "rows": 208,
   "columns": [
    {
     "name": "id",
@@ -791,7 +791,7 @@
  "stripe_customers_bigquery": {
   "name": "public.stripe_customers_bigquery",
   "rls_enabled": true,
-  "rows": 26350,
+  "rows": 26406,
   "columns": [
    {
     "name": "id",

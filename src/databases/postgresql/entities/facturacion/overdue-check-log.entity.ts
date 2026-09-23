@@ -1,10 +1,10 @@
-import { Check, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 /**
  * Entity de `public.overdue_check_log` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 51 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Registro de ejecuciones de la verificación automática de facturas vencidas.
  *    Tabla de auditoría del sistema con RLS habilitado.
  *    holding_id NULL indica ejecución global que afecta múltiples holdings.
@@ -15,6 +15,9 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_holding_id ON public.overdue_check_log USING btree (holding_id, created_at DESC)
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_overdue_check_log_status ON public.overdue_check_log USING btree (status, created_at DESC)
  */
+@Index('idx_overdue_check_log_date', { synchronize: false })
+@Index('idx_overdue_check_log_holding_id', { synchronize: false })
+@Index('idx_overdue_check_log_status', { synchronize: false })
 @Entity({
 	name: 'overdue_check_log',
 	comment:

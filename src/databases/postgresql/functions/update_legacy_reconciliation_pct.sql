@@ -37,5 +37,8 @@ BEGIN
   RAISE NOTICE '[LEGACY_PCT] Contract %: % satisfied / % total = % pct',
     p_contract_id, v_total_satisfied, v_total_contract_value, ROUND(v_reconciliation_pct, 2);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."update_legacy_reconciliation_pct"(p_contract_id uuid) IS 'Calcula y actualiza legacy_reconciliation_pct del contrato.
+   FIX 20260302170000: ahora lee de contract_invoices.is_satisfied=true (flujo nuevo)
+   en vez de invoice_items_legacy_match (flujo antiguo, siempre vacío).';

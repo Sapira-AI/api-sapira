@@ -11,6 +11,7 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 	where: `(salesforce_account_id IS NOT NULL)`,
 })
 @Index('idx_clients_stripe_customer_id', ['stripe_customer_id'], { where: `(stripe_customer_id IS NOT NULL)` })
+@Index('idx_clients_custom_fields', { synchronize: false })
 @Entity('clients')
 export class Client {
 	@PrimaryGeneratedColumn('uuid')

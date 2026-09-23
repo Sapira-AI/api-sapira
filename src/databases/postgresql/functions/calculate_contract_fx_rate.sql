@@ -402,4 +402,6 @@ BEGIN
 
   RETURN QUERY SELECT v_rate, v_source, v_ref_date;
 END;
-$function$
+$function$;
+
+COMMENT ON FUNCTION public."calculate_contract_fx_rate"(p_contract_id uuid, p_conversion_type fx_conversion_type, p_date date) IS 'Calcula tipo de cambio según política del contrato usando fx_rate_with_indirect para soporte de conversiones indirectas';

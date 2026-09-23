@@ -275,5 +275,6 @@ EXCEPTION
       'error', SQLERRM
     );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."consolidate_invoices_simple"(p_contract_id uuid, p_invoice_ids uuid[], p_notes text) IS 'Consolida múltiples facturas de un contrato en una sola. Usa la fecha de emisión más temprana y vencimiento más lejano. Marca como Cancelada si total=0.';

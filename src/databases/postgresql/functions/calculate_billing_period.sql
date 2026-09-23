@@ -24,5 +24,6 @@ BEGIN
   
   RETURN QUERY SELECT v_period_start, v_period_end, v_scheduled_date;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."calculate_billing_period"(p_item_start_date date, p_period_index integer, p_frequency_months integer, p_billing_method text) IS 'Calcula el periodo de facturación y la fecha de emisión según el método de facturación (Anticipado/Vencido).';

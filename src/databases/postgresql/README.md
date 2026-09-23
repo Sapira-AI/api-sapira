@@ -112,17 +112,18 @@ Un `.espejo.ts` es inerte: está fuera del glob `**/*.entity.ts`, así que ni el
 
 ## 🧱 Assets SQL no-TypeORM
 
-El runner `postgres:assets` aplica los `.sql` en siete fases, en este orden, con los archivos ordenados alfabéticamente dentro de cada una. `assets.manifest.json` declara las fases y permite adelantar rutas puntuales con `order`.
+El runner `postgres:assets` aplica los `.sql` en ocho fases, en este orden, con los archivos ordenados alfabéticamente dentro de cada una. `assets.manifest.json` declara las fases y permite adelantar rutas puntuales con `order`.
 
 | Fase | Contiene | Cuenta |
 |---|---|---|
-| `types/` | Extensiones y enums. Van primero porque una columna puede referenciarlos. | 10 |
+| `types/` | Extensiones, enums y secuencias sueltas. Van primero porque una columna puede referenciarlas. | 11 |
 | `functions/` | Una función por archivo, `CREATE OR REPLACE`. | 301 |
 | `special-index/` | Índices que TypeORM **no puede** declarar con `@Index`: método no btree (`gin`, `ivfflat`) u orden explícito (`DESC`, `NULLS`). Los parciales sí se declaran con `@Index({ where })` y **no** van acá. | 41 |
 | `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 121 |
 | `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 387 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 2 |
 | `seed/` | Datos semilla idempotentes. | 2 |
+| `cron/` | Jobs de pg_cron (`cron.schedule`, upsert por nombre). Van últimos: un job no debe dispararse antes de que existan sus funciones y datos. | 3 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
 >
@@ -144,6 +145,7 @@ Cada asset aplicado queda registrado en `public.sapira_sql_asset_history` con su
 | `yarn postgres:assets --dry-run --target <e>` | Lee el historial y lista pendientes | No |
 | `yarn postgres:assets --apply [--only <ruta>…] --target <e>` | Ejecuta lo pendiente y lo registra | Sí |
 | `yarn postgres:assets --baseline --target <e>` | Registra sin ejecutar lo que ya coincide con la base | Solo el historial |
+| `yarn schema:snapshot --target <e>` | Recaptura el catálogo y refresca los `*.prod-snapshot.ts` que miden a las entities | No |
 
 **Cómo se usan, en qué orden y contra qué base: [`GUIA-CAMBIOS-DE-ESQUEMA.md` → 🔄 Sincronizar cambios a QA y producción](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción).**
 Ahí están las conexiones por entorno, el procedimiento, qué significa cada estado, la línea base y los

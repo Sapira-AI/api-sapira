@@ -1,19 +1,18 @@
 # REGISTRO-ALINEACION — entities que se alinean contra producción
 
 > Este registro cubre la deriva entity↔producción. Lo que falta para que **todo** el esquema sea
-> código (incluidos los 41 índices que producen 41 de las 94 sentencias de abajo) se sigue en
+> código se sigue en
 > [`REGISTRO-DB-COMO-CODIGO.md`](../REGISTRO-DB-COMO-CODIGO.md).
 
 > Estado del paso E3: llevar cada entity a reflejar exactamente su tabla en producción,
 > hasta que `yarn schema:log` no emita nada. Mientras emita algo, la entity **no** es todavía
 > la definición de la tabla.
 
-> Medición base: 2026-09-09, **1102 sentencias** de deriva · **94 al 2026-09-16**
+> Medición base: 2026-09-09, **1102 sentencias** de deriva · **53 al 2026-09-23** (eran 94 hasta declarar los special-index con `synchronize: false`)
 > (`yarn schema:log` contra producción; desde que no quedan espejos ya no hace falta
 > `TYPEORM_LOAD_MIRROR_ENTITIES=true`, y con o sin el flag la salida es idéntica).
 >
-> **Las 94 están todas clasificadas y ninguna cambiaría producción**: 41 índices de
-> `special-index/`, 28 FKs que TypeORM dropea y vuelve a crear idénticas (14 pares), 14 sentencias
+> **Las 53 están todas clasificadas y ninguna cambiaría producción**: 28 FKs que TypeORM dropea y vuelve a crear idénticas (14 pares), 14 sentencias
 > del churn de `gen_random_uuid()`, 4 de 2 índices que se dropean y recrean igual
 > (`idx_client_entities_odoo_partner_holding`, `idx_invoice_payments_holding_date`), 4 defaults
 > `CURRENT_DATE` que TypeORM normaliza a `('now'::text)::date` y 3 defaults `ARRAY[]` equivalentes.

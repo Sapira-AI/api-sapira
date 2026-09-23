@@ -118,5 +118,6 @@ BEGIN
   -- Retornar tasa encontrada o 1.0 como último fallback
   RETURN COALESCE(v_direct_rate, 1.0);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."fx_rate_with_indirect"(p_date date, p_from text, p_to text) IS 'Obtiene tipo de cambio con soporte para conversiones indirectas (UF->CLP->USD) y prioridad de fuentes';

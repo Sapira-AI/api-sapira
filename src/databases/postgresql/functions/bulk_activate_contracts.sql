@@ -145,5 +145,8 @@ BEGIN
 
   RETURN;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."bulk_activate_contracts"(p_contract_ids uuid[], p_booking_mode text, p_booking_date date, p_comments text) IS 'Activa múltiples contratos en una sola operación. 
+Modos de booking_date: keep_existing (usa fecha existente o hoy), set_date (usa fecha proporcionada), today (usa fecha actual).
+Valida permisos, estado y FX policy para cada contrato.';

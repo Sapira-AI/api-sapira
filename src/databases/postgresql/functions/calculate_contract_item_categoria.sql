@@ -43,5 +43,6 @@ BEGIN
   ELSE
     RETURN 'CROSS-SELL';
   END IF;
-END;$function$
+END;$function$;
 
+COMMENT ON FUNCTION public."calculate_contract_item_categoria"(p_contract_id uuid, p_client_id uuid, p_product_id uuid) IS 'Calcula la categoría automática de un item de contrato basándose en historial del cliente y producto';

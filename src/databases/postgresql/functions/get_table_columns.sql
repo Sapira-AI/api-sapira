@@ -13,5 +13,6 @@ AS $function$
   WHERE c.table_name = $1 
     AND c.table_schema = $2
   ORDER BY c.ordinal_position;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_table_columns"(table_name text, schema_name text) IS 'Obtiene dinámicamente las columnas de una tabla específica. Usado para mapeo de campos en integraciones.';

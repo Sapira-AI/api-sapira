@@ -250,5 +250,10 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     RETURN QUERY SELECT false, 'Error: ' || SQLERRM, 0;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."generate_missing_invoices_for_contract"(p_contract_id uuid) IS 'Genera facturas reales desde contract_invoices programadas.
+ACTUALIZADO 2026-02-05:
+- Ignora facturas legacy al validar si ya existen invoices (COALESCE(is_legacy, false) = false)
+- Solo genera facturas para contract_invoices con is_satisfied = false (COALESCE(is_satisfied, false) = false)
+- Esto permite que contratos legacy reconciliados generen solo las facturas pendientes';

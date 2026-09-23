@@ -224,5 +224,6 @@ BEGIN
     'updated_items', v_updated_items
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_fixed_fx_to_contract"(p_contract_id uuid, p_fx_rate numeric, p_policy text, p_invoice_ids uuid[], p_target_amount numeric) IS 'Política FX de facturación (fijo|spot) contrato→factura. Con p_target_amount: FX inverso desde el subtotal (neto) exacto en moneda de facturación para UNA factura (caso OC), calculado desde el precio unitario.';

@@ -107,5 +107,13 @@ BEGIN
 
   RETURN OLD;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."restore_invoice_items_amounts_on_quantity_delete"() IS 'Trigger AFTER DELETE en quantities. Cuando se elimina un override,
+restaura los valores del invoice_item de la factura ACTIVA "Por Emitir" del mismo
+mes calendario, usando unit_price y quantity base del contract_item
+(con discount_value, tax_rate y FX cascada item→header).
+Solo afecta facturas con is_active=true (inactivas son históricas).
+Si el contract_item no tiene unit_price/quantity base (ej. Variable sin
+defaults), no hace nada y la factura queda con los valores del último override.
+Idéntico match-por-mes que sync_invoice_items_amounts_from_quantities.';

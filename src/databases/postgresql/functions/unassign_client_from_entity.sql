@@ -23,5 +23,7 @@ BEGIN
 
   RETURN COALESCE(v_deleted, false);
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."unassign_client_from_entity"(p_entity_id uuid, p_client_id uuid) IS 'Desasigna un cliente comercial de una razón social. 
+El trigger automáticamente manejará la actualización del primary si es necesario.';

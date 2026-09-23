@@ -14,23 +14,23 @@
     "array": false
    },
    "from_currency": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": true,
     "generated": null,
     "default": null,
-    "length": "3",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "to_currency": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": true,
     "generated": null,
     "default": null,
-    "length": "3",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
@@ -46,31 +46,42 @@
     "scale": 8,
     "array": false
    },
-   "source_type": {
-    "type": "varchar",
+   "created_at": {
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "BANCOCENTRAL",
-    "length": "50",
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "system",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "api_source": {
-    "type": "varchar",
+    "type": "text",
     "nullable": true,
     "primary": false,
     "generated": null,
-    "default": null,
-    "length": "100",
+    "default": "system",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "is_indirect_conversion": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": false,
@@ -89,28 +100,37 @@
     "precision": null,
     "scale": null,
     "array": false
-   },
-   "created_at": {
-    "type": "timestamp",
-    "nullable": false,
-    "primary": false,
-    "generated": null,
-    "default": "CURRENT_TIMESTAMP",
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
    }
   },
   "uniques": {},
   "indices": {
-   "IDX_525fa84b629fc56ad612fcf6db": {
+   "idx_exchange_rates_lookup": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_exchange_rates_pair_date": {
     "columns": [
-     "rate_date",
+     "from_currency",
+     "to_currency",
+     "rate_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_exchange_rates_date": {
+    "columns": [
+     "rate_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_exchange_rates_currencies": {
+    "columns": [
      "from_currency",
      "to_currency"
     ],
-    "unique": true,
+    "unique": false,
     "where": null
    }
   },
@@ -132,23 +152,23 @@
     "array": false
    },
    "from_currency": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "3",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
    },
    "to_currency": {
-    "type": "varchar",
+    "type": "text",
     "nullable": false,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": "3",
+    "length": null,
     "precision": null,
     "scale": null,
     "array": false
@@ -182,35 +202,35 @@
     "generated": null,
     "default": null,
     "length": null,
-    "precision": 20,
-    "scale": 8,
+    "precision": null,
+    "scale": null,
     "array": false
    },
    "min_rate": {
     "type": "numeric",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
     "length": null,
-    "precision": 20,
-    "scale": 8,
+    "precision": null,
+    "scale": null,
     "array": false
    },
    "max_rate": {
     "type": "numeric",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
     "length": null,
-    "precision": 20,
-    "scale": 8,
+    "precision": null,
+    "scale": null,
     "array": false
    },
    "data_points": {
     "type": "integer",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
@@ -220,11 +240,362 @@
     "array": false
    },
    "calculated_at": {
-    "type": "timestamp",
+    "type": "timestamptz",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key": [
+    "from_currency",
+    "to_currency",
+    "year",
+    "month"
+   ]
+  },
+  "indices": {
+   "idx_exchange_rates_monthly_avg_period": {
+    "columns": [
+     "year",
+     "month"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_exchange_rates_monthly_avg_currencies": {
+    "columns": [
+     "from_currency",
+     "to_currency"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {}
+ },
+ "holding_fx_period_rates": {
+  "class": "HoldingFxPeriodRate",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_start": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_end": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "holding_fx_period_rates_unique_period": [
+    "holding_id",
+    "from_currency",
+    "to_currency",
+    "period_start",
+    "period_end"
+   ]
+  },
+  "indices": {
+   "idx_holding_fx_period_rates_period": {
+    "columns": [
+     "period_start",
+     "period_end"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_holding_fx_period_rates_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_holding_fx_period_rates_currencies": {
+    "columns": [
+     "from_currency",
+     "to_currency"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "holding_fx_period_rates_rate_check",
+    "expression": "rate > (0)::numeric"
+   },
+   {
+    "name": "holding_fx_period_rates_period_check",
+    "expression": "period_end >= period_start"
+   }
+  ],
+  "foreignKeys": {
+   "holding_fx_period_rates_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   },
+   "holding_fx_period_rates_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "contract_fx_period_rates": {
+  "class": "ContractFxPeriodRate",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "rate": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 15,
+    "scale": 6,
+    "array": false
+   },
+   "period_start": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_end": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -233,19 +604,64 @@
   },
   "uniques": {},
   "indices": {
-   "IDX_a0f7bac807c2baa7f7e29c4a40": {
+   "idx_contract_fx_rates_period": {
+    "columns": [
+     "period_start",
+     "period_end"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_fx_rates_holding_contract": {
+    "columns": [
+     "holding_id",
+     "contract_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_fx_rates_currencies": {
     "columns": [
      "from_currency",
-     "to_currency",
-     "year",
-     "month"
+     "to_currency"
     ],
-    "unique": true,
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_fx_rates_contract_id": {
+    "columns": [
+     "contract_id"
+    ],
+    "unique": false,
     "where": null
    }
   },
-  "checks": [],
-  "foreignKeys": {}
+  "checks": [
+   {
+    "name": "contract_fx_period_rates_rate_check",
+    "expression": "rate > (0)::numeric"
+   },
+   {
+    "name": "contract_fx_period_rates_check",
+    "expression": "period_end > period_start"
+   }
+  ],
+  "foreignKeys": {
+   "contract_fx_period_rates_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "fk_contract_fx_period_rates_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "indicadores_economicos": {
   "class": "IndicadorEconomicoEntity",
@@ -340,7 +756,7 @@
    },
    "status_code": {
     "type": "varchar",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "OK",
@@ -350,19 +766,162 @@
     "array": false
    }
   },
-  "uniques": {},
+  "uniques": {
+   "uq_indicadores_economicos_codigo_fecha": [
+    "codigo",
+    "fecha"
+   ]
+  },
   "indices": {
-   "IDX_12adf0e0173888995638a10aa7": {
+   "idx_indicadores_economicos_fecha": {
     "columns": [
-     "codigo",
      "fecha"
     ],
-    "unique": true,
+    "unique": false,
+    "where": null
+   },
+   "idx_indicadores_economicos_codigo": {
+    "columns": [
+     "codigo"
+    ],
+    "unique": false,
     "where": null
    }
   },
   "checks": [],
   "foreignKeys": {}
+ },
+ "fx_api_sync_log": {
+  "class": "FxApiSyncLog",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sync_date": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "api_source": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currencies_synced": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "{}",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": true
+   },
+   "records_created": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "records_updated": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "pending",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "error_details": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {},
+  "checks": [
+   {
+    "name": "fx_api_sync_log_status_check",
+    "expression": "status = ANY (ARRAY['success'::text, 'partial'::text, 'failed'::text, 'pending'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "fx_api_sync_log_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "generic_export_vats": {
   "class": "GenericExportVat",
@@ -378,51 +937,18 @@
     "scale": null,
     "array": false
    },
-   "holding_id": {
-    "type": "uuid",
-    "nullable": false,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "tax_id": {
-    "type": "text",
-    "nullable": false,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
    "vat": {
-    "type": "text",
+    "type": "varchar",
     "nullable": false,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": null,
+    "length": "50",
     "precision": null,
     "scale": null,
     "array": false
    },
-   "company_name": {
-    "type": "text",
-    "nullable": false,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "address": {
+   "description": {
     "type": "text",
     "nullable": true,
     "primary": false,
@@ -433,24 +959,13 @@
     "scale": null,
     "array": false
    },
-   "country": {
-    "type": "text",
+   "country_code": {
+    "type": "varchar",
     "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "vat_rate": {
-    "type": "numeric",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
+    "length": "3",
     "precision": null,
     "scale": null,
     "array": false
@@ -467,7 +982,7 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
+    "type": "timestamptz",
     "nullable": false,
     "primary": false,
     "generated": null,
@@ -478,30 +993,38 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": true,
+    "type": "timestamptz",
+    "nullable": false,
     "primary": false,
     "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "metadata": {
-    "type": "jsonb",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "generic_export_vats_vat_key": [
+    "vat"
+   ]
+  },
+  "indices": {
+   "idx_generic_export_vats_vat": {
+    "columns": [
+     "vat"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_generic_export_vats_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {}
  }

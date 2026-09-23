@@ -214,5 +214,9 @@ BEGIN
     'invoice_details', v_invoice_details
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_reconciliation_template"(p_template_invoice_id uuid, p_target_invoice_ids uuid[], p_user_id uuid, p_billing_periods jsonb) IS 'Aplica una plantilla de reconciliación a múltiples facturas similares.
+Calcula FX dinámicamente para cada factura.
+Permite asignar períodos de facturación en formato YYYY-MM.
+Retorna detalles de cada factura reconciliada incluyendo FX calculado.';

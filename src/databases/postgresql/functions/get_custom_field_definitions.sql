@@ -10,5 +10,6 @@ AS $function$
     AND entity_type = p_entity_type
     AND is_active = true
   ORDER BY display_order, created_at;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_custom_field_definitions"(p_entity_type text, p_holding_id uuid) IS 'Obtiene las definiciones de campos personalizados activos para una entidad y holding específicos';

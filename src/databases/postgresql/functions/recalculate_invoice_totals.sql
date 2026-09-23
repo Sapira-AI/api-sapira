@@ -37,5 +37,6 @@ BEGIN
     total_invoice_currency = v_total_invoice
   WHERE id = p_invoice_id;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."recalculate_invoice_totals"(p_invoice_id uuid) IS 'Recalcula los totales de una invoice sumando sus invoice_items';

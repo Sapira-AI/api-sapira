@@ -11,6 +11,8 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 @Index('idx_sf_opp_cache_holding_id', ['holding_id'])
 @Index('idx_sf_opp_cache_salesforce_id', ['salesforce_id'])
 @Index('idx_sf_opp_cache_unique', ['holding_id', 'salesforce_id'], { unique: true })
+@Index('idx_sf_opp_cache_close_date', { synchronize: false })
+@Index('idx_sf_opp_cache_sync_date', { synchronize: false })
 @Entity({
 	name: 'salesforce_opportunities_cache',
 	comment:

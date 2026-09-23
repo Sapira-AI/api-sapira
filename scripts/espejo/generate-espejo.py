@@ -7,6 +7,9 @@ Reglas:
     del módulo dónde está la entity y su diferencia con prod (metadata TypeORM real vs lectura en vivo).
   - Solo se generan espejos para las tablas sin entity, APAGADOS en runtime: `<tabla>.espejo.ts` (no terminan en .entity.ts,
     así el glob `**/*.entity.ts` de database.module.ts no los carga y ningún módulo los registra en forFeature).
+  - Una entity PROMOVIDA (`<tabla>.entity.ts`) NO se reescribe: desde su promoción la fuente de verdad de esa tabla es el repo.
+    Para ella se siguen emitiendo el snapshot de prod (contra el que la mide su spec), el barrel, el registro y el README, así que
+    la deriva se sigue detectando; el archivo lo edita quien cambia la tabla, con su migración.
   - Las FKs apuntan a la entity existente (import @/databases/postgresql/entities/<dominio>/…) o al espejo de su módulo (este u otro, vía
     scripts/espejo/generated-entities.json). Generar todos los módulos en DOS pasadas para resolver FKs entre módulos.
 
@@ -17,6 +20,7 @@ Salida por módulo: <tabla>.espejo.ts, index.ts, <modulo>.prod-snapshot.ts, <mod
 Globales (se regeneran siempre): entities/espejo.index.ts (todos los espejos) y entities/espejo.existing.ts (todas las entities
 existentes, solo para los specs).
 """
+import datetime
 import json
 import os
 import re
@@ -28,8 +32,24 @@ ENTITIES_DIR = os.path.join(ROOT, 'src', 'databases', 'postgresql', 'entities')
 EXISTING_PATH = os.path.join(ROOT, 'scripts', 'espejo', 'existing-entities.json')
 MODMAP_PATH = os.path.join(ROOT, 'scripts', 'espejo', 'module-map.json')
 REGISTRY_PATH = os.path.join(ROOT, 'scripts', 'espejo', 'generated-entities.json')
-DATE = '2026-08-22'
 PROJECT = 'hklompkypzqtglprfobu'
+
+
+def fecha_del_catalogo():
+    """Fecha de la captura que se está usando, no una constante.
+
+    Estaba hardcodeada en '2026-08-22': al refrescar los snapshots desde prod, cada archivo
+    generado seguía declarando esa fecha y el README mentía sobre cuándo se midió.
+    """
+    crudo = os.path.join(ROOT, 'scripts', 'espejo', 'snapshots', 'raw', 'catalog.json')
+    if '--date' in sys.argv:
+        return sys.argv[sys.argv.index('--date') + 1]
+    if os.path.exists(crudo):
+        return datetime.date.fromtimestamp(os.path.getmtime(crudo)).isoformat()
+    return datetime.date.today().isoformat()
+
+
+DATE = fecha_del_catalogo()
 
 def cols_fk(v):
     """Columnas de una FK. `fetch-catalog.ts` las emite como lista; si el driver no parsea el
@@ -224,9 +244,12 @@ def live_type(col):
 def sufijo_espejo(clase, outdir=None):
     """`.entity` si el espejo ya fue promovido (existe el archivo), `.espejo` si sigue inerte.
 
-    Sin esto el generador reescribe el `<tabla>.espejo.ts` de una tabla ya promovida y deja dos
+    Sin esto el generador emitiría `<tabla>.espejo.ts` para una tabla ya promovida y quedarían dos
     clases mapeando la misma tabla: la promovida que carga runtime y el espejo que exporta el
     barrel. Pasó con `permissions`.
+
+    Se sigue usando después de retirar la reescritura (2026-09-22), porque el barrel y los imports
+    de FK tienen que apuntar al `.entity` promovido.
     """
     base = kebab(clase)
     destino = outdir if outdir is not None else OUTDIR
@@ -491,7 +514,7 @@ for table in order:
         # Sin esta rama, los 74 espejos promovidos decían "APAGADO en runtime … termina en `.espejo.ts`"
         # en su propia cabecera: falso, y es lo primero que lee quien abre el archivo (o un agente).
         header = [f"Entity de {origen}"]
-        header.append('PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.')
+        header.append('PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.')
     else:
         header = [f"Espejo de {origen}"]
         header.append('APAGADO en runtime: el archivo termina en `.espejo.ts` (no en `.entity.ts`), por lo que el glob de entities de database.module.ts no lo carga y ningún módulo lo registra en forFeature.')
@@ -521,7 +544,12 @@ for table in order:
     tab_comment = t.get('comment') or c_tab.get('comment')
     entity_deco = f"@Entity({{ name: '{table}', comment: {ts_str(tab_comment)} }})" if tab_comment else f"@Entity('{table}')"
     out += '\n'.join([entity_deco] + class_decos) + '\nexport class ' + cls + ' {\n' + '\n\n'.join(body) + '\n}\n'
-    open(os.path.join(OUTDIR, fname), 'w', encoding='utf-8').write(out)
+    # Una entity PROMOVIDA no se reescribe: desde su promoción la fuente de verdad de esa tabla es
+    # el repo, no prod. El generador sigue emitiendo todo lo demás para ella —el snapshot contra el
+    # que la mide su spec, el barrel, el README y el registro— así que sigue vigilada, pero el
+    # archivo lo edita quien cambia la tabla (entity → migración → aplicar).
+    if not promovido:
+        open(os.path.join(OUTDIR, fname), 'w', encoding='utf-8').write(out)
 
     snapshot[table] = {
         'columns': snap_cols, 'primary': pk, 'foreignKeys': snap_fks,
@@ -577,6 +605,13 @@ import * as modulo from './index';
  * Verifica que los espejos del módulo `{MODULE}` coinciden con el snapshot de prod (columnas + nullabilidad, PK,
  * FKs con ON DELETE, UNIQUE, CHECK e índices) y que no duplican tablas que ya tienen entity en el repo.
  * Construye la metadata en memoria con TODOS los espejos + todas las entities existentes (destinos de FK): NO abre conexión.
+ *
+ * ⚠️ SI ESTE SPEC FALLA, el repo y prod difieren. Son dos casos distintos:
+ *   1. Cambiaste una entity y todavía no aplicaste su migración a prod → aplicala (GUIA → Sincronizar
+ *      cambios) y DESPUÉS refrescá el snapshot con `yarn schema:snapshot`.
+ *   2. Nadie tocó el repo → prod cambió por fuera del proceso: hay que revisar qué pasó antes de
+ *      refrescar nada.
+ * El snapshot es una foto de prod a propósito: sirve de detector de deriva. No lo edites a mano.
  */
 describe('Espejo {MODULE} (TypeORM ↔ prod public)', () => {{
 	const mirrorEntities = Object.values(modulo);
@@ -644,10 +679,14 @@ describe('Espejo {MODULE} (TypeORM ↔ prod public)', () => {{
 		it('tiene los mismos índices declarables (nombre → columnas, unique, where) que prod', () => {{
 			expect(
 				Object.fromEntries(
-					metadata().indices.map((index) => [
-						index.name,
-						{{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null }},
-					])
+					metadata()
+						// `@Index('x', {{ synchronize: false }})` no declara un índice: avisa que existe y que
+						// TypeORM no lo toque (los de `special-index/`). No tiene columnas y no va contra el snapshot.
+						.indices.filter((index) => index.synchronize !== false)
+						.map((index) => [
+							index.name,
+							{{ columns: index.columns.map((column) => column.databaseName), unique: index.isUnique, where: index.where ?? null }},
+						])
 				)
 			).toEqual(expected.indexes);
 		}});
@@ -673,8 +712,10 @@ n_prom = sum(1 for t in generated if sufijo_espejo(CLASS[t]) == '.entity')
 if n_prom == n_new:
     estado_b = ('**Estado: todas promovidas.** Cada archivo termina en `.entity.ts`, así que `database.module.ts` las carga por el glob '
                 '`entities: [__dirname + \'/../../**/*.entity{.ts,.js}\']` y quedan disponibles para `TypeOrmModule.forFeature([...])` en el módulo que las use. '
-                'Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Siguen siendo archivos generados**: '
-                'este generador los reescribe desde prod, así que lo que se edite a mano en ellos se pierde.')
+                'Cada promoción está registrada a mano en `promotedMirrorEntities` de `database.module.spec.ts`. **Desde el 2026-09-22 el generador ya NO las '
+                'reescribe**: la entity es la fuente de verdad de su tabla y se edita a mano (entity → `migration:generate` → revisar → `migration:run`). '
+                'Lo que el generador sigue emitiendo para ellas es el snapshot contra el que las mide su spec, el barrel y este README: si el spec queda en rojo, '
+                'el repo y prod difieren, y el snapshot se refresca con `yarn schema:snapshot` DESPUÉS de aplicar el cambio a prod.')
 else:
     estado_b = (f'**Estado: {n_prom} promovidas, {n_new - n_prom} apagadas.** Un espejo apagado termina en `.espejo.ts`: `database.module.ts` carga entities con '
                 '`entities: [__dirname + \'/../../**/*.entity{.ts,.js}\']`, así que no lo ve, y ningún módulo lo incluye en `TypeOrmModule.forFeature([...])`. '

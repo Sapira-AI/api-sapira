@@ -42,5 +42,6 @@ AS $function$
     AND nc.status = 'Emitida'
     AND nc.is_active = true
     AND nc.nc_revenue_treatment IS NOT NULL
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."nc_discount_revenue_adjustment"(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date) IS 'Ajuste (negativo) de recognized por NC de descuento clasificadas, por ítem y mes. Solo NC discount Emitida con nc_revenue_treatment NOT NULL.';

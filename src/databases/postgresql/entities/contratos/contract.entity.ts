@@ -27,6 +27,7 @@ import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quo
 @Index('idx_contracts_holding_id', ['holding_id'])
 @Index('idx_contracts_sf_opp', ['salesforce_opportunity_id'], { where: `(salesforce_opportunity_id IS NOT NULL)` })
 @Index('idx_contracts_workflow_started_at', ['workflow_started_at'])
+@Index('idx_contracts_custom_fields', { synchronize: false })
 @Entity('contracts')
 export class Contract {
 	@PrimaryGeneratedColumn('uuid')

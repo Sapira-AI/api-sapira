@@ -232,5 +232,10 @@ BEGIN
                       v_updated, v_inserted, v_deleted)
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."edit_pending_invoice"(p_invoice_id uuid, p_items jsonb, p_issue_date date) IS 'P1 #3 (b): edición segura de una factura Por Emitir (reemplaza a
+edit_invoice_safe, que estaba rota: columnas inexistentes + EXCEPTION que
+tragaba el error tras borrar líneas). Reemplazo total de líneas con validación
+previa completa, IVA por tax_rate del header, header derivado de las líneas,
+auditoría en invoice_adjustments y rebuild de RSM.';

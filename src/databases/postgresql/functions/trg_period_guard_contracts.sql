@@ -87,5 +87,6 @@ BEGIN
     array_to_string(v_fields_changed, ','), v_cutoff
     USING ERRCODE = 'P0001',
           HINT = 'Reabrir el período correspondiente o restringir el cambio';
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."trg_period_guard_contracts"() IS 'Guard que bloquea cambios en campos "padre" del contrato cuando existe al menos un contract_item con start_date en período cerrado.';

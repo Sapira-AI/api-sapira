@@ -79,5 +79,6 @@ BEGIN
     'restored_invoice_ids', v_source_invoice_ids
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."unconsolidate_invoices_simple"(p_consolidated_invoice_id uuid) IS 'Revierte una consolidación, restaurando las facturas originales a is_active=true.';

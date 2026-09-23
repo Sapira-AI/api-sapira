@@ -26,5 +26,6 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."inherit_auto_renew_from_quote_item"() IS 'Hereda automáticamente la configuración de auto_renew desde quote_items cuando se crea un contract_item';

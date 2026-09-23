@@ -26,5 +26,6 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."auto_populate_client_tax_id_from_entity"() IS 'Completa automáticamente el campo client_tax_id en invoices_legacy buscando el tax_id desde client_entities usando client_entity_id. Se ejecuta en INSERT o UPDATE cuando client_tax_id está vacío.';

@@ -113,5 +113,6 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'Error en detect_invoice_line_changes_with_dynamic_mapping: %', SQLERRM;
     RETURN TRUE;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."detect_invoice_line_changes_with_dynamic_mapping"(new_data jsonb, existing_line_id uuid, holding_id_param uuid) IS 'Detecta cambios en líneas de factura usando configuración de mapeo dinámico. Retorna TRUE si hay cambios.';

@@ -171,5 +171,6 @@ BEGIN
   END IF;
 
   RETURN COALESCE(NEW, OLD);
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."trg_period_guard_contract_items"() IS 'Guard que bloquea cambios contables en contract_items cuyo start_date cae en período cerrado de la company. Respeta GUCs sapira.period_guard_mode y sapira.bypass_period_guard.';

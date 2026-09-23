@@ -7,7 +7,7 @@ import { ContractItem } from './contract-item.entity';
 
 /**
  * Entity de `public.contract_amendment_items` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 35 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_set_amendment_item_holding · BEFORE INSERT FOR EACH ROW → set_contract_amendment_item_holding_id().
  * Policies (3): tenant_amend_items_ins (INSERT, public); tenant_amend_items_sel (SELECT, public); tenant_amend_items_upd (UPDATE, public).

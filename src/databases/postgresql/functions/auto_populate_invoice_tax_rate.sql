@@ -28,5 +28,9 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."auto_populate_invoice_tax_rate"() IS 'Trigger que auto-completa tax_rate en invoices desde companies.tax_rate.
+Si la company no tiene tax_rate configurado, lanza RAISE EXCEPTION con código TAX_RATE_NOT_CONFIGURED
+para que el frontend muestre un modal específico solicitando configurar el impuesto.
+Solo se ejecuta si tax_rate está vacío, permitiendo sobrescritura manual.';

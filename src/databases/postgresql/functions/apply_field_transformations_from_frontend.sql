@@ -30,5 +30,7 @@ BEGIN
     
     RETURN result;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_field_transformations_from_frontend"(source_data jsonb, holding_id_param uuid, source_model text, target_table text) IS 'Función helper que permite al frontend usar opcionalmente las transformaciones de base de datos.
+El frontend puede seguir usando su lógica actual o migrar gradualmente a usar esta función.';

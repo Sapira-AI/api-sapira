@@ -19,5 +19,6 @@ AS $function$
     AND ci.end_date > CURRENT_DATE
     AND ci.renewed_by_item_id IS NULL
   ORDER BY ci.end_date ASC;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_items_pending_auto_renewal"(p_days_before_expiry integer) IS 'Retorna lista de items que están pendientes de auto-renovación dentro del período especificado';

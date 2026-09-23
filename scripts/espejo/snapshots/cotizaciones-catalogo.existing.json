@@ -26,7 +26,7 @@
    },
    "client_id": {
     "type": "uuid",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
@@ -224,9 +224,75 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_quotes_salesforce_opportunity_unique": {
+    "columns": [
+     "salesforce_opportunity_id",
+     "holding_id"
+    ],
+    "unique": true,
+    "where": "(salesforce_opportunity_id IS NOT NULL)"
+   },
+   "idx_quotes_salesforce_opportunity_id": {
+    "columns": [
+     "salesforce_opportunity_id"
+    ],
+    "unique": false,
+    "where": "(salesforce_opportunity_id IS NOT NULL)"
+   },
+   "idx_quotes_quote_number": {
+    "columns": [
+     "quote_number"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_quotes_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "fk_quotes_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "fk_quotes_stage": {
+    "columns": [
+     "quote_stage_id"
+    ],
+    "table": "quote_stages",
+    "onDelete": "NO ACTION"
+   },
+   "quotes_client_contact_id_fkey": {
+    "columns": [
+     "client_contact_id"
+    ],
+    "table": "client_contacts",
+    "onDelete": "NO ACTION"
+   },
+   "quotes_client_id_fkey": {
+    "columns": [
+     "client_id"
+    ],
+    "table": "clients",
+    "onDelete": "CASCADE"
+   },
+   "quotes_seller_id_fkey1": {
+    "columns": [
+     "seller_id"
+    ],
+    "table": "sellers",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "quote_items": {
   "class": "QuoteItem",
@@ -368,7 +434,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": null,
+    "default": "gen_random_uuid()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -596,9 +662,96 @@
    }
   },
   "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "indices": {
+   "idx_quote_items_custom_fields": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_quote_items_sf_product": {
+    "columns": [
+     "salesforce_product_id"
+    ],
+    "unique": false,
+    "where": "(salesforce_product_id IS NOT NULL)"
+   },
+   "idx_quote_items_salesforce_line_item_unique": {
+    "columns": [
+     "salesforce_line_item_id"
+    ],
+    "unique": true,
+    "where": "(salesforce_line_item_id IS NOT NULL)"
+   },
+   "idx_quote_items_salesforce_line_item_id": {
+    "columns": [
+     "salesforce_line_item_id"
+    ],
+    "unique": false,
+    "where": "(salesforce_line_item_id IS NOT NULL)"
+   },
+   "idx_quote_items_quote_item_number_unique": {
+    "columns": [
+     "quote_item_number"
+    ],
+    "unique": true,
+    "where": "(quote_item_number IS NOT NULL)"
+   },
+   "idx_quote_items_quote_item_number": {
+    "columns": [
+     "quote_item_number"
+    ],
+    "unique": false,
+    "where": "(quote_item_number IS NOT NULL)"
+   },
+   "idx_quote_items_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "quote_items_discount_type_check",
+    "expression": "((discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])))"
+   },
+   {
+    "name": "quote_items_billing_method_check",
+    "expression": "((billing_method = ANY (ARRAY['Anticipado'::text, 'Vencido'::text])))"
+   },
+   {
+    "name": "quote_items_billing_frequency_check",
+    "expression": "((billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])))"
+   },
+   {
+    "name": "chk_quote_items_price_entry_mode",
+    "expression": "((price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "fk_quote_items_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "quote_items_product_id_fkey": {
+    "columns": [
+     "product_id"
+    ],
+    "table": "products",
+    "onDelete": "NO ACTION"
+   },
+   "quote_items_quote_id_fkey": {
+    "columns": [
+     "quote_id"
+    ],
+    "table": "quotes",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "quote_stages": {
   "class": "QuoteStage",
@@ -703,10 +856,199 @@
     "array": false
    }
   },
-  "uniques": {},
+  "uniques": {
+   "quote_stages_holding_id_position_key": [
+    "holding_id",
+    "position"
+   ],
+   "quote_stages_holding_id_name_key": [
+    "holding_id",
+    "name"
+   ]
+  },
   "indices": {},
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "quote_stages_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "quote_attachments": {
+  "class": "QuoteAttachment",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_url": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_size": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "attachment_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "uploaded_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "uploaded_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_quote_attachments_quote_id": {
+    "columns": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_quote_attachments_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_quote_attachments_attachment_type": {
+    "columns": [
+     "attachment_type"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "quote_attachments_attachment_type_check",
+    "expression": "attachment_type = ANY (ARRAY['acceptance'::text, 'purchase_order'::text, 'hes'::text, 'contract'::text, 'other'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "quote_attachments_quote_id_fkey": {
+    "columns": [
+     "quote_id"
+    ],
+    "table": "quotes",
+    "onDelete": "CASCADE"
+   },
+   "quote_attachments_uploaded_by_fkey": {
+    "columns": [
+     "uploaded_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "products": {
   "class": "Product",
@@ -790,10 +1132,10 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -845,8 +1187,52 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_products_stripe_product_id": {
+    "columns": [
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": "(stripe_product_id IS NOT NULL)"
+   },
+   "idx_products_salesforce_product_id": {
+    "columns": [
+     "salesforce_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_products_product_code": {
+    "columns": [
+     "product_code"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_products_odoo_tax_ids": {
+    "columns": [
+     "odoo_tax_ids"
+    ],
+    "unique": false,
+    "where": "(odoo_tax_ids IS NOT NULL)"
+   },
+   "idx_products_odoo_product_id": {
+    "columns": [
+     "odoo_product_id"
+    ],
+    "unique": false,
+    "where": "(odoo_product_id IS NOT NULL)"
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "products_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   }
+  }
  }
 }

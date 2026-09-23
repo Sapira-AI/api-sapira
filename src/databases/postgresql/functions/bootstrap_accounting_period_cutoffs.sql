@@ -33,5 +33,6 @@ BEGIN
   SELECT count(*) INTO v_inserted FROM inserted;
 
   RETURN v_inserted;
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."bootstrap_accounting_period_cutoffs"() IS 'Bootstrap inicial: crea una fila accounting_period_cutoff con cutoff_date=NULL para cada (holding, company) que tenga datos. Idempotente. Solo super_admin.';

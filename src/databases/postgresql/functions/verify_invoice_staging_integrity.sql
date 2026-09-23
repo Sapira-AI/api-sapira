@@ -37,5 +37,6 @@ BEGIN
     JOIN odoo_invoices_stg oi ON oi.id = oil.invoice_staging_id
     WHERE oil.odoo_invoice_id != oi.odoo_id;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."verify_invoice_staging_integrity"() IS 'Verifica la integridad referencial entre facturas y líneas en staging';

@@ -74,5 +74,10 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."calculate_mrr_legacy_system_currency"() IS 'Calcula fx_contract_to_system y mrr_legacy_system_currency para registros MRR Legacy.
+CORREGIDO: SIEMPRE divide porque los rates están configurados como INVERSOS (1 USD = X moneda).
+Ejemplos:
+- CLF 116.70 con FX 0.024 (1 USD = 41.67 CLF) = 116.70 / 0.024 = 4,862.50 USD
+- MXN 7,440 con FX 18.29 (1 USD = 18.29 MXN) = 7,440 / 18.29 = 406.78 USD';

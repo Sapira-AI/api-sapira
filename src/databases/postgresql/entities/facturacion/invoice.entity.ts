@@ -44,6 +44,7 @@ import { Subscription } from '@/databases/postgresql/entities/suscripciones/subs
 @Index('idx_invoices_split_from', ['split_from_invoice_id'], { where: `(split_from_invoice_id IS NOT NULL)` })
 @Index('idx_invoices_stripe_id_holding_id', ['stripe_id', 'holding_id'], { where: `(stripe_id IS NOT NULL)` })
 @Index('idx_invoices_subscription_id', ['subscription_id'], { where: `(subscription_id IS NOT NULL)` })
+@Index('idx_invoices_custom_fields', { synchronize: false })
 @Entity({
 	name: 'invoices',
 	comment: 'Tabla de facturas del sistema. \nIMPORTANTE: tax_rate se auto-completa desde companies.tax_rate en formato decimal (0.19 = 19%).',

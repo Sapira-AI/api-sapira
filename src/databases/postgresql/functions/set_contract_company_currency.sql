@@ -14,5 +14,8 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."set_contract_company_currency"() IS 'Trigger BEFORE INSERT/UPDATE que calcula company_currency, system_currency y sus FX rates.
+CORREGIDO: Usa calculate_system_fx_rate en lugar de fx_rate_v2 (que no existe).
+DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).';

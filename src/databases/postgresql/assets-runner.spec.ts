@@ -406,6 +406,31 @@ describe('Corpus de assets SQL', () => {
 		expect(fueraDeFase).toEqual([]);
 	});
 
+	it('todo asset de cron/ programa un job con nombre literal y ninguno lo elimina', () => {
+		// `cron.schedule` hace upsert por (jobname, username): un asset describe el estado de un job.
+		// Un `cron.unschedule` sería una transición y va en migración, como cualquier borrado.
+		for (const file of listSql('cron')) {
+			const sql = read(file);
+			expect({ file, programa: /SELECT\s+cron\.schedule\('[^']+',\s*'[^']+'/i.test(sql) }).toEqual({ file, programa: true });
+			expect({ file, elimina: /cron\.unschedule/i.test(sql) }).toEqual({ file, elimina: false });
+		}
+	});
+
+	it('ningún asset ni snapshot lleva un secreto', () => {
+		// Dos jobs de pg_cron tenían la service role key escrita en su comando. Al modelarlos como
+		// assets, capturar sin redactar habría commiteado la clave —y `snapshots/raw/catalog.json`
+		// está versionado—. Esta guarda vale para cualquier secreto futuro, no solo para esos dos.
+		const patrones = [/Bearer\s+[A-Za-z0-9._-]{20,}/, /eyJ[A-Za-z0-9._-]{30,}/, /\bsb_secret_[A-Za-z0-9._-]{10,}/];
+		const tieneSecreto = (contenido: string): boolean => patrones.some((patron) => patron.test(contenido));
+
+		const assetsConSecreto = ASSET_DIRECTORIES.flatMap((directory) => listSql(directory)).filter((file) => tieneSecreto(read(file)));
+		const snapshotsConSecreto = ['catalog.json', 'list-tables.json']
+			.map((nombre) => path.join(assetsRoot, '..', '..', '..', 'scripts', 'espejo', 'snapshots', 'raw', nombre))
+			.filter((file) => fs.existsSync(file) && tieneSecreto(fs.readFileSync(file, 'utf8')));
+
+		expect([...assetsConSecreto, ...snapshotsConSecreto]).toEqual([]);
+	});
+
 	it('las tablas deny-all por diseño no reciben policies', () => {
 		// Estas cuatro tienen RLS activo y CERO policies en producción, y eso es correcto, no un
 		// descuido: para anon y authenticated son deny-all, que es el estado más cerrado posible.

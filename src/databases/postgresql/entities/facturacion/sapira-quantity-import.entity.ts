@@ -47,6 +47,7 @@ export type QuantityImportResolutionSource = 'sapira_ids' | 'salesforce_ids';
  * A diferencia de la tabla que reemplazó, los numéricos se castean: el `source_hash` se calcula
  * sobre los valores parseados, así que `0.050` y `0.05` no generan un diff falso.
  */
+@Index('sapira_quantity_imports_source_key', { synchronize: false })
 @Entity({
 	name: 'sapira_quantity_imports',
 	comment:
