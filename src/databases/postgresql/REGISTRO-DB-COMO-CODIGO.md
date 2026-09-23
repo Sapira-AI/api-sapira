@@ -25,7 +25,7 @@ Desde el 2026-09-23 se suma la fase **`cron/`**: los 4 jobs de pg_cron son asset
 |---|---|---|---|
 | 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) | ✅ | 2026-09-21 |
 | 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ✅ | 2026-09-22 |
-| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) (quedan 3 decisiones chicas, ver el punto) | 🔶 | 2026-09-21 |
+| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ✅ | 2026-09-23 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
 | 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
 | 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
@@ -92,6 +92,16 @@ aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4
 **Cómo se verifica:** `schema:status --target production` no muestra `LINEA BASE`.
 
 ## 3. QA sin alinear
+
+> ✅ **CERRADO el 2026-09-23.** QA y producción quedaron **idénticas: 867 assets `APLICADO` en cada
+> una, 0 pendientes, 0 deriva, 0 solo-en-base**. Lo que faltaba de las 3 decisiones abiertas:
+>
+> - **`types/000-extensions` (`NO CONVERGE`)**: QA no tenía `pg_trgm` ni `pgjwt`. No era cosmético —
+>   `search_contracts_by_client_identity` y `suggest_contract_item_matches` usan `similarity()`, así
+>   que existían en QA y habrían fallado al ejecutarse. Aplicar el asset las instaló.
+> - **6 funciones con comentarios solo en QA**: se trajo la versión de QA al repo (documentaba mejor,
+>   incluidos ~20 comentarios en `standardize_invoice_items`) y se aplicó a las dos bases.
+> - Las policies y objetos que solo existían en QA ya se habían resuelto el 21-09.
 
 > 🔶 **CASI CERRADO el 2026-09-21** (sesión Domi+Claude, procedimiento §6 de la GUIA en el orden
 > documentado): 2 policies del paso 1 → **las 5 migraciones TypeORM** → 24 assets con `--only`
