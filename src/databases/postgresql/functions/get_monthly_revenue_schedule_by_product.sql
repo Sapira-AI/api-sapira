@@ -11,6 +11,7 @@ AS $function$
       MAX(rsm.contract_currency) AS contract_currency,
       MAX(rsm.company_currency) AS company_currency,
       MAX(rsm.system_currency) AS system_currency,
+      -- Contract ccy sums
       SUM(COALESCE(rsm.recognized_period_contract_ccy, 0)) AS recognized_period_contract_ccy,
       SUM(COALESCE(rsm.recognized_cum_contract_ccy, 0)) AS recognized_cum_contract_ccy,
       SUM(COALESCE(rsm.billed_period_contract_ccy, 0)) AS billed_period_contract_ccy,
@@ -20,6 +21,7 @@ AS $function$
       SUM(COALESCE(rsm.mrr_period_contract_ccy, 0)) AS mrr_period_contract_ccy,
       SUM(COALESCE(rsm.mrr_period_contracted_contract_ccy, 0)) AS mrr_period_contracted_contract_ccy,
       SUM(COALESCE(rsm.cmrr_period_contract_ccy, 0)) AS cmrr_period_contract_ccy,
+      -- Company ccy sums
       SUM(COALESCE(rsm.recognized_period_ccy, 0)) AS recognized_period_ccy,
       SUM(COALESCE(rsm.recognized_cum_ccy, 0)) AS recognized_cum_ccy,
       SUM(COALESCE(rsm.billed_period_ccy, 0)) AS billed_period_ccy,
@@ -29,6 +31,7 @@ AS $function$
       SUM(COALESCE(rsm.mrr_period_ccy, 0)) AS mrr_period_ccy,
       SUM(COALESCE(rsm.mrr_period_contracted_ccy, 0)) AS mrr_period_contracted_ccy,
       SUM(COALESCE(rsm.cmrr_period_ccy, 0)) AS cmrr_period_ccy,
+      -- System ccy sums
       SUM(COALESCE(rsm.recognized_period_system_ccy, 0)) AS recognized_period_system_ccy,
       SUM(COALESCE(rsm.recognized_cum_system_ccy, 0)) AS recognized_cum_system_ccy,
       SUM(COALESCE(rsm.billed_period_system_ccy, 0)) AS billed_period_system_ccy,
@@ -38,6 +41,7 @@ AS $function$
       SUM(COALESCE(rsm.mrr_period_system_ccy, 0)) AS mrr_period_system_ccy,
       SUM(COALESCE(rsm.mrr_period_contracted_system_ccy, 0)) AS mrr_period_contracted_system_ccy,
       SUM(COALESCE(rsm.cmrr_period_system_ccy, 0)) AS cmrr_period_system_ccy,
+      -- FX metadata (MAX es seguro: valor compartido por todas las filas del contrato en el mes)
       MAX(rsm.fx_contract_to_company) AS fx_contract_to_company,
       MAX(rsm.fx_to_company_source) AS fx_to_company_source,
       MAX(rsm.fx_to_company_date) AS fx_to_company_date,
@@ -154,4 +158,4 @@ AS $function$
   ORDER BY 1, 3 DESC, 2;
 $function$;
 
-COMMENT ON FUNCTION public."get_monthly_revenue_schedule_by_product"(p_contract_id uuid) IS 'Devuelve el schedule mensual de RSM consolidado por producto + fila TOTAL por mes. Recomputa deferred/unbilled EOM con GREATEST(SUM(cum_a) - SUM(cum_b), 0) porque los EOM crudos usan max() y no son sumables cuando original + fantasma de contraccion tienen signos opuestos. Usado por el tab Revenue Schedule del contrato.';
+COMMENT ON FUNCTION public."get_monthly_revenue_schedule_by_product"(p_contract_id uuid) IS 'Devuelve el schedule mensual de RSM consolidado por producto + fila TOTAL por mes. Recomputa deferred/unbilled EOM con GREATEST(SUM(cum_a) - SUM(cum_b), 0) porque los EOM crudos usan max() y no son sumables cuando original + fantasma de contracción tienen signos opuestos. Usado por el tab Revenue Schedule del contrato.';

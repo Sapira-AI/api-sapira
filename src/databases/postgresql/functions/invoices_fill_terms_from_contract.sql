@@ -13,5 +13,6 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."invoices_fill_terms_from_contract"() IS 'Copia contracts.invoice_terms_and_conditions a invoices.invoice_terms_and_conditions si este viene NULL. Permite override explícito al insertar.';
