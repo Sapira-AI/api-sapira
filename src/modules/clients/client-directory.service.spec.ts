@@ -127,6 +127,23 @@ describe('ClientDirectoryService · edición', () => {
 		expect(params).toEqual(['e-1', 'h-1', 'Nueva']);
 	});
 
+	it('razón social: guarda la condición de pago (jsonb) y permite quitarla con null', async () => {
+		const { service, query } = build((sql) => {
+			if (sql.startsWith('SELECT id, tax_id')) return [{ id: 'e-1', tax_id: '1-9' }];
+			if (sql.startsWith('UPDATE')) return [[{ id: 'e-1' }], 1];
+
+			return [];
+		});
+
+		await service.updateEntity('h-1', 'e-1', { payment_terms: { kind: 'day_of_next_month', day: 17 } });
+		await service.updateEntity('h-1', 'e-1', { payment_terms: null });
+		const updates = query.mock.calls.filter(([text]) => (text as string).startsWith('UPDATE'));
+
+		expect(updates[0][0]).toContain('SET payment_terms = $3');
+		expect(updates[0][1]).toEqual(['e-1', 'h-1', { kind: 'day_of_next_month', day: 17 }]);
+		expect(updates[1][1]).toEqual(['e-1', 'h-1', null]);
+	});
+
 	it('contactos en lote: exige cliente o rol, y valida el cliente del holding', async () => {
 		const { service } = build(() => []);
 

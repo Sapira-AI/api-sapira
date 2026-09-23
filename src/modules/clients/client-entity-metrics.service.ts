@@ -23,7 +23,7 @@ export class ClientEntityMetricsService {
 	private async findEntity(entityId: string, holdingId: string) {
 		const [entity] = await this.dataSource.query<Row[]>(
 			`SELECT id, legal_name, tax_id, country, legal_address, email, phone, economic_activity, client_number,
-				odoo_partner_id, odoo_fiscal_position_name
+				odoo_partner_id, odoo_fiscal_position_name, payment_terms
 			FROM client_entities WHERE id = $1 AND holding_id = $2`,
 			[entityId, holdingId]
 		);

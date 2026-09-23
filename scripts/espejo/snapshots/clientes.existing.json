@@ -395,6 +395,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "payment_terms": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -429,7 +440,12 @@
     "where": null
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "client_entities_payment_terms_check",
+    "expression": "(payment_terms IS NULL) OR CASE (payment_terms ->> 'kind'::text) WHEN 'net'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'end_of_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'day_of_next_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric)) ELSE false END ELSE false END"
+   }
+  ],
   "foreignKeys": {
    "fk_client_entities_holding_id": {
     "columns": [

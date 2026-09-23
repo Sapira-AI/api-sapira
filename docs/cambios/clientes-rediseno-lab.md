@@ -6,9 +6,8 @@
 
 ## 👉 Leon: qué necesitamos de ti
 
-1. **Validar y correr la migración de condiciones de pago** (ver [Migración pendiente](#migración-pendiente-condiciones-de-pago)).
-   Está escrita, **no se corrió en ninguna base**. Queremos tu visto bueno sobre la forma (jsonb + CHECK) y el
-   orden de despliegue que proponemos.
+1. ~~Validar y correr la migración de condiciones de pago~~ → aplicada el 23-09 en QA y prod según lo acordado
+   (ver [Migración](#migración-condiciones-de-pago--aplicada-23-09-qa-y-producción)).
 2. **Revisar el acceso por holding** ([Acceso por holding](#acceso-por-holding-clientsholdingscopeguard)): cambia
    el comportamiento de endpoints existentes de `/clients`. Encontramos que ningún endpoint de clientes, razones
    sociales o contactos validaba que el usuario perteneciera al holding pedido.
@@ -47,7 +46,7 @@ Criterio de cartera = el de Facturación de la app actual: abiertas = `Emitida |
 (mismas fuentes que el dashboard).
 
 Tablas en que se escribe: `clients`, `client_entities`, `client_entity_clients`, `client_contacts`. No hay cambios
-de esquema salvo la migración pendiente.
+de esquema salvo la migración de condiciones de pago (aplicada el 23-09).
 
 ## Acceso por holding (`ClientsHoldingScopeGuard`)
 
@@ -74,9 +73,18 @@ de esquema salvo la migración pendiente.
 `x-holding-id` y no filtra `is_active`. Clientes recibe el holding por query/body y necesita la lista de holdings
 del usuario para las rutas por id. Se podrían unificar: queda a tu criterio.
 
-## Migración pendiente: condiciones de pago
+## Migración: condiciones de pago — ✅ aplicada 23-09 (QA y producción)
 
-`src/databases/postgresql/migrations/1789200000000-AddClientEntityPaymentTerms.ts` — **escrita, sin correr**.
+`src/databases/postgresql/migrations/1789200000000-AddClientEntityPaymentTerms.ts`.
+
+**Aplicación (23-09, tras merge de `qa` en `domi`)**: `migration:show` en QA y prod → única pendiente →
+`migration:run --target qa` → verificado en QA (columna jsonb + CHECK + comentario; un UPDATE con 400 días es
+rechazado por el CHECK) → `migration:run --target production` → verificado en prod (1.542 razones sociales
+intactas). **Después**, como exige el proceso: columna + `@Check` en la entity promovida `ClientEntity` y
+`yarn schema:snapshot --target production` (solo cambió el snapshot de `client_entities`). Código: `payment_terms`
+en `UpdateClientEntityDto` (`PaymentTermsDto`, espejo del CHECK), en la lista blanca de `ClientDirectoryService` y en
+el detalle `GET /client-entities/:id`. Tests: DTO + servicio. El generador de facturas **todavía no lee** la
+condición (sigue `+30`): conectarlo va en la auditoría de contratos (S4 · Medios #11).
 
 - **Qué:** `client_entities.payment_terms jsonb NULL` + CHECK `client_entities_payment_terms_check` + comentario.
 - **Por qué (roadmap operativo #11):** hoy el generador usa `emisión + 30 días` para todo; en agosto el SAT rechazó
@@ -90,7 +98,7 @@ del usuario para las rutas por id. Se podrían unificar: queda a tu criterio.
   (días como texto, 400 días, día 0, `kind` desconocido, sin `kind`). Usa `CASE` anidados para no castear antes de
   validar el tipo.
 
-**Orden de despliegue propuesto — por favor valídalo:**
+**Orden de despliegue (el que se siguió el 23-09):**
 
 1. Correr la migración (`yarn migration:run`) en QA y luego en producción. Una columna nueva que TypeORM no conoce
    es inofensiva.

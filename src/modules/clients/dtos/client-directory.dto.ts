@@ -1,6 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import {
+	ArrayMaxSize,
+	ArrayMinSize,
+	IsArray,
+	IsBoolean,
+	IsIn,
+	IsInt,
+	IsOptional,
+	IsString,
+	IsUUID,
+	Max,
+	MaxLength,
+	Min,
+	ValidateIf,
+	ValidateNested,
+} from 'class-validator';
 
 import { CONTACT_SORT_FIELDS, ENTITY_SORT_FIELDS } from '../client-directory.service';
 
@@ -95,6 +110,32 @@ export class AssignClientEntitiesDto {
 	make_primary_if_none?: boolean;
 }
 
+export const PAYMENT_TERM_KINDS = ['net', 'end_of_month', 'day_of_next_month'] as const;
+
+/**
+ * Condición de pago por defecto (espejo del CHECK `client_entities_payment_terms_check`):
+ * `net` y `end_of_month` usan `days` (0–365); `day_of_next_month` usa `day` (1–31).
+ */
+export class PaymentTermsDto {
+	@ApiProperty({ enum: PAYMENT_TERM_KINDS })
+	@IsIn(PAYMENT_TERM_KINDS)
+	kind!: (typeof PAYMENT_TERM_KINDS)[number];
+
+	@ApiPropertyOptional({ description: 'Días (net: desde la emisión; end_of_month: desde el fin de mes)' })
+	@ValidateIf((terms: PaymentTermsDto) => terms.kind !== 'day_of_next_month')
+	@IsInt()
+	@Min(0)
+	@Max(365)
+	days?: number;
+
+	@ApiPropertyOptional({ description: 'Día del mes siguiente (day_of_next_month)' })
+	@ValidateIf((terms: PaymentTermsDto) => terms.kind === 'day_of_next_month')
+	@IsInt()
+	@Min(1)
+	@Max(31)
+	day?: number;
+}
+
 export class UpdateClientEntityDto {
 	@ApiProperty()
 	@IsUUID()
@@ -147,6 +188,13 @@ export class UpdateClientEntityDto {
 	@MaxLength(80)
 	@IsOptional()
 	client_number?: string;
+
+	@ApiPropertyOptional({ type: PaymentTermsDto, nullable: true, description: 'Condición de pago por defecto; null la quita' })
+	@IsOptional()
+	@ValidateIf((_, value) => value !== null)
+	@ValidateNested()
+	@Type(() => PaymentTermsDto)
+	payment_terms?: PaymentTermsDto | null;
 
 	@ApiPropertyOptional({ description: 'Guardar aunque el RUT ya exista en otra razón social del holding (tras confirmar la alerta)' })
 	@IsBoolean()

@@ -245,6 +245,7 @@ export class ClientDirectoryService {
 		'phone',
 		'economic_activity',
 		'client_number',
+		'payment_terms',
 	] as const;
 
 	/** Campos editables de un contacto (lista blanca). */
@@ -268,7 +269,7 @@ export class ClientDirectoryService {
 	async updateEntity(
 		holdingId: string,
 		entityId: string,
-		changes: Partial<Record<(typeof ClientDirectoryService.ENTITY_FIELDS)[number], string | null>>,
+		changes: Partial<Record<(typeof ClientDirectoryService.ENTITY_FIELDS)[number], unknown>>,
 		allowDuplicateTaxId = false
 	) {
 		const [entity] = await this.dataSource.query<Row[]>(`SELECT id, tax_id FROM client_entities WHERE id = $1 AND holding_id = $2`, [
@@ -278,7 +279,7 @@ export class ClientDirectoryService {
 
 		if (!entity) throw new NotFoundException('Razón social no encontrada');
 
-		const newTaxId = changes.tax_id?.trim();
+		const newTaxId = typeof changes.tax_id === 'string' ? changes.tax_id.trim() : undefined;
 
 		if (newTaxId && newTaxId !== entity.tax_id && !allowDuplicateTaxId) {
 			const [duplicate] = await this.dataSource.query<Row[]>(
