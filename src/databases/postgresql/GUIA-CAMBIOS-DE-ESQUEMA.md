@@ -282,6 +282,11 @@ Además lista:
 - las **migraciones pendientes** por nombre y las ejecutadas que no tienen archivo en el repo;
 - **SOLO EN LA BASE**: objetos que existen ahí y no tienen asset (algo creado a mano en esa base, o
   que una migración pendiente va a eliminar);
+- **Permisos**: la firma de ACL mayoritaria de tablas y funciones, **quién se aparta de ella** y los
+  `ALTER DEFAULT PRIVILEGES` vigentes. Es informativo: `grants/` se emite con sentencias fijas, así
+  que coincidir con el archivo no prueba nada y la fase sigue siendo `NO VERIFICABLE`. Lo que esto
+  logra es hacerlo **observable**: si las 131 tablas comparten una firma, el asset dice la verdad, y
+  si una función tiene otra, aparece con nombre;
 - **FUERA DEL CORPUS**: objetos que **ninguna fase del repo puede describir** —vistas, vistas
   materializadas, secuencias sueltas sin asset, procedimientos, agregados y tipos compuestos—. No es
   lo mismo que `SOLO EN LA BASE`: ahí hay un archivo posible y falta; acá no hay ni forma de

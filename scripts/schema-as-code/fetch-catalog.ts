@@ -189,6 +189,59 @@ const QUERIES = {
 		  AND (cl.oid IS NULL OR cl.relkind NOT IN ('r', 'v', 'm', 'p'))
 		ORDER BY t.typname`,
 
+	// ── Permisos reales ────────────────────────────────────────────────────────────
+	// `grants/` se emite con sentencias fijas, así que coincidir con el archivo no prueba nada y la
+	// fase es NO VERIFICABLE. Esto captura los ACL de verdad —con `aclexplode`, y con
+	// `COALESCE(acl, acldefault(...))` porque un ACL nulo significa "los permisos por defecto", que
+	// para una función es EXECUTE a PUBLIC: justo lo que `grants/010` existe para corregir—.
+	//
+	// Se agrupa por firma en vez de traer una fila por objeto: 131 tablas y 463 funciones comparten
+	// casi siempre la misma, y lo que importa es cuál es la mayoritaria y quién se aparta.
+	aclSignatures: `
+		WITH objetos AS (
+			SELECT 'tabla' AS tipo, cl.relname AS nombre,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC') AS rol, a.privilege_type AS privilegio
+			FROM pg_class cl
+			JOIN pg_namespace n ON n.oid = cl.relnamespace,
+			     LATERAL aclexplode(coalesce(cl.relacl, acldefault('r', cl.relowner))) a
+			WHERE n.nspname = 'public' AND cl.relkind = 'r'
+			UNION ALL
+			SELECT 'funcion', p.proname,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC'), a.privilege_type
+			FROM pg_proc p
+			JOIN pg_namespace n ON n.oid = p.pronamespace,
+			     LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+			WHERE n.nspname = 'public'
+		), firmas AS (
+			SELECT tipo, nombre, string_agg(DISTINCT rol || ':' || privilegio, ', ' ORDER BY rol || ':' || privilegio) AS firma
+			FROM objetos GROUP BY tipo, nombre
+		)
+		SELECT tipo, firma, count(*)::int AS objetos,
+		       -- ::text como en foreignKeys: el driver no parsea arrays de tipo name y devuelve el literal crudo.
+		       (array_agg(nombre::text ORDER BY nombre))[1:5] AS ejemplos
+		FROM firmas GROUP BY tipo, firma ORDER BY tipo, objetos DESC`,
+
+	// `ALTER DEFAULT PRIVILEGES` sin FOR ROLE aplica al rol actual, así que el rol dueño importa;
+	// y una fila con defaclnamespace = 0 es para toda la base, no para un esquema.
+	defaultAcls: `
+		WITH filas AS (
+			SELECT pg_get_userbyid(d.defaclrole) AS rol, coalesce(n.nspname, '') AS esquema,
+			       d.defaclobjtype::text AS tipo,
+			       coalesce(a.grantee::regrole::text, 'PUBLIC') AS beneficiario, a.privilege_type AS privilegio
+			FROM pg_default_acl d
+			LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace,
+			     LATERAL aclexplode(d.defaclacl) a
+			WHERE n.nspname = 'public' OR d.defaclnamespace = 0
+		), por_beneficiario AS (
+			SELECT rol, esquema, tipo, beneficiario,
+			       string_agg(privilegio, ', ' ORDER BY privilegio) AS privilegios
+			FROM filas GROUP BY rol, esquema, tipo, beneficiario
+		)
+		-- Una fila por (rol, esquema, tipo de objeto): sin agrupar son 84 líneas de ruido.
+		SELECT rol, esquema, tipo,
+		       string_agg(beneficiario || ' (' || privilegios || ')', '; ' ORDER BY beneficiario) AS concede
+		FROM por_beneficiario GROUP BY rol, esquema, tipo ORDER BY rol, esquema, tipo`,
+
 	// Las vistas no las modela TypeORM ni tienen fase propia todavía: se capturan
 	// para que la brecha quede medida y no supuesta.
 	views: `
@@ -310,6 +363,8 @@ function buildCatalog(data: Record<QueryName, Row[]>): unknown {
 		functions: data.functions,
 		cron: (data.cron ?? []).map((job) => ({ ...job, command: redactarSecretos(String(job.command)) })),
 		sequences: data.sequences,
+		aclSignatures: data.aclSignatures,
+		defaultAcls: data.defaultAcls,
 		views: data.views,
 		otherRoutines: data.otherRoutines,
 		otherTypes: data.otherTypes,

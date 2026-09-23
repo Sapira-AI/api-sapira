@@ -217,6 +217,44 @@ export function objetosNoModelados(
 	return fuera.sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
 }
 
+// ── Permisos ───────────────────────────────────────────────────────────────────
+
+export interface ResumenPermisos {
+	/** Firma mayoritaria por tipo de objeto, con cuántos la comparten. */
+	dominantes: { tipo: string; firma: string; objetos: number }[];
+	/** Objetos que se apartan de la firma mayoritaria de su tipo: lo que hay que mirar. */
+	excepciones: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	/** `ALTER DEFAULT PRIVILEGES` vigentes: deciden qué permisos hereda lo que se cree después. */
+	porDefecto: { rol: string; esquema: string; tipo: string; concede: string }[];
+}
+
+/**
+ * Qué permisos hay de verdad, para lo que `grants/` no puede probar.
+ *
+ * `grants/` se emite con sentencias fijas (`GRANT ALL ON ALL TABLES …`), así que coincidir con el
+ * archivo no dice nada sobre la base: la fase es `NO VERIFICABLE` a propósito. Esto no la vuelve
+ * verificable; la hace **observable**, que es el paso previo: si las 131 tablas comparten una firma,
+ * el asset dice la verdad, y si una se aparta, aparece con nombre.
+ */
+export function resumirPermisos(catalogo: {
+	aclSignatures?: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	defaultAcls?: ResumenPermisos['porDefecto'];
+}): ResumenPermisos {
+	const firmas = catalogo.aclSignatures ?? [];
+	const dominantes: ResumenPermisos['dominantes'] = [];
+	const excepciones: ResumenPermisos['excepciones'] = [];
+
+	for (const tipo of [...new Set(firmas.map((f) => f.tipo))].sort()) {
+		const delTipo = [...firmas.filter((f) => f.tipo === tipo)].sort((a, b) => b.objetos - a.objetos);
+		const [dominante, ...resto] = delTipo;
+		if (!dominante) continue;
+		dominantes.push({ tipo, firma: dominante.firma, objetos: dominante.objetos });
+		excepciones.push(...resto);
+	}
+
+	return { dominantes, excepciones, porDefecto: catalogo.defaultAcls ?? [] };
+}
+
 // ── Migraciones ────────────────────────────────────────────────────────────────
 
 export const MIGRATIONS_TABLE = 'public.sapira_typeorm_migrations';

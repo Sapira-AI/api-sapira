@@ -32,6 +32,7 @@ Desde el 2026-09-23 se suma la fase **`cron/`**: los 4 jobs de pg_cron son asset
 | 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) (eliminadas; falta confirmar con Domi) | 🔶 | 2026-09-21 |
 | 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) — decidido: se clona prod | ✅ | 2026-09-22 |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
+| 10 | [Permisos: `grants/` sigue sin ser verificable](#10-permisos-grants-sigue-sin-ser-verificable) | 🔶 | 2026-09-23 |
 
 Las cifras de abajo se midieron el **2026-09-21**. La fuente vigente siempre es el comando, no esta
 tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|production>`.
@@ -301,6 +302,23 @@ ninguna escrita.
 
 **Cómo se verifica:** `migration:run` + `postgres:assets --apply` sobre una base vacía la dejan
 igual a prod.
+
+## 10. Permisos: `grants/` sigue sin ser verificable
+
+> 🔶 **Observable desde el 2026-09-23, todavía no verificable.** `schema:status` ahora captura los
+> ACL reales (`aclexplode` sobre `relacl`/`proacl`, con `COALESCE(acl, acldefault(...))` para que
+> "sin ACL" signifique los permisos por defecto) y reporta la firma mayoritaria, las excepciones y
+> los `ALTER DEFAULT PRIVILEGES`. Medido en prod: **las 131 tablas comparten una sola firma**, así
+> que lo que declara `grants/000-table-privileges.sql` es cierto.
+
+**Lo que falta para cerrarlo (D2):** que `grants/000`, un `grants/001-default-privileges` nuevo y
+`grants/010` se **generen desde el catálogo** en vez de escribirse a mano. Recién entonces se puede
+sacar `grants` de `UNVERIFIABLE_DIRECTORIES` —lo que además hace que `--baseline` los registre—.
+
+**Hallazgo del reporte (2026-09-23):** `change_contract_currency` **no tiene `EXECUTE` para PUBLIC** y
+ningún asset lo explica. Es el único caso así: `cleanup_duplicate_partners_by_vat` también se aparta,
+pero eso sí está documentado en `grants/010`. Alguien revocó ese permiso por fuera del repo. Hay que
+decidir si se conserva —y entonces se escribe en un asset— o si se restituye.
 
 ## 9. Rotar las contraseñas
 

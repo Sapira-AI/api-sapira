@@ -17,6 +17,7 @@ import {
 	leerMigracionesEjecutadas,
 	normalizarSql,
 	objetosNoModelados,
+	resumirPermisos,
 } from './schema-status';
 
 const asset = (ruta: string, sql: string): SqlAsset => ({ path: ruta, sql, checksum: checksumSql(sql) });
@@ -158,6 +159,32 @@ describe('objetosNoModelados', () => {
 
 	it('un catálogo sin esas claves no rompe', () => {
 		expect(objetosNoModelados({}, new Map())).toEqual([]);
+	});
+});
+
+describe('resumirPermisos', () => {
+	it('separa la firma mayoritaria de las excepciones, que es lo único que hay que mirar', () => {
+		// `grants/` se emite con sentencias fijas, así que coincidir con el archivo no prueba nada.
+		// Esto no lo vuelve verificable: lo vuelve observable.
+		const resumen = resumirPermisos({
+			aclSignatures: [
+				{ tipo: 'tabla', firma: 'anon:SELECT', objetos: 131, ejemplos: ['invoices'] },
+				{ tipo: 'funcion', firma: 'PUBLIC:EXECUTE', objetos: 300, ejemplos: ['f1'] },
+				{ tipo: 'funcion', firma: 'postgres:EXECUTE', objetos: 1, ejemplos: ['cleanup_duplicate_partners_by_vat'] },
+			],
+			defaultAcls: [{ rol: 'postgres', esquema: 'public', tipo: 'r', concede: 'anon (SELECT)' }],
+		});
+
+		expect(resumen.dominantes).toEqual([
+			{ tipo: 'funcion', firma: 'PUBLIC:EXECUTE', objetos: 300 },
+			{ tipo: 'tabla', firma: 'anon:SELECT', objetos: 131 },
+		]);
+		expect(resumen.excepciones.map((e) => e.ejemplos[0])).toEqual(['cleanup_duplicate_partners_by_vat']);
+		expect(resumen.porDefecto).toHaveLength(1);
+	});
+
+	it('una base sin ACL capturados no rompe', () => {
+		expect(resumirPermisos({})).toEqual({ dominantes: [], excepciones: [], porDefecto: [] });
 	});
 });
 

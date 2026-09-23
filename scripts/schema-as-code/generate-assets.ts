@@ -38,6 +38,9 @@ export interface Catalog {
 	views?: { name: string; kind: string; def: string }[];
 	otherRoutines?: { name: string; kind: string }[];
 	otherTypes?: { name: string; kind: string }[];
+	/** Permisos reales, agrupados por firma; `grants/` no es verificable, así que esto es el reporte. */
+	aclSignatures?: { tipo: string; firma: string; objetos: number; ejemplos: string[] }[];
+	defaultAcls?: { rol: string; esquema: string; tipo: string; concede: string }[];
 	/** Jobs de pg_cron. Vacío si la base no tiene la extensión. */
 	cron?: { name: string; schedule: string; command: string; active: boolean; username: string; database: string }[];
 }
