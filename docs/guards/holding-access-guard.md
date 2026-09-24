@@ -1,3 +1,9 @@
+# HoldingAccessGuard — ⚠️ DEPRECADO (24-09-2026)
+
+> No usar en código nuevo. La única forma de acotar por holding es `HoldingScopeGuard` + `@HoldingId()`
+> (`docs/v2-rediseno/autorizacion-y-tenancy.md`). Diferencias: este guard **deja pasar si falta el header** y no mira
+> `user_holdings.is_active`. Lo usan todavía 2 controladores de Salesforce (migración pendiente de Leon).
+
 # HoldingAccessGuard
 
 ## Descripción

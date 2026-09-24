@@ -22,7 +22,7 @@ describe('ClientsService', () => {
 	it('ordena por created_at desc por defecto, con desempate por id', async () => {
 		const { service, clientRepository } = buildService();
 
-		await service.findAll({ holding_id: 'h-1' });
+		await service.findAll({}, 'h-1');
 
 		expect(clientRepository.findAndCount).toHaveBeenCalledWith(
 			expect.objectContaining({ order: { created_at: { direction: 'DESC', nulls: 'LAST' }, id: 'ASC' }, where: { holding_id: 'h-1' } })
@@ -32,7 +32,7 @@ describe('ClientsService', () => {
 	it('ordena por la columna y dirección pedidas', async () => {
 		const { service, clientRepository } = buildService();
 
-		await service.findAll({ holding_id: 'h-1', sort_by: 'name_commercial', sort_order: 'asc', page: 2, limit: 25 });
+		await service.findAll({ sort_by: 'name_commercial', sort_order: 'asc', page: 2, limit: 25 }, 'h-1');
 
 		expect(clientRepository.findAndCount).toHaveBeenCalledWith(
 			expect.objectContaining({ order: { name_commercial: { direction: 'ASC', nulls: 'LAST' }, id: 'ASC' }, skip: 25, take: 25 })

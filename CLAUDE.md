@@ -84,6 +84,21 @@ actualizar todo lo que no es tabla.**
 - **La fuente de verdad de hoy es producción.** Ni `supabase/schema.sql`, ni las migraciones del
   front, ni los `.espejo.ts` lo son: son fotos con fecha. Verifica contra la base antes de escribir SQL.
 
+## Autorización por holding: una sola forma
+
+Regla completa: `docs/v2-rediseno/autorizacion-y-tenancy.md`. La API entra a Postgres con un rol privilegiado: **RLS no
+filtra nada de lo que pasa por la API**, así que cada endpoint acota por holding.
+
+- Controlador de un holding: `@UseGuards(SupabaseAuthGuard, HoldingScopeGuard)` y el holding se lee con `@HoldingId()`
+  (`src/guards/holding-scope.guard.ts`, `src/decorators/holding-id.decorator.ts`). El guard exige `x-holding-id` (400),
+  valida fila activa en `user_holdings` (403) y rechaza un `holding_id` distinto en query/body (403).
+- **Ningún DTO recibe `holding_id`.** Rutas por id: `WHERE id = $1 AND holding_id = $2` → 404 si no es del holding.
+- No uses `user_holdings.selected` para decidir qué datos devolver, ni `HoldingAccessGuard` (deprecado), ni
+  `auth.uid()`/`rls_user_holding_id()` en SQL que llama la API: el holding sale del registro.
+- Tests por controlador: sin header → 400, holding ajeno → 403, registro de otro holding → 404.
+- Adopción opt-in: Clientes y Dashboard ya la usan; los controladores previos se migran cuando se tocan (pendiente Leon).
+- Tablas nuevas: grants del Data API solo si el front viejo las lee, nunca a `anon` (Supabase deja de darlos solo desde el 30-10-2026).
+
 ## Eliminar una tabla, función, trigger o policy
 
 Procedimiento completo: `src/databases/postgresql/README.md` → **Eliminar una tabla, una función u

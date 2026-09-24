@@ -8,10 +8,6 @@ export const CLIENT_INVOICE_STATUS_FILTERS = ['all', 'open', 'overdue', 'paid'] 
 export type ClientInvoiceStatusFilter = (typeof CLIENT_INVOICE_STATUS_FILTERS)[number];
 
 export class QueryClientInvoicesDto {
-	@ApiPropertyOptional({ description: 'ID del holding', example: 'f6e3cb81-8b4a-451e-8402-573e47688d45' })
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiPropertyOptional({
 		description: 'Estado: abiertas, vencidas, pagadas o todas (sin "Por Emitir")',
 		enum: CLIENT_INVOICE_STATUS_FILTERS,

@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 /** Columnas por las que se puede ordenar `GET /clients` (lista blanca: nunca se interpola el input). */
 export const CLIENT_SORT_FIELDS = [
@@ -26,14 +26,6 @@ export class QueryClientsDto {
 	@IsIn(['asc', 'desc'])
 	@IsOptional()
 	sort_order?: 'asc' | 'desc';
-
-	@ApiPropertyOptional({
-		description: 'ID del holding para filtrar clientes',
-		example: 'f6e3cb81-8b4a-451e-8402-573e47688d45',
-	})
-	@IsUUID()
-	@IsOptional()
-	holding_id?: string;
 
 	@ApiPropertyOptional({
 		description: 'Filtrar por segmento',

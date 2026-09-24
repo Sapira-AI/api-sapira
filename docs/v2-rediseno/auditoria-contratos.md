@@ -1243,3 +1243,4 @@ Maxio, Zuora, Rillet, Campfire; product tours y activación). Las preguntas S8a 
 | 9 | Unificar los dos triggers de generación de facturas y los 3 `updated_at` duplicados | Leon |
 | 10 | Restablecer: ¿Sapira puede borrar o actualizar por API el borrador en Odoo? (a veces Odoo no permite borrar) — S6-11 | Leon (Domi revisa al final) |
 | 11 | DWH: confirmar que `billing_date` es el período de servicio (y renombrar); ventana del cron que incluya el mes anterior; qué hacer con conflictos (hoy `DO NOTHING`) — B7 | Leon |
+| 12 | Migrar los ~35 controladores previos y los 2 de Salesforce a `HoldingScopeGuard` + `@HoldingId()` (regla única de `autorizacion-y-tenancy.md`); retirar `HoldingAccessGuard` | Leon |

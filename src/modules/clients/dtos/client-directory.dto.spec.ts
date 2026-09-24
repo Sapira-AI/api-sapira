@@ -3,10 +3,7 @@ import { validateSync } from 'class-validator';
 
 import { UpdateClientEntityDto } from './client-directory.dto';
 
-const errorsFor = (body: Record<string, unknown>) =>
-	validateSync(plainToInstance(UpdateClientEntityDto, { holding_id: 'f6e3cb81-8b4a-451e-8402-573e47688d45', ...body })).map(
-		(error) => error.property
-	);
+const errorsFor = (body: Record<string, unknown>) => validateSync(plainToInstance(UpdateClientEntityDto, body)).map((error) => error.property);
 
 describe('UpdateClientEntityDto · payment_terms', () => {
 	it('acepta las tres formas y null', () => {
