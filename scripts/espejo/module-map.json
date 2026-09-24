@@ -31,6 +31,7 @@
   "client_entity_clients",
   "client_contacts",
   "contact_preferences",
+  "client_activity_notes",
   "client_documents",
   "company_legal_documents",
   "client_entity_tax_id_normalization_conflicts",

@@ -1,12 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, Raw, Repository } from 'typeorm';
 
 import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
 
+import { clientLifecycleSql, type ClientLifecycleStatus } from './client-lifecycle';
 import { AssignEntityToClientDto } from './dtos/assign-entity.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
@@ -35,7 +36,19 @@ export class ClientsService {
 
 	/** Clientes del holding activo (validado por `HoldingScopeGuard`). */
 	async findAll(queryDto: QueryClientsDto, holdingId: string): Promise<IPaginatedClients> {
-		const { page = 1, limit = 20, search, segment, industry, market, status, country, sort_by = 'created_at', sort_order = 'desc' } = queryDto;
+		const {
+			page = 1,
+			limit = 20,
+			search,
+			segment,
+			industry,
+			market,
+			status,
+			lifecycle,
+			country,
+			sort_by = 'created_at',
+			sort_order = 'desc',
+		} = queryDto;
 
 		const skip = (page - 1) * limit;
 
@@ -61,20 +74,37 @@ export class ClientsService {
 			where.country = country;
 		}
 
-		if (search) {
-			where.name_commercial = ILike(`%${search}%`);
+		if (lifecycle) {
+			where.id = Raw(
+				(column) =>
+					`${column} IN (SELECT cl.id FROM clients cl WHERE cl.holding_id = :lifecycleHolding AND (${clientLifecycleSql('cl')}) = :lifecycle)`,
+				{
+					lifecycleHolding: holdingId,
+					lifecycle,
+				}
+			);
 		}
 
+		// La búsqueda encuentra por nombre comercial o por N° cliente (OR, con el resto de los filtros en ambas ramas).
+		const searchWhere = search
+			? [
+					{ ...where, name_commercial: ILike(`%${search}%`) },
+					{ ...where, client_number: ILike(`%${search}%`) },
+				]
+			: where;
+
 		const [data, total] = await this.clientRepository.findAndCount({
-			where,
+			where: searchWhere,
 			skip,
 			take: limit,
 			// `id` desempata para que la paginación sea estable con valores repetidos; los vacíos van al final.
 			order: { [sort_by]: { direction: sort_order === 'asc' ? 'ASC' : 'DESC', nulls: 'LAST' }, id: 'ASC' },
 		});
 
+		const lifecycles = await this.lifecycleByClient(data.map((client) => client.id));
+
 		return {
-			data,
+			data: data.map((client) => ({ ...client, lifecycle_status: lifecycles.get(client.id) })),
 			items: total,
 			pages: Math.ceil(total / limit),
 			currentPage: page,
@@ -142,11 +172,28 @@ export class ClientsService {
 			}
 		}
 
+		const lifecycles = await this.lifecycleByClient([client.id]);
+
 		return {
 			...client,
+			lifecycle_status: lifecycles.get(client.id),
 			entities,
 			primary_entity,
 		};
+	}
+
+	/** Estado calculado (`client-lifecycle.ts`) de cada cliente, en una sola consulta. */
+	private async lifecycleByClient(ids: string[]): Promise<Map<string, ClientLifecycleStatus>> {
+		if (ids.length === 0) return new Map();
+		const rows = (await this.clientRepository.query(
+			`SELECT cl.id, ${clientLifecycleSql('cl')} AS lifecycle FROM clients cl WHERE cl.id = ANY($1::uuid[])`,
+			[ids]
+		)) as Array<{
+			id: string;
+			lifecycle: ClientLifecycleStatus;
+		}>;
+
+		return new Map(rows.map((row) => [row.id, row.lifecycle]));
 	}
 
 	async update(id: string, updateClientDto: UpdateClientDto): Promise<Client> {

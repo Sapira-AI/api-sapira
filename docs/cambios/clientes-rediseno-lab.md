@@ -23,7 +23,7 @@ El front de `/lab` está apagado en producción. Para verlo en local con la rama
 - `api-sapira` local apuntando a la base de producción ("Sapira MVP"). ⚠️ Crear/editar/asignar en el lab
   **escribe en producción**: probar en el holding Hanka.
 
-## Endpoints nuevos (todos con `SupabaseAuthGuard` + `ClientsHoldingScopeGuard`)
+## Endpoints nuevos (todos con `SupabaseAuthGuard` + `HoldingScopeGuard`, salvo la descarga de documentos)
 
 SQL crudo con `DataSource.query`, validado contra producción en solo lectura. Orden por lista blanca.
 
@@ -52,6 +52,29 @@ Criterio de cartera = el de Facturación de la app actual: abiertas = `Emitida |
 
 Tablas en que se escribe: `clients`, `client_entities`, `client_entity_clients`, `client_contacts`. No hay cambios
 de esquema salvo la migración de condiciones de pago (aplicada el 23-09).
+
+## Cliente 360 completo (24-09): estado calculado, cotizaciones, actividad y documentos
+
+| Endpoint | Para qué | Servicio |
+|---|---|---|
+| `GET /clients?lifecycle=` + `lifecycle_status` en cada cliente y en `GET /clients/:id/with-entities` / `GET /client-entities/:id` | Estado **calculado** desde contratos y suscripciones (`client-lifecycle.ts`): activo · por terminar · pausado (reservado) · en implementación · churn · prospecto. El campo manual `status` queda para la app actual | `ClientsService`, `ClientEntityMetricsService` |
+| `GET /clients/:id/quotes`, `GET /clients/:id/quotes/:quoteId/items` | Pestaña Cotizaciones: filtro por etapa (configurable por holding) y detalle con ítems | `ClientQuotesService` |
+| `GET /client-entities/:id/contracts` | Contratos de una razón social, filtro por cliente comercial | `ClientMetricsService` |
+| `GET /clients/:id/activity?types=`, `POST /clients/:id/activity/notes`, `DELETE /clients/:id/activity/notes/:noteId` | Línea de tiempo (contratos, facturas, pagos, cobranza, cotizaciones, documentos) + notas fechadas (solo el autor borra) | `ClientActivityService` |
+| `GET /clients/:id/documents`, `POST /clients/:id/documents/upload-url`, `POST /clients/:id/documents`, `DELETE /clients/:id/documents/:documentId` | Documentos: subida en 3 pasos con URL firmada al bucket privado `client-files`; archivar = borrado lógico | `ClientDocumentsService` |
+| `GET /client-documents/:id/download` | URL firmada de 60 s. **Sin `HoldingScopeGuard`** (la usan los enlaces guardados, también desde la app actual): el holding sale del registro y se valida pertenencia | `ClientDocumentsController` |
+
+**Migración `1790272076545-CreateClientActivityNotesAndDocumentStorage`** — ✅ aplicada en QA y en producción (24-09, con OK de Domi; migración + 2 assets + `schema:snapshot`):
+tabla `client_activity_notes` (RLS + policy `service_role` + trigger `updated_at`), 7 columnas opcionales en
+`client_documents` y bucket privado `client-files` (20 MB). Hasta aplicarla en producción, los specs de
+`entities/clientes` sobre `client_documents` quedan en rojo (esperado, GUIA → Sincronizar cambios).
+
+**Para publicar en producción (Leon):**
+1. ~~Migración + assets + snapshot en prod~~ ✅ hecho 24-09.
+2. Variables de la API en prod: `SUPABASE_SERVICE_ROLE_KEY` (verificar que esté) y `DOCUMENTS_LINK_BASE_URL=https://www.aisapira.com`.
+3. Confirmar la cookie de sesión compartida en prod (`NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` y `VITE_AUTH_COOKIE_DOMAIN` = `.aisapira.com`): de eso depende que la app actual abra los documentos nuevos.
+4. Riesgo existente: el bucket `client_documents` de prod es **público** (8 documentos con URL pública). Migrar esos archivos a `client-files` y cerrarlo cuando la app actual deje de subir ahí.
+5. La app actual no filtra `client_documents.deleted_at`: un documento archivado en el front nuevo se le sigue viendo. Opción: agregar `deleted_at IS NULL` a la policy `holding_access_client_documents`.
 
 ## Acceso por holding (`ClientsHoldingScopeGuard`)
 

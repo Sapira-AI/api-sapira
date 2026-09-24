@@ -128,14 +128,23 @@ export class ClientDirectoryService {
 		const [row] = await this.dataSource.query<Row[]>(
 			`SELECT COUNT(*) AS total,
 				COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM client_entity_clients x WHERE x.client_entity_id = ce.id)) AS unassigned,
-				array_agg(DISTINCT btrim(ce.country)) FILTER (WHERE btrim(coalesce(ce.country, '')) <> '') AS countries
+				array_agg(DISTINCT btrim(ce.country)) FILTER (WHERE btrim(coalesce(ce.country, '')) <> '') AS countries,
+				(SELECT COUNT(*) FROM invoices i WHERE i.holding_id = $1 AND i.is_active AND i.client_entity_id IS NULL AND i.status = ANY($2)) AS unlinked_open_invoices,
+				(SELECT COALESCE(SUM(i.total_system_currency), 0) FROM invoices i WHERE i.holding_id = $1 AND i.is_active AND i.client_entity_id IS NULL AND i.status = ANY($2)) AS unlinked_receivable,
+				(SELECT COUNT(*) FROM contracts c WHERE c.holding_id = $1 AND c.client_entity_id IS NULL) AS unlinked_contracts
 			FROM client_entities ce WHERE ce.holding_id = $1`,
-			[holdingId]
+			[holdingId, OPEN_INVOICE_STATUSES]
 		);
 
 		return {
 			total: toNumber(row?.total),
 			unassigned: toNumber(row?.unassigned),
+			/** Cartera y contratos sin razón social: no aparecen en ninguna fila de esta lista (dato a completar). */
+			unlinked: {
+				open_invoices: toNumber(row?.unlinked_open_invoices),
+				receivable: toNumber(row?.unlinked_receivable),
+				contracts: toNumber(row?.unlinked_contracts),
+			},
 			countries: [...((row?.countries as string[] | null) ?? [])].sort((a, b) => a.localeCompare(b, 'es')),
 		};
 	}
@@ -187,7 +196,8 @@ export class ClientDirectoryService {
 		if (search)
 			filters.push(`(cc.name ILIKE $${params.push(`%${search}%`)} OR cc.email ILIKE $${params.length} OR cc.position ILIKE $${params.length})`);
 		if (clientId) filters.push(`cc.client_id = $${params.push(clientId)}`);
-		if (contactType) filters.push(`cc.contact_type = $${params.push(contactType)}`);
+		if (contactType === 'Sin tipo') filters.push(`cc.contact_type IS NULL`);
+		else if (contactType) filters.push(`cc.contact_type = $${params.push(contactType)}`);
 		const where = `WHERE ${filters.join(' AND ')}`;
 		const order = `${CONTACT_SORT_FIELDS[sortBy] ?? 'cc.name'} ${sortOrder === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, cc.id`;
 

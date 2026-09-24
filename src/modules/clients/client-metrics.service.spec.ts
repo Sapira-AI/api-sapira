@@ -1,13 +1,23 @@
 import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+
 import { ClientMetricsService, OPEN_INVOICE_STATUSES } from './client-metrics.service';
 
 describe('ClientMetricsService', () => {
 	const build = (impl: (sql: string, params: unknown[]) => unknown[]) => {
 		const query = jest.fn(async (sql: string, params: unknown[]) => impl(sql, params));
 
-		return { service: new ClientMetricsService({ query } as unknown as DataSource), query };
+		const metrics = {
+			monthMetrics: jest.fn().mockResolvedValue({
+				currency: 'USD',
+				mrr: { value: 1200, previous: 1000, trend: 20 },
+				activeClients: { value: 8, previous: 10, trend: -20 },
+			}),
+		} as unknown as HoldingMetricsService;
+
+		return { service: new ClientMetricsService({ query } as unknown as DataSource, metrics), query };
 	};
 	const asOf = new Date('2026-09-22T12:00:00.000Z');
 
@@ -185,6 +195,23 @@ describe('ClientMetricsService', () => {
 
 			await service.getContracts('c-1', 'h-1', { sortBy: 'mrr', sortOrder: 'asc' }, asOf);
 			expect(query.mock.calls[1][0]).toContain('ORDER BY mrr ASC NULLS LAST, c.id');
+		});
+
+		it('razón social: acota por client_entity_id y filtra por cliente comercial', async () => {
+			const { service, query } = build((sql) => (sql.includes('FROM client_entities WHERE id') ? [{ '?column?': 1 }] : contractsImpl(sql)));
+
+			await service.getEntityContracts('e-1', 'h-1', { clientId: 'c-2', status: 'all' }, asOf);
+			const [listSql, listParams] = query.mock.calls[1] as [string, unknown[]];
+
+			expect(listSql).toContain('c.client_entity_id = $1');
+			expect(listSql).toContain('c.client_id = $4');
+			expect(listParams).toEqual(['e-1', 'h-1', '2026-09-22', 'c-2']);
+		});
+
+		it('razón social de otro holding → 404', async () => {
+			const { service } = build((sql) => (sql.includes('FROM client_entities WHERE id') ? [] : [{}]));
+
+			await expect(service.getEntityContracts('e-1', 'h-9', {}, asOf)).rejects.toBeInstanceOf(NotFoundException);
 		});
 
 		it('404 si el cliente no es del holding', async () => {

@@ -2,6 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
+import { CLIENT_LIFECYCLE_STATUSES, type ClientLifecycleStatus } from '../client-lifecycle';
+
 /** Columnas por las que se puede ordenar `GET /clients` (lista blanca: nunca se interpola el input). */
 export const CLIENT_SORT_FIELDS = [
 	'name_commercial',
@@ -68,6 +70,14 @@ export class QueryClientsDto {
 	@IsString()
 	@IsOptional()
 	status?: string;
+
+	@ApiPropertyOptional({
+		description: 'Filtrar por estado calculado desde contratos y suscripciones (ver client-lifecycle.ts)',
+		enum: CLIENT_LIFECYCLE_STATUSES,
+	})
+	@IsIn(CLIENT_LIFECYCLE_STATUSES)
+	@IsOptional()
+	lifecycle?: ClientLifecycleStatus;
 
 	@ApiPropertyOptional({
 		description: 'Filtrar por país',
