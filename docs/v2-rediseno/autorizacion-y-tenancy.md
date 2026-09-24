@@ -55,7 +55,11 @@ export class ClientsController {
   **activa** en `user_holdings` (403 si no) y deja `request.holdingId`. Si una query o body todavía trae `holding_id`
   distinto al del header, responde 403 (protección mientras se migran los DTO viejos).
 - `@HoldingId()` (`src/decorators/holding-id.decorator.ts`) entrega el holding ya validado.
-- **Ningún DTO nuevo recibe `holding_id`**. El holding sale solo del guard.
+- **Ningún DTO nuevo recibe `holding_id`**. El holding sale solo del guard. Excepción temporal y documentada: si el
+  front viejo ya llama ese endpoint con `holding_id`, se deja como campo opcional `deprecated` (el guard exige que
+  coincida con el header y el servicio lo ignora). Hoy: `GET /clients` (buscador de clientes comerciales de la pantalla Integraciones › Salesforce).
+- **Antes de migrar un controlador, buscar sus llamadas en el front viejo** (`sapira-ai/src/services/*`, `NestJSApiClient`):
+  ese cliente ya manda `X-Holding-Id` desde `HoldingContext`, pero puede enviar campos que el DTO nuevo rechaza.
 - Rutas por id: buscan por `id` **y** `holding_id`; si no es del holding → **404** (no se confirma que exista). Tablas sin
   `holding_id` se acotan por su padre (ej. `contract_items` → `contracts`).
 - Endpoints que no son de un holding (`/users/me`, listar o seleccionar holdings, catálogos globales) no usan el guard.

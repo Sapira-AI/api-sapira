@@ -10,6 +10,7 @@ import { ClientsService } from './clients.service';
 import { AssignEntityResponseDto, AssignEntityToClientDto } from './dtos/assign-entity.dto';
 import { ClientResponseDto } from './dtos/client-response.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
+import { QueryClientContractsDto } from './dtos/query-client-contracts.dto';
 import { QueryClientInvoicesDto } from './dtos/query-client-invoices.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
@@ -104,6 +105,24 @@ export class ClientsController {
 	@ApiParam({ name: 'id', type: String })
 	async getInvoices(@Param('id', new ParseUUIDPipe()) id: string, @Query() query: QueryClientInvoicesDto, @HoldingId() holdingId: string) {
 		return await this.clientMetricsService.getInvoices(id, holdingId, {
+			page: query.page,
+			limit: query.limit,
+			status: query.status,
+			entityId: query.client_entity_id,
+			search: query.search,
+			sortBy: query.sort_by,
+			sortOrder: query.sort_order,
+		});
+	}
+
+	@Get(':id/contracts')
+	@ApiOperation({
+		summary: 'Contratos del cliente',
+		description: 'Paginados, de todas sus razones sociales; filtro por estado, razón social y número, con conteo por estado y MRR del mes',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async getContracts(@Param('id', new ParseUUIDPipe()) id: string, @Query() query: QueryClientContractsDto, @HoldingId() holdingId: string) {
+		return await this.clientMetricsService.getContracts(id, holdingId, {
 			page: query.page,
 			limit: query.limit,
 			status: query.status,

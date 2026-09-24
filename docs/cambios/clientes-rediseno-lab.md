@@ -27,14 +27,19 @@ El front de `/lab` está apagado en producción. Para verlo en local con la rama
 
 SQL crudo con `DataSource.query`, validado contra producción en solo lectura. Orden por lista blanca.
 
+> Desde el 24-09 todos estos endpoints usan `HoldingScopeGuard`: el holding va en el header `x-holding-id` (no en la
+> query ni el body). Regla: `docs/v2-rediseno/autorizacion-y-tenancy.md`. `GET /clients` acepta `holding_id` solo por
+> compatibilidad con el front viejo (debe coincidir con el header).
+
 | Endpoint | Para qué | Servicio |
 |---|---|---|
 | `GET /clients?sort_by&sort_order` | Orden por columna en la lista (nuevo parámetro; `nulls LAST` + `id` para paginación estable) | `ClientsService.findAll` |
-| `GET /clients/filter-options?holding_id` | Valores de segmento, industria, mercado, país y estado | `ClientsService.getFilterOptions` |
-| `GET /clients/summary?holding_id` | KPIs de la lista: MRR del mes, cartera abierta y vencida | `ClientMetricsService` |
-| `GET /clients/:id/summary?holding_id` | Indicadores del cliente | `ClientMetricsService` |
-| `GET /clients/:id/receivables?holding_id` | Cartera por antigüedad (por vencer, 1–30, 31–60, 61–90, +90) | `ClientMetricsService` |
-| `GET /clients/:id/invoices?holding_id&status&client_entity_id&search&sort_by&sort_order&page&limit` | Pestaña Facturas del 360; trae `counts` por estado | `ClientMetricsService` |
+| `GET /clients/filter-options` | Valores de segmento, industria, mercado, país y estado | `ClientsService.getFilterOptions` |
+| `GET /clients/summary` | KPIs de la lista: MRR del mes, cartera abierta y vencida | `ClientMetricsService` |
+| `GET /clients/:id/summary` | Indicadores del cliente | `ClientMetricsService` |
+| `GET /clients/:id/receivables` | Cartera por antigüedad (por vencer, 1–30, 31–60, 61–90, +90) | `ClientMetricsService` |
+| `GET /clients/:id/invoices?status&client_entity_id&search&sort_by&sort_order&page&limit` | Pestaña Facturas del 360; trae `counts` por estado | `ClientMetricsService` |
+| `GET /clients/:id/contracts?status&client_entity_id&search&sort_by&sort_order&page&limit` | Pestaña Contratos del 360 (24-09); `counts` por estado, inicio = primer ítem, MRR del mes (RSM, moneda sistema y contrato) | `ClientMetricsService` |
 | `GET /client-entities`, `GET /client-entities/stats` | Lista de razones sociales (filtro "sin cliente asignado", país) | `ClientDirectoryService` |
 | `POST /client-entities/assign` | Vincular varias razones sociales a un cliente (transacción; marca principal si no tiene) | `ClientDirectoryService` |
 | `GET /client-entities/:id`, `/:id/summary`, `/:id/invoices` | Razón social 360 | `ClientEntityMetricsService` |
@@ -62,16 +67,17 @@ de esquema salvo la migración de condiciones de pago (aplicada el 23-09).
 
 | Endpoint | Antes | Ahora |
 |---|---|---|
-| `GET /clients` sin `holding_id` | Devolvía clientes de **todos** los holdings | Usa el holding por defecto del usuario |
-| `GET /clients/:id`, `/:id/with-entities`, `PATCH /:id`, `DELETE /:id`, `/:id/entities*` | Cualquier cliente por id | 404 si el cliente no es de un holding del usuario |
-| `POST /clients/:id/entities` | Roto: leía `req.user.holdingId`, que `SupabaseAuthGuard` nunca llena → siempre fallaba la validación | Toma el holding del cliente |
+| `GET /clients` | Devolvía clientes de **todos** los holdings si no venía `holding_id` | Holding del header `x-holding-id` (`HoldingScopeGuard`, 24-09) |
+| `GET /clients/:id`, `/:id/with-entities`, `PATCH /:id`, `DELETE /:id`, `/:id/entities*` | Cualquier cliente por id | 404 si el cliente no es del holding activo |
+| `POST /clients/:id/entities` | Roto: leía `req.user.holdingId`, que `SupabaseAuthGuard` nunca llena → siempre fallaba la validación | Toma el holding activo |
 
-Único consumidor fuera del front nuevo: `sapira-ai` `SalesforceClientSearchSelect` → `GET /clients` **con**
-`holding_id`, así que no se ve afectado.
+Único consumidor fuera del front nuevo: el buscador de **clientes comerciales** de Integraciones › Salesforce del
+front viejo (`sapira-ai` `SalesforceClientSearchSelect`) → `GET /clients` con `holding_id` en la query **y** el header
+`X-Holding-Id` (lo agrega `NestJSApiClient` desde `HoldingContext`). Por eso `QueryClientsDto` conserva `holding_id`
+como campo `deprecated` de compatibilidad: el guard exige que coincida con el header y el servicio lo ignora.
 
-**Por qué un guard nuevo y no el global:** `src/guards/holding-access.guard.ts` (Salesforce) solo mira el header
-`x-holding-id` y no filtra `is_active`. Clientes recibe el holding por query/body y necesita la lista de holdings
-del usuario para las rutas por id. Se podrían unificar: queda a tu criterio.
+**Guard (24-09):** el `ClientsHoldingScopeGuard` local se reemplazó por el guard único `HoldingScopeGuard`
+(`src/guards/`), la regla de `docs/v2-rediseno/autorizacion-y-tenancy.md`. `HoldingAccessGuard` queda deprecado.
 
 ## Migración: condiciones de pago — ✅ aplicada 23-09 (QA y producción)
 

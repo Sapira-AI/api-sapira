@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 /** Columnas por las que se puede ordenar `GET /clients` (lista blanca: nunca se interpola el input). */
 export const CLIENT_SORT_FIELDS = [
@@ -26,6 +26,16 @@ export class QueryClientsDto {
 	@IsIn(['asc', 'desc'])
 	@IsOptional()
 	sort_order?: 'asc' | 'desc';
+
+	/**
+	 * Solo compatibilidad con el front viejo: el buscador de clientes comerciales de Integraciones › Salesforce
+	 * (`SalesforceClientSearchSelect`) lo manda junto al header. No se usa:
+	 * el holding sale de `HoldingScopeGuard`, que rechaza (403) un valor distinto al de `x-holding-id`. Se quita cuando esa pantalla se migre.
+	 */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
+	@IsUUID()
+	@IsOptional()
+	holding_id?: string;
 
 	@ApiPropertyOptional({
 		description: 'Filtrar por segmento',

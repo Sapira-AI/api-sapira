@@ -128,4 +128,69 @@ describe('ClientMetricsService', () => {
 			await expect(service.getInvoices('c-1', 'h-9', {}, asOf)).rejects.toBeInstanceOf(NotFoundException);
 		});
 	});
+
+	describe('getContracts', () => {
+		const contractsImpl = (sql: string) => {
+			if (sql.includes('FROM clients WHERE id')) return [{ '?column?': 1 }];
+			if (sql.includes('all_count')) return [{ all_count: '9', active_count: '6', in_review_count: '1', cancelled_count: '2' }];
+
+			return [
+				{
+					id: 'k-1',
+					contract_number: 'CTR-2026-110',
+					status: 'Activo',
+					type: '',
+					client_entity_id: 'e-1',
+					legal_name: 'DREAM TEC SA',
+					company_name: 'Sapira SpA',
+					start_date: '2026-01-01',
+					end_date: '2026-12-31',
+					days_to_end: 98,
+					contract_currency: 'CLF',
+					system_currency: 'USD',
+					mrr: '5660.12',
+					mrr_contract_ccy: '140.5',
+					total_value: '1686',
+					total_value_system_currency: '67920.44',
+					items_count: '3',
+				},
+			];
+		};
+
+		it('filtra por estado, razón social y número; el total es el del estado pedido', async () => {
+			const { service, query } = build(contractsImpl);
+			const page = await service.getContracts('c-1', 'h-1', { status: 'active', entityId: 'e-1', search: ' CTR-2026 ', limit: 4 }, asOf);
+			const [listSql, listParams] = query.mock.calls[1] as [string, unknown[]];
+
+			expect(listSql).toContain("AND c.status = 'Activo'");
+			expect(listSql).toContain('c.client_entity_id = $4');
+			expect(listSql).toContain('c.contract_number ILIKE $5');
+			expect(listSql).toContain('r.holding_id = $2');
+			expect(listParams).toEqual(['c-1', 'h-1', '2026-09-22', 'e-1', '%CTR-2026%']);
+			// El conteo comparte params: debe tipar $3 aunque no filtre por fecha.
+			expect(query.mock.calls[2][0]).toContain('$3::date');
+			expect(page).toMatchObject({ items: 6, pages: 2, currentPage: 1, limit: 4, counts: { all: 9, active: 6, in_review: 1, cancelled: 2 } });
+			expect(page.data[0]).toMatchObject({
+				mrr: 5660.12,
+				mrr_contract_ccy: 140.5,
+				total_value: 1686,
+				days_to_end: 98,
+				type: null,
+				items_count: 3,
+			});
+		});
+
+		it('ordena solo por columnas de la lista blanca', async () => {
+			const { service, query } = build(contractsImpl);
+
+			await service.getContracts('c-1', 'h-1', { sortBy: 'mrr', sortOrder: 'asc' }, asOf);
+			expect(query.mock.calls[1][0]).toContain('ORDER BY mrr ASC NULLS LAST, c.id');
+		});
+
+		it('404 si el cliente no es del holding', async () => {
+			const { service } = build((sql) => (sql.includes('FROM clients WHERE id') ? [] : [{}]));
+
+			await expect(service.getContracts('c-1', 'h-9', {}, asOf)).rejects.toBeInstanceOf(NotFoundException);
+		});
+	});
 });
