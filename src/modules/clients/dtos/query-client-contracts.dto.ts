@@ -1,10 +1,14 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+
+/** UUID de una razón social, o `none` para lo que no tiene razón social. */
+export const UUID_OR_NONE = /^(none|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export const CLIENT_CONTRACT_SORT_FIELDS = ['contract_number', 'start_date', 'end_date', 'mrr', 'total_value', 'status'] as const;
 export type ClientContractSortField = (typeof CLIENT_CONTRACT_SORT_FIELDS)[number];
-export const CLIENT_CONTRACT_STATUS_FILTERS = ['all', 'active', 'in_review', 'cancelled'] as const;
+/** `active` = vigente (Activo con fin ≥ hoy o sin fin); `expired` = Activo con fin pasado (vencido sin renovar). */
+export const CLIENT_CONTRACT_STATUS_FILTERS = ['all', 'active', 'expired', 'in_review', 'cancelled'] as const;
 export type ClientContractStatusFilter = (typeof CLIENT_CONTRACT_STATUS_FILTERS)[number];
 
 /** Query de `GET /clients/:id/contracts`. El holding sale de `HoldingScopeGuard`, nunca de la query. */
@@ -14,8 +18,8 @@ export class QueryClientContractsDto {
 	@IsOptional()
 	status?: ClientContractStatusFilter;
 
-	@ApiPropertyOptional({ description: 'Filtrar por razón social' })
-	@IsUUID()
+	@ApiPropertyOptional({ description: 'Filtrar por razón social; `none` = sin razón social' })
+	@Matches(UUID_OR_NONE, { message: 'client_entity_id debe ser un UUID o none' })
 	@IsOptional()
 	client_entity_id?: string;
 
@@ -49,4 +53,12 @@ export class QueryClientContractsDto {
 	@Max(100)
 	@IsOptional()
 	limit?: number;
+}
+
+/** Query de `GET /client-entities/:id/contracts`: mismos filtros, por cliente comercial en vez de razón social. */
+export class QueryEntityContractsDto extends OmitType(QueryClientContractsDto, ['client_entity_id'] as const) {
+	@ApiPropertyOptional({ description: 'Filtrar por cliente comercial (una razón social puede facturar a varios)' })
+	@IsUUID()
+	@IsOptional()
+	client_id?: string;
 }

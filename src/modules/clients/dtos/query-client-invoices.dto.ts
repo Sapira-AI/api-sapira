@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+
+import { UUID_OR_NONE } from './query-client-contracts.dto';
 
 export const CLIENT_INVOICE_SORT_FIELDS = ['issue_date', 'due_date', 'amount', 'invoice_number', 'status', 'days_overdue'] as const;
 export type ClientInvoiceSortField = (typeof CLIENT_INVOICE_SORT_FIELDS)[number];
@@ -17,8 +19,8 @@ export class QueryClientInvoicesDto {
 	@IsOptional()
 	status?: ClientInvoiceStatusFilter;
 
-	@ApiPropertyOptional({ description: 'Filtrar por razón social' })
-	@IsUUID()
+	@ApiPropertyOptional({ description: 'Filtrar por razón social; `none` = sin razón social' })
+	@Matches(UUID_OR_NONE, { message: 'client_entity_id debe ser un UUID o none' })
 	@IsOptional()
 	client_entity_id?: string;
 

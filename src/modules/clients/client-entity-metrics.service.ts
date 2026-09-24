@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { clientLifecycleSql, type ClientLifecycleStatus } from './client-lifecycle';
 import { OPEN_INVOICE_STATUSES } from './client-metrics.service';
 
 type Row = Record<string, unknown>;
@@ -39,8 +40,9 @@ export class ClientEntityMetricsService {
 		const asOf = isoDate(asOfDate);
 
 		const clients = await this.dataSource.query<Row[]>(
-			`SELECT c.id, c.name_commercial, c.client_number, c.status, ece.is_primary,
-				(SELECT COUNT(*) FROM contracts ct WHERE ct.client_id = c.id AND ct.client_entity_id = $1 AND ct.status = 'Activo') AS active_contracts,
+			`SELECT c.id, c.name_commercial, c.client_number, c.status, ${clientLifecycleSql('c')} AS lifecycle_status, ece.is_primary,
+				(SELECT COUNT(*) FROM contracts ct WHERE ct.client_id = c.id AND ct.client_entity_id = $1 AND ct.status = 'Activo'
+					AND (ct.contract_end_date IS NULL OR ct.contract_end_date >= $4::date)) AS active_contracts,
 				COALESCE((SELECT SUM(i.total_system_currency) FROM invoices i
 					WHERE i.client_entity_id = $1 AND i.client_id = c.id AND i.is_active AND i.status = ANY($3)), 0) AS receivable,
 				COALESCE((SELECT SUM(i.total_system_currency) FROM invoices i
@@ -63,6 +65,7 @@ export class ClientEntityMetricsService {
 				name_commercial: (client.name_commercial as string) ?? null,
 				client_number: (client.client_number as string) ?? null,
 				status: (client.status as string) ?? null,
+				lifecycle_status: (client.lifecycle_status as ClientLifecycleStatus) ?? null,
 				is_primary: Boolean(client.is_primary),
 				active_contracts: toNumber(client.active_contracts),
 				receivable: toNumber(client.receivable),
@@ -72,21 +75,26 @@ export class ClientEntityMetricsService {
 		};
 	}
 
-	/** Indicadores: facturado 12 meses, cartera por antigüedad y comportamiento de pago. */
-	async getSummary(entityId: string, holdingId: string, asOfDate = new Date()) {
+	/**
+	 * Indicadores: facturado 12 meses, cartera por antigüedad y comportamiento de pago. Con `clientId`, solo lo
+	 * facturado a ese cliente comercial (filtro de la tarjeta de clientes de la Razón social 360).
+	 */
+	async getSummary(entityId: string, holdingId: string, asOfDate = new Date(), clientId?: string) {
 		await this.findEntity(entityId, holdingId);
 		const asOf = isoDate(asOfDate);
+		const params: unknown[] = [entityId, holdingId, asOf, OPEN_INVOICE_STATUSES];
+		const clientFilter = clientId ? `AND client_id = $${params.push(clientId)}` : '';
 
 		const [row] = await this.dataSource.query<Row[]>(
 			`WITH inv AS (
-				SELECT * FROM invoices WHERE client_entity_id = $1 AND holding_id = $2 AND is_active = true
+				SELECT * FROM invoices WHERE client_entity_id = $1 AND holding_id = $2 AND is_active = true ${clientFilter}
 			), paid AS (
 				SELECT inv.issue_date, inv.due_date, p.paid_at
 				FROM inv JOIN (SELECT invoice_id, MAX(payment_date) AS paid_at FROM invoice_payments WHERE confirmed GROUP BY invoice_id) p ON p.invoice_id = inv.id
 				WHERE inv.issue_date > $3::date - interval '12 months'
 			)
 			SELECT
-				(SELECT MAX(system_currency) FROM inv) AS currency,
+				COALESCE((SELECT hs.system_currency FROM holding_settings hs WHERE hs.holding_id = $2), (SELECT MAX(system_currency) FROM inv), 'USD') AS currency,
 				(SELECT COUNT(*) FROM inv WHERE status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada') AND issue_date > $3::date - interval '12 months') AS invoiced_count,
 				(SELECT COALESCE(SUM(total_system_currency), 0) FROM inv WHERE status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada') AND issue_date > $3::date - interval '12 months') AS invoiced_amount,
 				(SELECT COUNT(*) FROM inv WHERE status = ANY($4)) AS receivable_count,
@@ -97,7 +105,7 @@ export class ClientEntityMetricsService {
 				(SELECT ROUND(AVG(paid_at - issue_date)) FROM paid) AS avg_payment_days,
 				(SELECT ROUND(AVG(paid_at - due_date)) FROM paid WHERE due_date IS NOT NULL) AS avg_days_late,
 				(SELECT ROUND(AVG(due_date - issue_date)) FROM inv WHERE due_date IS NOT NULL AND issue_date > $3::date - interval '12 months') AS avg_terms_days`,
-			[entityId, holdingId, asOf, OPEN_INVOICE_STATUSES]
+			params
 		);
 
 		return {
@@ -150,12 +158,23 @@ export class ClientEntityMetricsService {
 				params
 			),
 			// Mismos `params` que la consulta principal: $3 y $4 se tipan aquí aunque el filtro de estado no los use.
+			// Conteo por estado con los demás filtros (cliente), para los chips de la tabla.
 			this.dataSource.query<Row[]>(
-				`SELECT COUNT(*) AS total FROM invoices i ${where} AND $3::date IS NOT NULL AND $4::text[] IS NOT NULL`,
+				`SELECT COUNT(*) FILTER (WHERE i.status <> 'Por Emitir') AS all_count,
+					COUNT(*) FILTER (WHERE i.status = ANY($4)) AS open_count,
+					COUNT(*) FILTER (WHERE i.status = ANY($4) AND i.due_date < $3::date) AS overdue_count,
+					COUNT(*) FILTER (WHERE i.status = 'Pagada') AS paid_count
+				FROM invoices i WHERE i.client_entity_id = $1 AND i.holding_id = $2 AND i.is_active = true ${clientFilter}`,
 				params
 			),
 		]);
-		const total = toNumber(countRow?.total);
+		const counts = {
+			all: toNumber(countRow?.all_count),
+			open: toNumber(countRow?.open_count),
+			overdue: toNumber(countRow?.overdue_count),
+			paid: toNumber(countRow?.paid_count),
+		};
+		const total = counts[status];
 
 		return {
 			data: rows.map((row) => ({
@@ -176,6 +195,7 @@ export class ClientEntityMetricsService {
 			pages: Math.max(1, Math.ceil(total / limit)),
 			currentPage: page,
 			limit,
+			counts,
 		};
 	}
 }

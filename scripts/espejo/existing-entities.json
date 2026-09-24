@@ -15,6 +15,11 @@
   "file": "src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity"
  },
+ "client_activity_notes": {
+  "class": "ClientActivityNote",
+  "file": "src/databases/postgresql/entities/clientes/client-activity-note.entity.ts",
+  "import": "@/databases/postgresql/entities/clientes/client-activity-note.entity"
+ },
  "client_contacts": {
   "class": "ClientContact",
   "file": "src/databases/postgresql/entities/clientes/client-contact.entity.ts",

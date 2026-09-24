@@ -27,6 +27,7 @@ describe('ClientEntityMetricsService', () => {
 						{
 							id: 'c-1',
 							name_commercial: 'Andes',
+							lifecycle_status: 'ending',
 							is_primary: true,
 							active_contracts: '2',
 							receivable: '100.5',
@@ -45,6 +46,7 @@ describe('ClientEntityMetricsService', () => {
 				name_commercial: 'Andes',
 				client_number: null,
 				status: null,
+				lifecycle_status: 'ending',
 				is_primary: true,
 				active_contracts: 2,
 				receivable: 100.5,
@@ -57,14 +59,14 @@ describe('ClientEntityMetricsService', () => {
 	it('pagina facturas y filtra por cliente comercial y vencidas', async () => {
 		const { service, query } = build((sql) => {
 			if (sql.includes('FROM client_entities')) return [entityRow];
-			if (sql.includes('COUNT(*) AS total')) return [{ total: '45' }];
+			if (sql.includes('all_count')) return [{ all_count: '60', open_count: '50', overdue_count: '45', paid_count: '10' }];
 
 			return [{ id: 'i-1', invoice_number: 'F-1', status: 'Vencida', amount: '10', days_overdue: '12', client_name: 'Andes' }];
 		});
 
 		const page = await service.getInvoices('e-1', 'h-1', { page: 2, limit: 20, clientId: 'c-1', status: 'overdue' }, asOf);
 
-		expect(page).toMatchObject({ items: 45, pages: 3, currentPage: 2, limit: 20 });
+		expect(page).toMatchObject({ items: 45, pages: 3, currentPage: 2, limit: 20, counts: { all: 60, open: 50, overdue: 45, paid: 10 } });
 		expect(page.data[0]).toMatchObject({ invoice_number: 'F-1', days_overdue: 12, amount: 10 });
 		const [sql, params] = query.mock.calls.find(([text]) => (text as string).includes('LIMIT'))!;
 
@@ -72,5 +74,15 @@ describe('ClientEntityMetricsService', () => {
 		expect(sql).toContain('i.due_date < $3::date');
 		expect(sql).toContain('i.client_id = $5');
 		expect(params).toEqual(['e-1', 'h-1', '2026-09-22', ['Emitida', 'Enviada', 'Vencida'], 'c-1']);
+	});
+
+	it('los indicadores se acotan al cliente comercial elegido', async () => {
+		const { service, query } = build((sql) => (sql.includes('FROM client_entities') ? [entityRow] : [{}]));
+
+		await service.getSummary('e-1', 'h-1', asOf, 'c-2');
+		const [sql, params] = query.mock.calls.find(([text]) => (text as string).includes('WITH inv AS'))!;
+
+		expect(sql).toContain('AND client_id = $5');
+		expect(params).toEqual(['e-1', 'h-1', '2026-09-22', ['Emitida', 'Enviada', 'Vencida'], 'c-2']);
 	});
 });

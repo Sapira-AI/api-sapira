@@ -1,11 +1,21 @@
 import { DataSource } from 'typeorm';
 
+import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+
 import { DashboardService } from './dashboard.service';
 
 describe('DashboardService', () => {
 	const buildService = (queryImpl: (sql: string, params: unknown[]) => Promise<unknown[]>) => {
 		const dataSource = { query: jest.fn(queryImpl) } as unknown as DataSource;
-		return { service: new DashboardService(dataSource), query: (dataSource as unknown as { query: jest.Mock }).query };
+		// MRR y clientes activos vienen de la definición compartida (se prueba en holding-metrics.service.spec).
+		const metrics = {
+			monthMetrics: jest.fn().mockResolvedValue({
+				currency: 'CLP',
+				mrr: { value: 1200, previous: 1000, trend: 20 },
+				activeClients: { value: 8, previous: 10, trend: -20 },
+			}),
+		} as unknown as HoldingMetricsService;
+		return { service: new DashboardService(dataSource, metrics), query: (dataSource as unknown as { query: jest.Mock }).query };
 	};
 
 	it('consulta solo el holding recibido (validado por HoldingScopeGuard) y no resuelve holdings por su cuenta', async () => {
@@ -22,8 +32,6 @@ describe('DashboardService', () => {
 
 	it('con holding resuelto arma los KPIs y tareas desde las consultas', async () => {
 		const { service } = buildService(async (sql) => {
-			if (sql.includes('monthly_mrr')) return [{ current: '1200', previous: '1000' }];
-			if (sql.includes('active_clients')) return [{ current: '8', previous: '10' }];
 			if (sql.includes('recognized_period_system_ccy')) return [{ value: '5400' }];
 			if (sql.includes('to_issue_count')) return [{ to_issue_count: '3', to_issue_amount: '900', overdue_count: '2' }];
 			if (sql.includes('renew_30')) return [{ renew_30: '1', renew_90: '4', expired_contracts: '2', starts_this_month: '5' }];

@@ -31,6 +31,7 @@ export { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-h
 export { UserViewPreference } from '@/databases/postgresql/entities/base-tenancy/user-view-preference.entity';
 export { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 export { ClientContact } from '@/databases/postgresql/entities/clientes/client-contact.entity';
+export { ClientActivityNote } from '@/databases/postgresql/entities/clientes/client-activity-note.entity';
 export { ClientDocument } from '@/databases/postgresql/entities/clientes/client-document.entity';
 export { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
 export { ClientEntityTaxIdNormalizationConflict } from '@/databases/postgresql/entities/clientes/client-entity-tax-id-normalization-conflict.entity';

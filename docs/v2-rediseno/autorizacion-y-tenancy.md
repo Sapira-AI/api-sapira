@@ -63,6 +63,9 @@ export class ClientsController {
 - Rutas por id: buscan por `id` **y** `holding_id`; si no es del holding → **404** (no se confirma que exista). Tablas sin
   `holding_id` se acotan por su padre (ej. `contract_items` → `contracts`).
 - Endpoints que no son de un holding (`/users/me`, listar o seleccionar holdings, catálogos globales) no usan el guard.
+- **Recurso por id pedido sin header** (enlaces guardados que abre también la app actual, p. ej. `GET /client-documents/:id/download`):
+  no usa el guard; el holding sale **del registro** y el servicio valida pertenencia activa con `UserHoldingsService`
+  (404 si no). Es la única forma permitida de omitir el header.
   Webhooks y crons usan su propio secreto y toman el holding **del registro** que procesan.
 - **Super admin**: accede porque tiene fila en `user_holdings` (hoy 6 de 7 holdings), sin bypass especial.
 - **SQL (funciones, triggers, RSM) usado desde la API**: el holding sale del registro, nunca de la sesión (`auth.uid()`,

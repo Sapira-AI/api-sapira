@@ -1,19 +1,32 @@
-import { Body, Controller, Delete, Get, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
+import { ClientActivityService } from './client-activity.service';
+import { ClientDocumentsService } from './client-documents.service';
 import { ClientMetricsService } from './client-metrics.service';
+import { ClientQuotesService } from './client-quotes.service';
 import { ClientsService } from './clients.service';
 import { AssignEntityResponseDto, AssignEntityToClientDto } from './dtos/assign-entity.dto';
+import {
+	ConfirmDocumentUploadDto,
+	CreateActivityNoteDto,
+	PrepareDocumentUploadDto,
+	QueryClientActivityDto,
+} from './dtos/client-activity-documents.dto';
 import { ClientResponseDto } from './dtos/client-response.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { QueryClientContractsDto } from './dtos/query-client-contracts.dto';
 import { QueryClientInvoicesDto } from './dtos/query-client-invoices.dto';
+import { QueryClientQuotesDto } from './dtos/query-client-quotes.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
+
+type AuthRequest = { user?: { sub?: string; id?: string } };
+const authIdOf = (req: AuthRequest) => String(req.user?.sub ?? req.user?.id ?? '');
 
 @ApiTags('Clients')
 @Controller('clients')
@@ -23,7 +36,10 @@ import { UpdateClientDto } from './dtos/update-client.dto';
 export class ClientsController {
 	constructor(
 		private readonly clientsService: ClientsService,
-		private readonly clientMetricsService: ClientMetricsService
+		private readonly clientMetricsService: ClientMetricsService,
+		private readonly clientQuotesService: ClientQuotesService,
+		private readonly clientActivityService: ClientActivityService,
+		private readonly clientDocumentsService: ClientDocumentsService
 	) {}
 
 	@Post()
@@ -131,6 +147,118 @@ export class ClientsController {
 			sortBy: query.sort_by,
 			sortOrder: query.sort_order,
 		});
+	}
+
+	@Get(':id/quotes')
+	@ApiOperation({
+		summary: 'Cotizaciones del cliente',
+		description:
+			'Paginadas; filtro por etapa (configurable por holding) y número; trae las etapas del holding con su conteo y el contrato creado',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async getQuotes(@Param('id', new ParseUUIDPipe()) id: string, @Query() query: QueryClientQuotesDto, @HoldingId() holdingId: string) {
+		return await this.clientQuotesService.getQuotes(id, holdingId, {
+			page: query.page,
+			limit: query.limit,
+			stageId: query.stage_id,
+			search: query.search,
+			sortBy: query.sort_by,
+			sortOrder: query.sort_order,
+		});
+	}
+
+	@Get(':id/quotes/:quoteId/items')
+	@ApiOperation({ summary: 'Ítems de una cotización del cliente', description: '404 si la cotización no es del cliente y holding activo' })
+	@ApiParam({ name: 'id', type: String })
+	@ApiParam({ name: 'quoteId', type: String })
+	async getQuoteItems(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Param('quoteId', new ParseUUIDPipe()) quoteId: string,
+		@HoldingId() holdingId: string
+	) {
+		return await this.clientQuotesService.getQuoteItems(id, quoteId, holdingId);
+	}
+
+	@Get(':id/activity')
+	@ApiOperation({
+		summary: 'Línea de tiempo del cliente',
+		description: 'Contratos, facturas, pagos, cobranza, cotizaciones, documentos y notas; filtro por tipo',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async getActivity(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Query() query: QueryClientActivityDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.clientActivityService.list(id, holdingId, authIdOf(req), { types: query.types, page: query.page, limit: query.limit });
+	}
+
+	@Post(':id/activity/notes')
+	@ApiOperation({ summary: 'Agregar una nota a la línea de tiempo' })
+	@ApiParam({ name: 'id', type: String })
+	async addActivityNote(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Body() body: CreateActivityNoteDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.clientActivityService.addNote(id, holdingId, authIdOf(req), body.body);
+	}
+
+	@Delete(':id/activity/notes/:noteId')
+	@ApiOperation({ summary: 'Borrar una nota propia (borrado lógico)' })
+	@ApiParam({ name: 'id', type: String })
+	@ApiParam({ name: 'noteId', type: String })
+	async deleteActivityNote(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Param('noteId', new ParseUUIDPipe()) noteId: string,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.clientActivityService.deleteNote(id, noteId, holdingId, authIdOf(req));
+	}
+
+	@Get(':id/documents')
+	@ApiOperation({ summary: 'Documentos del cliente' })
+	@ApiParam({ name: 'id', type: String })
+	async getDocuments(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.clientDocumentsService.list(id, holdingId);
+	}
+
+	@Post(':id/documents/upload-url')
+	@ApiOperation({ summary: 'Paso 1 de la subida: valida el archivo y devuelve una URL firmada de subida' })
+	@ApiParam({ name: 'id', type: String })
+	async prepareDocumentUpload(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Body() body: PrepareDocumentUploadDto,
+		@HoldingId() holdingId: string
+	) {
+		return await this.clientDocumentsService.prepareUpload(id, holdingId, body);
+	}
+
+	@Post(':id/documents')
+	@ApiOperation({ summary: 'Paso 3 de la subida: confirma que el archivo quedó en Storage y registra el documento' })
+	@ApiParam({ name: 'id', type: String })
+	async confirmDocumentUpload(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Body() body: ConfirmDocumentUploadDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.clientDocumentsService.confirmUpload(id, holdingId, authIdOf(req), body);
+	}
+
+	@Delete(':id/documents/:documentId')
+	@ApiOperation({ summary: 'Archivar un documento (borrado lógico; el archivo se conserva)' })
+	@ApiParam({ name: 'id', type: String })
+	@ApiParam({ name: 'documentId', type: String })
+	async archiveDocument(
+		@Param('id', new ParseUUIDPipe()) id: string,
+		@Param('documentId', new ParseUUIDPipe()) documentId: string,
+		@HoldingId() holdingId: string
+	) {
+		return await this.clientDocumentsService.archive(id, documentId, holdingId);
 	}
 
 	@Get(':id/receivables')

@@ -1244,3 +1244,4 @@ Maxio, Zuora, Rillet, Campfire; product tours y activación). Las preguntas S8a 
 | 10 | Restablecer: ¿Sapira puede borrar o actualizar por API el borrador en Odoo? (a veces Odoo no permite borrar) — S6-11 | Leon (Domi revisa al final) |
 | 11 | DWH: confirmar que `billing_date` es el período de servicio (y renombrar); ventana del cron que incluya el mes anterior; qué hacer con conflictos (hoy `DO NOTHING`) — B7 | Leon |
 | 12 | Migrar los ~35 controladores previos y los 2 de Salesforce a `HoldingScopeGuard` + `@HoldingId()` (regla única de `autorizacion-y-tenancy.md`); retirar `HoldingAccessGuard` | Leon |
+| 13 | Publicar Cliente 360 en prod: migración `1790272076545` + assets, `SUPABASE_SERVICE_ROLE_KEY` y `DOCUMENTS_LINK_BASE_URL` en la API, cookie `.aisapira.com` en ambos fronts; cerrar el bucket público `client_documents` (8 docs) y filtrar `deleted_at` en su policy (detalle en `docs/cambios/clientes-rediseno-lab.md`) | Leon (con OK de Domi) |

@@ -1,23 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+
 type NumericRow = Record<string, string | number | null>;
 
 @Injectable()
 export class DashboardService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		private readonly holdingMetrics: HoldingMetricsService
+	) {}
 
 	/** KPIs y tareas del holding activo (validado por `HoldingScopeGuard`). */
 	async getHome(holdingId: string, asOf = new Date()): Promise<Record<string, unknown>> {
 		const date = asOf.toISOString().slice(0, 10);
 
-		const [mrr, activeClients, recognizedRevenue, invoices, tasks] = await Promise.all([
-			this.getMrr(holdingId, date),
-			this.getActiveClients(holdingId, date),
+		// MRR y clientes activos: una sola definición compartida con Clientes (HoldingMetricsService).
+		const [metrics, recognizedRevenue, invoices, tasks] = await Promise.all([
+			this.holdingMetrics.monthMetrics(holdingId, date),
 			this.getRecognizedRevenue(holdingId, date),
 			this.getInvoiceSummary(holdingId, date),
 			this.getTasks(holdingId, date),
 		]);
+		const mrr = { value: metrics.mrr.value, trend: metrics.mrr.trend, currency: metrics.currency };
+		const activeClients = { value: metrics.activeClients.value, trend: metrics.activeClients.trend };
+		// Todos los montos están en moneda del sistema: la del holding, no USD fijo.
+		recognizedRevenue.currency = metrics.currency;
+		invoices.toIssue.currency = metrics.currency;
 
 		return {
 			holding_id: holdingId,
@@ -37,62 +47,6 @@ export class DashboardService {
 				items_starting_this_month: tasks.startsThisMonth,
 			},
 		};
-	}
-
-	private async getMrr(holdingId: string, asOf: string) {
-		const rows = await this.dataSource.query<NumericRow[]>(
-			`WITH monthly_mrr AS (
-				SELECT period_month, mrr_period_system_ccy AS value
-				FROM revenue_schedule_monthly
-				WHERE holding_id = $1 AND is_total_row = false
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION ALL
-				SELECT period_month, mrr_legacy_system_currency AS value
-				FROM mrr_legacy
-				WHERE holding_id = $1
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-			)
-			SELECT
-				COALESCE(SUM(value) FILTER (WHERE period_month = date_trunc('month', $2::date)), 0) AS current,
-				COALESCE(SUM(value) FILTER (WHERE period_month = date_trunc('month', $2::date) - interval '1 month'), 0) AS previous
-			FROM monthly_mrr`,
-			[holdingId, asOf]
-		);
-		const row = rows[0] || {};
-		const current = Number(row.current || 0);
-		const previous = Number(row.previous || 0);
-		return { value: current, trend: previous > 0 ? ((current - previous) / previous) * 100 : 0, currency: 'USD' };
-	}
-
-	private async getActiveClients(holdingId: string, asOf: string) {
-		const rows = await this.dataSource.query<NumericRow[]>(
-			`SELECT
-				COUNT(DISTINCT client_id) FILTER (WHERE month = date_trunc('month', $2::date)) AS current,
-				COUNT(DISTINCT client_id) FILTER (WHERE month = date_trunc('month', $2::date) - interval '1 month') AS previous
-			 FROM (
-				SELECT c.client_id, date_trunc('month', r.period_month) AS month
-				FROM revenue_schedule_monthly r
-				JOIN contracts c ON c.id = r.contract_id
-				WHERE r.holding_id = $1 AND r.is_total_row = false
-				AND r.period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION
-				SELECT s.client_id, date_trunc('month', r.period_month) AS month
-				FROM revenue_schedule_monthly r
-				JOIN subscriptions s ON s.id = r.subscription_id
-				WHERE r.holding_id = $1
-				AND r.period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION
-				SELECT client_id, date_trunc('month', period_month) AS month
-				FROM mrr_legacy
-				WHERE holding_id = $1
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-			 ) active_clients`,
-			[holdingId, asOf]
-		);
-		const row = rows[0] || {};
-		const current = Number(row.current || 0);
-		const previous = Number(row.previous || 0);
-		return { value: current, trend: previous > 0 ? ((current - previous) / previous) * 100 : 0 };
 	}
 
 	private async getRecognizedRevenue(holdingId: string, asOf: string) {
