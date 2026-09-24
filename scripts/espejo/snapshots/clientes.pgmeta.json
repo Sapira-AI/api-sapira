@@ -177,6 +177,17 @@
   ],
   "foreign_key_constraints": [
    {
+    "name": "client_activity_notes_client_id_fkey",
+    "source_table": "public.client_activity_notes",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "client_agent_configs_client_id_fkey",
     "source_table": "public.client_agent_configs",
     "source_columns": [
@@ -476,6 +487,17 @@
    "id"
   ],
   "foreign_key_constraints": [
+   {
+    "name": "client_documents_client_entity_id_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
    {
     "name": "client_entities_client_id_fkey",
     "source_table": "public.client_entities",
@@ -892,6 +914,130 @@
   ],
   "foreign_key_constraints": []
  },
+ "client_activity_notes": {
+  "name": "public.client_activity_notes",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "client_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "body",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "users.id de quien escribió la nota"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "deleted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Borrado lógico: la nota deja de mostrarse pero se conserva"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "client_activity_notes_client_id_fkey",
+    "source_table": "public.client_activity_notes",
+    "source_columns": [
+     "client_id"
+    ],
+    "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_activity_notes_created_by_fkey",
+    "source_table": "public.client_activity_notes",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_activity_notes_holding_id_fkey",
+    "source_table": "public.client_activity_notes",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
  "client_documents": {
   "name": "public.client_documents",
   "rls_enabled": true,
@@ -957,6 +1103,81 @@
      "updatable"
     ],
     "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "storage_bucket",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Bucket de Storage (privado) del archivo; NULL en documentos antiguos con URL pública"
+   },
+   {
+    "name": "storage_path",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ruta del objeto dentro del bucket: <holding_id>/<client_id>/<id>/<nombre>"
+   },
+   {
+    "name": "file_size",
+    "data_type": "bigint",
+    "format": "int8",
+    "type": "bigint",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "mime_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "uploaded_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "users.id de quien lo subió"
+   },
+   {
+    "name": "client_entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Razón social a la que corresponde (opcional)"
+   },
+   {
+    "name": "deleted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Borrado lógico desde el front nuevo"
    }
   ],
   "primary_keys": [
@@ -964,12 +1185,34 @@
   ],
   "foreign_key_constraints": [
    {
+    "name": "client_documents_client_entity_id_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "client_documents_client_id_fkey",
     "source_table": "public.client_documents",
     "source_columns": [
      "client_id"
     ],
     "target_table": "public.clients",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_documents_uploaded_by_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
     "target_columns": [
      "id"
     ]

@@ -1,7 +1,7 @@
-# Módulo 6 · Facturación — 17 tablas de prod (2026-09-23)
+# Módulo 6 · Facturación — 17 tablas de prod (2026-09-24)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-23 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/facturacion.{pgmeta,catalog}.json`); metadata real de las entities existentes en `facturacion.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-24 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/facturacion.{pgmeta,catalog}.json`); metadata real de las entities existentes en `facturacion.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (4) — no se tocaron ni se duplicaron
 
@@ -9,9 +9,9 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `invoice_items` (11503) | `src/databases/postgresql/entities/facturacion/invoice-item.entity.ts` · `InvoiceItem` | ⚠️ difiere de prod | — | — | — | nombre de PK `invoice_items_pkey`<br>CHECK `invoice_items_discount_pct_check`<br>CHECK `invoice_items_quantity_check`<br>índice con expresión `idx_invoice_items_custom_fields` |
+| `invoice_items` (11636) | `src/databases/postgresql/entities/facturacion/invoice-item.entity.ts` · `InvoiceItem` | ⚠️ difiere de prod | — | — | — | nombre de PK `invoice_items_pkey`<br>CHECK `invoice_items_discount_pct_check`<br>CHECK `invoice_items_quantity_check`<br>índice con expresión `idx_invoice_items_custom_fields` |
 | `invoice_references` (230) | `src/databases/postgresql/entities/facturacion/invoice-reference.entity.ts` · `InvoiceReference` | ⚠️ difiere de prod | — | — | — | nombre de PK `invoice_references_pkey` |
-| `invoices` (9628) | `src/databases/postgresql/entities/facturacion/invoice.entity.ts` · `Invoice` | ⚠️ difiere de prod | — | — | — | nombre de PK `invoices_pkey`<br>CHECK `invoices_credit_reason_check`<br>CHECK `invoices_credit_type_check`<br>CHECK `invoices_document_type_check`<br>CHECK `invoices_export_type_check`<br>CHECK `invoices_invoice_type_check`<br>CHECK `invoices_nc_revenue_treatment_check`<br>CHECK `invoices_payment_method_check`<br>CHECK `invoices_status_check`<br>índice con expresión `idx_invoices_custom_fields` |
+| `invoices` (9689) | `src/databases/postgresql/entities/facturacion/invoice.entity.ts` · `Invoice` | ⚠️ difiere de prod | — | — | — | nombre de PK `invoices_pkey`<br>CHECK `invoices_credit_reason_check`<br>CHECK `invoices_credit_type_check`<br>CHECK `invoices_document_type_check`<br>CHECK `invoices_export_type_check`<br>CHECK `invoices_invoice_type_check`<br>CHECK `invoices_nc_revenue_treatment_check`<br>CHECK `invoices_payment_method_check`<br>CHECK `invoices_status_check`<br>índice con expresión `idx_invoices_custom_fields` |
 | `sapira_quantity_imports` (0) | `src/databases/postgresql/entities/facturacion/sapira-quantity-import.entity.ts` · `SapiraQuantityImport` | ⚠️ difiere de prod | — | — | — | nombre de PK `PK_sapira_quantity_imports`<br>CHECK `sapira_quantity_imports_period_check`<br>CHECK `sapira_quantity_imports_resolution_source_check`<br>CHECK `sapira_quantity_imports_status_check`<br>índice con expresión `sapira_quantity_imports_source_key` |
 
 ## B · Tablas SIN entity previa → espejos generados (13): 13 promovidas, 0 apagadas

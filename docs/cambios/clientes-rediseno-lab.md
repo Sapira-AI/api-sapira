@@ -64,13 +64,13 @@ de esquema salvo la migración de condiciones de pago (aplicada el 23-09).
 | `GET /clients/:id/documents`, `POST /clients/:id/documents/upload-url`, `POST /clients/:id/documents`, `DELETE /clients/:id/documents/:documentId` | Documentos: subida en 3 pasos con URL firmada al bucket privado `client-files`; archivar = borrado lógico | `ClientDocumentsService` |
 | `GET /client-documents/:id/download` | URL firmada de 60 s. **Sin `HoldingScopeGuard`** (la usan los enlaces guardados, también desde la app actual): el holding sale del registro y se valida pertenencia | `ClientDocumentsController` |
 
-**Migración `1790272076545-CreateClientActivityNotesAndDocumentStorage`** — ✅ aplicada en QA (24-09), ⏳ producción:
+**Migración `1790272076545-CreateClientActivityNotesAndDocumentStorage`** — ✅ aplicada en QA y en producción (24-09, con OK de Domi; migración + 2 assets + `schema:snapshot`):
 tabla `client_activity_notes` (RLS + policy `service_role` + trigger `updated_at`), 7 columnas opcionales en
 `client_documents` y bucket privado `client-files` (20 MB). Hasta aplicarla en producción, los specs de
 `entities/clientes` sobre `client_documents` quedan en rojo (esperado, GUIA → Sincronizar cambios).
 
 **Para publicar en producción (Leon):**
-1. `migration:run` + `postgres:assets --apply --only triggers/client_activity_notes_set_updated_at.sql --only rls/client_activity_notes_service_role.sql` en prod, y después `yarn schema:snapshot --target production`.
+1. ~~Migración + assets + snapshot en prod~~ ✅ hecho 24-09.
 2. Variables de la API en prod: `SUPABASE_SERVICE_ROLE_KEY` (verificar que esté) y `DOCUMENTS_LINK_BASE_URL=https://www.aisapira.com`.
 3. Confirmar la cookie de sesión compartida en prod (`NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` y `VITE_AUTH_COOKIE_DOMAIN` = `.aisapira.com`): de eso depende que la app actual abra los documentos nuevos.
 4. Riesgo existente: el bucket `client_documents` de prod es **público** (8 documentos con URL pública). Migrar esos archivos a `client-files` y cerrarlo cuando la app actual deje de subir ahí.

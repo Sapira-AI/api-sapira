@@ -233,10 +233,32 @@
     ]
    },
    {
+    "name": "client_activity_notes_created_by_fkey",
+    "source_table": "public.client_activity_notes",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "client_agent_configs_created_by_fkey",
     "source_table": "public.client_agent_configs",
     "source_columns": [
      "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_documents_uploaded_by_fkey",
+    "source_table": "public.client_documents",
+    "source_columns": [
+     "uploaded_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -1053,6 +1075,17 @@
    {
     "name": "claude_skills_holding_id_fkey",
     "source_table": "public.claude_skills",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "client_activity_notes_holding_id_fkey",
+    "source_table": "public.client_activity_notes",
     "source_columns": [
      "holding_id"
     ],
