@@ -3,10 +3,6 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
 export class QueryEntityInvoicesDto {
-	@ApiPropertyOptional({ description: 'ID del holding', example: 'f6e3cb81-8b4a-451e-8402-573e47688d45' })
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiPropertyOptional({ description: 'Filtrar por cliente comercial' })
 	@IsUUID()
 	@IsOptional()

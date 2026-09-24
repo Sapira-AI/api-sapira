@@ -7,13 +7,9 @@ type NumericRow = Record<string, string | number | null>;
 export class DashboardService {
 	constructor(private readonly dataSource: DataSource) {}
 
-	async getHome(authId: string, asOf = new Date()): Promise<Record<string, unknown>> {
-		const holdingId = await this.getUserHoldingId(authId);
+	/** KPIs y tareas del holding activo (validado por `HoldingScopeGuard`). */
+	async getHome(holdingId: string, asOf = new Date()): Promise<Record<string, unknown>> {
 		const date = asOf.toISOString().slice(0, 10);
-
-		if (!holdingId) {
-			return this.emptyHome(date);
-		}
 
 		const [mrr, activeClients, recognizedRevenue, invoices, tasks] = await Promise.all([
 			this.getMrr(holdingId, date),
@@ -41,27 +37,6 @@ export class DashboardService {
 				items_starting_this_month: tasks.startsThisMonth,
 			},
 		};
-	}
-
-	/**
-	 * Holding del usuario con el criterio canónico del sistema (el mismo de las funciones
-	 * `get_user_holding_id`/`rls_user_holding_id` de la base): el holding con `selected = true`
-	 * si existe y, si no, el activo más antiguo. `selected` solo lo escribe el selector de
-	 * holdings (super admins / multi-holding vía POST /holdings/select): exigirlo aquí dejaba
-	 * el dashboard en cero (emptyHome silencioso) para todo usuario de cliente que nunca
-	 * cambió de holding — 26 de 28 usuarios de producción al 22-09-2026.
-	 */
-	private async getUserHoldingId(authId: string): Promise<string | null> {
-		const [row] = await this.dataSource.query<{ holding_id: string }[]>(
-			`SELECT uh.holding_id
-			 FROM user_holdings uh
-			 JOIN users u ON u.id = uh.user_id
-			 WHERE u.auth_id = $1 AND uh.is_active = true
-			 ORDER BY uh.selected DESC, uh.created_at ASC
-			 LIMIT 1`,
-			[authId]
-		);
-		return row?.holding_id || null;
 	}
 
 	private async getMrr(holdingId: string, asOf: string) {
@@ -174,27 +149,6 @@ export class DashboardService {
 			renew30: Number(row.renew_30 || 0),
 			renew90: Number(row.renew_90 || 0),
 			startsThisMonth: Number(row.starts_this_month || 0),
-		};
-	}
-
-	private emptyHome(asOf: string) {
-		return {
-			holding_id: null,
-			as_of: asOf,
-			kpis: {
-				mrr: { value: 0, trend: 0, currency: 'USD' },
-				active_clients: { value: 0, trend: 0 },
-				recognized_revenue: { value: 0, period: 'Últimos 12 meses', trend: 0, currency: 'USD' },
-				pending_invoices: { count: 0, amount: 0, currency: 'USD' },
-			},
-			tasks: {
-				overdue_invoices: 0,
-				expired_contracts: 0,
-				contracts_to_renew_30: 0,
-				contracts_to_renew_90: 0,
-				invoices_to_emit: 0,
-				items_starting_this_month: 0,
-			},
 		};
 	}
 }

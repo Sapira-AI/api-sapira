@@ -27,10 +27,12 @@ export class QueryClientsDto {
 	@IsOptional()
 	sort_order?: 'asc' | 'desc';
 
-	@ApiPropertyOptional({
-		description: 'ID del holding para filtrar clientes',
-		example: 'f6e3cb81-8b4a-451e-8402-573e47688d45',
-	})
+	/**
+	 * Solo compatibilidad con el front viejo: el buscador de clientes comerciales de Integraciones › Salesforce
+	 * (`SalesforceClientSearchSelect`) lo manda junto al header. No se usa:
+	 * el holding sale de `HoldingScopeGuard`, que rechaza (403) un valor distinto al de `x-holding-id`. Se quita cuando esa pantalla se migre.
+	 */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
 	@IsUUID()
 	@IsOptional()
 	holding_id?: string;

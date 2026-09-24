@@ -7,8 +7,6 @@ import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-en
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryModule } from '@/modules/bigquery/bigquery.module';
 
-import { ClientsHoldingScopeGuard } from './access/clients-holding-scope.guard';
-import { UserHoldingsService } from './access/user-holdings.service';
 import { ClientContactsController } from './client-contacts.controller';
 import { ClientDirectoryService } from './client-directory.service';
 import { ClientEntitiesController } from './client-entities.controller';
@@ -22,15 +20,7 @@ import { StripeClientsService } from './stripe-clients.service';
 @Module({
 	imports: [PostgreSQLDatabaseModule, TypeOrmModule.forFeature([Client, ClientEntity, ClientEntityClient]), BigQueryModule],
 	controllers: [ClientsController, ClientEntitiesController, ClientContactsController, StripeClientsController],
-	providers: [
-		UserHoldingsService,
-		ClientsHoldingScopeGuard,
-		ClientsService,
-		ClientMetricsService,
-		ClientEntityMetricsService,
-		ClientDirectoryService,
-		StripeClientsService,
-	],
+	providers: [ClientsService, ClientMetricsService, ClientEntityMetricsService, ClientDirectoryService, StripeClientsService],
 	exports: [ClientsService, StripeClientsService],
 })
 export class ClientsModule {}

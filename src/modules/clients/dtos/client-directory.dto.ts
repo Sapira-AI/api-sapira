@@ -19,11 +19,8 @@ import {
 
 import { CONTACT_SORT_FIELDS, ENTITY_SORT_FIELDS } from '../client-directory.service';
 
+/** Lista paginada del holding activo (el holding sale de `HoldingScopeGuard`, nunca de la query). */
 class PaginatedHoldingQuery {
-	@ApiProperty({ description: 'ID del holding' })
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiPropertyOptional({ default: 1 })
 	@Type(() => Number)
 	@IsInt()
@@ -89,10 +86,6 @@ export class QueryClientContactsDto extends PaginatedHoldingQuery {
 }
 
 export class AssignClientEntitiesDto {
-	@ApiProperty()
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiProperty({ description: 'Cliente comercial al que se vinculan' })
 	@IsUUID()
 	client_id!: string;
@@ -137,10 +130,6 @@ export class PaymentTermsDto {
 }
 
 export class UpdateClientEntityDto {
-	@ApiProperty()
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiPropertyOptional()
 	@IsString()
 	@MaxLength(200)
@@ -239,17 +228,9 @@ export class ContactFieldsDto {
 	client_id?: string;
 }
 
-export class UpsertClientContactDto extends ContactFieldsDto {
-	@ApiProperty()
-	@IsUUID()
-	holding_id!: string;
-}
+export class UpsertClientContactDto extends ContactFieldsDto {}
 
 export class BulkUpdateContactsDto {
-	@ApiProperty()
-	@IsUUID()
-	holding_id!: string;
-
 	@ApiProperty({ type: [String] })
 	@IsArray()
 	@ArrayMinSize(1)

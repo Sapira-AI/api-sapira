@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import type { ClientContractSortField, ClientContractStatusFilter } from './dtos/query-client-contracts.dto';
 import type { ClientInvoiceSortField, ClientInvoiceStatusFilter } from './dtos/query-client-invoices.dto';
 
 type Row = Record<string, string | number | null>;
@@ -333,6 +334,129 @@ export class ClientMetricsService {
 				legal_name: (row.legal_name as string) ?? null,
 				contract_number: (row.contract_number as string) ?? null,
 				days_overdue: toNumber(row.days_overdue),
+			})),
+			items: total,
+			pages: Math.max(1, Math.ceil(total / limit)),
+			currentPage: page,
+			limit,
+			counts,
+		};
+	}
+
+	/**
+	 * Contratos del cliente (todas sus razones sociales), paginados, con conteo por estado. Inicio = el
+	 * primer `start_date` de sus ítems; fin = `contract_end_date`; MRR = RSM del mes de `asOf` en moneda del
+	 * sistema (misma fuente que los indicadores) y en moneda del contrato.
+	 */
+	async getContracts(
+		clientId: string,
+		holdingId: string,
+		{
+			page = 1,
+			limit = 25,
+			status = 'all',
+			entityId,
+			search,
+			sortBy = 'start_date',
+			sortOrder = 'desc',
+		}: {
+			page?: number;
+			limit?: number;
+			status?: ClientContractStatusFilter;
+			entityId?: string;
+			search?: string;
+			sortBy?: ClientContractSortField;
+			sortOrder?: 'asc' | 'desc';
+		},
+		asOfDate = new Date()
+	) {
+		await this.assertClientInHolding(clientId, holdingId);
+		const params: unknown[] = [clientId, holdingId, isoDate(asOfDate)];
+		const filters = [`c.client_id = $1`, `c.holding_id = $2`];
+
+		if (entityId) filters.push(`c.client_entity_id = $${params.push(entityId)}`);
+		if (search?.trim()) filters.push(`c.contract_number ILIKE $${params.push(`%${search.trim()}%`)}`);
+		const base = `WHERE ${filters.join(' AND ')}`;
+		const statusFilter = {
+			active: `AND c.status = 'Activo'`,
+			in_review: `AND c.status = 'En revisión'`,
+			cancelled: `AND c.status = 'Cancelado'`,
+			all: '',
+		}[status];
+		// Lista blanca: el campo de orden nunca viene del usuario tal cual.
+		const orderColumn = {
+			contract_number: 'c.contract_number',
+			start_date: 'start_date',
+			end_date: 'c.contract_end_date',
+			mrr: 'mrr',
+			total_value: 'c.total_value_system_currency',
+			status: 'c.status',
+		}[sortBy];
+		const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
+		const offset = (page - 1) * limit;
+
+		const [rows, [countRow]] = await Promise.all([
+			this.dataSource.query<Row[]>(
+				`SELECT c.id, c.contract_number, c.status, c.type, c.contract_currency, c.system_currency,
+					c.total_value, c.total_value_system_currency,
+					c.contract_end_date::text AS end_date,
+					CASE WHEN c.status = 'Activo' AND c.contract_end_date >= $3::date THEN c.contract_end_date - $3::date END AS days_to_end,
+					ce.id AS client_entity_id, ce.legal_name, co.legal_name AS company_name,
+					items.start_date::text AS start_date, COALESCE(items.items_count, 0) AS items_count,
+					COALESCE(rsm.mrr, 0) AS mrr, COALESCE(rsm.mrr_contract_ccy, 0) AS mrr_contract_ccy
+				FROM contracts c
+				LEFT JOIN client_entities ce ON ce.id = c.client_entity_id
+				LEFT JOIN companies co ON co.id = c.company_id
+				LEFT JOIN LATERAL (
+					SELECT MIN(ci.start_date) AS start_date, COUNT(*) AS items_count FROM contract_items ci WHERE ci.contract_id = c.id
+				) items ON true
+				LEFT JOIN LATERAL (
+					SELECT SUM(r.mrr_period_system_ccy) AS mrr, SUM(r.mrr_period_contract_ccy) AS mrr_contract_ccy
+					FROM revenue_schedule_monthly r
+					WHERE r.contract_id = c.id AND r.holding_id = $2 AND r.is_total_row = false AND r.period_month = date_trunc('month', $3::date)
+				) rsm ON true
+				${base} ${statusFilter}
+				ORDER BY ${orderColumn} ${direction} NULLS LAST, c.id
+				LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
+				params
+			),
+			this.dataSource.query<Row[]>(
+				// Comparte `params` con la lista: `$3` (fecha) se tipa aunque el conteo no la use, o Postgres falla.
+				`SELECT $3::date AS as_of, COUNT(*) AS all_count,
+					COUNT(*) FILTER (WHERE c.status = 'Activo') AS active_count,
+					COUNT(*) FILTER (WHERE c.status = 'En revisión') AS in_review_count,
+					COUNT(*) FILTER (WHERE c.status = 'Cancelado') AS cancelled_count
+				FROM contracts c ${base}`,
+				params
+			),
+		]);
+		const counts = {
+			all: toNumber(countRow?.all_count),
+			active: toNumber(countRow?.active_count),
+			in_review: toNumber(countRow?.in_review_count),
+			cancelled: toNumber(countRow?.cancelled_count),
+		};
+		const total = counts[status];
+
+		return {
+			data: rows.map((row) => ({
+				id: row.id as string,
+				contract_number: (row.contract_number as string) ?? null,
+				status: row.status as string,
+				type: (row.type as string) || null,
+				client_entity_id: (row.client_entity_id as string) ?? null,
+				legal_name: (row.legal_name as string) ?? null,
+				company_name: (row.company_name as string) ?? null,
+				start_date: (row.start_date as string) ?? null,
+				end_date: (row.end_date as string) ?? null,
+				days_to_end: row.days_to_end === null || row.days_to_end === undefined ? null : toNumber(row.days_to_end),
+				contract_currency: (row.contract_currency as string) ?? null,
+				system_currency: (row.system_currency as string) ?? null,
+				mrr: toNumber(row.mrr),
+				mrr_contract_ccy: toNumber(row.mrr_contract_ccy),
+				total_value: toNumber(row.total_value),
+				total_value_system_currency: toNumber(row.total_value_system_currency),
+				items_count: toNumber(row.items_count),
 			})),
 			items: total,
 			pages: Math.max(1, Math.ceil(total / limit)),

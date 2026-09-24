@@ -27,33 +27,19 @@ export class ClientsService {
 		private readonly bigQueryService: BigQueryService
 	) {}
 
-	async create(createClientDto: CreateClientDto): Promise<Client> {
-		const client = this.clientRepository.create(createClientDto);
+	/** Crea el cliente en el holding activo (validado por `HoldingScopeGuard`). */
+	async create(createClientDto: CreateClientDto, holdingId: string): Promise<Client> {
+		const client = this.clientRepository.create({ ...createClientDto, holding_id: holdingId });
 		return await this.clientRepository.save(client);
 	}
 
-	async findAll(queryDto: QueryClientsDto): Promise<IPaginatedClients> {
-		const {
-			page = 1,
-			limit = 20,
-			search,
-			holding_id,
-			segment,
-			industry,
-			market,
-			status,
-			country,
-			sort_by = 'created_at',
-			sort_order = 'desc',
-		} = queryDto;
+	/** Clientes del holding activo (validado por `HoldingScopeGuard`). */
+	async findAll(queryDto: QueryClientsDto, holdingId: string): Promise<IPaginatedClients> {
+		const { page = 1, limit = 20, search, segment, industry, market, status, country, sort_by = 'created_at', sort_order = 'desc' } = queryDto;
 
 		const skip = (page - 1) * limit;
 
-		const where: any = {};
-
-		if (holding_id) {
-			where.holding_id = holding_id;
-		}
+		const where: any = { holding_id: holdingId };
 
 		if (segment) {
 			where.segment = segment;
@@ -121,13 +107,13 @@ export class ClientsService {
 		};
 	}
 
-	/** Cliente por id; con `holdingIds`, solo si es de uno de esos holdings (si no, 404 como si no existiera). */
-	async findOne(id: string, holdingIds?: string[]): Promise<Client> {
+	/** Cliente por id; con `holdingId`, solo si es de ese holding (si no, 404 como si no existiera). */
+	async findOne(id: string, holdingId?: string): Promise<Client> {
 		const client = await this.clientRepository.findOne({
 			where: { id },
 		});
 
-		if (!client || (holdingIds && !holdingIds.includes(client.holding_id))) {
+		if (!client || (holdingId && client.holding_id !== holdingId)) {
 			throw new NotFoundException(`Cliente con id ${id} no encontrado`);
 		}
 
