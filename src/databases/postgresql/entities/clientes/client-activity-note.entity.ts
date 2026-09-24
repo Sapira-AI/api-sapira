@@ -12,7 +12,9 @@ import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
  *
  * Tabla nueva creada por `migrations/1790272076545-CreateClientActivityNotesAndDocumentStorage.ts`.
  */
-@Entity('client_activity_notes')
+@Entity('client_activity_notes', {
+	comment: 'Notas de la línea de tiempo del cliente comercial (pestaña Actividad del front nuevo). Distintas de clients.notes (nota fija).',
+})
 @Index('client_activity_notes_client_idx', ['client_id', 'created_at'])
 @Check('client_activity_notes_body_check', `char_length(btrim(body)) BETWEEN 1 AND 5000`)
 export class ClientActivityNote {
