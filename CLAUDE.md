@@ -1,6 +1,9 @@
 # api-sapira — Reglas obligatorias
 
-Convenciones de stack, estructura de módulo y estilo: `AGENTS.md`.
+@AGENTS.md
+
+Convenciones de stack, estructura de módulo, estilo y la **regla de documentación funcional,
+documentación técnica y tests unitarios**: `AGENTS.md` (importado arriba).
 **Procedimiento para cambiar el esquema: `src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md`.**
 Referencia del corpus y su estado: `src/databases/postgresql/README.md`.
 Lo que falta para que la base sea código, con estado por punto:
