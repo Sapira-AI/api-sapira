@@ -30,7 +30,12 @@ días con datos: 0 llamadas a las 14 firmas y a `recalc_revenue_for_contract` (`
 Verificación: `vite build` del front viejo OK, `tsc` sin errores nuevos (los 96 existentes no tocan estos archivos),
 tests de `src/databases/postgresql` 617/617.
 
-**Estado**: QA ⏳ · producción ⏳.
+**Estado**: ✅ QA y ✅ producción (24-09). En ambas, `schema:status` final: 0 migraciones pendientes, 857 assets
+aplicados, 0 "solo en la base"; verificado en el catálogo que las 14 firmas no existen, que la v2 de renovación y sus
+llamadores (auto-renovación, cross-sell, `approve_contract_amendment`) siguen, y que `recalc_revenue_for_contract` ya no
+es ejecutable por `anon`/`authenticated` (su llamador corre como `postgres`). Snapshot de prod refrescado: solo cambia el
+catálogo de funciones (las 14) y el conteo de `sapira_typeorm_migrations`; ningún `*.prod-snapshot.ts`. Front viejo:
+commit `d0a98ae` en `sapira-ai` (se puede desplegar en cualquier orden: lo borrado no era alcanzable).
 
 ## Capa 1 · Siguiente (en este bloque, el front viejo sigue funcionando)
 
