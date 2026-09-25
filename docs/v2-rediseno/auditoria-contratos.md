@@ -1235,7 +1235,7 @@ Maxio, Zuora, Rillet, Campfire; product tours y activación). Las preguntas S8a 
 | 1 | `REVOKE` inmediato de `migrate_contracts_to_new_workflow`, `generate_missing_invoices_for_contract` y `approve_contract_amendment` a PUBLIC/anon/authenticated | Leon |
 | 2 | Validar holding dentro de las 7 funciones que usan `get_contract_holding` (o retirar las muertas primero) | Leon |
 | 3 | ¿Endurecimiento en bloque del EXECUTE a PUBLIC/anon? | Leon |
-| 4 | Retirar las 9 funciones marcadas (ventana de observación con `REVOKE` → `DROP` por migración) | Domi + Leon |
+| 4 | ~~Retirar las 9 funciones marcadas~~ Domi 24-09: sin ventana de observación, `DROP` directo con doble confirmación (código + 30 días de logs) de 7 de §2 + las 7 legacy de S8; `recalc_revenue_for_contract` solo `REVOKE`; `mark_contract_signed_safe` y `approve_contract_amendment` esperan su fusión. Registro: [`saneamiento-contratos.md`](./saneamiento-contratos.md) | Domi |
 | 5 | Auto-renovación: ¿se arregla (renovar sin usuario en el cron) o se apaga el cron? Hay 383 ítems esperando | Domi |
 | 6 | Estado Expirado: ¿se activa `auto_expire_contracts` o se elimina el estado? | Domi |
 | 7 | ¿Aprobación de modificaciones? Nunca se usó (0 Pending): ¿se elimina el concepto o se diseña de nuevo en el front nuevo? | Domi |

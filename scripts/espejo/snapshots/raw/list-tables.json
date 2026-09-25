@@ -21606,7 +21606,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 9,
+			"rows": 10,
 			"columns": [
 				{
 					"name": "id",
