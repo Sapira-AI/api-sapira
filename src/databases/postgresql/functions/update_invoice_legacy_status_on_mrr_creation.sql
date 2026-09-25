@@ -12,5 +12,6 @@ BEGIN
   
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."update_invoice_legacy_status_on_mrr_creation"() IS 'Actualiza reconciliation_status de invoices_legacy a mrr_legacy cuando se crea un registro en mrr_legacy';

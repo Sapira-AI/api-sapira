@@ -132,5 +132,8 @@ BEGIN
   FROM similar_groups sg
   ORDER BY ARRAY_LENGTH(sg.all_invoice_ids, 1) DESC;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."detect_similar_invoices"(p_invoice_ids uuid[], p_holding_id uuid) IS 'Detecta grupos de facturas legacy con estructura similar (mismas cantidades y unidades).
+Retorna grupos ordenados por tamaño (más facturas primero).
+Si un grupo ya tiene una factura reconciliada, la marca como plantilla.';

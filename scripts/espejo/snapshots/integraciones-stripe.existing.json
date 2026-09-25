@@ -102,8 +102,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -113,8 +113,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -125,8 +125,35 @@
    }
   },
   "uniques": {},
-  "indices": {},
-  "checks": [],
+  "indices": {
+   "idx_stripe_connections_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_connections_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_connections_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "stripe_connections_mode_check",
+    "expression": "((mode = ANY (ARRAY['test'::text, 'live'::text])))"
+   }
+  ],
   "foreignKeys": {}
  },
  "stripe_customers_stg": {
@@ -243,8 +270,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -254,8 +281,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -276,8 +303,49 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_stripe_customer_per_holding": [
+    "holding_id",
+    "stripe_id"
+   ]
+  },
+  "indices": {
+   "idx_stripe_customers_stg_sync_batch_id": {
+    "columns": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_stg_stripe_id": {
+    "columns": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_stg_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_stg_connection_id": {
+    "columns": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {}
  },
@@ -395,8 +463,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -406,8 +474,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -428,8 +496,49 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_stripe_invoice_per_holding": [
+    "holding_id",
+    "stripe_id"
+   ]
+  },
+  "indices": {
+   "idx_stripe_invoices_stg_sync_batch_id": {
+    "columns": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_invoices_stg_stripe_id": {
+    "columns": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_invoices_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_invoices_stg_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_invoices_stg_connection_id": {
+    "columns": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {}
  },
@@ -547,8 +656,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -558,8 +667,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -580,8 +689,49 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_stripe_subscription_per_holding": [
+    "holding_id",
+    "stripe_id"
+   ]
+  },
+  "indices": {
+   "idx_stripe_subscriptions_stg_sync_batch_id": {
+    "columns": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_subscriptions_stg_stripe_id": {
+    "columns": [
+     "stripe_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_subscriptions_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_subscriptions_stg_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_subscriptions_stg_connection_id": {
+    "columns": [
+     "connection_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {}
  },
@@ -633,8 +783,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -644,8 +794,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -667,7 +817,7 @@
    },
    "metadata": {
     "type": "jsonb",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": {},
@@ -677,16 +827,59 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_stripe_mapping": [
+    "holding_id",
+    "sapira_product_id",
+    "stripe_product_id"
+   ]
+  },
+  "indices": {
+   "idx_stripe_mappings_stripe_product": {
+    "columns": [
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_mappings_sapira_product": {
+    "columns": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_mappings_holding_stripe": {
+    "columns": [
+     "holding_id",
+     "stripe_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_mappings_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {
-   "FK_4714046cbde9b848625b31d8979": {
+   "stripe_product_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "stripe_product_mappings_sapira_product_id_fkey": {
     "columns": [
      "sapira_product_id"
     ],
     "table": "products",
-    "onDelete": "NO ACTION"
+    "onDelete": "CASCADE"
    }
   }
  },
@@ -805,7 +998,27 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_stripe_sync_jobs_created_at": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_sync_jobs_status": {
+    "columns": [
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_sync_jobs_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {}
  },
@@ -901,8 +1114,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -912,11 +1125,11 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
+    "type": "timestamptz",
     "nullable": true,
     "primary": false,
     "generated": null,
-    "default": null,
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -924,8 +1137,38 @@
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "idx_stripe_customers_bigquery_stripe_customer_id": {
+    "columns": [
+     "stripe_customer_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_bigquery_salesforce_account_id": {
+    "columns": [
+     "salesforce_account_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_stripe_customers_bigquery_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "stripe_customers_bigquery_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

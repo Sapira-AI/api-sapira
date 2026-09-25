@@ -106,5 +106,8 @@ BEGIN
 
   RETURN;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."bulk_confirm_fx_policy"(p_contract_ids uuid[], p_fx_policy text) IS 'Confirma la política FX de múltiples contratos en una sola operación.
+Políticas válidas: monthly_avg (promedio mensual), fixed_period (tasas fijas por período).
+Para fixed_period, deben existir tasas configuradas en contract_fx_period_rates.';

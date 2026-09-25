@@ -25,5 +25,6 @@ BEGIN
     v_allocated_sum,
     (v_source_subtotal - v_allocated_sum) as difference;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_mrr_legacy_splits"(p_invoice_item_legacy_id uuid, p_period_month date) IS 'Valida que la suma de allocated_invoice_currency de todos los splits sea igual al subtotal original';

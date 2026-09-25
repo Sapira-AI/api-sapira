@@ -10,14 +10,16 @@ import * as path from 'path';
  * No hay fase `tables`: las tablas las define su entity TypeORM y se crean con
  * migraciones revisadas, no con assets.
  */
-export const ASSET_DIRECTORIES = ['types', 'functions', 'special-index', 'triggers', 'rls', 'grants', 'seed'] as const;
+export const ASSET_DIRECTORIES = ['types', 'functions', 'special-index', 'triggers', 'rls', 'grants', 'seed', 'cron'] as const;
 export const HISTORY_TABLE = 'public.sapira_sql_asset_history';
 
 /**
  * Fases donde **re-aplicar un asset modificado hace que la base coincida con el archivo**.
  *
  * Es el criterio exacto, no una preferencia: `functions/` usa `CREATE OR REPLACE`, `triggers/` y
- * `rls/` usan `DROP … IF EXISTS` + `CREATE`, y `grants/` son sentencias absolutas. En las cuatro,
+ * `rls/` usan `DROP … IF EXISTS` + `CREATE`, `grants/` son sentencias absolutas y `cron/` usa
+ * `cron.schedule`, que desde pg_cron 1.4 actualiza el job si ya existe uno con ese nombre
+ * (verificado en QA el 2026-09-22: mismo `jobid`, schedule y comando nuevos). En las cinco,
  * correr el archivo de nuevo deja el objeto tal como lo describe el archivo.
  *
  * Sin esto, cambiar una función obligaba a crear un archivo nuevo —`<objeto>_<motivo>.sql`— y
@@ -30,7 +32,7 @@ export const HISTORY_TABLE = 'public.sapira_sql_asset_history';
  * El historial sigue registrando el checksum vigente, así que un asset sin cambios se sigue
  * omitiendo. Lo que cambia es que un asset modificado se re-aplica en vez de hacer fallar la corrida.
  */
-export const REAPPLICABLE_DIRECTORIES = ['functions', 'triggers', 'rls', 'grants'] as const;
+export const REAPPLICABLE_DIRECTORIES = ['functions', 'triggers', 'rls', 'grants', 'cron'] as const;
 
 /** Por qué las otras tres fases NO se pueden re-aplicar: el archivo cambiaría y la base no. */
 const MOTIVO_NO_REAPLICABLE: Record<string, string> = {

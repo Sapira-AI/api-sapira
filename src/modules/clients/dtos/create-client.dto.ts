@@ -1,15 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsDateString, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateClientDto {
-	@ApiProperty({
-		description: 'ID del holding al que pertenece el cliente',
-		example: 'f6e3cb81-8b4a-451e-8402-573e47688d45',
-	})
-	@IsUUID()
-	@IsNotEmpty()
-	holding_id!: string;
-
 	@ApiPropertyOptional({
 		description: 'Nombre comercial del cliente',
 		example: 'Acme Corporation',

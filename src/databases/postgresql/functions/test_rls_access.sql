@@ -21,5 +21,6 @@ BEGIN
   LEFT JOIN public.company_holdings ch ON uh.holding_id = ch.id
   WHERE u.auth_id = auth.uid();
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."test_rls_access"() IS 'Función de testing para verificar qué puede ver el usuario actual';

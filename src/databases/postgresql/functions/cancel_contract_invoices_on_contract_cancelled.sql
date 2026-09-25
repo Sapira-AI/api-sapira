@@ -18,5 +18,6 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."cancel_contract_invoices_on_contract_cancelled"() IS 'Cancela las contract_invoices (cronograma) futuras no satisfechas cuando un contrato pasa a Cancelado (churn o manual). Fix bug "churn deja facturas Programada". Ver feature_bug_churn_scheduled_invoices.';

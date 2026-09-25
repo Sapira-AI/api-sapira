@@ -201,6 +201,11 @@
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
    },
    {
+    "name": "client_entities_payment_terms_check",
+    "type": "c",
+    "expr": "(payment_terms IS NULL) OR\nCASE (payment_terms ->> 'kind'::text)\n    WHEN 'net'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'end_of_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'day_of_next_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric))\n        ELSE false\n    END\n    ELSE false\nEND"
+   },
+   {
     "name": "client_entities_pkey",
     "type": "p",
     "cols": [
@@ -522,12 +527,89 @@
    }
   ]
  },
+ "client_activity_notes": {
+  "comment": "Notas de la línea de tiempo del cliente comercial (pestaña Actividad del front nuevo). Distintas de clients.notes (nota fija).",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "client_activity_notes_body_check",
+    "type": "c",
+    "expr": "(char_length(btrim(body)) >= 1) AND (char_length(btrim(body)) <= 5000)"
+   },
+   {
+    "name": "client_activity_notes_client_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_activity_notes_created_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "client_activity_notes_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_activity_notes_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "client_activity_notes_client_idx",
+    "cols": [
+     "client_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "client_activity_notes_set_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()"
+  ],
+  "policies": [
+   "client_activity_notes_service_role (ALL, service_role)"
+  ],
+  "policies_detail": [
+   {
+    "name": "client_activity_notes_service_role",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "service_role"
+    ],
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true"
+   }
+  ]
+ },
  "client_documents": {
   "comment": null,
   "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [
+   {
+    "name": "client_documents_client_entity_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id) ON DELETE SET NULL"
+   },
    {
     "name": "client_documents_client_id_fkey",
     "type": "f",
@@ -541,6 +623,13 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "client_documents_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL"
    },
    {
     "name": "fk_client_documents_holding_id",
@@ -618,7 +707,7 @@
  },
  "client_entity_tax_id_normalization_conflicts": {
   "comment": "Registro histórico de tax_id duplicados detectados antes de normalizar. Los duplicados se conservan y la integración debe resolverlos de forma determinista.",
-  "rls": false,
+  "rls": true,
   "rls_forced": false,
   "columns": {},
   "constraints": [

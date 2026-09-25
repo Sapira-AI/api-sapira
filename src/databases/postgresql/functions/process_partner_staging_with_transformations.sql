@@ -103,5 +103,6 @@ BEGIN
     
     RETURN QUERY SELECT processed, errors, result_details;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."process_partner_staging_with_transformations"(staging_ids uuid[], holding_id_param uuid) IS 'Procesa partners desde staging usando el nuevo sistema de transformaciones';

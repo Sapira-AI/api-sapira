@@ -81,7 +81,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -102,8 +102,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -113,8 +113,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -124,10 +124,52 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "bigquery_connections_holding_id_name_key": [
+    "holding_id",
+    "name"
+   ]
+  },
+  "indices": {
+   "idx_bigquery_connections_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_bigquery_connections_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_bigquery_connections_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "bigquery_connections_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "bigquery_connections_user_id_fkey": {
+    "columns": [
+     "user_id"
+    ],
+    "table": "users",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "field_mappings": {
   "class": "FieldMapping",
@@ -200,7 +242,7 @@
    },
    "is_active": {
     "type": "boolean",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": true,
@@ -221,8 +263,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp without time zone",
-    "nullable": false,
+    "type": "timestamp",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -232,8 +274,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp without time zone",
-    "nullable": false,
+    "type": "timestamp",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -276,7 +318,7 @@
     "array": false
    },
    "transformation_type": {
-    "type": "text",
+    "type": "enum",
     "nullable": true,
     "primary": false,
     "generated": null,
@@ -298,9 +340,202 @@
     "array": false
    }
   },
+  "uniques": {
+   "unique_field_mapping": [
+    "holding_id",
+    "mapping_type",
+    "source_model",
+    "target_table"
+   ],
+   "field_mappings_holding_id_source_model_target_table_is_acti_key": [
+    "holding_id",
+    "source_model",
+    "target_table",
+    "is_active"
+   ]
+  },
+  "indices": {
+   "idx_field_mappings_target_table": {
+    "columns": [
+     "target_table"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_field_mappings_source_model": {
+    "columns": [
+     "source_model"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_field_mappings_mapping_type": {
+    "columns": [
+     "mapping_type"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_field_mappings_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_field_mappings_hierarchical": {
+    "columns": [
+     "holding_id",
+     "source_model",
+     "secondary_source_model",
+     "is_active"
+    ],
+    "unique": false,
+    "where": "(mapping_type = 'hierarchical'::text)"
+   },
+   "idx_field_mappings_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": "(is_active = true)"
+   }
+  },
+  "checks": [
+   {
+    "name": "field_mappings_mapping_type_check",
+    "expression": "((mapping_type = ANY (ARRAY['simple'::text, 'hierarchical'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "field_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   },
+   "field_mappings_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "integration_configs": {
+  "class": "IntegrationConfig",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "service_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "Disconnected",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_sync_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp without time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
   "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "indices": {
+   "idx_integration_configs_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "integration_configs_status_check",
+    "expression": "status = ANY (ARRAY['Connected'::text, 'Disconnected'::text, 'Error'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "fk_integration_configs_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "integration_configs_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "NO ACTION"
+   }
+  }
  }
 }

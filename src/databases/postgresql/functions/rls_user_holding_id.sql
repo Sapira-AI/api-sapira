@@ -26,5 +26,7 @@ AS $function$
       LIMIT 1
     )
   );
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."rls_user_holding_id"() IS 'Obtiene el holding_id del usuario autenticado para políticas RLS. Prioriza el holding con selected=true, 
+y si no existe, retorna el primer holding activo disponible ordenado por fecha de creación.';

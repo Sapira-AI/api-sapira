@@ -59,10 +59,19 @@ function leerArchivosDeEntities(): string[] {
 describe('índices de producción declarados', () => {
 	const catalogo = JSON.parse(fs.readFileSync(CATALOGO, 'utf8')) as { tables: Record<string, TablaCatalogo> };
 
+	// Dos cosas distintas que se escriben igual:
+	//   @Index('x', ['col'])                    → la entity DECLARA el índice y TypeORM lo gestiona.
+	//   @Index('x', { synchronize: false })     → la entity solo AVISA que existe y que no lo toque.
+	// La segunda forma es la que evita que `migration:generate` emita un DROP INDEX sobre los 41
+	// assets de `special-index/`, que TypeORM no puede declarar y por eso no reconoce.
 	const declaradosEnEntities = new Set<string>();
+	const marcadosComoExternos = new Set<string>();
 	for (const archivo of leerArchivosDeEntities()) {
 		const contenido = fs.readFileSync(archivo, 'utf8');
-		for (const coincidencia of contenido.matchAll(/@Index\('([^']+)'/g)) declaradosEnEntities.add(coincidencia[1]);
+		for (const coincidencia of contenido.matchAll(/@Index\('([^']+)'\s*,\s*([^)]*)\)/g)) {
+			if (/synchronize:\s*false/.test(coincidencia[2])) marcadosComoExternos.add(coincidencia[1]);
+			else declaradosEnEntities.add(coincidencia[1]);
+		}
 	}
 
 	const enSpecialIndex = new Set(
@@ -109,5 +118,22 @@ describe('índices de producción declarados', () => {
 	it('no deja assets en special-index/ para índices que la entity ya declara', () => {
 		const duplicados = [...enSpecialIndex].filter((nombre) => declaradosEnEntities.has(nombre));
 		expect(duplicados).toEqual([]);
+	});
+
+	it('marca en la entity, con synchronize: false, cada índice de special-index/', () => {
+		// Sin esta marca TypeORM no sabe que el índice existe y `migration:generate` emite un
+		// `DROP INDEX` por cada uno: eran 41 de las 94 sentencias de ruido que había que borrar a
+		// mano en cada migración, y el riesgo es que en esa limpieza se cuele un DROP real.
+		const tablaDeIndice = new Map<string, string>();
+		for (const [tabla, definicionTabla] of Object.entries(catalogo.tables)) {
+			for (const indice of definicionTabla.indexes ?? []) tablaDeIndice.set(indice.name, tabla);
+		}
+
+		const sinMarcar = [...enSpecialIndex]
+			.filter((nombre) => tablaDeIndice.has(nombre)) // el que ya no existe en prod es otra deuda
+			.filter((nombre) => !marcadosComoExternos.has(nombre))
+			.map((nombre) => `${tablaDeIndice.get(nombre)}.${nombre}`);
+
+		expect(sinMarcar).toEqual([]);
 	});
 });

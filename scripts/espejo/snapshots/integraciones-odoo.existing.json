@@ -124,8 +124,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -135,8 +135,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -146,10 +146,52 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "odoo_connections_holding_id_name_key": [
+    "holding_id",
+    "name"
+   ]
+  },
+  "indices": {
+   "idx_odoo_connections_user_id": {
+    "columns": [
+     "user_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_connections_is_active": {
+    "columns": [
+     "is_active"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_connections_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
-  "foreignKeys": {}
+  "foreignKeys": {
+   "odoo_connections_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "odoo_connections_user_id_fkey": {
+    "columns": [
+     "user_id"
+    ],
+    "table": "users",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "odoo_invoices_stg": {
   "class": "OdooInvoicesStg",
@@ -266,10 +308,10 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -277,10 +319,10 @@
    },
    "updated_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -309,10 +351,80 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "uniques": {
+   "odoo_invoices_stg_holding_id_odoo_id_key": [
+    "holding_id",
+    "odoo_id"
+   ]
+  },
+  "indices": {
+   "idx_odoo_invoices_stg_sync_session": {
+    "columns": [
+     "sync_session_id"
+    ],
+    "unique": false,
+    "where": "(sync_session_id IS NOT NULL)"
+   },
+   "idx_odoo_invoices_stg_sync_batch": {
+    "columns": [
+     "sync_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoices_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoices_stg_odoo_id_status": {
+    "columns": [
+     "odoo_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoices_stg_holding_status": {
+    "columns": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoices_stg_error": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": "(processing_status = 'error'::text)"
+   },
+   "idx_odoo_invoices_stg_batch_id": {
+    "columns": [
+     "integration_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "odoo_invoices_stg_processing_status_check",
+    "expression": "((processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "odoo_invoices_stg_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "odoo_invoice_lines_stg": {
   "class": "OdooInvoiceLinesStg",
@@ -388,7 +500,7 @@
     "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "pending",
+    "default": "create",
     "length": null,
     "precision": null,
     "scale": null,
@@ -440,10 +552,10 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -451,10 +563,10 @@
    },
    "updated_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -483,16 +595,99 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "uniques": {
+   "odoo_invoice_lines_stg_holding_id_odoo_line_id_key": [
+    "holding_id",
+    "odoo_line_id"
+   ]
+  },
+  "indices": {
+   "idx_odoo_invoice_lines_stg_sync_session": {
+    "columns": [
+     "sync_session_id"
+    ],
+    "unique": false,
+    "where": "(sync_session_id IS NOT NULL)"
+   },
+   "idx_odoo_invoice_lines_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoice_lines_stg_odoo_line_id": {
+    "columns": [
+     "odoo_line_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoice_lines_stg_odoo_invoice_id": {
+    "columns": [
+     "odoo_invoice_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoice_lines_stg_invoice_staging_id": {
+    "columns": [
+     "invoice_staging_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoice_lines_stg_holding_status": {
+    "columns": [
+     "holding_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_invoice_lines_stg_error": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": "(processing_status = 'error'::text)"
+   },
+   "idx_odoo_invoice_lines_stg_batch_id": {
+    "columns": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": "(batch_id IS NOT NULL)"
+   }
+  },
+  "checks": [
+   {
+    "name": "odoo_invoice_lines_stg_processing_status_check",
+    "expression": "((processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "odoo_invoice_lines_stg_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "odoo_invoice_lines_stg_invoice_staging_id_fkey": {
+    "columns": [
+     "invoice_staging_id"
+    ],
+    "table": "odoo_invoices_stg",
+    "onDelete": "CASCADE"
+   }
+  }
  },
  "odoo_partners_stg": {
   "class": "OdooPartnersStg",
   "columns": {
    "id": {
-    "type": "Number",
+    "type": "bigint",
     "nullable": false,
     "primary": true,
     "generated": "increment",
@@ -559,10 +754,10 @@
    },
    "created_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -570,10 +765,10 @@
    },
    "updated_at": {
     "type": "timestamp",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
-    "default": "CURRENT_TIMESTAMP",
+    "default": "now()",
     "length": null,
     "precision": null,
     "scale": null,
@@ -635,10 +830,77 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
-  "checks": [],
-  "foreignKeys": {}
+  "uniques": {
+   "odoo_partners_stg_odoo_id_holding_id_key": [
+    "odoo_id",
+    "holding_id"
+   ]
+  },
+  "indices": {
+   "idx_odoo_partners_stg_raw_data_gin": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_processing_status": {
+    "columns": [
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_processed_at": {
+    "columns": [
+     "processed_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_odoo_id_status": {
+    "columns": [
+     "odoo_id",
+     "processing_status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_odoo_id": {
+    "columns": [
+     "odoo_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_partners_stg_batch_id": {
+    "columns": [
+     "integration_batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "odoo_partners_stg_processing_status_check",
+    "expression": "((processing_status = ANY (ARRAY['create'::text, 'update'::text, 'processed'::text, 'error'::text])))"
+   }
+  ],
+  "foreignKeys": {
+   "odoo_partners_stg_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "NO ACTION"
+   }
+  }
  },
  "odoo_product_mappings": {
   "class": "OdooProductMapping",
@@ -688,8 +950,8 @@
     "array": false
    },
    "created_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -699,8 +961,8 @@
     "array": false
    },
    "updated_at": {
-    "type": "timestamp with time zone",
-    "nullable": false,
+    "type": "timestamptz",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": "now()",
@@ -722,7 +984,7 @@
    },
    "metadata": {
     "type": "jsonb",
-    "nullable": false,
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": {},
@@ -732,16 +994,207 @@
     "array": false
    }
   },
-  "uniques": {},
-  "indices": {},
+  "uniques": {
+   "unique_odoo_mapping": [
+    "holding_id",
+    "sapira_product_id",
+    "odoo_product_id"
+   ]
+  },
+  "indices": {
+   "idx_odoo_mappings_sapira_product": {
+    "columns": [
+     "sapira_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_mappings_odoo_product": {
+    "columns": [
+     "odoo_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_mappings_holding_odoo": {
+    "columns": [
+     "holding_id",
+     "odoo_product_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_mappings_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
   "checks": [],
   "foreignKeys": {
-   "FK_57cfe833d43b4e35d212a06442d": {
+   "odoo_product_mappings_sapira_product_id_fkey": {
     "columns": [
      "sapira_product_id"
     ],
     "table": "products",
-    "onDelete": "NO ACTION"
+    "onDelete": "CASCADE"
+   },
+   "odoo_product_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "odoo_object_mappings": {
+  "class": "OdooObjectMapping",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_object_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "odoo_object_id": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sapira_table_name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sapira_record_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_synced_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "unique_odoo_object_per_holding": [
+    "holding_id",
+    "odoo_object_type",
+    "odoo_object_id"
+   ]
+  },
+  "indices": {
+   "idx_odoo_object_mappings_sapira_lookup": {
+    "columns": [
+     "holding_id",
+     "sapira_table_name",
+     "sapira_record_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_object_mappings_odoo_lookup": {
+    "columns": [
+     "holding_id",
+     "odoo_object_type",
+     "odoo_object_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_odoo_object_mappings_holding": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "odoo_object_mappings_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
    }
   }
  }

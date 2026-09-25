@@ -51,5 +51,6 @@ BEGIN
     'reverted_invoices', v_reverted_count
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."delete_mrr_legacy_group"(p_record_ids uuid[]) IS 'Elimina un grupo de registros MRR Legacy y revierte automáticamente el estado de las facturas legacy a pending si no tienen otros registros MRR asociados';

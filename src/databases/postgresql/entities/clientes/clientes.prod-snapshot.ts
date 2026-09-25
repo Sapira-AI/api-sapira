@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-08-22 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-09-24 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -45,12 +45,27 @@ export const CLIENTES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			file_url: true,
 			uploaded_at: true,
 			holding_id: false,
+			storage_bucket: true,
+			storage_path: true,
+			file_size: true,
+			mime_type: true,
+			uploaded_by: true,
+			client_entity_id: true,
+			deleted_at: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
+			client_documents_client_entity_id_fkey: {
+				table: 'client_entities',
+				onDelete: 'SET NULL',
+			},
 			client_documents_client_id_fkey: {
 				table: 'clients',
 				onDelete: 'CASCADE',
+			},
+			client_documents_uploaded_by_fkey: {
+				table: 'users',
+				onDelete: 'SET NULL',
 			},
 			fk_client_documents_holding_id: {
 				table: 'company_holdings',

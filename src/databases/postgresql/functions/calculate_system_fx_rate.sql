@@ -95,5 +95,9 @@ BEGIN
 
   RETURN QUERY SELECT v_rate, v_source, v_ref_date;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."calculate_system_fx_rate"(p_holding_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text) IS 'Calcula FX para conversiones contract_currency → system_currency. 
+Para fixed_period usa holding_fx_period_rates (global del holding).
+Para monthly_avg usa exchange_rates_monthly_avg.
+Soporta búsqueda inversa automática.';

@@ -72,5 +72,8 @@ BEGIN
   WHERE cec.client_entity_id = p_entity_id
   ORDER BY cec.is_primary DESC, c.name_commercial;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."assign_clients_to_entity"(p_entity_id uuid, p_client_ids uuid[], p_primary_client_id uuid) IS 'Asigna múltiples clientes comerciales a una razón social. 
+Si p_primary_client_id se especifica, ese será el primary, sino el primero del array.
+Usa ON CONFLICT para no duplicar si ya existe la relación.';

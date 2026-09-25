@@ -73,5 +73,6 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."auto_calculate_pricing_fields"() IS 'Trigger compartido por quote_items y contract_items. La rama CHURN/DOWNSELL (con NEW.categoria) está anidada dentro de un IF separado por TG_TABLE_NAME, no encadenada con AND — PG planea expresiones SQL al ejecutarlas y la referencia a una columna inexistente falla aunque el gate sea false.';

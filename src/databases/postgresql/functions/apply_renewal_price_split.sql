@@ -129,5 +129,6 @@ BEGIN
     'new_momentum',  v_mom
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."apply_renewal_price_split"(p_contract_item_id uuid) IS 'Helper idempotente que aplica el split de renovación con cambio de precio en revenue_schedule_monthly: UPDATE fila RENEWAL al mrr base + INSERT fila UPSELL/DOWNSELL con el delta. Solo escribe moneda contrato, invoca apply_fx al final. Guard clauses silenciosas: retorna no_action si el item no es un RENEWAL con renewal_base_unit_price seteado. Invocado automáticamente al final de revenue_schedule_rebuild_contract_ccy.';

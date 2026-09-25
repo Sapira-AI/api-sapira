@@ -42,9 +42,16 @@ actualizar todo lo que no es tabla.**
 - Detalle por carpeta: GUIA → **Crear, modificar y eliminar, por carpeta**.
 - **Toda tabla de `public` tiene entity viva; no hay espejos** (`database.module.spec.ts` lo exige).
   Una tabla nueva nace como entity + migración, nunca como `.espejo.ts`.
-- **74 entities son generadas** (cabecera "PROMOVIDA desde espejo"). Se editan para cambiar su tabla,
-  pero no se corre `scripts/espejo/generate-espejo.py` sin antes refrescar los snapshots desde prod:
-  regenerar con snapshots viejos revierte el cambio en silencio.
+- **Los jobs de pg_cron son assets** (`cron/`), y **nunca llevan un secreto en el comando**: si llaman
+  una edge function, van por `public.cron_invoke_edge_function`, que lee la URL y la clave de Vault.
+  Hay una prueba que falla si aparece un token en el corpus o en los snapshots.
+- **Las 74 entities promovidas (cabecera "PROMOVIDA desde espejo") ya NO se regeneran**: son la
+  fuente de verdad de su tabla y se editan como cualquier entity. El generador solo refresca el
+  snapshot de prod contra el que su spec las mide. Si ese spec queda en rojo, el repo y prod
+  difieren: se aplica el cambio y DESPUÉS se corre `yarn schema:snapshot --target production`.
+- **El CLI exige lo que antes era solo regla escrita**: `--apply` sin `--only` aborta (o `--all` a
+  conciencia), no se aplica un asset con cambios sin commitear (o `--allow-dirty`), y `--target` es
+  obligatorio: ya no se infiere de `NODE_ENV`.
 
 ## Reglas duras
 
@@ -76,6 +83,21 @@ actualizar todo lo que no es tabla.**
   `REGISTRO-DB-COMO-CODIGO.md` figure como cerrado.
 - **La fuente de verdad de hoy es producción.** Ni `supabase/schema.sql`, ni las migraciones del
   front, ni los `.espejo.ts` lo son: son fotos con fecha. Verifica contra la base antes de escribir SQL.
+
+## Autorización por holding: una sola forma
+
+Regla completa: `docs/v2-rediseno/autorizacion-y-tenancy.md`. La API entra a Postgres con un rol privilegiado: **RLS no
+filtra nada de lo que pasa por la API**, así que cada endpoint acota por holding.
+
+- Controlador de un holding: `@UseGuards(SupabaseAuthGuard, HoldingScopeGuard)` y el holding se lee con `@HoldingId()`
+  (`src/guards/holding-scope.guard.ts`, `src/decorators/holding-id.decorator.ts`). El guard exige `x-holding-id` (400),
+  valida fila activa en `user_holdings` (403) y rechaza un `holding_id` distinto en query/body (403).
+- **Ningún DTO recibe `holding_id`.** Rutas por id: `WHERE id = $1 AND holding_id = $2` → 404 si no es del holding.
+- No uses `user_holdings.selected` para decidir qué datos devolver, ni `HoldingAccessGuard` (deprecado), ni
+  `auth.uid()`/`rls_user_holding_id()` en SQL que llama la API: el holding sale del registro.
+- Tests por controlador: sin header → 400, holding ajeno → 403, registro de otro holding → 404.
+- Adopción opt-in: Clientes y Dashboard ya la usan; los controladores previos se migran cuando se tocan (pendiente Leon).
+- Tablas nuevas: grants del Data API solo si el front viejo las lee, nunca a `anon` (Supabase deja de darlos solo desde el 30-10-2026).
 
 ## Eliminar una tabla, función, trigger o policy
 

@@ -1,3 +1,5 @@
+import type { ClientLifecycleStatus } from '../client-lifecycle';
+
 export interface IClient {
 	id: string;
 	holding_id?: string;
@@ -42,12 +44,22 @@ export interface IClientEntityClient {
 }
 
 export interface IClientWithEntities extends IClient {
+	lifecycle_status?: ClientLifecycleStatus;
 	entities?: IClientEntity[];
 	primary_entity?: IClientEntity;
 }
 
+/** `GET /clients/filter-options`: valores distintos por campo filtrable, ordenados. */
+export interface IClientFilterOptions {
+	segment: string[];
+	industry: string[];
+	market: string[];
+	country: string[];
+	status: string[];
+}
+
 export interface IPaginatedClients {
-	data: IClient[];
+	data: Array<IClient & { lifecycle_status?: ClientLifecycleStatus }>;
 	items: number;
 	pages: number;
 	currentPage: number;

@@ -15,5 +15,6 @@ BEGIN
   WHERE p_holding_id IS NULL OR v.holding_id = p_holding_id
   GROUP BY v.holding_id;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."get_current_mrr_by_holding"(p_holding_id uuid) IS 'Obtiene MRR actual agregado por holding usando los nuevos campos monthly_price.';

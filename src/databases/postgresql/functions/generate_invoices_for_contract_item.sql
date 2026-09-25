@@ -168,5 +168,6 @@ BEGIN
     'invoices', v_created_invoices
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."generate_invoices_for_contract_item"(p_item_id uuid, p_metadata jsonb) IS 'Genera facturas programadas para un contract_item, incluyendo periodos de facturación y respetando Anticipado/Vencido.';

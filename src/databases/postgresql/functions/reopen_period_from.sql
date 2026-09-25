@@ -91,5 +91,6 @@ BEGIN
   RETURNING id INTO v_event_id;
 
   RETURN v_event_id;
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."reopen_period_from"(p_holding_id uuid, p_company_id uuid, p_from_date date, p_reason text) IS 'Reabre desde el mes que comienza en p_from_date. Mueve cutoff_date a (p_from_date - 1 día). Solo admin/super_admin.';

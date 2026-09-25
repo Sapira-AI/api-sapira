@@ -71,5 +71,6 @@ BEGIN
 
   RETURN QUERY SELECT v_monthly_price, v_billing_period_price;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."calculate_monthly_and_period_prices"(p_unit_price numeric, p_quantity numeric, p_billing_frequency text, p_is_recurring boolean, p_final_price numeric, p_term_months integer, p_discount_type text, p_discount_value numeric) IS 'Calcula monthly_price y billing_period_price. Para recurrentes: monthly_price = (unit_price × quantity) con descuento. Para descuento porcentual aplica % al precio mensual, para monto fijo usa final_price/term_months.';

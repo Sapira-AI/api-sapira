@@ -49,5 +49,6 @@ BEGIN
     
     RETURN FALSE;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."detect_partner_changes_with_mapping"(new_data jsonb, old_data jsonb, holding_id_param uuid) IS 'Detecta cambios usando los campos configurados en el mapeo activo del holding';

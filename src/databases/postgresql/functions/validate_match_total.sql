@@ -26,5 +26,6 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."validate_match_total"() IS 'Valida que la suma de matches de un item de factura legacy no exceda su subtotal (sin IVA)';

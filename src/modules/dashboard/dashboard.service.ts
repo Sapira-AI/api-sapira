@@ -1,27 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+
 type NumericRow = Record<string, string | number | null>;
 
 @Injectable()
 export class DashboardService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		private readonly holdingMetrics: HoldingMetricsService
+	) {}
 
-	async getHome(authId: string, asOf = new Date()): Promise<Record<string, unknown>> {
-		const holdingId = await this.getUserHoldingId(authId);
+	/** KPIs y tareas del holding activo (validado por `HoldingScopeGuard`). */
+	async getHome(holdingId: string, asOf = new Date()): Promise<Record<string, unknown>> {
 		const date = asOf.toISOString().slice(0, 10);
 
-		if (!holdingId) {
-			return this.emptyHome(date);
-		}
-
-		const [mrr, activeClients, recognizedRevenue, invoices, tasks] = await Promise.all([
-			this.getMrr(holdingId, date),
-			this.getActiveClients(holdingId, date),
+		// MRR y clientes activos: una sola definición compartida con Clientes (HoldingMetricsService).
+		const [metrics, recognizedRevenue, invoices, tasks] = await Promise.all([
+			this.holdingMetrics.monthMetrics(holdingId, date),
 			this.getRecognizedRevenue(holdingId, date),
 			this.getInvoiceSummary(holdingId, date),
 			this.getTasks(holdingId, date),
 		]);
+		const mrr = { value: metrics.mrr.value, trend: metrics.mrr.trend, currency: metrics.currency };
+		const activeClients = { value: metrics.activeClients.value, trend: metrics.activeClients.trend };
+		// Todos los montos están en moneda del sistema: la del holding, no USD fijo.
+		recognizedRevenue.currency = metrics.currency;
+		invoices.toIssue.currency = metrics.currency;
 
 		return {
 			holding_id: holdingId,
@@ -41,83 +47,6 @@ export class DashboardService {
 				items_starting_this_month: tasks.startsThisMonth,
 			},
 		};
-	}
-
-	/**
-	 * Holding del usuario con el criterio canónico del sistema (el mismo de las funciones
-	 * `get_user_holding_id`/`rls_user_holding_id` de la base): el holding con `selected = true`
-	 * si existe y, si no, el activo más antiguo. `selected` solo lo escribe el selector de
-	 * holdings (super admins / multi-holding vía POST /holdings/select): exigirlo aquí dejaba
-	 * el dashboard en cero (emptyHome silencioso) para todo usuario de cliente que nunca
-	 * cambió de holding — 26 de 28 usuarios de producción al 22-09-2026.
-	 */
-	private async getUserHoldingId(authId: string): Promise<string | null> {
-		const [row] = await this.dataSource.query<{ holding_id: string }[]>(
-			`SELECT uh.holding_id
-			 FROM user_holdings uh
-			 JOIN users u ON u.id = uh.user_id
-			 WHERE u.auth_id = $1 AND uh.is_active = true
-			 ORDER BY uh.selected DESC, uh.created_at ASC
-			 LIMIT 1`,
-			[authId]
-		);
-		return row?.holding_id || null;
-	}
-
-	private async getMrr(holdingId: string, asOf: string) {
-		const rows = await this.dataSource.query<NumericRow[]>(
-			`WITH monthly_mrr AS (
-				SELECT period_month, mrr_period_system_ccy AS value
-				FROM revenue_schedule_monthly
-				WHERE holding_id = $1 AND is_total_row = false
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION ALL
-				SELECT period_month, mrr_legacy_system_currency AS value
-				FROM mrr_legacy
-				WHERE holding_id = $1
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-			)
-			SELECT
-				COALESCE(SUM(value) FILTER (WHERE period_month = date_trunc('month', $2::date)), 0) AS current,
-				COALESCE(SUM(value) FILTER (WHERE period_month = date_trunc('month', $2::date) - interval '1 month'), 0) AS previous
-			FROM monthly_mrr`,
-			[holdingId, asOf]
-		);
-		const row = rows[0] || {};
-		const current = Number(row.current || 0);
-		const previous = Number(row.previous || 0);
-		return { value: current, trend: previous > 0 ? ((current - previous) / previous) * 100 : 0, currency: 'USD' };
-	}
-
-	private async getActiveClients(holdingId: string, asOf: string) {
-		const rows = await this.dataSource.query<NumericRow[]>(
-			`SELECT
-				COUNT(DISTINCT client_id) FILTER (WHERE month = date_trunc('month', $2::date)) AS current,
-				COUNT(DISTINCT client_id) FILTER (WHERE month = date_trunc('month', $2::date) - interval '1 month') AS previous
-			 FROM (
-				SELECT c.client_id, date_trunc('month', r.period_month) AS month
-				FROM revenue_schedule_monthly r
-				JOIN contracts c ON c.id = r.contract_id
-				WHERE r.holding_id = $1 AND r.is_total_row = false
-				AND r.period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION
-				SELECT s.client_id, date_trunc('month', r.period_month) AS month
-				FROM revenue_schedule_monthly r
-				JOIN subscriptions s ON s.id = r.subscription_id
-				WHERE r.holding_id = $1
-				AND r.period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-				UNION
-				SELECT client_id, date_trunc('month', period_month) AS month
-				FROM mrr_legacy
-				WHERE holding_id = $1
-				AND period_month IN (date_trunc('month', $2::date), date_trunc('month', $2::date) - interval '1 month')
-			 ) active_clients`,
-			[holdingId, asOf]
-		);
-		const row = rows[0] || {};
-		const current = Number(row.current || 0);
-		const previous = Number(row.previous || 0);
-		return { value: current, trend: previous > 0 ? ((current - previous) / previous) * 100 : 0 };
 	}
 
 	private async getRecognizedRevenue(holdingId: string, asOf: string) {
@@ -174,27 +103,6 @@ export class DashboardService {
 			renew30: Number(row.renew_30 || 0),
 			renew90: Number(row.renew_90 || 0),
 			startsThisMonth: Number(row.starts_this_month || 0),
-		};
-	}
-
-	private emptyHome(asOf: string) {
-		return {
-			holding_id: null,
-			as_of: asOf,
-			kpis: {
-				mrr: { value: 0, trend: 0, currency: 'USD' },
-				active_clients: { value: 0, trend: 0 },
-				recognized_revenue: { value: 0, period: 'Últimos 12 meses', trend: 0, currency: 'USD' },
-				pending_invoices: { count: 0, amount: 0, currency: 'USD' },
-			},
-			tasks: {
-				overdue_invoices: 0,
-				expired_contracts: 0,
-				contracts_to_renew_30: 0,
-				contracts_to_renew_90: 0,
-				invoices_to_emit: 0,
-				items_starting_this_month: 0,
-			},
 		};
 	}
 }

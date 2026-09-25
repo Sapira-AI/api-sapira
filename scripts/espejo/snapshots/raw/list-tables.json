@@ -2241,7 +2241,7 @@
 		{
 			"name": "public.churn_reasons",
 			"rls_enabled": true,
-			"rows": 15,
+			"rows": 16,
 			"columns": [
 				{
 					"name": "id",
@@ -2412,6 +2412,130 @@
 				{
 					"name": "claude_skills_holding_id_fkey",
 					"source_table": "public.claude_skills",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.client_activity_notes",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "client_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "body",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "created_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "users.id de quien escribió la nota"
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "updated_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "deleted_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Borrado lógico: la nota deja de mostrarse pero se conserva"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "client_activity_notes_client_id_fkey",
+					"source_table": "public.client_activity_notes",
+					"source_columns": [
+						"client_id"
+					],
+					"target_table": "public.clients",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "client_activity_notes_created_by_fkey",
+					"source_table": "public.client_activity_notes",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "client_activity_notes_holding_id_fkey",
+					"source_table": "public.client_activity_notes",
 					"source_columns": [
 						"holding_id"
 					],
@@ -2750,6 +2874,81 @@
 						"updatable"
 					],
 					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "storage_bucket",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Bucket de Storage (privado) del archivo; NULL en documentos antiguos con URL pública"
+				},
+				{
+					"name": "storage_path",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Ruta del objeto dentro del bucket: <holding_id>/<client_id>/<id>/<nombre>"
+				},
+				{
+					"name": "file_size",
+					"data_type": "bigint",
+					"format": "int8",
+					"type": "bigint",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "mime_type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "uploaded_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "users.id de quien lo subió"
+				},
+				{
+					"name": "client_entity_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Razón social a la que corresponde (opcional)"
+				},
+				{
+					"name": "deleted_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Borrado lógico desde el front nuevo"
 				}
 			],
 			"primary_keys": [
@@ -2757,12 +2956,34 @@
 			],
 			"foreign_key_constraints": [
 				{
+					"name": "client_documents_client_entity_id_fkey",
+					"source_table": "public.client_documents",
+					"source_columns": [
+						"client_entity_id"
+					],
+					"target_table": "public.client_entities",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "client_documents_client_id_fkey",
 					"source_table": "public.client_documents",
 					"source_columns": [
 						"client_id"
 					],
 					"target_table": "public.clients",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "client_documents_uploaded_by_fkey",
+					"source_table": "public.client_documents",
+					"source_columns": [
+						"uploaded_by"
+					],
+					"target_table": "public.users",
 					"target_columns": [
 						"id"
 					]
@@ -2929,12 +3150,34 @@
 						"updatable"
 					],
 					"comment": "Nombre de la posición fiscal en Odoo (ej: \"RC con ICA\", \"RC sin ICA\")"
+				},
+				{
+					"name": "payment_terms",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Condición de pago por defecto: {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. NULL = sin condición propia"
 				}
 			],
 			"primary_keys": [
 				"id"
 			],
 			"foreign_key_constraints": [
+				{
+					"name": "client_documents_client_entity_id_fkey",
+					"source_table": "public.client_documents",
+					"source_columns": [
+						"client_entity_id"
+					],
+					"target_table": "public.client_entities",
+					"target_columns": [
+						"id"
+					]
+				},
 				{
 					"name": "client_entities_client_id_fkey",
 					"source_table": "public.client_entities",
@@ -3410,6 +3653,17 @@
 				"id"
 			],
 			"foreign_key_constraints": [
+				{
+					"name": "client_activity_notes_client_id_fkey",
+					"source_table": "public.client_activity_notes",
+					"source_columns": [
+						"client_id"
+					],
+					"target_table": "public.clients",
+					"target_columns": [
+						"id"
+					]
+				},
 				{
 					"name": "client_agent_configs_client_id_fkey",
 					"source_table": "public.client_agent_configs",
@@ -4445,6 +4699,17 @@
 				{
 					"name": "claude_skills_holding_id_fkey",
 					"source_table": "public.claude_skills",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "client_activity_notes_holding_id_fkey",
+					"source_table": "public.client_activity_notes",
 					"source_columns": [
 						"holding_id"
 					],
@@ -6720,7 +6985,7 @@
 		{
 			"name": "public.contract_item_change_log",
 			"rls_enabled": true,
-			"rows": 1189,
+			"rows": 1346,
 			"columns": [
 				{
 					"name": "id",
@@ -6888,7 +7153,7 @@
 		{
 			"name": "public.contract_items",
 			"rls_enabled": true,
-			"rows": 1118,
+			"rows": 1182,
 			"columns": [
 				{
 					"name": "id",
@@ -7477,7 +7742,7 @@
 		{
 			"name": "public.contract_lifecycle_events",
 			"rls_enabled": true,
-			"rows": 209,
+			"rows": 278,
 			"columns": [
 				{
 					"name": "id",
@@ -8132,7 +8397,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 690,
+			"rows": 694,
 			"columns": [
 				{
 					"name": "id",
@@ -9523,7 +9788,7 @@
 		{
 			"name": "public.exchange_rates_monthly_avg",
 			"rls_enabled": true,
-			"rows": 695,
+			"rows": 730,
 			"columns": [
 				{
 					"name": "id",
@@ -11227,7 +11492,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 11252,
+			"rows": 11636,
 			"columns": [
 				{
 					"name": "id",
@@ -12861,7 +13126,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9460,
+			"rows": 9689,
 			"columns": [
 				{
 					"name": "id",
@@ -17453,7 +17718,7 @@
 		{
 			"name": "public.quotes",
 			"rls_enabled": true,
-			"rows": 383,
+			"rows": 411,
 			"columns": [
 				{
 					"name": "id",
@@ -18072,7 +18337,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 20144,
+			"rows": 20512,
 			"columns": [
 				{
 					"name": "id",
@@ -18925,7 +19190,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 99,
+			"rows": 111,
 			"columns": [
 				{
 					"name": "id",
@@ -19476,7 +19741,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 144,
+			"rows": 162,
 			"columns": [
 				{
 					"name": "id",
@@ -20075,7 +20340,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 132,
+			"rows": 149,
 			"columns": [
 				{
 					"name": "id",
@@ -21283,7 +21548,7 @@
 		{
 			"name": "public.sapira_sql_asset_history",
 			"rls_enabled": true,
-			"rows": 7,
+			"rows": 862,
 			"columns": [
 				{
 					"name": "asset_path",
@@ -21321,6 +21586,16 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "modo",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'apply'::text"
 				}
 			],
 			"primary_keys": [
@@ -21331,7 +21606,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 5,
+			"rows": 10,
 			"columns": [
 				{
 					"name": "id",
@@ -21994,7 +22269,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 26350,
+			"rows": 26407,
 			"columns": [
 				{
 					"name": "id",
@@ -22122,7 +22397,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 414,
+			"rows": 416,
 			"columns": [
 				{
 					"name": "id",
@@ -22521,7 +22796,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 483,
+			"rows": 488,
 			"columns": [
 				{
 					"name": "id",
@@ -22663,7 +22938,7 @@
 		{
 			"name": "public.stripe_sync_jobs",
 			"rls_enabled": true,
-			"rows": 200,
+			"rows": 208,
 			"columns": [
 				{
 					"name": "id",
@@ -23989,10 +24264,32 @@
 					]
 				},
 				{
+					"name": "client_activity_notes_created_by_fkey",
+					"source_table": "public.client_activity_notes",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "client_agent_configs_created_by_fkey",
 					"source_table": "public.client_agent_configs",
 					"source_columns": [
 						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "client_documents_uploaded_by_fkey",
+					"source_table": "public.client_documents",
+					"source_columns": [
+						"uploaded_by"
 					],
 					"target_table": "public.users",
 					"target_columns": [

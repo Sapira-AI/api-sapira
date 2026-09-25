@@ -168,5 +168,6 @@ BEGIN
     'amount', v_invoice.total_invoice_currency
   );
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."cancel_invoice_with_credit_note"(p_invoice_id uuid, p_credit_note_data jsonb) IS 'Cancela una factura creando una nota de crédito que afecta el revenue.';

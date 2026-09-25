@@ -35,5 +35,6 @@ BEGIN
     
     RETURN NEW;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."trigger_generate_invoices_on_status_change"() IS 'Trigger para generar facturas cuando un contrato cambia a estado Activo (activación legacy o MRR legacy). Verifica que no existan facturas previas antes de generar.';

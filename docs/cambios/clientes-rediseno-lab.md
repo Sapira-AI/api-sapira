@@ -1,0 +1,148 @@
+# Cambio: endpoints de Clientes para el rediseño (`/lab/clientes`) + acceso por holding
+
+> **Rama:** `domi` · 22-09-2026 · Domi + Claude
+> **Repo front (par):** `front-sapira` — módulo en construcción `app/(protected)/lab/clientes/` (README con el
+> mapa pantalla → BFF → endpoint). Guía del laboratorio: `front-sapira/docs/reglas-desarrollo/modulos-en-construccion.md`.
+
+## 👉 Leon: qué necesitamos de ti
+
+1. ~~Validar y correr la migración de condiciones de pago~~ → aplicada el 23-09 en QA y prod según lo acordado
+   (ver [Migración](#migración-condiciones-de-pago--aplicada-23-09-qa-y-producción)).
+2. **Revisar el acceso por holding** ([Acceso por holding](#acceso-por-holding-clientsholdingscopeguard)): cambia
+   el comportamiento de endpoints existentes de `/clients`. Encontramos que ningún endpoint de clientes, razones
+   sociales o contactos validaba que el usuario perteneciera al holding pedido.
+3. Opcional: decidir si unificamos `ClientsHoldingScopeGuard` con el `HoldingAccessGuard` global.
+
+## Cómo ver el laboratorio
+
+El front de `/lab` está apagado en producción. Para verlo en local con la rama `domi` de ambos repos:
+
+- `front-sapira/.env.local`: `DESIGN_LAB_ENABLED=true` (variable de servidor; sin ella `/lab` y sus rutas BFF
+  responden 404).
+- Entrar con un usuario **super admin** (permiso interno `VIEW_LAB`) y abrir `http://localhost:8081/lab`.
+- `api-sapira` local apuntando a la base de producción ("Sapira MVP"). ⚠️ Crear/editar/asignar en el lab
+  **escribe en producción**: probar en el holding Hanka.
+
+## Endpoints nuevos (todos con `SupabaseAuthGuard` + `HoldingScopeGuard`, salvo la descarga de documentos)
+
+SQL crudo con `DataSource.query`, validado contra producción en solo lectura. Orden por lista blanca.
+
+> Desde el 24-09 todos estos endpoints usan `HoldingScopeGuard`: el holding va en el header `x-holding-id` (no en la
+> query ni el body). Regla: `docs/v2-rediseno/autorizacion-y-tenancy.md`. `GET /clients` acepta `holding_id` solo por
+> compatibilidad con el front viejo (debe coincidir con el header).
+
+| Endpoint | Para qué | Servicio |
+|---|---|---|
+| `GET /clients?sort_by&sort_order` | Orden por columna en la lista (nuevo parámetro; `nulls LAST` + `id` para paginación estable) | `ClientsService.findAll` |
+| `GET /clients/filter-options` | Valores de segmento, industria, mercado, país y estado | `ClientsService.getFilterOptions` |
+| `GET /clients/summary` | KPIs de la lista: MRR del mes, cartera abierta y vencida | `ClientMetricsService` |
+| `GET /clients/:id/summary` | Indicadores del cliente | `ClientMetricsService` |
+| `GET /clients/:id/receivables` | Cartera por antigüedad (por vencer, 1–30, 31–60, 61–90, +90) | `ClientMetricsService` |
+| `GET /clients/:id/invoices?status&client_entity_id&search&sort_by&sort_order&page&limit` | Pestaña Facturas del 360; trae `counts` por estado | `ClientMetricsService` |
+| `GET /clients/:id/contracts?status&client_entity_id&search&sort_by&sort_order&page&limit` | Pestaña Contratos del 360 (24-09); `counts` por estado, inicio = primer ítem, MRR del mes (RSM, moneda sistema y contrato) | `ClientMetricsService` |
+| `GET /client-entities`, `GET /client-entities/stats` | Lista de razones sociales (filtro "sin cliente asignado", país) | `ClientDirectoryService` |
+| `POST /client-entities/assign` | Vincular varias razones sociales a un cliente (transacción; marca principal si no tiene) | `ClientDirectoryService` |
+| `GET /client-entities/:id`, `/:id/summary`, `/:id/invoices` | Razón social 360 | `ClientEntityMetricsService` |
+| `PATCH /client-entities/:id` | Editar razón social; RUT duplicado = 409 confirmable con `allow_duplicate_tax_id` (en prod hay duplicados legítimos) | `ClientDirectoryService` |
+| `GET /client-contacts`, `/stats`, `POST /client-contacts`, `POST /client-contacts/bulk-update`, `PATCH /client-contacts/:id` | Contactos: lista, crear, editar, asignar cliente / cambiar rol en lote | `ClientDirectoryService` |
+
+Criterio de cartera = el de Facturación de la app actual: abiertas = `Emitida | Enviada | Vencida` sumando
+`total_system_currency`; vencidas = abiertas con `due_date` < hoy. MRR = `revenue_schedule_monthly` + `mrr_legacy`
+(mismas fuentes que el dashboard).
+
+Tablas en que se escribe: `clients`, `client_entities`, `client_entity_clients`, `client_contacts`. No hay cambios
+de esquema salvo la migración de condiciones de pago (aplicada el 23-09).
+
+## Cliente 360 completo (24-09): estado calculado, cotizaciones, actividad y documentos
+
+| Endpoint | Para qué | Servicio |
+|---|---|---|
+| `GET /clients?lifecycle=` + `lifecycle_status` en cada cliente y en `GET /clients/:id/with-entities` / `GET /client-entities/:id` | Estado **calculado** desde contratos y suscripciones (`client-lifecycle.ts`): activo · por terminar · pausado (reservado) · en implementación · churn · prospecto. El campo manual `status` queda para la app actual | `ClientsService`, `ClientEntityMetricsService` |
+| `GET /clients/:id/quotes`, `GET /clients/:id/quotes/:quoteId/items` | Pestaña Cotizaciones: filtro por etapa (configurable por holding) y detalle con ítems | `ClientQuotesService` |
+| `GET /client-entities/:id/contracts` | Contratos de una razón social, filtro por cliente comercial | `ClientMetricsService` |
+| `GET /clients/:id/activity?types=`, `POST /clients/:id/activity/notes`, `DELETE /clients/:id/activity/notes/:noteId` | Línea de tiempo (contratos, facturas, pagos, cobranza, cotizaciones, documentos) + notas fechadas (solo el autor borra) | `ClientActivityService` |
+| `GET /clients/:id/documents`, `POST /clients/:id/documents/upload-url`, `POST /clients/:id/documents`, `DELETE /clients/:id/documents/:documentId` | Documentos: subida en 3 pasos con URL firmada al bucket privado `client-files`; archivar = borrado lógico | `ClientDocumentsService` |
+| `GET /client-documents/:id/download` | URL firmada de 60 s. **Sin `HoldingScopeGuard`** (la usan los enlaces guardados, también desde la app actual): el holding sale del registro y se valida pertenencia | `ClientDocumentsController` |
+
+**Migración `1790272076545-CreateClientActivityNotesAndDocumentStorage`** — ✅ aplicada en QA y en producción (24-09, con OK de Domi; migración + 2 assets + `schema:snapshot`):
+tabla `client_activity_notes` (RLS + policy `service_role` + trigger `updated_at`), 7 columnas opcionales en
+`client_documents` y bucket privado `client-files` (20 MB). Hasta aplicarla en producción, los specs de
+`entities/clientes` sobre `client_documents` quedan en rojo (esperado, GUIA → Sincronizar cambios).
+
+**Para publicar en producción (Leon):**
+1. ~~Migración + assets + snapshot en prod~~ ✅ hecho 24-09.
+2. Variables de la API en prod: `SUPABASE_SERVICE_ROLE_KEY` (verificar que esté) y `DOCUMENTS_LINK_BASE_URL=https://www.aisapira.com`.
+3. Confirmar la cookie de sesión compartida en prod (`NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` y `VITE_AUTH_COOKIE_DOMAIN` = `.aisapira.com`): de eso depende que la app actual abra los documentos nuevos.
+4. Riesgo existente: el bucket `client_documents` de prod es **público** (8 documentos con URL pública). Migrar esos archivos a `client-files` y cerrarlo cuando la app actual deje de subir ahí.
+5. La app actual no filtra `client_documents.deleted_at`: un documento archivado en el front nuevo se le sigue viendo. Opción: agregar `deleted_at IS NULL` a la policy `holding_access_client_documents`.
+
+## Acceso por holding (`ClientsHoldingScopeGuard`)
+
+`src/modules/clients/access/`. Se aplica a `ClientsController`, `ClientEntitiesController` y
+`ClientContactsController`, después de `SupabaseAuthGuard`:
+
+- Si la petición nombra un holding (`holding_id` en query o body, o header `x-holding-id`), el usuario debe tener
+  una fila **activa** en `user_holdings` para él → si no, **403**. Es el mismo criterio con que
+  `POST /holdings/select` deja elegir holding (los super admin tienen una fila por holding).
+- Deja `request.holdingIds` (seleccionado primero, luego el más antiguo).
+
+**Cambios de comportamiento en endpoints existentes de `/clients`:**
+
+| Endpoint | Antes | Ahora |
+|---|---|---|
+| `GET /clients` | Devolvía clientes de **todos** los holdings si no venía `holding_id` | Holding del header `x-holding-id` (`HoldingScopeGuard`, 24-09) |
+| `GET /clients/:id`, `/:id/with-entities`, `PATCH /:id`, `DELETE /:id`, `/:id/entities*` | Cualquier cliente por id | 404 si el cliente no es del holding activo |
+| `POST /clients/:id/entities` | Roto: leía `req.user.holdingId`, que `SupabaseAuthGuard` nunca llena → siempre fallaba la validación | Toma el holding activo |
+
+Único consumidor fuera del front nuevo: el buscador de **clientes comerciales** de Integraciones › Salesforce del
+front viejo (`sapira-ai` `SalesforceClientSearchSelect`) → `GET /clients` con `holding_id` en la query **y** el header
+`X-Holding-Id` (lo agrega `NestJSApiClient` desde `HoldingContext`). Por eso `QueryClientsDto` conserva `holding_id`
+como campo `deprecated` de compatibilidad: el guard exige que coincida con el header y el servicio lo ignora.
+
+**Guard (24-09):** el `ClientsHoldingScopeGuard` local se reemplazó por el guard único `HoldingScopeGuard`
+(`src/guards/`), la regla de `docs/v2-rediseno/autorizacion-y-tenancy.md`. `HoldingAccessGuard` queda deprecado.
+
+## Migración: condiciones de pago — ✅ aplicada 23-09 (QA y producción)
+
+`src/databases/postgresql/migrations/1789200000000-AddClientEntityPaymentTerms.ts`.
+
+**Aplicación (23-09, tras merge de `qa` en `domi`)**: `migration:show` en QA y prod → única pendiente →
+`migration:run --target qa` → verificado en QA (columna jsonb + CHECK + comentario; un UPDATE con 400 días es
+rechazado por el CHECK) → `migration:run --target production` → verificado en prod (1.542 razones sociales
+intactas). **Después**, como exige el proceso: columna + `@Check` en la entity promovida `ClientEntity` y
+`yarn schema:snapshot --target production` (solo cambió el snapshot de `client_entities`). Código: `payment_terms`
+en `UpdateClientEntityDto` (`PaymentTermsDto`, espejo del CHECK), en la lista blanca de `ClientDirectoryService` y en
+el detalle `GET /client-entities/:id`. Tests: DTO + servicio. El generador de facturas **todavía no lee** la
+condición (sigue `+30`): conectarlo va en la auditoría de contratos (S4 · Medios #11).
+
+- **Qué:** `client_entities.payment_terms jsonb NULL` + CHECK `client_entities_payment_terms_check` + comentario.
+- **Por qué (roadmap operativo #11):** hoy el generador usa `emisión + 30 días` para todo; en agosto el SAT rechazó
+  13 facturas PPD de TiMining que exigen vencimiento el mes siguiente.
+- **Dónde (decisión de Domi):** en `client_entities`, no en `client_entity_clients`. Es el default de la razón
+  social; la factura y el contrato copian la regla y pueden sobrescribirla.
+- **Forma:** `{"kind":"net","days":30}` · `{"kind":"end_of_month","days":30}` · `{"kind":"day_of_next_month","day":17}`
+  (si el mes es más corto, el último día). `NULL` = sin condición propia. El cálculo vive en
+  `front-sapira/app/(protected)/lab/clientes/_lib/payment-terms.ts` (con tests).
+- **CHECK verificado** en producción con un `SELECT` (sin DDL): acepta las 5 formas válidas y rechaza 5 inválidas
+  (días como texto, 400 días, día 0, `kind` desconocido, sin `kind`). Usa `CASE` anidados para no castear antes de
+  validar el tipo.
+
+**Orden de despliegue (el que se siguió el 23-09):**
+
+1. Correr la migración (`yarn migration:run`) en QA y luego en producción. Una columna nueva que TypeORM no conoce
+   es inofensiva.
+2. Después, en otro commit: declarar la columna en `ClientEntity` + `payment_terms` en `UpdateClientEntityDto` y en
+   `ClientDirectoryService.ENTITY_FIELDS` + habilitar "Guardar" en la tarjeta del front.
+
+Al revés (código antes que migración), TypeORM seleccionaría una columna inexistente en cada lectura de
+`client_entities` y rompería producción.
+
+**Preguntas abiertas:** ¿jsonb con CHECK o columnas separadas (`payment_terms_kind` + `payment_terms_days`)?
+¿Conviene un registro en `REGISTRO-ALINEACION.md` al aplicarla? ¿Quién propaga la regla al generador de facturas
+(api o RPC de `sapira-ai`)?
+
+## Tests
+
+`clients.service.spec`, `client-metrics.service.spec` (incluye facturas), `client-entity-metrics.service.spec`,
+`client-directory.service.spec`, `access/clients-holding-scope.guard.spec`. `jest src/modules/clients
+src/databases/postgresql`: 617 en verde.

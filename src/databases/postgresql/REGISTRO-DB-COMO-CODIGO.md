@@ -6,28 +6,37 @@
 **Qué significa "la base es código" acá:** el repo describe el estado deseado del esquema `public`,
 cada entorno se lleva a ese estado con un procedimiento repetible
 ([GUIA → Sincronizar cambios](./GUIA-CAMBIOS-DE-ESQUEMA.md#-sincronizar-cambios-a-qa-y-producción)),
-y cuando el código y una base difieren, **manda el código**. Hoy eso último no es cierto en todos
-los casos: los puntos 1, 5 y 7 son exactamente donde la base todavía manda.
+y cuando el código y una base difieren, **manda el código**. Con los puntos 1, 5 y 7 cerrados eso ya
+es cierto para tablas, funciones, triggers, policies, índices y jobs. Donde todavía no lo es: los 3
+assets `NO VERIFICABLE` de `grants/` y `seed/`, que el runner aplica sin poder comprobar el
+resultado contra la base (punto 10).
 
 **Lo que ya está** (no se repite abajo): las 129 tablas de `public` con datos de negocio tienen
-entity viva y no queda ningún espejo inerte; 887 assets cubren enums, extensiones, índices
+entity viva y no queda ningún espejo inerte; 868 assets cubren enums, extensiones, índices
 especiales, funciones, triggers, policies, permisos y semillas; `yarn schema:status --target <e>`
 mide cualquier base en solo lectura; y hay guardas en las pruebas para que nada de eso se
 desarme (GUIA → Guardas automáticas).
+
+Desde el 2026-09-22 se suma: los **140 comentarios de función** y la secuencia suelta `invoice_number_seq` están en el corpus; `schema:status` reporta **FUERA DEL CORPUS** (lo que ninguna fase puede describir); y el CLI **exige** `--only` en `--apply`, rechaza aplicar archivos sin commitear y ya no infiere el `--target`.
+
+Desde el 2026-09-23 se suma la fase **`cron/`**: los jobs de pg_cron son assets verificables. Los 2 que llamaban edge functions tenían la service role key escrita en `cron.job.command`; ahora pasan por `public.cron_invoke_edge_function`, que lee la URL y la clave de **Vault** (un secreto por entorno, fuera del repo). La captura redacta cualquier `Bearer`/JWT antes de escribir el snapshot —que está commiteado— y una prueba falla si aparece un secreto en el corpus o en los snapshots. Validado sin efectos: el wrapper autenticó contra una función inexistente (404) y los dos comandos nuevos se ejecutaron dentro de una transacción revertida.
+
+Ese mismo día quedaron **3 jobs**: se retiró `salesforce-daily-sync` junto con las 6 edge functions `salesforce-*` de QA y producción. La sincronización la hace el scheduler de la API (`SalesforceScheduler`, `@Cron('30 8 * * *')` en `America/Santiago`), que es quien escribe `salesforce_opportunities_stg`; la edge function no podía funcionar desde hacía tiempo —solo sabía renovar el token por `refresh_token`, y ninguna conexión tiene uno— y devolvía `200` igual porque capturaba el error por holding. Migración `RetiraSincronizacionSalesforcePorEdgeFunction`, que se lleva también `check_salesforce_sync_cron_status()`. **Queda muerta `salesforce_opportunities_cache`** (0 filas, sin lectores en ninguno de los dos repos): era lo único que esa edge function escribía, y su borrado es una decisión aparte.
 
 ## Estado
 
 | # | Pendiente | Estado | Cerrado |
 |---|---|---|---|
 | 1 | [Funciones donde la base y el repo difieren de verdad](#1-funciones-con-deriva-real-en-producción) | ✅ | 2026-09-21 |
-| 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ⬜ | |
-| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) (quedan 3 decisiones chicas, ver el punto) | 🔶 | 2026-09-21 |
+| 2 | [Línea base de prod sin registrar](#2-línea-base-de-producción-sin-registrar) | ✅ | 2026-09-22 |
+| 3 | [QA sin alinear con el repo](#3-qa-sin-alinear) | ✅ | 2026-09-23 |
 | 4 | [23 assets huérfanos](#4-23-assets-huérfanos) | ✅ | 2026-09-21 |
-| 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ⬜ | |
-| 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) | ⬜ | |
+| 5 | [El generador reescribe 74 entities desde prod](#5-el-generador-de-espejos-todavía-manda-sobre-74-entities) | ✅ | 2026-09-22 |
+| 6 | [94 sentencias de ruido en `migration:generate`](#6-94-sentencias-de-ruido-al-generar-una-migración) → 53 | ✅ | 2026-09-23 |
 | 7 | [2 vistas sin asset ni entity](#7-dos-vistas-fuera-del-código) | ✅ | 2026-09-21 |
-| 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) | ⬜ | |
+| 8 | [No se puede reconstruir una base desde cero](#8-no-hay-bootstrap-desde-cero) — decidido: se clona prod | ✅ | 2026-09-22 |
 | 9 | [Rotar las contraseñas de QA y producción](#9-rotar-las-contraseñas) | ⬜ | |
+| 10 | [Permisos: `grants/` sigue sin ser verificable](#10-permisos-grants-sigue-sin-ser-verificable) | 🔶 | 2026-09-23 |
 
 Las cifras de abajo se midieron el **2026-09-21**. La fuente vigente siempre es el comando, no esta
 tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|production>`.
@@ -66,6 +75,15 @@ tabla: `DOTENV_CONFIG_PATH=.env.<qa|prod>.db yarn schema:status --target <qa|pro
 
 ## 2. Línea base de producción sin registrar
 
+> ✅ **CERRADO el 2026-09-22.** `--baseline` registró 853 assets en producción y 830 en QA (más los
+> que ya estaban). Antes se re-aplicaron las 2 funciones cuyo archivo había cambiado al incorporar
+> los comentarios. Estado al cierre: **prod 862 APLICADO, 0 pendientes, 0 deriva, 0 solo-en-base**;
+> QA 855 APLICADO. Los 3 `NO VERIFICABLE` (`grants/000`, `seed/001`, `seed/002`) siguen fuera por
+> diseño hasta el punto de permisos verificables.
+>
+> Desde ahora `schema:status` dice la verdad sobre qué está pendiente en cada base: esa es la
+> diferencia entre tener historial y no tenerlo.
+
 `public.sapira_sql_asset_history` tiene **9 filas de 887 assets** (7 entre el 2026-09-09 y el 09-15,
 más las 2 del 09-21); **851** están verificados idénticos a la base y esperan registro.
 
@@ -79,6 +97,16 @@ aparece `DERIVA`. Detalle: [GUIA → Línea base](./GUIA-CAMBIOS-DE-ESQUEMA.md#4
 **Cómo se verifica:** `schema:status --target production` no muestra `LINEA BASE`.
 
 ## 3. QA sin alinear
+
+> ✅ **CERRADO el 2026-09-23.** QA y producción quedaron **idénticas: 867 assets `APLICADO` en cada
+> una, 0 pendientes, 0 deriva, 0 solo-en-base**. Lo que faltaba de las 3 decisiones abiertas:
+>
+> - **`types/000-extensions` (`NO CONVERGE`)**: QA no tenía `pg_trgm` ni `pgjwt`. No era cosmético —
+>   `search_contracts_by_client_identity` y `suggest_contract_item_matches` usan `similarity()`, así
+>   que existían en QA y habrían fallado al ejecutarse. Aplicar el asset las instaló.
+> - **6 funciones con comentarios solo en QA**: se trajo la versión de QA al repo (documentaba mejor,
+>   incluidos ~20 comentarios en `standardize_invoice_items`) y se aplicó a las dos bases.
+> - Las policies y objetos que solo existían en QA ya se habían resuelto el 21-09.
 
 > 🔶 **CASI CERRADO el 2026-09-21** (sesión Domi+Claude, procedimiento §6 de la GUIA en el orden
 > documentado): 2 policies del paso 1 → **las 5 migraciones TypeORM** → 24 assets con `--only`
@@ -210,6 +238,14 @@ ninguna base. Para regenerar esta lista: `schema:status --target production`, se
 
 ## 5. El generador de espejos todavía manda sobre 74 entities
 
+> ✅ **CERRADO el 2026-09-22.** El generador ya no escribe los `.entity.ts` promovidos: solo emite
+> para ellos el snapshot de prod, el barrel, el registro y el README. Verificado con el criterio de
+> este punto —regenerar los 16 módulos no modifica ningún `.entity.ts`—. Además: la fecha de los
+> archivos generados salía de una constante `2026-08-22` y ahora se deriva del catálogo, y el
+> refresco (4 pasos sueltos) quedó en un solo comando, `yarn schema:snapshot --target <entorno>`,
+> que se corre **después** de aplicar a prod. Las 74 cabeceras se reescribieron para que ningún
+> archivo siga afirmando que se regenera.
+
 Las 74 entities promovidas desde espejo (cabecera "PROMOVIDA desde espejo") las reescribe
 `scripts/espejo/generate-espejo.py` desde los snapshots de prod.
 
@@ -223,6 +259,13 @@ actualizar sus pruebas y `entities/README.md`.
 **Cómo se verifica:** regenerar todos los módulos no modifica ningún `.entity.ts`.
 
 ## 6. 94 sentencias de ruido al generar una migración
+
+> ✅ **CERRADO el 2026-09-23: 94 → 53.** Los 41 `DROP INDEX` de `special-index/` desaparecieron al
+> declarar cada uno en su entity con `@Index('<nombre>', { synchronize: false })` —TypeORM entonces
+> sabe que el índice existe y no lo crea ni lo borra— en 26 entities. Una guarda nueva en
+> `indices-declarados.spec.ts` exige esa marca para cada asset de `special-index/`, así que el ruido
+> no puede volver. Las 53 restantes son churn del propio TypeORM (28 FKs que elimina y recrea
+> idénticas, 21 de defaults y 4 de dos índices) y no tienen arreglo desde el repo.
 
 `yarn schema:log` contra prod emite 94 sentencias, todas clasificadas y ninguna cambiaría la base:
 41 índices de `special-index/`, 28 FKs que TypeORM elimina y recrea idénticas, 14 del churn de
@@ -247,7 +290,11 @@ TypeORM y no tienen arreglo desde el repo.
 > la lógica reutilizable vive en `get_invoice_net_amount()` / `get_invoice_items_with_credits()`.
 > Evidencia de no-uso en el comentario de la migración (0 referencias en 3 repos, 0 funciones,
 > 0 en el catálogo semántico del copiloto). El `down()` las recrea verbatim.
-
+>
+> Lo que quedaba del punto se resolvió por otro lado: `schema:status` ahora lista **FUERA DEL
+> CORPUS**, así que una vista nueva se reporta sola en vez de pasar inadvertida, y crear la fase
+> `views/` dejó de tener sentido sin archivos que poner. Medido en vivo el 21-09: las dos vistas ya
+> no estaban ni en prod ni en QA.
 
 `invoices_with_net_amounts` e `invoice_items_consolidated` existen en prod y no tienen asset ni
 entity. `fetch-catalog.ts` ya las captura (consulta `views`), pero no hay fase que las aplique.
@@ -262,6 +309,13 @@ los tendría y nadie revisa sus cambios.
 
 ## 8. No hay bootstrap desde cero
 
+> ✅ **CERRADO el 2026-09-22 como decisión, no como desarrollo** (Leon): **el camino oficial para un
+> entorno nuevo es clonar producción**, no reconstruir desde el repo. No se escribe la migración
+> inicial de las 131 tablas. La receta quedó en
+> [GUIA → Crear un entorno nuevo](./GUIA-CAMBIOS-DE-ESQUEMA.md#crear-un-entorno-nuevo).
+> Consecuencia aceptada: el repo describe el estado y las transiciones, pero no construye la base
+> desde vacío; los assets pueden asumir que las tablas existen.
+
 Las 131 tablas de prod existían antes de este sistema y `migrations/` solo tiene las 5 posteriores:
 **ninguna migración las crea**. Un entorno nuevo solo se puede levantar clonando prod.
 
@@ -275,6 +329,23 @@ ninguna escrita.
 
 **Cómo se verifica:** `migration:run` + `postgres:assets --apply` sobre una base vacía la dejan
 igual a prod.
+
+## 10. Permisos: `grants/` sigue sin ser verificable
+
+> 🔶 **Observable desde el 2026-09-23, todavía no verificable.** `schema:status` ahora captura los
+> ACL reales (`aclexplode` sobre `relacl`/`proacl`, con `COALESCE(acl, acldefault(...))` para que
+> "sin ACL" signifique los permisos por defecto) y reporta la firma mayoritaria, las excepciones y
+> los `ALTER DEFAULT PRIVILEGES`. Medido en prod: **las 131 tablas comparten una sola firma**, así
+> que lo que declara `grants/000-table-privileges.sql` es cierto.
+
+**Lo que falta para cerrarlo (D2):** que `grants/000`, un `grants/001-default-privileges` nuevo y
+`grants/010` se **generen desde el catálogo** en vez de escribirse a mano. Recién entonces se puede
+sacar `grants` de `UNVERIFIABLE_DIRECTORIES` —lo que además hace que `--baseline` los registre—.
+
+**Hallazgo del reporte (2026-09-23):** `change_contract_currency` **no tiene `EXECUTE` para PUBLIC** y
+ningún asset lo explica. Es el único caso así: `cleanup_duplicate_partners_by_vat` también se aparta,
+pero eso sí está documentado en `grants/010`. Alguien revocó ese permiso por fuera del repo. Hay que
+decidir si se conserva —y entonces se escribe en un asset— o si se restituye.
 
 ## 9. Rotar las contraseñas
 

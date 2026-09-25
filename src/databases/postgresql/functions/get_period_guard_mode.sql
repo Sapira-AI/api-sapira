@@ -15,5 +15,6 @@ BEGIN
     RETURN 'enforce';
   END IF;
   RETURN v_mode;
-END $function$
+END $function$;
 
+COMMENT ON FUNCTION public."get_period_guard_mode"() IS 'Devuelve el modo del guard (sapira.period_guard_mode): off, warn o enforce. Default: enforce.';

@@ -21,5 +21,6 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN RAISE WARNING 'refresh_all_pending_renewals: falló contract %: %', v_contract_id, SQLERRM; END;
   END LOOP;
   RETURN QUERY SELECT v_count, v_rows;
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."refresh_all_pending_renewals"() IS 'Itera contratos con items en limbo (categoria NOT IN DOWNSELL/CHURN) y ejecuta apply_pending_renewal_tail. v1.2. Usado por pg_cron diario (refresh-pending-renewals).';

@@ -39,5 +39,6 @@ BEGIN
   VALUES (v_holding_id, p_contract_id, v_user_id, 'update_item_descriptions',
     jsonb_build_object('updates', p_updates, 'updated_count', v_count, 'failed', v_failed));
   RETURN jsonb_build_object('success', true, 'updated_count', v_count, 'failed', v_failed);
-END; $function$
+END; $function$;
 
+COMMENT ON FUNCTION public."invoice_items_bulk_update_description"(p_contract_id uuid, p_updates jsonb) IS 'Actualiza description de invoice_items específicos, solo de facturas Por Emitir del contrato. Requiere permiso EDIT_FACTURACION.';

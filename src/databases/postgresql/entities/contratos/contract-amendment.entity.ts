@@ -5,13 +5,14 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
 
 /**
  * Entity de `public.contract_amendments` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 87 filas · RLS on.
- * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Sigue siendo un archivo GENERADO por `scripts/espejo/generate-espejo.py`: lo que se edite a mano se pierde en la próxima regeneración.
+ * PROMOVIDA desde espejo: el archivo termina en `.entity.ts`, así que la carga el glob de entities de database.module.ts y puede registrarse en forFeature. Desde el 2026-09-22 este archivo YA NO se regenera: es la fuente de verdad de su tabla y se edita a mano (entity → migración revisada → aplicar). El generador solo refresca el snapshot de prod contra el que su spec lo mide.
  * Referenciada por FK desde 1 tabla(s): contract_amendment_items.
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: trg_set_amendment_holding · BEFORE INSERT FOR EACH ROW → set_contract_amendment_holding_id().
  * Policies (3): tenant_amendments_ins (INSERT, public); tenant_amendments_sel (SELECT, public); tenant_amendments_upd (UPDATE, public).
  * Índice no declarado (expresión/orden/método): CREATE INDEX idx_contract_amendments_contract_date ON public.contract_amendments USING btree (contract_id, effective_date DESC, created_at DESC)
  */
+@Index('idx_contract_amendments_contract_date', { synchronize: false })
 @Entity('contract_amendments')
 @Index('idx_contract_amendments_contract', ['contract_id'])
 @Index('idx_contract_amendments_holding', ['holding_id'])

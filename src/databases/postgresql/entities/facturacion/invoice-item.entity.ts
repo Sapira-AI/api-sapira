@@ -19,6 +19,7 @@ import { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/
 @Index('idx_invoice_items_product_id', ['product_id'])
 @Index('idx_invoice_items_status', ['status'])
 @Index('idx_invoice_items_subscription_item_id', ['subscription_item_id'], { where: `(subscription_item_id IS NOT NULL)` })
+@Index('idx_invoice_items_custom_fields', { synchronize: false })
 @Entity('invoice_items')
 export class InvoiceItem {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'invoice_items_pkey' })

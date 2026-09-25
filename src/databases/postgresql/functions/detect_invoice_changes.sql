@@ -20,5 +20,6 @@ BEGIN
     
     RETURN FALSE;
 END;
-$function$
+$function$;
 
+COMMENT ON FUNCTION public."detect_invoice_changes"(new_data jsonb, old_data jsonb, relevant_fields text[]) IS 'Función de compatibilidad para detectar cambios en facturas con campos específicos';
