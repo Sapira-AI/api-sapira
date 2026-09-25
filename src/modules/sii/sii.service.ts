@@ -1,7 +1,7 @@
 import { DefaultAzureCredential } from '@azure/identity';
 import { SecretClient } from '@azure/keyvault-secrets';
 import { BlobServiceClient } from '@azure/storage-blob';
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -24,18 +24,8 @@ export class SiiService {
 		private readonly facturaClient: FacturaClientService
 	) {}
 
-	private async selectedHolding(authId: string) {
-		const [row] = await this.dataSource.query<{ holding_id: string }[]>(
-			`SELECT uh.holding_id FROM user_holdings uh JOIN users u ON u.id = uh.user_id
-			 WHERE u.auth_id = $1 AND uh.selected = true AND uh.is_active = true LIMIT 1`,
-			[authId]
-		);
-		if (!row) throw new ForbiddenException('No existe un holding seleccionado');
-		return row.holding_id;
-	}
-
-	private async assertCompany(authId: string, companyId: string) {
-		const holdingId = await this.selectedHolding(authId);
+	/** Razón social chilena del holding activo; 404 si es de otro holding (no se confirma que exista). */
+	private async assertCompany(holdingId: string, companyId: string) {
 		const company = await this.companies.findOne({ where: { id: companyId, holding_id: holdingId } });
 		if (!company || !['chile', 'cl'].includes((company.country || '').trim().toLowerCase())) {
 			throw new NotFoundException('Razón social chilena no encontrada en el holding seleccionado');
@@ -43,8 +33,7 @@ export class SiiService {
 		return { company, holdingId };
 	}
 
-	async eligibleCompanies(authId: string) {
-		const holdingId = await this.selectedHolding(authId);
+	async eligibleCompanies(holdingId: string) {
 		const companies = await this.companies
 			.createQueryBuilder('company')
 			.where('company.holding_id = :holdingId', { holdingId })
@@ -66,8 +55,8 @@ export class SiiService {
 		}));
 	}
 
-	async integrateWithFactura(authId: string, companyId: string, dto: IntegrateFacturaDto = {}) {
-		const { company, holdingId } = await this.assertCompany(authId, companyId);
+	async integrateWithFactura(holdingId: string, companyId: string, dto: IntegrateFacturaDto = {}) {
+		const { company } = await this.assertCompany(holdingId, companyId);
 		const configuration = await this.configurations.findOne({ where: { company_id: company.id, holding_id: holdingId } });
 		const giro = dto.business_activity || configuration?.business_activity;
 		const comuna = dto.commune || configuration?.commune;
@@ -118,8 +107,8 @@ export class SiiService {
 		return { linked: true, sapiraCompanyId: company.id, empresaId, configurationId: savedConfiguration.id };
 	}
 
-	async getConfiguration(authId: string, companyId: string) {
-		const { company, holdingId } = await this.assertCompany(authId, companyId);
+	async getConfiguration(holdingId: string, companyId: string) {
+		const { company } = await this.assertCompany(holdingId, companyId);
 		const configuration = await this.configurations.findOne({ where: { company_id: company.id, holding_id: holdingId } });
 		if (!configuration) return { company, configuration: null, certificate: null, cafs: [] };
 		const [certificate, cafs] = await Promise.all([
@@ -129,8 +118,8 @@ export class SiiService {
 		return { company, configuration, certificate: certificate ? { ...certificate, key_vault_secret_name: undefined } : null, cafs };
 	}
 
-	async updateConfiguration(authId: string, companyId: string, dto: UpdateSiiConfigurationDto) {
-		const { company, holdingId } = await this.assertCompany(authId, companyId);
+	async updateConfiguration(holdingId: string, companyId: string, dto: UpdateSiiConfigurationDto) {
+		const { company } = await this.assertCompany(holdingId, companyId);
 		const configuration = await this.configurations.preload({
 			...(await this.configurations.findOne({ where: { company_id: company.id, holding_id: holdingId } })),
 			holding_id: holdingId,
@@ -169,9 +158,9 @@ export class SiiService {
 		return new BlobServiceClient(url, new DefaultAzureCredential()).getContainerClient(name);
 	}
 
-	async uploadCertificate(authId: string, companyId: string, file: Express.Multer.File, password: string, expiresAt?: string) {
+	async uploadCertificate(holdingId: string, companyId: string, file: Express.Multer.File, password: string, expiresAt?: string) {
 		if (!file || !password) throw new BadRequestException('Certificado y contraseña son requeridos');
-		const { configuration } = await this.getConfiguration(authId, companyId);
+		const { configuration } = await this.getConfiguration(holdingId, companyId);
 		if (!configuration) throw new BadRequestException('Guarda primero la configuración tributaria');
 		const secretName = `sii-${configuration.id}-certificate-${Date.now()}`;
 		await this.keyVault().setSecret(secretName, JSON.stringify({ pfx: file.buffer.toString('base64'), password }));
@@ -187,9 +176,9 @@ export class SiiService {
 		);
 	}
 
-	async uploadCaf(authId: string, companyId: string, dto: CreateCafDto, file: Express.Multer.File) {
+	async uploadCaf(holdingId: string, companyId: string, dto: CreateCafDto, file: Express.Multer.File) {
 		if (!file) throw new BadRequestException('Archivo CAF requerido');
-		const { configuration } = await this.getConfiguration(authId, companyId);
+		const { configuration } = await this.getConfiguration(holdingId, companyId);
 		if (!configuration) throw new BadRequestException('Guarda primero la configuración tributaria');
 		const xml = file.buffer.toString('utf8');
 		const start = Number(xml.match(/<RNG><D>(\d+)<\/D>/)?.[1]);
@@ -212,8 +201,8 @@ export class SiiService {
 		);
 	}
 
-	async reserveFolio(authId: string, dto: ReserveFolioDto) {
-		const { holdingId } = await this.assertCompany(authId, dto.company_id);
+	async reserveFolio(holdingId: string, dto: ReserveFolioDto) {
+		await this.assertCompany(holdingId, dto.company_id);
 		return this.dataSource.transaction(async (manager) => {
 			const configuration = await manager
 				.getRepository(SiiConfiguration)
