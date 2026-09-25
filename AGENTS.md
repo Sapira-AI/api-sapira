@@ -19,11 +19,41 @@
 - Crea controladores y providers siguiendo los modulos ya existentes.
 - Evita refactors o simplificaciones no pedidas.
 - No hagas commits ni cambios destructivos de git sin instruccion explicita.
-- Toda funcionalidad nueva o modificada debe actualizar su documentación funcional en la misma tarea.
+- Toda funcionalidad nueva o modificada —la haga Claude, Cursor o una persona— cierra la tarea con tres verificaciones: documentación funcional, documentación técnica y tests unitarios. Detalle abajo, en **Documentación y tests obligatorios**.
 - `ROADMAP-V2.md` (raíz) es el único índice del plan v2: un documento de planificación nuevo se linkea desde ahí o no existe. El backlog operativo de fixes vive en copia espejo doble: `docs/ROADMAP-OPERATIVO.md` y `sapira-ai/docs/ROADMAP-OPERATIVO.md` — todo cambio se replica en ambos (convención en el propio archivo).
 - Prioriza documentar en la ubicación más cercana del módulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `docs/` para documentación transversal.
-- Toda funcionalidad nueva o modificada en backend debe incluir tests unitarios nuevos o actualizados.
 - Usa Jest para pruebas unitarias y manten las specs dentro de `src/` con sufijo `.spec.ts`, idealmente cerca del modulo afectado.
+
+## Documentación y tests obligatorios
+
+Toda funcionalidad nueva o modificada cierra con estas tres verificaciones. La versión legible y
+ampliada está en `docs/README.md`.
+
+**1. Documentación funcional.** Obligatoria cuando el cambio toca comportamiento funcional, flujos o
+reglas de negocio, contratos de entrada/salida, integraciones externas, payloads, validaciones,
+errores esperados o configuración relevante para operación y soporte. Va en la ubicación más cercana:
+`src/modules/<modulo>/docs/` si el módulo ya tiene carpeta propia, o `docs/cambios/` para cambios
+puntuales y `docs/` para lo transversal. No hace falta para renombres internos ni refactors sin
+impacto funcional visible.
+
+**2. Documentación técnica.** Se actualiza la fuente canónica que corresponda, sin crear taxonomías
+nuevas ni duplicar:
+
+| Qué cambió | Dónde se documenta |
+|---|---|
+| Esquema de la base: tablas, entities, funciones, triggers, policies, grants, seeds, cron | `src/databases/postgresql/` (GUIA, README del corpus, REGISTRO-DB-COMO-CODIGO). **No se duplica en `docs/`** |
+| Guards transversales, autorización y tenancy | `docs/guards/` y `docs/v2-rediseno/autorizacion-y-tenancy.md` |
+| Arquitectura o diseño técnico de un módulo | `src/modules/<modulo>/docs/` |
+| Decisiones técnicas transversales del rediseño | `docs/v2-rediseno/` (linkeado desde `ROADMAP-V2.md`) |
+
+**3. Tests unitarios.** Toda funcionalidad nueva o modificada incluye specs nuevas o actualizadas en
+Jest, dentro de `src/`, con sufijo `.spec.ts` y cerca del módulo afectado. Prioriza `service`,
+`provider`, helpers y lógica de negocio; en `controller`, cubre su comportamiento propio y mockea
+dependencias externas. Para un controlador con `HoldingScopeGuard`, los tres casos son obligatorios:
+sin header → 400, holding ajeno → 403, registro de otro holding → 404.
+
+No cierres una tarea funcional sin verificar los tres puntos. Si alguno no aplica, deja la
+justificación explícita en la entrega; no lo omitas en silencio.
 
 ## Base de datos y esquema
 
