@@ -1,0 +1,42 @@
+---
+description: Checklist obligatorio al crear o modificar funcionalidades en api-sapira
+alwaysApply: true
+---
+
+# Funcionalidades: documentación y tests
+
+Toda funcionalidad nueva o modificada en `api-sapira` cierra con estas tres verificaciones. La fuente de verdad es la sección "Documentación y tests obligatorios" de `AGENTS.md`; la versión ampliada está en `docs/README.md`.
+
+## 1. Documentación funcional
+
+Obligatoria cuando el cambio toca alguno de estos puntos:
+
+- comportamiento funcional;
+- flujos o reglas de negocio;
+- contratos de entrada o salida;
+- integraciones externas;
+- payloads, validaciones o errores esperados;
+- configuración relevante para operación o soporte.
+
+Dónde: `src/modules/<modulo>/docs/` si el módulo ya tiene carpeta propia; `docs/cambios/` para cambios puntuales; `docs/` para lo transversal. No hace falta para renombres internos ni refactors sin impacto funcional visible.
+
+## 2. Documentación técnica
+
+Se actualiza la fuente canónica que corresponda. No inventes rutas ni dupliques contenido:
+
+- esquema de base de datos (tablas, entities, funciones, triggers, policies, grants, seeds, cron) → `src/databases/postgresql/`: `GUIA-CAMBIOS-DE-ESQUEMA.md`, el `README.md` del corpus y `REGISTRO-DB-COMO-CODIGO.md`. **Nunca se duplica en `docs/`**;
+- guards transversales, autorización y tenancy → `docs/guards/` y `docs/v2-rediseno/autorizacion-y-tenancy.md`;
+- arquitectura o diseño técnico de un módulo → `src/modules/<modulo>/docs/`;
+- decisiones técnicas transversales del rediseño → `docs/v2-rediseno/`, linkeado desde `ROADMAP-V2.md`.
+
+## 3. Tests unitarios
+
+- Toda funcionalidad nueva o modificada incluye specs nuevas o actualizadas con Jest.
+- Specs dentro de `src/`, con sufijo `.spec.ts`, cerca del módulo afectado.
+- Prioriza `service`, `provider`, helpers y lógica de negocio. En `controller`, cubre su comportamiento propio y mockea dependencias externas.
+- Controlador con `HoldingScopeGuard`: los tres casos son obligatorios — sin header `x-holding-id` → 400, holding ajeno → 403, registro de otro holding → 404.
+- Comandos: `yarn test`, `yarn test:cov`, `yarn test:e2e`. Jest y `@nestjs/testing` ya están instalados: reutilízalos antes de agregar dependencias.
+
+## Cierre
+
+No cierres una tarea funcional sin verificar los tres puntos. Si alguno no aplica, deja la justificación explícita en la entrega y pide confirmación cuando corresponda. No lo omitas en silencio.

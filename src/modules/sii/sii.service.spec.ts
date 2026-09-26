@@ -45,12 +45,14 @@ describe('SiiService factura integration', () => {
 			{} as any,
 			facturaClient as any
 		);
-		return { service, facturaClient, companies, configurations };
+		return { service, facturaClient, companies, configurations, dataSource };
 	}
+
+	const OTHER_HOLDING = 'a4f0c2b1-2d3e-4f5a-8b6c-7d8e9f0a1b2c';
 
 	it('lists Chilean companies with facturaStatus not_linked by default', async () => {
 		const { service } = createService();
-		await expect(service.eligibleCompanies('auth-1')).resolves.toEqual([
+		await expect(service.eligibleCompanies(company.holding_id)).resolves.toEqual([
 			expect.objectContaining({
 				id: company.id,
 				legalName: company.legal_name,
@@ -63,7 +65,7 @@ describe('SiiService factura integration', () => {
 	it('provisions a holding company in api-factura', async () => {
 		const { service, facturaClient } = createService();
 		await expect(
-			service.integrateWithFactura('auth-1', company.id, {
+			service.integrateWithFactura(company.holding_id, company.id, {
 				business_activity: 'Software',
 				commune: 'Santiago',
 				city: 'Santiago',
@@ -80,13 +82,32 @@ describe('SiiService factura integration', () => {
 
 	it('rejects a company outside the selected holding', async () => {
 		const { service } = createService({ company: null });
-		await expect(service.integrateWithFactura('auth-1', 'other-company', {})).rejects.toBeInstanceOf(NotFoundException);
+		await expect(service.integrateWithFactura(company.holding_id, 'other-company', {})).rejects.toBeInstanceOf(NotFoundException);
+	});
+
+	it('consulta solo el holding recibido (validado por HoldingScopeGuard) y no lo resuelve por su cuenta', async () => {
+		const { service, companies, dataSource } = createService();
+
+		await service.eligibleCompanies(company.holding_id);
+
+		// Antes el holding salía de `user_holdings.selected`: el selector del front no tenía efecto.
+		for (const [sql] of dataSource.query.mock.calls as [string][]) {
+			expect(sql).not.toContain('user_holdings');
+		}
+		expect(companies.createQueryBuilder().where).toHaveBeenCalledWith('company.holding_id = :holdingId', { holdingId: company.holding_id });
+	});
+
+	it('responde 404 si la razón social es de otro holding, sin confirmar que exista', async () => {
+		const { service, companies } = createService({ company: null });
+
+		await expect(service.getConfiguration(OTHER_HOLDING, company.id)).rejects.toBeInstanceOf(NotFoundException);
+		expect(companies.findOne).toHaveBeenCalledWith({ where: { id: company.id, holding_id: OTHER_HOLDING } });
 	});
 
 	it('rejects a company missing tax identity', async () => {
 		const { service, facturaClient } = createService({ company: { ...company, tax_id: undefined } as any });
 		await expect(
-			service.integrateWithFactura('auth-1', company.id, { business_activity: 'Software', commune: 'Santiago', city: 'Santiago' })
+			service.integrateWithFactura(company.holding_id, company.id, { business_activity: 'Software', commune: 'Santiago', city: 'Santiago' })
 		).rejects.toBeInstanceOf(BadRequestException);
 		expect(facturaClient.provisionEmpresa).not.toHaveBeenCalled();
 	});
