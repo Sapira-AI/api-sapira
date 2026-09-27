@@ -1,6 +1,6 @@
 {
 	"name": "api-sapira",
-	"version": "0.0.39",
+	"version": "0.0.40",
 	"description": "API de Sapira",
 	"author": "León Montero",
 	"private": true,
@@ -30,7 +30,7 @@
 		"migration:show": "ts-node -r tsconfig-paths/register scripts/run-migrations.ts show",
 		"migration:run": "ts-node -r tsconfig-paths/register scripts/run-migrations.ts run",
 		"migration:revert": "ts-node -r tsconfig-paths/register scripts/run-migrations.ts revert",
-		"version:commit": "bash ../scripts/version-commit.sh",
+		"version:commit": "node ../scripts/version-commit.js",
 		"vcp": "yarn version:commit patch"
 	},
 	"dependencies": {

@@ -27,6 +27,7 @@ que lee Supabase directo; no se tocan mientras ese front exista.
 | Forma | Dónde | Problema |
 |---|---|---|
 | Holding "seleccionado" en la base (`user_holdings.selected`) | Dashboard, `sii.service.ts` | El request no dice sobre qué holding opera; cambiar de holding en una pestaña cambia todas |
+| Todos los holdings del usuario | `GET /invoices/scheduler/report` | El super admin veía todo y el usuario de cliente casi nada; el selector no tenía efecto |
 | `HoldingAccessGuard` (header) | 2 controladores de Salesforce | Si falta el header **deja pasar**; no mira `is_active` |
 | `ClientsHoldingScopeGuard` | 3 controladores de Clientes (lab) | Correcto en lo esencial, pero local y acepta el holding por header, query o body |
 | Solo sesión; el holding llega como un dato más, sin validar pertenencia | ~35 controladores (invoices, odoo, stripe, bigquery, agents, copilot, holdings…) | Cualquier usuario con sesión podría operar sobre otro holding (§1 de `auditoria-contratos.md`) |
@@ -51,14 +52,16 @@ export class ClientsController {
   }
 }
 ```
+- Referencia técnica del guard: [`docs/guards/holding-scope-guard.md`](../guards/holding-scope-guard.md).
 - `HoldingScopeGuard` (`src/guards/holding-scope.guard.ts`): exige `x-holding-id` con UUID (400 si falta), valida fila
   **activa** en `user_holdings` (403 si no) y deja `request.holdingId`. Si una query o body todavía trae `holding_id`
   distinto al del header, responde 403 (protección mientras se migran los DTO viejos).
 - `@HoldingId()` (`src/decorators/holding-id.decorator.ts`) entrega el holding ya validado.
 - **Ningún DTO nuevo recibe `holding_id`**. El holding sale solo del guard. Excepción temporal y documentada: si el
   front viejo ya llama ese endpoint con `holding_id`, se deja como campo opcional `deprecated` (el guard exige que
-  coincida con el header y el servicio lo ignora). Hoy: `GET /clients` (buscador de clientes comerciales de la pantalla Integraciones › Salesforce).
-- **Antes de migrar un controlador, buscar sus llamadas en el front viejo** (`sapira-ai/src/services/*`, `NestJSApiClient`):
+  coincida con el header y el servicio lo ignora). Hoy: `GET /clients` (buscador de clientes comerciales de la pantalla Integraciones › Salesforce) y los 3 DTO del
+  copiloto. Ojo: con `forbidNonWhitelisted: true` (`main.ts`) **borrar el campo no lo ignora, devuelve 400** a quien lo mande.
+- **Antes de migrar un controlador, buscar sus llamadas en el front viejo** (`front-sapira-vite/src/services/*`, `NestJSApiClient`):
   ese cliente ya manda `X-Holding-Id` desde `HoldingContext`, pero puede enviar campos que el DTO nuevo rechaza.
 - Rutas por id: buscan por `id` **y** `holding_id`; si no es del holding → **404** (no se confirma que exista). Tablas sin
   `holding_id` se acotan por su padre (ej. `contract_items` → `contracts`).
@@ -74,9 +77,18 @@ export class ClientsController {
 
 ### Adopción: opt-in, sin romper nada
 - El guard **no es global**: se aplica con `@UseGuards` en cada controlador que se migra. Lo existente sigue igual.
+- Se aplica **al método** solo cuando el controlador mezcla endpoints migrados con otros que el front viejo todavía
+  llama sin header. Hoy hay un caso: `GET /invoices/scheduler/report`. Va documentado en el JSDoc del método.
+- **Websockets**: `NotificationsGateway` e `InvoiceSchedulerGateway` no pasan por guards HTTP y hoy no validan holding.
+  No transportan datos que la UI muestre —solo avisan para que el front invalide sus queries, y el REST ya está
+  acotado—, así que no se tocan en esta fase. Si algún día emiten contenido, necesitan su propia validación.
 - **Nosotros (Domi + Claude)**: Clientes (lab) y Dashboard ahora; todo lo nuevo nace así.
-- **Leon (pendiente)**: los ~35 controladores previos y los 2 de Salesforce, cuando los revise, con esta misma regla.
-  `HoldingAccessGuard` queda deprecado (no usar en código nuevo).
+- **Leon, Fase 1 (hecha, 26-09)**: los 4 grupos que consume el front nuevo — `sii`, `GET /invoices/scheduler/report`,
+  `notifications` y `sapira-copilot`. Detalle en [`docs/cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md`](../cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md).
+- **Leon, Fase 2 (pendiente)**: los ~25 controladores que solo usa el front viejo (salesforce, stripe, odoo, bigquery,
+  subscriptions, agents…) y los 2 de Salesforce con `HoldingAccessGuard`. Quedan sin acotar también
+  `/invoices/scheduler/{send,jobs,status,debug}` y los dos gateways de websocket.
+- `HoldingAccessGuard` queda deprecado (no usar en código nuevo).
 - `user_holdings.selected` queda solo como "holding con el que abre la app" (default del selector); ningún endpoint lo usa
   para decidir qué datos devuelve.
 

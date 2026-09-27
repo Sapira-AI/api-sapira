@@ -1,6 +1,6 @@
 # Notificaciones generales
 
-El módulo expone `notifications` para eventos de aplicación persistentes y sus destinatarios. Requiere autenticación Supabase y el header `x-holding-id`, igual que los controladores de módulos existentes.
+El módulo expone `notifications` para eventos de aplicación persistentes y sus destinatarios. Requiere autenticación Supabase y el header `x-holding-id`, **validado por `HoldingScopeGuard`**: responde 400 si el header falta o no es un UUID, y 403 si el usuario no tiene membresía activa en ese holding o si la query o el body traen un `holding_id` distinto. Antes el header se leía a mano y no se validaba la pertenencia. Detalle de la regla: [`docs/guards/holding-scope-guard.md`](../../../docs/guards/holding-scope-guard.md).
 
 ## Endpoints
 

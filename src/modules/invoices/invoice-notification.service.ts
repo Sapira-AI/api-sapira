@@ -273,6 +273,8 @@ export class InvoiceNotificationService {
 	async sendSchedulerErrorSummary(params: {
 		jobId: string;
 		holdingId: string;
+		/** Nombre del holding; va en el asunto para distinguir los correos de una misma noche. */
+		holdingName?: string;
 		dryRun: boolean;
 		executionSource: ExecutionSource;
 		executionEnvironment: ExecutionEnvironment;
@@ -283,7 +285,10 @@ export class InvoiceNotificationService {
 		if (params.dryRun || params.result.summary.errors === 0 || this.adminEmails.length === 0) return;
 
 		const nodeEnvironment = this.getNodeEnvironment();
-		const subject = `🚨 [${nodeEnvironment}] Integración de facturas con errores`;
+		// Con una corrida por holding llegan varios correos la misma noche: sin el holding en el asunto
+		// el cliente de correo los agrupa como si fueran uno solo.
+		const holdingLabel = params.holdingName || (params.holdingId === 'all' ? 'todos los holdings' : params.holdingId);
+		const subject = `🚨 [${nodeEnvironment}] Integración de facturas con errores — ${holdingLabel}`;
 		const errorRows = params.distinctErrors
 			.map(
 				(error) =>

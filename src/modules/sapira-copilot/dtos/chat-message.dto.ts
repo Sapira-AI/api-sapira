@@ -37,8 +37,13 @@ export class ChatMessageDto {
 	@Type(() => MessageHistoryDto)
 	history?: MessageHistoryDto[];
 
-	@ApiProperty({ description: 'Holding ID (obligatorio)' })
+	/**
+	 * Compatibilidad con el front viejo, que todavía lo manda: el holding sale de `HoldingScopeGuard`,
+	 * que rechaza (403) un valor distinto al de `x-holding-id`. El servicio lo ignora. Se quita cuando
+	 * el front viejo deje de enviarlo.
+	 */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
 	@IsString()
-	@IsNotEmpty()
-	holding_id: string;
+	@IsOptional()
+	holding_id?: string;
 }

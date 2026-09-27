@@ -177,11 +177,16 @@ export class InvoiceSchedulerService {
 		}
 	}
 
-	async getInvoicesToSend(holdingId?: string, contractId?: string): Promise<InvoiceWithRelations[]> {
+	/**
+	 * Facturas candidatas a enviarse hoy. Único lugar donde viven estos filtros: lo usan el envío
+	 * (`getInvoicesToSend`) y el cron para saber qué holdings tienen trabajo pendiente
+	 * (`getHoldingIdsWithPendingInvoices`).
+	 */
+	private pendingInvoicesQuery() {
 		const businessToday = this.getBusinessTodayString();
 		const businessCurrentMonth = businessToday.substring(0, 7);
 
-		const query = this.invoiceRepository
+		return this.invoiceRepository
 			.createQueryBuilder('inv')
 			.leftJoin('client_entities', 'cle', 'cle.id = inv.client_entity_id')
 			.leftJoin('companies', 'com', 'com.id = inv.company_id')
@@ -193,9 +198,28 @@ export class InvoiceSchedulerService {
 			.andWhere("TO_CHAR(inv.issue_date, 'YYYY-MM') = :businessCurrentMonth", { businessCurrentMonth })
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
-			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)')
-			.orderBy('inv.issue_date', 'ASC')
-			.addOrderBy('inv.created_at', 'ASC');
+			.andWhere('(con.auto_send_to_odoo = true OR con.auto_send_to_odoo IS NULL)');
+	}
+
+	/**
+	 * Holdings que el cron nocturno debe procesar: los que tienen facturas pendientes **y** no tienen
+	 * apagada la integración automática de Odoo (`holding_integration_settings`; fila ausente = habilitado).
+	 *
+	 * El flag se aplica solo aquí, no en `getInvoicesToSend`: el envío manual sigue siendo la válvula de
+	 * escape de un holding apagado.
+	 */
+	async getHoldingIdsWithPendingInvoices(): Promise<string[]> {
+		const rows = await this.pendingInvoicesQuery()
+			.leftJoin('holding_integration_settings', 'his', "his.holding_id = inv.holding_id AND his.integration = 'odoo'")
+			.andWhere('COALESCE(his.auto_enabled, true) = true')
+			.select('DISTINCT inv.holding_id', 'holding_id')
+			.getRawMany<{ holding_id: string }>();
+
+		return rows.map((row) => row.holding_id).filter(Boolean);
+	}
+
+	async getInvoicesToSend(holdingId?: string, contractId?: string): Promise<InvoiceWithRelations[]> {
+		const query = this.pendingInvoicesQuery().orderBy('inv.issue_date', 'ASC').addOrderBy('inv.created_at', 'ASC');
 
 		if (holdingId) {
 			query.andWhere('inv.holding_id = :holdingId', { holdingId });
@@ -1903,19 +1927,22 @@ export class InvoiceSchedulerService {
 			.exec();
 	}
 
-	async getJobsReport(query: SchedulerReportQueryDto, allowedHoldingIds?: string[]): Promise<SchedulerReportResponseDto> {
-		const match: Record<string, any> = {};
+	/**
+	 * Reporte de ejecuciones acotado al holding activo (validado por `HoldingScopeGuard`).
+	 *
+	 * Desde el 27-09-2026 el cron crea **una corrida por holding**, así que el caso normal es un job que ya
+	 * viene acotado y se muestra tal cual.
+	 *
+	 * Las ramas condicionadas a `holdingId === 'all'` siguen aquí por el **histórico**: hasta esa fecha el
+	 * cron creaba un solo job cross-holding por noche, con facturas de todos los clientes. Esas corridas se
+	 * incluyen —si no, el reporte perdería meses de historia— pero se les recortan las facturas al holding
+	 * activo y se recalculan `progress` y `summary` sobre esa porción, para no exponer datos ajenos. No se
+	 * pueden simplificar mientras queden jobs `'all'` en Mongo.
+	 */
+	async getJobsReport(query: SchedulerReportQueryDto, holdingId: string): Promise<SchedulerReportResponseDto> {
+		const match: Record<string, any> = { $or: [{ holdingId }, { holdingId: 'all' }] };
 		if (query.environment) match.executionEnvironment = query.environment;
 		if (query.source) match.executionSource = query.source;
-		if (allowedHoldingIds) {
-			// Usuario no super admin: solo ejecuciones de SUS holdings. Si además pidió un
-			// holding puntual, se respeta solo si le pertenece; si no, resultado vacío.
-			if (query.holdingId) {
-				match.holdingId = allowedHoldingIds.includes(query.holdingId) ? query.holdingId : '__sin_acceso__';
-			} else {
-				match.holdingId = { $in: allowedHoldingIds };
-			}
-		} else if (query.holdingId) match.holdingId = query.holdingId;
 		if (query.dryRun !== undefined) match.dryRun = query.dryRun === 'true';
 
 		if (query.from || query.to) {
@@ -1928,11 +1955,45 @@ export class InvoiceSchedulerService {
 			}
 		}
 
+		// En una corrida de un solo holding sus resultados ya son de ese holding (y los registros
+		// antiguos pueden no traer `holdingId` por factura): solo se filtra lo cross-holding.
+		const scopedResultsStage = {
+			$addFields: {
+				scopedResults: {
+					$filter: {
+						input: { $ifNull: ['$result.results', []] },
+						as: 'result',
+						cond: { $or: [{ $ne: ['$holdingId', 'all'] }, { $eq: ['$$result.holdingId', holdingId] }] },
+					},
+				},
+			},
+		};
+		const countScopedByStatus = (status: string) => ({
+			$size: { $filter: { input: '$scopedResults', as: 'result', cond: { $eq: ['$$result.status', status] } } },
+		});
+		const scopedProgressStage = {
+			$addFields: {
+				progress: {
+					$cond: [
+						{ $eq: ['$holdingId', 'all'] },
+						{
+							total: { $size: '$scopedResults' },
+							sent: countScopedByStatus('sent'),
+							errors: countScopedByStatus('error'),
+							skipped: countScopedByStatus('skipped'),
+							current: { $size: '$scopedResults' },
+						},
+						'$progress',
+					],
+				},
+			},
+		};
+
 		const errorProjection = {
 			$map: {
 				input: {
 					$filter: {
-						input: { $ifNull: ['$result.results', []] },
+						input: '$scopedResults',
 						as: 'result',
 						cond: { $eq: ['$$result.status', 'error'] },
 					},
@@ -1943,6 +2004,8 @@ export class InvoiceSchedulerService {
 		};
 		const basePipeline: any[] = [
 			{ $match: match },
+			scopedResultsStage,
+			scopedProgressStage,
 			{
 				$project: {
 					jobId: 1,
@@ -1961,7 +2024,7 @@ export class InvoiceSchedulerService {
 					errors: errorProjection,
 					invoiceResults: {
 						$map: {
-							input: { $ifNull: ['$result.results', []] },
+							input: '$scopedResults',
 							as: 'result',
 							in: {
 								invoiceId: '$$result.invoiceId',
@@ -1981,7 +2044,7 @@ export class InvoiceSchedulerService {
 						$map: {
 							input: {
 								$filter: {
-									input: { $ifNull: ['$result.results', []] },
+									input: '$scopedResults',
 									as: 'result',
 									cond: { $eq: ['$$result.status', 'error'] },
 								},
@@ -2036,6 +2099,9 @@ export class InvoiceSchedulerService {
 			this.invoiceSchedulerJobModel
 				.aggregate([
 					{ $match: match },
+					// Mismo recorte que los items: el resumen cuenta solo las facturas del holding activo.
+					scopedResultsStage,
+					scopedProgressStage,
 					{
 						$group: {
 							_id: null,
@@ -2143,15 +2209,26 @@ export class InvoiceSchedulerService {
 		);
 
 		const job = await this.invoiceSchedulerJobModel.findOne({ jobId }).lean().exec();
+		const holdingId = job?.holdingId || 'all';
 		await this.sendErrorSummaryNotification({
 			jobId,
-			holdingId: job?.holdingId || 'all',
+			holdingId,
+			holdingName: await this.getHoldingName(holdingId),
 			dryRun: result.dryRun,
 			executionSource: job?.executionSource || 'automatic',
 			executionEnvironment: job?.executionEnvironment || 'unknown',
 			startedAt: job?.startedAt || result.executedAt,
 			result,
 		});
+	}
+
+	/** Nombre del holding para el correo de errores; `undefined` en las corridas cross-holding antiguas. */
+	private async getHoldingName(holdingId: string): Promise<string | undefined> {
+		if (holdingId === 'all') return undefined;
+
+		const rows = (await this.dataSource.query('SELECT name FROM company_holdings WHERE id = $1', [holdingId])) as Array<{ name: string }>;
+
+		return rows[0]?.name;
 	}
 
 	async updateSchedulerJobError(jobId: string, error: Error): Promise<void> {
@@ -2170,6 +2247,7 @@ export class InvoiceSchedulerService {
 	private async sendErrorSummaryNotification(params: {
 		jobId: string;
 		holdingId: string;
+		holdingName?: string;
 		dryRun: boolean;
 		executionSource: ExecutionSource;
 		executionEnvironment: ExecutionEnvironment;
