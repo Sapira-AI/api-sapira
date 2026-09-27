@@ -2,7 +2,7 @@
  "contracts": {
   "name": "public.contracts",
   "rls_enabled": true,
-  "rows": 694,
+  "rows": 696,
   "columns": [
    {
     "name": "id",

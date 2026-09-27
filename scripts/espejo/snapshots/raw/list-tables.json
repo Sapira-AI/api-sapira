@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 54,
+			"rows": 104,
 			"columns": [
 				{
 					"name": "id",
@@ -2687,7 +2687,7 @@
 		{
 			"name": "public.client_contacts",
 			"rls_enabled": true,
-			"rows": 220,
+			"rows": 262,
 			"columns": [
 				{
 					"name": "id",
@@ -5128,6 +5128,17 @@
 				{
 					"name": "holding_fx_period_rates_holding_id_fkey",
 					"source_table": "public.holding_fx_period_rates",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "holding_integration_settings_holding_id_fkey",
+					"source_table": "public.holding_integration_settings",
 					"source_columns": [
 						"holding_id"
 					],
@@ -8397,7 +8408,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 694,
+			"rows": 696,
 			"columns": [
 				{
 					"name": "id",
@@ -10700,9 +10711,82 @@
 			]
 		},
 		{
+			"name": "public.holding_integration_settings",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "integration",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "auto_enabled",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "true",
+					"comment": "false apaga la corrida automática de esa integración para el holding"
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "updated_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"holding_id",
+				"integration"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "holding_integration_settings_holding_id_fkey",
+					"source_table": "public.holding_integration_settings",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.holding_settings",
 			"rls_enabled": true,
-			"rows": 4,
+			"rows": 5,
 			"columns": [
 				{
 					"name": "holding_id",
@@ -18337,7 +18421,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 20512,
+			"rows": 20547,
 			"columns": [
 				{
 					"name": "id",
@@ -19190,7 +19274,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 111,
+			"rows": 112,
 			"columns": [
 				{
 					"name": "id",
@@ -19741,7 +19825,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 162,
+			"rows": 163,
 			"columns": [
 				{
 					"name": "id",
@@ -20340,7 +20424,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 149,
+			"rows": 150,
 			"columns": [
 				{
 					"name": "id",
@@ -21606,7 +21690,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 10,
+			"rows": 11,
 			"columns": [
 				{
 					"name": "id",
@@ -22269,7 +22353,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 26407,
+			"rows": 26408,
 			"columns": [
 				{
 					"name": "id",
@@ -22397,7 +22481,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 416,
+			"rows": 420,
 			"columns": [
 				{
 					"name": "id",

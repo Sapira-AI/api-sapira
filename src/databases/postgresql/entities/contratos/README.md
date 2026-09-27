@@ -1,7 +1,7 @@
-# Módulo 5 · Contratos — 17 tablas de prod (2026-09-24)
+# Módulo 5 · Contratos — 17 tablas de prod (2026-09-27)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-24 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/contratos.{pgmeta,catalog}.json`); metadata real de las entities existentes en `contratos.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/contratos.{pgmeta,catalog}.json`); metadata real de las entities existentes en `contratos.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (1) — no se tocaron ni se duplicaron
 
@@ -9,7 +9,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `contracts` (694) | `src/databases/postgresql/entities/contratos/contract.entity.ts` · `Contract` | ⚠️ difiere de prod | — | — | — | nombre de PK `contracts_pkey`<br>CHECK `contracts_fx_company_policy_check`<br>CHECK `contracts_fx_invoice_policy_check`<br>CHECK `contracts_legacy_status_check`<br>CHECK `contracts_status_check`<br>índice con expresión `idx_contracts_custom_fields` |
+| `contracts` (696) | `src/databases/postgresql/entities/contratos/contract.entity.ts` · `Contract` | ⚠️ difiere de prod | — | — | — | nombre de PK `contracts_pkey`<br>CHECK `contracts_fx_company_policy_check`<br>CHECK `contracts_fx_invoice_policy_check`<br>CHECK `contracts_legacy_status_check`<br>CHECK `contracts_status_check`<br>índice con expresión `idx_contracts_custom_fields` |
 
 ## B · Tablas SIN entity previa → espejos generados (16): 16 promovidas, 0 apagadas
 

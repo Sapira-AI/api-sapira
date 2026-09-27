@@ -1513,6 +1513,17 @@
     ]
    },
    {
+    "name": "holding_integration_settings_holding_id_fkey",
+    "source_table": "public.holding_integration_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "holding_settings_holding_id_fkey",
     "source_table": "public.holding_settings",
     "source_columns": [
@@ -2652,7 +2663,7 @@
  "holding_settings": {
   "name": "public.holding_settings",
   "rls_enabled": true,
-  "rows": 4,
+  "rows": 5,
   "columns": [
    {
     "name": "holding_id",

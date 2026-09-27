@@ -22,12 +22,12 @@ export { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 export { Currency } from '@/databases/postgresql/entities/base-tenancy/currency.entity';
 export { CustomFieldDefinition } from '@/databases/postgresql/entities/base-tenancy/custom-field-definition.entity';
 export { FinancialSettings } from '@/databases/postgresql/entities/base-tenancy/financial-settings.entity';
+export { HoldingIntegrationSettings } from '@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity';
 export { HoldingSettings } from '@/databases/postgresql/entities/base-tenancy/holding-settings.entity';
 export { MasterData } from '@/databases/postgresql/entities/base-tenancy/master-data.entity';
 export { Permission } from '@/databases/postgresql/entities/base-tenancy/permission.entity';
 export { RolePermission } from '@/databases/postgresql/entities/base-tenancy/role-permission.entity';
 export { Role } from '@/databases/postgresql/entities/base-tenancy/role.entity';
-export { HoldingIntegrationSettings } from '@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity';
 export { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
 export { UserViewPreference } from '@/databases/postgresql/entities/base-tenancy/user-view-preference.entity';
 export { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
