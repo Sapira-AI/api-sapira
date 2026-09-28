@@ -1513,6 +1513,17 @@
     ]
    },
    {
+    "name": "holding_integration_settings_holding_id_fkey",
+    "source_table": "public.holding_integration_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "holding_settings_holding_id_fkey",
     "source_table": "public.holding_settings",
     "source_columns": [
@@ -2128,6 +2139,17 @@
      "updatable"
     ],
     "comment": "ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)"
+   },
+   {
+    "name": "fx_company_policy",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'monthly_avg'::text",
+    "comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
    }
   ],
   "primary_keys": [
@@ -2652,7 +2674,7 @@
  "holding_settings": {
   "name": "public.holding_settings",
   "rls_enabled": true,
-  "rows": 4,
+  "rows": 5,
   "columns": [
    {
     "name": "holding_id",

@@ -5,6 +5,7 @@ import { QueryRunner } from 'typeorm';
 
 import { AddFxRatePurposeAndCompanyFxPolicy1790610000000 } from './migrations/1790610000000-AddFxRatePurposeAndCompanyFxPolicy';
 import { FixHankaCompanyFxRatesDirection1790610000001 } from './migrations/1790610000001-FixHankaCompanyFxRatesDirection';
+import { FixHankaCompanyFxRatesDirectionTrimmedName1790610000002 } from './migrations/1790610000002-FixHankaCompanyFxRatesDirectionTrimmedName';
 
 /**
  * Modelo FX de contratos v2 (28-09-2026): regla única "1 [from] = rate [to]" y `contract_fx_period_rates.purpose`.
@@ -86,6 +87,39 @@ describe('migración 1790610000000 (purpose + companies.fx_company_policy)', () 
 
 		await new AddFxRatePurposeAndCompanyFxPolicy1790610000000().down(free.runner);
 		expect(sqls(free.query).filter((sql) => sql.includes('DROP'))).toHaveLength(5);
+	});
+});
+
+describe('migración 1790610000002 (Hanka, nombre del holding con espacio final)', () => {
+	// En producción el holding se llama "Hanka Robotics " (espacio final): la 1790610000001 comparó exacto y no corrigió nada.
+	const NEW_FUNCTION = `... AND cpr_direct.purpose = 'company' ...`;
+	const rows = [{ id: 'r1', contract_id: 'c1' }];
+
+	it('busca el holding con btrim y corrige + reconstruye como la anterior', async () => {
+		const { runner: db, query } = runner((sql) => {
+			if (sql.includes('pg_get_functiondef')) return [{ definition: NEW_FUNCTION }];
+			if (sql.includes('SELECT r.id, r.contract_id')) return rows;
+
+			return undefined;
+		});
+
+		await new FixHankaCompanyFxRatesDirectionTrimmedName1790610000002().up(db);
+		const [selectSql, selectParams] = query.mock.calls.find(([sql]) => (sql as string).includes('SELECT r.id, r.contract_id'))!;
+
+		expect(selectSql).toContain('btrim(h.name) = $1');
+		expect((selectParams as unknown[])[0]).toBe('Hanka Robotics');
+		expect(sqls(query).some((sql) => sql.includes('UPDATE contract_fx_period_rates'))).toBe(true);
+		expect(query.mock.calls.filter(([sql]) => (sql as string).includes('revenue_schedule_rebuild')).map(([, params]) => params)).toEqual([
+			['c1'],
+		]);
+	});
+
+	it('sin el asset nuevo aplicado, aborta', async () => {
+		const { runner: db } = runner((sql) =>
+			sql.includes('pg_get_functiondef') ? [{ definition: 'ROUND(1.0 / cpr_direct.rate, 10)' }] : undefined
+		);
+
+		await expect(new FixHankaCompanyFxRatesDirectionTrimmedName1790610000002().up(db)).rejects.toThrow('Aplica primero el asset');
 	});
 });
 
