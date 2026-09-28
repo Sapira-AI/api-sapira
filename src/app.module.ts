@@ -27,6 +27,7 @@ import { BancoCentralModule } from './modules/banco-central/banco-central.module
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { ClaudeModule } from './modules/claude/claude.module';
 import { ClientsModule } from './modules/clients';
+import { ContractsModule } from './modules/contracts';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DatabaseAnalyzerModule } from './modules/database/database-analyzer.module';
 import { DevicesModule } from './modules/devices/devices.module';
@@ -96,6 +97,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		NotificationsModule,
 		UsersModule,
 		ClientsModule,
+		ContractsModule,
 		OdooModule,
 		SalesforceModule,
 		EmailModule,

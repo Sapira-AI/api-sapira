@@ -3,11 +3,23 @@ import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, 
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { ChurnReason } from '@/databases/postgresql/entities/contratos/churn-reason.entity';
 import { WorkflowStep } from '@/databases/postgresql/entities/contratos/workflow-step.entity';
 import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 
+/** Tipos de documento que un contrato puede emitir (subconjunto de `invoices_document_type_check`, sin NC/ND). */
+export const CONTRACT_DOCUMENT_TYPES = ['FACTURA', 'FACTURA_EXPORTACION'] as const;
+export type ContractDocumentType = (typeof CONTRACT_DOCUMENT_TYPES)[number];
+
+/** Contratos v2 (`docs/v2-rediseno/mapa-v2-contratos.md` §6): migración `1790358766159-AddContractBillingFields`. */
+@Check('contracts_billing_anchor_day_check', `((billing_anchor_day >= 1) AND (billing_anchor_day <= 31))`)
+@Check('contracts_document_type_check', `((document_type IS NULL) OR (document_type = ANY (ARRAY['FACTURA'::text, 'FACTURA_EXPORTACION'::text])))`)
+@Check(
+	'contracts_payment_terms_check',
+	"(payment_terms IS NULL) OR CASE (payment_terms ->> 'kind'::text) WHEN 'net'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'end_of_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'day_of_next_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric)) ELSE false END ELSE false END"
+)
 @Check('contracts_fx_company_policy_check', `((fx_company_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])))`)
 @Check('contracts_fx_invoice_policy_check', `((fx_invoice_policy = ANY (ARRAY['fixed'::text, 'spot'::text])))`)
 @Check(
@@ -224,6 +236,37 @@ export class Contract {
 			'Términos y condiciones que se incluirán en el campo narration de las facturas generadas por este contrato. Acepta HTML para formato enriquecido.',
 	})
 	invoice_terms_and_conditions?: string;
+
+	@Column({
+		type: 'smallint',
+		nullable: true,
+		comment:
+			'Día de ciclo de facturación (1-31): los períodos parten ese día de cada mes (el último día si el mes es más corto). NULL = contratos anteriores a v2: se deriva del día del MIN(start_date) de los ítems recurrentes',
+	})
+	billing_anchor_day?: number | null;
+
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment:
+			'Condición de pago del contrato (misma forma que client_entities.payment_terms): {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. Default al crear: la de la razón social. NULL = sin condición propia',
+	})
+	payment_terms?: PaymentTerms | null;
+
+	@Column({
+		type: 'text',
+		nullable: true,
+		comment:
+			'Tipo de documento que emite el contrato: FACTURA o FACTURA_EXPORTACION (de él se deriva invoices.export_type). Sugerido por país emisor vs receptor. NULL = contratos anteriores a v2',
+	})
+	document_type?: ContractDocumentType | null;
+
+	@Column({
+		type: 'timestamp with time zone',
+		nullable: true,
+		comment: 'Borrado lógico (solo borradores En revisión sin facturas, con evento DELETED). NULL = vigente',
+	})
+	deleted_at?: Date | null;
 
 	@ManyToOne(() => ChurnReason)
 	@JoinColumn({ name: 'churn_reason_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contracts_churn_reason_id_fkey' })
