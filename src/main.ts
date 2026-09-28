@@ -1,4 +1,4 @@
-import { BadRequestException, Logger, ValidationError, ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationError, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -11,6 +11,7 @@ import { AppModule } from './app.module';
 import { getCorsOrigins } from './core/config/cors-origins';
 import { swaggerConfig } from './core/config/site.config';
 import { GlobalExceptionFilter } from './core/filters/global-exception.filter';
+import { flattenValidationErrors, validationException } from './core/utils/validation-errors';
 import { AppLoggerService } from './logger/app-logger.service';
 import { TelemetryService } from './telemetry/telemetry.service';
 
@@ -33,15 +34,9 @@ async function bootstrap() {
 			transform: true,
 			disableErrorMessages: false,
 			errorHttpStatusCode: 400,
+			// `message` con los mensajes unidos (como siempre) + `errors[{ field, message }]`, también de campos anidados.
 			exceptionFactory: (errors: ValidationError[]) => {
-				const messages = errors.map((error) => {
-					if (error.constraints) {
-						return Object.values(error.constraints)[0];
-					}
-					return 'Error de validación';
-				});
-				const message = messages.join(', ');
-				throw new BadRequestException(message);
+				throw validationException(flattenValidationErrors(errors));
 			},
 		})
 	);

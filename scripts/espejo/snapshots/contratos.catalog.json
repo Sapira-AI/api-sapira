@@ -73,6 +73,11 @@
   },
   "constraints": [
    {
+    "name": "contracts_billing_anchor_day_check",
+    "type": "c",
+    "expr": "(billing_anchor_day >= 1) AND (billing_anchor_day <= 31)"
+   },
+   {
     "name": "contracts_churn_reason_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -108,6 +113,11 @@
     "def": "FOREIGN KEY (current_step_id) REFERENCES workflow_steps(id)"
    },
    {
+    "name": "contracts_document_type_check",
+    "type": "c",
+    "expr": "(document_type IS NULL) OR (document_type = ANY (ARRAY['FACTURA'::text, 'FACTURA_EXPORTACION'::text]))"
+   },
+   {
     "name": "contracts_fx_company_policy_check",
     "type": "c",
     "expr": "fx_company_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
@@ -121,6 +131,11 @@
     "name": "contracts_legacy_status_check",
     "type": "c",
     "expr": "legacy_status = ANY (ARRAY['pending'::text, 'in_reconciliation'::text, 'validated'::text, 'activated'::text])"
+   },
+   {
+    "name": "contracts_payment_terms_check",
+    "type": "c",
+    "expr": "(payment_terms IS NULL) OR\nCASE (payment_terms ->> 'kind'::text)\n    WHEN 'net'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'end_of_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'day_of_next_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric))\n        ELSE false\n    END\n    ELSE false\nEND"
    },
    {
     "name": "contracts_pkey",

@@ -24,6 +24,9 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
    reparto entre razones sociales, upsell/downsell simple — todo registrado y recalculado →
    [`docs/v2-rediseno/flexibilidad-con-trazabilidad.md`](docs/v2-rediseno/flexibilidad-con-trazabilidad.md).
 3. **Presupuesto vs proyección vs real** de ventas, facturación y caja → [`docs/v2-rediseno/budgets-forecast-real.md`](docs/v2-rediseno/budgets-forecast-real.md).
+4. **Pre-onboarding y prueba guiada** (propuesta en discusión 25-09): sandbox guiado en la demo,
+   acuerdo de evaluación clickwrap, propuesta en 72h desde sizing declarado, calculadora en la web →
+   [`docs/v2-rediseno/spec-preonboarding-prueba-guiada.md`](docs/v2-rediseno/spec-preonboarding-prueba-guiada.md).
 
 ## 📋 Las fases (los 7 pasos del plan del 21-08, tachados según avance)
 

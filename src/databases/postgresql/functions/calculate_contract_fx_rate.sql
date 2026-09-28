@@ -328,6 +328,7 @@ BEGIN
     INTO v_rate, v_source, v_ref_date
     FROM contract_fx_period_rates cfpr
     WHERE cfpr.contract_id = p_contract_id
+      AND cfpr.purpose = 'company'
       AND cfpr.from_currency = p_from_currency
       AND cfpr.to_currency = p_to_currency
       AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end
@@ -346,6 +347,7 @@ BEGIN
       INTO v_rate, v_source, v_ref_date
       FROM contract_fx_period_rates cfpr
       WHERE cfpr.contract_id = p_contract_id
+        AND cfpr.purpose = 'company'
         AND cfpr.from_currency = p_to_currency
         AND cfpr.to_currency = p_from_currency
         AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end

@@ -20,6 +20,7 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`spec-agentes-ia.md`](./spec-agentes-ia.md) | Funcionalidad agéntica: catálogo de acciones, agentes configurables, add-ons |
 | [`flexibilidad-con-trazabilidad.md`](./flexibilidad-con-trazabilidad.md) | Principio de producto: facturar distinto a lo planificado, con todo registrado |
 | [`budgets-forecast-real.md`](./budgets-forecast-real.md) | Feature: presupuesto vs proyección vs real |
+| [`spec-preonboarding-prueba-guiada.md`](./spec-preonboarding-prueba-guiada.md) | Flujo comercial pre-onboarding: sandbox guiado, clickwrap, sizing declarado, calculadora web (propuesta en discusión) |
 | [`glosario.md`](./glosario.md) | Vocabulario oficial del modelo |
 | [`documentacion-publicable-y-mcp.md`](./documentacion-publicable-y-mcp.md) | Convención de docu publicable por módulo (docs públicas, OpenAPI, MCP de una sola fuente) |
 

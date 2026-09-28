@@ -766,6 +766,17 @@
     "scale": null,
     "array": false
    },
+   "fx_company_policy": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "monthly_avg",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "logo_url": {
     "type": "text",
     "nullable": true,
@@ -884,7 +895,12 @@
     "where": null
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "companies_fx_company_policy_check",
+    "expression": "fx_company_policy = ANY (ARRAY['monthly_avg'::text])"
+   }
+  ],
   "foreignKeys": {
    "companies_holding_fk": {
     "columns": [

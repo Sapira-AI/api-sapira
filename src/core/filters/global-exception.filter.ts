@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { v4 as uuid } from 'uuid';
 
 import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
+import { fieldErrorsOf } from '@/core/utils/validation-errors';
 import { AppLoggerService } from '@/logger/app-logger.service';
 import { TelemetryService } from '@/telemetry/telemetry.service';
 
@@ -41,11 +42,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 			});
 		}
 
-		// Respuesta consistente
+		const message = this.getClientMessage(exception);
+		const errors = fieldErrorsOf(exception);
+
+		// Respuesta consistente. `message` y `errors[{ field, message }]` también en la raíz: es el contrato que la BFF
+		// de front-sapira espera (`message` estable + errores por campo); `error.message` se mantiene para los demás.
 		response.status(status).json({
 			success: false,
+			message,
+			...(errors ? { errors } : {}),
 			error: {
-				message: this.getClientMessage(exception),
+				message,
+				...(errors ? { errors } : {}),
 				code: exception.code || 'INTERNAL_ERROR',
 				correlationId,
 				timestamp: timestamp.toISOString(),
