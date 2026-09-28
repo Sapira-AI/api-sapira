@@ -592,6 +592,11 @@
   "columns": {},
   "constraints": [
    {
+    "name": "companies_fx_company_policy_check",
+    "type": "c",
+    "expr": "fx_company_policy = ANY (ARRAY['monthly_avg'::text])"
+   },
+   {
     "name": "companies_holding_fk",
     "type": "f",
     "ondelete": "n",

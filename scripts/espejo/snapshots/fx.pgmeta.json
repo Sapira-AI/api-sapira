@@ -467,6 +467,17 @@
      "updatable"
     ],
     "default_value": "now()"
+   },
+   {
+    "name": "purpose",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'company'::text",
+    "comment": "Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period) o invoice (tipo de cambio fijo de facturación, fx_invoice_policy = fixed). Regla: 1 [from_currency] = rate [to_currency]"
    }
   ],
   "primary_keys": [

@@ -7047,9 +7047,34 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)"
+				},
+				{
+					"column": "fx_company_policy",
+					"attnum": 24,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'monthly_avg'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
 				}
 			],
 			"constraints": [
+				{
+					"name": "companies_fx_company_policy_check",
+					"type": "c",
+					"def": "CHECK ((fx_company_policy = ANY (ARRAY['monthly_avg'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
 				{
 					"name": "companies_holding_fk",
 					"type": "f",
@@ -10198,6 +10223,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "purpose",
+					"attnum": 13,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'company'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period) o invoice (tipo de cambio fijo de facturación, fx_invoice_policy = fixed). Regla: 1 [from_currency] = rate [to_currency]"
 				}
 			],
 			"constraints": [
@@ -10223,6 +10264,15 @@
 					"name": "contract_fx_period_rates_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_fx_period_rates_purpose_check",
+					"type": "c",
+					"def": "CHECK ((purpose = ANY (ARRAY['company'::text, 'invoice'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -10257,6 +10307,12 @@
 				{
 					"name": "idx_contract_fx_rates_contract_id",
 					"def": "CREATE INDEX idx_contract_fx_rates_contract_id ON public.contract_fx_period_rates USING btree (contract_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_contract_fx_rates_contract_purpose",
+					"def": "CREATE INDEX idx_contract_fx_rates_contract_purpose ON public.contract_fx_period_rates USING btree (contract_id, purpose)",
 					"unique": false,
 					"primary": false
 				},
@@ -14092,9 +14148,82 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Términos y condiciones que se incluirán en el campo narration de las facturas generadas por este contrato. Acepta HTML para formato enriquecido."
+				},
+				{
+					"column": "billing_anchor_day",
+					"attnum": 59,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Día de ciclo de facturación (1-31): los períodos parten ese día de cada mes (el último día si el mes es más corto). NULL = contratos anteriores a v2: se deriva del día del MIN(start_date) de los ítems recurrentes"
+				},
+				{
+					"column": "payment_terms",
+					"attnum": 60,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Condición de pago del contrato (misma forma que client_entities.payment_terms): {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. Default al crear: la de la razón social. NULL = sin condición propia"
+				},
+				{
+					"column": "document_type",
+					"attnum": 61,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tipo de documento que emite el contrato: FACTURA o FACTURA_EXPORTACION (de él se deriva invoices.export_type). Sugerido por país emisor vs receptor. NULL = contratos anteriores a v2"
+				},
+				{
+					"column": "deleted_at",
+					"attnum": 62,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Borrado lógico (solo borradores En revisión sin facturas, con evento DELETED). NULL = vigente"
 				}
 			],
 			"constraints": [
+				{
+					"name": "contracts_billing_anchor_day_check",
+					"type": "c",
+					"def": "CHECK (((billing_anchor_day >= 1) AND (billing_anchor_day <= 31)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
 				{
 					"name": "contracts_churn_reason_id_fkey",
 					"type": "f",
@@ -14141,6 +14270,15 @@
 					"onupdate": "a"
 				},
 				{
+					"name": "contracts_document_type_check",
+					"type": "c",
+					"def": "CHECK (((document_type IS NULL) OR (document_type = ANY (ARRAY['FACTURA'::text, 'FACTURA_EXPORTACION'::text]))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
 					"name": "contracts_fx_company_policy_check",
 					"type": "c",
 					"def": "CHECK ((fx_company_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])))",
@@ -14162,6 +14300,15 @@
 					"name": "contracts_legacy_status_check",
 					"type": "c",
 					"def": "CHECK ((legacy_status = ANY (ARRAY['pending'::text, 'in_reconciliation'::text, 'validated'::text, 'activated'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contracts_payment_terms_check",
+					"type": "c",
+					"def": "CHECK (((payment_terms IS NULL) OR\nCASE (payment_terms ->> 'kind'::text)\n    WHEN 'net'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'end_of_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric))\n        ELSE false\n    END\n    WHEN 'day_of_next_month'::text THEN\n    CASE\n        WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric))\n        ELSE false\n    END\n    ELSE false\nEND))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -17355,6 +17502,143 @@
 					"cmd": "UPDATE",
 					"qual": "(holding_id = get_current_user_holding_id())",
 					"with_check": null
+				}
+			]
+		},
+		"holding_integration_settings": {
+			"comment": "Habilitación de la integración automática (cron) de cada servicio, por holding. Fila ausente = habilitado.",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "holding_id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "integration",
+					"attnum": 2,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "auto_enabled",
+					"attnum": 3,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "false apaga la corrida automática de esa integración para el holding"
+				},
+				{
+					"column": "created_at",
+					"attnum": 4,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 5,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "holding_integration_settings_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "holding_integration_settings_integration_check",
+					"type": "c",
+					"def": "CHECK ((integration = ANY (ARRAY['odoo'::text, 'salesforce'::text, 'bigquery'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_integration_settings_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (holding_id, integration)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "holding_integration_settings_pkey",
+					"def": "CREATE UNIQUE INDEX holding_integration_settings_pkey ON public.holding_integration_settings USING btree (holding_id, integration)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_integration_settings_service_role",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"service_role"
+					],
+					"cmd": "ALL",
+					"qual": "true",
+					"with_check": "true"
 				}
 			]
 		},
@@ -49662,6 +49946,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"holding_integration_settings": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"holding_settings": [
 			{
 				"grantee": "anon",
@@ -58524,9 +58922,9 @@
 		},
 		{
 			"name": "bulk_confirm_fx_policy",
-			"def": "CREATE OR REPLACE FUNCTION public.bulk_confirm_fx_policy(p_contract_ids uuid[], p_fx_policy text DEFAULT 'monthly_avg'::text)\n RETURNS TABLE(contract_id uuid, success boolean, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_user_id uuid;\n  v_holding_id uuid;\n  v_contract RECORD;\n  v_cid uuid;\nBEGIN\n  -- Resolver usuario actual\n  SELECT public.get_current_user_id() INTO v_user_id;\n  IF v_user_id IS NULL THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Usuario no autenticado';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Resolver holding del usuario\n  SELECT public.get_current_user_holding_id() INTO v_holding_id;\n  IF v_holding_id IS NULL THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Usuario sin holding asociado';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Validar política FX\n  IF p_fx_policy NOT IN ('fixed_period', 'monthly_avg') THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Política FX inválida. Use fixed_period o monthly_avg';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Procesar cada contrato\n  FOREACH v_cid IN ARRAY p_contract_ids LOOP\n    BEGIN\n      -- Obtener datos del contrato\n      SELECT c.* INTO v_contract\n      FROM public.contracts c\n      WHERE c.id = v_cid AND c.holding_id = v_holding_id;\n\n      IF NOT FOUND THEN\n        contract_id := v_cid;\n        success := false;\n        message := 'Contrato no encontrado o sin permisos';\n        RETURN NEXT;\n        CONTINUE;\n      END IF;\n\n      -- Verificar si ya está confirmado\n      IF v_contract.fx_company_confirmed_at IS NOT NULL THEN\n        contract_id := v_cid;\n        success := false;\n        message := 'La política FX ya está confirmada';\n        RETURN NEXT;\n        CONTINUE;\n      END IF;\n\n      -- Si es fixed_period, verificar que existan tasas configuradas\n      IF p_fx_policy = 'fixed_period' THEN\n        IF NOT EXISTS (\n          SELECT 1 FROM public.contract_fx_period_rates \n          WHERE contract_id = v_cid\n        ) THEN\n          contract_id := v_cid;\n          success := false;\n          message := 'Política fixed_period requiere tasas FX configuradas';\n          RETURN NEXT;\n          CONTINUE;\n        END IF;\n      END IF;\n\n      -- Actualizar contrato con política confirmada\n      UPDATE public.contracts\n      SET \n        fx_company_policy = p_fx_policy,\n        fx_company_confirmed_at = now()\n      WHERE id = v_cid;\n\n      contract_id := v_cid;\n      success := true;\n      message := 'Política FX confirmada exitosamente';\n      RETURN NEXT;\n\n    EXCEPTION WHEN OTHERS THEN\n      contract_id := v_cid;\n      success := false;\n      message := 'Error: ' || SQLERRM;\n      RETURN NEXT;\n    END;\n  END LOOP;\n\n  RETURN;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.bulk_confirm_fx_policy(p_contract_ids uuid[], p_fx_policy text DEFAULT 'monthly_avg'::text)\n RETURNS TABLE(contract_id uuid, success boolean, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_user_id uuid;\n  v_holding_id uuid;\n  v_contract RECORD;\n  v_cid uuid;\nBEGIN\n  -- Resolver usuario actual\n  SELECT public.get_current_user_id() INTO v_user_id;\n  IF v_user_id IS NULL THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Usuario no autenticado';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Resolver holding del usuario\n  SELECT public.get_current_user_holding_id() INTO v_holding_id;\n  IF v_holding_id IS NULL THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Usuario sin holding asociado';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Validar política FX\n  IF p_fx_policy NOT IN ('fixed_period', 'monthly_avg') THEN\n    FOREACH v_cid IN ARRAY p_contract_ids LOOP\n      contract_id := v_cid;\n      success := false;\n      message := 'Política FX inválida. Use fixed_period o monthly_avg';\n      RETURN NEXT;\n    END LOOP;\n    RETURN;\n  END IF;\n\n  -- Procesar cada contrato\n  FOREACH v_cid IN ARRAY p_contract_ids LOOP\n    BEGIN\n      -- Obtener datos del contrato\n      SELECT c.* INTO v_contract\n      FROM public.contracts c\n      WHERE c.id = v_cid AND c.holding_id = v_holding_id;\n\n      IF NOT FOUND THEN\n        contract_id := v_cid;\n        success := false;\n        message := 'Contrato no encontrado o sin permisos';\n        RETURN NEXT;\n        CONTINUE;\n      END IF;\n\n      -- Verificar si ya está confirmado\n      IF v_contract.fx_company_confirmed_at IS NOT NULL THEN\n        contract_id := v_cid;\n        success := false;\n        message := 'La política FX ya está confirmada';\n        RETURN NEXT;\n        CONTINUE;\n      END IF;\n\n      -- Si es fixed_period, verificar que existan tasas configuradas\n      IF p_fx_policy = 'fixed_period' THEN\n        IF NOT EXISTS (\n          SELECT 1 FROM public.contract_fx_period_rates \n          WHERE contract_id = v_cid\n            AND purpose = 'company'\n        ) THEN\n          contract_id := v_cid;\n          success := false;\n          message := 'Política fixed_period requiere tasas FX configuradas';\n          RETURN NEXT;\n          CONTINUE;\n        END IF;\n      END IF;\n\n      -- Actualizar contrato con política confirmada\n      UPDATE public.contracts\n      SET \n        fx_company_policy = p_fx_policy,\n        fx_company_confirmed_at = now()\n      WHERE id = v_cid;\n\n      contract_id := v_cid;\n      success := true;\n      message := 'Política FX confirmada exitosamente';\n      RETURN NEXT;\n\n    EXCEPTION WHEN OTHERS THEN\n      contract_id := v_cid;\n      success := false;\n      message := 'Error: ' || SQLERRM;\n      RETURN NEXT;\n    END;\n  END LOOP;\n\n  RETURN;\nEND;\n$function$\n",
 			"extension": null,
-			"comment": "Confirma la política FX de múltiples contratos en una sola operación.\nPolíticas válidas: monthly_avg (promedio mensual), fixed_period (tasas fijas por período).\nPara fixed_period, deben existir tasas configuradas en contract_fx_period_rates.",
+			"comment": "Confirma la política FX de múltiples contratos en una sola operación.\nPolíticas válidas: monthly_avg (promedio mensual), fixed_period (tasas fijas por período).\nPara fixed_period, deben existir tasas configuradas en contract_fx_period_rates con purpose = company (las de facturación no cuentan).",
 			"identity_args": "p_contract_ids uuid[], p_fx_policy text"
 		},
 		{
@@ -58587,7 +58985,7 @@
 		},
 		{
 			"name": "calculate_contract_fx_rate",
-			"def": "CREATE OR REPLACE FUNCTION public.calculate_contract_fx_rate(p_contract_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text DEFAULT 'monthly_avg'::text)\n RETURNS TABLE(rate numeric, source text, reference_date date)\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_rate NUMERIC;\n  v_source TEXT;\n  v_ref_date DATE;\n  v_policy TEXT := COALESCE(p_policy, 'monthly_avg');\nBEGIN\n  -- If same currency, return 1.0\n  IF p_from_currency = p_to_currency THEN\n    RETURN QUERY SELECT 1.0::NUMERIC, 'same_currency'::TEXT, p_period_date;\n    RETURN;\n  END IF;\n\n  -- Handle fixed_period policy with inverse lookup\n  IF v_policy = 'fixed_period' THEN\n    -- 1️⃣ Try direct rate (from_currency → to_currency)\n    SELECT cfpr.rate, 'contract_fixed_period', cfpr.period_start\n    INTO v_rate, v_source, v_ref_date\n    FROM contract_fx_period_rates cfpr\n    WHERE cfpr.contract_id = p_contract_id\n      AND cfpr.from_currency = p_from_currency\n      AND cfpr.to_currency = p_to_currency\n      AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end\n    ORDER BY cfpr.created_at DESC\n    LIMIT 1;\n    \n    -- 2️⃣ If not found, try inverse rate (to_currency → from_currency)\n    IF v_rate IS NULL THEN\n      SELECT \n        CASE \n          WHEN cfpr.rate > 0 THEN ROUND(1.0 / cfpr.rate, 6)\n          ELSE NULL \n        END,\n        'contract_fixed_period_inverse',\n        cfpr.period_start\n      INTO v_rate, v_source, v_ref_date\n      FROM contract_fx_period_rates cfpr\n      WHERE cfpr.contract_id = p_contract_id\n        AND cfpr.from_currency = p_to_currency\n        AND cfpr.to_currency = p_from_currency\n        AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end\n      ORDER BY cfpr.created_at DESC\n      LIMIT 1;\n    END IF;\n    \n    -- 3️⃣ If still not found, mark as missing\n    IF v_rate IS NULL THEN\n      v_source := 'missing_contract_fx_rate';\n    END IF;\n\n  -- Handle monthly_avg policy with inverse lookup\n  ELSIF v_policy = 'monthly_avg' THEN\n    -- 1️⃣ Try direct rate (from_currency → to_currency)\n    SELECT erm.avg_rate, 'monthly_average', DATE_TRUNC('month', p_period_date)::DATE\n    INTO v_rate, v_source, v_ref_date\n    FROM exchange_rates_monthly_avg erm\n    WHERE erm.from_currency = p_from_currency\n      AND erm.to_currency = p_to_currency\n      AND erm.year = EXTRACT(YEAR FROM p_period_date)::INTEGER\n      AND erm.month = EXTRACT(MONTH FROM p_period_date)::INTEGER\n    LIMIT 1;\n    \n    -- 2️⃣ If not found, try inverse rate (to_currency → from_currency)\n    IF v_rate IS NULL THEN\n      SELECT \n        CASE \n          WHEN erm.avg_rate > 0 THEN ROUND(1.0 / erm.avg_rate, 6)\n          ELSE NULL \n        END,\n        'monthly_average_inverse',\n        DATE_TRUNC('month', p_period_date)::DATE\n      INTO v_rate, v_source, v_ref_date\n      FROM exchange_rates_monthly_avg erm\n      WHERE erm.from_currency = p_to_currency\n        AND erm.to_currency = p_from_currency\n        AND erm.year = EXTRACT(YEAR FROM p_period_date)::INTEGER\n        AND erm.month = EXTRACT(MONTH FROM p_period_date)::INTEGER\n      LIMIT 1;\n    END IF;\n    \n    -- 3️⃣ If still not found, mark as missing\n    IF v_rate IS NULL THEN\n      v_source := 'missing_monthly_avg_rate';\n    END IF;\n\n  ELSE\n    -- Unsupported policy\n    v_rate := NULL;\n    v_source := 'unsupported_policy';\n    v_ref_date := NULL;\n  END IF;\n\n  RETURN QUERY SELECT v_rate, v_source, v_ref_date;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.calculate_contract_fx_rate(p_contract_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text DEFAULT 'monthly_avg'::text)\n RETURNS TABLE(rate numeric, source text, reference_date date)\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_rate NUMERIC;\n  v_source TEXT;\n  v_ref_date DATE;\n  v_policy TEXT := COALESCE(p_policy, 'monthly_avg');\nBEGIN\n  -- If same currency, return 1.0\n  IF p_from_currency = p_to_currency THEN\n    RETURN QUERY SELECT 1.0::NUMERIC, 'same_currency'::TEXT, p_period_date;\n    RETURN;\n  END IF;\n\n  -- Handle fixed_period policy with inverse lookup\n  IF v_policy = 'fixed_period' THEN\n    -- 1️⃣ Try direct rate (from_currency → to_currency)\n    SELECT cfpr.rate, 'contract_fixed_period', cfpr.period_start\n    INTO v_rate, v_source, v_ref_date\n    FROM contract_fx_period_rates cfpr\n    WHERE cfpr.contract_id = p_contract_id\n      AND cfpr.purpose = 'company'\n      AND cfpr.from_currency = p_from_currency\n      AND cfpr.to_currency = p_to_currency\n      AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end\n    ORDER BY cfpr.created_at DESC\n    LIMIT 1;\n    \n    -- 2️⃣ If not found, try inverse rate (to_currency → from_currency)\n    IF v_rate IS NULL THEN\n      SELECT \n        CASE \n          WHEN cfpr.rate > 0 THEN ROUND(1.0 / cfpr.rate, 6)\n          ELSE NULL \n        END,\n        'contract_fixed_period_inverse',\n        cfpr.period_start\n      INTO v_rate, v_source, v_ref_date\n      FROM contract_fx_period_rates cfpr\n      WHERE cfpr.contract_id = p_contract_id\n        AND cfpr.purpose = 'company'\n        AND cfpr.from_currency = p_to_currency\n        AND cfpr.to_currency = p_from_currency\n        AND p_period_date BETWEEN cfpr.period_start AND cfpr.period_end\n      ORDER BY cfpr.created_at DESC\n      LIMIT 1;\n    END IF;\n    \n    -- 3️⃣ If still not found, mark as missing\n    IF v_rate IS NULL THEN\n      v_source := 'missing_contract_fx_rate';\n    END IF;\n\n  -- Handle monthly_avg policy with inverse lookup\n  ELSIF v_policy = 'monthly_avg' THEN\n    -- 1️⃣ Try direct rate (from_currency → to_currency)\n    SELECT erm.avg_rate, 'monthly_average', DATE_TRUNC('month', p_period_date)::DATE\n    INTO v_rate, v_source, v_ref_date\n    FROM exchange_rates_monthly_avg erm\n    WHERE erm.from_currency = p_from_currency\n      AND erm.to_currency = p_to_currency\n      AND erm.year = EXTRACT(YEAR FROM p_period_date)::INTEGER\n      AND erm.month = EXTRACT(MONTH FROM p_period_date)::INTEGER\n    LIMIT 1;\n    \n    -- 2️⃣ If not found, try inverse rate (to_currency → from_currency)\n    IF v_rate IS NULL THEN\n      SELECT \n        CASE \n          WHEN erm.avg_rate > 0 THEN ROUND(1.0 / erm.avg_rate, 6)\n          ELSE NULL \n        END,\n        'monthly_average_inverse',\n        DATE_TRUNC('month', p_period_date)::DATE\n      INTO v_rate, v_source, v_ref_date\n      FROM exchange_rates_monthly_avg erm\n      WHERE erm.from_currency = p_to_currency\n        AND erm.to_currency = p_from_currency\n        AND erm.year = EXTRACT(YEAR FROM p_period_date)::INTEGER\n        AND erm.month = EXTRACT(MONTH FROM p_period_date)::INTEGER\n      LIMIT 1;\n    END IF;\n    \n    -- 3️⃣ If still not found, mark as missing\n    IF v_rate IS NULL THEN\n      v_source := 'missing_monthly_avg_rate';\n    END IF;\n\n  ELSE\n    -- Unsupported policy\n    v_rate := NULL;\n    v_source := 'unsupported_policy';\n    v_ref_date := NULL;\n  END IF;\n\n  RETURN QUERY SELECT v_rate, v_source, v_ref_date;\nEND;\n$function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": "p_contract_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text"
@@ -60092,9 +60490,9 @@
 		},
 		{
 			"name": "revenue_schedule_apply_fx_for_contract",
-			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_info RECORD;\nBEGIN\n  SELECT\n    c.id, c.holding_id, c.contract_currency,\n    co.currency AS company_currency,\n    COALESCE(hs.system_currency, 'USD') AS system_currency,\n    COALESCE(c.fx_company_policy, 'monthly_avg') AS fx_company_policy,\n    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy\n  INTO v_info\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Contract % not found', p_contract_id;\n  END IF;\n\n  WITH fx_company AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.company_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.company_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN cpr_direct.rate > 0 THEN ROUND(1.0 / cpr_direct.rate, 10) ELSE 1.0 END,\n        CASE WHEN cpr_inverse.rate > 0 THEN cpr_inverse.rate ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN cpr_direct.rate IS NOT NULL THEN 'contract_fixed_period'\n        WHEN cpr_inverse.rate IS NOT NULL THEN 'contract_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN contract_fx_period_rates cpr_direct\n      ON cpr_direct.contract_id = v_info.id\n     AND cpr_direct.from_currency = v_info.contract_currency\n     AND cpr_direct.to_currency = v_info.company_currency\n     AND rsm.period_month >= cpr_direct.period_start\n     AND rsm.period_month <= cpr_direct.period_end\n    LEFT JOIN contract_fx_period_rates cpr_inverse\n      ON cpr_inverse.contract_id = v_info.id\n     AND cpr_inverse.from_currency = v_info.company_currency\n     AND cpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= cpr_inverse.period_start\n     AND rsm.period_month <= cpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  ),\n\n  fx_system AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.system_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.system_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) ELSE 1.0 END,\n        CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN hpr_direct.rate IS NOT NULL THEN 'holding_fixed_period'\n        WHEN hpr_inverse.rate IS NOT NULL THEN 'holding_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN holding_fx_period_rates hpr_direct\n      ON hpr_direct.holding_id = v_info.holding_id\n     AND hpr_direct.from_currency = v_info.contract_currency\n     AND hpr_direct.to_currency = v_info.system_currency\n     AND rsm.period_month >= hpr_direct.period_start\n     AND rsm.period_month <= hpr_direct.period_end\n    LEFT JOIN holding_fx_period_rates hpr_inverse\n      ON hpr_inverse.holding_id = v_info.holding_id\n     AND hpr_inverse.from_currency = v_info.system_currency\n     AND hpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= hpr_inverse.period_start\n     AND rsm.period_month <= hpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  )\n\n  UPDATE revenue_schedule_monthly r\n  SET\n    recognized_period_ccy           = ROUND(r.recognized_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    recognized_cum_ccy              = ROUND(r.recognized_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    billed_period_ccy               = ROUND(r.billed_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    billed_cum_ccy                  = ROUND(r.billed_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    deferred_balance_period_ccy     = ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    unbilled_balance_period_ccy     = ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    deferred_balance_eom_ccy        = ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    unbilled_balance_eom_ccy        = ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    mrr_period_ccy                  = ROUND(r.mrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    mrr_period_contracted_ccy       = ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    cmrr_period_ccy                 = ROUND(r.cmrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    fx_contract_to_company          = COALESCE(fc.rate, 1.0),\n    fx_to_company_source            = COALESCE(fc.src, 'no_conversion_needed'),\n    fx_to_company_date              = fc.dte,\n    recognized_period_system_ccy        = ROUND(r.recognized_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    recognized_cum_system_ccy           = ROUND(r.recognized_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    billed_period_system_ccy            = ROUND(r.billed_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    billed_cum_system_ccy               = ROUND(r.billed_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    deferred_balance_period_system_ccy  = ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    unbilled_balance_period_system_ccy  = ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    deferred_balance_eom_system_ccy     = ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    unbilled_balance_eom_system_ccy     = ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    mrr_period_system_ccy               = ROUND(r.mrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    mrr_period_contracted_system_ccy    = ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    cmrr_period_system_ccy              = ROUND(r.cmrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    fx_contract_to_system               = COALESCE(fs.rate, 1.0),\n    fx_to_system_source                 = COALESCE(fs.src, 'no_conversion_needed'),\n    fx_to_system_date                   = fs.dte,\n    calc_version                        = 'v4-fx-normalized'\n  FROM fx_company fc\n  FULL JOIN fx_system fs ON fs.period_month = fc.period_month\n  WHERE r.contract_id = p_contract_id\n    AND r.period_month = COALESCE(fc.period_month, fs.period_month)\n    AND (p_from_month IS NULL OR r.period_month >= p_from_month)\n    AND COALESCE(r.is_total_row, false) = false;\n\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_info RECORD;\nBEGIN\n  SELECT\n    c.id, c.holding_id, c.contract_currency,\n    co.currency AS company_currency,\n    COALESCE(hs.system_currency, 'USD') AS system_currency,\n    COALESCE(c.fx_company_policy, 'monthly_avg') AS fx_company_policy,\n    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy\n  INTO v_info\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Contract % not found', p_contract_id;\n  END IF;\n\n  WITH fx_company AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.company_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.company_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      -- Regla única (v2): \"1 [from] = rate [to]\". Directa (contrato → compañía) se multiplica; inversa = 1/rate.\n      COALESCE(\n        CASE WHEN cpr_direct.rate > 0 THEN cpr_direct.rate END,\n        CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN cpr_direct.rate IS NOT NULL THEN 'contract_fixed_period'\n        WHEN cpr_inverse.rate IS NOT NULL THEN 'contract_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN contract_fx_period_rates cpr_direct\n      ON cpr_direct.contract_id = v_info.id\n     AND cpr_direct.purpose = 'company'\n     AND cpr_direct.from_currency = v_info.contract_currency\n     AND cpr_direct.to_currency = v_info.company_currency\n     AND rsm.period_month >= cpr_direct.period_start\n     AND rsm.period_month <= cpr_direct.period_end\n    LEFT JOIN contract_fx_period_rates cpr_inverse\n      ON cpr_inverse.contract_id = v_info.id\n     AND cpr_inverse.purpose = 'company'\n     AND cpr_inverse.from_currency = v_info.company_currency\n     AND cpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= cpr_inverse.period_start\n     AND rsm.period_month <= cpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  ),\n\n  fx_system AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.system_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.system_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) ELSE 1.0 END,\n        CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN hpr_direct.rate IS NOT NULL THEN 'holding_fixed_period'\n        WHEN hpr_inverse.rate IS NOT NULL THEN 'holding_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN holding_fx_period_rates hpr_direct\n      ON hpr_direct.holding_id = v_info.holding_id\n     AND hpr_direct.from_currency = v_info.contract_currency\n     AND hpr_direct.to_currency = v_info.system_currency\n     AND rsm.period_month >= hpr_direct.period_start\n     AND rsm.period_month <= hpr_direct.period_end\n    LEFT JOIN holding_fx_period_rates hpr_inverse\n      ON hpr_inverse.holding_id = v_info.holding_id\n     AND hpr_inverse.from_currency = v_info.system_currency\n     AND hpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= hpr_inverse.period_start\n     AND rsm.period_month <= hpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  )\n\n  UPDATE revenue_schedule_monthly r\n  SET\n    recognized_period_ccy           = ROUND(r.recognized_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    recognized_cum_ccy              = ROUND(r.recognized_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    billed_period_ccy               = ROUND(r.billed_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    billed_cum_ccy                  = ROUND(r.billed_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    deferred_balance_period_ccy     = ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    unbilled_balance_period_ccy     = ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    deferred_balance_eom_ccy        = ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    unbilled_balance_eom_ccy        = ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    mrr_period_ccy                  = ROUND(r.mrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    mrr_period_contracted_ccy       = ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    cmrr_period_ccy                 = ROUND(r.cmrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2),\n    fx_contract_to_company          = COALESCE(fc.rate, 1.0),\n    fx_to_company_source            = COALESCE(fc.src, 'no_conversion_needed'),\n    fx_to_company_date              = fc.dte,\n    recognized_period_system_ccy        = ROUND(r.recognized_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    recognized_cum_system_ccy           = ROUND(r.recognized_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    billed_period_system_ccy            = ROUND(r.billed_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    billed_cum_system_ccy               = ROUND(r.billed_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    deferred_balance_period_system_ccy  = ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    unbilled_balance_period_system_ccy  = ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    deferred_balance_eom_system_ccy     = ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    unbilled_balance_eom_system_ccy     = ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    mrr_period_system_ccy               = ROUND(r.mrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    mrr_period_contracted_system_ccy    = ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    cmrr_period_system_ccy              = ROUND(r.cmrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2),\n    fx_contract_to_system               = COALESCE(fs.rate, 1.0),\n    fx_to_system_source                 = COALESCE(fs.src, 'no_conversion_needed'),\n    fx_to_system_date                   = fs.dte,\n    calc_version                        = 'v4-fx-normalized'\n  FROM fx_company fc\n  FULL JOIN fx_system fs ON fs.period_month = fc.period_month\n  WHERE r.contract_id = p_contract_id\n    AND r.period_month = COALESCE(fc.period_month, fs.period_month)\n    AND (p_from_month IS NULL OR r.period_month >= p_from_month)\n    AND COALESCE(r.is_total_row, false) = false;\n\nEND;\n$function$\n",
 			"extension": null,
-			"comment": "Step 2: Apply FX conversion to revenue schedule records using holding FX policies.\nCORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).\nConvierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.\nEjemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD",
+			"comment": "Step 2: Apply FX conversion to revenue schedule records using holding FX policies.\nCORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).\nConvierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.\nEjemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD.\nfixed_period (contract_fx_period_rates, solo purpose = company): regla única \"1 [from] = rate [to]\"; la fila directa contrato → compañía se multiplica y la inversa es 1/rate (28-09-2026, igual que monthly_avg). Las tasas del holding (sistema) mantienen su convención.",
 			"identity_args": "p_contract_id uuid, p_from_month date"
 		},
 		{
@@ -61405,7 +61803,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 132,
+			"objetos": 133,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

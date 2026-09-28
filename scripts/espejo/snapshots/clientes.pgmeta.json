@@ -704,7 +704,7 @@
  "client_contacts": {
   "name": "public.client_contacts",
   "rls_enabled": true,
-  "rows": 220,
+  "rows": 262,
   "columns": [
    {
     "name": "id",

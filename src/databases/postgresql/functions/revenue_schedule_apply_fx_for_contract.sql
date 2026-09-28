@@ -64,9 +64,10 @@ BEGIN
 
     SELECT
       rsm.period_month,
+      -- Regla única (v2): "1 [from] = rate [to]". Directa (contrato → compañía) se multiplica; inversa = 1/rate.
       COALESCE(
-        CASE WHEN cpr_direct.rate > 0 THEN ROUND(1.0 / cpr_direct.rate, 10) ELSE 1.0 END,
-        CASE WHEN cpr_inverse.rate > 0 THEN cpr_inverse.rate ELSE 1.0 END
+        CASE WHEN cpr_direct.rate > 0 THEN cpr_direct.rate END,
+        CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) ELSE 1.0 END
       ) AS rate,
       CASE
         WHEN cpr_direct.rate IS NOT NULL THEN 'contract_fixed_period'
@@ -77,12 +78,14 @@ BEGIN
     FROM revenue_schedule_monthly rsm
     LEFT JOIN contract_fx_period_rates cpr_direct
       ON cpr_direct.contract_id = v_info.id
+     AND cpr_direct.purpose = 'company'
      AND cpr_direct.from_currency = v_info.contract_currency
      AND cpr_direct.to_currency = v_info.company_currency
      AND rsm.period_month >= cpr_direct.period_start
      AND rsm.period_month <= cpr_direct.period_end
     LEFT JOIN contract_fx_period_rates cpr_inverse
       ON cpr_inverse.contract_id = v_info.id
+     AND cpr_inverse.purpose = 'company'
      AND cpr_inverse.from_currency = v_info.company_currency
      AND cpr_inverse.to_currency = v_info.contract_currency
      AND rsm.period_month >= cpr_inverse.period_start
@@ -211,4 +214,5 @@ $function$;
 COMMENT ON FUNCTION public."revenue_schedule_apply_fx_for_contract"(p_contract_id uuid, p_from_month date) IS 'Step 2: Apply FX conversion to revenue schedule records using holding FX policies.
 CORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).
 Convierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.
-Ejemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD';
+Ejemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD.
+fixed_period (contract_fx_period_rates, solo purpose = company): regla única "1 [from] = rate [to]"; la fila directa contrato → compañía se multiplica y la inversa es 1/rate (28-09-2026, igual que monthly_avg). Las tasas del holding (sistema) mantienen su convención.';
