@@ -119,10 +119,10 @@ El runner `postgres:assets` aplica los `.sql` en ocho fases, en este orden, con 
 | `types/` | Extensiones, enums y secuencias sueltas. Van primero porque una columna puede referenciarlas. | 11 |
 | `functions/` | Una función por archivo, `CREATE OR REPLACE`. | 301 |
 | `special-index/` | Índices que TypeORM **no puede** declarar con `@Index`: método no btree (`gin`, `ivfflat`) u orden explícito (`DESC`, `NULLS`). Los parciales sí se declaran con `@Index({ where })` y **no** van acá. | 41 |
-| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 121 |
-| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 387 |
+| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 122 |
+| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 393 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 2 |
-| `seed/` | Datos semilla idempotentes. | 2 |
+| `seed/` | Datos semilla idempotentes. | 3 |
 | `cron/` | Jobs de pg_cron (`cron.schedule`, upsert por nombre). Van últimos: un job no debe dispararse antes de que existan sus funciones y datos. | 3 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.

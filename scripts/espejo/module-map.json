@@ -63,7 +63,12 @@
   "contract_notifications",
   "contract_billing_splits",
   "contract_invoices",
-  "churn_reasons"
+  "churn_reasons",
+  "tax_document_types",
+  "billable_metrics",
+  "prices",
+  "consumption_entries",
+  "consumption_entry_revisions"
  ],
  "facturacion": [
   "billing_references",
