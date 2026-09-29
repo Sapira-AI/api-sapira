@@ -171,6 +171,13 @@
     "expr": "status = ANY (ARRAY['En revisión'::text, 'En proceso'::text, 'Firmado'::text, 'Activo'::text, 'Cancelado'::text, 'Expirado'::text])"
    },
    {
+    "name": "contracts_tax_document_type_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (tax_document_type_id) REFERENCES tax_document_types(id)"
+   },
+   {
     "name": "fk_contracts_holding_id",
     "type": "f",
     "ondelete": "c",
@@ -250,6 +257,14 @@
     ],
     "unique": false,
     "where": "salesforce_opportunity_id IS NOT NULL"
+   },
+   {
+    "name": "idx_contracts_tax_document_type_id",
+    "cols": [
+     "tax_document_type_id"
+    ],
+    "unique": false,
+    "where": null
    },
    {
     "name": "idx_contracts_workflow_started_at",
@@ -452,6 +467,13 @@
     ]
    },
    {
+    "name": "contract_items_price_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (price_id) REFERENCES prices(id)"
+   },
+   {
     "name": "contract_items_product_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -551,6 +573,14 @@
     ],
     "unique": false,
     "where": "(monthly_price IS NOT NULL) AND (is_recurring = true)"
+   },
+   {
+    "name": "idx_contract_items_price_id",
+    "cols": [
+     "price_id"
+    ],
+    "unique": false,
+    "where": null
    },
    {
     "name": "idx_contract_items_quote_item_id",
@@ -2192,6 +2222,551 @@
      "public"
     ],
     "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "tax_document_types": {
+  "comment": "Catálogo compartido de documentos tributarios por país (ISO-2, o * como comodín). code = código oficial cuando existe (SII 33/34/61, SUNAT 01/03, CFDI-I/E, DIAN FE/NC). kind = familia fiscal; de ella se deriva contracts.document_type",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "tax_document_types_country_code_code_key",
+    "type": "u",
+    "cols": [
+     "country_code",
+     "code"
+    ]
+   },
+   {
+    "name": "tax_document_types_kind_check",
+    "type": "c",
+    "expr": "kind = ANY (ARRAY['invoice'::text, 'export_invoice'::text, 'credit_note'::text, 'debit_note'::text, 'receipt'::text])"
+   },
+   {
+    "name": "tax_document_types_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_tax_document_types_country_active",
+    "cols": [
+     "country_code",
+     "active"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "tax_document_types_select_authenticated (SELECT, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tax_document_types_select_authenticated",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(auth.role() = 'authenticated'::text)",
+    "with_check": null
+   }
+  ]
+ },
+ "billable_metrics": {
+  "comment": "Métricas facturables por holding: qué se mide (rutas, usuarios, GB), cómo se agrega y de dónde llega",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "billable_metrics_aggregation_check",
+    "type": "c",
+    "expr": "aggregation = ANY (ARRAY['sum'::text, 'count'::text, 'max'::text, 'min'::text, 'last'::text, 'unique_count'::text])"
+   },
+   {
+    "name": "billable_metrics_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "billable_metrics_holding_id_code_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "code"
+    ]
+   },
+   {
+    "name": "billable_metrics_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "billable_metrics_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "billable_metrics_source_kind_check",
+    "type": "c",
+    "expr": "source_kind = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])"
+   },
+   {
+    "name": "billable_metrics_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['active'::text, 'archived'::text])"
+   },
+   {
+    "name": "billable_metrics_updated_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (updated_by) REFERENCES users(id)"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_billable_metrics_holding_status",
+    "cols": [
+     "holding_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_billable_metrics (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_billable_metrics",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "prices": {
+  "comment": "Modelo de precio (standard, graduated, volume, package, seat) con cantidad fija o medida, tramos, gratis, mínimo y tope",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "unit_amount": {
+    "precision": 18,
+    "scale": 6
+   },
+   "package_size": {
+    "precision": 18,
+    "scale": 6
+   },
+   "package_amount": {
+    "precision": 18,
+    "scale": 2
+   },
+   "seat_minimum_quantity": {
+    "precision": 18,
+    "scale": 6
+   },
+   "free_units": {
+    "precision": 18,
+    "scale": 6
+   },
+   "minimum_amount": {
+    "precision": 18,
+    "scale": 2
+   },
+   "cap_amount": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "prices_billable_metric_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (billable_metric_id) REFERENCES billable_metrics(id)"
+   },
+   {
+    "name": "prices_cap_minimum_check",
+    "type": "c",
+    "expr": "(cap_amount IS NULL) OR (minimum_amount IS NULL) OR (cap_amount >= minimum_amount)"
+   },
+   {
+    "name": "prices_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "prices_contract_owner_check",
+    "type": "c",
+    "expr": "((owner = 'contract'::text) AND (contract_id IS NOT NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL))"
+   },
+   {
+    "name": "prices_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "prices_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "prices_invoice_line_mode_check",
+    "type": "c",
+    "expr": "invoice_line_mode = ANY (ARRAY['single'::text, 'per_tier'::text])"
+   },
+   {
+    "name": "prices_list_price_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (list_price_id) REFERENCES prices(id)"
+   },
+   {
+    "name": "prices_metered_metric_check",
+    "type": "c",
+    "expr": "(quantity_type = 'fixed'::text) OR (billable_metric_id IS NOT NULL)"
+   },
+   {
+    "name": "prices_model_check",
+    "type": "c",
+    "expr": "model = ANY (ARRAY['standard'::text, 'graduated'::text, 'volume'::text, 'package'::text, 'seat'::text])"
+   },
+   {
+    "name": "prices_owner_check",
+    "type": "c",
+    "expr": "owner = ANY (ARRAY['catalog'::text, 'contract'::text])"
+   },
+   {
+    "name": "prices_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_product_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (product_id) REFERENCES products(id)"
+   },
+   {
+    "name": "prices_quantity_type_check",
+    "type": "c",
+    "expr": "quantity_type = ANY (ARRAY['fixed'::text, 'metered'::text])"
+   },
+   {
+    "name": "prices_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])"
+   },
+   {
+    "name": "prices_supersedes_price_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (supersedes_price_id) REFERENCES prices(id)"
+   },
+   {
+    "name": "prices_updated_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (updated_by) REFERENCES users(id)"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_prices_billable_metric_id",
+    "cols": [
+     "billable_metric_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_prices_contract_id",
+    "cols": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": "owner = 'contract'::text"
+   },
+   {
+    "name": "idx_prices_holding_product_status",
+    "cols": [
+     "holding_id",
+     "product_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_prices (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_prices",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "consumption_entries": {
+  "comment": "Consumo vigente de un ítem por período de servicio (reemplaza quantities en Contratos v2); las correcciones quedan en consumption_entry_revisions",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "quantity": {
+    "precision": 18,
+    "scale": 6
+   },
+   "amount_override": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "consumption_entries_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "consumption_entries_contract_item_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "consumption_entries_contract_item_id_period_start_key",
+    "type": "u",
+    "cols": [
+     "contract_item_id",
+     "period_start"
+    ]
+   },
+   {
+    "name": "consumption_entries_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "consumption_entries_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "consumption_entries_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "consumption_entries_period_check",
+    "type": "c",
+    "expr": "period_end >= period_start"
+   },
+   {
+    "name": "consumption_entries_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_quantity_check",
+    "type": "c",
+    "expr": "quantity >= (0)::numeric"
+   },
+   {
+    "name": "consumption_entries_source_check",
+    "type": "c",
+    "expr": "source = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])"
+   },
+   {
+    "name": "consumption_entries_updated_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (updated_by) REFERENCES users(id)"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_consumption_entries_contract_period",
+    "cols": [
+     "contract_id",
+     "period_start"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_consumption_entries_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_consumption_entries_idempotency",
+    "cols": [
+     "holding_id",
+     "idempotency_key"
+    ],
+    "unique": true,
+    "where": "idempotency_key IS NOT NULL"
+   },
+   {
+    "name": "idx_consumption_entries_invoice_id",
+    "cols": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": "invoice_id IS NOT NULL"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_consumption_entries (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_consumption_entries",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "consumption_entry_revisions": {
+  "comment": "Historial append-only de consumption_entries: una fila por revisión (nunca update destructivo sin rastro)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "quantity": {
+    "precision": 18,
+    "scale": 6
+   },
+   "amount_override": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "consumption_entry_revisions_changed_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (changed_by) REFERENCES users(id)"
+   },
+   {
+    "name": "consumption_entry_revisions_entry_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (entry_id) REFERENCES consumption_entries(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "consumption_entry_revisions_entry_id_revision_key",
+    "type": "u",
+    "cols": [
+     "entry_id",
+     "revision"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "consumption_entry_revisions_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_consumption_entry_revisions_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_consumption_entry_revisions (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_consumption_entry_revisions",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
     "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }

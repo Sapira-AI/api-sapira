@@ -1046,6 +1046,28 @@
     "scale": null,
     "array": false
    },
+   "pricing_breakdown": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity_source": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "invoice_currency": {
     "type": "text",
     "nullable": true,
@@ -1301,8 +1323,12 @@
   },
   "checks": [
    {
+    "name": "invoice_items_quantity_source_check",
+    "expression": "((\"quantity_source\" IS NULL) OR (\"quantity_source\" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text])))"
+   },
+   {
     "name": "invoice_items_quantity_check",
-    "expression": "((quantity > (0)::numeric))"
+    "expression": "((quantity >= (0)::numeric))"
    },
    {
     "name": "invoice_items_discount_pct_check",

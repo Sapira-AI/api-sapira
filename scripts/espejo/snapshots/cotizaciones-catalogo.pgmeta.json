@@ -1162,6 +1162,17 @@
     ]
    },
    {
+    "name": "prices_product_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "products_holding_id_fkey",
     "source_table": "public.products",
     "source_columns": [

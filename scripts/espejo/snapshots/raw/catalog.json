@@ -3740,6 +3740,360 @@
 				}
 			]
 		},
+		"billable_metrics": {
+			"comment": "Métricas facturables por holding: qué se mide (rutas, usuarios, GB), cómo se agrega y de dónde llega",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "code",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Slug estable para API y DWH, único por holding"
+				},
+				{
+					"column": "name",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Lo que ve la usuaria (\"Rutas completadas\")"
+				},
+				{
+					"column": "description",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "aggregation",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "sum, count, max, min, last o unique_count"
+				},
+				{
+					"column": "unit",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Unidad en singular para glosa y UI (\"ruta\", \"usuario\", \"GB\")"
+				},
+				{
+					"column": "source_kind",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'manual'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "manual, csv, dwh o api"
+				},
+				{
+					"column": "source_config",
+					"attnum": 9,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Para dwh: referencia a la consulta/tabla de BigQuery; para el resto {}"
+				},
+				{
+					"column": "status",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'active'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "active o archived; una métrica con precios activos no se archiva"
+				},
+				{
+					"column": "created_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 13,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_by",
+					"attnum": 14,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "archived_at",
+					"attnum": 15,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "billable_metrics_aggregation_check",
+					"type": "c",
+					"def": "CHECK ((aggregation = ANY (ARRAY['sum'::text, 'count'::text, 'max'::text, 'min'::text, 'last'::text, 'unique_count'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "billable_metrics_created_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (created_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "billable_metrics_holding_id_code_key",
+					"type": "u",
+					"def": "UNIQUE (holding_id, code)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "billable_metrics_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "billable_metrics_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "billable_metrics_source_kind_check",
+					"type": "c",
+					"def": "CHECK ((source_kind = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "billable_metrics_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "billable_metrics_updated_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (updated_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "billable_metrics_holding_id_code_key",
+					"def": "CREATE UNIQUE INDEX billable_metrics_holding_id_code_key ON public.billable_metrics USING btree (holding_id, code)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "billable_metrics_pkey",
+					"def": "CREATE UNIQUE INDEX billable_metrics_pkey ON public.billable_metrics USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_billable_metrics_holding_status",
+					"def": "CREATE INDEX idx_billable_metrics_holding_status ON public.billable_metrics USING btree (holding_id, status)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_billable_metrics",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
 		"billing_references": {
 			"comment": null,
 			"rls": true,
@@ -8098,6 +8452,764 @@
 				}
 			]
 		},
+		"consumption_entries": {
+			"comment": "Consumo vigente de un ítem por período de servicio (reemplaza quantities en Contratos v2); las correcciones quedan en consumption_entry_revisions",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_item_id",
+					"attnum": 4,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "period_start",
+					"attnum": 5,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Inicio del período de servicio de la línea que alimenta (= invoice_items.billing_period_start)"
+				},
+				{
+					"column": "period_end",
+					"attnum": 6,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Fin del período de servicio de la línea (= invoice_items.billing_period_end)"
+				},
+				{
+					"column": "quantity",
+					"attnum": 7,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "0 = sin consumo: la línea queda en 0 (nunca cobra la cantidad base)"
+				},
+				{
+					"column": "amount_override",
+					"attnum": 8,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Monto final informado por el cliente; si viene, la línea usa este monto y quantity queda informativa"
+				},
+				{
+					"column": "apply_item_discount",
+					"attnum": 9,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "El descuento del ítem se aplica sobre el consumo (S7-9)"
+				},
+				{
+					"column": "account",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuenta del período si difiere de la del ítem"
+				},
+				{
+					"column": "is_estimated",
+					"attnum": 11,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "true = fila estimada al cierre; se reemplaza al llegar el real"
+				},
+				{
+					"column": "source",
+					"attnum": 12,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'manual'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "manual, csv, dwh o api"
+				},
+				{
+					"column": "idempotency_key",
+					"attnum": 13,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "El DWH y la API reenvían sin duplicar (único por holding)"
+				},
+				{
+					"column": "revision",
+					"attnum": 14,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "1",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Sube en cada corrección"
+				},
+				{
+					"column": "correction_reason",
+					"attnum": 15,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo obligatorio desde la revisión 2"
+				},
+				{
+					"column": "notes",
+					"attnum": 16,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "invoice_id",
+					"attnum": 17,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Factura que lleva este consumo: la Por Emitir recalculada, la complementaria (consumo adicional) o la reemitida (spec §4.4). NULL si el período solo tenía facturas anuladas"
+				},
+				{
+					"column": "created_at",
+					"attnum": 18,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 19,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 20,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_by",
+					"attnum": 21,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "consumption_entries_contract_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entries_contract_item_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entries_contract_item_id_period_start_key",
+					"type": "u",
+					"def": "UNIQUE (contract_item_id, period_start)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entries_created_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (created_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entries_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entries_invoice_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entries_period_check",
+					"type": "c",
+					"def": "CHECK ((period_end >= period_start))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entries_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entries_quantity_check",
+					"type": "c",
+					"def": "CHECK ((quantity >= (0)::numeric))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entries_source_check",
+					"type": "c",
+					"def": "CHECK ((source = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entries_updated_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (updated_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "consumption_entries_contract_item_id_period_start_key",
+					"def": "CREATE UNIQUE INDEX consumption_entries_contract_item_id_period_start_key ON public.consumption_entries USING btree (contract_item_id, period_start)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "consumption_entries_pkey",
+					"def": "CREATE UNIQUE INDEX consumption_entries_pkey ON public.consumption_entries USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_consumption_entries_contract_period",
+					"def": "CREATE INDEX idx_consumption_entries_contract_period ON public.consumption_entries USING btree (contract_id, period_start)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_consumption_entries_holding_id",
+					"def": "CREATE INDEX idx_consumption_entries_holding_id ON public.consumption_entries USING btree (holding_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_consumption_entries_idempotency",
+					"def": "CREATE UNIQUE INDEX idx_consumption_entries_idempotency ON public.consumption_entries USING btree (holding_id, idempotency_key) WHERE (idempotency_key IS NOT NULL)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "idx_consumption_entries_invoice_id",
+					"def": "CREATE INDEX idx_consumption_entries_invoice_id ON public.consumption_entries USING btree (invoice_id) WHERE (invoice_id IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_consumption_entries",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
+		"consumption_entry_revisions": {
+			"comment": "Historial append-only de consumption_entries: una fila por revisión (nunca update destructivo sin rastro)",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "entry_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "revision",
+					"attnum": 4,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "quantity",
+					"attnum": 5,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "amount_override",
+					"attnum": 6,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "apply_item_discount",
+					"attnum": 7,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "source",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "reason",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo de la corrección (obligatorio desde la revisión 2)"
+				},
+				{
+					"column": "changed_by",
+					"attnum": 10,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "changed_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "consumption_entry_revisions_changed_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (changed_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entry_revisions_entry_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (entry_id) REFERENCES consumption_entries(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entry_revisions_entry_id_revision_key",
+					"type": "u",
+					"def": "UNIQUE (entry_id, revision)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "consumption_entry_revisions_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "consumption_entry_revisions_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "consumption_entry_revisions_entry_id_revision_key",
+					"def": "CREATE UNIQUE INDEX consumption_entry_revisions_entry_id_revision_key ON public.consumption_entry_revisions USING btree (entry_id, revision)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "consumption_entry_revisions_pkey",
+					"def": "CREATE UNIQUE INDEX consumption_entry_revisions_pkey ON public.consumption_entry_revisions USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_consumption_entry_revisions_holding_id",
+					"def": "CREATE INDEX idx_consumption_entry_revisions_holding_id ON public.consumption_entry_revisions USING btree (holding_id)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_consumption_entry_revisions",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
 		"contact_preferences": {
 			"comment": null,
 			"rls": true,
@@ -11751,6 +12863,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Precio unitario efectivo ANTES de la renovación (mismo price_entry_mode y escala que unit_price). Solo poblado en items con categoria=RENEWAL cuando la renovación cambió el precio. Usado por apply_renewal_price_split() al final de revenue_schedule_rebuild_contract_ccy para emitir filas RSM RENEWAL (precio base) + UPSELL/DOWNSELL (delta) en el mes efectivo, solo en columnas *_contract_ccy. revenue_schedule_apply_fx_for_contract completa system/company."
+				},
+				{
+					"column": "price_id",
+					"attnum": 41,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo (unit_price mensual × cantidad × meses)"
 				}
 			],
 			"constraints": [
@@ -11816,6 +12944,15 @@
 					"deferred": false,
 					"ondelete": " ",
 					"onupdate": " "
+				},
+				{
+					"name": "contract_items_price_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (price_id) REFERENCES prices(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
 				},
 				{
 					"name": "contract_items_product_id_fkey",
@@ -11918,6 +13055,12 @@
 				{
 					"name": "idx_contract_items_monthly_price",
 					"def": "CREATE INDEX idx_contract_items_monthly_price ON public.contract_items USING btree (monthly_price) WHERE ((monthly_price IS NOT NULL) AND (is_recurring = true))",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_contract_items_price_id",
+					"def": "CREATE INDEX idx_contract_items_price_id ON public.contract_items USING btree (price_id)",
 					"unique": false,
 					"primary": false
 				},
@@ -14212,6 +15355,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Borrado lógico (solo borradores En revisión sin facturas, con evento DELETED). NULL = vigente"
+				},
+				{
+					"column": "tax_document_type_id",
+					"attnum": 63,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Documento tributario del catálogo tax_document_types que emite el contrato (33, 34, 110, 01, CFDI-I…). document_type es su familia derivada (kind export_invoice → FACTURA_EXPORTACION, resto → FACTURA). NULL = contratos anteriores al catálogo"
 				}
 			],
 			"constraints": [
@@ -14360,6 +15519,15 @@
 					"onupdate": " "
 				},
 				{
+					"name": "contracts_tax_document_type_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (tax_document_type_id) REFERENCES tax_document_types(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
 					"name": "fk_contracts_holding_id",
 					"type": "f",
 					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
@@ -14427,6 +15595,12 @@
 				{
 					"name": "idx_contracts_sf_opp",
 					"def": "CREATE INDEX idx_contracts_sf_opp ON public.contracts USING btree (salesforce_opportunity_id) WHERE (salesforce_opportunity_id IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_contracts_tax_document_type_id",
+					"def": "CREATE INDEX idx_contracts_tax_document_type_id ON public.contracts USING btree (tax_document_type_id)",
 					"unique": false,
 					"primary": false
 				},
@@ -19891,6 +21065,38 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "ID del impuesto de Odoo (account.tax) que se aplicará a esta línea de factura. Se asigna automáticamente desde la compañía emisora al enviar a Odoo."
+				},
+				{
+					"column": "pricing_breakdown",
+					"attnum": 41,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Pricing v2: sublíneas del desglose {kind: free|tier|package|seat|discount|minimum|cap, quantity, amount, label…} tal como las produjo el motor; la línea sigue siendo una"
+				},
+				{
+					"column": "quantity_source",
+					"attnum": 42,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
 				}
 			],
 			"constraints": [
@@ -19987,7 +21193,16 @@
 				{
 					"name": "invoice_items_quantity_check",
 					"type": "c",
-					"def": "CHECK ((quantity > (0)::numeric))",
+					"def": "CHECK ((quantity >= (0)::numeric))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "invoice_items_quantity_source_check",
+					"type": "c",
+					"def": "CHECK (((quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -28594,6 +29809,703 @@
 					"cmd": "ALL",
 					"qual": "false",
 					"with_check": "false"
+				}
+			]
+		},
+		"prices": {
+			"comment": "Modelo de precio (standard, graduated, volume, package, seat) con cantidad fija o medida, tramos, gratis, mínimo y tope",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "owner",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "catalog (versionado, etapa 3) o contract (precio inline del ítem o copia del catálogo)"
+				},
+				{
+					"column": "product_id",
+					"attnum": 4,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "El ítem exige producto (S1-12)"
+				},
+				{
+					"column": "contract_id",
+					"attnum": 5,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "NOT NULL si owner = contract, NULL si catalog (CHECK)"
+				},
+				{
+					"column": "name",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Etiqueta (\"Tramos LatAm — UF\"); para contract default = nombre del producto"
+				},
+				{
+					"column": "currency",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Moneda del contrato (S1-2); en catálogo, la del precio"
+				},
+				{
+					"column": "model",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "standard, graduated, volume, package o seat"
+				},
+				{
+					"column": "quantity_type",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "fixed o metered; metered exige billable_metric_id"
+				},
+				{
+					"column": "billable_metric_id",
+					"attnum": 10,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "unit_amount",
+					"attnum": 11,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "standard y seat: precio por unidad del período (no mensual)"
+				},
+				{
+					"column": "tiers",
+					"attnum": 12,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "graduated/volume: [{from, to, per_unit_amount, flat_amount}]"
+				},
+				{
+					"column": "package_size",
+					"attnum": 13,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "package: bloque de N unidades"
+				},
+				{
+					"column": "package_amount",
+					"attnum": 14,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "package: precio del bloque"
+				},
+				{
+					"column": "seat_minimum_quantity",
+					"attnum": 15,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": "'0'::numeric",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "seat: asientos mínimos cobrados"
+				},
+				{
+					"column": "free_units",
+					"attnum": 16,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": "'0'::numeric",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Unidades gratis por período"
+				},
+				{
+					"column": "minimum_amount",
+					"attnum": 17,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Mínimo comprometido por período con true-up; NULL = sin mínimo"
+				},
+				{
+					"column": "cap_amount",
+					"attnum": 18,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tope máximo por período; NULL = sin tope"
+				},
+				{
+					"column": "invoice_line_mode",
+					"attnum": 19,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'single'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Presentación en la factura (spec §3.8): single = una línea con el detalle en la glosa; per_tier = una línea por tramo más ajustes"
+				},
+				{
+					"column": "charge_flat_when_free",
+					"attnum": 20,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "graduated/volume: cobrar el cargo fijo del tramo aunque todo el consumo caiga en unidades gratis (spec §3.5, pregunta 5)"
+				},
+				{
+					"column": "status",
+					"attnum": 21,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'active'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "draft, active o archived; contract nace active"
+				},
+				{
+					"column": "version",
+					"attnum": 22,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "1",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Sube con cada supersedes_price_id"
+				},
+				{
+					"column": "supersedes_price_id",
+					"attnum": 23,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Versión anterior"
+				},
+				{
+					"column": "list_price_id",
+					"attnum": 24,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "En owner = contract, el precio de catálogo del que salió (etapa 3). NULL en precios inline"
+				},
+				{
+					"column": "notes",
+					"attnum": 25,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Catálogo: nota interna de la versión (qué cambió, para quién aplica)"
+				},
+				{
+					"column": "created_at",
+					"attnum": 26,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 27,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 28,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_by",
+					"attnum": 29,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "published_at",
+					"attnum": 30,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "archived_at",
+					"attnum": 31,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "prices_billable_metric_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (billable_metric_id) REFERENCES billable_metrics(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_cap_minimum_check",
+					"type": "c",
+					"def": "CHECK (((cap_amount IS NULL) OR (minimum_amount IS NULL) OR (cap_amount >= minimum_amount)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_contract_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_contract_owner_check",
+					"type": "c",
+					"def": "CHECK ((((owner = 'contract'::text) AND (contract_id IS NOT NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_created_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (created_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_invoice_line_mode_check",
+					"type": "c",
+					"def": "CHECK ((invoice_line_mode = ANY (ARRAY['single'::text, 'per_tier'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_list_price_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (list_price_id) REFERENCES prices(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_metered_metric_check",
+					"type": "c",
+					"def": "CHECK (((quantity_type = 'fixed'::text) OR (billable_metric_id IS NOT NULL)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_model_check",
+					"type": "c",
+					"def": "CHECK ((model = ANY (ARRAY['standard'::text, 'graduated'::text, 'volume'::text, 'package'::text, 'seat'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_owner_check",
+					"type": "c",
+					"def": "CHECK ((owner = ANY (ARRAY['catalog'::text, 'contract'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_product_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (product_id) REFERENCES products(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_quantity_type_check",
+					"type": "c",
+					"def": "CHECK ((quantity_type = ANY (ARRAY['fixed'::text, 'metered'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "prices_supersedes_price_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (supersedes_price_id) REFERENCES prices(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "prices_updated_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (updated_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_prices_billable_metric_id",
+					"def": "CREATE INDEX idx_prices_billable_metric_id ON public.prices USING btree (billable_metric_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_prices_contract_id",
+					"def": "CREATE INDEX idx_prices_contract_id ON public.prices USING btree (contract_id) WHERE (owner = 'contract'::text)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_prices_holding_product_status",
+					"def": "CREATE INDEX idx_prices_holding_product_status ON public.prices USING btree (holding_id, product_id, status)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "prices_pkey",
+					"def": "CREATE UNIQUE INDEX prices_pkey ON public.prices USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_prices",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
 				}
 			]
 		},
@@ -41970,6 +43882,219 @@
 				}
 			]
 		},
+		"tax_document_types": {
+			"comment": "Catálogo compartido de documentos tributarios por país (ISO-2, o * como comodín). code = código oficial cuando existe (SII 33/34/61, SUNAT 01/03, CFDI-I/E, DIAN FE/NC). kind = familia fiscal; de ella se deriva contracts.document_type",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "country_code",
+					"attnum": 2,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "País ISO-2 del documento, o * para el comodín genérico"
+				},
+				{
+					"column": "code",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Código oficial del documento en su país (33, 01, CFDI-I, FE…) o genérico (FACTURA)"
+				},
+				{
+					"column": "name",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Nombre en español neutro"
+				},
+				{
+					"column": "kind",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Familia fiscal: invoice, export_invoice, credit_note, debit_note o receipt"
+				},
+				{
+					"column": "is_electronic",
+					"attnum": 6,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "sort",
+					"attnum": 7,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "'0'::smallint",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Orden de presentación dentro del país"
+				},
+				{
+					"column": "active",
+					"attnum": 8,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 9,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "tax_document_types_country_code_code_key",
+					"type": "u",
+					"def": "UNIQUE (country_code, code)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "tax_document_types_kind_check",
+					"type": "c",
+					"def": "CHECK ((kind = ANY (ARRAY['invoice'::text, 'export_invoice'::text, 'credit_note'::text, 'debit_note'::text, 'receipt'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "tax_document_types_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_tax_document_types_country_active",
+					"def": "CREATE INDEX idx_tax_document_types_country_active ON public.tax_document_types USING btree (country_code, active)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "tax_document_types_country_code_code_key",
+					"def": "CREATE UNIQUE INDEX tax_document_types_country_code_code_key ON public.tax_document_types USING btree (country_code, code)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "tax_document_types_pkey",
+					"def": "CREATE UNIQUE INDEX tax_document_types_pkey ON public.tax_document_types USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "tax_document_types_select_authenticated",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "SELECT",
+					"qual": "(auth.role() = 'authenticated'::text)",
+					"with_check": null
+				}
+			]
+		},
 		"user_holdings": {
 			"comment": null,
 			"rls": true,
@@ -45044,6 +47169,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"billable_metrics": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"billing_references": [
 			{
 				"grantee": "anon",
@@ -46755,6 +48994,234 @@
 			}
 		],
 		"company_legal_documents": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"consumption_entries": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"consumption_entry_revisions": [
 			{
 				"grantee": "anon",
 				"privilege": "DELETE"
@@ -53480,6 +55947,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"prices": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"products": [
 			{
 				"grantee": "anon",
@@ -58040,6 +60621,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"tax_document_types": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"user_holdings": [
 			{
 				"grantee": "anon",
@@ -61803,7 +64498,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 133,
+			"objetos": 138,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

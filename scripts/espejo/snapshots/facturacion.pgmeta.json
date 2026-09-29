@@ -1089,6 +1089,28 @@
      "updatable"
     ],
     "comment": "ID del impuesto de Odoo (account.tax) que se aplicará a esta línea de factura. Se asigna automáticamente desde la compañía emisora al enviar a Odoo."
+   },
+   {
+    "name": "pricing_breakdown",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: sublíneas del desglose {kind: free|tier|package|seat|discount|minimum|cap, quantity, amount, label…} tal como las produjo el motor; la línea sigue siendo una"
+   },
+   {
+    "name": "quantity_source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
    }
   ],
   "primary_keys": [
@@ -2527,6 +2549,17 @@
     ]
    },
    {
+    "name": "consumption_entries_invoice_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "fk_invoices_holding_id",
     "source_table": "public.invoices",
     "source_columns": [
@@ -3024,7 +3057,7 @@
  "quantities": {
   "name": "public.quantities",
   "rls_enabled": true,
-  "rows": 252,
+  "rows": 311,
   "columns": [
    {
     "name": "id",
