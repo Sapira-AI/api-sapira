@@ -45,6 +45,7 @@ export { Seller } from '@/databases/postgresql/entities/clientes/seller.entity';
 export { BankColumnMapping } from '@/databases/postgresql/entities/conciliacion/bank-column-mapping.entity';
 export { BankMovement } from '@/databases/postgresql/entities/conciliacion/bank-movement.entity';
 export { BankUploadBatch } from '@/databases/postgresql/entities/conciliacion/bank-upload-batch.entity';
+export { BillableMetric } from '@/databases/postgresql/entities/contratos/billable-metric.entity';
 export { ChurnReason } from '@/databases/postgresql/entities/contratos/churn-reason.entity';
 export { ContractAmendmentItem } from '@/databases/postgresql/entities/contratos/contract-amendment-item.entity';
 export { ContractAmendment } from '@/databases/postgresql/entities/contratos/contract-amendment.entity';
@@ -60,6 +61,10 @@ export { ContractNotification } from '@/databases/postgresql/entities/contratos/
 export { ContractTemplate } from '@/databases/postgresql/entities/contratos/contract-template.entity';
 export { ContractWorkflowHistory } from '@/databases/postgresql/entities/contratos/contract-workflow-history.entity';
 export { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
+export { ConsumptionEntryRevision } from '@/databases/postgresql/entities/contratos/consumption-entry-revision.entity';
+export { ConsumptionEntry } from '@/databases/postgresql/entities/contratos/consumption-entry.entity';
+export { Price } from '@/databases/postgresql/entities/contratos/price.entity';
+export { TaxDocumentType } from '@/databases/postgresql/entities/contratos/tax-document-type.entity';
 export { WorkflowStepDocument } from '@/databases/postgresql/entities/contratos/workflow-step-document.entity';
 export { WorkflowStep } from '@/databases/postgresql/entities/contratos/workflow-step.entity';
 export { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';

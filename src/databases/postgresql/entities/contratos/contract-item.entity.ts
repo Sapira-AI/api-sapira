@@ -2,6 +2,7 @@ import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedCo
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
+import { Price } from '@/databases/postgresql/entities/contratos/price.entity';
 import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
 import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity';
 
@@ -33,6 +34,7 @@ import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo
 @Index('idx_contract_items_contract_end_date', ['contract_id', 'end_date'])
 @Index('idx_contract_items_holding_id', ['holding_id'])
 @Index('idx_contract_items_monthly_price', ['monthly_price'], { where: '(monthly_price IS NOT NULL) AND (is_recurring = true)' })
+@Index('idx_contract_items_price_id', ['price_id'])
 @Index('idx_contract_items_quote_item_id', ['quote_item_id'])
 @Index('idx_contract_items_quote_item_number', ['quote_item_number'], { where: 'quote_item_number IS NOT NULL' })
 @Index('idx_contract_items_recurring_dates', ['is_recurring', 'start_date', 'end_date'], { where: 'is_recurring = true' })
@@ -249,6 +251,17 @@ export class ContractItem {
 	})
 	renewal_base_unit_price?: number;
 
+	/**
+	 * Pricing v2 (`docs/v2-rediseno/spec-pricing-v2.md` §2.4, migración `1790630000000-CreatePricingV2`): modelo de precio del
+	 * ítem. NULL = `standard` fijo de hoy (`unit_price` mensual × cantidad × meses).
+	 */
+	@Column({
+		type: 'uuid',
+		comment: 'Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo (unit_price mensual × cantidad × meses)',
+		nullable: true,
+	})
+	price_id?: string | null;
+
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_contract_id_fkey' })
 	contract?: Contract; // entity existente (no se duplica)
@@ -276,4 +289,8 @@ export class ContractItem {
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_contract_items_holding_id' })
 	holding?: CompanyHolding; // entity existente (no se duplica)
+
+	@ManyToOne(() => Price)
+	@JoinColumn({ name: 'price_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_price_id_fkey' })
+	priceModel?: Price;
 }

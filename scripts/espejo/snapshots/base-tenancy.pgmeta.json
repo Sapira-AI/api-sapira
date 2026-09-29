@@ -222,6 +222,28 @@
     ]
    },
    {
+    "name": "billable_metrics_created_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billable_metrics_updated_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "billing_references_created_by_fkey",
     "source_table": "public.billing_references",
     "source_columns": [
@@ -270,6 +292,39 @@
     "source_table": "public.client_entity_clients",
     "source_columns": [
      "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_created_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_updated_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_changed_by_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "changed_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -523,6 +578,28 @@
     "source_table": "public.period_guard_warnings",
     "source_columns": [
      "triggered_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_created_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_updated_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "updated_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -1062,6 +1139,17 @@
     ]
    },
    {
+    "name": "billable_metrics_holding_id_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "billing_references_holding_id_fkey",
     "source_table": "public.billing_references",
     "source_columns": [
@@ -1130,6 +1218,28 @@
    {
     "name": "companies_holding_fk",
     "source_table": "public.companies",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_holding_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_holding_id_fkey",
+    "source_table": "public.consumption_entry_revisions",
     "source_columns": [
      "holding_id"
     ],
@@ -1702,6 +1812,17 @@
    {
     "name": "overdue_check_log_holding_id_fkey",
     "source_table": "public.overdue_check_log",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_holding_id_fkey",
+    "source_table": "public.prices",
     "source_columns": [
      "holding_id"
     ],
