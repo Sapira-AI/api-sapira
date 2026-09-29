@@ -15,6 +15,11 @@
   "file": "src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity"
  },
+ "billable_metrics": {
+  "class": "BillableMetric",
+  "file": "src/databases/postgresql/entities/contratos/billable-metric.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/billable-metric.entity"
+ },
  "client_activity_notes": {
   "class": "ClientActivityNote",
   "file": "src/databases/postgresql/entities/clientes/client-activity-note.entity.ts",
@@ -49,6 +54,16 @@
   "class": "CompanyHolding",
   "file": "src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/company-holding.entity"
+ },
+ "consumption_entries": {
+  "class": "ConsumptionEntry",
+  "file": "src/databases/postgresql/entities/contratos/consumption-entry.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/consumption-entry.entity"
+ },
+ "consumption_entry_revisions": {
+  "class": "ConsumptionEntryRevision",
+  "file": "src/databases/postgresql/entities/contratos/consumption-entry-revision.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/consumption-entry-revision.entity"
  },
  "contracts": {
   "class": "Contract",
@@ -134,6 +149,11 @@
   "class": "OdooProductMapping",
   "file": "src/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity"
+ },
+ "prices": {
+  "class": "Price",
+  "file": "src/databases/postgresql/entities/contratos/price.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/price.entity"
  },
  "products": {
   "class": "Product",
@@ -269,6 +289,11 @@
   "class": "StripeSyncJob",
   "file": "src/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity"
+ },
+ "tax_document_types": {
+  "class": "TaxDocumentType",
+  "file": "src/databases/postgresql/entities/contratos/tax-document-type.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/tax-document-type.entity"
  },
  "user_holdings": {
   "class": "UserHolding",

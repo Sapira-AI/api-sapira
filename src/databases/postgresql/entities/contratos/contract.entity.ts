@@ -6,6 +6,7 @@ import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-en
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { ChurnReason } from '@/databases/postgresql/entities/contratos/churn-reason.entity';
+import { TaxDocumentType } from '@/databases/postgresql/entities/contratos/tax-document-type.entity';
 import { WorkflowStep } from '@/databases/postgresql/entities/contratos/workflow-step.entity';
 import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 
@@ -38,6 +39,7 @@ export type ContractDocumentType = (typeof CONTRACT_DOCUMENT_TYPES)[number];
 @Index('idx_contracts_current_step_id', ['current_step_id'])
 @Index('idx_contracts_holding_id', ['holding_id'])
 @Index('idx_contracts_sf_opp', ['salesforce_opportunity_id'], { where: `(salesforce_opportunity_id IS NOT NULL)` })
+@Index('idx_contracts_tax_document_type_id', ['tax_document_type_id'])
 @Index('idx_contracts_workflow_started_at', ['workflow_started_at'])
 @Index('idx_contracts_custom_fields', { synchronize: false })
 @Entity('contracts')
@@ -267,6 +269,18 @@ export class Contract {
 		comment: 'Borrado lógico (solo borradores En revisión sin facturas, con evento DELETED). NULL = vigente',
 	})
 	deleted_at?: Date | null;
+
+	@Column({
+		type: 'uuid',
+		nullable: true,
+		comment:
+			'Documento tributario del catálogo tax_document_types que emite el contrato (33, 34, 110, 01, CFDI-I…). document_type es su familia derivada (kind export_invoice → FACTURA_EXPORTACION, resto → FACTURA). NULL = contratos anteriores al catálogo',
+	})
+	tax_document_type_id?: string | null;
+
+	@ManyToOne(() => TaxDocumentType)
+	@JoinColumn({ name: 'tax_document_type_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contracts_tax_document_type_id_fkey' })
+	tax_document_type?: TaxDocumentType;
 
 	@ManyToOne(() => ChurnReason)
 	@JoinColumn({ name: 'churn_reason_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contracts_churn_reason_id_fkey' })

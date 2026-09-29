@@ -9,8 +9,31 @@ import { InvoiceItemsLegacyMatch } from '@/databases/postgresql/entities/legacy/
 import { InvoiceItemsLegacy } from '@/databases/postgresql/entities/legacy/invoice-items-legacy.entity';
 import { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/subscription-item.entity';
 
+/** Pricing v2: origen de la cantidad de una línea. */
+export const INVOICE_ITEM_QUANTITY_SOURCES = ['fixed', 'consumption', 'estimated', 'pending'] as const;
+export type InvoiceItemQuantitySource = (typeof INVOICE_ITEM_QUANTITY_SOURCES)[number];
+
+/** Pricing v2: sublínea del desglose guardado en `pricing_breakdown` (misma forma que `PricedLine.breakdown`). */
+export interface PricingBreakdownRow {
+	kind: 'free' | 'tier' | 'package' | 'seat' | 'discount' | 'minimum' | 'cap';
+	tier_index?: number;
+	from?: number;
+	to?: number | null;
+	quantity: number;
+	unit_amount?: number;
+	flat_amount?: number;
+	amount: number;
+	label: string;
+}
+
 @Check('invoice_items_discount_pct_check', `(((discount_pct >= (0)::numeric) AND (discount_pct <= (100)::numeric)))`)
-@Check('invoice_items_quantity_check', `((quantity > (0)::numeric))`)
+// Pricing v2 (migración 1790630000000): una línea por consumo puede quedar en 0 (consumo 0 = "sin consumo", spec §2.3), así
+// que el CHECK pasa de `> 0` a `>= 0`.
+@Check('invoice_items_quantity_check', `((quantity >= (0)::numeric))`)
+@Check(
+	'invoice_items_quantity_source_check',
+	`(("quantity_source" IS NULL) OR ("quantity_source" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text])))`
+)
 @Index('idx_invoice_items_billing_period', ['billing_period_start', 'billing_period_end'])
 @Index('idx_invoice_items_contract_id', ['contract_id'])
 @Index('idx_invoice_items_contract_item_id', ['contract_item_id'])
@@ -77,6 +100,23 @@ export class InvoiceItem {
 
 	@Column({ type: 'jsonb', nullable: true, default: () => "'{}'", comment: 'Campos personalizados definidos por el usuario en formato JSONB' })
 	custom_fields?: object;
+
+	/** Pricing v2 (`docs/v2-rediseno/spec-pricing-v2.md` §2.4): sublíneas del desglose tal como las produjo el motor. */
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment:
+			'Pricing v2: sublíneas del desglose {kind: free|tier|package|seat|discount|minimum|cap, quantity, amount, label…} tal como las produjo el motor; la línea sigue siendo una',
+	})
+	pricing_breakdown?: PricingBreakdownRow[] | null;
+
+	/** Pricing v2: de dónde salió la cantidad de la línea; `pending` = línea medida sin consumo informado. */
+	@Column({
+		type: 'text',
+		nullable: true,
+		comment: 'Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)',
+	})
+	quantity_source?: InvoiceItemQuantitySource | null;
 
 	@Column({ type: 'text', nullable: true })
 	invoice_currency?: string;
