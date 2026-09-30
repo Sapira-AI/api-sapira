@@ -15371,6 +15371,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Documento tributario del catálogo tax_document_types que emite el contrato (33, 34, 110, 01, CFDI-I…). document_type es su familia derivada (kind export_invoice → FACTURA_EXPORTACION, resto → FACTURA). NULL = contratos anteriores al catálogo"
+				},
+				{
+					"column": "invoice_description_template",
+					"attnum": 64,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa"
 				}
 			],
 			"constraints": [
@@ -21093,6 +21109,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
+				},
+				{
+					"column": "description_locked",
+					"attnum": 43,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla"
 				}
 			],
 			"constraints": [
@@ -44026,6 +44058,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "description_max_chars",
+					"attnum": 10,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
 				}
 			],
 			"constraints": [

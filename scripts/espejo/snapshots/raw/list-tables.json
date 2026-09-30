@@ -2015,7 +2015,7 @@
 		{
 			"name": "public.billable_metrics",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -9781,6 +9781,17 @@
 						"updatable"
 					],
 					"comment": "Documento tributario del catálogo tax_document_types que emite el contrato (33, 34, 110, 01, CFDI-I…). document_type es su familia derivada (kind export_invoice → FACTURA_EXPORTACION, resto → FACTURA). NULL = contratos anteriores al catálogo"
+				},
+				{
+					"name": "invoice_description_template",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa"
 				}
 			],
 			"primary_keys": [
@@ -12810,6 +12821,17 @@
 						"updatable"
 					],
 					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
+				},
+				{
+					"name": "description_locked",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "false",
+					"comment": "true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla"
 				}
 			],
 			"primary_keys": [
@@ -14083,7 +14105,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9689,
+			"rows": 9788,
 			"columns": [
 				{
 					"name": "id",
@@ -23023,7 +23045,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 18,
+			"rows": 19,
 			"columns": [
 				{
 					"name": "id",
@@ -25343,6 +25365,17 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "description_max_chars",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
 				}
 			],
 			"primary_keys": [

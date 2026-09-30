@@ -628,6 +628,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "invoice_description_template": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -4259,6 +4270,17 @@
     "primary": false,
     "generated": null,
     "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description_max_chars": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
     "length": null,
     "precision": null,
     "scale": null,
