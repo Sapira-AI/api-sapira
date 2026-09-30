@@ -6,6 +6,12 @@ DECLARE
   v_prices RECORD;
   v_frequency_multiplier INTEGER;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   -- Sincronizar campos anuales <-> mensuales (común a quote_items y contract_items)
   IF NEW.price_entry_mode = 'annual' AND NEW.annual_unit_price IS NOT NULL THEN
     NEW.unit_price := ROUND(NEW.annual_unit_price / 12.0, 6);

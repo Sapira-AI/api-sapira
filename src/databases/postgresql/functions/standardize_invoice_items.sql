@@ -13,6 +13,12 @@ DECLARE
     v_final_unit_of_measure TEXT;
     v_final_unit_price NUMERIC;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
     -- Only process if we have a contract_item_id reference
     IF NEW.contract_item_id IS NOT NULL THEN
         -- Get contract item details
