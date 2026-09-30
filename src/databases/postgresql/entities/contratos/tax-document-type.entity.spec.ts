@@ -38,6 +38,8 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			sort: false,
 			active: false,
 			created_at: false,
+			// Migración 1790670000000-InvoiceDescriptionTemplate (spec facturas §3.6): NULL = sin límite.
+			description_max_chars: true,
 		});
 		expect(metadata.primaryColumns.map((column) => column.databaseName)).toEqual(['id']);
 		expect(Object.fromEntries(metadata.uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual({
@@ -100,14 +102,15 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 
 	describe('seed 003-tax-document-types.sql', () => {
 		const seed = fs.readFileSync(path.join(__dirname, '..', '..', 'seed', '003-tax-document-types.sql'), 'utf8');
-		const rows = [...seed.matchAll(/\('([^']+)', '([^']+)', '([^']+)', '([^']+)', (TRUE|FALSE), (\d+)\)/g)].map(
-			([, country, code, name, kind, electronic, sort]) => ({
+		const rows = [...seed.matchAll(/\('([^']+)', '([^']+)', '([^']+)', '([^']+)', (TRUE|FALSE), (\d+), (\d+|NULL)\)/g)].map(
+			([, country, code, name, kind, electronic, sort, maxChars]) => ({
 				country,
 				code,
 				name,
 				kind,
 				electronic: electronic === 'TRUE',
 				sort: Number(sort),
+				max_chars: maxChars === 'NULL' ? null : Number(maxChars),
 			})
 		);
 
@@ -135,6 +138,12 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			expect(rows.filter((row) => row.kind === 'export_invoice').map((row) => row.code)).toEqual(['110', 'FACTURA_EXPORTACION']);
 			expect(rows.find((row) => row.code === '34')?.name).toBe('Factura no afecta o exenta electrónica');
 			expect(rows.find((row) => row.code === '03')?.kind).toBe('receipt');
+		});
+
+		it('description_max_chars: 80 en todos los documentos de Chile (SII NmbItem) y sin límite en el resto (MX/PE a confirmar)', () => {
+			expect(rows).toHaveLength(17);
+			expect(rows.filter((row) => row.country === 'CL').every((row) => row.max_chars === 80)).toBe(true);
+			expect(rows.filter((row) => row.country !== 'CL').every((row) => row.max_chars === null)).toBe(true);
 		});
 	});
 });
