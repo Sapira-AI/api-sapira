@@ -118,6 +118,14 @@ export class InvoiceItem {
 	})
 	quantity_source?: InvoiceItemQuantitySource | null;
 
+	/** Facturas en el 360 §3.6 (migración 1790670000000): glosa escrita a mano; ninguna regeneración la toca hasta volver a la plantilla. */
+	@Column({
+		type: 'boolean',
+		default: false,
+		comment: 'true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla',
+	})
+	description_locked: boolean;
+
 	@Column({ type: 'text', nullable: true })
 	invoice_currency?: string;
 

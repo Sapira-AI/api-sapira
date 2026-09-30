@@ -54,6 +54,14 @@ export class TaxDocumentType {
 	@Column({ type: 'boolean', default: true })
 	active: boolean;
 
+	/** Facturas en el 360 §3.6 (migración 1790670000000): largo máximo de la glosa de una línea (SII `NmbItem` = 80); NULL = sin límite. */
+	@Column({
+		type: 'integer',
+		nullable: true,
+		comment: 'Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite',
+	})
+	description_max_chars?: number | null;
+
 	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
 	created_at: Date;
 }

@@ -38,6 +38,8 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			sort: false,
 			active: false,
 			created_at: false,
+			// Migración 1790670000000-InvoiceDescriptionTemplate (spec facturas §3.6): NULL = sin límite.
+			description_max_chars: true,
 		});
 		expect(metadata.primaryColumns.map((column) => column.databaseName)).toEqual(['id']);
 		expect(Object.fromEntries(metadata.uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual({
@@ -135,6 +137,11 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			expect(rows.filter((row) => row.kind === 'export_invoice').map((row) => row.code)).toEqual(['110', 'FACTURA_EXPORTACION']);
 			expect(rows.find((row) => row.code === '34')?.name).toBe('Factura no afecta o exenta electrónica');
 			expect(rows.find((row) => row.code === '03')?.kind).toBe('receipt');
+		});
+
+		it('el seed no nombra description_max_chars: un seed aplicado no se modifica; el límite (80 en CL) lo fija la migración 1790670000000', () => {
+			expect(rows).toHaveLength(17);
+			expect(seed).not.toContain('description_max_chars');
 		});
 	});
 });
