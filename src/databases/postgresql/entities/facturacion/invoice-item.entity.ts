@@ -9,8 +9,8 @@ import { InvoiceItemsLegacyMatch } from '@/databases/postgresql/entities/legacy/
 import { InvoiceItemsLegacy } from '@/databases/postgresql/entities/legacy/invoice-items-legacy.entity';
 import { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/subscription-item.entity';
 
-/** Pricing v2: origen de la cantidad de una línea. */
-export const INVOICE_ITEM_QUANTITY_SOURCES = ['fixed', 'consumption', 'estimated', 'pending'] as const;
+/** Pricing v2: origen de la cantidad de una línea. `manual` = editada a mano en el editor de la Por Emitir (facturas en el 360 §3.4). */
+export const INVOICE_ITEM_QUANTITY_SOURCES = ['fixed', 'consumption', 'estimated', 'pending', 'manual'] as const;
 export type InvoiceItemQuantitySource = (typeof INVOICE_ITEM_QUANTITY_SOURCES)[number];
 
 /** Pricing v2: sublínea del desglose guardado en `pricing_breakdown` (misma forma que `PricedLine.breakdown`). */
@@ -24,15 +24,18 @@ export interface PricingBreakdownRow {
 	flat_amount?: number;
 	amount: number;
 	label: string;
+	/** Solo `discount`: descuento puntual de la factura (facturas en el 360 §3.4), no del precio. */
+	one_off?: boolean;
 }
 
 @Check('invoice_items_discount_pct_check', `(((discount_pct >= (0)::numeric) AND (discount_pct <= (100)::numeric)))`)
 // Pricing v2 (migración 1790630000000): una línea por consumo puede quedar en 0 (consumo 0 = "sin consumo", spec §2.3), así
 // que el CHECK pasa de `> 0` a `>= 0`.
 @Check('invoice_items_quantity_check', `((quantity >= (0)::numeric))`)
+// Facturas en el 360 · etapa 4 (migración 1790680000000): se agrega `manual` (línea editada a mano; los recálculos no la pisan).
 @Check(
 	'invoice_items_quantity_source_check',
-	`(("quantity_source" IS NULL) OR ("quantity_source" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text])))`
+	`(("quantity_source" IS NULL) OR ("quantity_source" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text])))`
 )
 @Index('idx_invoice_items_billing_period', ['billing_period_start', 'billing_period_end'])
 @Index('idx_invoice_items_contract_id', ['contract_id'])
@@ -114,7 +117,8 @@ export class InvoiceItem {
 	@Column({
 		type: 'text',
 		nullable: true,
-		comment: 'Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)',
+		comment:
+			'Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado) | manual (editada a mano en la Por Emitir: consumos, modificaciones y plantillas no la reescriben)',
 	})
 	quantity_source?: InvoiceItemQuantitySource | null;
 
