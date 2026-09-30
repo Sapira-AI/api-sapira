@@ -1068,6 +1068,17 @@
     "scale": null,
     "array": false
    },
+   "description_locked": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "invoice_currency": {
     "type": "text",
     "nullable": true,

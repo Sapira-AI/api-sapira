@@ -278,6 +278,15 @@ export class Contract {
 	})
 	tax_document_type_id?: string | null;
 
+	/** Facturas en el 360 §3.6 (migración 1790670000000): plantilla de descripción de las líneas; NULL = glosa estándar. */
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment:
+			'Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa',
+	})
+	invoice_description_template?: { separator?: string; blocks: Array<{ type: string; format?: string; text?: string }> } | null;
+
 	@ManyToOne(() => TaxDocumentType)
 	@JoinColumn({ name: 'tax_document_type_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contracts_tax_document_type_id_fkey' })
 	tax_document_type?: TaxDocumentType;
