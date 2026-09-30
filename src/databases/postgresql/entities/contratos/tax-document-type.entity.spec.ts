@@ -102,15 +102,14 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 
 	describe('seed 003-tax-document-types.sql', () => {
 		const seed = fs.readFileSync(path.join(__dirname, '..', '..', 'seed', '003-tax-document-types.sql'), 'utf8');
-		const rows = [...seed.matchAll(/\('([^']+)', '([^']+)', '([^']+)', '([^']+)', (TRUE|FALSE), (\d+), (\d+|NULL)\)/g)].map(
-			([, country, code, name, kind, electronic, sort, maxChars]) => ({
+		const rows = [...seed.matchAll(/\('([^']+)', '([^']+)', '([^']+)', '([^']+)', (TRUE|FALSE), (\d+)\)/g)].map(
+			([, country, code, name, kind, electronic, sort]) => ({
 				country,
 				code,
 				name,
 				kind,
 				electronic: electronic === 'TRUE',
 				sort: Number(sort),
-				max_chars: maxChars === 'NULL' ? null : Number(maxChars),
 			})
 		);
 
@@ -140,10 +139,9 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			expect(rows.find((row) => row.code === '03')?.kind).toBe('receipt');
 		});
 
-		it('description_max_chars: 80 en todos los documentos de Chile (SII NmbItem) y sin límite en el resto (MX/PE a confirmar)', () => {
+		it('el seed no nombra description_max_chars: un seed aplicado no se modifica; el límite (80 en CL) lo fija la migración 1790670000000', () => {
 			expect(rows).toHaveLength(17);
-			expect(rows.filter((row) => row.country === 'CL').every((row) => row.max_chars === 80)).toBe(true);
-			expect(rows.filter((row) => row.country !== 'CL').every((row) => row.max_chars === null)).toBe(true);
+			expect(seed).not.toContain('description_max_chars');
 		});
 	});
 });

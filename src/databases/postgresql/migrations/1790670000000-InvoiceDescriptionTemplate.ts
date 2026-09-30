@@ -10,12 +10,12 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *    regeneración la toca hasta "Volver a la plantilla" (`mode: 'unlock'`). Las filas existentes quedan en false.
  * 3. `tax_document_types.description_max_chars` (integer, NULL = sin límite): largo máximo de la descripción de una línea en el
  *    documento. Chile (SII, `NmbItem`) = 80 para todos sus documentos; México y Perú quedan NULL hasta que Leon confirme el límite.
- *    El UPDATE corrige las filas ya sembradas (el seed es `ON CONFLICT DO NOTHING` y no las toca); el seed
- *    `seed/003-tax-document-types.sql` trae el mismo valor para entornos nuevos.
+ *    El UPDATE fija el valor en las filas ya sembradas. El seed `seed/003-tax-document-types.sql` NO cambia: un seed aplicado es
+ *    inmutable (`ON CONFLICT DO NOTHING` no converge; el aplicador lo bloquea). En un entorno nuevo el seed corre después de esta
+ *    migración y las filas CL nacen sin límite: ahí hay que repetir el UPDATE en una migración posterior al seed.
  *
- * Orden de despliegue: 1) esta migración, 2) `postgres:assets --only seed/003-tax-document-types.sql` (el seed ya nombra la columna:
- * sin la migración falla), 3) el código: la API lee `invoice_description_template`, `description_locked` y `description_max_chars`
- * (detalle de factura, activación, modificaciones, consumos y el constructor); sin la migración esas consultas fallan.
+ * Orden de despliegue: 1) esta migración, 2) el código: la API lee `invoice_description_template`, `description_locked` y
+ * `description_max_chars` (detalle de factura, activación, modificaciones, consumos y el constructor); sin la migración esas consultas fallan.
  */
 export class InvoiceDescriptionTemplate1790670000000 implements MigrationInterface {
 	name = 'InvoiceDescriptionTemplate1790670000000';
