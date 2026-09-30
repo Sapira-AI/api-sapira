@@ -7,6 +7,12 @@ DECLARE
     v_result RECORD;
     v_existing_invoices_count INTEGER := 0;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NULL;  -- AFTER: el valor de retorno se ignora
+  END IF;
+
     -- Only trigger when status changes to 'Activo'
     IF NEW.status = 'Activo' AND (OLD.status IS NULL OR OLD.status != 'Activo') THEN
         
@@ -37,4 +43,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."trigger_generate_invoices_on_status_change"() IS 'Trigger para generar facturas cuando un contrato cambia a estado Activo (activación legacy o MRR legacy). Verifica que no existan facturas previas antes de generar.';
+COMMENT ON FUNCTION public."trigger_generate_invoices_on_status_change"() IS 'RETIRADA DEL USO (30-09-2026): su trigger generate_invoices_on_contract_active se elimina por migración (1790660000000) y la generación legacy queda unificada en trigger_generate_invoices_on_contract_signed. Queda sin trigger, con la costura sapira.writer, hasta su DROP FUNCTION en la baja (doble confirmación).';

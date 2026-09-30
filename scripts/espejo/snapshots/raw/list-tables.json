@@ -17542,7 +17542,7 @@
 		{
 			"name": "public.prices",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -19754,7 +19754,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 20561,
+			"rows": 20569,
 			"columns": [
 				{
 					"name": "id",
@@ -20607,7 +20607,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 112,
+			"rows": 116,
 			"columns": [
 				{
 					"name": "id",
@@ -21158,7 +21158,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 163,
+			"rows": 170,
 			"columns": [
 				{
 					"name": "id",
@@ -21757,7 +21757,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 150,
+			"rows": 156,
 			"columns": [
 				{
 					"name": "id",
@@ -23023,7 +23023,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 17,
+			"rows": 18,
 			"columns": [
 				{
 					"name": "id",
@@ -23686,7 +23686,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 26408,
+			"rows": 26974,
 			"columns": [
 				{
 					"name": "id",
@@ -23814,7 +23814,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 420,
+			"rows": 421,
 			"columns": [
 				{
 					"name": "id",
@@ -24355,7 +24355,7 @@
 		{
 			"name": "public.stripe_sync_jobs",
 			"rls_enabled": true,
-			"rows": 208,
+			"rows": 216,
 			"columns": [
 				{
 					"name": "id",

@@ -254,94 +254,6 @@
     "precision": null,
     "scale": null,
     "array": false
-   },
-   "created_by": {
-    "type": "uuid",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "updated_by": {
-    "type": "uuid",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "sent_at": {
-    "type": "timestamp with time zone",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "signed_at": {
-    "type": "timestamp with time zone",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "lost_at": {
-    "type": "timestamp with time zone",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "lost_reason": {
-    "type": "text",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "payment_terms_json": {
-    "type": "jsonb",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
-   },
-   "company_id": {
-    "type": "uuid",
-    "nullable": true,
-    "primary": false,
-    "generated": null,
-    "default": null,
-    "length": null,
-    "precision": null,
-    "scale": null,
-    "array": false
    }
   },
   "uniques": {},
@@ -352,13 +264,6 @@
     ],
     "unique": false,
     "where": "(valid_until IS NOT NULL)"
-   },
-   "idx_quotes_company_id": {
-    "columns": [
-     "company_id"
-    ],
-    "unique": false,
-    "where": "(company_id IS NOT NULL)"
    },
    "idx_quotes_holding_active": {
     "columns": [
@@ -432,27 +337,6 @@
      "seller_id"
     ],
     "table": "sellers",
-    "onDelete": "NO ACTION"
-   },
-   "quotes_company_id_fkey": {
-    "columns": [
-     "company_id"
-    ],
-    "table": "companies",
-    "onDelete": "NO ACTION"
-   },
-   "quotes_created_by_fkey": {
-    "columns": [
-     "created_by"
-    ],
-    "table": "users",
-    "onDelete": "NO ACTION"
-   },
-   "quotes_updated_by_fkey": {
-    "columns": [
-     "updated_by"
-    ],
-    "table": "users",
     "onDelete": "NO ACTION"
    }
   }
@@ -1072,7 +956,7 @@
      "kind"
     ],
     "unique": true,
-    "where": "(kind = ANY (ARRAY['signed'::text, 'lost'::text, 'contract_created'::text]))"
+    "where": "(kind = ANY (ARRAY['signed'::text, 'lost'::text]))"
    }
   },
   "checks": [

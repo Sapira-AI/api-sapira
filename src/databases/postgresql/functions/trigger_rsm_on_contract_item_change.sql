@@ -10,9 +10,17 @@ DECLARE
   v_contract_status text;
   v_affected_month date;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NULL;  -- AFTER: el valor de retorno se ignora
+  END IF;
+
+  -- U9: la configuración del holding del registro, no la del usuario de sesión (sin sesión —webhook Odoo, DWH, cron— el
+  -- holding de sesión es NULL y el RSM no se actualizaba).
   SELECT revenue_schedule_monthly_enabled INTO v_enabled
   FROM financial_settings
-  WHERE holding_id = get_current_user_holding_id()
+  WHERE holding_id = CASE WHEN TG_OP = 'DELETE' THEN OLD.holding_id ELSE NEW.holding_id END
   LIMIT 1;
 
   IF NOT COALESCE(v_enabled, false) THEN

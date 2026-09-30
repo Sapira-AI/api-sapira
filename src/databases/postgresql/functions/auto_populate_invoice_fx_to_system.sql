@@ -11,6 +11,12 @@ DECLARE
   v_fx_result RECORD;
   v_issue_date DATE;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   -- Solo procesar si el invoice tiene contract_id
   IF NEW.contract_id IS NULL THEN
     RETURN NEW;

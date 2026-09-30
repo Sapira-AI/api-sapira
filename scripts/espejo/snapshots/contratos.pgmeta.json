@@ -4340,7 +4340,7 @@
  "prices": {
   "name": "public.prices",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",

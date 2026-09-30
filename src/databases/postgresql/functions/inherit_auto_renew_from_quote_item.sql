@@ -5,6 +5,12 @@ AS $function$
 DECLARE
   v_quote_item RECORD;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   -- Si el contract_item tiene quote_item_id, heredar configuración de auto_renew
   IF NEW.quote_item_id IS NOT NULL THEN
     SELECT auto_renew, auto_renew_term_months

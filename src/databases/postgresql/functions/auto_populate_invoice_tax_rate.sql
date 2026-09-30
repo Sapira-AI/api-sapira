@@ -7,6 +7,12 @@ AS $function$
 DECLARE
   v_company_tax_rate NUMERIC;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   IF NEW.company_id IS NULL THEN
     RETURN NEW;
   END IF;
