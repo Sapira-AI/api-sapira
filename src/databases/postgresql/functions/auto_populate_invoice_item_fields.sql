@@ -8,6 +8,12 @@ DECLARE
   v_invoice_record RECORD;
   v_contract_item_record RECORD;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   -- Obtener datos de la factura
   SELECT contract_id, status, issue_date
   INTO v_invoice_record

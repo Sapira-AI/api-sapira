@@ -6,6 +6,12 @@ DECLARE
   v_client_id UUID;
   v_calculated_categoria TEXT;
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   IF NEW.categoria IS NOT NULL THEN
     RETURN NEW;
   END IF;

@@ -3,6 +3,12 @@ CREATE OR REPLACE FUNCTION public.validate_fx_confirmation_before_firmado()
  LANGUAGE plpgsql
 AS $function$
 BEGIN
+  -- Costura sapira.writer: en una transacción de la API (v2) este trigger no hace nada; la API escribe cada campo.
+  -- El front viejo nunca fija la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md
+  IF current_setting('sapira.writer', true) = 'api' THEN
+    RETURN NEW;
+  END IF;
+
   -- Solo validar si el contrato está cambiando a estado 'Firmado'
   IF NEW.status = 'Firmado' AND (OLD.status IS NULL OR OLD.status != 'Firmado') THEN
     -- Validar que fx_company_confirmed_at esté establecido
