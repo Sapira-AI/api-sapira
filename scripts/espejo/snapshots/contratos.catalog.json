@@ -276,7 +276,6 @@
    }
   ],
   "triggers": [
-   "generate_invoices_on_contract_active · AFTER UPDATE OF status FOR EACH ROW → trigger_generate_invoices_on_status_change()",
    "trg_00_period_guard_contracts · BEFORE UPDATE FOR EACH ROW → trg_period_guard_contracts()",
    "trg_audit_contract_changes · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → trg_audit_contract_changes()",
    "trg_cancel_schedule_on_contract_cancelled · AFTER UPDATE OF status FOR EACH ROW → cancel_contract_invoices_on_contract_cancelled() [WHEN ((new.status = 'Cancelado'::text) AND (old.status IS DISTINCT FROM 'Cancelado'::text))]",
