@@ -18,7 +18,9 @@ AS $function$
       AND nii.contract_item_id = p_contract_item_id
       AND nc.document_type = 'NC'
       AND nc.credit_type = 'discount'
-      AND nc.status = 'Emitida'
+      -- Una NC no vence: nace de una factura y se cierra con ella (Domi 30-09). La tarea programada del front viejo
+      -- (`check-overdue-invoices`) igual la deja en 'Vencida', así que cuenta cualquier estado de NC emitida.
+      AND nc.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')
       AND nc.is_active = true
       AND nc.nc_revenue_treatment IS NOT NULL
 
@@ -57,7 +59,7 @@ AS $function$
         WHERE dnc.related_invoice_id = i.id
           AND dnc.document_type = 'NC'
           AND dnc.credit_type = 'discount'
-          AND dnc.status = 'Emitida'
+          AND dnc.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')
           AND dnc.is_active = true
           AND dnc.nc_revenue_treatment IS NOT NULL
       )
@@ -113,4 +115,4 @@ AS $function$
   ) s
 $function$;
 
-COMMENT ON FUNCTION public."nc_discount_revenue_adjustment"(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date) IS 'Ajuste (negativo) de recognized por ítem y mes. Fuentes: (1) NC discount Emitida con nc_revenue_treatment NOT NULL; (2) descuento puntual de una factura no NC (sublíneas {kind: discount, one_off: true} del pricing_breakdown) con nc_revenue_treatment NOT NULL, activa y no Cancelada, salvo que tenga una NC discount clasificada vigente (manda la NC). Tratamientos: impact_month (mes de la NC / emisión), defer_forward (desde ese mes hasta el fin activo del ítem), service_period (meses del período de servicio de la línea; sin período = impact_month).';
+COMMENT ON FUNCTION public."nc_discount_revenue_adjustment"(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date) IS 'Ajuste (negativo) de recognized por ítem y mes. Fuentes: (1) NC discount emitida (Emitida/Enviada/Vencida/Pagada: una NC no vence) con nc_revenue_treatment NOT NULL; (2) descuento puntual de una factura no NC (sublíneas {kind: discount, one_off: true} del pricing_breakdown) con nc_revenue_treatment NOT NULL, activa y no Cancelada, salvo que tenga una NC discount clasificada vigente (manda la NC). Tratamientos: impact_month (mes de la NC / emisión), defer_forward (desde ese mes hasta el fin activo del ítem), service_period (meses del período de servicio de la línea; sin período = impact_month).';
