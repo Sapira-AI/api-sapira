@@ -369,7 +369,7 @@
   "checks": [
    {
     "name": "invoice_adjustments_type_check",
-    "expression": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
+    "expression": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])"
    }
   ],
   "foreignKeys": {
@@ -1335,7 +1335,7 @@
   "checks": [
    {
     "name": "invoice_items_quantity_source_check",
-    "expression": "((\"quantity_source\" IS NULL) OR (\"quantity_source\" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text])))"
+    "expression": "((\"quantity_source\" IS NULL) OR (\"quantity_source\" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text])))"
    },
    {
     "name": "invoice_items_quantity_check",
@@ -2925,7 +2925,7 @@
    },
    {
     "name": "invoices_nc_revenue_treatment_check",
-    "expression": "(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))))"
+    "expression": "(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))))"
    },
    {
     "name": "invoices_invoice_type_check",

@@ -12820,7 +12820,7 @@
 						"nullable",
 						"updatable"
 					],
-					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
+					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado) | manual (editada a mano en la Por Emitir: consumos, modificaciones y plantillas no la reescriben)"
 				},
 				{
 					"name": "description_locked",
@@ -14742,7 +14742,7 @@
 						"nullable",
 						"updatable"
 					],
-					"comment": "Solo NC discount: devengo del descuento en RSM (impact_month = mes de la NC; defer_forward = meses restantes del ítem). NULL en facturas y NC de anulación/churn."
+					"comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
 				}
 			],
 			"primary_keys": [
@@ -19776,7 +19776,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 20569,
+			"rows": 20636,
 			"columns": [
 				{
 					"name": "id",
@@ -23045,7 +23045,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 19,
+			"rows": 20,
 			"columns": [
 				{
 					"name": "id",

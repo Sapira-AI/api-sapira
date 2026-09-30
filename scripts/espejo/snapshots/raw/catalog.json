@@ -19621,7 +19621,7 @@
 				{
 					"name": "invoice_adjustments_type_check",
 					"type": "c",
-					"def": "CHECK ((type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])))",
+					"def": "CHECK ((type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -21108,7 +21108,7 @@
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado)"
+					"comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado) | manual (editada a mano en la Por Emitir: consumos, modificaciones y plantillas no la reescriben)"
 				},
 				{
 					"column": "description_locked",
@@ -21230,7 +21230,7 @@
 				{
 					"name": "invoice_items_quantity_source_check",
 					"type": "c",
-					"def": "CHECK (((quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text]))))",
+					"def": "CHECK (((quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -24487,7 +24487,7 @@
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "Solo NC discount: devengo del descuento en RSM (impact_month = mes de la NC; defer_forward = meses restantes del ítem). NULL en facturas y NC de anulación/churn."
+					"comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
 				}
 			],
 			"constraints": [
@@ -24611,7 +24611,7 @@
 				{
 					"name": "invoices_nc_revenue_treatment_check",
 					"type": "c",
-					"def": "CHECK (((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))))",
+					"def": "CHECK (((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -63026,9 +63026,9 @@
 		},
 		{
 			"name": "nc_discount_revenue_adjustment",
-			"def": "CREATE OR REPLACE FUNCTION public.nc_discount_revenue_adjustment(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date)\n RETURNS numeric\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  SELECT COALESCE(SUM(\n    CASE\n      -- impact_month, o defer degenerado (la NC cae después del fin activo del\n      -- ítem): todo el monto al mes de la NC.\n      WHEN nc.nc_revenue_treatment = 'impact_month'\n           OR m.n_months IS NULL\n      THEN CASE WHEN d.nc_month = p_month THEN nii.subtotal_contract_currency ELSE 0 END\n      -- defer_forward: cuota k de n con redondeo telescópico (suma exacta).\n      WHEN nc.nc_revenue_treatment = 'defer_forward'\n           AND p_month >= d.defer_start\n           AND p_month <= p_item_active_end_month\n      THEN ROUND(nii.subtotal_contract_currency * m.k / m.n_months, 2)\n         - ROUND(nii.subtotal_contract_currency * (m.k - 1) / m.n_months, 2)\n      ELSE 0\n    END\n  ), 0)\n  FROM public.invoices nc\n  JOIN public.invoice_items nii ON nii.invoice_id = nc.id\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', nc.issue_date)::date AS nc_month,\n           GREATEST(DATE_TRUNC('month', nc.issue_date)::date, p_item_start_month) AS defer_start\n  ) d\n  CROSS JOIN LATERAL (\n    SELECT\n      CASE WHEN p_item_active_end_month IS NULL OR d.defer_start > p_item_active_end_month THEN NULL\n           ELSE ((EXTRACT(YEAR FROM p_item_active_end_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n                + EXTRACT(MONTH FROM p_item_active_end_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int AS k\n  ) m\n  WHERE nc.contract_id = p_contract_id\n    AND nii.contract_item_id = p_contract_item_id\n    AND nc.document_type = 'NC'\n    AND nc.credit_type = 'discount'\n    AND nc.status = 'Emitida'\n    AND nc.is_active = true\n    AND nc.nc_revenue_treatment IS NOT NULL\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.nc_discount_revenue_adjustment(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date)\n RETURNS numeric\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  WITH adj AS (\n    -- Fuente 1 (sin cambios): NC de descuento Emitidas y clasificadas. El\n    -- subtotal de la línea de la NC ya es negativo.\n    SELECT nc.nc_revenue_treatment AS treatment,\n           nc.issue_date AS ref_date,\n           nii.subtotal_contract_currency AS amount,\n           nii.billing_period_start AS period_start,\n           nii.billing_period_end AS period_end\n    FROM public.invoices nc\n    JOIN public.invoice_items nii ON nii.invoice_id = nc.id\n    WHERE nc.contract_id = p_contract_id\n      AND nii.contract_item_id = p_contract_item_id\n      AND nc.document_type = 'NC'\n      AND nc.credit_type = 'discount'\n      AND nc.status = 'Emitida'\n      AND nc.is_active = true\n      AND nc.nc_revenue_treatment IS NOT NULL\n\n    UNION ALL\n\n    -- Fuente 2 (facturas en el 360, etapa 4): descuento puntual de una factura\n    -- (no NC) de la línea, guardado como sublínea del pricing_breakdown\n    -- { kind: 'discount', one_off: true, amount: -X }. Cuenta desde que se\n    -- registra (también Por Emitir); cancelar la factura lo quita. Si la factura\n    -- ya tiene una NC de descuento clasificada vigente, manda la NC (sin doble\n    -- conteo).\n    SELECT i.nc_revenue_treatment,\n           i.issue_date,\n           o.amount,\n           ii.billing_period_start,\n           ii.billing_period_end\n    FROM public.invoices i\n    JOIN public.invoice_items ii ON ii.invoice_id = i.id\n    CROSS JOIN LATERAL (\n      SELECT SUM((elem->>'amount')::numeric) AS amount\n      FROM jsonb_array_elements(\n        CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array' THEN ii.pricing_breakdown ELSE '[]'::jsonb END\n      ) elem\n      WHERE elem->>'kind' = 'discount'\n        AND COALESCE((elem->>'one_off')::boolean, false)\n    ) o\n    WHERE i.contract_id = p_contract_id\n      AND ii.contract_item_id = p_contract_item_id\n      AND i.nc_revenue_treatment IS NOT NULL\n      AND i.is_active = true\n      AND COALESCE(i.document_type, '') <> 'NC'\n      AND i.status IS DISTINCT FROM 'Cancelada'\n      AND o.amount IS NOT NULL\n      AND NOT EXISTS (\n        SELECT 1 FROM public.invoices dnc\n        WHERE dnc.related_invoice_id = i.id\n          AND dnc.document_type = 'NC'\n          AND dnc.credit_type = 'discount'\n          AND dnc.status = 'Emitida'\n          AND dnc.is_active = true\n          AND dnc.nc_revenue_treatment IS NOT NULL\n      )\n  )\n  SELECT COALESCE(SUM(\n    CASE\n      -- service_period: partes iguales en los meses calendario del período de\n      -- servicio de la línea (redondeo telescópico: suma exacta). Sin período\n      -- válido degenera a impact_month (rama siguiente).\n      WHEN a.treatment = 'service_period' AND s.n_months IS NOT NULL\n      THEN CASE WHEN p_month >= s.sp_start AND p_month <= s.sp_end\n                THEN ROUND(a.amount * s.k / s.n_months, 2)\n                   - ROUND(a.amount * (s.k - 1) / s.n_months, 2)\n                ELSE 0 END\n      -- impact_month, o defer degenerado (la referencia cae después del fin\n      -- activo del ítem): todo el monto al mes de la referencia (fecha de la NC\n      -- o de emisión de la factura).\n      WHEN a.treatment IN ('impact_month', 'service_period')\n           OR m.n_months IS NULL\n      THEN CASE WHEN d.ref_month = p_month THEN a.amount ELSE 0 END\n      -- defer_forward: cuota k de n con redondeo telescópico (suma exacta).\n      WHEN a.treatment = 'defer_forward'\n           AND p_month >= d.defer_start\n           AND p_month <= p_item_active_end_month\n      THEN ROUND(a.amount * m.k / m.n_months, 2)\n         - ROUND(a.amount * (m.k - 1) / m.n_months, 2)\n      ELSE 0\n    END\n  ), 0)\n  FROM adj a\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.ref_date)::date AS ref_month,\n           GREATEST(DATE_TRUNC('month', a.ref_date)::date, p_item_start_month) AS defer_start\n  ) d\n  CROSS JOIN LATERAL (\n    SELECT\n      CASE WHEN p_item_active_end_month IS NULL OR d.defer_start > p_item_active_end_month THEN NULL\n           ELSE ((EXTRACT(YEAR FROM p_item_active_end_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n                + EXTRACT(MONTH FROM p_item_active_end_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int AS k\n  ) m\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.period_start)::date AS sp_start,\n           DATE_TRUNC('month', a.period_end)::date AS sp_end,\n      CASE WHEN a.period_start IS NULL OR a.period_end IS NULL OR a.period_end < a.period_start THEN NULL\n           ELSE ((EXTRACT(YEAR FROM a.period_end) - EXTRACT(YEAR FROM a.period_start)) * 12\n                + EXTRACT(MONTH FROM a.period_end) - EXTRACT(MONTH FROM a.period_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM a.period_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM a.period_start) + 1)::int AS k\n  ) s\n$function$\n",
 			"extension": null,
-			"comment": "Ajuste (negativo) de recognized por NC de descuento clasificadas, por ítem y mes. Solo NC discount Emitida con nc_revenue_treatment NOT NULL.",
+			"comment": "Ajuste (negativo) de recognized por ítem y mes. Fuentes: (1) NC discount Emitida con nc_revenue_treatment NOT NULL; (2) descuento puntual de una factura no NC (sublíneas {kind: discount, one_off: true} del pricing_breakdown) con nc_revenue_treatment NOT NULL, activa y no Cancelada, salvo que tenga una NC discount clasificada vigente (manda la NC). Tratamientos: impact_month (mes de la NC / emisión), defer_forward (desde ese mes hasta el fin activo del ítem), service_period (meses del período de servicio de la línea; sin período = impact_month).",
 			"identity_args": "p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date"
 		},
 		{
