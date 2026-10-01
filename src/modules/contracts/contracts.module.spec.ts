@@ -39,6 +39,7 @@ describe('ContractsModule (cableado)', () => {
 				'ContractInvoiceReorganizeService',
 				'ContractInvoiceVoidService',
 				'ContractInvoicePartialPoService',
+				'ContractInvoiceConsolidationService',
 			])
 		);
 	});

@@ -17,6 +17,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { ReorganizeInvoicesDto } from './dtos/contract-invoice-reorganize.dto';
+import { MC_UF_ITEM, mcInvoiceRow, mcStoredLine, multicurrencyRoute, revaluedHeaders } from './multicurrency.test-fixtures';
 
 type Row = Record<string, unknown>;
 
@@ -470,5 +471,59 @@ describe('ContractsController (reorganizar)', () => {
 		expect(reorganizeService.preview).toHaveBeenCalledWith(CONTRACT_ID, body, HOLDING);
 		expect(reorganizeService.apply).toHaveBeenCalledWith(CONTRACT_ID, body, HOLDING, 'auth-1');
 		expect(reorganizeService.scheduleLines).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
+	});
+});
+
+describe('ContractInvoiceReorganizeService · multimoneda (spec-multimoneda §4)', () => {
+	it('merge de dos Por Emitir con pares distintos: la línea movida conserva la tasa de SU par (no la del encabezado de destino) y el destino queda = Σ líneas con FX NULL', async () => {
+		const clp = { contract_currency: 'CLP', invoice_currency: 'CLP', fx_contract_to_invoice: null };
+		const usd = lineRow(LINE_A, INV_A, '2026-10-01', '2026-10-31', {
+			subtotal_invoice_currency: '950000',
+			line_currency: 'USD',
+			line_fx: '950',
+			line_fx_rate_source: 'contract',
+		});
+		const uf = lineRow(LINE_B, INV_B, '2026-11-01', '2026-11-30', {
+			contract_item_id: MC_UF_ITEM,
+			quantity: '1',
+			unit_price_contract_currency: '10',
+			subtotal_contract_currency: '10',
+			tax_amount_contract_currency: '1.9',
+			total_contract_currency: '11.9',
+			unit_price_invoice_currency: '380000',
+			subtotal_invoice_currency: '380000',
+			tax_amount_invoice_currency: '72200',
+			total_invoice_currency: '452200',
+			line_currency: 'UF',
+			line_fx: '38000',
+			line_fx_rate_source: 'contract',
+		});
+		const { service, runner, dataSource } = build({
+			invoices: { [INV_A]: invoiceRow(INV_A, '2026-10-01', clp), [INV_B]: invoiceRow(INV_B, '2026-11-01', clp) },
+			lines: { [INV_A]: [usd], [INV_B]: [uf] },
+		});
+		const base = runner.query.getMockImplementation()!;
+		const mc = multicurrencyRoute({
+			contract_id: CONTRACT_ID,
+			invoices: { [INV_A]: mcInvoiceRow(INV_A, CONTRACT_ID) },
+			lines: { [INV_A]: [mcStoredLine(LINE_A, 'USD'), mcStoredLine(LINE_B, 'UF', { billing_period_start: '2026-11-01' })] },
+		});
+		const route = (sql: string, params: unknown[] = []) => {
+			if (sql.includes('c.billing_anchor_day'))
+				return [{ ...contractRow, contract_currency: 'CLP', invoice_currency: 'CLP', requires_multicurrency_billing: true }];
+
+			return mc(sql, params) ?? base(sql, params);
+		};
+
+		runner.query.mockImplementation(route);
+		(dataSource.query as unknown as jest.Mock).mockImplementation(route);
+		await service.apply(CONTRACT_ID, dto({ operations: [{ op: 'merge', invoice_ids: [INV_A, INV_B] }] }), HOLDING, 'auth-1', TODAY);
+		const move = calls(runner.query, 'UPDATE invoice_items SET invoice_id').find(([, params]) => (params as unknown[])[0] === LINE_B)!;
+
+		// $12 = subtotal en moneda de factura, $18 = tasa de la línea: la del par UF → CLP.
+		expect([(move[1] as unknown[])[0], (move[1] as unknown[])[11], (move[1] as unknown[])[17]]).toEqual([LINE_B, 380000, 38000]);
+		expect(revaluedHeaders(runner.query.mock.calls)).toEqual([
+			expect.objectContaining({ id: INV_A, fx: null, amount_invoice_currency: 1330000, amount_contract_currency: 1270000 }),
+		]);
 	});
 });

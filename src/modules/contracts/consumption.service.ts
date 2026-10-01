@@ -57,6 +57,8 @@ import {
 	fitDescription,
 } from './invoice-description';
 import { MANUAL_EDIT_KEPT, MANUAL_QUANTITY_SOURCE } from './invoice-edit';
+import { multicurrencyHeader } from './multicurrency';
+import { revalueMulticurrencyInvoices } from './multicurrency-invoices';
 import { PRICE_COLUMNS, priceSpecFromRow, priceSummaryFromRow } from './price-rows';
 import {
 	asciiGlosa,
@@ -311,6 +313,8 @@ interface IssuedInvoiceHeader {
 	payment_terms: unknown;
 	entity_payment_terms: unknown;
 	company_country: string | null;
+	/** Multimoneda: `contracts.requires_multicurrency_billing` (cada línea de la factura nueva se valoriza con su par). */
+	multicurrency?: boolean;
 }
 
 /** Línea de una factura emitida tal como se lee para reemitirla (misma forma que `ChangeInvoiceLineRow`). */
@@ -1572,10 +1576,19 @@ export class ConsumptionService {
 
 				addFittedWarning(plan.warnings, plan.warning_codes, draft.fitted_lines, item.description_max_chars);
 				const invoiceId = await this.insertInvoiceHeader(runner, header, draft, holdingId);
-				const ids = await this.insertLines(runner, invoiceId, header, draft.fx, draft.issue_date, draft.newLines, holdingId);
+				// Multimoneda: la línea no toma la tasa del encabezado clonado; queda sin tasa y `pairInvoiceView` le da la de su par.
+				const ids = await this.insertLines(
+					runner,
+					invoiceId,
+					header,
+					header.multicurrency ? null : draft.fx,
+					draft.issue_date,
+					draft.newLines,
+					holdingId
+				);
 
 				resultLines = draft.lines.map((part, index) => ({ ...stripAmounts(part), id: ids[index] ?? null }));
-				invoice = { ...draft.invoice, id: invoiceId };
+				invoice = await this.pairInvoiceView(runner, header, { ...draft.invoice, id: invoiceId }, holdingId);
 				plan.line = this.lineFromRow(plan.priced!, resultLines[0], invoiceId);
 				created.invoice_id = invoiceId;
 				Object.assign(eventMeta, {
@@ -1612,11 +1625,19 @@ export class ConsumptionService {
 					}
 				);
 				const invoiceId = await this.insertInvoiceHeader(runner, header, draft, holdingId);
-				const ids = await this.insertLines(runner, invoiceId, header, draft.fx, draft.issue_date, draft.lines, holdingId);
+				const ids = await this.insertLines(
+					runner,
+					invoiceId,
+					header,
+					header.multicurrency ? null : draft.fx,
+					draft.issue_date,
+					draft.lines,
+					holdingId
+				);
 				const offset = draft.lines.length - draft.item_lines.length;
 
 				resultLines = draft.item_lines.map((line, index) => ({ ...line, id: ids[offset + index] ?? null }));
-				invoice = { ...draft.invoice, id: invoiceId };
+				invoice = await this.pairInvoiceView(runner, header, { ...draft.invoice, id: invoiceId }, holdingId);
 				creditNote = { id: creditNoteId, number: null, total: draft.credit_note.total };
 				cancelledInvoice = { id: header.id, invoice_number: header.invoice_number };
 				created.invoice_id = invoiceId;
@@ -1910,6 +1931,28 @@ export class ConsumptionService {
 	 * `auto_populate_invoice_fx_to_system`). `sync_invoice_items_on_invoice_update` solo actúa si cambian status/issue_date.
 	 */
 	private async recomputeHeader(runner: QueryRunner, invoiceId: string, holdingId: string, taxRate: number, fx: number | null) {
+		const multicurrency = await this.multicurrencyHeaderOf(runner, invoiceId, holdingId);
+
+		if (multicurrency) {
+			await runner.query(
+				`UPDATE invoices SET amount_contract_currency = $3, vat = $4, amount_invoice_currency = $5, total_invoice_currency = $6, tax_rate = $7,
+					fx_contract_to_invoice = $8
+				WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
+				[
+					invoiceId,
+					holdingId,
+					multicurrency.amount_contract_currency,
+					multicurrency.vat,
+					multicurrency.amount_invoice_currency,
+					multicurrency.total_invoice_currency,
+					taxRate,
+					multicurrency.fx,
+				]
+			);
+			await refreshInvoiceSystemAmounts(runner, holdingId, [invoiceId]);
+
+			return multicurrency;
+		}
 		const [sums] = (await runner.query(
 			`SELECT COALESCE(SUM(subtotal_contract_currency), 0) AS subtotal, COALESCE(SUM(tax_amount_contract_currency), 0) AS tax
 			FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`,
@@ -1934,6 +1977,47 @@ export class ConsumptionService {
 		await refreshInvoiceSystemAmounts(runner, holdingId, [invoiceId]);
 
 		return header;
+	}
+
+	/**
+	 * Multimoneda: encabezado por par (`multicurrencyHeader`) si la factura tiene líneas en monedas distintas de la de su encabezado; null si no
+	 * (el encabezado de siempre). La moneda de contrato convierte cada línea con la tasa pactada ítem → contrato del contrato.
+	 */
+	private async multicurrencyHeaderOf(runner: QueryRunner, invoiceId: string, holdingId: string) {
+		const rows = ((await runner.query(
+			`SELECT ii.contract_currency AS line_currency, ii.subtotal_contract_currency, ii.tax_amount_contract_currency, ii.subtotal_invoice_currency,
+				ii.tax_amount_invoice_currency, ii.fx_contract_to_invoice, ii.billing_period_start::text AS billing_period_start,
+				i.contract_currency, i.invoice_currency, i.contract_id, i.issue_date::text AS issue_date
+			FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+			WHERE ii.invoice_id = $1 AND ii.holding_id = $2
+				AND EXISTS (SELECT 1 FROM invoice_items m WHERE m.invoice_id = i.id AND m.contract_currency IS DISTINCT FROM i.contract_currency)`,
+			[invoiceId, holdingId]
+		)) ?? []) as Row[];
+
+		if (!Array.isArray(rows) || !rows.length) return null;
+		const itemRates = ((await runner.query(
+			`SELECT from_currency, to_currency, rate, period_start::text AS period_start, period_end::text AS period_end, created_at
+			FROM contract_fx_period_rates WHERE contract_id = $1 AND holding_id = $2 AND purpose = 'item'`,
+			[rows[0].contract_id, holdingId]
+		)) ?? []) as Array<{ from_currency: string; to_currency: string; rate: number; period_start: string; period_end: string }>;
+
+		return multicurrencyHeader(
+			rows.map((row) => ({
+				currency: toText(row.line_currency),
+				subtotal: toNumber(row.subtotal_contract_currency),
+				tax: toNumber(row.tax_amount_contract_currency),
+				subtotal_invoice: toNullableNumber(row.subtotal_invoice_currency),
+				tax_invoice: toNullableNumber(row.tax_amount_invoice_currency),
+				fx: toNullableNumber(row.fx_contract_to_invoice),
+				period_start: toText(row.billing_period_start),
+			})),
+			{
+				contract_currency: toText(rows[0].contract_currency) ?? '',
+				invoice_currency: toText(rows[0].invoice_currency) ?? '',
+				item_rates: itemRates,
+				fallback_date: toText(rows[0].issue_date) ?? '',
+			}
+		);
 	}
 
 	/**
@@ -2015,6 +2099,31 @@ export class ConsumptionService {
 		await refreshInvoiceSystemAmounts(runner, holdingId, [invoiceId]);
 
 		return invoiceId;
+	}
+
+	/**
+	 * Multimoneda (spec-multimoneda §4): la factura nueva del período (complementaria o reemisión) de un contrato con el flag se valoriza por
+	 * par: cada línea con la moneda de su ítem y la tasa de su par (fija pactada del período o spot → NULL), encabezado = Σ líneas. Devuelve la
+	 * vista de la factura con esos montos; sin el flag, la del borrador tal cual.
+	 */
+	private async pairInvoiceView(
+		runner: QueryRunner,
+		header: IssuedInvoiceHeader,
+		view: ConsumptionInvoiceView,
+		holdingId: string
+	): Promise<ConsumptionInvoiceView> {
+		if (!header.multicurrency) return view;
+		const revalued = (await revalueMulticurrencyInvoices(runner, holdingId, [view.id])).get(view.id);
+
+		if (!revalued) return view;
+
+		return {
+			...view,
+			fx: revalued.header.fx,
+			subtotal: revalued.header.amount_contract_currency,
+			tax: revalued.header.vat,
+			total: revalued.header.total_invoice_currency ?? round2(revalued.header.amount_contract_currency + revalued.header.vat),
+		};
 	}
 
 	private async contractIdOf(runner: QueryRunner, invoiceId: string, holdingId: string): Promise<string | null> {
@@ -2180,7 +2289,14 @@ export class ConsumptionService {
 					AND NOT (o.contract_item_id IS NOT DISTINCT FROM ii.contract_item_id AND o.billing_period_start IS NOT DISTINCT FROM ii.billing_period_start)
 				) AS other_nonzero_lines,
 				i.invoice_number, i.status, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, i.invoice_type, i.document_type, i.issue_date::text AS issue_date,
-				i.tax_rate, i.fx_contract_to_invoice, i.contract_currency, i.invoice_currency,
+				i.tax_rate,
+				-- Multimoneda (spec-multimoneda §4): en un documento con líneas de varias monedas, la línea recalculada conserva SU moneda (la del
+				-- ítem) y la tasa de SU par; en los demás, la del encabezado como siempre.
+				CASE WHEN EXISTS (SELECT 1 FROM invoice_items m WHERE m.invoice_id = i.id AND m.contract_currency IS DISTINCT FROM i.contract_currency)
+					THEN ii.fx_contract_to_invoice ELSE i.fx_contract_to_invoice END AS fx_contract_to_invoice,
+				CASE WHEN EXISTS (SELECT 1 FROM invoice_items m WHERE m.invoice_id = i.id AND m.contract_currency IS DISTINCT FROM i.contract_currency)
+					THEN COALESCE(ii.contract_currency, i.contract_currency) ELSE i.contract_currency END AS contract_currency,
+				i.invoice_currency,
 				COALESCE(i.total_invoice_currency, i.amount_contract_currency + COALESCE(i.vat, 0)) AS invoice_total
 			FROM invoice_items ii
 			JOIN invoices i ON i.id = ii.invoice_id
@@ -2247,7 +2363,8 @@ export class ConsumptionService {
 				i.contract_currency, i.invoice_currency, i.system_currency, i.fx_contract_to_invoice, i.tax_rate, i.document_type, i.export_type,
 				i.issuer_tax_id, i.issuer_legal_name, i.issuer_address, i.client_tax_id, i.payment_method, i.fiscal_regime, i.invoice_series,
 				i.requires_references_for_billing, i.auto_invoice, i.invoice_terms_and_conditions,
-				c.document_type AS contract_document_type, c.fx_invoice_policy, c.payment_terms, co.country AS company_country, ce.payment_terms AS entity_payment_terms
+				c.document_type AS contract_document_type, c.fx_invoice_policy, c.payment_terms, co.country AS company_country, ce.payment_terms AS entity_payment_terms,
+				c.requires_multicurrency_billing
 			FROM invoices i
 			JOIN contracts c ON c.id = i.contract_id
 			LEFT JOIN companies co ON co.id = i.company_id AND co.holding_id = i.holding_id
@@ -2290,6 +2407,7 @@ export class ConsumptionService {
 			payment_terms: parseJson(row.payment_terms),
 			entity_payment_terms: parseJson(row.entity_payment_terms),
 			company_country: toText(row.company_country),
+			...(row.requires_multicurrency_billing === true ? { multicurrency: true } : {}),
 		};
 	}
 

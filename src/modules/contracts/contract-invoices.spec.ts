@@ -131,6 +131,8 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 				reissued: 'INVOICE_REISSUED',
 				credit_note: 'INVOICE_CREDIT_NOTE_CREATED',
 				partial_billing: 'INVOICE_PARTIAL_BILLING',
+				consolidated: 'INVOICE_CONSOLIDATED',
+				consolidation_undone: 'INVOICE_CONSOLIDATION_UNDONE',
 			});
 		});
 	});

@@ -38,6 +38,19 @@ DECLARE
   v_item_active_end_month date;
   v_nc_rev_adj NUMERIC(15,2);
   v_in_active boolean;
+  -- Multimoneda (spec-multimoneda-contrato §3 #5, §5): los montos del ítem están en SU moneda; la fila se escribe en moneda de contrato
+  -- con la tasa fija pactada `purpose = 'item'` (1 [moneda del ítem] = rate [moneda del contrato]; directa o 1/inversa) que cubre el mes.
+  -- Sin tasa la fila queda con montos NULL y calc_version 'missing_fx_rate' (nunca 1). Ítems en la moneda del contrato: tasa 1, sin cambio.
+  v_item_ccy text;
+  v_item_rate NUMERIC;
+  v_calc_version text;
+  -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítem en otra moneda que la del contrato pero IGUAL a la de la compañía (o a la del
+  -- sistema) → las columnas *_ccy (o *_system_ccy) llevan el monto del ítem tal cual (tasa 1), calculado aquí con los mismos montos en
+  -- moneda del ítem que alimentan las columnas de contrato (sin redondear a contrato y volver). Factor 1 = directo, 0 = lo completa
+  -- revenue_schedule_apply_fx_for_contract desde la moneda de contrato (que salta las columnas directas).
+  v_company_direct NUMERIC;
+  v_system_direct NUMERIC;
+  v_monthly_price_item NUMERIC(15,2);
 BEGIN
   SELECT c.id, c.holding_id, c.company_id, c.contract_currency,
     co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency
@@ -99,6 +112,11 @@ BEGIN
     v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(p_from_month, v_contract_start_date), v_contract_start_date))::date;
     v_last_period := DATE_TRUNC('month', v_contract_end_date)::date;
     v_is_recurring := COALESCE(v_item.is_recurring, false);
+    v_item_ccy := UPPER(TRIM(COALESCE(v_item.currency, v_contract.contract_currency)));
+    v_company_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))
+      AND v_item_ccy = UPPER(TRIM(v_contract.company_currency)) THEN 1 ELSE 0 END;
+    v_system_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))
+      AND v_item_ccy = UPPER(TRIM(v_contract.system_currency)) THEN 1 ELSE 0 END;
 
     IF COALESCE(v_item.term_months, 0) > 0 THEN
       v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);
@@ -127,6 +145,11 @@ BEGIN
     v_cur := v_first_period;
     WHILE v_cur <= v_last_period LOOP
       v_eom_of_cur := (v_cur + INTERVAL '1 month' - INTERVAL '1 day')::date;
+      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_cur, v_eom_of_cur);
+      v_calc_version := CASE
+        WHEN v_item_rate IS NULL THEN 'missing_fx_rate'
+        WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency)) THEN 'v3.3-multicurrency-item-fx'
+        ELSE 'v3.2-nc-discount-2026-07' END;
 
       -- FIX 1.2 + FIX 1.1: SELECT de billing siempre se ejecuta (esté el item
       -- activo o no en este mes). Solo se conecta por contract_item_id y se
@@ -229,14 +252,29 @@ BEGIN
       ) VALUES (
         gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,
         v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,
-        v_recognized_period, v_recognized_cum, v_billed_period, v_billed_cum,
-        v_deferred_balance_period, v_unbilled_balance_period, v_deferred_balance_eom, v_unbilled_balance_eom,
-        v_mrr_contracted,
-        v_mrr_contracted, v_cmrr,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        v_item.product_name, 'v3.2-nc-discount-2026-07', false,  -- F2
-        1, 1, NULL, NULL, NULL, NULL
+        ROUND(v_recognized_period * v_item_rate, 2), ROUND(v_recognized_cum * v_item_rate, 2),
+        ROUND(v_billed_period * v_item_rate, 2), ROUND(v_billed_cum * v_item_rate, 2),
+        ROUND(v_deferred_balance_period * v_item_rate, 2), ROUND(v_unbilled_balance_period * v_item_rate, 2),
+        ROUND(v_deferred_balance_eom * v_item_rate, 2), ROUND(v_unbilled_balance_eom * v_item_rate, 2),
+        ROUND(v_mrr_contracted * v_item_rate, 2),
+        ROUND(v_mrr_contracted * v_item_rate, 2), ROUND(v_cmrr * v_item_rate, 2),
+        -- Sin vueltas: monto del ítem directo si su moneda es la de la compañía / del sistema (si no, 0 y lo completa apply_fx).
+        v_recognized_period * v_company_direct, v_recognized_cum * v_company_direct,
+        v_billed_period * v_company_direct, v_billed_cum * v_company_direct,
+        v_deferred_balance_period * v_company_direct, v_unbilled_balance_period * v_company_direct,
+        v_deferred_balance_eom * v_company_direct, v_unbilled_balance_eom * v_company_direct,
+        v_mrr_contracted * v_company_direct, v_mrr_contracted * v_company_direct, v_cmrr * v_company_direct,
+        v_recognized_period * v_system_direct, v_recognized_cum * v_system_direct,
+        v_billed_period * v_system_direct, v_billed_cum * v_system_direct,
+        v_deferred_balance_period * v_system_direct, v_unbilled_balance_period * v_system_direct,
+        v_deferred_balance_eom * v_system_direct, v_unbilled_balance_eom * v_system_direct,
+        v_mrr_contracted * v_system_direct, v_mrr_contracted * v_system_direct, v_cmrr * v_system_direct,
+        v_item.product_name, v_calc_version, false,  -- F2 (+ multimoneda)
+        -- fx_contract_to_*: con directo, la tasa implícita contrato → compañía/sistema (1 / tasa item; NULL sin tasa item).
+        CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+        CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+        CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,
+        CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL
       );
       v_cur := (v_cur + INTERVAL '1 month')::date;
     END LOOP;
@@ -248,7 +286,10 @@ BEGIN
        AND DATE_TRUNC('month', v_item.churn_date)::date > DATE_TRUNC('month', v_item.end_date)::date
     THEN
       v_tail_period := DATE_TRUNC('month', v_item.churn_date)::date;
-      v_monthly_price := COALESCE(v_item.monthly_price, v_monthly_revenue);
+      v_monthly_price_item := COALESCE(v_item.monthly_price, v_monthly_revenue);
+      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_tail_period,
+        (v_tail_period + INTERVAL '1 month' - INTERVAL '1 day')::date);
+      v_monthly_price := ROUND(v_monthly_price_item * v_item_rate, 2);
 
       IF p_from_month IS NULL OR v_tail_period >= p_from_month THEN
         INSERT INTO revenue_schedule_monthly(
@@ -274,13 +315,18 @@ BEGIN
         ) VALUES (
           gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,
           v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,
-          0, v_recognized_cum, 0, v_billed_cum,
+          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),
           0, 0, 0, 0,
           v_monthly_price, v_monthly_price, v_monthly_price,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          v_item.product_name, 'v3.0-contraction-tail', false,  -- FIX 1.5
-          1, 1, NULL, NULL, NULL, NULL,
+          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,
+          v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct,
+          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,
+          v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct,
+          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-tail' END, false,  -- FIX 1.5
+          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,
+          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,
           'BOP'
         )
         ON CONFLICT (contract_id, contract_item_id, period_month, momentum)
@@ -288,6 +334,16 @@ BEGIN
           mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,
           mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,
           cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,
+          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,
+          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,
+          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,
+          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,
+          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,
+          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,
+          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,
+          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,
+          fx_to_company_source               = EXCLUDED.fx_to_company_source,
+          fx_to_system_source                = EXCLUDED.fx_to_system_source,
           product_name                       = EXCLUDED.product_name,
           calc_version                       = EXCLUDED.calc_version;
 
@@ -314,13 +370,18 @@ BEGIN
         ) VALUES (
           gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,
           v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,
-          0, v_recognized_cum, 0, v_billed_cum,
+          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),
           0, 0, 0, 0,
           -v_monthly_price, -v_monthly_price, -v_monthly_price,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          v_item.product_name, 'v3.0-contraction-churn', false,  -- FIX 1.5
-          1, 1, NULL, NULL, NULL, NULL,
+          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,
+          -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct,
+          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,
+          -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct,
+          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-churn' END, false,  -- FIX 1.5
+          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
+          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,
+          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,
           'CHURN'
         )
         ON CONFLICT (contract_id, contract_item_id, period_month, momentum)
@@ -328,6 +389,16 @@ BEGIN
           mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,
           mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,
           cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,
+          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,
+          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,
+          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,
+          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,
+          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,
+          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,
+          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,
+          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,
+          fx_to_company_source               = EXCLUDED.fx_to_company_source,
+          fx_to_system_source                = EXCLUDED.fx_to_system_source,
           product_name                       = EXCLUDED.product_name,
           calc_version                       = EXCLUDED.calc_version;
       END IF;
@@ -351,4 +422,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item.';
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item.';

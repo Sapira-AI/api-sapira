@@ -31,8 +31,10 @@ import {
 	MANUAL_QUANTITY_SOURCE,
 	type RenderInput,
 	renderLine,
+	revalueStates,
 	stateOf,
 } from './invoice-edit';
+import { multicurrencyHeader, type PairRateContext } from './multicurrency';
 import { isOneOffSubline, oneOffOf } from './one-off-discount';
 import { isMetered, type PricedSubline } from './pricing-engine';
 
@@ -182,6 +184,8 @@ export interface ReorganizeContext {
 	product_names: Map<string, string | null>;
 	rules: NewInvoiceRules;
 	render: { template: RenderInput['template']; contract_number: string | null; client_name: string | null; max_chars: number | null };
+	/** Multimoneda: contexto por par del contrato (`requires_multicurrency_billing`); ausente/null en los demás. */
+	multicurrency?: PairRateContext | null;
 }
 
 // ------------------------------------------------------------------ salida
@@ -621,13 +625,39 @@ const headerOfRow = (row: ContractInvoiceRow, lines: LineState[]): ReorganizeHea
  * Encabezado = Σ líneas con la convención única (`headerFromLines` de `consumption.ts`): misma moneda → iguales; spot → NULL en moneda de
  * factura y `vat` en moneda de contrato; fija → Σ de los montos redondeados de las líneas valorizadas.
  */
-function headerFromLines(invoice: WInvoice, lines: LineState[], status: string | null): ReorganizeHeader {
-	const tax = round2(sum(lines.map((line) => line.tax_contract_currency)));
-	const amounts = headerFromLineAmounts(lines, {
+function headerFromLines(invoice: WInvoice, lines: LineState[], status: string | null, pairs: PairRateContext | null = null): ReorganizeHeader {
+	let tax = round2(sum(lines.map((line) => line.tax_contract_currency)));
+	let amounts = headerFromLineAmounts(lines, {
 		sameCurrency: upper(invoice.invoice_currency || invoice.contract_currency) === upper(invoice.contract_currency),
 		fx: invoice.fx,
 		taxRate: invoice.tax_rate,
 	});
+
+	// Multimoneda (spec-multimoneda §4): encabezado = Σ líneas por par (moneda de contrato con la tasa pactada ítem → contrato).
+	if (pairs && lines.length) {
+		const of = (valued: boolean) =>
+			multicurrencyHeader(
+				lines.map((line) => ({
+					currency: line.currency ?? null,
+					subtotal: line.subtotal_contract_currency,
+					tax: line.tax_contract_currency,
+					subtotal_invoice: valued ? line.subtotal_invoice_currency : null,
+					tax_invoice: valued ? line.tax_invoice_currency : null,
+					fx: line.fx ?? null,
+					period_start: line.billing_period_start,
+				})),
+				{
+					contract_currency: pairs.contract_currency,
+					invoice_currency: invoice.invoice_currency ?? pairs.contract_currency,
+					item_rates: pairs.item_rates,
+					fallback_date: invoice.issue_date ?? '',
+				}
+			);
+		const header = of(true);
+
+		amounts = header;
+		tax = of(false).vat;
+	}
 
 	return {
 		status,
@@ -1702,6 +1732,43 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 			);
 		}
 	}
+	// Multimoneda (spec-multimoneda §4): cada línea con la tasa de SU par en el documento donde queda (nunca la del encabezado de destino). La
+	// que se mueve o nace deja su tasa y toma la del documento (fijada por factura para el par, fija pactada del período o spot); la que se
+	// queda conserva la suya. Glosa con la tasa de la línea; FX del encabezado = el del único par convertidor o NULL.
+	if (ctx.multicurrency) {
+		for (const invoice of invoices.values()) {
+			const current = live(invoice.key);
+
+			if (!current.length) continue;
+			const revalued = revalueStates(
+				current.map((line) => ({
+					id: line.key,
+					state:
+						line.original_invoice_key !== line.invoice_key || !line.id ? { ...line.state, fx: null, fx_rate_source: null } : line.state,
+				})),
+				ctx.multicurrency,
+				{ invoice_currency: invoice.invoice_currency, issue_date: invoice.issue_date },
+				invoice.tax_rate
+			);
+
+			current.forEach((line, index) => {
+				const next = revalued.states[index];
+
+				line.state =
+					!next.description_locked && (line.amount_changed || line.period_changed || !line.id)
+						? {
+								...next,
+								description: renderLine(
+									next,
+									renderFor(invoice),
+									isPerTierBreakdown(next.pricing_breakdown) ? 'per_tier' : undefined
+								),
+							}
+						: next;
+			});
+			invoice.fx = revalued.header.fx_contract_to_invoice ?? null;
+		}
+	}
 	// Cuadre de redondeo en moneda de factura: el residuo contra el encabezado guardado va a la misma línea.
 	for (const [invoiceKey, lineKey] of roundFixTargets) {
 		const invoice = invoices.get(invoiceKey)!;
@@ -1713,6 +1780,7 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 		let invoiceResidual = 0;
 
 		if (
+			!ctx.multicurrency &&
 			invoice.fx !== null &&
 			invoice.fx !== 1 &&
 			row.amount_invoice_currency !== null &&
@@ -1742,7 +1810,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 		const after = headerFromLines(
 			invoice,
 			current.map((line) => line.state),
-			PENDING_STATUS
+			PENDING_STATUS,
+			ctx.multicurrency ?? null
 		);
 		const before = headerOfRow(row, originalLines.get(invoiceKey) ?? []);
 
@@ -1890,7 +1959,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 				headerFromLines(
 					invoice,
 					current.map((line) => line.state),
-					PENDING_STATUS
+					PENDING_STATUS,
+					ctx.multicurrency ?? null
 				)
 			);
 		const changed = linesChanged || forcedChange;
@@ -1899,7 +1969,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 			const header = headerFromLines(
 				invoice,
 				current.map((line) => line.state),
-				PENDING_STATUS
+				PENDING_STATUS,
+				ctx.multicurrency ?? null
 			);
 
 			views.push({
@@ -1937,7 +2008,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 			: headerFromLines(
 					invoice,
 					current.map((line) => line.state),
-					cancelled ? CANCELLED_STATUS : PENDING_STATUS
+					cancelled ? CANCELLED_STATUS : PENDING_STATUS,
+					ctx.multicurrency ?? null
 				);
 
 		views.push({

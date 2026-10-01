@@ -7,6 +7,7 @@ import {
 	IsIn,
 	IsInt,
 	IsNumber,
+	IsObject,
 	IsOptional,
 	IsString,
 	IsUUID,
@@ -114,7 +115,7 @@ export class InvoiceFxDto extends InvoiceOperationDto {
 	policy!: InvoiceFxPolicy;
 
 	@ApiPropertyOptional({ description: 'Tasa fija: 1 moneda de contrato = rate moneda de factura (obligatoria con fixed)' })
-	@ValidateIf((dto: InvoiceFxDto) => dto.policy === 'fixed' || present(dto.rate))
+	@ValidateIf((dto: InvoiceFxDto) => (dto.policy === 'fixed' && !dto.rates_by_pair) || present(dto.rate))
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe la tasa fija' })
 	@Min(0.000001, { message: 'El tipo de cambio fijo debe ser mayor que 0' })
 	rate?: number;
@@ -124,6 +125,16 @@ export class InvoiceFxDto extends InvoiceOperationDto {
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el neto exacto en moneda de factura' })
 	@Min(0.01, { message: 'El neto exacto debe ser mayor que 0' })
 	target_net_amount?: number;
+	@ApiPropertyOptional({
+		type: 'object',
+		additionalProperties: { type: 'number' },
+		example: { 'USD>CLP': 950.5, 'CLF>CLP': 39000 },
+		description:
+			'Multimoneda (contrato con ítems en distintas monedas): tasa fija por par moneda del ítem > moneda de factura (1 USD = 950,5 CLP). Con un solo par basta `rate`. `net_exact` solo con un par (400 net_exact_multi_pair)',
+	})
+	@IsObject({ message: 'rates_by_pair debe ser un objeto { "USD>CLP": tasa }' })
+	@IsOptional()
+	rates_by_pair?: Record<string, number>;
 }
 
 /** `POST /contracts/:id/invoices/fx-bulk` (spec §3.2): varias facturas a spot o a una misma tasa fija (`net_exact` es de una sola). */
@@ -140,7 +151,7 @@ export class InvoiceFxBulkDto extends InvoiceOperationDto {
 	policy!: InvoiceFxPolicy;
 
 	@ApiPropertyOptional({ description: 'Tasa fija (obligatoria con fixed)' })
-	@ValidateIf((dto: InvoiceFxBulkDto) => dto.policy === 'fixed' || present(dto.rate))
+	@ValidateIf((dto: InvoiceFxBulkDto) => (dto.policy === 'fixed' && !dto.rates_by_pair) || present(dto.rate))
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe la tasa fija' })
 	@Min(0.000001, { message: 'El tipo de cambio fijo debe ser mayor que 0' })
 	rate?: number;
@@ -150,6 +161,15 @@ export class InvoiceFxBulkDto extends InvoiceOperationDto {
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el neto exacto en moneda de factura' })
 	@Min(0.01, { message: 'El neto exacto debe ser mayor que 0' })
 	target_net_amount?: number;
+	@ApiPropertyOptional({
+		type: 'object',
+		additionalProperties: { type: 'number' },
+		example: { 'USD>CLP': 950.5 },
+		description: 'Multimoneda: tasa fija por par (`USD>CLP`) para todas las facturas',
+	})
+	@IsObject({ message: 'rates_by_pair debe ser un objeto { "USD>CLP": tasa }' })
+	@IsOptional()
+	rates_by_pair?: Record<string, number>;
 }
 
 /** `POST /contracts/:id/invoices/:invoiceId/erp-reset` (§3.1): restablecer el borrador del ERP de una Por Emitir. */

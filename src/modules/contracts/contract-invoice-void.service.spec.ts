@@ -18,6 +18,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
+import { MC_UF_ITEM, MC_USD_ITEM, mcInvoiceRow, mcStoredLine, multicurrencyRoute, revaluedHeaders } from './multicurrency.test-fixtures';
 
 type Row = Record<string, unknown>;
 
@@ -499,5 +500,58 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 					.unit_price_invoice
 			).toBeNull();
 		});
+	});
+});
+
+describe('ContractInvoiceVoidService · reemisión multimoneda (spec-multimoneda §4)', () => {
+	it('la reemisión copia la moneda y la tasa DE CADA LÍNEA de la anulada (como la NC espejo) y el encabezado = Σ líneas con FX NULL', async () => {
+		const { service, runner, dataSource } = build({
+			invoice: invoiceRow({ contract_currency: 'CLP', fx_contract_to_invoice: null, amount_contract_currency: '1270000' }),
+		});
+		const base = runner.query.getMockImplementation()!;
+		const usd = lineRow(LINE_A, 1000, { contract_item_id: MC_USD_ITEM, line_currency: 'USD', line_fx: '950', line_fx_rate_source: 'contract' });
+		const uf = lineRow(LINE_B, 10, {
+			contract_item_id: MC_UF_ITEM,
+			unit_price_contract_currency: '10',
+			unit_price_invoice_currency: '385000',
+			subtotal_invoice_currency: '385000',
+			tax_amount_invoice_currency: '73150',
+			total_invoice_currency: '458150',
+			quantity: '1',
+			line_currency: 'UF',
+			line_fx: '38500',
+			line_fx_rate_source: 'spot',
+		});
+		const mc = multicurrencyRoute({
+			contract_id: CONTRACT_ID,
+			invoices: { 'reissue-1': mcInvoiceRow('reissue-1', CONTRACT_ID, { fallback_date: '2026-09-30' }) },
+			lines: {
+				'reissue-1': [
+					mcStoredLine('r-usd', 'USD', { fx_rate_source: 'reissue', billing_period_start: '2026-09-01' }),
+					mcStoredLine('r-uf', 'UF', { fx_contract_to_invoice: '38500', fx_rate_source: 'spot', billing_period_start: '2026-09-01' }),
+				],
+			},
+		});
+		const route = (sql: string, params: unknown[] = []) => {
+			if (sql.includes('c.billing_anchor_day'))
+				return [{ ...contractRow, contract_currency: 'CLP', invoice_currency: 'CLP', requires_multicurrency_billing: true }];
+			if (sql.includes('ii.visible_line_id') && sql.includes('ANY($1::uuid[])')) return [usd, uf];
+
+			return mc(sql, params) ?? (base as (sql: string, params?: unknown[]) => Row[])(sql, params);
+		};
+
+		runner.query.mockImplementation(route);
+		(dataSource.query as unknown as jest.Mock).mockImplementation(route);
+		await service.voidInvoice(CONTRACT_ID, INV, { reason: 'issue_error', reissue: true } as VoidInvoiceDto, HOLDING, 'auth-1', TODAY);
+		const reissueLines = calls(runner.query, 'INSERT INTO invoice_items').filter(([, params]) => (params as unknown[])[0] === 'reissue-1');
+
+		// $18 = tasa de la línea, $26 = moneda de la línea (= del ítem): nunca la del encabezado.
+		expect(reissueLines.map(([, params]) => [(params as unknown[])[17], (params as unknown[])[25]])).toEqual([
+			[950, 'USD'],
+			[38500, 'UF'],
+		]);
+		expect(revaluedHeaders(runner.query.mock.calls)).toEqual([
+			expect.objectContaining({ id: 'reissue-1', fx: null, amount_invoice_currency: 1335000, amount_contract_currency: 1270000 }),
+		]);
 	});
 });

@@ -209,17 +209,25 @@ Tests (regla dura): `planRenewal` con pacto `percent_uplift` (1.000 → 1.050: R
 `index` sin dato → blocker, `skipped` con motivo, `every_n_months` genera fila hija y `next_effective_date`, job
 idempotente, ítem con churn cancela sus pactos; front: `PasoCondiciones` bloque Renovación, widget con MRR simulado.
 
-## 7. Preguntas para Domi
+## 7. Preguntas para Domi — estado 01-10
 
-1. **Modo por defecto de la renovación automática**: ¿`confirm` (propone y alguien aprueba, como S2-2) o `auto` (renueva
-   sola y avisa) por holding? La propuesta asume `confirm`; SimpliRoute podría querer `auto` con pacto.
-2. **Reajuste por IPC**: ¿variación **acumulada desde la fecha base pactada** (snapshot al firmar) o **últimos 12 meses
-   publicados** a la fecha de aplicación? ¿Con qué desfase de publicación (propuesto: último valor ≤ fecha − 1 mes)?
-3. **Prorrateo del reajuste `on_date`**: ¿rige desde el próximo inicio de período sin prorrateo (propuesto, como
-   downsell/renegociación) o la usuaria elige "cobrar ahora / próxima factura" (S3-17)?
-4. **Redondeo**: ¿del precio unitario a 2 decimales por defecto y a entero en CLP? ¿O del mensual del ítem?
-5. **Métrica**: el pacto **pendiente**, ¿se muestra solo como "MRR pactado" en el 360 o también entra a un KPI de
-   la lista (CMRR estilo Chargebee)? El MRR "real" no cambia hasta aplicarse en ningún caso.
-6. **Precio libre en la renovación** (S3-15): ¿aceptas que `renewal` con `unit_price`/`quantity` se guarde siempre como
-   un pacto `new_unit_price`/`quantity` aplicado en el acto (mismo modelo, misma tabla), y que el front viejo
-   (`EnhancedRenewalModal`) se retire con `create_contract_renewal`?
+> Decisiones finales de Domi (01-10). Diseño y migración en [`spec-modificaciones-contrato-v2.md`](./spec-modificaciones-contrato-v2.md) §9
+> (9.3.4 renovación con precio, 9.3.5 auto-renovación, 9.3.6 pactos, 9.4 migración). Cambios respecto de §3–§6: la columna
+> `applied_change_id` se llama `applied_event_id`; `kind` suma `billing_frequency` (cambio de frecuencia = ítem nuevo + pacto, S3-15); se agregan
+> `parent_id`, `next_effective_date`, `status_reason`/`status_changed_by` (reemplazan `cancelled_by`/`cancel_reason`). El cron legacy ya está
+> desprogramado; sus funciones se retiran al switch.
+
+1. **Modo de la renovación automática** — ✅ **DECIDIDO: confirmación del holding** (`confirm`). El job solo propone (`RENEWAL_PROPOSED`) y la
+   usuaria confirma, omite o apaga; el modo `auto` **no se construye** y la Migración 2 queda reducida a `holding_settings.auto_renewal_notice_days`
+   (default 30). Los pactos `on_date`/`every_n_months` siguen el mismo criterio (evento `SCHEDULED_CHANGE_DUE` + confirmación).
+2. **Reajuste por IPC** (acumulado desde la base vs. 12 meses; desfase) — sin decisión explícita: se construye con la propuesta (acumulado desde
+   `index_base_value`, `index_lag_months = 1` por fila, editable al pactar); el preview muestra ambos valores. Pendiente de confirmar en R3.
+3. **Prorrateo del reajuste `on_date`** — sin decisión explícita: se construye **sin prorrateo** (rige desde el próximo inicio de período, como
+   downsell/renegociación). Pendiente de confirmar en R3.
+4. **Redondeo** — sin decisión explícita: `rounding` por fila (default `unit_2`, `unit_0` sugerido en CLP). Pendiente de confirmar en R3.
+5. **Métrica del pacto pendiente** — sin decisión explícita: solo "MRR pactado" en el 360; el MRR real no cambia hasta aplicarse. KPI de lista
+   (CMRR) queda pendiente.
+6. **Precio libre en la renovación** (S3-15) — ✅ **DECIDIDO: sí**. `renewal` acepta `quantity`/`unit_price`/`discount_value`, guarda **dos ítems**
+   (RENEWAL al valor anterior + ajuste) y registra el pacto aplicado (`new_unit_price`/`quantity`, `status applied`) en el mismo acto; además
+   **extiende la tasa FX de todo el contrato** (o pide la del nuevo término) en la misma operación. `EnhancedRenewalModal` y `create_contract_renewal`
+   se retiran al switch.

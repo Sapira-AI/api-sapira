@@ -47,6 +47,42 @@ límites de caracteres CFDI/PE).
 - **Test**: `invoice-scheduler.service.spec.ts` → "respeta la tasa fijada explícitamente…" y "una tasa pegada sin origen explícito no se usa…".
 - **Estado**: sin commit al 01-10; va en la rama `domi` con el bloque de Facturas del contrato.
 
+## 4. FX por par al emitir · multimoneda MM4 (01-10-2026)
+
+- **Dónde**: `src/modules/invoices/invoice-scheduler.service.ts`. Tres puntos acotados:
+  1. `calculateInvoiceAmountsAtIssue`: al inicio, si `InvoiceSchedulerService.requiresPairValuation(invoice)` deriva al método nuevo
+     `calculatePairAmountsAtIssue`; si no, **el código de siempre sin ningún cambio** (mismos números y campos).
+  2. `sendInvoiceToOdoo`: la condición que llama al cálculo y la que valida "montos no calculados" pasan de
+     `contract_currency !== invoice_currency` a `contract_currency !== invoice_currency || convertsByPair(invoice)`. Es necesario porque un
+     contrato CLP con ítems en UF facturado en CLP tiene encabezado CLP = CLP y antes no se valorizaba (U3: líneas UF a $0 en Odoo).
+  3. Métodos nuevos: `requiresPairValuation` y `convertsByPair` (estáticos, puros) y `calculatePairAmountsAtIssue` (privado), más el set
+     `KEPT_FX_SOURCES`. Importa las funciones puras `valuateLinesByPair`, `pairKey`, `upperCode` de `src/modules/contracts/multicurrency.ts`
+     (la misma valorización por línea que usa el motor de Contratos).
+- **Cuándo aplica la rama nueva**: el contrato tiene `requires_multicurrency_billing`, **o** las líneas vienen en dos o más monedas
+  (`invoice_items.contract_currency`), **o** alguna línea está en una moneda distinta del `contract_currency` del encabezado (p. ej. un
+  consolidado). Una factura de una sola moneda (la del encabezado) nunca entra.
+- **Qué hace**: agrupa las líneas por par `(moneda de la línea → moneda de factura)`. Línea en la moneda de la factura → tasa 1 (si ya tiene
+  sus montos en moneda de factura no se escribe). Línea ya fijada (`fx_rate_source` = `contract`, `manual`, `net_exact` o `manual_unify`, con
+  `fx_contract_to_invoice` > 0) → conserva su tasa y su origen. Si no, la spot del día de emisión de **ese par**
+  (`getExchangeRateWithFallback(moneda de la línea, moneda de factura, issue_date)`, una consulta por par) y la línea queda con
+  `fx_rate_source = 'spot'` y `fx_rate_date` = fecha de la tasa usada. Por línea escribe unitario, subtotal, IVA (subtotal × tasa de IVA del
+  documento, 0 si ninguna línea lleva IVA) y total en moneda de factura, con residuo de centavos por par a la línea mayor (convención del
+  motor). Encabezado = Σ líneas (`amount_invoice_currency`, `vat`, `total_invoice_currency`); `invoices.fx_contract_to_invoice` = la tasa si
+  hay un solo par que convierte, NULL con dos o más. **Nunca ida y vuelta por la moneda del contrato**: `amount_contract_currency` no se toca.
+- **Regla dura**: primero resuelve todos los pares; si falta la tasa de **cualquiera** no escribe nada, lanza `fx_rate_missing` con el par
+  (`error.code`, `error.pairs`, mensaje "USD → MXN") y la factura queda omitida con el log `exchange_rate` y el correo de tasa faltante de
+  siempre (uno por par). Con política fija y una línea que convierte sin tasa → mismo error, sin consultar Banco Central (como U12/B3).
+  Las tasas fallback avisan por correo como antes (una por par).
+- **Por qué**: decisión de Domi (01-10): lo que va al ERP está siempre en la moneda de la factura y la conversión es directa por par (UF → CLP,
+  USD → CLP), nunca ítem → contrato → factura. Antes el envío spot aplicaba una sola tasa `contrato → factura` a todas las líneas.
+- **Qué no cambia**: el mapper ya mandaba `price_unit = unit_price_invoice_currency` por línea y `currency_id` = moneda de factura (verificado,
+  sin cambios); se siguen omitiendo las líneas en cero y las internas (entradas 1 y 2). Facturas de una sola moneda: sin cambio.
+- **Efecto en Contratos**: se quitó el bloqueo `multicurrency_spot_send_pending` (activación de contratos multimoneda spot y consolidación
+  spot con varios pares).
+- **Test**: `invoice-scheduler.service.spec.ts` → bloque "MM4 · multimoneda: una tasa por par al emitir" (USD en MXN, dos pares, tasa manual
+  conservada, par sin tasa no envía, fija sin tasa, detección). Los tests anteriores pasan sin cambios.
+- **Estado**: sin commit al 01-10; va en la rama `domi` con el bloque Multimoneda (MM1–MM5).
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

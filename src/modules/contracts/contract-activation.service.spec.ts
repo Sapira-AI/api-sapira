@@ -695,6 +695,7 @@ describe('ContractsController (acciones masivas y activación)', () => {
 		{} as ContractInvoiceEditService,
 		{} as never,
 		{} as never,
+		{} as never,
 		{} as never
 	);
 

@@ -37,6 +37,7 @@ import { cleanPaymentTerms, QUOTE_CONTRACT_CREATED_STAGE, resolveUserId } from '
 import { ContractInvoiceEditService, type PendingTermsPlan } from './contract-invoice-edit.service';
 import { ContractsService } from './contracts.service';
 import { parseStoredTemplate } from './invoice-description';
+import { type ContractConversion, itemRate, multicurrencyHeader, upperCode } from './multicurrency';
 import { PRICE_COLUMNS } from './price-rows';
 import { DEFAULT_INVOICE_LINE_MODE } from './pricing-engine';
 import { DESCRIPTION_LIMITS_SQL, descriptionMaxCharsOfRow } from './tax-document-types';
@@ -399,9 +400,29 @@ export class ContractChangesService {
 		const units: InvoiceLineUnits = new Map();
 		// Facturas tocadas: al final se escriben sus montos en moneda del sistema (antes `auto_populate_invoice_fx_to_system`).
 		const touched = new Set<string>();
+		// Multimoneda (spec §3/§4): con el flag (guardado o encendido por este cambio) el encabezado se recalcula por par y las líneas usan su
+		// propia tasa; el monto en moneda de contrato convierte cada línea con la tasa pactada ítem → contrato (las nuevas incluidas).
+		const multicurrency =
+			contract.requires_multicurrency_billing === true || plan.ops.some((op) => op.kind === 'set_multicurrency' && op.enabled);
+		const conversion: ContractConversion | null = multicurrency
+			? {
+					contract_currency: upperCode(contract.contract_currency),
+					item_rates: [
+						...(contract.fx_item_rates ?? []),
+						...plan.ops.flatMap((op) =>
+							op.kind === 'insert_fx_rates'
+								? op.rates.filter((rate) => rate.purpose === 'item').map((rate) => ({ ...rate, created_at: '9999' }))
+								: []
+						),
+					],
+				}
+			: null;
+		const lineOf = (invoiceId: string, lineId: string) => byInvoice.get(invoiceId)?.lines.find((line) => line.id === lineId) ?? null;
 
 		for (const item of ctx.items) units.set(item.id, { unit_of_measure: item.unit_of_measure, product_id: item.product_id });
 		const order: Array<WriteOp['kind']> = [
+			// Multimoneda: el flag va primero (el validador de ítems lo lee al insertar uno en otra moneda).
+			'set_multicurrency',
 			'insert_item',
 			'update_item',
 			'delete_line',
@@ -427,6 +448,13 @@ export class ContractChangesService {
 
 		for (const op of ops) {
 			switch (op.kind) {
+				case 'set_multicurrency':
+					await runner.query(`UPDATE contracts SET requires_multicurrency_billing = $3 WHERE id = $1 AND holding_id = $2`, [
+						contract.id,
+						holdingId,
+						op.enabled,
+					]);
+					break;
 				case 'insert_item': {
 					const item = op.item;
 					// Precios derivados (antes `auto_calculate_pricing_fields`, con su rama CHURN/DOWNSELL): los escribe la API.
@@ -571,7 +599,8 @@ export class ContractChangesService {
 					break;
 				case 'update_line': {
 					touched.add(op.invoice_id);
-					const fx = byInvoice.get(op.invoice_id)?.fx ?? null;
+					// Multimoneda: la línea se valoriza con la tasa de su par (la suya), no con la del encabezado.
+					const fx = multicurrency ? (lineOf(op.invoice_id, op.line_id)?.fx ?? null) : (byInvoice.get(op.invoice_id)?.fx ?? null);
 					const values = op.values;
 					const inInvoice = (value: number) => (fx === null ? null : round2(value * fx));
 
@@ -609,7 +638,7 @@ export class ContractChangesService {
 				}
 				case 'recompute_header':
 					touched.add(op.invoice_id);
-					await this.recomputeHeader(runner, op.invoice_id, holdingId, byInvoice.get(op.invoice_id) ?? null, op.note);
+					await this.recomputeHeader(runner, op.invoice_id, holdingId, byInvoice.get(op.invoice_id) ?? null, op.note, conversion);
 					break;
 				case 'cancel_invoice':
 					touched.add(op.invoice_id);
@@ -640,7 +669,8 @@ export class ContractChangesService {
 								target,
 								holdingId,
 								existing ?? null,
-								`Línea agregada por modificación del contrato (${plan.preview.type})`
+								`Línea agregada por modificación del contrato (${plan.preview.type})`,
+								conversion
 							);
 						} else {
 							const [id] = await insertEngineInvoices(runner, issuer, [invoice], [op.fixed_rates[index] ?? null], units);
@@ -691,7 +721,8 @@ export class ContractChangesService {
 							invoiceId,
 							holdingId,
 							existing ? { ...existing, tax_rate: op.tax_rate } : null,
-							`Documento ${op.document_type}`
+							`Documento ${op.document_type}`,
+							conversion
 						);
 					}
 					break;
@@ -701,6 +732,43 @@ export class ContractChangesService {
 						const existing = byInvoice.get(target.invoice_id);
 
 						touched.add(target.invoice_id);
+						if (target.lines) {
+							// Multimoneda: cada línea con la tasa de su par y sus montos ya valorizados (residuo por par en la línea mayor).
+							for (const line of target.lines) {
+								await runner.query(
+									`UPDATE invoice_items SET invoice_currency = $3, fx_contract_to_invoice = $4,
+										fx_rate_source = CASE WHEN $4::numeric IS NULL THEN NULL ELSE $5 END,
+										fx_rate_date = CASE WHEN $4::numeric IS NULL THEN NULL ELSE CURRENT_DATE END,
+										unit_price_invoice_currency = $6, subtotal_invoice_currency = $7, tax_amount_invoice_currency = $8,
+										total_invoice_currency = $9, updated_at = now()
+									WHERE id = $1 AND holding_id = $2`,
+									[
+										line.line_id,
+										holdingId,
+										op.invoice_currency,
+										line.fx,
+										CHANGES_FX_RATE_SOURCE,
+										line.amounts?.unit_price ?? null,
+										line.amounts?.subtotal ?? null,
+										line.amounts?.tax ?? null,
+										line.amounts?.total ?? null,
+									]
+								);
+							}
+							await runner.query(
+								`UPDATE invoices SET invoice_currency = $3, fx_contract_to_invoice = $4 WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
+								[target.invoice_id, holdingId, op.invoice_currency, target.fx]
+							);
+							await this.recomputeHeader(
+								runner,
+								target.invoice_id,
+								holdingId,
+								existing ? { ...existing, fx: target.fx } : null,
+								`Moneda de facturación ${op.invoice_currency}`,
+								conversion
+							);
+							continue;
+						}
 						await runner.query(
 							// Sin tasa (spot que se valoriza al emitir): origen y fecha de la tasa en NULL, como el resto de la línea en moneda de factura.
 							`UPDATE invoice_items SET invoice_currency = $3, fx_contract_to_invoice = $4,
@@ -732,7 +800,7 @@ export class ContractChangesService {
 					for (const rate of op.rates) {
 						await runner.query(
 							`INSERT INTO contract_fx_period_rates (contract_id, holding_id, purpose, from_currency, to_currency, rate, period_start, period_end, notes)
-							VALUES ($1, $2, 'invoice', $3, $4, $5, $6, $7, $8)`,
+							VALUES ($1, $2, $9, $3, $4, $5, $6, $7, $8)`,
 							[
 								contract.id,
 								holdingId,
@@ -741,7 +809,10 @@ export class ContractChangesService {
 								rate.rate,
 								rate.period_start,
 								rate.period_end,
-								'Condiciones de facturación (modificación v2)',
+								rate.purpose === 'item'
+									? 'Tasa pactada ítem → contrato (modificación v2)'
+									: 'Condiciones de facturación (modificación v2)',
+								rate.purpose ?? 'invoice',
 							]
 						);
 					}
@@ -784,8 +855,14 @@ export class ContractChangesService {
 		invoiceId: string,
 		holdingId: string,
 		invoice: Pick<ChangeInvoiceRow, 'tax_rate' | 'fx'> | null,
-		note: string
+		note: string,
+		conversion: ContractConversion | null = null
 	) {
+		if (conversion) {
+			await this.recomputeMulticurrencyHeader(runner, invoiceId, holdingId, invoice, note, conversion);
+
+			return;
+		}
 		const [sums] = (await runner.query(
 			`SELECT COUNT(*) AS lines, COALESCE(SUM(subtotal_contract_currency), 0) AS subtotal, COALESCE(SUM(tax_amount_contract_currency), 0) AS tax
 			FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`,
@@ -814,6 +891,70 @@ export class ContractChangesService {
 				header.vat,
 				header.amount_invoice_currency,
 				header.total_invoice_currency,
+				invoice?.tax_rate ?? null,
+			]
+		);
+	}
+
+	/**
+	 * Multimoneda: encabezado = Σ líneas por par (`multicurrencyHeader`): moneda de contrato con la tasa pactada ítem → contrato de cada línea;
+	 * moneda de factura = Σ líneas si todas están valorizadas (si no NULL); FX del encabezado = el del único par convertidor o NULL.
+	 */
+	private async recomputeMulticurrencyHeader(
+		runner: QueryRunner,
+		invoiceId: string,
+		holdingId: string,
+		invoice: Pick<ChangeInvoiceRow, 'tax_rate'> | null,
+		note: string,
+		conversion: ContractConversion
+	) {
+		const rows = ((await runner.query(
+			`SELECT ii.contract_currency, ii.subtotal_contract_currency, ii.tax_amount_contract_currency, ii.subtotal_invoice_currency,
+				ii.tax_amount_invoice_currency, ii.fx_contract_to_invoice, ii.billing_period_start::text AS billing_period_start,
+				i.invoice_currency, i.issue_date::text AS issue_date
+			FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+			WHERE ii.invoice_id = $1 AND ii.holding_id = $2`,
+			[invoiceId, holdingId]
+		)) ?? []) as Row[];
+
+		if (!rows.length) {
+			await runner.query(
+				`UPDATE invoices SET status = 'Cancelada', notes = COALESCE(notes || E'\\n', '') || $3 WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
+				[invoiceId, holdingId, note]
+			);
+
+			return;
+		}
+		const header = multicurrencyHeader(
+			rows.map((row) => ({
+				currency: toText(row.contract_currency),
+				subtotal: toNumber(row.subtotal_contract_currency),
+				tax: toNumber(row.tax_amount_contract_currency),
+				subtotal_invoice: toNullableNumber(row.subtotal_invoice_currency),
+				tax_invoice: toNullableNumber(row.tax_amount_invoice_currency),
+				fx: toNullableNumber(row.fx_contract_to_invoice),
+				period_start: toText(row.billing_period_start),
+			})),
+			{
+				contract_currency: conversion.contract_currency,
+				invoice_currency: toText(rows[0].invoice_currency) ?? conversion.contract_currency,
+				item_rates: conversion.item_rates,
+				fallback_date: toText(rows[0].issue_date) ?? '',
+			}
+		);
+
+		await runner.query(
+			`UPDATE invoices SET amount_contract_currency = $3, vat = $4, amount_invoice_currency = $5, total_invoice_currency = $6,
+				fx_contract_to_invoice = $7, tax_rate = COALESCE($8::numeric, tax_rate)
+			WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
+			[
+				invoiceId,
+				holdingId,
+				header.amount_contract_currency,
+				header.vat,
+				header.amount_invoice_currency,
+				header.total_invoice_currency,
+				header.fx,
 				invoice?.tax_rate ?? null,
 			]
 		);
@@ -943,6 +1084,11 @@ export class ContractChangesService {
 							'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
 							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
 						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'invoice') AS fx_invoice_rates,
+					(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+							'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
+						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates,
+					COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
 					public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date
 				FROM contracts c
 				LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
@@ -980,7 +1126,8 @@ export class ContractChangesService {
 					ii.subtotal_contract_currency, ii.subtotal_invoice_currency, ii.tax_amount_contract_currency, ii.tax_amount_invoice_currency,
 					ii.total_contract_currency, ii.total_invoice_currency,
 					ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end, ii.quantity_source,
-					ii.visible_line_id, ii.fx_rate_source
+					ii.visible_line_id, ii.fx_rate_source, ii.contract_currency AS line_currency, ii.fx_contract_to_invoice AS line_fx,
+					ii.fx_rate_date::text AS fx_rate_date
 				FROM invoice_items ii
 				JOIN invoices i ON i.id = ii.invoice_id
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
@@ -1019,7 +1166,7 @@ export class ContractChangesService {
 				: Promise.resolve([] as Row[]),
 			dto.origin?.type === 'quote' && dto.origin.quote_id
 				? (db.query(
-						`SELECT q.id, q.quote_type,
+						`SELECT q.id, q.quote_type, q.currency,
 							(EXISTS (SELECT 1 FROM contracts c WHERE c.quote_id = q.id AND c.deleted_at IS NULL)
 							 OR EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.holding_id = q.holding_id AND e.metadata->'origin'->>'quote_id' = q.id::text)) AS already_applied
 						FROM quotes q WHERE q.id = $1 AND q.holding_id = $2`,
@@ -1087,6 +1234,8 @@ export class ContractChangesService {
 				payment_terms: cleanPaymentTerms(parseJson(contractRow.entity_payment_terms)),
 			},
 			fx_invoice_rates: (parseJson(contractRow.fx_invoice_rates) as FxPeriodRate[] | null) ?? [],
+			requires_multicurrency_billing: contractRow.requires_multicurrency_billing === true,
+			fx_item_rates: (parseJson(contractRow.fx_item_rates) as FxPeriodRate[] | null) ?? [],
 			cutoff_date: toText(contractRow.cutoff_date),
 			invoice_description_template: parseStoredTemplate(contractRow.invoice_description_template),
 			description_max_chars: descriptionMaxCharsOfRow(contractRow),
@@ -1162,6 +1311,10 @@ export class ContractChangesService {
 				quantity_source: toText(row.quantity_source),
 				visible_line_id: toText(row.visible_line_id),
 				fx_rate_source: toText(row.fx_rate_source),
+				// Multimoneda: moneda de origen y tasa de la línea (su par); la NC espejo y las modificaciones las reusan.
+				currency: toText(row.line_currency),
+				fx: toNullableNumber(row.line_fx),
+				fx_rate_date: toText(row.fx_rate_date),
 				consumption:
 					consumptionByKey.get(`${toText(row.contract_item_id) ?? ''}|${toText(row.billing_period_start)?.slice(0, 10) ?? ''}`) ?? null,
 			};
@@ -1226,7 +1379,14 @@ export class ContractChangesService {
 			tax_document_type: taxDocAllowed
 				? { id: String(taxDoc.id), code: toText(taxDoc.code) ?? '', name: toText(taxDoc.name) ?? '', kind: toText(taxDoc.kind) ?? '' }
 				: null,
-			quote: quote ? { id: String(quote.id), quote_type: toText(quote.quote_type), already_applied: quote.already_applied === true } : null,
+			quote: quote
+				? {
+						id: String(quote.id),
+						quote_type: toText(quote.quote_type),
+						already_applied: quote.already_applied === true,
+						currency: toText(quote.currency),
+					}
+				: null,
 			billable_metrics: new Map(metricRows.map((row) => [String(row.id), toText(row.status) ?? ''])),
 			catalog_prices: catalogPrices,
 			today,
@@ -1306,6 +1466,36 @@ export async function insertMirrorCreditNote(
 	if (!original) throw new NotFoundException(`La factura ${mirrors.id} ya no existe`);
 	const computed = mirrorCreditNoteAmounts(lines, mirrors.tax_rate, options.exact === true);
 	const amounts = computed.lines;
+	// Multimoneda (spec-multimoneda §4 "Notas de crédito"): cada línea de la NC reusa la moneda y la tasa de SU línea original (par, origen y
+	// fecha de la tasa), nunca las del encabezado; el encabezado en moneda de contrato = Σ líneas × tasa pactada ítem → contrato.
+	const originals = ((await runner.query(
+		`SELECT id, contract_currency, fx_contract_to_invoice, fx_rate_source, fx_rate_date::text AS fx_rate_date
+		FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`,
+		[mirrors.id, holdingId]
+	)) ?? []) as Row[];
+	const originalLine = new Map(originals.map((row) => [String(row.id), row]));
+	const headerCurrency = upperCode(original.contract_currency);
+	const multicurrency = originals.some((row) => Boolean(row.contract_currency) && upperCode(row.contract_currency) !== headerCurrency);
+
+	if (multicurrency) {
+		const itemRates = ((await runner.query(
+			`SELECT from_currency, to_currency, rate, period_start::text AS period_start, period_end::text AS period_end, created_at
+			FROM contract_fx_period_rates WHERE contract_id = $1 AND holding_id = $2 AND purpose = 'item'`,
+			[original.contract_id, holdingId]
+		)) ?? []) as FxPeriodRate[];
+		let subtotal = 0;
+		let tax = 0;
+
+		lines.forEach(({ line, period_start: periodStart }, index) => {
+			const rate =
+				itemRate(itemRates, toText(originalLine.get(line.id)?.contract_currency) ?? headerCurrency, headerCurrency, periodStart) ?? 0;
+
+			subtotal += round2(amounts[index].subtotal * rate);
+			tax += round2(amounts[index].tax * rate);
+		});
+		computed.header.amount_contract_currency = -round2(subtotal);
+		if (computed.header.amount_invoice_currency === null) computed.header.vat = -round2(tax);
+	}
 	// Costura: la API escribe el grupo (el de la factura espejada, antes `assign_invoice_group_id`), las condiciones del contrato
 	// (antes `invoices_fill_terms_from_contract`) y, al final, los montos en moneda del sistema.
 	const [header] = (await runner.query(
@@ -1371,6 +1561,7 @@ export async function insertMirrorCreditNote(
 		const amount = amounts[index];
 		const document = visibleIds.has(line.id) ? mirrorVisibleLineAmounts(line.id, lines, amounts) : null;
 		const byAmount = !document && (options.line_shape === 'amount' || (options.partial_line_shape === 'amount' && ratio !== 1));
+		const source = originalLine.get(line.id);
 
 		// Con la costura la línea nace con su ítem (sin patrón B: `standardize_invoice_items` no corre para la API).
 		const [row] = (await runner.query(
@@ -1379,13 +1570,13 @@ export async function insertMirrorCreditNote(
 				unit_price_contract_currency, unit_price_invoice_currency, discount_pct,
 				subtotal_contract_currency, subtotal_invoice_currency, tax_amount_contract_currency, tax_amount_invoice_currency,
 				total_contract_currency, total_invoice_currency, contract_currency, invoice_currency, fx_contract_to_invoice, fx_rate_source,
-				status, issue_date, billing_period_start, billing_period_end
+				status, issue_date, billing_period_start, billing_period_end, fx_rate_date
 			) VALUES (
 				$25::uuid, $1, $2, $3, $4, $5, $6, $7,
 				$8, $9, $10,
 				$11, $12, $13, $14,
 				$15, $16, $17, $18, $19, $20,
-				$21, $22, $23, $24
+				$21, $22, $23, $24, $26::date
 			) RETURNING id`,
 			[
 				holdingId,
@@ -1412,15 +1603,20 @@ export async function insertMirrorCreditNote(
 				amount.tax_invoice === null ? null : -amount.tax_invoice,
 				-round2(amount.subtotal + amount.tax),
 				amount.subtotal_invoice === null ? null : -round2(amount.subtotal_invoice + (amount.tax_invoice ?? 0)),
-				original.contract_currency,
+				multicurrency ? (toText(source?.contract_currency) ?? original.contract_currency) : original.contract_currency,
 				original.invoice_currency,
-				original.fx_contract_to_invoice,
-				CHANGES_FX_RATE_SOURCE,
+				multicurrency
+					? source
+						? toNullableNumber(source.fx_contract_to_invoice)
+						: original.fx_contract_to_invoice
+					: original.fx_contract_to_invoice,
+				multicurrency ? (toText(source?.fx_rate_source) ?? null) : CHANGES_FX_RATE_SOURCE,
 				CREDIT_NOTE_STATUS,
 				effectiveDate,
 				period_start,
 				line.billing_period_end,
 				line.contract_item_id ?? null,
+				multicurrency ? (toText(source?.fx_rate_date)?.slice(0, 10) ?? null) : null,
 			]
 		)) as Row[];
 

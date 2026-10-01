@@ -23,6 +23,7 @@ import { ContractSubscriptionsService } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { EditInvoiceDto } from './dtos/contract-invoice-edit.dto';
+import { MC_UF_ITEM, mcInvoiceRow, mcStoredLine, multicurrencyRoute, revaluedHeaders, revaluedLines } from './multicurrency.test-fixtures';
 
 type Row = Record<string, unknown>;
 
@@ -603,6 +604,129 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 	});
 });
 
+describe('ContractInvoiceEditService · multimoneda (spec-multimoneda §4)', () => {
+	/** Factura CLP de un contrato CLP multimoneda con una línea USD (950) y una UF (38.000). */
+	const multicurrency = () => {
+		const mcInvoice = invoiceRow(INV_A, {
+			contract_currency: 'CLP',
+			invoice_currency: 'CLP',
+			fx_contract_to_invoice: null,
+			amount_contract_currency: '1270000',
+			amount_invoice_currency: '1330000',
+			vat: '252700',
+			total_invoice_currency: '1582700',
+			lines_count: '2',
+		});
+		const usd = lineRow(INV_A, {
+			unit_price_invoice_currency: '95000',
+			subtotal_invoice_currency: '950000',
+			tax_amount_invoice_currency: '180500',
+			total_invoice_currency: '1130500',
+			line_currency: 'USD',
+			line_fx: '950',
+			line_fx_rate_source: 'contract',
+		});
+		const uf = lineRow(INV_A, {
+			id: '66666666-6666-4666-8666-666666666666',
+			contract_item_id: MC_UF_ITEM,
+			product_name: 'Soporte',
+			quantity: '1',
+			unit_price_contract_currency: '10',
+			subtotal_contract_currency: '10',
+			tax_amount_contract_currency: '1.9',
+			total_contract_currency: '11.9',
+			unit_price_invoice_currency: '380000',
+			subtotal_invoice_currency: '380000',
+			tax_amount_invoice_currency: '72200',
+			total_invoice_currency: '452200',
+			line_currency: 'UF',
+			line_fx: '38000',
+			line_fx_rate_source: 'contract',
+		});
+		const built = build({ invoices: { [INV_A]: mcInvoice }, lines: { [INV_A]: [usd, uf] } });
+		const base = built.runner.query.getMockImplementation()!;
+		const mc = multicurrencyRoute({
+			contract_id: CONTRACT_ID,
+			invoices: { [INV_A]: mcInvoiceRow(INV_A, CONTRACT_ID) },
+			lines: {
+				[INV_A]: [
+					mcStoredLine(LINE, 'USD', {
+						subtotal_contract_currency: '1200',
+						unit_price_contract_currency: '100',
+						tax_amount_contract_currency: '228',
+					}),
+					mcStoredLine(String(uf.id), 'UF'),
+				],
+			},
+		});
+		const route = (sql: string, params: unknown[] = []) => {
+			if (sql.includes('c.billing_anchor_day'))
+				return [
+					{
+						...contractRow,
+						contract_currency: 'CLP',
+						invoice_currency: 'CLP',
+						fx_invoice_policy: 'fixed',
+						requires_multicurrency_billing: true,
+					},
+				];
+
+			return mc(sql, params) ?? base(sql, params);
+		};
+
+		built.runner.query.mockImplementation(route);
+		(built.dataSource.query as unknown as jest.Mock).mockImplementation(route);
+
+		return built;
+	};
+
+	it('preview y PUT: la línea USD editada se valoriza con USD → CLP, la UF conserva su par; encabezado = Σ líneas con FX NULL', async () => {
+		const { service, runner } = multicurrency();
+		const body = { lines: [lineEdit({ quantity: 12 })], deviation: { type: 'upsell' as const, reason: 'Dos usuarios más' } };
+		const preview = await service.previewEdit(CONTRACT_ID, INV_A, body, HOLDING, TODAY);
+
+		expect(preview.lines[0].after).toMatchObject({ currency: 'USD', fx: 950, subtotal_invoice_currency: 1140000 });
+		expect(preview.invoice.after).toMatchObject({
+			fx_contract_to_invoice: null,
+			amount_invoice_currency: 1520000,
+			amount_contract_currency: 1450000,
+		});
+
+		await service.edit(CONTRACT_ID, INV_A, body, HOLDING, 'auth-1', TODAY);
+		const [pairUpdate] = calls(runner.query, 'contract_currency = COALESCE($4, contract_currency)');
+
+		expect(pairUpdate[1]).toEqual([LINE, INV_A, HOLDING, 'USD', 950, 'contract']);
+		expect(revaluedLines(runner.query.mock.calls)).toEqual([
+			expect.objectContaining({ currency: 'USD', fx: 950, subtotal: 1140000, tax: 216600 }),
+			expect.objectContaining({ currency: 'UF', fx: 38000, subtotal: 380000, tax: 72200 }),
+		]);
+		expect(revaluedHeaders(runner.query.mock.calls)).toEqual([
+			{
+				id: INV_A,
+				amount_contract_currency: 1450000,
+				vat: 288800,
+				amount_invoice_currency: 1520000,
+				total_invoice_currency: 1808800,
+				fx: null,
+			},
+		]);
+	});
+
+	it('sin el flag no se consulta ni se escribe nada por par (comportamiento de siempre)', async () => {
+		const { service, runner } = build();
+
+		await service.edit(
+			CONTRACT_ID,
+			INV_A,
+			{ lines: [lineEdit({ quantity: 12 })], deviation: { type: 'upsell', reason: 'x' } },
+			HOLDING,
+			'auth-1',
+			TODAY
+		);
+		expect(sqlOf(runner.query).some((sql) => sql.includes('multimoneda'))).toBe(false);
+	});
+});
+
 describe('ContractsController (editar Por Emitir, desvíos, masivo y borrador del ERP)', () => {
 	const edit = {
 		previewEdit: jest.fn().mockResolvedValue({}),
@@ -625,6 +749,7 @@ describe('ContractsController (editar Por Emitir, desvíos, masivo y borrador de
 		invoices as unknown as ContractInvoicesService,
 		{} as ContractInvoiceDescriptionsService,
 		edit as unknown as ContractInvoiceEditService,
+		{} as never,
 		{} as never,
 		{} as never,
 		{} as never

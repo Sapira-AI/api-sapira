@@ -11,6 +11,7 @@ import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
 import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { ContractInvoicePartialPoService } from './contract-invoice-partial-po.service';
@@ -22,6 +23,7 @@ import { ContractsService } from './contracts.service';
 import { ActivateContractsDto, BulkContractIdsDto, BulkContractSettingsDto } from './dtos/bulk-contracts.dto';
 import { ConsumptionBulkDto, QueryConsumptionPendingDto, UpsertConsumptionDto } from './dtos/consumption.dto';
 import { ContractChangeRequestDto } from './dtos/contract-changes.dto';
+import { ConsolidateInvoicesDto, UndoConsolidationDto } from './dtos/contract-invoice-consolidation.dto';
 import { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
 import {
 	PreviewDescriptionTemplateDto,
@@ -65,7 +67,8 @@ const CONTRACT_PARAM = { name: 'id', type: String, description: 'UUID del contra
  * y operaciones sobre facturas del contrato (`spec-facturas-en-contrato-360.md` §3.1–3.3: enviar al ERP ahora, registrar emisión externa,
  * reprogramar y tipo de cambio por factura, cada una con `preview`; §3.6–3.7a: constructor de descripción y referencias OC/HES; §3.4: editar
  * una Por Emitir con conciliador de desvíos, masivo de encabezado y restablecer el borrador del ERP; §3.5: reorganizar el cronograma; §3.7b y
- * §3.8: facturar por OC, anular con NC espejo y reemitir, NC de descuento parcial sobre una emitida).
+ * §3.8: facturar por OC, anular con NC espejo y reemitir, NC de descuento parcial sobre una emitida) y consolidación opcional entre
+ * contratos (`spec-multimoneda-contrato.md` §7: candidatas, preview, aplicar y deshacer).
  * Holding por `HoldingScopeGuard` + `@HoldingId()` (`docs/v2-rediseno/autorizacion-y-tenancy.md`).
  */
 @ApiTags('Contracts')
@@ -88,7 +91,8 @@ export class ContractsController {
 		private readonly contractInvoiceEditService: ContractInvoiceEditService,
 		private readonly contractInvoiceReorganizeService: ContractInvoiceReorganizeService,
 		private readonly contractInvoiceVoidService: ContractInvoiceVoidService,
-		private readonly contractInvoicePartialPoService: ContractInvoicePartialPoService
+		private readonly contractInvoicePartialPoService: ContractInvoicePartialPoService,
+		private readonly contractInvoiceConsolidationService: ContractInvoiceConsolidationService
 	) {}
 
 	@Get()
@@ -257,6 +261,67 @@ export class ContractsController {
 	})
 	async activate(@Body() body: ActivateContractsDto, @HoldingId() holdingId: string, @Request() req: AuthRequest) {
 		return await this.contractActivationService.activate(body.ids, holdingId, authIdOf(req));
+	}
+
+	// ---------------------------------------------------------------- consolidación entre contratos (spec multimoneda §7)
+	// Rutas fijas `invoices/consolidations…` antes de `:id` para que Nest no las capture como un id de contrato.
+
+	@Post('invoices/consolidations/preview')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Vista previa: consolidar facturas de varios contratos',
+		description:
+			'`{ invoice_ids[] (2–50), notes? }`: Por Emitir activas de 2 o más contratos con la misma compañía, razón social receptora, moneda de factura, mes de emisión, documento, exportación y serie (los clientes comerciales pueden diferir). Valoriza cada línea por su par (spot entero si alguna línea que convierte es spot), antepone el número de contrato a la glosa, aporte por contrato y contrato principal (mayor aporte). No escribe nada',
+	})
+	@ApiResponse({
+		status: 200,
+		description:
+			'{ invoices[{ id, invoice_number, contract_id, contract_number, client_id, client_name, issue_date, invoice_series, amounts, lines_count, auto_invoice, blockers[] }], contributions[{ contract_id, contract_number, client_id, client_name, invoice_ids, lines_count, contract_currency, amount_contract_currency, subtotal_invoice_currency, subtotal_by_currency[{ currency, subtotal }], weight, main }], main_contract_id, header{ contract_id, client_id, …, contract_currency_mode, amount_contract_currency, vat, amount_invoice_currency, total_invoice_currency, fx_contract_to_invoice, spot, pairs[], auto_invoice, auto_send_to_erp, requires_references_for_billing }, lines[{ source_line_id, contract_id, contract_number, description, currency, fx, *_invoice_currency, spot_propagated }], references{ invoice_reference_ids, contract_reference_ids, items[{ kind, code, source }], deduped }, warnings[], blockers[], can_apply }',
+	})
+	@ApiResponse({ status: 404, description: 'Alguna factura no existe o es de otro holding' })
+	async consolidationPreview(@Body() body: ConsolidateInvoicesDto, @HoldingId() holdingId: string) {
+		return await this.contractInvoiceConsolidationService.preview(body, holdingId);
+	}
+
+	@Post('invoices/consolidations')
+	@ApiOperation({
+		summary: 'Consolidar facturas de varios contratos',
+		description:
+			'Una transacción: documento `Unificada` nuevo (grupo propio; encabezado del contrato principal; `auto_invoice` = AND de los orígenes; `requires_references_for_billing` heredado) con COPIAS de las líneas (prefijo de contrato, `contract_id` de la línea, tasa por par), referencias OC/HES sin repetir tipo+folio, orígenes `is_active = false` con `consolidated_into_invoice_id`, y un evento INVOICE_CONSOLIDATED por contrato',
+	})
+	@ApiResponse({ status: 201, description: 'El preview más `applied`, `consolidated_invoice_id`, `event_ids`, `invoice`' })
+	@ApiResponse({
+		status: 409,
+		description:
+			'`code: blocked` con `blockers[]` (credit_note, not_pending, already_consolidated, legacy_invoice, no_contract, partial_billing_invoice, open_consumption, sent_to_erp_draft (action erp_reset), period_closed, single_contract, company_mismatch, entity_mismatch, currency_mismatch, month_mismatch, document_type_mismatch, export_type_mismatch, series_mismatch, tax_rate_mismatch)',
+	})
+	async consolidate(@Body() body: ConsolidateInvoicesDto, @HoldingId() holdingId: string, @Request() req: AuthRequest) {
+		return await this.contractInvoiceConsolidationService.apply(body, holdingId, authIdOf(req));
+	}
+
+	@Post('invoices/consolidations/:invoiceId/undo')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Deshacer una consolidación',
+		description:
+			'`{ reason }`. Solo un consolidado v2 (con evento INVOICE_CONSOLIDATED) Por Emitir y sin borrador en el ERP: pasa a Cancelada (no se borra), los orígenes vuelven a `is_active = true` sin `consolidated_into_invoice_id`; evento INVOICE_CONSOLIDATION_UNDONE por contrato',
+	})
+	@ApiParam(INVOICE_PARAM)
+	@ApiResponse({
+		status: 200,
+		description: '{ consolidated, origins[], undone, consolidated_invoice_id, status: Cancelada, restored_invoice_ids, event_ids }',
+	})
+	@ApiResponse({
+		status: 409,
+		description: '`code: blocked` con `blockers[]` (not_consolidated, legacy_unified, not_pending, sent_to_erp_draft, no_origins)',
+	})
+	async undoConsolidation(
+		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+		@Body() body: UndoConsolidationDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractInvoiceConsolidationService.undo(invoiceId, body, holdingId, authIdOf(req));
 	}
 
 	@Delete(':id')
@@ -1133,6 +1198,27 @@ export class ContractsController {
 		@Request() req: AuthRequest
 	) {
 		return await this.contractInvoicePartialPoService.apply(id, invoiceId, body, holdingId, authIdOf(req));
+	}
+
+	@Get(':id/invoices/:invoiceId/consolidation-candidates')
+	@ApiOperation({
+		summary: 'Candidatas para consolidar con una factura',
+		description:
+			'Por Emitir activas de OTROS contratos del holding con la misma compañía, razón social receptora, moneda de factura, mes de emisión, documento y exportación (hasta 100), cada una con sus bloqueos (serie, ERP, OC, consumo abierto, período) y `eligible`; más la factura base y por qué ella misma no se podría consolidar',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiParam(INVOICE_PARAM)
+	@ApiResponse({
+		status: 200,
+		description:
+			'{ invoice{ id, invoice_number, contract_id, contract_number, …, eligible, blockers[] }, base_blockers[], candidates[{ id, invoice_number, contract_id, contract_number, client_id, client_name, issue_date, invoice_series, contract_currency, invoice_currency, amount_contract_currency, amount_invoice_currency, total_invoice_currency, lines_count, auto_invoice, eligible, blockers[] }], total }',
+	})
+	async consolidationCandidates(
+		@Param('id') id: string,
+		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+		@HoldingId() holdingId: string
+	) {
+		return await this.contractInvoiceConsolidationService.candidates(id, invoiceId, holdingId);
 	}
 
 	// ---------------------------------------------------------------- constructor de descripción y referencias (spec facturas §3.6–3.7a)

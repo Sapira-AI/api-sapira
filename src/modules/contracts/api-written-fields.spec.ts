@@ -4,6 +4,7 @@ import * as path from 'path';
 import { API_WRITER_SQL, setApiWriter, withApiWriter } from './api-writer';
 import {
 	contractFxNeedsRefresh,
+	directSystemPart,
 	frequencyMultiplier,
 	invoiceTermsSql,
 	itemCategoriaSql,
@@ -105,6 +106,7 @@ describe('costura en todos los servicios v2 que escriben (texto de los servicios
 				'contract-bulk.service.ts',
 				'contract-changes.service.ts',
 				'contract-drafts.service.ts',
+				'contract-invoice-consolidation.service.ts',
 				'contract-invoice-descriptions.service.ts',
 				'contract-invoice-edit.service.ts',
 				'contract-invoice-partial-po.service.ts',
@@ -295,6 +297,72 @@ describe('refreshInvoiceSystemAmounts: auto_populate_invoice_fx_to_system con el
 			['h-1', 'CLP', 'USD', '2026-10-01', 'fixed_period'],
 			['h-1', 'EUR', 'USD', '2026-11-01', 'fixed_period'],
 		]);
+	});
+
+	it('sin vueltas (01-10): líneas ya en moneda del sistema entran directo; solo el resto en moneda de contrato se convierte', async () => {
+		const itemRates = [{ from_currency: 'USD', to_currency: 'CLP', rate: 950, period_start: '2026-01-01', period_end: '2026-12-31' }];
+		const invoices: Row[] = [
+			// Contrato CLP, sistema USD: línea USD 1.000 (ítem USD → 950.000 CLP en el encabezado) + línea CLP 95.000.
+			{
+				id: 'i-mixta',
+				contract_currency: 'CLP',
+				fx_date: '2026-10-01',
+				system_currency: 'USD',
+				fx_policy: 'fixed_period',
+				amount_contract_currency: '1045000',
+				system_lines: [{ subtotal: '1000', period_start: '2026-10-01' }],
+				item_rates: itemRates,
+			},
+			// Todo en USD y sin tasa CLP → USD del holding: igual se completa (directo), FX NULL.
+			{
+				id: 'i-solo-usd',
+				contract_currency: 'CLP',
+				fx_date: '2026-11-01',
+				system_currency: 'USD',
+				fx_policy: 'fixed_period',
+				amount_contract_currency: '475000',
+				system_lines: JSON.stringify([{ subtotal: 500, period_start: '2026-11-01' }]),
+				item_rates: itemRates,
+			},
+		];
+		const { runner, query } = db((sql, params) => {
+			if (sql.includes('COALESCE(hs.system_currency')) return invoices;
+			if (sql.includes('calculate_system_fx_rate')) return [{ rate: params[3] === '2026-10-01' ? '1000' : null }];
+
+			return undefined;
+		});
+
+		await refreshInvoiceSystemAmounts(runner, 'h-1', ['i-mixta', 'i-solo-usd']);
+		const [select] = query.mock.calls;
+
+		expect(select[0]).toContain('UPPER(TRIM(ii.contract_currency)) <> UPPER(TRIM(c.contract_currency))');
+		expect(select[0]).toContain(`r.purpose = 'item'`);
+		const updates = query.mock.calls.filter(([sql]) => (sql as string).startsWith('UPDATE invoices'));
+
+		// 1.000 USD directo + (1.045.000 − 1.000 × 950) = 95.000 CLP ÷ 1.000 = 95 USD → 1.095 (por el encabezado serían 1.045).
+		expect(updates[0][0]).toContain(
+			'amount_system_currency = ROUND($5::numeric + ROUND(CASE WHEN $7::boolean THEN $6::numeric / NULLIF($3::numeric, 0) ELSE $6::numeric * $3::numeric END, 2), 2)'
+		);
+		expect(updates[0][1]).toEqual(['i-mixta', 'h-1', 1000, 'USD', 1000, 95000, true]);
+		expect(updates[1][0]).toContain('amount_system_currency = ROUND($5::numeric + 0, 2)');
+		expect(updates[1][1]).toEqual(['i-solo-usd', 'h-1', null, 'USD', 500, 0, true]);
+	});
+
+	it('directSystemPart: sin líneas en moneda del sistema → null; tasa ítem → contrato por línea (inversa incluida)', () => {
+		expect(directSystemPart({ system_lines: [] }, 'CLP', 'USD', '2026-10-01')).toBeNull();
+		expect(
+			directSystemPart(
+				{
+					amount_contract_currency: 110500,
+					system_lines: [{ subtotal: 100.5, period_start: null }],
+					item_rates: [{ from_currency: 'CLP', to_currency: 'USD', rate: 0.001, period_start: '2026-01-01', period_end: '2026-12-31' }],
+				},
+				'CLP',
+				'USD',
+				'2026-10-01'
+			)
+			// 100,5 USD × (1 / 0,001) = 100.500 CLP; resto 110.500 − 100.500 = 10.000 CLP.
+		).toEqual({ subtotal: 100.5, rest_contract: 10000 });
 	});
 
 	it('systemFxDivides: solo fixed_period divide (tabla del holding inversa); monthly_avg y sin política multiplican', () => {

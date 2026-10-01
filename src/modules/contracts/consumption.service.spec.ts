@@ -27,6 +27,7 @@ import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { ConsumptionBulkDto, QueryConsumptionPendingDto, UpsertConsumptionDto } from './dtos/consumption.dto';
 import { DEFAULT_TEMPLATE } from './invoice-description';
+import { mcInvoiceRow, mcStoredLine, multicurrencyRoute, revaluedHeaders, revaluedLines } from './multicurrency.test-fixtures';
 import { asciiGlosa } from './pricing-engine';
 
 type Row = Record<string, unknown>;
@@ -660,6 +661,35 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 			alias.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, on_issued: 'block' }, HOLDING, 'auth-1'),
 			ConflictException
 		);
+	});
+
+	it('multimoneda: la complementaria no toma la tasa del encabezado clonado; su línea se valoriza con su par y el encabezado = Σ líneas', async () => {
+		const world = issuedWorld();
+		const mc = multicurrencyRoute({
+			contract_id: CONTRACT,
+			invoices: { 'inv-new': mcInvoiceRow('inv-new', CONTRACT) },
+			lines: { 'inv-new': [mcStoredLine('line-new-1', 'USD', { subtotal_contract_currency: '400', tax_amount_contract_currency: '76' })] },
+		});
+		const additional = build((sql, params) => {
+			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
+			if (sql.includes('ii.billing_period_start = $3::date')) return [paidLine(standardLine)];
+			if (sql.includes('FROM invoices i') && sql.includes('WHERE i.id = $1') && sql.includes('requires_multicurrency_billing'))
+				return [{ ...paidHeader, requires_multicurrency_billing: true }];
+
+			return mc(sql, params) ?? world(sql, params);
+		});
+		const result = await additional.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5, apply_as: 'additional' }, HOLDING, 'auth-1');
+		const [line] = calls(additional.runner.query, 'INSERT INTO invoice_items');
+
+		// $19 = tasa de la línea: NULL al insertar (la pone la valorización por par).
+		expect((line[1] as unknown[])[18]).toBeNull();
+		expect(revaluedLines(additional.runner.query.mock.calls)).toEqual([
+			expect.objectContaining({ id: 'line-new-1', currency: 'USD', fx: 950, subtotal: 380000, tax: 72200 }),
+		]);
+		expect(revaluedHeaders(additional.runner.query.mock.calls)).toEqual([
+			expect.objectContaining({ id: 'inv-new', fx: 950, amount_invoice_currency: 380000, amount_contract_currency: 360000 }),
+		]);
+		expect(result.invoice).toMatchObject({ id: 'inv-new', fx: 950, subtotal: 360000, tax: 72200, total: 452200 });
 	});
 
 	it('ítem estándar con la factura del período emitida: recompute → 409 item_not_metered con la emitida y las dos salidas; additional y reissue funcionan con la misma diferencia', async () => {
@@ -1500,6 +1530,7 @@ describe('controladores de consumo', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never

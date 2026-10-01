@@ -14,6 +14,8 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsService } from './contracts.service';
 import { invoiceFx, type LineState } from './invoice-edit';
 import { PARTIAL_BY_PO_SPLIT_REASON, type PartialByPoPlan, planPartialByPo } from './invoice-partial-po';
+import { MULTICURRENCY_CODES, revalueLineCurrency } from './multicurrency';
+import { revalueMulticurrencyInvoices } from './multicurrency-invoices';
 
 import type { PartialByPoDto } from './dtos/contract-invoice-partial-po.dto';
 
@@ -78,6 +80,8 @@ export class ContractInvoicePartialPoService {
 			const visibleId = await insertLineState(runner, holdingId, invoiceIdCovered, write.visible, {
 				fx: write.covered_fx,
 				fx_rate_source: coveredSource,
+				// Multimoneda: el documento cubierto está en una sola moneda de línea (si no, `net_exact_multi_pair`); la visible nace en ella.
+				...(plan.line_currency ? { currency: plan.line_currency } : {}),
 			});
 
 			for (const line of write.covered)
@@ -126,23 +130,20 @@ export class ContractInvoicePartialPoService {
 							WHERE invoice_id = $1 AND holding_id = $2 AND contract_item_id = $4 AND period_start = $5::date`,
 							[invoiceIdCovered, holdingId, remainderId, line.state.contract_item_id, line.state.billing_period_start, userId || null]
 						);
+				// Multimoneda: las líneas del saldo no toman la tasa del encabezado nuevo; quedan sin tasa y `revalueMulticurrencyInvoices` les da
+				// la de su par (fija pactada del período o spot) y el encabezado = Σ líneas.
+				const remainderFx = plan.line_currency ? null : write.remainder.fx;
+
 				for (const line of write.moves)
-					await this.updateLine(
-						runner,
-						holdingId,
-						line.id,
-						remainderId,
-						line.state,
-						write.remainder.fx,
-						PARTIAL_BY_PO_LINE_FX_SOURCE,
-						null
-					);
+					await this.updateLine(runner, holdingId, line.id, remainderId, line.state, remainderFx, PARTIAL_BY_PO_LINE_FX_SOURCE, null);
 				for (const line of write.creates)
 					await insertLineState(runner, holdingId, remainderId, line.state, {
-						fx: write.remainder.fx,
+						fx: remainderFx,
 						fx_rate_source: PARTIAL_BY_PO_LINE_FX_SOURCE,
 						source_line_id: line.from_line_id,
+						...(plan.line_currency ? { currency: plan.line_currency } : {}),
 					});
+				if (plan.line_currency) await revalueMulticurrencyInvoices(runner, holdingId, [remainderId]);
 			}
 			// Descuento puntual que pasó al saldo: su fila de desvío lo sigue y la cubierta pierde el devengo si ya no le queda ninguno.
 			if (remainderId && write.one_off_share > 0)
@@ -231,7 +232,7 @@ export class ContractInvoicePartialPoService {
 		today: string,
 		dto: PartialByPoDto,
 		lock: boolean
-	): Promise<PartialByPoPlan> {
+	): Promise<PartialByPoPlan & { line_currency?: string }> {
 		const context = await this.invoices.loadContext(db, contractId, holdingId, today);
 		const invoice = await this.invoices.loadInvoice(db, contractId, invoiceId, holdingId, lock);
 		const [editCtx, [generator], references] = await Promise.all([
@@ -242,6 +243,12 @@ export class ContractInvoicePartialPoService {
 				holdingId,
 			]) as Promise<Row[]>,
 		]);
+		// Multimoneda (spec-multimoneda §4): facturar por OC fija UN neto exacto en moneda de factura (una tasa); solo aplica si todas las líneas
+		// del documento están en una misma moneda. Con dos o más → `net_exact_multi_pair`.
+		const multicurrency = editCtx.multicurrency ?? null;
+		const pairCurrencies = multicurrency
+			? [...new Set(editCtx.lines.filter((line) => !line.visible_line_id).map((line) => revalueLineCurrency(line, multicurrency)))]
+			: [];
 		const plan = planPartialByPo(
 			{
 				invoice,
@@ -253,7 +260,7 @@ export class ContractInvoicePartialPoService {
 					contract_number: editCtx.contract_number,
 					client_name: editCtx.client_name,
 					references: editCtx.references,
-					contract_currency: invoice.contract_currency,
+					contract_currency: pairCurrencies.length === 1 ? pairCurrencies[0] : invoice.contract_currency,
 					invoice_currency: invoice.invoice_currency,
 					fx_rate: isMultiCurrency(invoice) ? invoiceFx(invoice) : null,
 					max_chars: editCtx.max_chars,
@@ -268,8 +275,16 @@ export class ContractInvoicePartialPoService {
 		);
 
 		if (plan.errors.length) throw validationException(plan.errors);
+		if (pairCurrencies.length > 1) {
+			plan.blockers.push({
+				code: MULTICURRENCY_CODES.net_exact_multi_pair,
+				message: `Facturar por OC fija un neto exacto con una sola tasa y esta factura tiene líneas en ${pairCurrencies.join(', ')}`,
+				next_step: 'Mueve las líneas de cada moneda a facturas separadas (Reorganizar) o factura sin OC parcial',
+			});
+			plan.can_apply = false;
+		}
 
-		return plan;
+		return pairCurrencies.length === 1 ? { ...plan, line_currency: pairCurrencies[0] } : plan;
 	}
 
 	/**

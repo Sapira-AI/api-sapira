@@ -658,7 +658,7 @@
   "checks": [
    {
     "name": "contract_fx_period_rates_purpose_check",
-    "expression": "purpose = ANY (ARRAY['company'::text, 'invoice'::text])"
+    "expression": "purpose = ANY (ARRAY['company'::text, 'invoice'::text, 'item'::text])"
    },
    {
     "name": "contract_fx_period_rates_rate_check",

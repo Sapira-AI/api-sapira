@@ -53,6 +53,17 @@ import {
 } from './dtos/contract-changes.dto';
 import { hasPricingModel, type PriceSpecDto, UF_CURRENCY } from './dtos/create-contract.dto';
 import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate } from './invoice-description';
+import {
+	type CodedFieldError,
+	codedValidationException,
+	type ContractConversion,
+	MULTICURRENCY_CODES,
+	MULTICURRENCY_NOT_ENABLED_STEP,
+	pairKey,
+	toContractCurrency,
+	upperCode,
+	valuateLinesByPair,
+} from './multicurrency';
 import { normalizePriceSpec, priceSpecFromRow } from './price-rows';
 import { isMetered, type PricedLine, type PricedSubline, priceLine, type PriceSpec, type QuantitySource, validatePriceSpec } from './pricing-engine';
 
@@ -93,8 +104,12 @@ export interface ChangeContractRow {
 		currency: string | null;
 	};
 	entity: { id: string | null; legal_name: string | null; tax_id: string | null; country: string | null; payment_terms: PaymentTerms | null };
-	/** Tasas fijas de facturación guardadas (`purpose = 'invoice'`). */
+	/** Tasas fijas de facturación guardadas (`purpose = 'invoice'`, por par moneda del ítem → factura). */
 	fx_invoice_rates: FxPeriodRate[];
+	/** Multimoneda: `contracts.requires_multicurrency_billing`. */
+	requires_multicurrency_billing?: boolean;
+	/** Multimoneda: tasas pactadas ítem → contrato (`purpose = 'item'`), para MRR/TCV y el encabezado en moneda de contrato. */
+	fx_item_rates?: FxPeriodRate[];
 	/** Cierre de períodos de la compañía (`get_cutoff_date`), o null. */
 	cutoff_date: string | null;
 	/** Plantilla de descripción de líneas (`contracts.invoice_description_template`, spec facturas §3.6); null/ausente = la glosa de hoy. */
@@ -140,6 +155,12 @@ export interface ChangeInvoiceLineRow {
 	previously_credited?: number;
 	/** Consumo registrado del ítem y período (`consumption_entries`): la cantidad de la línea es esa y ninguna modificación la reinicia. */
 	consumption?: { quantity: number; amount_override: number | null; apply_item_discount: boolean; is_estimated: boolean } | null;
+	/** Multimoneda: moneda de origen de la línea (`invoice_items.contract_currency` = moneda del ítem); los montos `subtotal`… están en ella. */
+	currency?: string | null;
+	/** Multimoneda: tasa de la línea moneda del ítem → factura (`invoice_items.fx_contract_to_invoice`). */
+	fx?: number | null;
+	/** Fecha de la tasa de la línea (`invoice_items.fx_rate_date`). */
+	fx_rate_date?: string | null;
 }
 
 /** Montos (positivos) de una línea de NC espejo: la parte `ratio` de la línea original en ambas monedas. */
@@ -252,8 +273,8 @@ export interface ChangeContext {
 	products: Map<string, string>;
 	/** `billing_conditions`: documento tributario pedido si existe y corresponde a la compañía emisora. */
 	tax_document_type: { id: string; code: string; name: string; kind: string } | null;
-	/** Origen cotización: la cotización si existe en el holding. */
-	quote: { id: string; quote_type: string | null; already_applied: boolean } | null;
+	/** Origen cotización: la cotización si existe en el holding (multimoneda: su moneda, que hereda el ítem nuevo). */
+	quote: { id: string; quote_type: string | null; already_applied: boolean; currency?: string | null } | null;
 	/** `item_add` con precios medidos: métricas facturables del holding referenciadas (id → estado). */
 	billable_metrics?: Map<string, string>;
 	/** `item_add` con `price_id` (etapa 3): precios de catálogo del holding referenciados (solo los que existen). */
@@ -410,11 +431,34 @@ export type WriteOp =
 	  }
 	| { kind: 'update_invoices_fields'; invoice_ids: string[]; set: Record<string, unknown> }
 	| { kind: 'update_invoices_document'; invoice_ids: string[]; document_type: string; export_type: 0 | 1; tax_rate: number }
-	| { kind: 'update_invoices_fx'; targets: Array<{ invoice_id: string; fx: number | null }>; invoice_currency: string }
+	| {
+			kind: 'update_invoices_fx';
+			/** `lines` (multimoneda): tasa por línea (su par); el encabezado toma `fx` (la del único par convertidor o null). */
+			targets: Array<{
+				invoice_id: string;
+				fx: number | null;
+				lines?: Array<{
+					line_id: string;
+					fx: number | null;
+					amounts: { unit_price: number; subtotal: number; tax: number; total: number } | null;
+				}>;
+			}>;
+			invoice_currency: string;
+	  }
 	| {
 			kind: 'insert_fx_rates';
-			rates: Array<{ from_currency: string; to_currency: string; rate: number; period_start: string; period_end: string }>;
+			rates: Array<{
+				/** Default `invoice`; `item` = tasa pactada ítem → contrato (multimoneda). */
+				purpose?: 'invoice' | 'item';
+				from_currency: string;
+				to_currency: string;
+				rate: number;
+				period_start: string;
+				period_end: string;
+			}>;
 	  }
+	/** Multimoneda: enciende/apaga `requires_multicurrency_billing` (va antes de los ítems: el validador de ítems lo lee). */
+	| { kind: 'set_multicurrency'; enabled: boolean }
 	| { kind: 'update_contract'; set: Record<string, unknown>; bypass_end_date_guard: boolean };
 
 export interface ChangeEvent {
@@ -450,6 +494,7 @@ export const ALLOWED_STATES: Record<ChangeType, ContractDerivedStatus[]> = {
 	renewal: ['active', 'pending_renewal', 'expired'],
 	item_add: ['active'],
 	item_change: ['active', 'pending_renewal'],
+	multicurrency: ['active', 'pending_renewal', 'expired'],
 };
 
 export const STATUS_LABELS: Record<ContractDerivedStatus, string> = {
@@ -526,11 +571,39 @@ export const nearestContractEnd = (items: ChangeItemRow[]): string | null => {
 	return ends[0] ?? null;
 };
 
-/** MRR del contrato a una fecha = Σ MRR del ítem madre (misma regla del 360). */
-export const contractMrr = (items: ChangeItemRow[], date: string): number =>
-	round2(buildItemGroups(items, date).reduce((sum, group) => sum + group.mrr, 0));
+/**
+ * Multimoneda (spec §5): copia del ítem con sus montos (mensual, valor) en moneda de contrato con la tasa pactada ítem → contrato (a su
+ * inicio). Sin conversión o en la moneda del contrato, el mismo ítem.
+ */
+const inContractCurrency = (item: ChangeItemRow, conversion?: ContractConversion | null): ChangeItemRow => {
+	if (!conversion || !item.currency || upperCode(item.currency) === upperCode(conversion.contract_currency)) return item;
+	const date = item.start_date ?? '';
+	const convert = (value: number | null) =>
+		value === null || value === undefined
+			? value
+			: toContractCurrency(num(value), item.currency, conversion.contract_currency, conversion.item_rates, date);
 
-const totalValue = (items: ChangeItemRow[]) => round2(items.reduce((sum, item) => sum + num(item.final_price), 0));
+	return { ...item, monthly_price: convert(item.monthly_price), final_price: convert(item.final_price), price: convert(item.price) };
+};
+
+/** MRR del contrato a una fecha = Σ MRR del ítem madre (misma regla del 360); multimoneda: cada ítem a moneda de contrato con su tasa `item`. */
+export const contractMrr = (items: ChangeItemRow[], date: string, conversion?: ContractConversion | null): number =>
+	round2(
+		buildItemGroups(
+			items.map((item) => inContractCurrency(item, conversion)),
+			date
+		).reduce((sum, group) => sum + group.mrr, 0)
+	);
+
+/** TCV (`contracts.total_value`) = Σ `final_price`; multimoneda: cada ítem × su tasa `item` (spec §5). */
+const totalValue = (items: ChangeItemRow[], conversion?: ContractConversion | null) =>
+	round2(items.reduce((sum, item) => sum + num(inContractCurrency(item, conversion).final_price), 0));
+
+/** Conversión del contrato (moneda + tasas `item`), con tasas extra que agrega el propio cambio. */
+export const conversionOf = (contract: ChangeContractRow, extra: FxPeriodRate[] = []): ContractConversion => ({
+	contract_currency: upperCode(contract.contract_currency),
+	item_rates: [...(contract.fx_item_rates ?? []), ...extra],
+});
 
 /** Por Emitir activa recalculable: no legacy, no unificada, no NC/ND. */
 export const isEditablePending = (invoice: ChangeInvoiceRow) =>
@@ -603,6 +676,9 @@ export const engineContract = (contract: ChangeContractRow, overrides: Partial<B
 	fx_invoice_policy: contract.fx_invoice_policy,
 	payment_terms: cleanPaymentTerms(contract.payment_terms) ?? cleanPaymentTerms(contract.entity.payment_terms),
 	fixed_invoice_rates: contract.fx_invoice_rates,
+	// Multimoneda: tasas pactadas ítem → contrato (encabezado y totales en moneda de contrato).
+	fixed_item_rates: contract.fx_item_rates ?? [],
+	multicurrency: contract.requires_multicurrency_billing === true,
 	document_type: contract.document_type,
 	company: { country: contract.company.country, tax_rate: contract.company.tax_rate },
 	entity_country: contract.entity.country,
@@ -643,6 +719,7 @@ export const engineItemFromNew = (item: NewItemRow): BillingEngineItem => ({
 	is_recurring: item.is_recurring,
 	final_price: item.final_price,
 	price: item.price_spec ?? null,
+	currency: item.currency,
 });
 
 /** Ítem existente al formato del generador (solo lo que necesita `itemPeriods`/`nextPeriodStart`). */
@@ -731,7 +808,7 @@ class Planner {
 	readonly blockers: ChangeBlocker[] = [];
 	readonly warnings: ChangeWarning[] = [];
 	readonly ops: WriteOp[] = [];
-	readonly errors: FieldError[] = [];
+	readonly errors: CodedFieldError[] = [];
 	readonly added: PreviewItem[] = [];
 	readonly adjusted: PreviewItem[] = [];
 	readonly ended: ChangePreview['items']['ended'] = [];
@@ -744,6 +821,11 @@ class Planner {
 	bypassEndDate = false;
 	mrrDelta = 0;
 	rsmFromMonth: string | null = null;
+	/** Multimoneda: tasas que agrega el propio cambio (ya en `ops`), para el generador y el MRR/TCV del preview. */
+	extraInvoiceRates: FxPeriodRate[] = [];
+	extraItemRates: FxPeriodRate[] = [];
+	/** Multimoneda: el cambio enciende/apaga el flag (`set_multicurrency`). */
+	multicurrencyAfter: boolean | null = null;
 	private counter = 0;
 	/** Encabezados ya marcados para recálculo (una sola vez por factura). */
 	private readonly headersTouched = new Map<string, { before: number; lines: number; change: string }>();
@@ -772,8 +854,40 @@ class Planner {
 	warn(code: string, message: string) {
 		if (!this.warnings.some((warning) => warning.code === code && warning.message === message)) this.warnings.push({ code, message });
 	}
-	error(field: string, message: string) {
-		this.errors.push({ field, message });
+	error(field: string, message: string, code?: string) {
+		this.errors.push({ field, message, ...(code ? { code } : {}) });
+	}
+
+	/** Multimoneda vigente después del cambio (el guardado o el que enciende/apaga el propio cambio). */
+	get multicurrency(): boolean {
+		return this.multicurrencyAfter ?? this.ctx.contract.requires_multicurrency_billing === true;
+	}
+
+	/** Contrato para el generador con lo que agrega el cambio (tasas nuevas y el flag). */
+	engineContractAfter(): BillingEngineContract {
+		const contract = this.ctx.contract;
+
+		return engineContract(contract, {
+			fixed_invoice_rates: [...contract.fx_invoice_rates, ...this.extraInvoiceRates],
+			fixed_item_rates: [...(contract.fx_item_rates ?? []), ...this.extraItemRates],
+			multicurrency: this.multicurrency,
+		});
+	}
+
+	/** Un monto de un ítem en moneda de contrato (ΔMRR de eventos, multimoneda §5); sin conversión o en la moneda del contrato, igual. */
+	toContract(amount: number, currency: string | null | undefined, date: string): number {
+		const conversion = this.conversion();
+
+		if (!conversion || !currency || upperCode(currency) === conversion.contract_currency) return amount;
+
+		return toContractCurrency(amount, currency, conversion.contract_currency, conversion.item_rates, date);
+	}
+
+	/** Conversión a moneda de contrato para MRR/TCV (solo multimoneda; sin flag, los montos ya están en moneda de contrato). */
+	conversion(): ContractConversion | null {
+		return this.multicurrency || this.ctx.contract.requires_multicurrency_billing === true
+			? conversionOf(this.ctx.contract, this.extraItemRates)
+			: null;
 	}
 	newKey() {
 		this.counter += 1;
@@ -1077,10 +1191,27 @@ class Planner {
 	addGeneratedInvoices(items: NewItemRow[], firstPeriod: 'cycle' | 'immediate') {
 		if (!items.length) return;
 		const contract = this.ctx.contract;
-		const engine = generateInvoices({ contract: engineContract(contract), items: items.map(engineItemFromNew) });
+		const engine = generateInvoices({ contract: this.engineContractAfter(), items: items.map(engineItemFromNew) });
 		const contractCurrency = upper(contract.contract_currency);
 		const invoiceCurrency = upper(contract.invoice_currency) || contractCurrency;
-		const usesFixedFx = contract.fx_invoice_policy === 'fixed' && invoiceCurrency !== contractCurrency;
+		// Multimoneda: la valorización es por línea (cada par con su tasa); los bloqueos van por par (`fx_missing`).
+		const perLine = engine.fx_missing !== undefined;
+		const usesFixedFx = !perLine && contract.fx_invoice_policy === 'fixed' && invoiceCurrency !== contractCurrency;
+
+		for (const missing of engine.fx_missing ?? []) {
+			if (missing.purpose === 'invoice')
+				this.block(
+					'fixed_fx_without_rate',
+					`Falta la tasa fija ${missing.from_currency} → ${missing.to_currency} para facturar desde el ${missing.period_start}`,
+					'Agrega la tasa del par en fx_invoice_rates o usa tipo de cambio del día'
+				);
+			else
+				this.block(
+					MULTICURRENCY_CODES.item_fx_rate_missing,
+					`Falta la tasa pactada ${missing.from_currency} → ${missing.to_currency} (métricas) desde el ${missing.period_start}`,
+					'Agrega la tasa ítem → contrato del par en fx_item_rates'
+				);
+		}
 		let invoices = engine.invoices;
 		let stubs = new Set<number>();
 
@@ -1116,10 +1247,11 @@ class Planner {
 					issue_date: existing.issue_date,
 					lines_changed: invoice.lines.length,
 					subtotal_before: before,
-					subtotal_after: round2(before + added),
+					// Multimoneda: el subtotal del generador ya está en moneda de contrato (líneas × tasa ítem → contrato).
+					subtotal_after: round2(before + (perLine ? invoice.subtotal : added)),
 					change: `se suma a la factura del ${existing.issue_date}`,
 				});
-				existing.subtotal = round2(before + added);
+				existing.subtotal = round2(before + (perLine ? invoice.subtotal : added));
 			} else this.createdInvoices.push(invoice);
 			this.touchRsm(invoice.billing_period_start);
 		}
@@ -1165,7 +1297,7 @@ class Planner {
 			metadata?: Record<string, unknown>;
 		}
 	): ChangePlan {
-		if (this.errors.length) throw validationException(this.errors);
+		if (this.errors.length) throw codedValidationException(this.errors);
 		this.closeInvoiceWarnings();
 		const { contract, items, today } = this.ctx;
 		const statusBefore = deriveContractStatus(contract.status, items, today);
@@ -1173,9 +1305,10 @@ class Planner {
 		const statusAfter = deriveContractStatus(statusAfterRaw, this.itemsAfter, today);
 		const endAfter = this.type === 'contract_cancel' ? contract.contract_end_date : nearestContractEnd(this.itemsAfter);
 		const touchesItems = this.added.length > 0 || this.ended.length > 0 || this.adjusted.length > 0;
+		const conversion = this.conversion();
 
 		if (touchesItems) {
-			this.contractSet.total_value = totalValue(this.itemsAfter);
+			this.contractSet.total_value = totalValue(this.itemsAfter, conversion);
 			if (endAfter && endAfter !== contract.contract_end_date) {
 				this.contractSet.contract_end_date = endAfter;
 				this.bypassEndDate = true;
@@ -1184,8 +1317,8 @@ class Planner {
 		if (Object.keys(this.contractSet).length)
 			this.ops.push({ kind: 'update_contract', set: this.contractSet, bypass_end_date_guard: this.bypassEndDate });
 
-		const mrrBefore = contractMrr(items, this.effective);
-		const mrrAfter = contractMrr(this.itemsAfter, this.effective);
+		const mrrBefore = contractMrr(items, this.effective, conversion);
+		const mrrAfter = contractMrr(this.itemsAfter, this.effective, conversion);
 		const cutoff = contract.cutoff_date;
 		const lastMonth = this.itemsAfter
 			.map((item) => item.end_date)
@@ -1209,7 +1342,7 @@ class Planner {
 				before: { mrr: mrrBefore, total_value: num(contract.total_value), end_date: contract.contract_end_date, status: statusBefore },
 				after: {
 					mrr: mrrAfter,
-					total_value: touchesItems ? totalValue(this.itemsAfter) : num(contract.total_value),
+					total_value: touchesItems ? totalValue(this.itemsAfter, conversion) : num(contract.total_value),
 					end_date: touchesItems ? endAfter : contract.contract_end_date,
 					status: statusAfter,
 				},
@@ -1448,7 +1581,7 @@ function planItemRemove(p: Planner, itemIds: string[], label: 'item_remove' | 'c
 		}
 		p.churnItem(item, itemTiming, monthly);
 		p.removeItemFromInvoices(item, p.effective, label === 'contract_cancel' ? 'cancelación' : 'baja');
-		totalDelta -= monthly;
+		totalDelta -= p.toContract(monthly, item.currency, item.start_date ?? p.effective);
 	}
 	p.assertNoUnified(removed, p.effective);
 	// Un producto que se quita mientras siguen otros es DOWNSELL a nivel métricas (benchmark §6); el último, CHURN.
@@ -1738,6 +1871,17 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 	p.assertState();
 	assertQuoteOrigin(p);
 	if (!refs.length) p.error('change.items', 'Indica al menos un ítem a agregar');
+	const contractCurrency = upperCode(ctx.contract.contract_currency);
+	const invoiceCurrency = upperCode(ctx.contract.invoice_currency) || contractCurrency;
+	const multicurrencyBefore = ctx.contract.requires_multicurrency_billing === true;
+	const enableMulticurrency = req.change.enable_multicurrency === true && !multicurrencyBefore;
+
+	// Multimoneda (spec §6): `enable_multicurrency` enciende el flag en la misma transacción (antes de insertar los ítems).
+	if (enableMulticurrency) {
+		p.multicurrencyAfter = true;
+		p.ops.push({ kind: 'set_multicurrency', enabled: true });
+	}
+	addChangeRates(p, contractCurrency, invoiceCurrency);
 	const anchor = anchorDayOf(ctx.contract, ctx.items);
 	const firstLive = liveRecurring(ctx.items).sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0] ?? ctx.items[0];
 
@@ -1752,6 +1896,17 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 		}
 		const isRecurring = ref.is_recurring !== false;
 		const start = typeof ref.start_date === 'string' ? ref.start_date : p.effective;
+		// Multimoneda: la moneda del ítem es la pedida; desde cotización, la de la cotización (cierra U10); si no, la del contrato.
+		const quoteCurrency = req.origin?.type === 'quote' ? upperCode(ctx.quote?.currency) : '';
+		const currency = upperCode(ref.currency) || quoteCurrency || contractCurrency;
+
+		if (currency !== contractCurrency && !p.multicurrency) {
+			p.block(
+				MULTICURRENCY_CODES.multicurrency_not_enabled,
+				`"${productName}" está en ${currency} y el contrato en ${contractCurrency}: el contrato no factura ítems en distintas monedas`,
+				MULTICURRENCY_NOT_ENABLED_STEP
+			);
+		}
 
 		if (start < p.effective) {
 			p.error(`${field}.start_date`, `El ítem no puede partir antes de la fecha efectiva (${p.effective})`);
@@ -1820,10 +1975,11 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 				catalog,
 				inline: Boolean(priceSpec),
 				product_id: productId,
-				contract_currency: ctx.contract.contract_currency,
+				// Multimoneda: el precio de catálogo debe estar en la moneda del ítem (400 price_currency_mismatch).
+				contract_currency: currency,
 			});
 
-			for (const error of catalogErrors) p.error(error.field, error.message);
+			for (const error of catalogErrors) p.error(error.field, error.message, error.code);
 			if (catalogErrors.length) continue;
 			priceSpec = normalizePriceSpec(catalog!.spec);
 			if (isMetered(priceSpec) && billingMethod === 'Anticipado' && priceSpec.model !== 'seat') {
@@ -1888,7 +2044,18 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 				`Ya hay un ítem "${productName}"${account ? ` cuenta ${account}` : ''} que parte el ${start}: revisa que no sea un duplicado`
 			);
 		categories.add(categoria);
-		mrrDelta += isRecurring ? round2(unit * quantity * (1 - pct / 100)) : 0;
+		// ΔMRR en moneda de contrato (multimoneda: con la tasa pactada ítem → contrato del par, spec §5).
+		mrrDelta += isRecurring
+			? currency === contractCurrency
+				? round2(unit * quantity * (1 - pct / 100))
+				: toContractCurrency(
+						unit * quantity * (1 - pct / 100),
+						currency,
+						contractCurrency,
+						[...(ctx.contract.fx_item_rates ?? []), ...p.extraItemRates],
+						start
+					)
+			: 0;
 		newItems.push({
 			key: p.newKey(),
 			product_id: productId,
@@ -1905,7 +2072,7 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 			discount_value: pct,
 			price,
 			final_price: round2(price * (1 - pct / 100)),
-			currency: ctx.contract.contract_currency,
+			currency,
 			billing_frequency: billingFrequency,
 			billing_method: billingMethod,
 			is_recurring: isRecurring,
@@ -1936,7 +2103,125 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 		description: `Se agregó ${newItems.map((item) => `${item.product_name} ${item.quantity} × ${money(item.unit_price ?? num(item.annual_unit_price) / 12)}`).join(', ')} desde el ${p.effective}: MRR +${money(mrrDelta)}`,
 		amount_delta: round2(mrrDelta),
 		items_affected: [],
-		metadata: { first_period_invoice: req.change.first_period_invoice ?? 'cycle' },
+		metadata: {
+			first_period_invoice: req.change.first_period_invoice ?? 'cycle',
+			// Multimoneda: monedas de los ítems nuevos, tasas agregadas y si el alta encendió el flag.
+			...(p.multicurrency
+				? {
+						currencies: [...new Set(newItems.map((item) => upperCode(item.currency)))],
+						fx_item_rates_added: p.extraItemRates.length,
+						fx_invoice_rates_added: p.extraInvoiceRates.length,
+						multicurrency_enabled: enableMulticurrency,
+					}
+				: {}),
+		},
+	});
+}
+
+/**
+ * Multimoneda en `item_add` (spec §6): `fx_item_rates[]` (pactadas ítem → contrato) y `fx_invoice_rates[]` (moneda del ítem → factura) del
+ * pedido se agregan a las guardadas (`insert_fx_rates`) y el generador del preview ya las usa. Sin fechas = desde la fecha efectiva sin fin.
+ */
+function addChangeRates(p: Planner, contractCurrency: string, invoiceCurrency: string) {
+	const change = p.req.change;
+	const itemRates = (change.fx_item_rates ?? []).map((rate, index) => {
+		const from = upperCode(rate.from_currency);
+
+		if (!p.multicurrency)
+			p.error(
+				`change.fx_item_rates.${index}`,
+				'Las tasas ítem → contrato solo aplican a contratos multimoneda',
+				MULTICURRENCY_CODES.multicurrency_not_enabled
+			);
+		if (!from || from === contractCurrency)
+			p.error(`change.fx_item_rates.${index}.from_currency`, `La tasa ítem → contrato es de una moneda distinta de ${contractCurrency}`);
+
+		return {
+			purpose: 'item' as const,
+			from_currency: from,
+			to_currency: contractCurrency,
+			rate: Number(rate.rate),
+			period_start: rate.period_start ?? p.effective,
+			period_end: rate.period_end ?? '9999-12-31',
+		};
+	});
+	const foreign = [
+		...new Set(
+			((change.items ?? []) as Array<Record<string, unknown>>)
+				.map(
+					(item) => upperCode(item.currency) || (p.req.origin?.type === 'quote' ? upperCode(p.ctx.quote?.currency) : '') || contractCurrency
+				)
+				.filter((code) => code !== invoiceCurrency)
+		),
+	];
+	const invoiceRates = (change.fx_invoice_rates ?? []).map((rate, index) => {
+		const from = upperCode(rate.from_currency) || (foreign.length === 1 ? foreign[0] : '');
+
+		if (!from) p.error(`change.fx_invoice_rates.${index}.from_currency`, 'Indica de qué moneda es la tasa (hay más de un par)');
+		else if (from === invoiceCurrency)
+			p.error(`change.fx_invoice_rates.${index}.from_currency`, `Se factura en ${invoiceCurrency}: esa moneda no lleva tasa de facturación`);
+
+		return {
+			purpose: 'invoice' as const,
+			from_currency: from,
+			to_currency: invoiceCurrency,
+			rate: Number(rate.rate),
+			period_start: rate.period_start ?? p.effective,
+			period_end: rate.period_end ?? '9999-12-31',
+		};
+	});
+
+	if (invoiceRates.length && p.ctx.contract.fx_invoice_policy !== 'fixed')
+		p.error('change.fx_invoice_rates', 'El contrato factura con tipo de cambio del día: cambia la política en Condiciones de facturación');
+	const rates = [...itemRates, ...invoiceRates];
+
+	if (rates.length) p.ops.push({ kind: 'insert_fx_rates', rates });
+	p.extraItemRates.push(...itemRates.map((rate) => ({ ...rate, created_at: '9999' })));
+	p.extraInvoiceRates.push(...invoiceRates.map((rate) => ({ ...rate, created_at: '9999' })));
+}
+
+/**
+ * `multicurrency { enabled }` (spec-multimoneda §6): enciende o apaga `requires_multicurrency_billing`. Encender no toca ítems, facturas ni
+ * RSM (evento `MULTICURRENCY_ENABLED`). Apagar con algún ítem —vivo o histórico— en otra moneda que la del contrato se bloquea
+ * (`foreign_currency_items_present`; el validador de contratos también lo rechaza); sin ellos, evento `MULTICURRENCY_DISABLED`.
+ */
+export function planMulticurrency(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
+	const p = new Planner(ctx, req, 'multicurrency');
+	const enabled = req.change.enabled;
+	const current = ctx.contract.requires_multicurrency_billing === true;
+	const contractCurrency = upperCode(ctx.contract.contract_currency);
+
+	p.assertState();
+	if (typeof enabled !== 'boolean') p.error('change.enabled', 'Indica si se activa (true) o se desactiva (false) la facturación multimoneda');
+	else if (enabled === current)
+		p.error('change.enabled', current ? 'El contrato ya factura ítems en distintas monedas' : 'El contrato ya factura todo en su moneda');
+	if (enabled === false) {
+		const foreign = ctx.items.filter((item) => (upperCode(item.currency) || contractCurrency) !== contractCurrency);
+
+		if (foreign.length)
+			p.block(
+				MULTICURRENCY_CODES.foreign_currency_items_present,
+				`No se puede desactivar multimoneda: ${foreign.length === 1 ? 'el ítem' : 'los ítems'} ${foreign
+					.map((item) => `"${item.product_name ?? item.id}" (${upperCode(item.currency)})`)
+					.join(', ')} ${foreign.length === 1 ? 'está' : 'están'} en otra moneda que la del contrato (${contractCurrency})`,
+				'Los ítems en otra moneda (vigentes o históricos) mantienen el contrato multimoneda'
+			);
+	}
+	if (typeof enabled === 'boolean' && enabled !== current) {
+		p.multicurrencyAfter = enabled;
+		p.ops.push({ kind: 'set_multicurrency', enabled });
+	}
+
+	return p.finish({
+		type: enabled ? 'MULTICURRENCY_ENABLED' : 'MULTICURRENCY_DISABLED',
+		subtype: null,
+		title: enabled ? 'Multimoneda activada' : 'Multimoneda desactivada',
+		description: enabled
+			? `${ctx.contract.contract_number ?? 'El contrato'} puede facturar ítems en distintas monedas desde el ${p.effective}`
+			: `${ctx.contract.contract_number ?? 'El contrato'} vuelve a facturar todo en ${contractCurrency} desde el ${p.effective}`,
+		amount_delta: 0,
+		items_affected: [],
+		metadata: { requires_multicurrency_billing: { before: current, after: enabled === true } },
 	});
 }
 
@@ -2061,7 +2346,7 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			);
 		categories.add(delta.categoria);
 		subtypes.add(bothAxes ? 'RENEGOTIATION' : delta.quantity_delta !== 0 ? 'quantity' : 'price');
-		mrrDelta += delta.mrr_delta;
+		mrrDelta += p.toContract(delta.mrr_delta, item.currency, item.start_date ?? start);
 		const newItem: NewItemRow = {
 			key: p.newKey(),
 			product_id: item.product_id,
@@ -2331,19 +2616,58 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 	const contractCurrency = upper(contract.contract_currency);
 	const currencyBefore = upper(contract.invoice_currency) || contractCurrency;
 	const currencyAfter = has('invoice_currency') ? upper(change.invoice_currency) : currencyBefore;
+	// Multimoneda (spec §6): los pares que convierten son las monedas de ítem ≠ moneda de factura; la política aplica a cada par.
+	const multi = p.multicurrency;
+	const itemCurrencies = [...new Set(ctx.items.map((item) => upperCode(item.currency) || contractCurrency))];
+	const converting = multi ? itemCurrencies.filter((code) => code !== currencyAfter) : currencyAfter !== contractCurrency ? [contractCurrency] : [];
 	const policyBefore = contract.fx_invoice_policy ?? 'spot';
-	const policyAfter = has('fx_invoice_policy') ? change.fx_invoice_policy! : currencyAfter === contractCurrency ? 'spot' : policyBefore;
-	const newRates = (change.fx_invoice_rates ?? []).map((rate) => ({
-		from_currency: contractCurrency,
-		to_currency: currencyAfter,
-		rate: Number(rate.rate),
-		period_start: rate.period_start ?? p.effective,
-		period_end: rate.period_end ?? '9999-12-31',
-	}));
+	const policyAfter = has('fx_invoice_policy') ? change.fx_invoice_policy! : converting.length === 0 ? 'spot' : policyBefore;
+	const newRates = (change.fx_invoice_rates ?? []).map((rate, index) => {
+		const from =
+			upperCode(rate.from_currency) || (multi ? (itemCurrencies.length > 1 ? '' : (converting[0] ?? contractCurrency)) : contractCurrency);
+
+		if (!from)
+			p.error(
+				`change.fx_invoice_rates.${index}.from_currency`,
+				'Indica de qué moneda es la tasa: el contrato tiene ítems en más de una moneda'
+			);
+		else if (!converting.includes(from))
+			p.error(
+				`change.fx_invoice_rates.${index}.from_currency`,
+				`Ningún ítem en ${from} se factura en ${currencyAfter}: la tasa ${from} → ${currencyAfter} no aplica`
+			);
+
+		return {
+			from_currency: from,
+			to_currency: currencyAfter,
+			rate: Number(rate.rate),
+			period_start: rate.period_start ?? p.effective,
+			period_end: rate.period_end ?? '9999-12-31',
+		};
+	});
 
 	if (currencyAfter === UF_CURRENCY) p.block('uf_invoice_currency', 'La UF no se factura: elige la moneda en que se emite (por ejemplo, CLP)');
-	if (currencyAfter !== contractCurrency && policyAfter === 'fixed' && !contract.fx_invoice_rates.length && !newRates.length) {
+	if (!multi && currencyAfter !== contractCurrency && policyAfter === 'fixed' && !contract.fx_invoice_rates.length && !newRates.length) {
 		p.error('change.fx_invoice_rates', 'Con tipo de cambio fijo indica al menos una tasa contrato → moneda de factura');
+	}
+	if (multi && policyAfter === 'fixed') {
+		// Multimoneda: una tasa por cada par nuevo (400 con el par faltante); la cobertura por período se bloquea por factura más abajo.
+		const known = [...contract.fx_invoice_rates, ...newRates];
+
+		for (const code of converting) {
+			const covered = known.some(
+				(rate) =>
+					(upperCode(rate.from_currency) === code && upperCode(rate.to_currency) === currencyAfter) ||
+					(upperCode(rate.from_currency) === currencyAfter && upperCode(rate.to_currency) === code)
+			);
+
+			if (!covered)
+				p.error(
+					'change.fx_invoice_rates',
+					`Con tipo de cambio fijo falta la tasa ${code} → ${currencyAfter} (indica from_currency = ${code})`,
+					'fixed_fx_without_rate'
+				);
+		}
 	}
 	if (currencyAfter !== currencyBefore || policyAfter !== policyBefore || newRates.length) {
 		if (currencyAfter !== currencyBefore) track('invoice_currency', currencyBefore, currencyAfter);
@@ -2356,7 +2680,7 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 			after.fx_invoice_rates_added = newRates.length;
 		}
 		const allRates: FxPeriodRate[] = [...contract.fx_invoice_rates, ...newRates.map((rate) => ({ ...rate, created_at: '9999' }))];
-		const targets: Array<{ invoice_id: string; fx: number | null }> = [];
+		const targets: Extract<WriteOp, { kind: 'update_invoices_fx' }>['targets'] = [];
 		const keptFx: ChangeInvoiceRow[] = [];
 
 		for (const invoice of pending) {
@@ -2367,6 +2691,54 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 				continue;
 			}
 			const periodStart = invoice.lines.map((line) => line.billing_period_start ?? '').sort()[0] || invoice.issue_date || p.effective;
+
+			if (multi) {
+				// Multimoneda: cada línea con la tasa de su par (fija) o NULL (spot); el encabezado toma la del único par convertidor.
+				const valuation = valuateLinesByPair(
+					invoice.lines.map((line) => ({
+						id: line.id,
+						currency: upperCode(line.currency) || upperCode(invoice.contract_currency) || contractCurrency,
+						unit_price: line.unit_price,
+						subtotal: line.subtotal,
+						tax_amount: line.tax_amount,
+						period_start: line.billing_period_start ?? periodStart,
+					})),
+					currencyAfter,
+					(line) => (policyAfter === 'fixed' ? findFixedRate(allRates, line.currency, currencyAfter, line.period_start) : null),
+					invoice.tax_rate
+				);
+
+				if (policyAfter === 'fixed')
+					for (const line of valuation.lines.filter((row) => row.fx === null)) {
+						p.block(
+							'fixed_fx_without_rate',
+							`La factura del ${invoice.issue_date} no tiene tasa ${line.currency} → ${currencyAfter} para el período de una de sus líneas`,
+							'Agrega la tasa del par en fx_invoice_rates (con from_currency) o usa tipo de cambio del día'
+						);
+					}
+				targets.push({
+					invoice_id: invoice.id,
+					fx: valuation.fx,
+					lines: valuation.lines.map((line) => ({
+						line_id: line.id,
+						fx: line.fx,
+						amounts:
+							line.subtotal === null
+								? null
+								: { unit_price: line.unit_price!, subtotal: line.subtotal, tax: line.tax!, total: line.total! },
+					})),
+				});
+				p.updatedInvoices.push({
+					id: invoice.id,
+					invoice_number: invoice.invoice_number,
+					issue_date: invoice.issue_date,
+					lines_changed: invoice.lines.length,
+					subtotal_before: invoice.subtotal,
+					subtotal_after: invoice.subtotal,
+					change: `moneda ${currencyAfter}${valuation.pairs.length ? `, pares ${valuation.pairs.join(', ')}${valuation.invoice ? ' a tasa fija' : ' (se valorizan al emitir)'}` : ''}`,
+				});
+				continue;
+			}
 			let fx: number | null = currencyAfter === contractCurrency ? 1 : null;
 
 			if (currencyAfter !== contractCurrency && policyAfter === 'fixed') {
@@ -2415,7 +2787,14 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 			),
 		amount_delta: 0,
 		items_affected: [],
-		metadata: { changed_fields: changed, fields_before: before, fields_after: after, pending_invoices_updated: p.updatedInvoices.length },
+		metadata: {
+			changed_fields: changed,
+			fields_before: before,
+			fields_after: after,
+			pending_invoices_updated: p.updatedInvoices.length,
+			// Multimoneda: pares de las tasas agregadas.
+			...(multi ? { fx_invoice_rate_pairs: [...new Set(newRates.map((rate) => pairKey(rate.from_currency, rate.to_currency)))] } : {}),
+		},
 	});
 }
 
@@ -2611,6 +2990,8 @@ export function planChange(ctx: ChangeContext, req: ContractChangeRequestDto): C
 			return planItemAdd(ctx, req);
 		case 'item_change':
 			return planItemChange(ctx, req);
+		case 'multicurrency':
+			return planMulticurrency(ctx, req);
 	}
 }
 

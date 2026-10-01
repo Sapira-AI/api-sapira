@@ -359,7 +359,7 @@
    {
     "name": "contract_fx_period_rates_purpose_check",
     "type": "c",
-    "expr": "purpose = ANY (ARRAY['company'::text, 'invoice'::text])"
+    "expr": "purpose = ANY (ARRAY['company'::text, 'invoice'::text, 'item'::text])"
    },
    {
     "name": "contract_fx_period_rates_rate_check",
