@@ -1,3 +1,6 @@
+// `InvoiceSchedulerService` (envío al ERP desde el Contrato 360) importa `uuid`, que desde la v13 es solo ESM: Jest no lo transforma.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+
 import { NotFoundException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
@@ -8,10 +11,15 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 
+import { ConsumptionService } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
+import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
+import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
+import { ContractInvoiceEditService } from './contract-invoice-edit.service';
+import { ContractInvoicesService } from './contract-invoices.service';
 import { deriveContractStatus, type StatusItem } from './contract-status';
 import { ContractSubscriptionsService, parseSubscriptionStatus } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
@@ -179,8 +187,8 @@ describe('ContractsService', () => {
 			const { service, query } = build(() => []);
 
 			await service.list('h-1', { autoSendToOdoo: 'true' }, asOf);
-			expect(listCall(query)[0]).toContain("(to_jsonb(c)->>'deleted_at') IS NULL");
-			expect(countCall(query)[0]).toContain("(to_jsonb(c)->>'deleted_at') IS NULL");
+			expect(listCall(query)[0]).toContain('c.deleted_at IS NULL');
+			expect(countCall(query)[0]).toContain('c.deleted_at IS NULL');
 			expect(listCall(query)[0]).toContain('c.auto_send_to_odoo IS DISTINCT FROM false');
 
 			query.mockClear();
@@ -367,7 +375,7 @@ describe('ContractsService', () => {
 			for (const [sql, params] of query.mock.calls) {
 				expect(params).toEqual(['h-1']);
 				expect(sql).toContain('c.holding_id = $1');
-				expect(sql).toContain("(to_jsonb(c)->>'deleted_at') IS NULL");
+				expect(sql).toContain('c.deleted_at IS NULL');
 			}
 		});
 	});
@@ -395,6 +403,47 @@ describe('ContractsService', () => {
 
 			await expect(service.detail('CTR-2026-184', 'h-1')).rejects.toBeInstanceOf(NotFoundException);
 			expect(query.mock.calls[0][0]).toContain('c.contract_number = $1');
+			expect(query.mock.calls[0][0]).toContain('c.deleted_at IS NULL');
+		});
+
+		it('detail expone día de ciclo, condición de pago y tipo de documento, y las fechas del servicio sin bajas ni ajustes', async () => {
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID, status: 'Activo' }];
+				if (sql.includes('cl.name_commercial AS client_name'))
+					return [
+						{
+							id: CONTRACT_ID,
+							status: 'Activo',
+							derived_status: 'active',
+							billing_anchor_day: '5',
+							payment_terms: { kind: 'end_of_month', days: 15 },
+							document_type: 'FACTURA_EXPORTACION',
+							requires_multicurrency_billing: true,
+							requires_multicompany_billing: null,
+							start_date: '2025-10-01',
+							end_date: '2026-09-30',
+						},
+					];
+
+				return [];
+			});
+
+			const result = await service.detail(CONTRACT_ID, 'h-1', asOf);
+			const [sql] = query.mock.calls.find(([text]) => (text as string).includes('cl.name_commercial AS client_name'))!;
+
+			expect(result).toMatchObject({
+				billing_anchor_day: 5,
+				payment_terms: { kind: 'end_of_month', days: 15 },
+				document_type: 'FACTURA_EXPORTACION',
+				requires_multicurrency_billing: true,
+				requires_multicompany_billing: false,
+				start_date: '2025-10-01',
+				end_date: '2026-09-30',
+			});
+			expect(sql).toContain('c.billing_anchor_day, c.payment_terms, c.document_type');
+			expect(sql).toContain(`ci.churn_date IS NULL AND COALESCE(ci.categoria, '') NOT IN ('CHURN', 'DOWNSELL')`);
+			expect(sql).toContain('COALESCE(cd.end_date, c.contract_end_date)');
+			expect(sql).not.toContain('to_jsonb');
 		});
 
 		it('ítems: deriva estado, arma el ítem madre y cruza con las Por Emitir', async () => {
@@ -436,10 +485,146 @@ describe('ContractsService', () => {
 			expect(result.groups[0]).toMatchObject({ quantity: 5, mrr: 50, next_invoice: { id: 'pe-1', amount: 50, matches: true } });
 		});
 
+		it('ítems: une prices, billable_metrics y el precio de catálogo, y los expone en cada ítem y en el grupo', async () => {
+			const priceRow = {
+				price_id: 'pr-1',
+				price_name: 'Ruteo por volumen',
+				price_version: 2,
+				price_status: 'active',
+				price_model: 'volume',
+				price_quantity_type: 'metered',
+				price_billable_metric_id: 'bm-1',
+				price_unit_amount: null,
+				price_tiers: [
+					{ from: 0, to: 500, per_unit_amount: '0.08', flat_amount: '10' },
+					{ from: 500, to: null, per_unit_amount: '0.05', flat_amount: 0 },
+				],
+				price_package_size: null,
+				price_package_amount: null,
+				price_seat_minimum_quantity: '0',
+				price_free_units: '100',
+				price_minimum_amount: '50',
+				price_cap_amount: null,
+				price_invoice_line_mode: 'per_tier',
+				price_charge_flat_when_free: false,
+				price_list_price_id: 'lp-1',
+				metric_id: 'bm-1',
+				metric_code: 'rutas',
+				metric_name: 'Rutas completadas',
+				metric_unit: 'ruta',
+				metric_aggregation: 'sum',
+				catalog_price_id: 'lp-1',
+				catalog_price_name: 'Ruteo lista',
+				catalog_price_version: 3,
+			};
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID, status: 'Activo' }];
+				if (sql.includes('FROM contract_items ci'))
+					return [
+						{
+							id: 'a',
+							product_name: 'RUTEO',
+							quantity: '2000',
+							unit_price: '0.035',
+							monthly_price: '70',
+							billing_period_price: '70',
+							is_recurring: true,
+							start_date: '2026-01-01',
+							end_date: '2026-12-31',
+							categoria: 'NEW',
+							currency: 'CLF',
+							...priceRow,
+						},
+						{
+							id: 'b',
+							product_name: 'SOPORTE',
+							quantity: '1',
+							unit_price: '5',
+							monthly_price: '5',
+							billing_period_price: '5',
+							is_recurring: true,
+							start_date: '2026-01-01',
+							end_date: '2026-12-31',
+							categoria: 'NEW',
+							currency: 'CLF',
+							price_id: null,
+							metric_id: null,
+							catalog_price_id: null,
+						},
+					];
+
+				return [];
+			});
+
+			const result = await service.items(CONTRACT_ID, 'h-1', asOf);
+			const [sql] = query.mock.calls.find(([text]) => (text as string).includes('FROM contract_items ci'))!;
+
+			expect(sql).toContain('LEFT JOIN prices p ON p.id = ci.price_id');
+			expect(sql).toContain('LEFT JOIN billable_metrics bm ON bm.id = p.billable_metric_id');
+			expect(sql).toContain('LEFT JOIN prices lp ON lp.id = p.list_price_id');
+			expect(sql).toContain('p.list_price_id AS price_list_price_id');
+
+			const [ruteo, soporte] = result.items;
+
+			expect(ruteo.price).toEqual({
+				id: 'pr-1',
+				name: 'Ruteo por volumen',
+				version: 2,
+				status: 'active',
+				list_price_id: 'lp-1',
+				model: 'volume',
+				quantity_type: 'metered',
+				billable_metric_id: 'bm-1',
+				unit_amount: null,
+				tiers: [
+					{ from: 0, to: 500, per_unit_amount: 0.08, flat_amount: 10 },
+					{ from: 500, to: null, per_unit_amount: 0.05, flat_amount: 0 },
+				],
+				package_size: null,
+				package_amount: null,
+				seat_minimum_quantity: 0,
+				free_units: 100,
+				minimum_amount: 50,
+				cap_amount: null,
+				invoice_line_mode: 'per_tier',
+				charge_flat_when_free: false,
+			});
+			expect(ruteo).toMatchObject({
+				unit_price: 0.035,
+				uses_price_model: true,
+				metric: { id: 'bm-1', code: 'rutas', name: 'Rutas completadas', unit: 'ruta', aggregation: 'sum' },
+				catalog_price: { id: 'lp-1', name: 'Ruteo lista', version: 3 },
+			});
+			expect(soporte).toMatchObject({ price: null, metric: null, catalog_price: null, uses_price_model: false });
+
+			const byProduct = Object.fromEntries(result.groups.map((group) => [group.product_name, group]));
+
+			expect(byProduct.RUTEO).toMatchObject({
+				uses_price_model: true,
+				price: ruteo.price,
+				metric: ruteo.metric,
+				catalog_price: ruteo.catalog_price,
+			});
+			expect(byProduct.SOPORTE).toMatchObject({ uses_price_model: false, price: null, metric: null, catalog_price: null });
+		});
+
 		it('facturas: filtra por estado sin parámetros sueltos y cuenta por estado', async () => {
 			const { service, query } = build((sql) => {
 				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
 				if (sql.includes('all_count')) return [{ all_count: '5', pending_count: '2', issued_count: '2', cancelled_count: '1' }];
+				if (sql.includes('OFFSET'))
+					return [
+						{
+							id: 'inv-1',
+							status: 'Emitida',
+							contract_currency: 'USD',
+							invoice_currency: 'CLP',
+							fx_contract_to_invoice: '950.5',
+							issued_externally: true,
+							original_issue_date: '2026-02-01',
+							issue_date: '2026-03-01',
+						},
+					];
 
 				return [];
 			});
@@ -449,8 +634,312 @@ describe('ContractsService', () => {
 
 			expect(params).toEqual([CONTRACT_ID, 'h-1']);
 			expect(sql).toContain(`i.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')`);
-			expect(sql).toContain('ORDER BY i.amount_contract_currency DESC');
+			expect(sql).toContain('ORDER BY i.amount_contract_currency DESC NULLS LAST, i.issue_date DESC NULLS LAST, i.id');
 			expect(result).toMatchObject({ items: 2, counts: { all: 5, pending: 2, issued: 2, cancelled: 1 } });
+			// Columnas de las etapas 1–2 de Facturas en el 360 en cada fila de la lista.
+			expect(result.data[0]).toMatchObject({
+				fx_policy: 'fixed',
+				fx_rate: 950.5,
+				issued_externally: true,
+				original_issue_date: '2026-02-01',
+				issue_date: '2026-03-01',
+			});
+		});
+
+		it('facturas (etapa 4): motivo del desvío, líneas manuales, sin cobro y "Restablecer borrador del ERP" por fila', async () => {
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
+				if (sql.includes('all_count')) return [{ all_count: '2', pending_count: '1', issued_count: '0', cancelled_count: '1' }];
+				if (sql.includes('OFFSET'))
+					return [
+						{
+							id: 'inv-1',
+							status: 'Por Emitir',
+							is_active: true,
+							odoo_invoice_id: '321',
+							sent_to_odoo_at: '2026-09-20T10:00:00.000Z',
+							has_manual_lines: true,
+							no_charge: false,
+							doc_type: 'FACTURA',
+							deviation_id: 'adj-1',
+							deviation_type: 'discount',
+							deviation_amount_diff: '-100',
+							deviation_reason: 'Promo',
+							deviation_adjusted_at: new Date('2026-09-29T10:00:00.000Z'),
+							deviation_adjusted_by_name: 'Domi',
+						},
+						{ id: 'inv-2', status: 'Cancelada', is_active: true, no_charge: true, odoo_invoice_id: null, sent_to_odoo_at: null },
+					];
+
+				return [];
+			});
+			const result = await service.invoices(CONTRACT_ID, 'h-1', { status: 'all' });
+			const [sql] = query.mock.calls.find(([text]) => (text as string).includes('OFFSET'))!;
+
+			expect(sql).toContain("mi.quantity_source = 'manual'");
+			expect(sql).toContain("'INVOICE_NO_CHARGE', 'INVOICE_NO_CHARGE_REVERTED'");
+			expect(sql).toContain("a.type IN ('discount', 'upsell', 'downsell', 'correction')");
+			expect(result.data[0]).toMatchObject({
+				has_manual_lines: true,
+				no_charge: false,
+				erp_sync_state: 'draft',
+				erp_reset_available: true,
+				deviation: {
+					has_reason: true,
+					type: 'discount',
+					amount_diff: -100,
+					reason: 'Promo',
+					adjusted_at: '2026-09-29T10:00:00.000Z',
+					adjusted_by_name: 'Domi',
+				},
+			});
+			expect(result.data[1]).toMatchObject({
+				status: 'Cancelada',
+				no_charge: true,
+				deviation: null,
+				erp_sync_state: 'none',
+				erp_reset_available: false,
+			});
+		});
+
+		it('facturas: por defecto ordena por período de servicio y desempata por emisión; por emisión no repite el desempate', async () => {
+			const rows = (sql: string) => (sql.includes('LIMIT 1') ? [{ id: CONTRACT_ID }] : sql.includes('all_count') ? [{ all_count: '0' }] : []);
+			const byPeriod = build(rows);
+
+			await byPeriod.service.invoices(CONTRACT_ID, 'h-1', {});
+			expect(byPeriod.query.mock.calls.find(([text]) => (text as string).includes('OFFSET'))![0]).toContain(
+				'ORDER BY lines.billing_period_start ASC NULLS LAST, i.issue_date ASC NULLS LAST, i.id'
+			);
+
+			const byIssue = build(rows);
+
+			await byIssue.service.invoices(CONTRACT_ID, 'h-1', { sortBy: 'issue_date', sortOrder: 'desc' });
+			expect(byIssue.query.mock.calls.find(([text]) => (text as string).includes('OFFSET'))![0]).toContain(
+				'ORDER BY i.issue_date DESC NULLS LAST, i.id'
+			);
+		});
+
+		describe('invoiceDetail', () => {
+			const INVOICE_ID = '33333333-3333-4333-8333-333333333333';
+			const header = {
+				id: INVOICE_ID,
+				invoice_number: 'F-1046',
+				status: 'Pagada',
+				document_type: 'FACTURA',
+				issue_date: '2026-03-01',
+				original_issue_date: '2026-03-01',
+				scheduled_at: '2026-03-01',
+				due_date: '2026-03-31',
+				created_at: new Date('2026-02-20T10:00:00.000Z'),
+				billing_period_start: '2026-03-01',
+				billing_period_end: '2026-03-31',
+				contract_currency: 'CLF',
+				invoice_currency: 'CLP',
+				amount_contract_currency: '110.6',
+				amount_invoice_currency: '4185387',
+				vat: '795223',
+				total_invoice_currency: '4980610',
+				fx_contract_to_invoice: '37842.2',
+				tax_rate: '0.19',
+				is_active: true,
+				odoo_invoice_id: 12,
+				sent_to_odoo_at: new Date('2026-03-01T12:00:00.000Z'),
+				requires_references_for_billing: true,
+				lines_count: '2',
+				legal_name: 'Acme SpA',
+				tax_document_type_id: null,
+				own_description_max_chars: null,
+				company_country: 'Chile',
+				contract_document_type: 'FACTURA',
+				description_limits: '[{"country_code":"CL","kind":"invoice","description_max_chars":80,"sort":10}]',
+			};
+			const route = (sql: string) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
+				if (sql.includes('FROM invoice_items ii') && sql.includes('pricing_breakdown')) {
+					return [
+						{
+							id: 'l-1',
+							description: 'Rutas optimizadas',
+							quantity: '1250',
+							unit_of_measure: 'rutas',
+							quantity_source: 'consumption',
+							unit_price_contract_currency: '0.08',
+							subtotal_contract_currency: '100',
+							tax_amount_contract_currency: '19',
+							total_contract_currency: '119',
+							billing_period_start: '2026-03-01',
+							billing_period_end: '2026-03-31',
+							contract_item_id: 'ci-1',
+							product_name: 'Rutas',
+							pricing_breakdown:
+								'[{"kind":"tier","tier_index":0,"from":0,"to":1000,"quantity":1000,"unit_amount":0.1,"amount":100,"label":"0–1.000"}]',
+						},
+						{
+							id: 'l-2',
+							description: 'Soporte',
+							quantity: '1',
+							subtotal_contract_currency: '10.6',
+							pricing_breakdown: [{ kind: 'seat', quantity: 1, amount: 10.6, label: 'Asiento' }],
+						},
+					];
+				}
+				if (sql.includes('FROM invoice_references r'))
+					return [{ id: 'r-1', type: 'OC', name: 'Orden de Compra', code: '5020333', date: '2026-02-15', source: 'invoice' }];
+				if (sql.includes('FROM invoice_adjustments a')) {
+					return [
+						{
+							id: 'a-1',
+							type: 'discount',
+							amount_diff: '-5',
+							notes: 'Descuento comercial',
+							adjusted_at: new Date('2026-03-05T09:00:00.000Z'),
+							user_id: 'u-1',
+							user_name: 'María José',
+						},
+					];
+				}
+				if (sql.includes("'credit_note'"))
+					return [
+						{
+							id: 'nc-1',
+							invoice_number: 'NC-12',
+							document_type: 'NC',
+							status: 'Emitida',
+							issue_date: '2026-03-10',
+							relation: 'credit_note',
+						},
+					];
+				if (sql.includes('JOIN contract_lifecycle_events e'))
+					return [
+						{
+							id: 'e-1',
+							event_type: 'INVOICE_RESCHEDULED',
+							event_subtype: null,
+							title: 'Factura reprogramada al 2026-03-01',
+							description: 'Emisión 2026-02-01 → 2026-03-01',
+							effective_date: '2026-03-01',
+							created_at: new Date('2026-02-20T11:00:00.000Z'),
+							metadata: {
+								source: 'contract_360',
+								invoice_id: INVOICE_ID,
+								before: { issue_date: '2026-02-01' },
+								after: { issue_date: '2026-03-01' },
+							},
+							user_id: 'u-1',
+							user_name: 'María José',
+						},
+					];
+				if (sql.includes('FROM invoices i') && sql.includes('i.id = $1::uuid AND i.contract_id = $2')) return [header];
+
+				return [];
+			};
+
+			it('devuelve encabezado, líneas con desglose (texto u objeto), referencias, ajustes y documentos relacionados, acotados al contrato y holding', async () => {
+				const { service, query } = build(route);
+
+				const result = await service.invoiceDetail(CONTRACT_ID, INVOICE_ID, 'h-1');
+
+				for (const [sql, params] of query.mock.calls.slice(1)) {
+					expect(sql).toContain('i.contract_id = $2 AND i.holding_id = $3');
+					expect(params).toEqual([INVOICE_ID, CONTRACT_ID, 'h-1']);
+				}
+				expect(result).toMatchObject({
+					id: INVOICE_ID,
+					invoice_number: 'F-1046',
+					amount_contract_currency: 110.6,
+					fx_contract_to_invoice: 37842.2,
+					tax_rate: 0.19,
+					sent_to_odoo_at: '2026-03-01T12:00:00.000Z',
+					created_at: '2026-02-20T10:00:00.000Z',
+					requires_references_for_billing: true,
+					lines_count: 2,
+					references: [{ id: 'r-1', type: 'OC', code: '5020333', source: 'invoice' }],
+					adjustments: [
+						{
+							id: 'a-1',
+							type: 'discount',
+							amount_diff: -5,
+							adjusted_at: '2026-03-05T09:00:00.000Z',
+							adjusted_by: { id: 'u-1', name: 'María José' },
+						},
+					],
+					related_documents: [{ id: 'nc-1', invoice_number: 'NC-12', relation: 'credit_note' }],
+					// Etapas 1–2 de Facturas en el 360: FX por factura (derivado de moneda + fx_contract_to_invoice), emisión externa (por evento), estado ERP derivado e historial.
+					fx_policy: 'fixed',
+					fx_rate: 37842.2,
+					fx_rate_source: null,
+					fx_confirmed_at: null,
+					issued_externally: false,
+					erp_sync_state: 'sent',
+					history: [
+						{
+							id: 'e-1',
+							type: 'INVOICE_RESCHEDULED',
+							title: 'Factura reprogramada al 2026-03-01',
+							effective_date: '2026-03-01',
+							created_at: '2026-02-20T11:00:00.000Z',
+							created_by: { id: 'u-1', name: 'María José' },
+							metadata: { invoice_id: INVOICE_ID, after: { issue_date: '2026-03-01' } },
+						},
+					],
+				});
+				const historySql = query.mock.calls.find(([sql]) => (sql as string).includes('JOIN contract_lifecycle_events e'))![0] as string;
+
+				expect(historySql).toContain(`e.metadata->>'invoice_id' = i.id::text`);
+				expect(historySql).toContain(`e.metadata->'created_invoices' ? i.id::text`);
+				// NC de modificaciones y documentos del consumo (reemisión, complementaria) también aparecen en el historial de la factura.
+				expect(historySql).toContain(`e.metadata->'created_credit_notes' ? i.id::text`);
+				expect(historySql).toContain(`e.metadata->>'credit_note_id' = i.id::text`);
+				expect(historySql).toContain(`e.metadata->>'cancelled_invoice_id' = i.id::text`);
+				expect(historySql).toContain(`e.metadata->>'complements_invoice_id' = i.id::text`);
+				expect(result.lines).toHaveLength(2);
+				expect(result.lines[0]).toMatchObject({
+					description: 'Rutas optimizadas',
+					quantity: 1250,
+					quantity_source: 'consumption',
+					subtotal_contract_currency: 100,
+					tax_contract_currency: 19,
+					product_name: 'Rutas',
+					pricing_breakdown: [{ kind: 'tier', quantity: 1000, amount: 100 }],
+				});
+				expect(result.lines[1].pricing_breakdown).toEqual([{ kind: 'seat', quantity: 1, amount: 10.6, label: 'Asiento' }]);
+				expect(result.lines[1].quantity_source).toBeNull();
+				// Etapa 3 (§3.6): protección por línea y límite del documento (contrato sin documento del catálogo → el de su país y familia).
+				expect(result.description_max_chars).toBe(80);
+				expect(result.lines.map((line) => line.description_locked)).toEqual([false, false]);
+				expect(result.references[0].kind).toBe('OC');
+				const [linesSql] = query.mock.calls.find(
+					([sql]) => (sql as string).includes('FROM invoice_items ii') && (sql as string).includes('pricing_breakdown')
+				)!;
+
+				expect(linesSql).toContain('ii.description_locked');
+				// Etapa 4 (§3.4): motivo del desvío (último invoice_adjustments), líneas manuales, visibilidad por línea, sin cobro y ERP.
+				expect(result).toMatchObject({
+					deviation: {
+						has_reason: true,
+						type: 'discount',
+						amount_diff: -5,
+						reason: 'Descuento comercial',
+						adjusted_at: '2026-03-05T09:00:00.000Z',
+						adjusted_by_name: 'María José',
+					},
+					has_manual_lines: false,
+					no_charge: false,
+					erp_reset_available: false,
+				});
+				expect(result.lines.map((line) => line.is_visible)).toEqual([true, true]);
+			});
+
+			it('responde 404 si la factura no es del contrato (o el contrato no es del holding)', async () => {
+				const { service } = build((sql) => (sql.includes('LIMIT 1') ? [{ id: CONTRACT_ID }] : []));
+
+				await expect(service.invoiceDetail(CONTRACT_ID, INVOICE_ID, 'h-1')).rejects.toBeInstanceOf(NotFoundException);
+
+				const other = build(notInHolding);
+
+				await expect(other.service.invoiceDetail(CONTRACT_ID, INVOICE_ID, 'h-otro')).rejects.toBeInstanceOf(NotFoundException);
+				expect(other.query).toHaveBeenCalledTimes(1);
+			});
 		});
 	});
 
@@ -735,11 +1224,75 @@ describe('ContractsController', () => {
 			{} as ContractSubscriptionsService,
 			{} as Contract360Service,
 			{} as ContractBulkService,
-			{} as ContractActivationService
+			{} as ContractActivationService,
+			{} as ConsumptionService,
+			{} as ContractChangesService,
+			{} as ContractInvoicesService,
+			{} as ContractInvoiceDescriptionsService,
+
+			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
+			{} as never
 		);
 
 		await controller.detail(CONTRACT_ID, 'h-1');
 		expect(service.detail).toHaveBeenCalledWith(CONTRACT_ID, 'h-1');
+	});
+
+	it('detalle de factura: pasa contrato, factura y holding del guard al servicio', async () => {
+		const INVOICE_ID = '33333333-3333-4333-8333-333333333333';
+		const service = { invoiceDetail: jest.fn().mockResolvedValue({ id: INVOICE_ID, lines: [] }) } as unknown as ContractsService;
+		const controller = new ContractsController(
+			service,
+			{} as ContractDraftsService,
+			{} as ContractSubscriptionsService,
+			{} as Contract360Service,
+			{} as ContractBulkService,
+			{} as ContractActivationService,
+			{} as ConsumptionService,
+			{} as ContractChangesService,
+			{} as ContractInvoicesService,
+			{} as ContractInvoiceDescriptionsService,
+
+			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
+			{} as never
+		);
+
+		await expect(controller.invoiceDetail('CTR-2026-184', INVOICE_ID, 'h-1')).resolves.toEqual({ id: INVOICE_ID, lines: [] });
+		expect(service.invoiceDetail).toHaveBeenCalledWith('CTR-2026-184', INVOICE_ID, 'h-1');
+	});
+
+	it('descarga de documentos: pasa contrato, documento y holding del guard al servicio 360', async () => {
+		const DOC_ID = '22222222-2222-4222-8222-222222222222';
+		const contract360 = {
+			documentDownloadUrl: jest.fn().mockResolvedValue({ url: 'https://storage.test/x', expires_at: '2026-09-25T12:01:00.000Z' }),
+		};
+		const controller = new ContractsController(
+			{} as ContractsService,
+			{} as ContractDraftsService,
+			{} as ContractSubscriptionsService,
+			contract360 as unknown as Contract360Service,
+			{} as ContractBulkService,
+			{} as ContractActivationService,
+			{} as ConsumptionService,
+			{} as ContractChangesService,
+			{} as ContractInvoicesService,
+			{} as ContractInvoiceDescriptionsService,
+
+			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
+			{} as never
+		);
+
+		await expect(controller.documentDownloadUrl('CTR-2026-184', DOC_ID, 'h-1')).resolves.toEqual({
+			url: 'https://storage.test/x',
+			expires_at: '2026-09-25T12:01:00.000Z',
+		});
+		expect(contract360.documentDownloadUrl).toHaveBeenCalledWith('CTR-2026-184', DOC_ID, 'h-1');
 	});
 
 	it('suscripciones: pasa el holding del guard y la query', async () => {
@@ -753,7 +1306,16 @@ describe('ContractsController', () => {
 			subscriptions,
 			{} as Contract360Service,
 			{} as ContractBulkService,
-			{} as ContractActivationService
+			{} as ContractActivationService,
+			{} as ConsumptionService,
+			{} as ContractChangesService,
+			{} as ContractInvoicesService,
+			{} as ContractInvoiceDescriptionsService,
+
+			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
+			{} as never
 		);
 
 		await controller.subscriptions({ status: 'active' }, 'h-1');

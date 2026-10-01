@@ -69,6 +69,7 @@ export { WorkflowStepDocument } from '@/databases/postgresql/entities/contratos/
 export { WorkflowStep } from '@/databases/postgresql/entities/contratos/workflow-step.entity';
 export { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
 export { QuoteAttachment } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-attachment.entity';
+export { QuoteEvent } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity';
 export { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity';
 export { QuoteStage } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-stage.entity';
 export { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';

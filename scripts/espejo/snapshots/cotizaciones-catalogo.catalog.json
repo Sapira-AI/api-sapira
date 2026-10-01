@@ -112,6 +112,14 @@
   ],
   "indexes": [
    {
+    "name": "idx_quotes_holding_active",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": "deleted_at IS NULL"
+   },
+   {
     "name": "idx_quotes_holding_id",
     "cols": [
      "holding_id"
@@ -143,9 +151,19 @@
     ],
     "unique": true,
     "where": "salesforce_opportunity_id IS NOT NULL"
+   },
+   {
+    "name": "idx_quotes_valid_until",
+    "cols": [
+     "valid_until"
+    ],
+    "unique": false,
+    "where": "valid_until IS NOT NULL"
    }
   ],
-  "triggers": [],
+  "triggers": [
+   "quotes_set_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()"
+  ],
   "policies": [
    "Users can create quotes for their holding (INSERT, public)",
    "tenant_isolation_delete_quotes (DELETE, public)",
@@ -270,6 +288,13 @@
     ]
    },
    {
+    "name": "quote_items_price_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (price_id) REFERENCES prices(id)"
+   },
+   {
     "name": "quote_items_product_id_fkey",
     "type": "f",
     "ondelete": "a",
@@ -299,6 +324,14 @@
     ],
     "unique": false,
     "where": null
+   },
+   {
+    "name": "idx_quote_items_price_id",
+    "cols": [
+     "price_id"
+    ],
+    "unique": false,
+    "where": "price_id IS NOT NULL"
    },
    {
     "name": "idx_quote_items_quote_item_number",
@@ -434,6 +467,11 @@
     ]
    },
    {
+    "name": "quote_stages_kind_check",
+    "type": "c",
+    "expr": "(kind IS NULL) OR (kind = ANY (ARRAY['draft'::text, 'sent'::text, 'signed'::text, 'lost'::text, 'contract_created'::text]))"
+   },
+   {
     "name": "quote_stages_pkey",
     "type": "p",
     "cols": [
@@ -441,7 +479,17 @@
     ]
    }
   ],
-  "indexes": [],
+  "indexes": [
+   {
+    "name": "idx_quote_stages_holding_kind_unique",
+    "cols": [
+     "holding_id",
+     "kind"
+    ],
+    "unique": true,
+    "where": "kind = ANY (ARRAY['signed'::text, 'lost'::text])"
+   }
+  ],
   "triggers": [
    "update_quote_stages_updated_at · BEFORE UPDATE FOR EACH ROW → update_quote_stages_updated_at()"
   ],
@@ -489,6 +537,95 @@
      "public"
     ],
     "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "quote_events": {
+  "comment": "Historial de la cotización: creación, edición, transiciones, duplicado, contrato y borrado",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "quote_events_actor_id_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (actor_id) REFERENCES users(id)"
+   },
+   {
+    "name": "quote_events_from_stage_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (from_stage_id) REFERENCES quote_stages(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "quote_events_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "quote_events_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_quote_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "quote_events_to_stage_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (to_stage_id) REFERENCES quote_stages(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "quote_events_type_check",
+    "type": "c",
+    "expr": "type = ANY (ARRAY['CREATED'::text, 'UPDATED'::text, 'SENT'::text, 'SIGNED'::text, 'LOST'::text, 'REOPENED'::text, 'STAGE_CHANGED'::text, 'DUPLICATED_FROM'::text, 'CONTRACT_CREATED'::text, 'APPLIED_TO_CONTRACT'::text, 'DELETED'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_quote_events_holding_id",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_quote_events_quote_id",
+    "cols": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_quote_events (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_quote_events",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
     "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }

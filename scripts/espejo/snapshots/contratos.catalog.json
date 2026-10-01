@@ -2424,7 +2424,7 @@
    {
     "name": "prices_contract_owner_check",
     "type": "c",
-    "expr": "((owner = 'contract'::text) AND (contract_id IS NOT NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL))"
+    "expr": "((owner = 'contract'::text) AND (contract_id IS NOT NULL) AND (quote_id IS NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL) AND (quote_id IS NULL)) OR ((owner = 'quote'::text) AND (quote_id IS NOT NULL) AND (contract_id IS NULL))"
    },
    {
     "name": "prices_created_by_fkey",
@@ -2465,7 +2465,7 @@
    {
     "name": "prices_owner_check",
     "type": "c",
-    "expr": "owner = ANY (ARRAY['catalog'::text, 'contract'::text])"
+    "expr": "owner = ANY (ARRAY['catalog'::text, 'contract'::text, 'quote'::text])"
    },
    {
     "name": "prices_pkey",
@@ -2485,6 +2485,13 @@
     "name": "prices_quantity_type_check",
     "type": "c",
     "expr": "quantity_type = ANY (ARRAY['fixed'::text, 'metered'::text])"
+   },
+   {
+    "name": "prices_quote_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE"
    },
    {
     "name": "prices_status_check",
@@ -2532,6 +2539,14 @@
     ],
     "unique": false,
     "where": null
+   },
+   {
+    "name": "idx_prices_quote_id",
+    "cols": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": "owner = 'quote'::text"
    }
   ],
   "triggers": [],

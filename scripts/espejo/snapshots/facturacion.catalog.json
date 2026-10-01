@@ -207,7 +207,7 @@
    {
     "name": "invoice_adjustments_type_check",
     "type": "c",
-    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
+    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])"
    }
   ],
   "indexes": [
@@ -695,7 +695,7 @@
    {
     "name": "invoice_items_quantity_source_check",
     "type": "c",
-    "expr": "(quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text]))"
+    "expr": "(quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text]))"
    },
    {
     "name": "invoice_items_subscription_item_id_fkey",
@@ -703,6 +703,13 @@
     "ondelete": "a",
     "onupdate": "a",
     "def": "FOREIGN KEY (subscription_item_id) REFERENCES subscription_items(id)"
+   },
+   {
+    "name": "invoice_items_visible_line_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (visible_line_id) REFERENCES invoice_items(id) ON DELETE SET NULL"
    }
   ],
   "indexes": [
@@ -777,6 +784,14 @@
     ],
     "unique": false,
     "where": "subscription_item_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_visible_line_id",
+    "cols": [
+     "visible_line_id"
+    ],
+    "unique": false,
+    "where": "visible_line_id IS NOT NULL"
    }
   ],
   "triggers": [
@@ -1386,7 +1401,7 @@
    {
     "name": "invoices_nc_revenue_treatment_check",
     "type": "c",
-    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))"
+    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))"
    },
    {
     "name": "invoices_payment_method_check",

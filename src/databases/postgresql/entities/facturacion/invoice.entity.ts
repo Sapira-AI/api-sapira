@@ -22,9 +22,11 @@ import { Subscription } from '@/databases/postgresql/entities/suscripciones/subs
 	'invoices_invoice_type_check',
 	`((invoice_type = ANY (ARRAY['Manual'::text, 'Automatica'::text, 'Consolidada'::text, 'Importada'::text, 'Suscripción'::text, 'Unificada'::text])))`
 )
+// Facturas en el 360 · etapa 4 (migración 1790680000000): se agrega `service_period` y el campo también vale para el descuento puntual de
+// una factura (no NC).
 @Check(
 	'invoices_nc_revenue_treatment_check',
-	`(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))))`
+	`(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))))`
 )
 @Check('invoices_payment_method_check', `((payment_method = ANY (ARRAY['CONTADO'::text, 'CREDITO'::text])))`)
 @Check(
@@ -279,7 +281,7 @@ export class Invoice {
 		type: 'text',
 		nullable: true,
 		comment:
-			'Solo NC discount: devengo del descuento en RSM (impact_month = mes de la NC; defer_forward = meses restantes del ítem). NULL en facturas y NC de anulación/churn.',
+			'Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto.',
 	})
 	nc_revenue_treatment?: string;
 

@@ -26,6 +26,14 @@ import { CONTRACT_DOCUMENT_TYPES, type ContractDocumentType } from '@/databases/
 import { PaymentTermsDto } from '@/modules/clients/dtos/client-directory.dto';
 
 import { BILLING_FREQUENCIES, BILLING_METHODS, type BillingFrequency, type BillingMethod } from '../billing-engine';
+import {
+	INVOICE_LINE_MODES,
+	type InvoiceLineMode,
+	PRICE_MODELS,
+	PRICE_QUANTITY_TYPES,
+	type PriceModel,
+	type PriceQuantityType,
+} from '../pricing-engine';
 
 export const FX_INVOICE_POLICIES = ['spot', 'fixed'] as const;
 /**
@@ -48,7 +56,7 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 
 /**
  * Tasa fija por período, con la regla única "1 [moneda del contrato] = rate [otra moneda]" (se multiplica). Sin fechas,
- * cubre todo el contrato (del primer inicio al último fin de los ítems).
+ * cubre todo el contrato (se guarda como "todo el contrato" y se resuelve sobre su horizonte real al generar y activar).
  */
 export class FxRatePeriodDto {
 	@ApiProperty({ description: '1 [moneda del contrato] = rate [moneda de factura o de la compañía]', example: 950 })
@@ -57,16 +65,142 @@ export class FxRatePeriodDto {
 	@Max(999999999, { message: 'Tasa fuera de rango' })
 	rate!: number;
 
-	@ApiPropertyOptional({ example: '2026-10-01', description: 'Default: primer inicio de los ítems' })
+	@ApiPropertyOptional({
+		example: '2026-10-01',
+		description:
+			'Sin period_start ni period_end = tasa para todo el contrato (no convive con tasas por período). Solo fin: inicio = primer inicio de los ítems',
+	})
 	@Matches(ISO_DATE, { message: 'Fecha de inicio de la tasa inválida' })
 	@IsOptional()
 	period_start?: string;
 
-	@ApiPropertyOptional({ example: '2027-09-30', description: 'Default: último fin de los ítems' })
+	@ApiPropertyOptional({
+		example: '2027-09-30',
+		description: 'Default (con inicio): último fin de los ítems; un ítem sin término cubre su horizonte de 12 períodos',
+	})
 	@Matches(ISO_DATE, { message: 'Fecha de fin de la tasa inválida' })
 	@IsOptional()
 	period_end?: string;
 }
+
+/** Tramo de un precio `graduated`/`volume` (Pricing v2 §3.1): `from` de cada tramo = `to` anterior + 1; el último `to` es null (∞). */
+export class PriceTierDto {
+	@ApiProperty({ description: 'Primera unidad del tramo (el primero empieza en 1)', example: 1 })
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe desde qué unidad va el tramo' })
+	@Min(1, { message: 'El tramo empieza en una unidad de 1 o más' })
+	from!: number;
+
+	@ApiPropertyOptional({ description: 'Última unidad del tramo; null o ausente = infinito (solo el último)', nullable: true, example: 500 })
+	@ValidateIf((_tier: PriceTierDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe hasta qué unidad va el tramo' })
+	@Min(1, { message: 'El fin del tramo va de 1 en adelante' })
+	to?: number | null;
+
+	@ApiProperty({ description: 'Precio por unidad dentro del tramo', example: 0.08 })
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio unitario del tramo' })
+	@Min(0, { message: 'El precio unitario del tramo no puede ser negativo' })
+	per_unit_amount!: number;
+
+	@ApiPropertyOptional({ description: 'Cargo fijo del tramo (una vez por período si el tramo tiene unidades)', default: 0 })
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Cargo fijo del tramo inválido' })
+	@Min(0, { message: 'El cargo fijo del tramo no puede ser negativo' })
+	@IsOptional()
+	flat_amount?: number;
+}
+
+/**
+ * Modelo de precio inline del ítem (Pricing v2 etapa 1, `docs/v2-rediseno/spec-pricing-v2.md` §2.2 y §4.1). Se guarda como fila
+ * de `prices` con `owner = contract` y el ítem la apunta con `price_id`. La coherencia entre campos (tramos contiguos,
+ * métrica si es medido, tope ≥ mínimo) la valida `validatePriceSpec` con `errors[{ field: items.N.price.<campo> }]`.
+ */
+export class PriceSpecDto {
+	@ApiProperty({ enum: PRICE_MODELS, description: 'standard (por unidad), graduated (por tramos), volume, package o seat' })
+	@IsIn(PRICE_MODELS, { message: 'Elige el modelo de precio: fijo, por tramos, volumen, paquete o asiento' })
+	model!: PriceModel;
+
+	@ApiProperty({ enum: PRICE_QUANTITY_TYPES, description: 'fixed = la cantidad del ítem; metered = la métrica facturable por período' })
+	@IsIn(PRICE_QUANTITY_TYPES, { message: 'Indica si la cantidad es fija o medida' })
+	quantity_type!: PriceQuantityType;
+
+	@ApiPropertyOptional({ description: 'Métrica facturable del holding (obligatoria si quantity_type = metered)' })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsUUID(undefined, { message: 'Métrica facturable inválida' })
+	billable_metric_id?: string | null;
+
+	@ApiPropertyOptional({ description: 'standard y seat: precio por unidad del período de la línea (no mensual)' })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio por unidad del período' })
+	@Min(0, { message: 'El precio por unidad no puede ser negativo' })
+	unit_amount?: number | null;
+
+	@ApiPropertyOptional({ type: [PriceTierDto], description: 'graduated/volume: tramos contiguos desde 1, el último hasta infinito' })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsArray({ message: 'Agrega al menos un tramo' })
+	@ArrayMaxSize(50, { message: 'Máximo 50 tramos' })
+	@ValidateNested({ each: true })
+	@Type(() => PriceTierDto)
+	tiers?: PriceTierDto[] | null;
+
+	@ApiPropertyOptional({ description: 'package: unidades por bloque' })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe cuántas unidades tiene el paquete' })
+	@Min(0.000001, { message: 'El paquete debe tener más de 0 unidades' })
+	package_size?: number | null;
+
+	@ApiPropertyOptional({ description: 'package: precio del bloque' })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el precio del paquete' })
+	@Min(0.01, { message: 'El precio del paquete debe ser mayor que 0' })
+	package_amount?: number | null;
+
+	@ApiPropertyOptional({ description: 'seat: asientos mínimos cobrados por período', default: 0 })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Mínimo de asientos inválido' })
+	@Min(0, { message: 'El mínimo de asientos no puede ser negativo' })
+	seat_minimum_quantity?: number | null;
+
+	@ApiPropertyOptional({ description: 'Unidades gratis por período (ocupan las primeras posiciones del primer tramo)', default: 0 })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Unidades gratis inválidas' })
+	@Min(0, { message: 'Las unidades gratis no pueden ser negativas' })
+	free_units?: number | null;
+
+	@ApiPropertyOptional({ description: 'Mínimo comprometido por período con true-up; null = sin mínimo', nullable: true })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Mínimo comprometido inválido' })
+	@Min(0, { message: 'El mínimo comprometido no puede ser negativo' })
+	minimum_amount?: number | null;
+
+	@ApiPropertyOptional({ description: 'Tope máximo por período; null = sin tope (debe ser ≥ mínimo)', nullable: true })
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Tope máximo inválido' })
+	@Min(0, { message: 'El tope máximo no puede ser negativo' })
+	cap_amount?: number | null;
+
+	@ApiPropertyOptional({
+		enum: INVOICE_LINE_MODES,
+		default: 'single',
+		description:
+			'Presentación en la factura (spec §3.8): single = una línea (cantidad del período × unitario efectivo) con el detalle por tramo en la glosa; per_tier = una línea por tramo/paquete/asiento más una por ajuste (descuento, mínimo, tope)',
+	})
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsIn(INVOICE_LINE_MODES, { message: 'Elige cómo se presenta en la factura: una línea (single) o una por tramo (per_tier)' })
+	invoice_line_mode?: InvoiceLineMode | null;
+
+	@ApiPropertyOptional({
+		default: false,
+		description: 'graduated/volume: cobrar el cargo fijo del tramo aunque todo el consumo del período caiga en unidades gratis (spec §3.5)',
+	})
+	@ValidateIf((_price: PriceSpecDto, value: unknown) => value !== null && value !== undefined)
+	@IsBoolean({ message: 'Indica con verdadero o falso si el cargo fijo se cobra con todo el consumo gratis' })
+	charge_flat_when_free?: boolean | null;
+}
+
+/** `true` si el ítem trae un precio distinto del "standard fijo" de hoy (el unitario mensual deja de ser obligatorio). */
+export const hasPricingModel = (item: { price?: PriceSpecDto | null }) =>
+	Boolean(item.price) && !(item.price!.model === 'standard' && item.price!.quantity_type === 'fixed');
+/** El ítem trae un modelo de precio: inline distinto de standard fijo, o un precio de catálogo (`price_id`, etapa 3). */
+export const usesPricingModel = (item: { price?: PriceSpecDto | null; price_id?: string | null }) => hasPricingModel(item) || Boolean(item.price_id);
 
 /** Ítem de `CreateContractDto`. Límites de texto = los de `contract_items` (varchar 64/32/128). */
 export class CreateContractItemDto {
@@ -120,11 +254,39 @@ export class CreateContractItemDto {
 	@Min(0.000001, { message: 'La cantidad debe ser mayor que 0' })
 	quantity!: number;
 
-	@ApiPropertyOptional({ description: 'Precio unitario mensual. Obligatorio salvo con price_entry_mode annual' })
-	@ValidateIf((item: CreateContractItemDto) => item.price_entry_mode !== 'annual' || item.unit_price !== undefined)
+	@ApiPropertyOptional({
+		description: 'Precio unitario mensual. Obligatorio salvo con price_entry_mode annual o con un modelo de precio (`price` o `price_id`)',
+	})
+	@ValidateIf((item: CreateContractItemDto) => (item.price_entry_mode !== 'annual' && !usesPricingModel(item)) || item.unit_price !== undefined)
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio unitario' })
 	@Min(0, { message: 'El precio no puede ser negativo' })
 	unit_price?: number;
+
+	@ApiPropertyOptional({
+		type: PriceSpecDto,
+		description:
+			'Pricing v2: modelo de precio inline del ítem (se guarda en `prices` con owner = contract). Sin él, el ítem es standard fijo (unit_price mensual × cantidad × meses). metered + Anticipado → 400 salvo seat',
+	})
+	@ValidateIf((_item: CreateContractItemDto, value: unknown) => value !== null && value !== undefined)
+	@ValidateNested()
+	@Type(() => PriceSpecDto)
+	price?: PriceSpecDto | null;
+
+	@ApiPropertyOptional({
+		description:
+			'Pricing v2 etapa 3: precio de catálogo (`GET /prices`, activo, del mismo producto y de la moneda del contrato). El contrato recibe su propia copia en `prices` (owner = contract, `list_price_id` = catálogo): cambios posteriores del catálogo no lo alteran. No se combina con `price`',
+	})
+	@IsUUID(undefined, { message: 'Precio de catálogo inválido' })
+	@IsOptional()
+	price_id?: string;
+
+	@ApiPropertyOptional({
+		description:
+			'Solo lectura: precio de catálogo del que salió la copia del ítem (lo devuelve `GET /contracts/:id/form`). Al guardar se conserva si vuelve igual; para cambiar de catálogo manda `price_id`',
+	})
+	@IsUUID(undefined, { message: 'Precio de catálogo inválido' })
+	@IsOptional()
+	list_price_id?: string | null;
 
 	@ApiPropertyOptional({ description: 'Precio unitario anual (con price_entry_mode annual)' })
 	@ValidateIf((item: CreateContractItemDto) => item.price_entry_mode === 'annual' || item.annual_unit_price !== undefined)
@@ -156,11 +318,16 @@ export class CreateContractItemDto {
 	@Matches(ISO_DATE, { message: 'Elige la fecha de inicio' })
 	start_date!: string;
 
-	@ApiProperty({ description: 'Plazo en meses' })
+	@ApiPropertyOptional({
+		description:
+			'Plazo en meses (1–600). `null` = sin término (S1-12): solo en recurrentes; el ítem queda sin `end_date` y se facturan 12 períodos de horizonte. Un ítem de pago único siempre lleva plazo',
+		nullable: true,
+	})
+	@ValidateIf((item: CreateContractItemDto) => item.is_recurring === false || (item.term_months !== null && item.term_months !== undefined))
 	@IsInt({ message: 'El plazo va en meses enteros' })
 	@Min(1, { message: 'El plazo mínimo es 1 mes' })
 	@Max(600, { message: 'El plazo máximo es 600 meses' })
-	term_months!: number;
+	term_months!: number | null;
 
 	@ApiPropertyOptional({ default: true })
 	@IsBoolean({ message: 'Indica si el ítem es recurrente' })
@@ -236,15 +403,14 @@ export class CreateContractDto {
 
 	@ApiPropertyOptional({
 		type: [FxRatePeriodDto],
-		description: 'Tasas fijas contrato → factura (al menos una con fx_invoice_policy fixed). `[{ rate }]` = una tasa para todo el contrato',
+		description:
+			'Tasas fijas contrato → factura (solo con fx_invoice_policy fixed). Opcionales al crear: sin tasa, cada factura la recibe desde el 360 › Facturas antes de emitirse (el scheduler no emite sin tasa). `[{ rate }]` = una tasa para todo el contrato',
 	})
-	@ValidateIf((dto: CreateContractDto) => dto.fx_invoice_policy === 'fixed' || dto.fx_invoice_rates !== undefined)
+	@ValidateIf((dto: CreateContractDto) => dto.fx_invoice_rates !== undefined)
 	@ValidateNested({ each: true })
 	@Type(() => FxRatePeriodDto)
 	@ArrayMaxSize(FX_RATES_MAX, { message: `Máximo ${FX_RATES_MAX} tasas` })
-	// class-validator informa primero el decorador de más abajo: "Agrega la tasa" cuando falta.
-	@ArrayMinSize(1, { message: 'Agrega la tasa fija de facturación' })
-	@IsArray({ message: 'Agrega la tasa fija de facturación' })
+	@IsArray({ message: 'Tasas fijas de facturación inválidas' })
 	fx_invoice_rates?: FxRatePeriodDto[];
 
 	@ApiPropertyOptional({
@@ -275,17 +441,31 @@ export class CreateContractDto {
 	@IsOptional()
 	payment_terms?: PaymentTermsDto;
 
-	@ApiPropertyOptional({ enum: CONTRACT_DOCUMENT_TYPES, description: 'Default: sugerido por país emisor vs receptor' })
+	@ApiPropertyOptional({
+		description:
+			'Documento tributario del catálogo (`form-options.companies[].tax_document_types`). Debe ser del país de la compañía emisora (o genérico si el país no tiene catálogo). Default: `suggested_tax_document_type_id`. Fija `document_type` por su familia',
+	})
+	@IsUUID(undefined, { message: 'Documento tributario inválido' })
+	@IsOptional()
+	tax_document_type_id?: string;
+
+	@ApiPropertyOptional({
+		enum: CONTRACT_DOCUMENT_TYPES,
+		description: 'Familia del documento. Solo se usa si no hay documento tributario del catálogo; default: sugerido por país emisor vs receptor',
+	})
 	@IsIn(CONTRACT_DOCUMENT_TYPES, { message: 'Tipo de documento inválido' })
 	@IsOptional()
 	document_type?: ContractDocumentType;
 
-	@ApiPropertyOptional({ description: 'Día de ciclo 1–31; default: día del primer inicio de los recurrentes' })
+	@ApiPropertyOptional({
+		description: 'Día de ciclo 1–31; ausente/null = automático (se guarda NULL y el generador usa el día del primer inicio de los recurrentes)',
+		nullable: true,
+	})
 	@IsInt({ message: 'Día de ciclo inválido' })
 	@Min(1, { message: 'El día de ciclo va de 1 a 31' })
 	@Max(31, { message: 'El día de ciclo va de 1 a 31' })
 	@IsOptional()
-	billing_anchor_day?: number;
+	billing_anchor_day?: number | null;
 
 	@ApiPropertyOptional({ default: true, description: 'true = ítems juntos por mes de emisión; false = una factura por ítem' })
 	@IsBoolean({ message: 'Agrupación inválida' })
@@ -297,27 +477,30 @@ export class CreateContractDto {
 	@IsOptional()
 	auto_send_to_odoo?: boolean;
 
-	@ApiPropertyOptional({ default: false })
+	@ApiPropertyOptional({ default: false, description: 'Requiere auto_send_to_odoo (S6-10); ambos requieren integración con el ERP en la compañía' })
 	@IsBoolean({ message: 'Facturación automática inválida' })
 	@IsOptional()
 	auto_invoice?: boolean;
 
-	@ApiPropertyOptional({ description: 'Fecha de cierre del negocio; default: la de la cotización (o se fija al activar)' })
+	@ApiPropertyOptional({
+		description: 'Fecha de cierre del negocio; default: la de la cotización (o se fija al activar). En PUT, null la borra',
+		nullable: true,
+	})
 	@Matches(ISO_DATE, { message: 'Fecha de cierre inválida' })
 	@IsOptional()
-	booking_date?: string;
+	booking_date?: string | null;
 
 	@ApiPropertyOptional({ description: 'Cotización firmada de origen' })
 	@IsUUID(undefined, { message: 'Cotización inválida' })
 	@IsOptional()
 	quote_id?: string;
 
-	@ApiPropertyOptional()
+	@ApiPropertyOptional({ description: 'Oportunidad del CRM. En PUT, null (o texto vacío) la borra', nullable: true })
 	@Transform(trim)
 	@IsString({ message: 'Oportunidad inválida' })
 	@MaxLength(40, { message: 'Oportunidad: máximo 40 caracteres' })
 	@IsOptional()
-	salesforce_opportunity_id?: string;
+	salesforce_opportunity_id?: string | null;
 
 	@ApiPropertyOptional()
 	@IsString({ message: 'Notas inválidas' })
@@ -336,6 +519,30 @@ export class CreateContractDto {
 	@IsOptional()
 	custom_fields?: Record<string, unknown>;
 
+	@ApiPropertyOptional({
+		default: false,
+		description: 'S1-15: se factura desde más de una compañía del holding. Default: lo que diga la cotización, si hay',
+	})
+	@IsBoolean({ message: 'Marca multiempresa inválida' })
+	@IsOptional()
+	requires_multicompany_billing?: boolean;
+
+	@ApiPropertyOptional({
+		default: false,
+		description: 'S1-15: ítems en distinta moneda (próximo bloque). Default: lo que diga la cotización, si hay',
+	})
+	@IsBoolean({ message: 'Marca multimoneda inválida' })
+	@IsOptional()
+	requires_multicurrency_billing?: boolean;
+
+	@ApiPropertyOptional({
+		default: false,
+		description: 'S1-15: las facturas no se emiten sin referencia (OC/HES). Default: lo que diga la cotización, si hay',
+	})
+	@IsBoolean({ message: 'Marca de referencias inválida' })
+	@IsOptional()
+	requires_references_for_billing?: boolean;
+
 	@ApiProperty({ type: [CreateContractItemDto] })
 	@IsArray({ message: 'Agrega al menos un ítem' })
 	@ArrayMinSize(1, { message: 'Agrega al menos un ítem' })
@@ -343,4 +550,60 @@ export class CreateContractDto {
 	@ValidateNested({ each: true })
 	@Type(() => CreateContractItemDto)
 	items!: CreateContractItemDto[];
+}
+
+/** Ítem de `PUT /contracts/:id`: con `id` actualiza el ítem existente del borrador; sin `id` lo crea. */
+export class UpdateContractItemDto extends CreateContractItemDto {
+	@ApiPropertyOptional({ description: 'Ítem existente del borrador (`GET /contracts/:id/form`). Los ítems del borrador que no vengan se eliminan' })
+	@IsUUID(undefined, { message: 'Ítem del contrato inválido' })
+	@IsOptional()
+	id?: string;
+}
+
+/**
+ * Body de `PUT /contracts/:id` (solo borradores): el formulario completo, con las mismas reglas que crear. El número de
+ * contrato y la cotización de origen no cambian al editar (`contract_number` y `quote_id` se validan pero no se reasignan).
+ */
+export class UpdateContractDto extends CreateContractDto {
+	@ApiProperty({ type: [UpdateContractItemDto] })
+	@IsArray({ message: 'Agrega al menos un ítem' })
+	@ArrayMinSize(1, { message: 'Agrega al menos un ítem' })
+	@ArrayMaxSize(200, { message: 'Máximo 200 ítems por contrato' })
+	@ValidateNested({ each: true })
+	@Type(() => UpdateContractItemDto)
+	items!: UpdateContractItemDto[];
+}
+
+/** Body de `PATCH /contracts/:id/terms`. `null` borra las condiciones. */
+export class UpdateContractTermsDto {
+	@ApiProperty({ description: 'Texto para el campo narration de las facturas en el ERP (acepta HTML); null lo borra', nullable: true })
+	@ValidateIf((_dto: UpdateContractTermsDto, value: unknown) => value !== null)
+	// class-validator informa primero el decorador de más abajo: "Escribe las condiciones" cuando falta.
+	@MaxLength(5000, { message: 'Las condiciones no pueden superar 5.000 caracteres' })
+	@IsString({ message: 'Escribe las condiciones de factura (o null para borrarlas)' })
+	invoice_terms_and_conditions!: string | null;
+}
+
+/** Body de `POST /contracts/price-preview` (Pricing v2 §5): simula un precio para varias cantidades sin guardar nada. */
+export class PricePreviewDto {
+	@ApiProperty({ type: PriceSpecDto })
+	@ValidateNested()
+	@Type(() => PriceSpecDto)
+	@IsObject({ message: 'Define el precio a simular' })
+	price!: PriceSpecDto;
+
+	@ApiPropertyOptional({ description: 'Descuento del ítem en porcentaje (0–100)', default: 0 })
+	@IsNumber({ maxDecimalPlaces: 4 }, { message: 'Descuento inválido' })
+	@Min(0, { message: 'El descuento va de 0 a 100 %' })
+	@Max(100, { message: 'El descuento va de 0 a 100 %' })
+	@IsOptional()
+	discount_pct?: number;
+
+	@ApiProperty({ type: [Number], description: 'Cantidades a simular (una línea por cantidad)', example: [300, 1250, 1400] })
+	@IsArray({ message: 'Indica al menos una cantidad a simular' })
+	@ArrayMinSize(1, { message: 'Indica al menos una cantidad a simular' })
+	@ArrayMaxSize(50, { message: 'Máximo 50 cantidades por simulación' })
+	@IsNumber({ maxDecimalPlaces: 6 }, { each: true, message: 'Cantidad a simular inválida' })
+	@Min(0, { each: true, message: 'La cantidad a simular no puede ser negativa' })
+	quantities!: number[];
 }

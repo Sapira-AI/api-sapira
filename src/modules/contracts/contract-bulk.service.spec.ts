@@ -62,6 +62,7 @@ describe('ContractBulkService.updateSettings', () => {
 		const result = await service.updateSettings({ ids: [A, B], auto_send_to_odoo: true }, 'h-1', 'auth-1');
 
 		expect(result).toEqual({
+			bulk_id: expect.any(String),
 			updated: 1,
 			unchanged: 1,
 			results: [
@@ -72,7 +73,7 @@ describe('ContractBulkService.updateSettings', () => {
 		const [[selectSql, selectParams]] = calls(runner.query, 'FROM contracts c');
 
 		expect(selectSql).toContain('c.id = ANY($1::uuid[]) AND c.holding_id = $2');
-		expect(selectSql).toContain("(to_jsonb(c)->>'deleted_at') IS NULL");
+		expect(selectSql).toContain('c.deleted_at IS NULL');
 		expect(selectSql).toContain('FOR UPDATE OF c');
 		expect(selectParams).toEqual([[A, B], 'h-1']);
 		expect(calls(runner.query, 'UPDATE contracts').map(([, params]) => params)).toEqual([[A, 'h-1', true, false]]);
@@ -86,10 +87,28 @@ describe('ContractBulkService.updateSettings', () => {
 		expect(JSON.parse(metadata as string)).toEqual({
 			source: 'api_v2',
 			bulk: true,
+			bulk_id: result.bulk_id,
 			before: { auto_send_to_odoo: false, auto_invoice: false },
 			after: { auto_send_to_odoo: true, auto_invoice: false },
 		});
 		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('los eventos de una misma acción comparten bulk_id; si la costura falla se hace rollback y se libera la conexión', async () => {
+		const { service, runner } = build([contract(A, 'CTR-A', false, false), contract(B, 'CTR-B', false, false)]);
+		const result = await service.updateSettings({ ids: [A, B], auto_send_to_odoo: true }, 'h-1', 'auth-1');
+		const ids = calls(runner.query, `'SETTINGS_CHANGED'`).map(([, params]) => JSON.parse((params as unknown[])[5] as string).bulk_id);
+
+		expect(ids).toEqual([result.bulk_id, result.bulk_id]);
+		const failing = build([contract(A, 'CTR-A', false, false)], (sql) => {
+			if (sql.includes('sapira.writer')) throw new Error('sin conexión');
+
+			return undefined;
+		});
+
+		await expect(failing.service.updateSettings({ ids: [A], auto_send_to_odoo: true }, 'h-1', 'auth-1')).rejects.toThrow('sin conexión');
+		expect(failing.runner.rollbackTransaction).toHaveBeenCalledTimes(1);
+		expect(failing.runner.release).toHaveBeenCalledTimes(1);
 	});
 
 	it('S6-10: rechaza encender la emisión automática si el contrato no envía al ERP (toda la acción, con mensaje claro)', async () => {

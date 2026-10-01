@@ -791,7 +791,7 @@
  "stripe_customers_bigquery": {
   "name": "public.stripe_customers_bigquery",
   "rls_enabled": true,
-  "rows": 26974,
+  "rows": 27671,
   "columns": [
    {
     "name": "id",
