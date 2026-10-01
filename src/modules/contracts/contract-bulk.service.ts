@@ -1,8 +1,11 @@
+import { randomUUID } from 'crypto';
+
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 
+import { setApiWriter } from './api-writer';
 import { resolveUserId } from './contract-drafts.service';
 
 import type { BulkContractSettingsDto } from './dtos/bulk-contracts.dto';
@@ -64,11 +67,13 @@ export class ContractBulkService {
 		await runner.connect();
 		await runner.startTransaction();
 		try {
+			// Costura `sapira.writer = 'api'`: primera sentencia de la transacción v2.
+			await setApiWriter(runner);
 			const rows = (await runner.query(
 				`SELECT c.id, c.contract_number, c.auto_send_to_odoo, c.auto_invoice,
 					EXISTS (SELECT 1 FROM contract_items ci WHERE ci.contract_id = c.id AND ci.currency IS DISTINCT FROM c.contract_currency) AS currency_mismatch
 				FROM contracts c
-				WHERE c.id = ANY($1::uuid[]) AND c.holding_id = $2 AND (to_jsonb(c)->>'deleted_at') IS NULL
+				WHERE c.id = ANY($1::uuid[]) AND c.holding_id = $2 AND c.deleted_at IS NULL
 				FOR UPDATE OF c`,
 				[ids, holdingId]
 			)) as Row[];
@@ -119,6 +124,8 @@ export class ContractBulkService {
 			});
 
 			if (errors.length) throw validationException(errors);
+			// Un id común a todos los eventos de la misma acción masiva (como `bulk_id` de las facturas): se audita y revierte en bloque.
+			const bulkId = randomUUID();
 
 			for (const entry of plan.filter((item) => item.changed)) {
 				await runner.query(`UPDATE contracts SET auto_send_to_odoo = $3, auto_invoice = $4 WHERE id = $1 AND holding_id = $2`, [
@@ -137,7 +144,7 @@ export class ContractBulkService {
 						settingsChangeTitle(entry.before, entry.after),
 						'Configuración cambiada con la acción masiva de contratos',
 						userId,
-						JSON.stringify({ source: 'api_v2', bulk: true, before: entry.before, after: entry.after }),
+						JSON.stringify({ source: 'api_v2', bulk: true, bulk_id: bulkId, before: entry.before, after: entry.after }),
 					]
 				);
 			}
@@ -146,6 +153,7 @@ export class ContractBulkService {
 			const updated = plan.filter((entry) => entry.changed).length;
 
 			return {
+				bulk_id: updated ? bulkId : null,
 				updated,
 				unchanged: plan.length - updated,
 				results: plan.map((entry) => ({ id: entry.id, contract_number: entry.contract_number, changed: entry.changed })),

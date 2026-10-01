@@ -9,6 +9,8 @@
  * Todas las fechas son `YYYY-MM-DD` (texto), así se comparan como string sin problemas de zona horaria.
  */
 
+import type { priceSummaryFromRow } from './price-rows';
+
 export type ContractItemStatus = 'active' | 'future' | 'ended' | 'churned' | 'renewed';
 
 export interface ContractItem {
@@ -44,6 +46,36 @@ export interface ContractItem {
 	status: ContractItemStatus;
 }
 
+/** Precio del ítem en `GET /contracts/:id/items` (el resto de lectores de ítems no lo cargan). */
+export interface PricedItemFields {
+	/** Modelo de precio (`contract_items.price_id` → `prices`), mismo shape que `GET /:id/consumption` `items[].price`. */
+	price: ItemPrice | null;
+	/** Métrica facturable del precio (`prices.billable_metric_id` → `billable_metrics`). */
+	metric: ItemMetric | null;
+	/** Precio de catálogo del que salió la copia (`prices.list_price_id`), para "Catálogo · <name> v<version>". */
+	catalog_price: CatalogPriceRef | null;
+	/** `true` si el ítem tiene precio declarado: `unit_price` es el unitario mensual equivalente guardado, no el del modelo. */
+	uses_price_model: boolean;
+}
+
+export interface PricedContractItem extends ContractItem, PricedItemFields {}
+
+export type ItemPrice = NonNullable<ReturnType<typeof priceSummaryFromRow>>;
+
+export interface ItemMetric {
+	id: string;
+	code: string;
+	name: string;
+	unit: string;
+	aggregation: string;
+}
+
+export interface CatalogPriceRef {
+	id: string;
+	name: string | null;
+	version: number;
+}
+
 /** Línea de una factura Por Emitir activa del contrato, para cruzar el ítem madre con la próxima factura. */
 export interface PendingInvoiceLine {
 	invoice_id: string;
@@ -69,6 +101,12 @@ export interface ItemGroup {
 	end_date: string | null;
 	item_ids: string[];
 	next_invoice: { id: string; issue_date: string | null; amount: number; matches: boolean } | null;
+	/** Precio común de los ítems vigentes del grupo (todos con el mismo `price.id`); si difieren o no tienen, `null`. */
+	price: ItemPrice | null;
+	metric: ItemMetric | null;
+	catalog_price: CatalogPriceRef | null;
+	/** Algún ítem vigente del grupo tiene modelo de precio: el unitario efectivo (MRR ÷ cantidad) no es "c/u". */
+	uses_price_model: boolean;
 }
 
 type ItemForStatus = Pick<ContractItem, 'churn_date' | 'categoria' | 'renewed_by_item_id' | 'start_date' | 'end_date'>;
@@ -108,8 +146,8 @@ type GroupableItem = Pick<
 >;
 
 const num = (value: unknown) => Number(value) || 0;
-/** Ajuste (delta) = categoría UPSELL o DOWNSELL. */
-const isDelta = (item: GroupableItem) => item.categoria === 'UPSELL' || item.categoria === 'DOWNSELL';
+/** Ajuste (delta) = categoría UPSELL, DOWNSELL o el espejo CHURN de una baja total. */
+const isDelta = (item: GroupableItem) => item.categoria === 'UPSELL' || item.categoria === 'DOWNSELL' || item.categoria === 'CHURN';
 /** Vigente = sin churn ya efectivo y sin fin pasado (mismo criterio que ContractItemsSummary). */
 const isCurrent = (item: GroupableItem, today: string) => {
 	if (item.churn_date && item.churn_date <= today) return false;
@@ -132,12 +170,24 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
  *
  * Los no recurrentes y los grupos sin ítems vigentes no forman grupo: el front los muestra desde `items`.
  */
-export const buildItemGroups = <T extends GroupableItem>(items: T[], today: string, pendingLines: PendingInvoiceLine[] = []): ItemGroup[] => {
+export const buildItemGroups = <T extends GroupableItem>(
+	items: T[],
+	today: string,
+	pendingLines: PendingInvoiceLine[] = [],
+	/** Precio de cada ítem (solo `GET /:id/items`): el grupo lo resume si todos sus vigentes comparten `price.id`. */
+	priceOf: (item: T) => Partial<PricedItemFields> | undefined = () => undefined
+): ItemGroup[] => {
 	const quantityById = new Map(items.map((item) => [item.id, Number(item.quantity)]));
+	const byId = new Map(items.map((item) => [item.id, item]));
 	const byKey = new Map<string, T[]>();
 
 	for (const item of items) {
 		if (item.is_recurring === false) continue;
+		// El espejo de una baja (ítem CHURN/DOWNSELL con `related_item_id`) sigue a su base: si la base ya tiene churn efectivo,
+		// el espejo tampoco está vigente (si no, el grupo mostraría MRR negativo; manual §10). Un downsell parcial (base viva) sí cuenta.
+		const base = item.related_item_id ? byId.get(item.related_item_id) : undefined;
+
+		if ((item.categoria === 'CHURN' || item.categoria === 'DOWNSELL') && base?.churn_date && base.churn_date <= today) continue;
 		const key = `${item.product_name || '—'}|${(item.account || '').trim()}`;
 
 		if (!byKey.has(key)) byKey.set(key, []);
@@ -168,7 +218,7 @@ export const buildItemGroups = <T extends GroupableItem>(items: T[], today: stri
 
 			if (isPriceAdjustment) return sum;
 
-			return sum + (item.categoria === 'DOWNSELL' ? -quantity : quantity);
+			return sum + (item.categoria === 'DOWNSELL' || item.categoria === 'CHURN' ? -quantity : quantity);
 		}, 0);
 		const baseQuantity = latestBase?.quantity === null || latestBase?.quantity === undefined ? null : Number(latestBase.quantity);
 		const quantity = quantitySum > 0 ? quantitySum : baseQuantity;
@@ -183,6 +233,10 @@ export const buildItemGroups = <T extends GroupableItem>(items: T[], today: stri
 
 			nextInvoice = { id: earliest.invoice_id, issue_date: earliest.issue_date, amount, matches: Math.abs(amount - perInvoice) <= 0.05 };
 		}
+
+		const scopePrices = scope.map((item) => priceOf(item));
+		const priceIds = new Set(scopePrices.map((fields) => fields?.price?.id ?? null));
+		const shared = priceIds.size === 1 && !priceIds.has(null) ? scopePrices[0] : undefined;
 
 		const startDates = scope.map((item) => item.start_date).filter((date): date is string => !!date);
 		const endDates = scope.map((item) => item.end_date).filter((date): date is string => !!date);
@@ -204,6 +258,10 @@ export const buildItemGroups = <T extends GroupableItem>(items: T[], today: stri
 			end_date: endDates.length > 0 ? endDates.sort()[0] : null,
 			item_ids: groupItems.map((item) => item.id),
 			next_invoice: nextInvoice,
+			price: shared?.price ?? null,
+			metric: shared?.metric ?? null,
+			catalog_price: shared?.catalog_price ?? null,
+			uses_price_model: scopePrices.some((fields) => Boolean(fields?.price)),
 		});
 	}
 

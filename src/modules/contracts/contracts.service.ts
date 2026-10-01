@@ -3,11 +3,25 @@ import { DataSource } from 'typeorm';
 
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 
-import { buildItemGroups, type ContractItem, deriveItemStatus, type ItemGroup, type PendingInvoiceLine } from './contract-items';
+import {
+	isVisibleLine,
+	noChargeSql,
+	partialBillingEventSql,
+	partialBillingOf,
+	relatedDocumentsOf,
+	relatedDocumentsSql,
+	voidedSql,
+} from './contract-360';
+import { buildItemGroups, deriveItemStatus, type ItemGroup, type PendingInvoiceLine, type PricedContractItem } from './contract-items';
 import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
+import { referenceKind } from './invoice-description';
+import { oneOffOf, type OneOffSubline } from './one-off-discount';
+import { PRICE_COLUMNS, priceSummaryFromRow } from './price-rows';
+import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, documentTypeLabel, resolveDescriptionMaxChars } from './tax-document-types';
 
 import type { ContractInvoiceSortField, ContractInvoiceStatusFilter } from './dtos/query-contract-invoices.dto';
 import type { ContractSortField } from './dtos/query-contracts.dto';
+import type { PricedSubline } from './pricing-engine';
 
 type Row = Record<string, unknown>;
 
@@ -16,6 +30,31 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Tipos de evento genéricos que dejan mandar al subtipo cuando este es un tipo conocido. */
 const GENERIC_EVENT_TYPES = new Set(['', 'AMENDMENT', 'MODIFICATION', 'CONTRACT_CHANGE', 'LIFECYCLE', 'CHANGE', 'OTHER']);
 export const ISSUED_INVOICE_STATUSES = ['Emitida', 'Enviada', 'Vencida', 'Pagada'];
+/** Política FX derivada de una fila de `invoices`: same_currency | spot (conversión sin tasa) | fixed (tasa en `fx_contract_to_invoice`). */
+export const fxPolicyOf = (row: { contract_currency?: unknown; invoice_currency?: unknown; fx_contract_to_invoice?: unknown }) => {
+	const contract = String(row.contract_currency ?? '').toUpperCase();
+	const invoice = String(row.invoice_currency ?? '').toUpperCase();
+
+	if (!contract || !invoice || contract === invoice) return 'same_currency' as const;
+
+	return row.fx_contract_to_invoice === null || row.fx_contract_to_invoice === undefined ? ('spot' as const) : ('fixed' as const);
+};
+
+/**
+ * Estado de la factura frente al ERP (derivado): `none` sin vínculo; `draft` Por Emitir con borrador (o marca de envío) en el ERP — se
+ * puede restablecer; `sent` emitida con vínculo. Una factura restablecida (`erp-reset`) queda sin vínculo → `none`.
+ */
+export const erpSyncStateOf = (row: { status?: unknown; odoo_invoice_id?: unknown; sent_to_odoo_at?: unknown }) => {
+	const linked =
+		(row.odoo_invoice_id !== null && row.odoo_invoice_id !== undefined) || (row.sent_to_odoo_at !== null && row.sent_to_odoo_at !== undefined);
+
+	if (!linked) return 'none' as const;
+
+	return row.status === 'Por Emitir' ? ('draft' as const) : ('sent' as const);
+};
+
+/** Tipos de `invoice_adjustments` que son un motivo de desvío contra el plan (el resto, p. ej. `reagenda`, no). */
+const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
 
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
@@ -34,7 +73,17 @@ export const NOT_PENDING_RENEWAL = `r.momentum IS DISTINCT FROM 'PENDING_RENEWAL
  * Borrado lógico de borradores (C5, columna `contracts.deleted_at` de la migración `1790358766159-AddContractBillingFields`):
  * un contrato borrado no aparece en ninguna lectura v2 (lista, KPIs, opciones ni 360).
  */
-const NOT_DELETED = `(to_jsonb(c)->>'deleted_at') IS NULL`;
+const NOT_DELETED = `c.deleted_at IS NULL`;
+
+/**
+ * Inicio y fin del servicio del contrato (lateral `cd`): primer inicio y último fin de sus ítems, sin los dados de baja
+ * (`churn_date`) ni los ajustes de baja (`CHURN`, `DOWNSELL`). El fin cae a `contract_end_date` si no queda ningún ítem.
+ */
+export const CONTRACT_DATES_LATERAL = `LEFT JOIN LATERAL (
+	SELECT MIN(ci.start_date) AS start_date, MAX(ci.end_date) AS end_date
+	FROM contract_items ci
+	WHERE ci.contract_id = c.id AND ci.churn_date IS NULL AND COALESCE(ci.categoria, '') NOT IN ('CHURN', 'DOWNSELL')
+) cd ON true`;
 
 /**
  * MRR del mes del contrato en moneda del sistema (lateral `rsm`, sin pendiente de renovar). `$1` = holding, `$2` = hoy.
@@ -147,6 +196,11 @@ export interface ResolvedContract {
  * Contratos v2 — lectura (L1–L3 de `docs/v2-rediseno/mapa-v2-contratos.md`). Solo lee: toda consulta se acota al
  * holding del guard; las rutas por contrato resuelven primero el contrato en el holding (404 si no es suyo).
  */
+/** Agrupa las líneas internas (facturar por OC) bajo su línea visible: `internal_lines[]` en cada línea (vacío si no tiene). */
+export function withInternalLines<T extends { id: string; visible_line_id: string | null }>(views: T[]): Array<T & { internal_lines: T[] }> {
+	return views.map((view) => ({ ...view, internal_lines: views.filter((entry) => entry.visible_line_id === view.id) }));
+}
+
 @Injectable()
 export class ContractsService {
 	constructor(
@@ -163,7 +217,7 @@ export class ContractsService {
 		const [row] = await this.dataSource.query<Row[]>(
 			`SELECT c.id, c.status, c.contract_end_date::text AS contract_end_date, c.contract_currency, c.system_currency
 			FROM contracts c
-			WHERE ${where} AND c.holding_id = $2 AND (to_jsonb(c)->>'deleted_at') IS NULL
+			WHERE ${where} AND c.holding_id = $2 AND c.deleted_at IS NULL
 			ORDER BY c.created_at DESC
 			LIMIT 1`,
 			[key, holdingId]
@@ -554,11 +608,15 @@ export class ContractsService {
 					cl.id AS client_id, cl.name_commercial AS client_name,
 					ce.id AS entity_id, ce.legal_name AS entity_legal_name, ce.tax_id AS entity_tax_id, ce.country AS entity_country,
 					co.id AS company_id, co.legal_name AS company_legal_name, co.country AS company_country, co.tax_rate AS company_tax_rate,
+					co.odoo_integration_id AS company_odoo_integration_id,
 					c.contract_currency, c.invoice_currency, c.system_currency, c.company_currency, c.fx_invoice_policy, c.fx_company_policy,
 					c.total_value, c.total_value_system_currency, c.booking_date::text AS booking_date,
-					(SELECT MIN(ci.start_date) FROM contract_items ci WHERE ci.contract_id = c.id)::text AS start_date,
-					c.contract_end_date::text AS end_date, nx.next_item_end_date::text AS next_item_end_date, c.term, c.churn_date::text AS churn_date,
+					cd.start_date::text AS start_date, COALESCE(cd.end_date, c.contract_end_date)::text AS end_date,
+					nx.next_item_end_date::text AS next_item_end_date, c.term, c.churn_date::text AS churn_date,
 					COALESCE(cr.name, c.churn_reason) AS churn_reason,
+					c.billing_anchor_day, c.payment_terms, c.document_type, c.requires_multicompany_billing, c.requires_multicurrency_billing,
+					c.tax_document_type_id, tdt.code AS tax_document_type_code, tdt.name AS tax_document_type_name, tdt.kind AS tax_document_type_kind,
+					tdt.country_code AS tax_document_type_country,
 					c.auto_send_to_odoo, c.auto_invoice, c.group_invoices_by_period, c.invoice_terms_and_conditions, c.notes,
 					q.id AS quote_id, q.quote_number, c.salesforce_opportunity_id, c.created_at,
 					rsm.mrr_system, rsm.mrr_contract, ds.derived_status
@@ -567,7 +625,9 @@ export class ContractsService {
 				LEFT JOIN client_entities ce ON ce.id = c.client_entity_id
 				LEFT JOIN companies co ON co.id = c.company_id
 				LEFT JOIN churn_reasons cr ON cr.id = c.churn_reason_id
+				LEFT JOIN tax_document_types tdt ON tdt.id = c.tax_document_type_id
 				LEFT JOIN quotes q ON q.id = c.quote_id
+				${CONTRACT_DATES_LATERAL}
 				${NEXT_ITEM_END_LATERAL.replace(/\$2::date/g, '$3::date')}
 					${derivedStatusLateral('$3')}
 				LEFT JOIN LATERAL (
@@ -605,6 +665,8 @@ export class ContractsService {
 						legal_name: toText(row.company_legal_name),
 						country: toText(row.company_country),
 						tax_rate: toNullableNumber(row.company_tax_rate),
+						/** La compañía puede enviar facturas al ERP (mismo criterio del scheduler y del alta: `odoo_integration_id` asignado). */
+						erp_integration_enabled: row.company_odoo_integration_id !== null && row.company_odoo_integration_id !== undefined,
 					}
 				: null,
 			contract_currency: toText(row.contract_currency),
@@ -622,6 +684,27 @@ export class ContractsService {
 			term: toNullableNumber(row.term),
 			churn_date: toText(row.churn_date),
 			churn_reason: toText(row.churn_reason),
+			/** Día de ciclo de facturación (1–31). */
+			billing_anchor_day: toNullableNumber(row.billing_anchor_day),
+			/** Condición de pago propia (misma forma que `client_entities.payment_terms`); `null` = sin condición propia. */
+			payment_terms: (row.payment_terms as Record<string, unknown> | null | undefined) ?? null,
+			/** Familia del documento que emite el contrato (`FACTURA`, `FACTURA_EXPORTACION`). */
+			document_type: toText(row.document_type),
+			/** Nombre para mostrar: el del documento tributario del catálogo o, sin él, el de la familia. */
+			document_type_label: toText(row.tax_document_type_name) || documentTypeLabel(toText(row.document_type)),
+			/** Documento tributario del catálogo (`tax_document_types`); null en contratos anteriores al catálogo. */
+			tax_document_type: row.tax_document_type_id
+				? {
+						id: String(row.tax_document_type_id),
+						code: toText(row.tax_document_type_code),
+						name: toText(row.tax_document_type_name),
+						kind: toText(row.tax_document_type_kind),
+						country_code: toText(row.tax_document_type_country),
+					}
+				: null,
+			/** Banderas: factura a más de una razón social / en más de una moneda (mismas que la lista). */
+			requires_multicompany_billing: row.requires_multicompany_billing === true,
+			requires_multicurrency_billing: row.requires_multicurrency_billing === true,
 			auto_send_to_odoo: row.auto_send_to_odoo === null || row.auto_send_to_odoo === undefined ? null : Boolean(row.auto_send_to_odoo),
 			auto_invoice: row.auto_invoice === null || row.auto_invoice === undefined ? null : Boolean(row.auto_invoice),
 			group_invoices_by_period:
@@ -775,7 +858,7 @@ export class ContractsService {
 
 	// ---------------------------------------------------------------- ítems e ítem madre
 
-	async items(idOrNumber: string, holdingId: string, asOfDate = new Date()): Promise<{ items: ContractItem[]; groups: ItemGroup[] }> {
+	async items(idOrNumber: string, holdingId: string, asOfDate = new Date()): Promise<{ items: PricedContractItem[]; groups: ItemGroup[] }> {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
 		const today = isoDate(asOfDate);
 		const [rows, lines] = await Promise.all([
@@ -785,9 +868,14 @@ export class ContractsService {
 					ci.monthly_price, ci.billing_period_price, ci.final_price, ci.term_months, ci.billing_frequency, ci.billing_method,
 					ci.is_recurring, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
 					ci.booking_date::text AS booking_date, ci.churn_date::text AS churn_date,
-					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency
+					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency, ${PRICE_COLUMNS},
+					bm.id AS metric_id, bm.code AS metric_code, bm.name AS metric_name, bm.unit AS metric_unit, bm.aggregation AS metric_aggregation,
+					lp.id AS catalog_price_id, lp.name AS catalog_price_name, lp.version AS catalog_price_version
 				FROM contract_items ci
 				JOIN contracts c ON c.id = ci.contract_id
+				LEFT JOIN prices p ON p.id = ci.price_id
+				LEFT JOIN billable_metrics bm ON bm.id = p.billable_metric_id
+				LEFT JOIN prices lp ON lp.id = p.list_price_id
 				WHERE ci.contract_id = $1 AND c.holding_id = $2
 				ORDER BY ci.product_name, ci.account NULLS FIRST, ci.start_date NULLS FIRST, ci.id`,
 				[contract.id, holdingId]
@@ -802,7 +890,7 @@ export class ContractsService {
 			),
 		]);
 
-		const items: ContractItem[] = rows.map((row) => {
+		const items: PricedContractItem[] = rows.map((row) => {
 			const item = {
 				id: row.id as string,
 				product_id: toText(row.product_id),
@@ -834,8 +922,26 @@ export class ContractsService {
 				auto_renew: Boolean(row.auto_renew),
 				currency: toText(row.currency),
 			};
+			const price = priceSummaryFromRow(row);
 
-			return { ...item, status: deriveItemStatus(item, today) };
+			return {
+				...item,
+				status: deriveItemStatus(item, today),
+				price,
+				metric: row.metric_id
+					? {
+							id: String(row.metric_id),
+							code: toText(row.metric_code) ?? '',
+							name: toText(row.metric_name) ?? '',
+							unit: toText(row.metric_unit) ?? '',
+							aggregation: toText(row.metric_aggregation) ?? '',
+						}
+					: null,
+				catalog_price: row.catalog_price_id
+					? { id: String(row.catalog_price_id), name: toText(row.catalog_price_name), version: Number(row.catalog_price_version ?? 1) || 1 }
+					: null,
+				uses_price_model: price !== null,
+			};
 		});
 		const pendingLines: PendingInvoiceLine[] = lines.map((line) => ({
 			invoice_id: line.invoice_id as string,
@@ -844,14 +950,14 @@ export class ContractsService {
 			subtotal: toNumber(line.subtotal),
 		}));
 
-		return { items, groups: buildItemGroups(items, today, pendingLines) };
+		return { items, groups: buildItemGroups(items, today, pendingLines, (item) => item) };
 	}
 
 	// ---------------------------------------------------------------- facturas
 
 	async invoices(idOrNumber: string, holdingId: string, filters: ContractInvoiceFilters) {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const { page = 1, limit = 50, status = 'all', sortBy = 'issue_date', sortOrder = 'asc' } = filters;
+		const { page = 1, limit = 50, status = 'all', sortBy = 'billing_period_start', sortOrder = 'asc' } = filters;
 		const params: unknown[] = [contract.id, holdingId];
 		const base = `WHERE i.contract_id = $1 AND i.holding_id = $2`;
 		const statusSql = {
@@ -861,9 +967,16 @@ export class ContractsService {
 			cancelled: `(i.status = 'Cancelada' OR i.is_active = false)`,
 		};
 		const statusFilter = status === 'all' ? '' : `AND ${statusSql[status]}`;
-		// Lista blanca: el campo de orden nunca viene del usuario tal cual.
-		const orderColumn = { issue_date: 'i.issue_date', amount: 'i.amount_contract_currency', status: 'i.status' }[sortBy] ?? 'i.issue_date';
+		// Lista blanca: el campo de orden nunca viene del usuario tal cual. Por período (defecto) desempata por emisión.
+		const orderColumn =
+			{
+				billing_period_start: 'lines.billing_period_start',
+				issue_date: 'i.issue_date',
+				amount: 'i.amount_contract_currency',
+				status: 'i.status',
+			}[sortBy] ?? 'lines.billing_period_start';
 		const direction = sortOrder === 'desc' ? 'DESC' : 'ASC';
+		const tieBreak = orderColumn === 'i.issue_date' ? '' : `, i.issue_date ${direction} NULLS LAST`;
 		const offset = (page - 1) * limit;
 
 		const [rows, [countRow]] = await Promise.all([
@@ -874,16 +987,30 @@ export class ContractsService {
 					i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat,
 					i.total_invoice_currency, i.total_system_currency, i.fx_contract_to_invoice, i.is_active,
 					i.odoo_invoice_id, i.sent_to_odoo_at, COALESCE(lines.lines_count, 0) AS lines_count,
-					ce.legal_name, i.related_invoice_id
+					ce.legal_name, i.related_invoice_id, i.original_issue_date::text AS original_issue_date,
+					EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id
+						AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
+					EXISTS (SELECT 1 FROM invoice_items mi WHERE mi.invoice_id = i.id AND mi.quantity_source = 'manual') AS has_manual_lines,
+					${noChargeSql('i')} AS no_charge, i.document_type AS doc_type,
+					${voidedSql('i')} AS voided, ${relatedDocumentsSql('i')} AS related_documents, ${partialBillingEventSql('i')} AS partial_billing_event,
+					i.split_reason, i.split_from_invoice_id,
+					adj.id AS deviation_id, adj.type AS deviation_type, adj.amount_diff AS deviation_amount_diff, adj.notes AS deviation_reason,
+					adj.adjusted_at AS deviation_adjusted_at, adj.adjusted_by_name AS deviation_adjusted_by_name
 				FROM invoices i
 				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
+				LEFT JOIN LATERAL (
+					SELECT a.id, a.type, a.amount_diff, a.notes, a.adjusted_at, COALESCE(u.name, u.email) AS adjusted_by_name
+					FROM invoice_adjustments a LEFT JOIN users u ON u.id = a.adjusted_by
+					WHERE a.invoice_id = i.id AND a.type IN ${DEVIATION_ADJUSTMENT_TYPES}
+					ORDER BY a.adjusted_at DESC, a.created_at DESC FETCH FIRST 1 ROW ONLY
+				) adj ON true
 				LEFT JOIN LATERAL (
 					SELECT MIN(ii.billing_period_start) AS billing_period_start, MAX(ii.billing_period_end) AS billing_period_end,
 						COUNT(*) AS lines_count
 					FROM invoice_items ii WHERE ii.invoice_id = i.id
 				) lines ON true
 				${base} ${statusFilter}
-				ORDER BY ${orderColumn} ${direction} NULLS LAST, i.id
+				ORDER BY ${orderColumn} ${direction} NULLS LAST${tieBreak}, i.id
 				LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
 				params
 			),
@@ -929,6 +1056,24 @@ export class ContractsService {
 				lines_count: toNumber(row.lines_count),
 				legal_name: toText(row.legal_name),
 				related_invoice_id: toText(row.related_invoice_id),
+				// Derivados (nada nuevo en la tabla): política por moneda + `fx_contract_to_invoice`; emisión externa por evento.
+				fx_policy: fxPolicyOf(row),
+				fx_rate: toNullableNumber(row.fx_contract_to_invoice),
+				issued_externally: row.issued_externally === true,
+				original_issue_date: toText(row.original_issue_date),
+				// Etapa 4 (spec facturas §3.4): motivo del desvío (último `invoice_adjustments`), líneas editadas a mano, sin cobro y ERP.
+				deviation: ContractsService.deviationOf(row),
+				has_manual_lines: row.has_manual_lines === true,
+				no_charge: row.no_charge === true,
+				erp_sync_state: erpSyncStateOf(row),
+				erp_reset_available: ContractsService.erpResetAvailable(row),
+				// Etapa 6 (spec facturas §3.7b–3.8): anulada con NC (derivado), documentos vinculados (NC y reemisión, ambos sentidos), facturación
+				// por OC (cubierta o saldo, desde su evento) y motivo de división (`reissue`, `partial_by_po`, `reorganize`).
+				voided: row.voided === true,
+				related_documents: relatedDocumentsOf(row.related_documents),
+				partial_billing: partialBillingOf(String(row.id), row.partial_billing_event),
+				split_reason: toText(row.split_reason),
+				split_from_invoice_id: toText(row.split_from_invoice_id),
 			})),
 			items: total,
 			pages: Math.max(1, Math.ceil(total / limit)),
@@ -936,6 +1081,347 @@ export class ContractsService {
 			limit,
 			counts,
 		};
+	}
+
+	/**
+	 * Una factura del contrato, de solo lectura: encabezado (fechas programada y real, monedas, tipo de cambio, IVA, ERP,
+	 * referencias exigidas), sus líneas con `pricing_breakdown` y `quantity_source`, las referencias (OC/HES: propias de la
+	 * factura y las del contrato vinculadas), los ajustes posteriores a la emisión y los documentos relacionados (nota de
+	 * crédito, original, consolidada, dividida). 404 si la factura no es del contrato o el contrato no es del holding.
+	 */
+	async invoiceDetail(idOrNumber: string, invoiceId: string, holdingId: string) {
+		const contract = await this.resolveContract(idOrNumber, holdingId);
+		const [[header], lines, references, adjustments, related, history] = await Promise.all([
+			this.dataSource.query<Row[]>(
+				`SELECT i.id, i.invoice_number, i.status, i.document_type, i.invoice_type, i.credit_type,
+					i.issue_date::text AS issue_date, i.original_issue_date::text AS original_issue_date, i.scheduled_at::text AS scheduled_at,
+					i.due_date::text AS due_date, i.created_at,
+					lines.billing_period_start::text AS billing_period_start, lines.billing_period_end::text AS billing_period_end,
+					i.contract_currency, i.invoice_currency, i.system_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat,
+					i.total_invoice_currency, i.total_system_currency, i.fx_contract_to_invoice, i.tax_rate, i.payment_method, i.is_active,
+					i.odoo_invoice_id, i.sent_to_odoo_at, i.sent_at, i.notes, i.pdf_url, i.invoice_terms_and_conditions,
+					i.requires_references_for_billing, i.related_invoice_id, i.consolidated_into_invoice_id, i.split_from_invoice_id, i.split_reason,
+					-- Proforma / documento: emisor y receptor como los guarda la factura, con la compañía y la razón social como respaldo.
+					COALESCE(i.issuer_legal_name, co.legal_name) AS issuer_legal_name, COALESCE(i.issuer_tax_id, co.tax_id) AS issuer_tax_id,
+					COALESCE(i.issuer_address, co.legal_address) AS issuer_address, i.fiscal_regime, i.export_type,
+					ce.country AS client_country, ce.legal_address AS client_address, c.contract_number,
+					(SELECT t.name FROM tax_document_types t WHERE t.id = c.tax_document_type_id) AS tax_document_type_name,
+					lines.fx_rate_source,
+					(SELECT MAX(e.created_at) FROM contract_lifecycle_events e WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id
+						AND e.event_type = 'INVOICE_FX_CHANGED' AND e.metadata->>'invoice_id' = i.id::text) AS fx_confirmed_at,
+					EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id
+						AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
+					COALESCE(lines.lines_count, 0) AS lines_count, ce.legal_name, COALESCE(ce.tax_id, i.client_tax_id) AS client_tax_id,
+					${noChargeSql('i')} AS no_charge, i.nc_revenue_treatment, i.client_entity_id, i.auto_invoice, i.credit_reason,
+					${voidedSql('i')} AS voided, ${partialBillingEventSql('i')} AS partial_billing_event,
+					c.tax_document_type_id, tdt.description_max_chars AS own_description_max_chars, co.country AS company_country,
+					c.document_type AS contract_document_type, ${DESCRIPTION_LIMITS_SQL} AS description_limits
+				FROM invoices i
+				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
+				LEFT JOIN contracts c ON c.id = i.contract_id AND c.holding_id = i.holding_id
+				LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
+				LEFT JOIN tax_document_types tdt ON tdt.id = c.tax_document_type_id
+				LEFT JOIN LATERAL (
+					SELECT MIN(ii.billing_period_start) AS billing_period_start, MAX(ii.billing_period_end) AS billing_period_end, COUNT(*) AS lines_count,
+						mode() WITHIN GROUP (ORDER BY ii.fx_rate_source) FILTER (WHERE ii.fx_rate_source IS NOT NULL) AS fx_rate_source
+					FROM invoice_items ii WHERE ii.invoice_id = i.id
+				) lines ON true
+				WHERE i.id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3`,
+				[invoiceId, contract.id, holdingId]
+			),
+			this.dataSource.query<Row[]>(
+				`SELECT ii.id, ii.description, ii.description_locked, ii.quantity, ii.unit_of_measure, ii.quantity_source, ii.discount_pct,
+					ii.unit_price_contract_currency, ii.unit_price_invoice_currency, ii.subtotal_contract_currency, ii.subtotal_invoice_currency,
+					ii.tax_amount_contract_currency, ii.tax_amount_invoice_currency, ii.total_contract_currency, ii.total_invoice_currency,
+					ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end,
+					ii.contract_item_id, ii.product_id, ii.pricing_breakdown, ci.product_name, ci.account, ii.visible_line_id
+				FROM invoice_items ii
+				JOIN invoices i ON i.id = ii.invoice_id
+				LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
+				WHERE ii.invoice_id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3
+				-- Las filas de un mismo ítem van juntas y, si el precio factura una fila por tramo, en el orden de sus tramos.
+				ORDER BY ii.billing_period_start NULLS LAST, ci.product_name NULLS LAST, ci.account NULLS FIRST, ii.contract_item_id,
+					CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array' THEN (ii.pricing_breakdown->0->>'line_index')::int END NULLS FIRST,
+					ii.created_at, ii.id`,
+				[invoiceId, contract.id, holdingId]
+			),
+			this.dataSource.query<Row[]>(
+				`SELECT r.id, r.document_type_code AS type, r.document_type_name AS name, r.document_number AS code,
+					r.reference_date::text AS date, 'invoice' AS source
+				FROM invoice_references r
+				JOIN invoices i ON i.id = r.invoice_id
+				WHERE r.invoice_id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3
+				UNION ALL
+				SELECT br.id, br.reference_type::text AS type, NULL AS name, br.reference_code AS code, br.issue_date::text AS date, 'contract' AS source
+				FROM invoice_reference_links rl
+				JOIN billing_references br ON br.id = rl.reference_id
+				JOIN invoices i ON i.id = rl.invoice_id
+				WHERE rl.invoice_id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3`,
+				[invoiceId, contract.id, holdingId]
+			),
+			this.dataSource.query<Row[]>(
+				`SELECT a.id, a.type, a.amount_diff, a.notes, a.adjusted_at, u.id AS user_id, COALESCE(u.name, u.email) AS user_name
+				FROM invoice_adjustments a
+				JOIN invoices i ON i.id = a.invoice_id
+				LEFT JOIN users u ON u.id = a.adjusted_by
+				WHERE a.invoice_id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3
+				ORDER BY a.adjusted_at DESC, a.created_at DESC`,
+				[invoiceId, contract.id, holdingId]
+			),
+			this.dataSource.query<Row[]>(
+				`SELECT o.id, o.invoice_number, o.document_type, o.credit_type, o.status, o.issue_date::text AS issue_date,
+					COALESCE(o.total_invoice_currency, o.amount_contract_currency) AS total,
+					CASE
+						WHEN o.related_invoice_id = $1::uuid AND o.document_type = 'NC' THEN 'credit_note'
+						WHEN o.related_invoice_id = $1::uuid THEN 'reissue'
+						WHEN o.id = i.related_invoice_id THEN 'original'
+						WHEN o.id = i.consolidated_into_invoice_id THEN 'consolidated_into'
+						WHEN o.id = i.split_from_invoice_id THEN 'split_from'
+					END AS relation
+				FROM invoices i
+				JOIN invoices o ON o.holding_id = i.holding_id AND o.id <> i.id
+					AND (o.related_invoice_id = i.id OR o.id = i.related_invoice_id OR o.id = i.consolidated_into_invoice_id OR o.id = i.split_from_invoice_id)
+				WHERE i.id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3
+				ORDER BY o.issue_date NULLS LAST, o.created_at`,
+				[invoiceId, contract.id, holdingId]
+			),
+			// Historial de la factura: eventos del contrato que la nombran (`metadata.invoice_id`, operaciones del 360) o la incluyen
+			// (`metadata.invoice_ids`, `created_invoices`, `invoices_updated`, `invoices_cancelled`, `created_credit_notes` de modificaciones/consumo)
+			// o la referencian como NC, anulada o complementada (`credit_note_id`, `cancelled_invoice_id`, `complements_invoice_id` del consumo).
+			this.dataSource.query<Row[]>(
+				`SELECT e.id, e.event_type, e.event_subtype, e.title, COALESCE(e.description, e.summary) AS description,
+					e.effective_date::text AS effective_date, e.created_at, e.metadata, u.id AS user_id, COALESCE(u.name, u.email) AS user_name
+				FROM invoices i
+				JOIN contract_lifecycle_events e ON e.contract_id = i.contract_id AND e.holding_id = i.holding_id
+				LEFT JOIN users u ON u.id = e.created_by
+				WHERE i.id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3
+					AND (e.metadata->>'invoice_id' = i.id::text
+						OR e.metadata->'invoice_ids' ? i.id::text
+						OR e.metadata->'created_invoices' ? i.id::text
+						OR e.metadata->'invoices_updated' ? i.id::text
+						OR e.metadata->'invoices_cancelled' ? i.id::text
+						OR e.metadata->'created_credit_notes' ? i.id::text
+						OR e.metadata->>'credit_note_id' = i.id::text
+						OR e.metadata->>'cancelled_invoice_id' = i.id::text
+						OR e.metadata->>'complements_invoice_id' = i.id::text)
+				ORDER BY e.created_at DESC`,
+				[invoiceId, contract.id, holdingId]
+			),
+		]);
+
+		if (!header) throw new NotFoundException('Factura no encontrada');
+		const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
+		const json = <T>(value: unknown): T | null => {
+			if (value === null || value === undefined) return null;
+			if (typeof value !== 'string') return value as T;
+			try {
+				return JSON.parse(value) as T;
+			} catch {
+				return null;
+			}
+		};
+
+		return {
+			id: header.id as string,
+			invoice_number: toText(header.invoice_number),
+			status: toText(header.status),
+			document_type: toText(header.document_type),
+			invoice_type: toText(header.invoice_type),
+			credit_type: toText(header.credit_type),
+			issue_date: toText(header.issue_date),
+			original_issue_date: toText(header.original_issue_date),
+			scheduled_at: toText(header.scheduled_at),
+			due_date: toText(header.due_date),
+			created_at: iso(header.created_at),
+			billing_period_start: toText(header.billing_period_start),
+			billing_period_end: toText(header.billing_period_end),
+			contract_currency: toText(header.contract_currency),
+			invoice_currency: toText(header.invoice_currency),
+			system_currency: toText(header.system_currency),
+			amount_contract_currency: toNullableNumber(header.amount_contract_currency),
+			amount_invoice_currency: toNullableNumber(header.amount_invoice_currency),
+			vat: toNullableNumber(header.vat),
+			total_invoice_currency: toNullableNumber(header.total_invoice_currency),
+			total_system_currency: toNullableNumber(header.total_system_currency),
+			fx_contract_to_invoice: toNullableNumber(header.fx_contract_to_invoice),
+			tax_rate: toNullableNumber(header.tax_rate),
+			payment_method: toText(header.payment_method),
+			is_active: header.is_active !== false,
+			odoo_invoice_id: toNullableNumber(header.odoo_invoice_id),
+			sent_to_odoo_at: iso(header.sent_to_odoo_at),
+			sent_at: iso(header.sent_at),
+			notes: toText(header.notes),
+			pdf_url: toText(header.pdf_url),
+			invoice_terms_and_conditions: toText(header.invoice_terms_and_conditions),
+			requires_references_for_billing: header.requires_references_for_billing === true,
+			related_invoice_id: toText(header.related_invoice_id),
+			split_reason: toText(header.split_reason),
+			split_from_invoice_id: toText(header.split_from_invoice_id),
+			// Tipo de cambio por factura (spec facturas §3.2) y emisión externa (§3.1), todo DERIVADO de lo existente: política por moneda +
+			// `fx_contract_to_invoice`; origen = `invoice_items.fx_rate_source` más frecuente; confirmación = último evento INVOICE_FX_CHANGED;
+			// emisión externa = evento INVOICE_ISSUED_EXTERNALLY; `erp_sync_state`: draft = borrador en el ERP de una Por Emitir, sent = emitida
+			// con vínculo al ERP, none = sin vínculo.
+			fx_policy: fxPolicyOf(header),
+			fx_rate: toNullableNumber(header.fx_contract_to_invoice),
+			fx_rate_source: toText(header.fx_rate_source),
+			fx_confirmed_at: iso(header.fx_confirmed_at),
+			issued_externally: header.issued_externally === true,
+			erp_sync_state: erpSyncStateOf(header),
+			// "Restablecer borrador del ERP" disponible (Por Emitir activa vinculada al ERP, no NC/unificada).
+			erp_reset_available: ContractsService.erpResetAvailable({ ...header, doc_type: header.document_type }),
+			// Sin cobro: Cancelada porque todas sus líneas quedaron en 0 (evento INVOICE_NO_CHARGE); se reactiva al recuperar cantidad.
+			no_charge: header.no_charge === true,
+			// Devengo del descuento puntual de la factura (mismo campo que las NC de descuento).
+			nc_revenue_treatment: toText(header.nc_revenue_treatment),
+			// Receptor y emisión automática de la factura (el editor de la etapa 4 parte de estos valores).
+			client_entity_id: toText(header.client_entity_id),
+			auto_invoice: header.auto_invoice === null || header.auto_invoice === undefined ? null : Boolean(header.auto_invoice),
+			has_manual_lines: lines.some((line) => line.quantity_source === 'manual'),
+			deviation: ContractsService.deviationOf(
+				(() => {
+					const latest = adjustments.find((row) => ['discount', 'upsell', 'downsell', 'correction'].includes(String(row.type)));
+
+					return latest
+						? {
+								deviation_id: latest.id,
+								deviation_type: latest.type,
+								deviation_amount_diff: latest.amount_diff,
+								deviation_reason: latest.notes,
+								deviation_adjusted_at: latest.adjusted_at,
+								deviation_adjusted_by_name: latest.user_name,
+							}
+						: {};
+				})()
+			),
+			lines_count: toNumber(header.lines_count),
+			legal_name: toText(header.legal_name),
+			client_tax_id: toText(header.client_tax_id),
+			// Proforma / documento (front `ProformaDocument`): emisor, receptor, régimen, exportación, contrato y nombre del documento.
+			issuer_legal_name: toText(header.issuer_legal_name),
+			issuer_tax_id: toText(header.issuer_tax_id),
+			issuer_address: toText(header.issuer_address),
+			fiscal_regime: toText(header.fiscal_regime),
+			export_type: toNullableNumber(header.export_type),
+			client_country: toText(header.client_country),
+			client_address: toText(header.client_address),
+			contract_number: toText(header.contract_number),
+			tax_document_type_name: toText(header.tax_document_type_name),
+			// Constructor de descripción (spec facturas §3.6): límite de la glosa del documento del contrato (null = sin límite).
+			description_max_chars: resolveDescriptionMaxChars({
+				tax_document_type_id: toText(header.tax_document_type_id),
+				own_max_chars: header.own_description_max_chars as number | null,
+				company_country: toText(header.company_country),
+				document_type: toText(header.contract_document_type),
+				limits: json<DescriptionLimitRow[]>(header.description_limits),
+			}),
+			// Etapa 6 (§3.7b): cada línea visible de una factura por OC lleva sus internas en `internal_lines` (las internas siguen también en la
+			// lista plana, con `visible_line_id`, para que Σ líneas = encabezado).
+			lines: withInternalLines(
+				lines.map((line) => ({
+					id: line.id as string,
+					description: toText(line.description),
+					description_locked: line.description_locked === true,
+					product_name: toText(line.product_name),
+					account: toText(line.account),
+					contract_item_id: toText(line.contract_item_id),
+					product_id: toText(line.product_id),
+					quantity: toNullableNumber(line.quantity),
+					unit_of_measure: toText(line.unit_of_measure),
+					quantity_source: toText(line.quantity_source),
+					// Visible (derivado): cantidad ≠ 0 y no es línea interna de facturar por OC (`visible_line_id`). Las ocultas quedan en Sapira para
+					// trazabilidad y devengo; no van al documento ni al ERP.
+					is_visible: isVisibleLine(toNumber(line.quantity), toText(line.visible_line_id)),
+					visible_line_id: toText(line.visible_line_id),
+					// Descuento puntual de la línea (sublínea `one_off` del desglose), el que mueve el devengo con `nc_revenue_treatment`.
+					one_off_discount: oneOffDiscountOf(json<PricedSubline[]>(line.pricing_breakdown)),
+					discount_pct: toNullableNumber(line.discount_pct),
+					unit_price_contract_currency: toNullableNumber(line.unit_price_contract_currency),
+					unit_price_invoice_currency: toNullableNumber(line.unit_price_invoice_currency),
+					subtotal_contract_currency: toNullableNumber(line.subtotal_contract_currency),
+					subtotal_invoice_currency: toNullableNumber(line.subtotal_invoice_currency),
+					tax_contract_currency: toNullableNumber(line.tax_amount_contract_currency),
+					tax_invoice_currency: toNullableNumber(line.tax_amount_invoice_currency),
+					total_contract_currency: toNullableNumber(line.total_contract_currency),
+					total_invoice_currency: toNullableNumber(line.total_invoice_currency),
+					billing_period_start: toText(line.billing_period_start),
+					billing_period_end: toText(line.billing_period_end),
+					pricing_breakdown: json<unknown[]>(line.pricing_breakdown),
+				}))
+			),
+			references: references.map((row) => ({
+				id: row.id as string,
+				// OC | HES | nombre del documento (derivado del código SII guardado: 801 = OC).
+				kind: referenceKind(toText(row.type), toText(row.name)),
+				type: toText(row.type),
+				name: toText(row.name),
+				code: toText(row.code),
+				date: toText(row.date),
+				source: (row.source === 'contract' ? 'contract' : 'invoice') as 'contract' | 'invoice',
+			})),
+			adjustments: adjustments.map((row) => ({
+				id: row.id as string,
+				type: toText(row.type),
+				amount_diff: toNullableNumber(row.amount_diff),
+				notes: toText(row.notes),
+				adjusted_at: iso(row.adjusted_at),
+				adjusted_by: row.user_id ? { id: row.user_id as string, name: toText(row.user_name) } : null,
+			})),
+			related_documents: related.map((row) => ({
+				id: row.id as string,
+				invoice_number: toText(row.invoice_number),
+				document_type: toText(row.document_type),
+				credit_type: toText(row.credit_type),
+				status: toText(row.status),
+				issue_date: toText(row.issue_date),
+				total: toNullableNumber(row.total),
+				relation: toText(row.relation),
+			})),
+			// Etapa 6 (§3.8): anulada con NC (derivado de la NC de anulación vinculada) y facturación por OC (§3.7b, desde su evento).
+			voided: header.voided === true,
+			credit_reason: toText(header.credit_reason),
+			partial_billing: partialBillingOf(String(header.id), header.partial_billing_event),
+			history: history.map((row) => ({
+				id: row.id as string,
+				type: ContractsService.normalizeEventType(row.event_type, row.event_subtype),
+				subtype: toText(row.event_subtype),
+				title: toText(row.title),
+				description: toText(row.description),
+				effective_date: toText(row.effective_date),
+				created_at: iso(row.created_at),
+				created_by: row.user_id ? { id: row.user_id as string, name: toText(row.user_name) } : null,
+				metadata: json<Record<string, unknown>>(row.metadata),
+			})),
+		};
+	}
+
+	/** Motivo del desvío de una factura desde su último `invoice_adjustments` (columnas `deviation_*`), o null si no tiene. */
+	static deviationOf(row: Row) {
+		if (!row.deviation_id) return null;
+		const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
+
+		return {
+			has_reason: !!toText(row.deviation_reason)?.trim(),
+			type: toText(row.deviation_type),
+			amount_diff: toNullableNumber(row.deviation_amount_diff),
+			reason: toText(row.deviation_reason),
+			adjusted_at: iso(row.deviation_adjusted_at),
+			adjusted_by_name: toText(row.deviation_adjusted_by_name),
+		};
+	}
+
+	/** Se puede "Restablecer borrador del ERP": Por Emitir activa vinculada al ERP que no es NC ni documento unificado. */
+	static erpResetAvailable(row: Row): boolean {
+		const docType = toText(row.doc_type) ?? '';
+
+		return (
+			row.status === 'Por Emitir' &&
+			row.is_active !== false &&
+			erpSyncStateOf(row) === 'draft' &&
+			!/^(NC|ND|NOTA)/i.test(docType) &&
+			!row.consolidated_into_invoice_id &&
+			row.invoice_type !== 'Unificada' &&
+			row.invoice_type !== 'Consolidada'
+		);
 	}
 
 	// ---------------------------------------------------------------- historial
@@ -1086,4 +1572,18 @@ export class ContractsService {
 			})),
 		};
 	}
+}
+
+/** Descuento puntual de una línea a partir de su desglose: tipo y valor ingresados, monto total (negativo) y etiqueta. */
+function oneOffDiscountOf(breakdown: PricedSubline[] | null): { type: string; value: number; amount: number; label: string } | null {
+	const subline: (OneOffSubline & { total: number }) | null = oneOffOf(breakdown);
+
+	if (!subline) return null;
+
+	return {
+		type: subline.one_off_type ?? 'amount',
+		value: Number(subline.one_off_value ?? Math.abs(subline.total)),
+		amount: subline.total,
+		label: subline.label,
+	};
 }

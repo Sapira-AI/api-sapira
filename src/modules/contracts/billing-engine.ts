@@ -9,10 +9,17 @@
  * - Frecuencias de **una sola tabla** (`BILLING_FREQUENCY_MONTHS`, Bianual = 24, S4-11).
  * - Anticipado emite al inicio del período; Vencido al inicio del siguiente.
  * - No recurrentes: **una sola vez**, al inicio, por el valor final completo (U6).
+ * - **Sin término** (S1-12 / M5): un recurrente con `term_months` null y sin `end_date` es indefinido. Supuesto: se generan
+ *   facturas para un horizonte de `INDEFINITE_HORIZON_PERIODS` (12) períodos de su frecuencia desde el inicio, el valor del
+ *   ítem se mide sobre ese mismo horizonte y la salida lleva `warning_codes: ['indefinite_horizon']` e `indefinite_until`.
  * - Línea = cantidad × unitario del período (mensual × meses) × (1 − descuento %), con precio de lista y descuento
  *   visibles (nunca `1 × total`). Cuotas con 2 decimales y **la diferencia en la última** (S1-11): Σ cuotas = valor del ítem.
- * - Último período corto y primer tramo (inicio del ítem ≠ día de ciclo) **proporcionales por días** (manual §11, S4-16):
- *   fracción = días del tramo / días del mes de ciclo que lo contiene. El primer tramo va en la factura del primer ciclo.
+ * - **Prorrateo** (manual §11, S4-16): si el día de ciclo ≠ día de inicio del ítem, el primer período va del inicio al día
+ *   anterior al siguiente día de ciclo; si el fin (plazo o `end_date`) no cae en un fin de período, el último también es
+ *   parcial. Un período parcial cobra `monto del período completo × meses cubiertos / meses de la frecuencia`, donde un mes
+ *   parcial cuenta `días del tramo / días del mes de ciclo que lo contiene` (en Mensual: `días / días del período completo`).
+ *   Montos a 2 decimales. Las líneas parciales llevan `prorated: true` y `prorated_days`, con la advertencia "Primer período
+ *   prorrateado: N días" (o "Último…") y el código `prorated_period`. El primer tramo va en la factura del primer ciclo.
  * - Encabezado = Σ líneas. IVA de la compañía salvo FACTURA_EXPORTACION (0) y Colombia (0 en Por Emitir: lo aplica Odoo).
  * - Moneda de factura (default: la del contrato). Misma moneda → FX 1; distinta → FX null y los montos quedan en moneda
  *   de contrato ("se valoriza al emitir"). Con tipo de cambio fijo (`fx_invoice_policy = 'fixed'`) cada factura toma la
@@ -20,11 +27,38 @@
  *   en moneda de factura (`amounts_invoice_currency`); sin tasa, queda con FX null y advertencia.
  * - Vencimiento = emisión + condición de pago; México sin condición: emisión + 1 mes; sin condición: emisión + 30 días
  *   con advertencia. Nunca `+30` fijo cuando hay condición.
- * - Glosa `PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa`, solo guion ASCII.
+ * - Glosa `PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa`, solo guion ASCII, renderizada con la plantilla de descripción del
+ *   contrato (`invoice-description.ts`, spec facturas §3.6); sin plantilla, `DEFAULT_TEMPLATE` produce exactamente esa glosa.
  * - Agrupación: juntas (una factura por fecha de emisión) o por ítem (una por ítem y fecha).
+ * - Pricing v2 (`spec-pricing-v2.md` §4.1): un ítem con `price` distinto de "standard fijo" resuelve por cuota la cantidad
+ *   del período (`resolveQuantity`) y la tarifa con `priceLine` (gratis → tramos → descuento → mínimo → tope); la línea
+ *   lleva `quantity_source` y `pricing.breakdown`. El unitario de `standard`/`seat` es **por período** de la línea (no
+ *   mensual). Con cantidad fija, un período parcial se prorratea igual que el estándar (subtotal y desglose × fracción); lo
+ *   medido no se prorratea (el consumo ya es el del tramo). `totals.contract_value` suma solo lo fijo; lo medido aporta el
+ *   mínimo comprometido por período (supuesto).
+ * - **MRR** (`totals.mrr`, `items[].monthly_equivalent`): Σ del mensual equivalente de los recurrentes = monto de un período
+ *   completo ÷ meses de la frecuencia, con la cantidad del ítem (en lo medido, la cantidad base) y el descuento del ítem. Es el
+ *   mismo valor que guarda `contract_items.monthly_price` (ver `ContractDraftsService.equivalentMonthlyUnit`).
+ * - Presentación (`spec-pricing-v2.md` §3.8): con `invoice_line_mode = single` (default) la línea es una, con el detalle por
+ *   tramo en la glosa; con `per_tier` la cuota produce **varias** líneas (una por tramo/paquete/asiento más una por ajuste),
+ *   todas del mismo ítem y período (`line_group`), cada una con su sub-desglose; Σ líneas = subtotal de la cuota.
  */
 
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+
+import { DESCRIPTION_FITTED_CODE, type DescriptionContext, type DescriptionTemplate, fitDescription } from './invoice-description';
+import {
+	type ConsumptionInput,
+	distributeTax,
+	isMetered,
+	isStandardFixed,
+	type PricedLine,
+	priceLine,
+	type PriceSpec,
+	type QuantitySource,
+	resolveQuantity,
+	splitInvoiceLines,
+} from './pricing-engine';
 
 /** Única tabla de frecuencias del sistema v2 (S4-11: Bianual = 24 meses). */
 export const BILLING_FREQUENCY_MONTHS = { Mensual: 1, Trimestral: 3, Semestral: 6, Anual: 12, Bianual: 24 } as const;
@@ -52,12 +86,17 @@ export interface BillingEngineItem {
 	billing_method: BillingMethod | string;
 	/** `YYYY-MM-DD`. */
 	start_date: string;
-	term_months: number;
-	/** `YYYY-MM-DD`. Default: inicio + término − 1 día. */
+	/** Plazo en meses. `null` (recurrente, sin `end_date`) = sin término: se factura un horizonte de 12 períodos. */
+	term_months: number | null;
+	/** `YYYY-MM-DD`. Default: inicio + término − 1 día (sin término: fin del horizonte). */
 	end_date?: string | null;
 	is_recurring: boolean;
 	/** Valor final del ítem, si ya viene calculado. Default: cantidad × unitario × término × (1 − descuento). */
 	final_price?: number | null;
+	/** Pricing v2: modelo de precio del ítem. Ausente o "standard fijo" = el cálculo de hoy. */
+	price?: PriceSpec | null;
+	/** Pricing v2: consumos registrados del ítem (uno por período de la línea), para los precios medidos. */
+	consumption?: ConsumptionInput[] | null;
 }
 
 /** Fila de tasa fija por período (`contract_fx_period_rates`). Regla única: "1 [from_currency] = rate [to_currency]". */
@@ -85,6 +124,15 @@ export interface BillingEngineContract {
 	document_type?: string | null;
 	company: { country?: string | null; tax_rate?: number | string | null };
 	entity_country?: string | null;
+	/** Plantilla de descripción del contrato (`contracts.invoice_description_template`, spec facturas §3.6); null = la glosa de hoy. */
+	description_template?: DescriptionTemplate | null;
+	/** Datos del contrato para los bloques de la plantilla (N° de contrato, razón social). */
+	description_context?: { contract_number?: string | null; client_name?: string | null } | null;
+	/**
+	 * Límite de caracteres de la descripción del documento tributario (`description_max_chars`, SII = 80); null/ausente = sin límite. Las
+	 * glosas generadas se ajustan a él en el origen (`fitDescription`, decisión 30-09) y la salida lleva `warning_codes: ['description_fitted']`.
+	 */
+	description_max_chars?: number | null;
 }
 
 export interface BillingEngineInput {
@@ -104,6 +152,29 @@ export interface PreviewLine {
 	total: number;
 	billing_period_start: string;
 	billing_period_end: string;
+	/** Pricing v2: de dónde salió la cantidad (`fixed` en las líneas de hoy). */
+	quantity_source: QuantitySource;
+	/** Pricing v2: desglose por tramo, solo en líneas con modelo de precio (en `per_tier`, el sub-desglose de esta fila). */
+	pricing?: PricedLine;
+	/** Pricing v2 `per_tier`: las filas de un mismo ítem y período comparten grupo (`item_key|period_start`). */
+	line_group?: string;
+	/** Pricing v2 `per_tier`: qué fila es dentro del grupo. */
+	line_part?: { part: 'charge' | 'adjustment'; index: number; count: number };
+	/** Período parcial (primer tramo o último período corto) cobrado en proporción a sus días. */
+	prorated?: boolean;
+	/** Días del período parcial (solo con `prorated`). */
+	prorated_days?: number;
+}
+
+/** Aporte de un ítem a los totales de la vista previa. */
+export interface PreviewItemTotals {
+	item_key: string;
+	product_name: string;
+	is_recurring: boolean;
+	/** Mensual equivalente (0 si no es recurrente): monto de un período completo ÷ meses de la frecuencia, con descuento. */
+	monthly_equivalent: number;
+	/** Lo que el ítem suma a `totals.contract_value`. */
+	value: number;
 }
 
 export interface PreviewInvoice {
@@ -126,9 +197,30 @@ export interface PreviewInvoice {
 
 export interface BillingEngineOutput {
 	invoices: PreviewInvoice[];
-	totals: { contract_value: number; invoiced_total: number; difference: number };
+	totals: { contract_value: number; invoiced_total: number; difference: number; mrr: number };
+	/** Totales por ítem válido, en el orden de entrada (MRR y valor por ítem para el formulario). */
+	items: PreviewItemTotals[];
 	warnings: string[];
+	/** Códigos estables de las advertencias que la UI distingue (`indefinite_horizon`, `prorated_period`, `description_fitted`). */
+	warning_codes: string[];
+	/** Con ítems sin término: última fecha del horizonte generado (`YYYY-MM-DD`); null si no hay. */
+	indefinite_until: string | null;
+	/** Líneas cuya glosa se ajustó al límite del documento (`description_fitted`). */
+	description_fitted_lines?: number;
 }
+
+/** Aviso del generador cuando ajustó glosas al límite del documento (código `description_fitted`). */
+export const descriptionFittedWarning = (count: number, maxChars: number | null) =>
+	`${count} ${count === 1 ? 'descripción se ajustó' : 'descripciones se ajustaron'} automáticamente al límite de ${maxChars ?? ''} caracteres del documento`.replace(
+		/\s+/g,
+		' '
+	);
+
+/** Horizonte de facturación de un ítem sin término: 12 períodos de su frecuencia desde el inicio (supuesto, mapa §3). */
+export const INDEFINITE_HORIZON_PERIODS = 12;
+export const INDEFINITE_HORIZON_CODE = 'indefinite_horizon';
+/** Hay al menos una línea prorrateada (primer o último período parcial). */
+export const PRORATED_PERIOD_CODE = 'prorated_period';
 
 // ------------------------------------------------------------------ dinero
 
@@ -182,6 +274,23 @@ export const addMonths = (iso: string, months: number) => {
 
 /** Fin de un ítem: `inicio + término − 1 día` (mismo criterio que `set_contract_item_end_date`). */
 export const itemEndDate = (start: string, termMonths: number) => addDays(addMonths(start, termMonths), -1);
+
+/** Un recurrente sin plazo ni fin es indefinido (S1-12 / M5). */
+export const isIndefiniteItem = (item: Pick<BillingEngineItem, 'term_months' | 'end_date' | 'is_recurring'>): boolean =>
+	item.is_recurring !== false && (item.term_months === null || item.term_months === undefined) && !item.end_date;
+
+/** Meses del horizonte de un ítem sin término: 12 períodos × meses de la frecuencia. */
+export const indefiniteHorizonMonths = (item: Pick<BillingEngineItem, 'billing_frequency'>): number =>
+	INDEFINITE_HORIZON_PERIODS * (BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1);
+
+/** Plazo con el que se calcula el ítem: el suyo o, sin término, el del horizonte. */
+export const effectiveTermMonths = (item: Pick<BillingEngineItem, 'term_months' | 'end_date' | 'is_recurring' | 'billing_frequency'>): number =>
+	isIndefiniteItem(item) ? indefiniteHorizonMonths(item) : Number(item.term_months) || 0;
+
+/** Fin del ítem para el generador: el guardado, el de su plazo o, sin término, el del horizonte. */
+export const itemEffectiveEnd = (
+	item: Pick<BillingEngineItem, 'start_date' | 'term_months' | 'end_date' | 'is_recurring' | 'billing_frequency'>
+): string => item.end_date || itemEndDate(item.start_date, effectiveTermMonths(item));
 
 /** Índice de mes absoluto (año × 12 + mes − 1). */
 const monthIndex = (iso: string) => {
@@ -326,8 +435,16 @@ export const discountPct = (item: Pick<BillingEngineItem, 'discount_value' | 'di
 };
 
 /** `price = unitario × cantidad × término` y `final_price = price × (1 − descuento %)` (mismo criterio que el front viejo). */
-export const itemPricing = (item: Pick<BillingEngineItem, 'quantity' | 'unit_price' | 'term_months' | 'discount_value' | 'discount_type'>) => {
-	const gross = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0) * (Number(item.term_months) || 0);
+export const itemPricing = (
+	item: Pick<BillingEngineItem, 'quantity' | 'unit_price' | 'term_months' | 'discount_value' | 'discount_type'> &
+		Partial<Pick<BillingEngineItem, 'billing_frequency'>>
+) => {
+	// Sin término (`term_months` null): el valor del ítem se mide sobre el horizonte de 12 períodos (supuesto, mapa §3).
+	const months =
+		item.term_months === null || item.term_months === undefined
+			? indefiniteHorizonMonths({ billing_frequency: item.billing_frequency ?? 'Mensual' })
+			: Number(item.term_months) || 0;
+	const gross = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0) * months;
 	const pct = discountPct(item, gross);
 
 	return { price: round2(gross), discount_pct: pct, final_price: round2(gross * (1 - pct / 100)) };
@@ -383,7 +500,7 @@ const recurringInstallments = (item: BillingEngineItem, anchor: number, monthlyN
 	const frequency = BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1;
 	const vencido = item.billing_method === 'Vencido';
 	const start = item.start_date;
-	const end = item.end_date || itemEndDate(start, item.term_months);
+	const end = itemEffectiveEnd(item);
 	const installments: Installment[] = [];
 
 	let index = monthIndex(start);
@@ -423,6 +540,27 @@ const recurringInstallments = (item: BillingEngineItem, anchor: number, monthlyN
 
 	return installments;
 };
+
+/**
+ * Períodos de servicio de un ítem recurrente con el día de ciclo del contrato (mismo cálculo que las cuotas del generador):
+ * primer tramo si el inicio no cae en el día de ciclo y luego períodos completos por frecuencia hasta el fin. Lo usan las
+ * modificaciones para ubicar "el próximo inicio de período" (S3-5/S3-6) sin duplicar la lógica.
+ */
+export const itemPeriods = (
+	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method'>,
+	anchor: number
+): Array<{ issue_date: string; period_start: string; period_end: string; months: number }> =>
+	recurringInstallments({ ...item, key: '', product_name: '', quantity: 1, unit_price: 0, is_recurring: true } as BillingEngineItem, anchor, 0).map(
+		({ issue_date, period_start, period_end, months }) => ({ issue_date, period_start, period_end, months })
+	);
+
+/** Próximo inicio de período del ítem en o después de `date` (null si el ítem termina antes). */
+export const nextPeriodStart = (
+	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method'>,
+	anchor: number,
+	date: string
+): string | null =>
+	itemPeriods(item, anchor).find((period) => period.period_start >= date && period.period_start > item.start_date)?.period_start ?? null;
 
 // ------------------------------------------------------------------ glosa
 
@@ -486,6 +624,212 @@ export function fixedFxAmounts(invoice: Pick<PreviewInvoice, 'subtotal' | 'tax_r
 	};
 }
 
+// ------------------------------------------------------------------ pricing v2: líneas con modelo de precio
+
+/** Descuento del ítem en porcentaje para el motor de precios (solo `Porcentaje`; `Monto fijo` no aplica a un precio por tramos). */
+const pricedDiscountPct = (item: BillingEngineItem, warn: (message: string) => void) => {
+	const value = Number(item.discount_value ?? 0) || 0;
+
+	if (value <= 0) return 0;
+	if (item.discount_type === 'Monto fijo') {
+		warn(`El descuento en monto fijo de "${item.product_name}" no aplica a un modelo de precio por consumo o tramos: se omite`);
+
+		return 0;
+	}
+
+	return Math.min(100, value);
+};
+
+// ------------------------------------------------------------------ prorrateo y mensual equivalente
+
+/** Días de un período `[start, end]`, ambos incluidos. */
+export const periodDays = (start: string, end: string) => diffDays(start, end) + 1;
+
+/** Una cuota es parcial si cubre otra cantidad de meses que la frecuencia (primer tramo o último período corto). */
+const isPartialPeriod = (months: number, frequency: number) => Math.abs(months - frequency) > 1e-9;
+
+/**
+ * Línea tarifada de un período parcial: subtotal y desglose × `fraction` (meses cubiertos / meses de la frecuencia). El
+ * subtotal se redondea a 2 decimales y el residuo de redondear las sublíneas va en la última de cargo (mismo criterio §3.6).
+ */
+export function prorateLine(priced: PricedLine, fraction: number): PricedLine {
+	const subtotal = round2(priced.subtotal * fraction);
+	const breakdown = priced.breakdown.map((subline) => ({ ...subline, amount: round2(subline.amount * fraction) }));
+	const residue = round2(subtotal - breakdown.reduce((sum, subline) => sum + subline.amount, 0));
+
+	if (residue !== 0 && breakdown.length) {
+		const chargeKinds = new Set(['tier', 'package', 'seat']);
+		let target = breakdown.length - 1;
+
+		for (let index = breakdown.length - 1; index >= 0; index -= 1) {
+			if (chargeKinds.has(breakdown[index].kind)) {
+				target = index;
+				break;
+			}
+		}
+		breakdown[target] = { ...breakdown[target], amount: round2(breakdown[target].amount + residue) };
+	}
+
+	return { ...priced, subtotal, breakdown, effective_unit_price: priced.quantity > 0 ? round6(subtotal / priced.quantity) : 0 };
+}
+
+/**
+ * Mensual equivalente de un ítem con modelo de precio: el subtotal de **un período completo** a la cantidad del ítem (en lo
+ * medido, la cantidad base) con el descuento del ítem, dividido en los meses de la frecuencia (no recurrente: en su plazo).
+ * Es lo que muestra el formulario como "Mensual" y lo que suma al MRR; `equivalentMonthlyUnit` guarda el mismo valor.
+ */
+export function pricedMonthlyEquivalent(
+	price: PriceSpec,
+	item: Pick<BillingEngineItem, 'quantity' | 'billing_frequency' | 'is_recurring' | 'term_months'>,
+	discountPctValue = 0
+): number {
+	const quantity = Number(item.quantity) || 0;
+
+	if (quantity <= 0) return 0;
+	const months =
+		item.is_recurring === false ? Number(item.term_months) || 1 : (BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1);
+
+	return round6(priceLine(price, quantity, discountPctValue).subtotal / months);
+}
+
+/** Aviso de una cuota prorrateada ("Primer período prorrateado: 17 días…"); `first` = el tramo que parte en el inicio del ítem. */
+const prorationWarning = (item: BillingEngineItem, start: string, end: string) =>
+	`${start === item.start_date ? 'Primer' : 'Último'} período prorrateado: ${periodDays(start, end)} días ("${item.product_name}", ${formatDate(start)} a ${formatDate(end)})`;
+
+/** Línea interna del motor: la fecha de emisión (para agrupar) y los datos de su descripción (se renderiza con el FX de la factura). */
+type EngineLine = PreviewLine & { issue_date: string; desc: DescriptionContext };
+
+/** ¿La cantidad de la línea ya es la final? (medida sin consumo cerrado → no: pending o estimated). */
+const quantityFinal = (source: QuantitySource) => source !== 'pending' && source !== 'estimated';
+
+/**
+ * Cuotas de un ítem con modelo de precio (§4.1): por cada período, `resolveQuantity` → `priceLine`. Devuelve lo que aporta
+ * al valor contratado: lo fijo suma sus subtotales; lo medido, el mínimo comprometido por período (o nada).
+ */
+function pricedLines(
+	item: BillingEngineItem,
+	anchor: number,
+	taxRate: number,
+	warn: (message: string) => void,
+	lines: EngineLine[],
+	onProrated: (start: string, end: string) => void
+): number {
+	const price = item.price!;
+	const pct = pricedDiscountPct(item, warn);
+	const end = itemEffectiveEnd(item);
+	const term = effectiveTermMonths(item);
+	const installments: Installment[] = item.is_recurring
+		? recurringInstallments(item, anchor, 0)
+		: [{ item, issue_date: item.start_date, period_start: item.start_date, period_end: end, months: term, amount: 0 }];
+	const frequency = item.is_recurring ? (BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1) : term;
+	let contractValue = 0;
+	let pendingWarned = false;
+	let partialWarned = false;
+
+	for (const installment of installments) {
+		const resolved = resolveQuantity(item, { start: installment.period_start, end: installment.period_end }, item.consumption ?? []);
+		const fullPriced = priceLine(price, resolved.quantity, pct, {
+			amount_override: resolved.amount_override,
+			apply_item_discount: resolved.apply_item_discount,
+			quantity_source: resolved.source,
+		});
+		// Período parcial con cantidad fija: se prorratea como el estándar. Lo medido no (el consumo ya es el del tramo).
+		const partial = item.is_recurring && isPartialPeriod(installment.months, frequency);
+		const prorate = partial && !isMetered(price);
+		const priced = prorate ? prorateLine(fullPriced, installment.months / frequency) : fullPriced;
+		const proration = prorate ? { prorated: true, prorated_days: periodDays(installment.period_start, installment.period_end) } : {};
+
+		if (prorate) onProrated(installment.period_start, installment.period_end);
+
+		if (resolved.source === 'pending' && !pendingWarned) {
+			warn(`Consumo por informar en "${item.product_name}": la línea usa la cantidad base del ítem y se recalcula al registrar`);
+			pendingWarned = true;
+		}
+		if (partial && !prorate && !partialWarned) {
+			warn(
+				`"${item.product_name}" tiene un período parcial (${formatDate(installment.period_start)} a ${formatDate(installment.period_end)}): el consumo se tarifa sin prorratear`
+			);
+			partialWarned = true;
+		}
+		priced.warnings.forEach(warn);
+		contractValue += isMetered(price) ? Number(price.minimum_amount ?? 0) || 0 : priced.subtotal;
+		const desc = {
+			product_name: item.product_name,
+			account: item.account ?? null,
+			period_start: installment.period_start,
+			period_end: installment.period_end,
+			quantity_final: quantityFinal(resolved.source),
+		};
+		const common = {
+			issue_date: installment.issue_date,
+			item_key: item.key,
+			product_name: item.product_name,
+			discount_pct: round6(pct),
+			billing_period_start: installment.period_start,
+			billing_period_end: installment.period_end,
+			quantity_source: resolved.source,
+			...proration,
+		};
+
+		if (price.invoice_line_mode === 'per_tier') {
+			// §3.8: una fila por tramo/paquete/asiento y una por ajuste; el IVA se reparte con el residuo en la última fila de cargo.
+			const parts = splitInvoiceLines(priced);
+			const taxes = distributeTax(
+				parts.map((part) => part.subtotal),
+				taxRate,
+				parts.map((part) => part.part === 'charge')
+			);
+
+			parts.forEach((part, index) => {
+				lines.push({
+					...common,
+					description: '',
+					desc: {
+						...desc,
+						line_kind: 'per_tier',
+						tier_label: part.label,
+						quantity: part.quantity,
+						unit_price: part.unit_price,
+						amount: part.subtotal,
+					},
+					quantity: part.quantity,
+					unit_price: part.unit_price,
+					subtotal: part.subtotal,
+					tax_amount: taxes[index],
+					total: round2(part.subtotal + taxes[index]),
+					pricing: { ...priced, subtotal: part.subtotal, effective_unit_price: part.unit_price, breakdown: part.breakdown, warnings: [] },
+					line_group: `${item.key}|${installment.period_start}`,
+					line_part: { part: part.part, index: part.index, count: part.count },
+				});
+			});
+			continue;
+		}
+		const taxAmount = round2((priced.subtotal * taxRate) / 100);
+
+		lines.push({
+			...common,
+			// §3.8 `single`: una línea, cantidad del período × unitario efectivo, con el detalle por tramo en la glosa (bloque `tier` detail).
+			description: '',
+			desc: {
+				...desc,
+				line_kind: 'single',
+				breakdown: priced.breakdown,
+				quantity: priced.quantity,
+				unit_price: priced.effective_unit_price,
+				amount: priced.subtotal,
+			},
+			quantity: priced.quantity,
+			unit_price: priced.effective_unit_price,
+			subtotal: priced.subtotal,
+			tax_amount: taxAmount,
+			total: round2(priced.subtotal + taxAmount),
+			pricing: priced,
+		});
+	}
+
+	return contractValue;
+}
+
 // ------------------------------------------------------------------ motor
 
 export function generateInvoices({ contract, items }: BillingEngineInput): BillingEngineOutput {
@@ -494,13 +838,33 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		if (!warnings.includes(message)) warnings.push(message);
 	};
 
+	const warningCodes: string[] = [];
+	const flag = (code: string) => {
+		if (!warningCodes.includes(code)) warningCodes.push(code);
+	};
 	const valid = items.filter((item) => {
-		const ok = Boolean(item.start_date) && Number(item.term_months) > 0 && Number(item.quantity) > 0;
+		// Válido con plazo, con fin explícito o sin término (recurrente indefinido).
+		const ok =
+			Boolean(item.start_date) &&
+			(isIndefiniteItem(item) || Boolean(item.end_date) || Number(item.term_months) > 0) &&
+			Number(item.quantity) > 0;
 
 		if (!ok) warn(`El ítem "${item.product_name}" no tiene inicio, plazo o cantidad válidos: no se incluye en la vista previa`);
 
 		return ok;
 	});
+	// Sin término: horizonte de 12 períodos por ítem; la UI lo distingue por `indefinite_horizon` y la última fecha cubierta.
+	let indefiniteUntil: string | null = null;
+
+	for (const item of valid.filter(isIndefiniteItem)) {
+		const until = itemEffectiveEnd(item);
+
+		if (!indefiniteUntil || until > indefiniteUntil) indefiniteUntil = until;
+		flag(INDEFINITE_HORIZON_CODE);
+		warn(
+			`"${item.product_name}" no tiene término: se generan facturas hasta el ${formatDate(until)} (${INDEFINITE_HORIZON_PERIODS} períodos); las siguientes se generan después`
+		);
+	}
 	const anchorInput = Number(contract.billing_anchor_day);
 	const anchor = anchorInput >= 1 && anchorInput <= 31 ? Math.trunc(anchorInput) : (defaultAnchorDay(valid) ?? 1);
 
@@ -535,7 +899,8 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 	}
 
 	// Cuotas por ítem, con redondeo por cuota y residuo en la última.
-	const lines: Array<PreviewLine & { issue_date: string }> = [];
+	const lines: EngineLine[] = [];
+	const itemTotals: PreviewItemTotals[] = [];
 	let contractValue = 0;
 
 	for (const item of valid) {
@@ -544,18 +909,59 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		const pricing = itemPricing(item);
 		const target = item.final_price !== null && item.final_price !== undefined ? round2(Number(item.final_price)) : pricing.final_price;
 		const pct = pricing.discount_pct;
+		const frequency = BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1;
+		const onProrated = (start: string, end: string) => {
+			flag(PRORATED_PERIOD_CODE);
+			warn(prorationWarning(item, start, end));
+		};
+
+		if (!isStandardFixed(item.price)) {
+			const value = pricedLines(item, anchor, taxRate, warn, lines, onProrated);
+
+			contractValue += value;
+			itemTotals.push({
+				item_key: item.key,
+				product_name: item.product_name,
+				is_recurring: item.is_recurring,
+				monthly_equivalent: item.is_recurring
+					? round2(
+							pricedMonthlyEquivalent(
+								item.price!,
+								item,
+								pricedDiscountPct(item, () => undefined)
+							)
+						)
+					: 0,
+				value: round2(value),
+			});
+			continue;
+		}
 
 		contractValue += target;
+		itemTotals.push({
+			item_key: item.key,
+			product_name: item.product_name,
+			is_recurring: item.is_recurring,
+			monthly_equivalent: item.is_recurring ? round2(quantity * unit * (1 - pct / 100)) : 0,
+			value: target,
+		});
 
 		let installments: Installment[];
 
 		if (item.is_recurring) {
 			installments = recurringInstallments(item, anchor, quantity * unit * (1 - pct / 100));
 		} else {
-			const end = item.end_date || itemEndDate(item.start_date, item.term_months);
+			const end = itemEffectiveEnd(item);
 
 			installments = [
-				{ item, issue_date: item.start_date, period_start: item.start_date, period_end: end, months: item.term_months, amount: target },
+				{
+					item,
+					issue_date: item.start_date,
+					period_start: item.start_date,
+					period_end: end,
+					months: Number(item.term_months) || 0,
+					amount: target,
+				},
 			];
 		}
 
@@ -564,6 +970,9 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		installments.forEach((installment, position) => {
 			const last = position === installments.length - 1;
 			const subtotal = last ? round2(target - accumulated) : round2(installment.amount);
+			const prorated = item.is_recurring && isPartialPeriod(installment.months, frequency);
+
+			if (prorated) onProrated(installment.period_start, installment.period_end);
 
 			if (last && Math.abs(subtotal - round2(installment.amount)) >= 1) {
 				warn(`El último período de "${item.product_name}" se ajustó para que las cuotas sumen el valor del ítem`);
@@ -575,7 +984,18 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 				issue_date: installment.issue_date,
 				item_key: item.key,
 				product_name: item.product_name,
-				description: lineDescription(item.product_name, item.account, installment.period_start, installment.period_end),
+				description: '',
+				desc: {
+					line_kind: 'standard',
+					product_name: item.product_name,
+					account: item.account ?? null,
+					period_start: installment.period_start,
+					period_end: installment.period_end,
+					quantity,
+					quantity_final: true,
+					unit_price: round6(unit * installment.months),
+					amount: subtotal,
+				},
 				quantity,
 				unit_price: round6(unit * installment.months),
 				discount_pct: round6(pct),
@@ -584,6 +1004,8 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 				total: round2(subtotal + taxAmount),
 				billing_period_start: installment.period_start,
 				billing_period_end: installment.period_end,
+				quantity_source: 'fixed',
+				...(prorated ? { prorated: true, prorated_days: periodDays(installment.period_start, installment.period_end) } : {}),
 			});
 		});
 	}
@@ -599,6 +1021,7 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 	}
 
 	const keyOrder = new Map(valid.map((item, position) => [item.key, position]));
+	let fittedLines = 0;
 	const invoices: PreviewInvoice[] = [...groups.values()]
 		.map((group) => {
 			const sorted = [...group].sort(
@@ -622,8 +1045,8 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 				currency,
 				fx,
 				tax_rate: taxRate,
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars -- se descarta la fecha interna de agrupación
-				lines: sorted.map(({ issue_date: _issueDate, ...line }) => line),
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars -- se descartan la fecha interna de agrupación y los datos de la glosa
+				lines: sorted.map(({ issue_date: _issueDate, desc: _desc, ...line }) => line),
 				subtotal,
 				tax,
 				total: round2(subtotal + tax),
@@ -643,6 +1066,24 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 					invoice.amounts_invoice_currency = { subtotal: amounts.amount, tax: amounts.vat, total: amounts.total };
 				}
 			}
+			// Glosa con la plantilla del contrato (o la de hoy), ya con el tipo de cambio de la factura, ajustada al límite del documento.
+			invoice.lines.forEach((line, index) => {
+				const fitted = fitDescription(
+					contract.description_template ?? null,
+					{
+						...sorted[index].desc,
+						contract_currency: contractCurrency,
+						invoice_currency: currency,
+						fx_rate: invoice.fx,
+						contract_number: contract.description_context?.contract_number ?? null,
+						client_name: contract.description_context?.client_name ?? null,
+					},
+					contract.description_max_chars ?? null
+				);
+
+				line.description = fitted.text;
+				if (fitted.fitted) fittedLines++;
+			});
 
 			return invoice;
 		})
@@ -653,12 +1094,25 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 				a.billing_period_start.localeCompare(b.billing_period_start)
 		);
 
+	if (fittedLines) {
+		flag(DESCRIPTION_FITTED_CODE);
+		warn(descriptionFittedWarning(fittedLines, contract.description_max_chars ?? null));
+	}
 	const invoicedTotal = round2(invoices.reduce((sum, invoice) => sum + invoice.subtotal, 0));
 	const total = round2(contractValue);
 
 	return {
 		invoices,
-		totals: { contract_value: total, invoiced_total: invoicedTotal, difference: round2(invoicedTotal - total) },
+		totals: {
+			contract_value: total,
+			invoiced_total: invoicedTotal,
+			difference: round2(invoicedTotal - total),
+			mrr: round2(itemTotals.reduce((sum, item) => sum + item.monthly_equivalent, 0)),
+		},
+		items: itemTotals,
 		warnings,
+		warning_codes: warningCodes,
+		indefinite_until: indefiniteUntil,
+		description_fitted_lines: fittedLines,
 	};
 }

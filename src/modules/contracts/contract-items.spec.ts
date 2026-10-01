@@ -1,4 +1,4 @@
-import { buildItemGroups, type ContractItem, deriveItemStatus } from './contract-items';
+import { buildItemGroups, type ContractItem, deriveItemStatus, type PricedItemFields } from './contract-items';
 
 const today = '2026-09-25';
 
@@ -190,5 +190,66 @@ describe('buildItemGroups (ítem madre)', () => {
 		]);
 
 		expect(group.next_invoice?.matches).toBe(false);
+	});
+
+	describe('precio del grupo', () => {
+		const price = (id: string) => ({
+			id,
+			name: `Precio ${id}`,
+			version: 1,
+			status: 'active',
+			list_price_id: null,
+			model: 'graduated' as const,
+			quantity_type: 'fixed' as const,
+			billable_metric_id: null,
+			unit_amount: null,
+			tiers: [],
+			package_size: null,
+			package_amount: null,
+			seat_minimum_quantity: 0,
+			free_units: 0,
+			minimum_amount: null,
+			cap_amount: null,
+			invoice_line_mode: 'single' as const,
+			charge_flat_when_free: false,
+		});
+		const fields = (id: string | null): PricedItemFields => ({
+			price: id ? price(id) : null,
+			metric: null,
+			catalog_price: id ? { id: `lp-${id}`, name: 'Lista', version: 2 } : null,
+			uses_price_model: Boolean(id),
+		});
+
+		it('resume el precio si todos los vigentes lo comparten; si no, null pero uses_price_model', () => {
+			const priced = new Map<string, PricedItemFields>([
+				['base', fields('p-1')],
+				['up', fields('p-1')],
+				['ended', fields('p-2')],
+				['other', fields('p-1')],
+				['plain', fields(null)],
+			]);
+			const groups = buildItemGroups(
+				[
+					item({ id: 'base' }),
+					item({ id: 'up', categoria: 'UPSELL', related_item_id: 'base', start_date: '2026-05-01' }),
+					item({ id: 'ended', end_date: '2026-03-31' }),
+					item({ id: 'other', product_name: 'MIXTO' }),
+					item({ id: 'plain', product_name: 'MIXTO' }),
+				],
+				today,
+				[],
+				(row) => priced.get(row.id)
+			);
+			const byName = Object.fromEntries(groups.map((group) => [group.product_name, group]));
+
+			expect(byName.LICENCIA).toMatchObject({ uses_price_model: true, price: { id: 'p-1' }, catalog_price: { id: 'lp-p-1', version: 2 } });
+			expect(byName.MIXTO).toMatchObject({ uses_price_model: true, price: null, metric: null, catalog_price: null });
+		});
+
+		it('sin precios (otros lectores) el grupo no declara modelo', () => {
+			const [group] = buildItemGroups([item({ id: 'a' })], today);
+
+			expect(group).toMatchObject({ price: null, metric: null, catalog_price: null, uses_price_model: false });
+		});
 	});
 });
