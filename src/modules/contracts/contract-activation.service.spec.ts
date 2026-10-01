@@ -1,14 +1,23 @@
+// `InvoiceSchedulerService` (envío al ERP desde el Contrato 360) importa `uuid`, que desde la v13 es solo ESM: Jest no lo transforma.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+
 import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { DataSource } from 'typeorm';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
+import { API_WRITER_SQL } from './api-writer';
 import { findFixedRate, fixedFxAmounts } from './billing-engine';
+import { ConsumptionService } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
+import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
+import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
+import { ContractInvoiceEditService } from './contract-invoice-edit.service';
+import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractSubscriptionsService } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
@@ -109,6 +118,15 @@ const build = (contracts: Row[], contractItems: Row[], handler: Handler = () => 
 
 		if (custom !== undefined) return custom;
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
+		// FX a la moneda del sistema del contrato (réplica de `calculate_contract_fx_amounts`).
+		if (sql.includes('fx_system_policy') && sql.includes('FROM contracts c')) {
+			const contract = contracts.find((row) => row.id === params[0]);
+
+			return contract
+				? [{ contract_currency: contract.contract_currency, fx_date: '2026-10-01', system_currency: 'CLP', fx_policy: 'monthly_avg' }]
+				: [];
+		}
+		if (sql.includes('FROM calculate_system_fx_rate')) return [{ rate: 950 }];
 		if (sql.includes('FROM contract_items ci') && sql.includes('JOIN contracts c')) {
 			const ids = params[0] as string[];
 
@@ -164,11 +182,36 @@ describe('ContractActivationService.evaluate (bloqueos)', () => {
 			total_to_invoice: 1100,
 			currency: 'CLP',
 			document_type: 'FACTURA',
+			// Sin documento del catálogo: la etiqueta es la de la familia.
+			document_type_label: 'Factura',
+			tax_document_type: null,
 		});
 		expect(plan.check.sample).toHaveLength(3);
 		// Condición del contrato (30 días), no la de la razón social (60).
 		expect(plan.check.sample[0]).toMatchObject({ due_date: '2026-10-31', subtotal: 700, tax: 133, total: 833, tax_rate: 19 });
 		expect(plan.check.sample[0].lines.map((line) => line.item_key)).toEqual([`${A}-rec`, `${A}-setup`]);
+	});
+
+	it('glosas largas: se ajustan al límite del documento del contrato (SII 80) y la vista previa avisa description_fitted', () => {
+		const long = items(A, {
+			product_name: 'Plataforma de optimizacion de rutas de ultima milla para flota refrigerada',
+			account: 'Santiago Centro',
+		});
+		const plan = ContractActivationService.evaluate(
+			A,
+			draft(A, { tax_document_type_id: 'tdt-33', tax_document_type_name: 'Factura electrónica', own_description_max_chars: 80 }),
+			long
+		);
+		const descriptions = plan.engine!.invoices.flatMap((invoice) => invoice.lines.map((line) => line.description));
+
+		expect(plan.check.can_activate).toBe(true);
+		expect(descriptions.every((text) => text.length <= 80)).toBe(true);
+		expect(plan.check.warning_codes).toContain('description_fitted');
+		// Sin límite (contrato sin documento ni país con límite), la glosa de hoy tal cual y sin aviso.
+		const unlimited = ContractActivationService.evaluate(A, draft(A, { company_country: null }), long);
+
+		expect(unlimited.check.warning_codes).not.toContain('description_fitted');
+		expect(unlimited.engine!.invoices[0].lines[0].description.length).toBeGreaterThan(80);
 	});
 
 	it.each<[string, Row, Row[] | null, string]>([
@@ -192,7 +235,12 @@ describe('ContractActivationService.evaluate (bloqueos)', () => {
 			null,
 			'fx_company_policy_missing',
 		],
-		['FX fijo de facturación sin tasa', { invoice_currency: 'USD', fx_invoice_policy: 'fixed' }, null, 'fixed_fx_without_rate'],
+		[
+			'moneda ≠ compañía emisora aunque la copia del contrato esté desalineada (manda la compañía)',
+			{ contract_currency: 'USD', invoice_currency: 'USD', contract_company_currency: 'USD', company_currency: 'CLP' },
+			null,
+			'fx_company_policy_missing',
+		],
 		['sin ítems', {}, [], 'no_items'],
 	])('%s → %s', (_label, overrides, customItems, code) => {
 		const plan = ContractActivationService.evaluate(A, draft(A, overrides), customItems ?? items(A));
@@ -218,6 +266,20 @@ describe('ContractActivationService.evaluate (bloqueos)', () => {
 	it('ítems sin producto o incompletos', () => {
 		expect(codes(ContractActivationService.evaluate(A, draft(A), items(A, { product_id: null })))).toEqual(['items_without_product']);
 		expect(codes(ContractActivationService.evaluate(A, draft(A), items(A, { start_date: null })))).toContain('incomplete_items');
+	});
+
+	it('sin término (S1-12): el recurrente con plazo y fin NULL no bloquea; la vista previa trae hasta cuándo se generaron facturas', () => {
+		const [recurring, setup] = items(A);
+		const plan = ContractActivationService.evaluate(A, draft(A), [{ ...recurring, term_months: null, end_date: null, final_price: null }, setup]);
+
+		expect(plan.check.can_activate).toBe(true);
+		expect(plan.check.blockers).toEqual([]);
+		// 12 meses de horizonte (la de implementación va junto a la primera).
+		expect(plan.check.invoices_count).toBe(12);
+		expect(plan.check.indefinite_until).toBe('2027-09-30');
+		expect(plan.check.warnings.some((warning) => warning.includes('no tiene término'))).toBe(true);
+		// Un ítem de pago único sin plazo sigue incompleto.
+		expect(codes(ContractActivationService.evaluate(A, draft(A), [recurring, { ...setup, term_months: null }]))).toContain('incomplete_items');
 	});
 
 	it('moneda ≠ compañía con política definida: no bloquea', () => {
@@ -248,7 +310,41 @@ describe('ContractActivationService.evaluate (bloqueos)', () => {
 		expect(plan.check.can_activate).toBe(true);
 		expect(plan.check.sample[0].due_date).toBe('2026-11-30');
 		expect(plan.check.document_type).toBe('FACTURA');
-		expect(plan.check.warnings).toContain('El contrato no tiene día de ciclo guardado: se usa el del primer ítem recurrente');
+		// Día de ciclo automático (NULL) es un estado válido, no un aviso (decisión de Domi 01-10).
+		expect(plan.check.warnings.join(' ')).not.toContain('día de ciclo');
+	});
+
+	it('period_closed: bloquea si alguna factura generada se emitiría en un período cerrado, con el paso para destrabar', () => {
+		const closed = ContractActivationService.evaluate(A, draft(A, { cutoff_date: '2026-10-31' }), items(A));
+
+		expect(closed.check.can_activate).toBe(false);
+		expect(closed.check.blockers).toEqual([
+			{
+				code: 'period_closed',
+				message: expect.stringContaining('cierre al 2026-10-31'),
+				next_step: expect.stringContaining('Reabrir el período'),
+			},
+		]);
+		expect(ContractActivationService.evaluate(A, draft(A, { cutoff_date: '2026-09-30' }), items(A)).check.can_activate).toBe(true);
+	});
+
+	it('con documento tributario del catálogo, la vista previa muestra su nombre en vez de la familia', () => {
+		const plan = ContractActivationService.evaluate(
+			A,
+			draft(A, {
+				document_type: 'FACTURA_EXPORTACION',
+				tax_document_type_id: 'tdt-110',
+				tax_document_type_code: '110',
+				tax_document_type_name: 'Factura de exportación electrónica',
+			}),
+			items(A)
+		);
+
+		expect(plan.check.document_type).toBe('FACTURA_EXPORTACION');
+		expect(plan.check.document_type_label).toBe('Factura de exportación electrónica');
+		expect(plan.check.tax_document_type).toEqual({ id: 'tdt-110', code: '110', name: 'Factura de exportación electrónica' });
+		// La familia sigue gobernando el IVA y el export_type de las facturas.
+		expect(plan.check.sample[0]).toMatchObject({ export_type: 1, tax_rate: 0 });
 	});
 
 	it('precio anual guardado sin unitario mensual: se divide en 12', () => {
@@ -309,16 +405,23 @@ describe('Tipo de cambio fijo de facturación (contract_fx_period_rates)', () =>
 		expect(check.currency).toBe('USD');
 	});
 
-	it('sin tasa (o sin cubrir algún período) → fixed_fx_without_rate', () => {
+	it('sin tasa (o sin cubrir algún período): se puede activar con aviso; la tasa se define por factura antes de emitir', () => {
 		const none = ContractActivationService.evaluate(A, fixedDraft([]), usdItems());
 
-		expect(codes(none)).toEqual(['fixed_fx_without_rate']);
-		expect(none.check.blockers[0].message).toContain('3 facturas no tienen tasa USD → CLP');
+		expect(codes(none)).toEqual([]);
+		expect(none.check.can_activate).toBe(true);
+		expect(none.check.warnings).toContain(
+			'Tipo de cambio fijo sin tasa: define la tasa por factura antes de emitir (3 facturas sin tasa USD → CLP, desde el 2026-10-01)'
+		);
+		expect(none.fixedRates).toEqual([null, null, null]);
 
 		const partial = ContractActivationService.evaluate(A, fixedDraft([rate('USD', 'CLP', 950, '2026-10-01', '2026-11-15')]), usdItems());
 
-		expect(codes(partial)).toEqual(['fixed_fx_without_rate']);
-		expect(partial.check.blockers[0].message).toContain('1 factura no tiene tasa USD → CLP para su período (desde el 2026-12-01)');
+		expect(codes(partial)).toEqual([]);
+		expect(partial.check.warnings).toContain(
+			'Tipo de cambio fijo sin tasa: define la tasa por factura antes de emitir (1 factura sin tasa USD → CLP, desde el 2026-12-01)'
+		);
+		expect(partial.fixedRates).toEqual([950, 950, null]);
 	});
 
 	it('activar: fx y montos en moneda de factura llenos en encabezado y líneas', async () => {
@@ -329,8 +432,9 @@ describe('Tipo de cambio fijo de facturación (contract_fx_period_rates)', () =>
 		expect(result.activated).toHaveLength(1);
 		const [, header] = runners[0].query.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO invoices'))!;
 
-		// vat, tax_rate, neto contrato, neto factura, sistema, total factura, total sistema, moneda contrato, factura, fx
-		expect((header as unknown[]).slice(6, 16)).toEqual([126350, 19, 700, 665000, 700, 791350, 833, 'USD', 'CLP', 950]);
+		// vat, tax_rate, neto contrato, neto factura, total factura, moneda contrato, factura, fx (los de sistema los escribe
+		// `refreshInvoiceSystemAmounts` después del INSERT).
+		expect((header as unknown[]).slice(6, 14)).toEqual([126350, 19, 700, 665000, 791350, 'USD', 'CLP', 950]);
 		const [, line] = runners[0].query.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO invoice_items'))!;
 
 		expect((line as unknown[]).slice(4, 13)).toEqual([100, 95000, 0, 200, 190000, 38, 36100, 238, 226100]);
@@ -366,49 +470,75 @@ describe('ContractActivationService.preview', () => {
 
 		expect(statements.every((sql) => sql.trim().startsWith('SELECT'))).toBe(true);
 		expect(statements[0]).toContain('c.holding_id = $2');
-		expect(statements[0]).toContain("(to_jsonb(c)->>'billing_anchor_day')");
+		expect(statements[0]).toContain('c.billing_anchor_day');
 		expect(runners).toHaveLength(0);
 	});
 });
 
 describe('ContractActivationService.activate', () => {
-	it('facturas antes del estado, líneas con patrón B, rebuild y evento, en una transacción', async () => {
-		const { service, runners } = build([draft(A)], items(A));
+	it('costura: marca primero; facturas con contract_item_id (sin patrón B), booking/FX antes del estado, rebuild y evento', async () => {
+		const { service, runners } = build([draft(A)], items(A), (sql) =>
+			sql.includes('SELECT status, booking_date::text AS booking_date, company_currency, fx_rate_to_system FROM contracts')
+				? [{ status: 'Activo', booking_date: '2026-10-01', company_currency: 'CLP', fx_rate_to_system: '1' }]
+				: undefined
+		);
 
 		const result = await service.activate([A], 'h-1', 'auth-1');
 
-		expect(result).toEqual({ activated: [{ id: A, contract_number: 'CTR-2026-001', invoices_created: 3 }], skipped: [], failed: [] });
+		expect(result).toEqual({
+			activated: [{ id: A, contract_number: 'CTR-2026-001', invoices_created: 3, warning_codes: [] }],
+			skipped: [],
+			failed: [],
+		});
 		expect(runners).toHaveLength(1);
 		const [runner] = runners;
 		const statements = sqlOf(runner);
 		const index = (needle: string) => statements.findIndex((sql) => sql.includes(needle));
 		const lastIndex = (needle: string) => statements.map((sql) => sql.includes(needle)).lastIndexOf(true);
 
-		// El contrato se bloquea antes de leer los ítems.
-		expect(statements[0]).toContain('FOR UPDATE OF c');
+		// La marca `sapira.writer = 'api'` es la primera sentencia; después se bloquea el contrato antes de leer los ítems.
+		expect(statements[0]).toBe(API_WRITER_SQL);
+		expect(statements[1]).toContain('FOR UPDATE OF c');
 		// Todas las facturas y líneas antes de pasar a Activo; el rebuild y el evento después.
 		expect(lastIndex('INSERT INTO invoice_items')).toBeLessThan(index('UPDATE contracts SET status'));
-		expect(lastIndex('UPDATE invoice_items')).toBeLessThan(index('UPDATE contracts SET status'));
 		expect(index('UPDATE contracts SET status')).toBeLessThan(index('revenue_schedule_rebuild'));
 		expect(index('revenue_schedule_rebuild')).toBeLessThan(index(`'ACTIVATION'`));
 		expect(statements.filter((sql) => sql.includes('INSERT INTO invoices'))).toHaveLength(3);
 		expect(statements.some((sql) => sql.includes('contract_invoices'))).toBe(false);
 		expect(statements.some((sql) => sql.includes('bypass_period_guard'))).toBe(false);
 
-		// Patrón B: el INSERT de la línea no lleva contract_item_id; el UPDATE de su factura lo fija después.
+		// Sin patrón B: la línea nace con su ítem y no hay UPDATE posterior de invoice_items.
 		const lineInserts = runner.query.mock.calls.filter(([sql]) => (sql as string).includes('INSERT INTO invoice_items'));
 
 		expect(lineInserts).toHaveLength(4);
-		expect(lineInserts.every(([sql]) => !(sql as string).includes('contract_item_id'))).toBe(true);
-		const firstLink = runner.query.mock.calls.find(([sql]) => (sql as string).includes('UPDATE invoice_items'))!;
+		expect(lineInserts.every(([sql]) => (sql as string).includes('invoice_id, contract_item_id,'))).toBe(true);
+		expect(statements.some((sql) => sql.includes('UPDATE invoice_items'))).toBe(false);
+		// Estado y fecha de la línea = los del encabezado (lo que hacía `auto_populate_invoice_item_fields`).
+		expect(lineInserts[0][0]).toContain(
+			'(SELECT h.status FROM invoices h WHERE h.id = $1), (SELECT h.issue_date FROM invoices h WHERE h.id = $1)'
+		);
 
-		expect(firstLink[0]).toContain('SET contract_item_id = x.contract_item_id');
-		expect(firstLink[1]).toEqual([['line-2', 'line-3'], [`${A}-rec`, `${A}-setup`], 'inv-1']);
-		expect(index('UPDATE invoice_items')).toBeGreaterThan(index('INSERT INTO invoice_items'));
+		// Booking (hoy si es null) y company_currency = la de la compañía emisora (regla v2), con el contrato todavía en
+		// borrador; FX a sistema antes del estado.
+		const booking = runner.query.mock.calls.find(([sql]) => (sql as string).includes('booking_date = COALESCE(booking_date, CURRENT_DATE)'))!;
 
-		// Encabezado = Σ líneas, IVA explícito, misma moneda → FX 1 y montos en moneda de factura llenos.
-		const [, headerParams] = runner.query.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO invoices'))!;
+		expect(booking[0]).toContain(
+			'company_currency = COALESCE((SELECT co.currency FROM companies co WHERE co.id = contracts.company_id), company_currency)'
+		);
+		expect(booking[1]).toEqual([A, 'h-1', 'En revisión']);
+		expect(index('booking_date = COALESCE')).toBeLessThan(index('UPDATE contracts SET status'));
+		expect(index('UPDATE contracts SET fx_rate_to_system')).toBeGreaterThan(index('booking_date = COALESCE'));
+		expect(index('UPDATE contracts SET fx_rate_to_system')).toBeLessThan(index('UPDATE contracts SET status'));
 
+		// Encabezado = Σ líneas, IVA explícito, misma moneda → FX 1 y montos en moneda de factura llenos; id propio = grupo.
+		const [headerSql, headerParams] = runner.query.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO invoices'))!;
+		const invoiceId = 'inv-1';
+
+		// id generado en el mismo INSERT y `invoice_group_id = id` (antes `assign_invoice_group_id`); condiciones del contrato.
+		expect(headerSql).toContain('id, invoice_group_id,');
+		expect(headerSql).toMatch(/SELECT\s+g\.id, g\.id,/);
+		expect(headerSql).toContain('FROM (SELECT gen_random_uuid() AS id) g');
+		expect(headerSql).toContain('(SELECT k.invoice_terms_and_conditions FROM contracts k WHERE k.id = $4::uuid)');
 		expect(headerParams).toEqual([
 			'company-1',
 			'client-1',
@@ -420,8 +550,6 @@ describe('ContractActivationService.activate', () => {
 			19,
 			700,
 			700,
-			700,
-			833,
 			833,
 			'CLP',
 			'CLP',
@@ -439,7 +567,7 @@ describe('ContractActivationService.activate', () => {
 		const [, lineParams] = lineInserts[0];
 
 		expect(lineParams).toEqual([
-			'inv-1',
+			invoiceId,
 			'Licencia Cuenta Norte - Periodo 01/10/2026 a 31/10/2026',
 			2,
 			'Usuarios',
@@ -462,7 +590,16 @@ describe('ContractActivationService.activate', () => {
 			'2026-10-01',
 			'2026-10-01',
 			'2026-10-31',
+			// Pricing v2: línea de hoy → cantidad fija, sin desglose.
+			'fixed',
+			null,
+			`${A}-rec`,
 		]);
+		// Montos en moneda del sistema de las 3 facturas creadas (réplica de `auto_populate_invoice_fx_to_system`).
+		const refresh = runner.query.mock.calls.find(([sql]) => (sql as string).includes('COALESCE(hs.system_currency'))!;
+
+		expect((refresh[1] as unknown[])[0]).toHaveLength(3);
+		expect((refresh[1] as unknown[])[0]).toContain(invoiceId);
 
 		// Pasa a Activo solo si sigue En revisión; rebuild completo; evento con usuario, cantidad y total.
 		const statusUpdate = runner.query.mock.calls.find(([sql]) => (sql as string).includes('UPDATE contracts SET status'))!;
@@ -477,7 +614,15 @@ describe('ContractActivationService.activate', () => {
 			invoices_created: 3,
 			total_to_invoice: 1100,
 			currency: 'CLP',
+			// Antes/después de lo que escribe la activación, avisos, horizonte, facturas creadas e ítems afectados.
+			before: { status: 'En revisión', booking_date: null, company_currency: 'CLP', fx_rate_to_system: null },
+			after: { status: 'Activo', booking_date: '2026-10-01', company_currency: 'CLP', fx_rate_to_system: 1 },
+			warning_codes: [],
+			indefinite_until: null,
+			created_invoice_ids: ['inv-1', expect.any(String), expect.any(String)],
+			items_affected: [`${A}-rec`, `${A}-setup`],
 		});
+		expect(JSON.parse((event[1] as unknown[])[5] as string)).toEqual([`${A}-rec`, `${A}-setup`]);
 		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
 	});
 
@@ -487,10 +632,11 @@ describe('ContractActivationService.activate', () => {
 		await service.activate([A], 'h-1', 'auth-1');
 		const [, headerParams] = runners[0].query.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO invoices'))!;
 
+		// neto y total en moneda de factura, moneda de factura y fx.
 		expect((headerParams as unknown[])[9]).toBeNull();
-		expect((headerParams as unknown[])[11]).toBeNull();
-		expect((headerParams as unknown[])[14]).toBe('USD');
-		expect((headerParams as unknown[])[15]).toBeNull();
+		expect((headerParams as unknown[])[10]).toBeNull();
+		expect((headerParams as unknown[])[12]).toBe('USD');
+		expect((headerParams as unknown[])[13]).toBeNull();
 	});
 
 	it('cada contrato en su transacción: un fallo no frena al resto; los bloqueados se omiten sin escribir', async () => {
@@ -507,7 +653,7 @@ describe('ContractActivationService.activate', () => {
 		const result = await service.activate([A, B, MISSING], 'h-1', 'auth-1');
 
 		expect(result.failed).toEqual([{ id: A, contract_number: 'CTR-2026-001', message: 'No se pudo activar: TAX_RATE_NOT_CONFIGURED' }]);
-		expect(result.activated).toEqual([{ id: B, contract_number: 'CTR-2026-002', invoices_created: 3 }]);
+		expect(result.activated).toEqual([{ id: B, contract_number: 'CTR-2026-002', invoices_created: 3, warning_codes: [] }]);
 		expect(result.skipped).toEqual([{ id: MISSING, contract_number: 'CTR-X', blockers: [expect.objectContaining({ code: 'not_draft' })] }]);
 		expect(runners).toHaveLength(3);
 		expect(runners[0].rollbackTransaction).toHaveBeenCalled();
@@ -540,7 +686,16 @@ describe('ContractsController (acciones masivas y activación)', () => {
 		{} as ContractSubscriptionsService,
 		{} as Contract360Service,
 		bulk,
-		activation
+		activation,
+		{} as ConsumptionService,
+		{} as ContractChangesService,
+		{} as ContractInvoicesService,
+		{} as ContractInvoiceDescriptionsService,
+
+		{} as ContractInvoiceEditService,
+		{} as never,
+		{} as never,
+		{} as never
 	);
 
 	it('heredan SupabaseAuthGuard + HoldingScopeGuard y responden 200', () => {

@@ -23,6 +23,7 @@
 - `ROADMAP-V2.md` (raíz) es el único índice del plan v2: un documento de planificación nuevo se linkea desde ahí o no existe. El backlog operativo de fixes vive en copia espejo doble: `docs/ROADMAP-OPERATIVO.md` y `sapira-ai/docs/ROADMAP-OPERATIVO.md` — todo cambio se replica en ambos (convención en el propio archivo).
 - Prioriza documentar en la ubicación más cercana del módulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `docs/` para documentación transversal.
 - Usa Jest para pruebas unitarias y manten las specs dentro de `src/` con sufijo `.spec.ts`, idealmente cerca del modulo afectado.
+- **Lógica de negocio en la API; triggers solo invariantes.** Toda transacción v2 que escribe fija `sapira.writer = 'api'` como primera sentencia (`setApiWriter`/`withApiWriter` de `src/modules/contracts/api-writer.ts`) y escribe cada campo explícito con la regla correcta (nunca un bug del trigger "por paridad": los fronts no conviven por módulo); los triggers legacy salen sin hacer nada ante la marca. Regla: `docs/reglas-desarrollo/logica-en-api-triggers.md`; inventario campo por campo: `docs/v2-rediseno/activacion-campos-api.md`.
 
 ## Documentación y tests obligatorios
 

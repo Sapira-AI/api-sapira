@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Price } from '@/databases/postgresql/entities/contratos/price.entity';
 import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
 import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 
@@ -18,6 +19,7 @@ import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quo
 @Index('idx_quote_items_salesforce_line_item_unique', ['salesforce_line_item_id'], { unique: true, where: `(salesforce_line_item_id IS NOT NULL)` })
 @Index('idx_quote_items_sf_product', ['salesforce_product_id'], { where: `(salesforce_product_id IS NOT NULL)` })
 @Index('idx_quote_items_custom_fields', { synchronize: false })
+@Index('idx_quote_items_price_id', ['price_id'], { where: `(price_id IS NOT NULL)` })
 @Entity('quote_items')
 export class QuoteItem {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'quote_items_pkey' })
@@ -165,9 +167,20 @@ export class QuoteItem {
 	})
 	price_entry_mode: string;
 
+	/**
+	 * Pricing v2 en cotizaciones (Q-A3, migración `1790650000000-QuotesV2`): modelo de precio del ítem (`prices.owner = quote`, o copia de
+	 * catálogo con `list_price_id`). NULL = standard fijo de hoy (unit_price mensual × cantidad × plazo). `fromQuote` lo copia al contrato.
+	 */
+	@Column({ type: 'uuid', nullable: true, comment: 'Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo' })
+	price_id?: string | null;
+
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_quote_items_holding_id' })
 	holding?: CompanyHolding;
+
+	@ManyToOne(() => Price)
+	@JoinColumn({ name: 'price_id', referencedColumnName: 'id', foreignKeyConstraintName: 'quote_items_price_id_fkey' })
+	priceModel?: Price;
 
 	@ManyToOne(() => Product)
 	@JoinColumn({ name: 'product_id', referencedColumnName: 'id', foreignKeyConstraintName: 'quote_items_product_id_fkey' })

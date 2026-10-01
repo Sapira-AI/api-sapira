@@ -629,6 +629,17 @@
     ]
    },
    {
+    "name": "quote_events_actor_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "actor_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "salesforce_connections_user_id_fkey",
     "source_table": "public.salesforce_connections",
     "source_columns": [
@@ -1845,6 +1856,17 @@
    {
     "name": "quantities_holding_id_fkey",
     "source_table": "public.quantities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_holding_id_fkey",
+    "source_table": "public.quote_events",
     "source_columns": [
      "holding_id"
     ],

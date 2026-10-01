@@ -2,7 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
-export const CONTRACT_INVOICE_SORT_FIELDS = ['issue_date', 'amount', 'status'] as const;
+/** `billing_period_start` (por defecto): período de servicio de la factura (MIN de sus líneas), luego fecha de emisión. */
+export const CONTRACT_INVOICE_SORT_FIELDS = ['billing_period_start', 'issue_date', 'amount', 'status'] as const;
 export type ContractInvoiceSortField = (typeof CONTRACT_INVOICE_SORT_FIELDS)[number];
 
 /**
@@ -34,7 +35,7 @@ export class QueryContractInvoicesDto {
 	@IsOptional()
 	status?: ContractInvoiceStatusFilter;
 
-	@ApiPropertyOptional({ enum: CONTRACT_INVOICE_SORT_FIELDS, default: 'issue_date' })
+	@ApiPropertyOptional({ enum: CONTRACT_INVOICE_SORT_FIELDS, default: 'billing_period_start' })
 	@IsIn(CONTRACT_INVOICE_SORT_FIELDS)
 	@IsOptional()
 	sortBy?: ContractInvoiceSortField;

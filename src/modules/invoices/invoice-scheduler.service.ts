@@ -237,6 +237,17 @@ export class InvoiceSchedulerService {
 		return invoices as InvoiceWithRelations[];
 	}
 
+	/**
+	 * Envío puntual de UNA factura por id (Contrato 360 › "Enviar al ERP ahora", `contract-invoices.service.ts`): carga la factura con
+	 * sus relaciones y reutiliza `sendInvoiceToOdoo`. No aplica la regla del mes en curso de `getInvoicesToSend`; los bloqueos de negocio
+	 * los corre quien llama.
+	 */
+	async sendInvoiceById(invoiceId: string, dryRun: boolean, schedulerSource: 'manual' | 'automatic' = 'manual'): Promise<InvoiceResultDto> {
+		const invoice = await this.getInvoiceWithRelations(invoiceId);
+
+		return await this.sendInvoiceToOdoo(invoice, dryRun, schedulerSource);
+	}
+
 	async sendInvoiceToOdoo(
 		invoice: InvoiceWithRelations,
 		dryRun: boolean,
@@ -869,7 +880,30 @@ export class InvoiceSchedulerService {
 
 		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
 
-		for (const item of invoice.items || []) {
+		/**
+		 * Líneas en cero (Contratos v2, Facturas en el 360 · etapa 4 — cambio puntual de Domi/Claude, avisado a Leon): una línea con
+		 * cantidad 0 (consumo informado en cero o línea dejada en cero al editar) se conserva en Sapira para trazabilidad, pero NO viaja al
+		 * ERP ni aparece en el documento. Solo se omiten si la factura tiene al menos una línea con cantidad distinta de cero: una factura
+		 * con todas sus líneas en cero se envía igual que antes (v2 no las deja Por Emitir: pasan a Cancelada "sin cobro").
+		 */
+		/**
+		 * Líneas internas (Contratos v2 · etapa 6, facturación parcial por OC): las líneas con `visible_line_id` son la asignación interna por
+		 * ítem y período de una única línea visible del documento; solo la visible viaja al ERP. También cambio puntual avisado a Leon
+		 * (`docs/v2-rediseno/cambios-integracion-para-leon.md`).
+		 */
+		const allItems = invoice.items || [];
+		const isZeroQuantity = (item: { quantity?: unknown }) => Number(item.quantity) === 0;
+		const isInternal = (item: { visible_line_id?: unknown }) => item.visible_line_id !== null && item.visible_line_id !== undefined;
+		const externalItems = allItems.filter((item) => !isInternal(item));
+		const itemsToSend = externalItems.some((item) => !isZeroQuantity(item)) ? externalItems.filter((item) => !isZeroQuantity(item)) : externalItems;
+
+		if (itemsToSend.length < allItems.length) {
+			this.logger.log(
+				`🧹 Factura ${invoice.invoice_number || invoice.id}: ${allItems.length - itemsToSend.length} línea(s) no se envían al ERP (en cero o internas de una línea visible)`
+			);
+		}
+
+		for (const item of itemsToSend) {
 			let odooProductId = 1;
 			const itemLabel = item.description || 'Producto/Servicio';
 			this.logger.log(`🧾 Iniciando cálculo de impuestos para item ${item.id} (${itemLabel})`);
@@ -1195,19 +1229,35 @@ export class InvoiceSchedulerService {
 		exchangeRate?: number;
 		fallbackDate?: Date;
 	}> {
-		// FX FIJO: si el contrato tiene política 'fixed' y la factura ya trae un
-		// fx_contract_to_invoice válido (persistido por el front), respetamos ese
-		// tipo de cambio y NO recalculamos spot contra Banco Central.
-		if (invoice.contract?.fx_invoice_policy === 'fixed' && invoice.fx_contract_to_invoice != null && Number(invoice.fx_contract_to_invoice) > 0) {
+		// U12/B3 (spec facturas §3.2, mapa F5/S6-2): con política fija del contrato y sin tasa en la factura (`fx_contract_to_invoice`
+		// NULL), el envío se detiene y avisa (omitida, `exchange_rate`); nunca sale a spot en silencio. La tasa por factura vive en
+		// `fx_contract_to_invoice` (valor = fija confirmada desde el Contrato 360; NULL = spot pendiente).
+		const fxPolicy = invoice.contract?.fx_invoice_policy ?? null;
+		const fixedRate = invoice.fx_contract_to_invoice;
+
+		if (fxPolicy === 'fixed' && !(fixedRate != null && Number(fixedRate) > 0)) {
+			throw new Error(
+				`La factura ${invoice.invoice_number || invoice.id} usa tipo de cambio fijo (política del contrato) y no tiene tasa: ` +
+					`confírmala desde el contrato antes de enviarla.`
+			);
+		}
+
+		// FX FIJO POR FACTURA (Contratos v2, decisión de Domi 01-10, avisada a Leon en `docs/v2-rediseno/cambios-integracion-para-leon.md`):
+		// una tasa fijada explícitamente en la factura desde el 360 (`invoice_items.fx_rate_source` = 'manual' o 'net_exact': tasa por
+		// factura, neto exacto o facturación por OC) se respeta aunque la política del contrato sea spot. Una tasa "pegada" por datos
+		// heredados (sin ese origen) sigue recalculándose a spot como antes.
+		const explicitlyFixed = (invoice.items || []).some((item) => ['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? '')));
+
+		if ((fxPolicy === 'fixed' || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
 			this.logger.log(
 				`💱 FX fijo aplicado para factura ${invoice.invoice_number}: ` +
-					`${invoice.contract_currency}/${invoice.invoice_currency} = ${invoice.fx_contract_to_invoice} ` +
-					`(política 'fixed' — sin consultar Banco Central)`
+					`${invoice.contract_currency}/${invoice.invoice_currency} = ${fixedRate} ` +
+					`(${fxPolicy === 'fixed' ? "política 'fixed'" : 'tasa fijada en la factura'} — sin consultar Banco Central)`
 			);
 			return {
 				success: true,
 				usedFallback: false,
-				exchangeRate: Number(invoice.fx_contract_to_invoice),
+				exchangeRate: Number(fixedRate),
 			};
 		}
 

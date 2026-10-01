@@ -255,6 +255,44 @@ describe('InvoiceSchedulerService', () => {
 		expect(payload.l10n_pe_edi_operation_type).toBe('1001');
 	});
 
+	it('no envía al ERP las líneas con cantidad 0 cuando la factura tiene otras líneas; si todas están en cero, las envía como antes', async () => {
+		const { service } = createService();
+		const base = buildInvoice('Uruguay', null, []);
+		const zero = { id: 'item-0', description: 'Consumo en cero', quantity: 0, unit_price_invoice_currency: 5, discount_pct: 0 };
+
+		const mixed = await service.mapInvoiceToOdooFormat({ ...base, items: [...base.items, zero] } as typeof base);
+
+		expect(mixed.invoice_line_ids).toHaveLength(1);
+		expect(mixed.invoice_line_ids[0].quantity).toBe(28);
+
+		const allZero = await service.mapInvoiceToOdooFormat({ ...base, items: [zero] } as typeof base);
+
+		expect(allZero.invoice_line_ids).toHaveLength(1);
+	});
+
+	it('no envía al ERP las líneas internas de una línea visible (facturación por OC): solo viaja la visible', async () => {
+		const { service } = createService();
+		const base = buildInvoice('Uruguay', null, []);
+		const visible = { id: 'item-v', description: 'OC 123 · septiembre', quantity: 1, unit_price_invoice_currency: 900, discount_pct: 0, visible_line_id: null };
+		const internal = { id: 'item-i', description: 'PATHFINDER+', quantity: 28, unit_price_invoice_currency: 32.14, discount_pct: 0, visible_line_id: 'item-v' };
+
+		const payload = await service.mapInvoiceToOdooFormat({ ...base, items: [visible, internal] } as typeof base);
+
+		expect(payload.invoice_line_ids).toHaveLength(1);
+		expect(payload.invoice_line_ids[0].quantity).toBe(1);
+	});
+
+	it('respeta la tasa fijada explícitamente en la factura (fx_rate_source manual/net_exact) aunque la política del contrato sea spot', async () => {
+		const { service, exchangeRatesService } = createService();
+		const base = buildInvoice('Chile', null, []);
+
+		const items = base.items.map((item) => ({ ...item, fx_rate_source: 'manual' }));
+		const result = await service.calculateInvoiceAmountsAtIssue({ ...base, items, fx_contract_to_invoice: 950.5, contract: { ...(base.contract ?? {}), fx_invoice_policy: 'spot' } } as typeof base);
+
+		expect(result).toEqual({ success: true, usedFallback: false, exchangeRate: 950.5 });
+		expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+	});
+
 	it('usa impuesto 0% para exportacion de Mexico', async () => {
 		const { service, taxMappingService } = createService();
 		taxMappingService.getCompanyZeroRateSaleTax.mockResolvedValue(90);
@@ -266,6 +304,64 @@ describe('InvoiceSchedulerService', () => {
 
 		expect(taxMappingService.getCompanyZeroRateSaleTax).toHaveBeenCalledWith(5, 'holding-1');
 		expect(payload.invoice_line_ids[0].tax_ids).toEqual([90]);
+	});
+
+	it('sendInvoiceById (Contrato 360 › Enviar al ERP ahora) carga la factura con sus relaciones y delega en sendInvoiceToOdoo con origen manual', async () => {
+		const { service } = createService();
+		const load = jest
+			.spyOn(service as unknown as { getInvoiceWithRelations: (id: string) => Promise<unknown> }, 'getInvoiceWithRelations')
+			.mockResolvedValue({ id: 'invoice-1', items: [{ id: 'item-1' }] });
+		const send = jest.spyOn(service, 'sendInvoiceToOdoo').mockResolvedValue({ invoiceId: 'invoice-1', status: 'sent', odooInvoiceId: 77 } as any);
+
+		await expect(service.sendInvoiceById('invoice-1', false)).resolves.toMatchObject({ status: 'sent', odooInvoiceId: 77 });
+		expect(load).toHaveBeenCalledWith('invoice-1');
+		expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: 'invoice-1', items: [{ id: 'item-1' }] }), false, 'manual');
+	});
+
+	it('U12/B3: política fija del contrato con tasa en la factura no consulta Banco Central; fija sin tasa se detiene (nunca spot en silencio)', async () => {
+		const { service, invoiceRepository, exchangeRatesService } = createService();
+
+		await expect(
+			service.calculateInvoiceAmountsAtIssue({
+				id: 'invoice-1',
+				fx_contract_to_invoice: 950,
+				contract: { fx_invoice_policy: 'fixed' },
+				contract_currency: 'USD',
+				invoice_currency: 'CLP',
+			} as any)
+		).resolves.toEqual({ success: true, usedFallback: false, exchangeRate: 950 });
+		expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+		expect(invoiceRepository.update).not.toHaveBeenCalled();
+
+		await expect(
+			service.calculateInvoiceAmountsAtIssue({
+				id: 'invoice-2',
+				invoice_number: 'INV-2',
+				fx_contract_to_invoice: null,
+				contract: { fx_invoice_policy: 'fixed' },
+				contract_currency: 'USD',
+				invoice_currency: 'CLP',
+			} as any)
+		).rejects.toThrow('tipo de cambio fijo (política del contrato) y no tiene tasa');
+		expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+	});
+
+	it('política spot del contrato: una tasa pegada sin origen explícito no se usa, se consulta Banco Central como antes', async () => {
+		const { service, exchangeRatesService, invoiceRepository } = createService();
+
+		exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 3.5, is_fallback: false, rate_date: new Date('2026-07-10') });
+		await expect(
+			service.calculateInvoiceAmountsAtIssue({
+				id: 'invoice-1',
+				fx_contract_to_invoice: 880,
+				contract: { fx_invoice_policy: 'spot' },
+				contract_currency: 'USD',
+				invoice_currency: 'PEN',
+				amount_contract_currency: 100,
+				items: [],
+			} as any)
+		).resolves.toMatchObject({ success: true, exchangeRate: 3.5 });
+		expect(invoiceRepository.update).toHaveBeenCalled();
 	});
 
 	it('persiste total_invoice_currency y vat al recalcular montos para emision', async () => {

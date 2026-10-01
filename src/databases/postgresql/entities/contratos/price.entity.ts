@@ -5,9 +5,10 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 import { BillableMetric } from '@/databases/postgresql/entities/contratos/billable-metric.entity';
 import { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
 import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
+import { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 
 /** Quién es dueño del precio: catálogo versionado (etapa 3) o el ítem del contrato (inline, etapa 1). Cotizaciones v2 (Q-A3) suma `quote`. */
-export const PRICE_OWNERS = ['catalog', 'contract'] as const;
+export const PRICE_OWNERS = ['catalog', 'contract', 'quote'] as const;
 export type PriceOwner = (typeof PRICE_OWNERS)[number];
 
 /** Modelos de precio de la etapa 1 (`percentage` y `matrix` quedan para después). */
@@ -48,15 +49,15 @@ export interface PriceTierRow {
 @Index('idx_prices_holding_product_status', ['holding_id', 'product_id', 'status'])
 @Index('idx_prices_contract_id', ['contract_id'], { where: `owner = 'contract'` })
 @Index('idx_prices_billable_metric_id', ['billable_metric_id'])
-// `quote` en owner, `quote_id` (FK CASCADE a quotes) y `idx_prices_quote_id` los agrega la migración `1790650000000-QuotesV2` (Cotizaciones v2):
-// el CHECK de owner y el de dueño se recrean ahí con la forma nueva. Mientras no se aplique, la entity replica exactamente `1790630000000-CreatePricingV2`.
-@Check('prices_owner_check', `"owner" = ANY (ARRAY['catalog'::text, 'contract'::text])`)
+// Cotizaciones v2 (migración 1790650000000-QuotesV2): owner `quote`, `quote_id` (FK CASCADE a quotes) e `idx_prices_quote_id`.
+@Index('idx_prices_quote_id', ['quote_id'], { where: `owner = 'quote'` })
+@Check('prices_owner_check', `"owner" = ANY (ARRAY['catalog'::text, 'contract'::text, 'quote'::text])`)
 @Check('prices_model_check', `"model" = ANY (ARRAY['standard'::text, 'graduated'::text, 'volume'::text, 'package'::text, 'seat'::text])`)
 @Check('prices_quantity_type_check', `"quantity_type" = ANY (ARRAY['fixed'::text, 'metered'::text])`)
 @Check('prices_status_check', `"status" = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])`)
 @Check(
 	'prices_contract_owner_check',
-	`("owner" = 'contract' AND "contract_id" IS NOT NULL) OR ("owner" = 'catalog' AND "contract_id" IS NULL)`
+	`("owner" = 'contract' AND "contract_id" IS NOT NULL AND "quote_id" IS NULL) OR ("owner" = 'catalog' AND "contract_id" IS NULL AND "quote_id" IS NULL) OR ("owner" = 'quote' AND "quote_id" IS NOT NULL AND "contract_id" IS NULL)`
 )
 @Check('prices_metered_metric_check', `"quantity_type" = 'fixed' OR "billable_metric_id" IS NOT NULL`)
 @Check('prices_cap_minimum_check', `"cap_amount" IS NULL OR "minimum_amount" IS NULL OR "cap_amount" >= "minimum_amount"`)
@@ -68,7 +69,7 @@ export class Price {
 	@Column({ type: 'uuid' })
 	holding_id: string;
 
-	@Column({ type: 'text', comment: 'catalog (versionado, etapa 3) o contract (precio inline del ítem o copia del catálogo)' })
+	@Column({ type: 'text', comment: 'catalog, contract o quote. Etapa 1 escribe contract (precio inline del ítem); Cotizaciones v2 escribe quote' })
 	owner: PriceOwner;
 
 	@Column({ type: 'uuid', comment: 'El ítem exige producto (S1-12)' })
@@ -76,6 +77,13 @@ export class Price {
 
 	@Column({ type: 'uuid', nullable: true, comment: 'NOT NULL si owner = contract, NULL si catalog (CHECK)' })
 	contract_id?: string | null;
+
+	@Column({
+		type: 'uuid',
+		nullable: true,
+		comment: 'Cotizaciones v2: NOT NULL si owner = quote (precio inline del ítem de cotización), NULL si no (CHECK)',
+	})
+	quote_id?: string | null;
 
 	@Column({ type: 'text', comment: 'Etiqueta ("Tramos LatAm — UF"); para contract default = nombre del producto' })
 	name: string;
@@ -174,6 +182,10 @@ export class Price {
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'prices_contract_id_fkey' })
 	contract?: Contract;
+
+	@ManyToOne(() => Quote, { onDelete: 'CASCADE' })
+	@JoinColumn({ name: 'quote_id', referencedColumnName: 'id', foreignKeyConstraintName: 'prices_quote_id_fkey' })
+	quote?: Quote;
 
 	@ManyToOne(() => BillableMetric)
 	@JoinColumn({ name: 'billable_metric_id', referencedColumnName: 'id', foreignKeyConstraintName: 'prices_billable_metric_id_fkey' })

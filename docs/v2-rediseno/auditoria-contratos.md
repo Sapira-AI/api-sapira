@@ -164,7 +164,8 @@ NestJS caso a caso.
 
 **Lectura** — `GET /contracts` (paginado, filtros y orden en servidor: estado, cliente, razón social,
 compañía, producto, vencimiento por ítem, con factura en ERP) · `GET /contracts/kpis` · `GET /contracts/:id`
-(por UUID o `contract_number`) · `/:id/items` · `/:id/alerts` · `/:id/invoice-schedule` · `/:id/invoices` ·
+(por UUID o `contract_number`) · `/:id/items` · `/:id/alerts` · `/:id/invoice-schedule` · `/:id/invoices` (orden por
+defecto `billing_period_start`) · `/:id/invoices/:invoiceId` (una factura: líneas con `pricing_breakdown`, referencias, ajustes, documentos relacionados) ·
 `/:id/history` (lifecycle + amendments normalizados) · `/:id/revenue-schedule` · `/:id/quantities` ·
 `/:id/documents` · `/:id/workflow` · `/:id/fx-period-rates` · `/:id/billing-splits`. (`GET /clients/:id/contracts`
 alimenta la pestaña Contratos del Cliente 360.)

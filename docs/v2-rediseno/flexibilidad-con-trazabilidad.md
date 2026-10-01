@@ -39,6 +39,19 @@ Tres mecanismos (en vez de prohibiciones):
 **HOY**: ~120 triggers y ~150 funciones con validaciones duras (CHECK cantidad>0, `prevent_end_date_update_when_active`, guards de período, validaciones de moneda/FX antes de firmar…) que a veces fallan o bloquean casos legítimos, y el usuario no sabe por qué.
 **DELTA**: clasificar cada regla en **invariante** (bloquea, y explica) o **advertencia** (avisa, pide motivo, deja continuar y registra el evento). Es insumo directo de la sesión de funciones/triggers (paso 4): cada función viva se clasifica conservar-como-invariante / convertir-en-advertencia / eliminar.
 
+### 6. Facturar un monto cerrado por OC (parcial del período) sin perder de vista el saldo
+
+> **Caso real (Domi 29-09, Alicorp CTR-2026-55, SimpliRoute Perú):** el contrato acuerda 5 servicios fijos en USD (24.074,20/mes, facturados en PEN), pero el cliente emite **OC por montos cerrados** que no calzan con el mes: julio se pagó en dos OC (6.609,12 USD en la factura de julio y 17.465,08 USD en la de agosto, como una línea "recurrente de Julio"), y septiembre llegó con una OC por **58.839,87 PEN** (= 17.465,08 USD). La usuaria emite **una sola línea global** por el monto de la OC; no sabe (ni necesita saber) qué servicios cubre, solo que **queda un saldo pendiente según lo acordado** que se facturará más adelante. Además no sabe con qué cuadra en moneda de contrato, porque la OC viene en moneda de factura.
+
+**HOY**: no hay flujo. La usuaria edita el borrador en Odoo (una línea con el monto de la OC) y emite; Sapira queda con el mes completo "por emitir" o con líneas que no calzan con el documento legal, el validador de Reestructurar muestra diferencias ficticias y el saldo se pierde de vista. El cuadre se hizo a mano por BD: descomponer el monto de la OC en los ítems que calzan al centavo (la única combinación posible), dejar esas líneas vinculadas al documento emitido y mover el resto a una factura "pendiente de facturar" con el período de cada línea (ver registro maestro de memoria, cierre 29-09).
+**DELTA**:
+1. **Factura parcial por monto cerrado**: desde el período, la usuaria ingresa el monto de la OC (en moneda de factura) y el sistema **propone qué ítems calzan** (combinación exacta si existe; si no, uno parcial con cantidad × precio de lista, ej. 504,04 de 560 licencias). Ella confirma o ajusta.
+2. **Saldo explícito, no perdido**: la diferencia queda automáticamente como **documento o ítems "pendientes de facturar"** del mismo período (cada línea conserva su período de servicio), visible en el contrato y en las alertas ("te quedan 6.609,12 USD de septiembre por facturar"), y se puede sumar a una factura futura (el "recurrente de Julio" en agosto) o emitir aparte.
+3. **Vista al cliente distinta de la vista interna**: el documento legal muestra **una sola línea** (texto libre + OC/HES), mientras Sapira mantiene **N líneas internas vinculadas a los ítems** para la trazabilidad y el devengo. Es el modelo `document_line` (visible) ↔ `line_allocation` (interno) — el mismo patrón que la ruta de facturación con líneas visibles del caso 3 _(Relvo: `visible lines` por ruta)_.
+4. **Tipo de cambio**: la OC fija el monto en moneda de factura; el sistema lo convierte a moneda de contrato con el FX del documento y registra la **diferencia de cambio** del saldo, que se liquida al facturar lo pendiente (no se "arrastra" como diferencia fantasma). Conecta con el caso 2 (FX por línea).
+5. **Ítems variables o por consumo**: si algún ítem del período es variable, el saldo no es fijo: primero se cierra la cantidad real del período (override) y recién ahí se calcula el pendiente. El sistema debe advertirlo ("hay consumo sin cerrar en este período; el saldo puede cambiar") en vez de bloquear.
+6. **Trazabilidad**: evento `partial_billing` con OC/HES, monto, ítems cubiertos, saldo generado y quién lo decidió; el balance triple muestra el saldo como "facturación diferida acordada", no como desbalance.
+
 ## Qué NO se flexibiliza (invariantes)
 
 1. **Documentos emitidos** son inmutables (folio fiscal): solo NC/ND o ajuste a lo emitido.
@@ -49,7 +62,7 @@ Tres mecanismos (en vez de prohibiciones):
 
 ## Impacto en el modelo (ya cubierto por decisiones del doc 03)
 
-A.3 moneda y FX por línea · A.4 cambios tipados con preview y prorrateo elegible · A.5 ruta de facturación declarada · A.6 documento con ejes de estado + líneas editables + event log tipado · A.9 balance triple como flag · agentes de guía (doc `04-spec-modelo-dominio-v2/agentes-ia-funcionalidad-agentica.md`). **Este principio es el "porqué de adopción" de esas decisiones** y se suma al principio transversal de usabilidad + IA.
+A.3 moneda y FX por línea · A.4 cambios tipados con preview y prorrateo elegible · A.5 ruta de facturación declarada · A.6 documento con ejes de estado + líneas editables + event log tipado · A.9 balance triple como flag · caso 6 (facturación parcial por OC): línea visible del documento ≠ asignación interna a ítems + saldo pendiente como estado explícito — **nuevo, a incorporar al modelo** · agentes de guía (doc `04-spec-modelo-dominio-v2/agentes-ia-funcionalidad-agentica.md`). **Este principio es el "porqué de adopción" de esas decisiones** y se suma al principio transversal de usabilidad + IA.
 
 ## Cómo se mide (para saber si funcionó)
 
