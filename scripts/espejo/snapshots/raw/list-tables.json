@@ -9234,7 +9234,7 @@
 		{
 			"name": "public.contract_scheduled_changes",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -9833,7 +9833,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 698,
+			"rows": 699,
 			"columns": [
 				{
 					"name": "id",
@@ -19376,7 +19376,7 @@
 		{
 			"name": "public.quote_events",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -20829,7 +20829,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21061,
+			"rows": 21073,
 			"columns": [
 				{
 					"name": "id",
@@ -24098,7 +24098,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 25,
+			"rows": 26,
 			"columns": [
 				{
 					"name": "id",

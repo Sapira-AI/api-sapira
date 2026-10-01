@@ -187,6 +187,15 @@
   ],
   "indexes": [
    {
+    "name": "contracts_holding_number_unique",
+    "cols": [
+     "holding_id",
+     "contract_number"
+    ],
+    "unique": true,
+    "where": "deleted_at IS NULL"
+   },
+   {
     "name": "idx_contracts_auto_invoice",
     "cols": [
      "auto_invoice",

@@ -2,7 +2,7 @@
  "contracts": {
   "name": "public.contracts",
   "rls_enabled": true,
-  "rows": 698,
+  "rows": 699,
   "columns": [
    {
     "name": "id",
@@ -5377,7 +5377,7 @@
  "contract_scheduled_changes": {
   "name": "public.contract_scheduled_changes",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",

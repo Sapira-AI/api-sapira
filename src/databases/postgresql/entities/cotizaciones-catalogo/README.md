@@ -12,7 +12,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `quotes` (424) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote.entity.ts` · `Quote` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `quotes_pkey` |
 | `quote_items` (510) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity.ts` · `QuoteItem` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_items_pkey`<br>CHECK `chk_quote_items_price_entry_mode`<br>CHECK `quote_items_billing_frequency_check`<br>CHECK `quote_items_billing_method_check`<br>CHECK `quote_items_discount_type_check`<br>índice con expresión `idx_quote_items_custom_fields` |
 | `quote_stages` (43) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-stage.entity.ts` · `QuoteStage` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_stages_pkey` |
-| `quote_events` (0) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity.ts` · `QuoteEvent` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_events_pkey`<br>CHECK `quote_events_type_check` |
+| `quote_events` (1) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity.ts` · `QuoteEvent` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_events_pkey`<br>CHECK `quote_events_type_check` |
 | `products` (88) | `src/databases/postgresql/entities/cotizaciones-catalogo/products.entity.ts` · `Product` | ⚠️ difiere de prod | — | — | — | nombre de PK `products_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (1): 1 promovidas, 0 apagadas
