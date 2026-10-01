@@ -26,6 +26,7 @@ import {
 	VOID_REASON_LABELS,
 	type VoidPlan,
 } from './invoice-void';
+import { revalueMulticurrencyInvoices } from './multicurrency-invoices';
 
 import type { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
 
@@ -100,7 +101,14 @@ export async function insertLineState(
 	holdingId: string,
 	invoiceId: string,
 	state: LineState,
-	options: { fx: number | null; fx_rate_source: string | null; visible_line_id?: string | null; source_line_id?: string | null }
+	options: {
+		fx: number | null;
+		fx_rate_source: string | null;
+		visible_line_id?: string | null;
+		source_line_id?: string | null;
+		/** Multimoneda: moneda de la línea (= del ítem); ausente/null = la del encabezado (contratos sin el flag). */
+		currency?: string | null;
+	}
 ): Promise<string> {
 	const [row] = (await runner.query(
 		`INSERT INTO invoice_items (
@@ -114,7 +122,7 @@ export async function insertLineState(
 			COALESCE($4::uuid, (SELECT ci.product_id FROM contract_items ci WHERE ci.id = $2::uuid)), $5, $6, $7, $8, $9,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
-			(SELECT h.contract_currency FROM invoices h WHERE h.id = $1), (SELECT h.invoice_currency FROM invoices h WHERE h.id = $1), $18::numeric,
+			COALESCE($26::text, (SELECT h.contract_currency FROM invoices h WHERE h.id = $1)), (SELECT h.invoice_currency FROM invoices h WHERE h.id = $1), $18::numeric,
 			CASE WHEN $18::numeric IS NULL THEN NULL ELSE COALESCE((SELECT o.fx_rate_source FROM invoice_items o WHERE o.id = $24::uuid), $19) END,
 			CASE WHEN $18::numeric IS NULL THEN NULL ELSE CURRENT_DATE END,
 			(SELECT h.status FROM invoices h WHERE h.id = $1), (SELECT h.issue_date FROM invoices h WHERE h.id = $1),
@@ -146,6 +154,7 @@ export async function insertLineState(
 			state.pricing_breakdown ? JSON.stringify(state.pricing_breakdown) : null,
 			options.source_line_id ?? null,
 			options.visible_line_id ?? null,
+			options.currency ?? null,
 		]
 	)) as Row[];
 
@@ -488,9 +497,12 @@ export class ContractInvoiceVoidService {
 		for (const line of ordered) {
 			const source = line.id ? sourceOf.get(line.id) : undefined;
 			const visibleSource = source?.visible_line_id ?? null;
+			// Multimoneda: la reemisión copia la moneda y la tasa DE CADA LÍNEA (como la NC espejo), no la del encabezado.
+			const pair = line.after!.currency !== undefined;
 			const id = await insertLineState(runner, holdingId, reissueId, line.after!, {
-				fx,
+				fx: pair ? (line.after!.fx ?? null) : fx,
 				fx_rate_source: REISSUE_FX_RATE_SOURCE,
+				...(pair ? { currency: line.after!.currency ?? null } : {}),
 				source_line_id: source?.id ?? null,
 				visible_line_id: visibleSource ? (newIds.get(visibleSource) ?? null) : null,
 			});
@@ -512,6 +524,8 @@ export class ContractInvoiceVoidService {
 			[original.id, holdingId, reissueId]
 		);
 		await refreshInvoiceSystemAmounts(runner, holdingId, [reissueId]);
+		// Multimoneda: encabezado de la reemisión = Σ líneas por par y FX del único par (o NULL con dos o más).
+		if (lines.some((line) => line.after!.currency !== undefined)) await revalueMulticurrencyInvoices(runner, holdingId, [reissueId]);
 
 		return reissueId;
 	}

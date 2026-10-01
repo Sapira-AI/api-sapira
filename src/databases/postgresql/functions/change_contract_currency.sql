@@ -19,6 +19,12 @@ BEGIN
     RAISE EXCEPTION 'Contrato no encontrado o fuera del holding del usuario'; END IF;
   IF v_contract.status IN ('Firmado', 'Activo', 'Cancelado', 'Expirado') THEN
     RAISE EXCEPTION 'No se puede cambiar la moneda de un contrato en estado: %', v_contract.status; END IF;
+  -- Multimoneda (spec-multimoneda-contrato §3 #4): esta función pisa la moneda de todos los ítems; un contrato con el flag o con
+  -- algún ítem en otra moneda que la del contrato se cambia desde Sapira v2. Se retira al switch.
+  IF COALESCE(v_contract.requires_multicurrency_billing, false)
+     OR EXISTS (SELECT 1 FROM public.contract_items
+       WHERE contract_id = p_contract_id AND currency IS DISTINCT FROM v_contract.contract_currency) THEN
+    RAISE EXCEPTION 'Contrato multimoneda: cambia monedas desde Sapira v2'; END IF;
   IF v_contract.contract_currency = p_new_currency
      AND NOT EXISTS (SELECT 1 FROM public.contract_items
        WHERE contract_id = p_contract_id AND currency IS DISTINCT FROM p_new_currency) THEN

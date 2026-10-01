@@ -83,6 +83,29 @@ export class FxRatePeriodDto {
 	period_end?: string;
 }
 
+/**
+ * Tasa de facturación por par (multimoneda, `spec-multimoneda-contrato.md` §6): "1 [from_currency] = rate [moneda de factura]". Sin
+ * `from_currency` = la moneda del contrato (como hasta hoy); en un contrato multimoneda, una por moneda de ítem ≠ moneda de factura.
+ */
+export class FxPairRateDto extends FxRatePeriodDto {
+	@ApiPropertyOptional({ example: 'USD', description: 'Moneda de origen del par (la del ítem). Default: la moneda del contrato' })
+	@Transform(upper)
+	@Matches(CURRENCY, { message: 'Moneda de origen de la tasa inválida' })
+	@IsOptional()
+	from_currency?: string;
+}
+
+/**
+ * Tasa fija pactada ítem → contrato (multimoneda, `purpose = 'item'`): "1 [from_currency] = rate [moneda del contrato]". Convierte MRR, TCV
+ * y devengo de los ítems en otra moneda. Obligatoria una por moneda de ítem ≠ moneda del contrato; sin fechas = todo el contrato.
+ */
+export class FxItemRateDto extends FxRatePeriodDto {
+	@ApiProperty({ example: 'USD', description: 'Moneda del ítem (≠ moneda del contrato)' })
+	@Transform(upper)
+	@Matches(CURRENCY, { message: 'Indica la moneda del ítem de la tasa' })
+	from_currency!: string;
+}
+
 /** Tramo de un precio `graduated`/`volume` (Pricing v2 §3.1): `from` de cada tramo = `to` anterior + 1; el último `to` es null (∞). */
 export class PriceTierDto {
 	@ApiProperty({ description: 'Primera unidad del tramo (el primero empieza en 1)', example: 1 })
@@ -219,6 +242,16 @@ export class CreateContractItemDto {
 	@ApiProperty({ description: 'Producto del catálogo (obligatorio, S1-12)' })
 	@IsUUID(undefined, { message: 'Elige un producto' })
 	product_id!: string;
+
+	@ApiPropertyOptional({
+		example: 'USD',
+		description:
+			'Multimoneda: moneda del ítem (precio, consumos). Default: la del contrato. Distinta solo con requires_multicurrency_billing (400 item_currency_requires_multicurrency); UF permitida',
+	})
+	@Transform(upper)
+	@Matches(CURRENCY, { message: 'Moneda del ítem inválida' })
+	@IsOptional()
+	currency?: string;
 
 	@ApiPropertyOptional({ description: 'Nombre a mostrar; default: el del catálogo' })
 	@Transform(trim)
@@ -408,10 +441,22 @@ export class CreateContractDto {
 	})
 	@ValidateIf((dto: CreateContractDto) => dto.fx_invoice_rates !== undefined)
 	@ValidateNested({ each: true })
-	@Type(() => FxRatePeriodDto)
+	@Type(() => FxPairRateDto)
 	@ArrayMaxSize(FX_RATES_MAX, { message: `Máximo ${FX_RATES_MAX} tasas` })
 	@IsArray({ message: 'Tasas fijas de facturación inválidas' })
-	fx_invoice_rates?: FxRatePeriodDto[];
+	fx_invoice_rates?: FxPairRateDto[];
+
+	@ApiPropertyOptional({
+		type: [FxItemRateDto],
+		description:
+			'Multimoneda: tasas fijas pactadas ítem → contrato (`purpose = item`), una por moneda de ítem ≠ moneda del contrato (400 item_fx_rate_missing). `[{ from_currency, rate }]` = todo el contrato',
+	})
+	@ValidateIf((dto: CreateContractDto) => dto.fx_item_rates !== undefined)
+	@ValidateNested({ each: true })
+	@Type(() => FxItemRateDto)
+	@ArrayMaxSize(FX_RATES_MAX, { message: `Máximo ${FX_RATES_MAX} tasas` })
+	@IsArray({ message: 'Tasas ítem → contrato inválidas' })
+	fx_item_rates?: FxItemRateDto[];
 
 	@ApiPropertyOptional({
 		enum: FX_COMPANY_POLICIES,
@@ -529,7 +574,8 @@ export class CreateContractDto {
 
 	@ApiPropertyOptional({
 		default: false,
-		description: 'S1-15: ítems en distinta moneda (próximo bloque). Default: lo que diga la cotización, si hay',
+		description:
+			'Multimoneda (spec-multimoneda §2): ítems en distinta moneda facturados en un solo documento. Default: `quotes.requires_multicurrency` de la cotización de origen, si hay',
 	})
 	@IsBoolean({ message: 'Marca multimoneda inválida' })
 	@IsOptional()

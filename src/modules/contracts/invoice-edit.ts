@@ -26,6 +26,7 @@ import {
 	manualDescription,
 	tierLabelFromBreakdown,
 } from './invoice-description';
+import { multicurrencyHeader, type PairRateContext, revalueByPair } from './multicurrency';
 import {
 	isOneOffSubline,
 	oneOffAmount,
@@ -173,6 +174,13 @@ export interface EditLineRow {
 	pricing_breakdown: PricedSubline[] | null;
 	/** Etapa 6 (§3.7b): línea interna ligada a la línea visible del documento (facturar por OC); null/ausente = línea normal. */
 	visible_line_id?: string | null;
+	/**
+	 * Multimoneda (spec-multimoneda §4; solo en contratos con `requires_multicurrency_billing`, ausente en los demás): moneda de la línea
+	 * (`invoice_items.contract_currency` = moneda del ítem), su tasa a la moneda de factura y el origen de la tasa.
+	 */
+	currency?: string | null;
+	fx?: number | null;
+	fx_rate_source?: string | null;
 }
 
 /** Ítem del contrato con su modelo de precio (copia del contrato) y su vigencia. */
@@ -237,6 +245,8 @@ export interface EditContext {
 	receiver: ReceiverRow | null;
 	references: DescriptionReference[];
 	plan: DeviationPlan;
+	/** Multimoneda: contexto por par del contrato (`requires_multicurrency_billing`); ausente/null = valorización de siempre (una tasa por factura). */
+	multicurrency?: PairRateContext | null;
 }
 
 // ------------------------------------------------------------------ tipos de salida
@@ -267,6 +277,10 @@ export interface LineState {
 	is_visible: boolean;
 	/** Vista del descuento puntual de la línea (derivada de su sublínea `one_off` del desglose); null si no tiene. */
 	one_off_discount?: { type: string; value: number; amount: number; label: string } | null;
+	/** Multimoneda (solo en contratos con el flag): moneda de la línea (= del ítem), tasa de su par a la moneda de factura y origen de la tasa. */
+	currency?: string | null;
+	fx?: number | null;
+	fx_rate_source?: string | null;
 }
 
 export type LineAction = 'update' | 'create' | 'unchanged' | 'hide' | 'remove';
@@ -467,6 +481,85 @@ export function retax(state: LineState, taxRate: number): LineState {
 	};
 }
 
+/**
+ * Multimoneda (spec-multimoneda §4): revaloriza por par los estados de línea de una Por Emitir de un contrato con `requires_multicurrency_billing`
+ * con el mismo cálculo que el motor y el tipo de cambio por factura (`revalueByPair`): cada línea con la moneda de su ítem y la tasa de su par
+ * (la suya si ya la tenía, la fijada por factura para el par, la fija pactada del período o NULL si es spot); encabezado = Σ líneas, FX del
+ * documento = la del único par convertidor o NULL. Devuelve los estados nuevos (mismo orden) y los montos del encabezado.
+ */
+export function revalueStates(
+	states: Array<{ id: string; state: LineState }>,
+	multicurrency: PairRateContext,
+	invoice: Pick<ContractInvoiceRow, 'invoice_currency' | 'issue_date'>,
+	taxRate: number
+): { states: LineState[]; header: Partial<HeaderState> } {
+	const result = revalueByPair(
+		states.map(({ id, state }) => ({
+			id,
+			contract_item_id: state.contract_item_id,
+			currency: state.currency ?? null,
+			fx: state.fx ?? null,
+			fx_rate_source: state.fx_rate_source ?? null,
+			unit_price: state.unit_price_contract_currency,
+			subtotal: state.subtotal_contract_currency,
+			tax_amount: state.tax_contract_currency,
+			period_start: state.billing_period_start,
+		})),
+		multicurrency,
+		{ invoice_currency: invoice.invoice_currency, tax_rate: taxRate, fallback_date: invoice.issue_date ?? '' }
+	);
+	const next = states.map(({ state }, index) => {
+		const line = result.lines[index];
+
+		return {
+			...state,
+			currency: line.currency,
+			fx: line.fx,
+			fx_rate_source: line.fx_rate_source,
+			unit_price_invoice_currency: line.unit_price,
+			subtotal_invoice_currency: line.subtotal,
+			tax_invoice_currency: line.tax,
+			total_invoice_currency: line.total,
+		};
+	});
+	const { header } = result;
+	// IVA del encabezado en moneda de contrato: Σ IVA de cada línea × tasa pactada ítem → contrato (mismo cálculo del encabezado sin valorizar).
+	const taxContract = multicurrencyHeader(
+		result.lines.map((line, index) => ({
+			currency: line.currency,
+			subtotal: states[index].state.subtotal_contract_currency,
+			tax: states[index].state.tax_contract_currency,
+			subtotal_invoice: null,
+			tax_invoice: null,
+			fx: null,
+			period_start: states[index].state.billing_period_start,
+		})),
+		{
+			contract_currency: multicurrency.contract_currency,
+			invoice_currency: invoice.invoice_currency ?? multicurrency.contract_currency,
+			item_rates: multicurrency.item_rates,
+			fallback_date: invoice.issue_date ?? '',
+		}
+	).vat;
+
+	return {
+		states: next,
+		header: {
+			fx_contract_to_invoice: header.fx,
+			amount_contract_currency: header.amount_contract_currency,
+			tax_contract_currency: taxContract,
+			total_contract_currency: round2(header.amount_contract_currency + taxContract),
+			vat: header.vat,
+			amount_invoice_currency: header.amount_invoice_currency,
+			total_invoice_currency: header.total_invoice_currency,
+			tax_invoice_currency:
+				header.amount_invoice_currency === null || header.total_invoice_currency === null
+					? null
+					: round2(header.total_invoice_currency - header.amount_invoice_currency),
+		},
+	};
+}
+
 /** Estado guardado de una línea. */
 export function stateOf(row: EditLineRow): LineState {
 	return {
@@ -492,6 +585,7 @@ export function stateOf(row: EditLineRow): LineState {
 		quantity_source: row.quantity_source,
 		pricing_breakdown: row.pricing_breakdown,
 		is_visible: isVisibleLine(row.quantity, row.visible_line_id),
+		...(row.currency === undefined ? {} : { currency: row.currency, fx: row.fx ?? null, fx_rate_source: row.fx_rate_source ?? null }),
 	};
 }
 
@@ -519,6 +613,7 @@ const rowFromState = (id: string, state: LineState): EditLineRow => ({
 	billing_period_end: state.billing_period_end,
 	quantity_source: state.quantity_source,
 	pricing_breakdown: state.pricing_breakdown,
+	...(state.currency === undefined ? {} : { currency: state.currency, fx: state.fx ?? null, fx_rate_source: state.fx_rate_source ?? null }),
 });
 
 /** Contexto de render de la glosa (plantilla del contrato) para una línea en su estado nuevo. */
@@ -555,9 +650,10 @@ export function renderLine(state: LineState, render: RenderInput, kind?: Descrip
 			quantity_final: source !== 'pending' && source !== 'estimated',
 			unit_price: state.unit_price_contract_currency,
 			amount: state.subtotal_contract_currency,
-			contract_currency: render.contract_currency,
+			// Multimoneda: el bloque de tipo de cambio de la glosa toma el par y la tasa DE LA LÍNEA (spec-multimoneda §4 "Glosa"), como el motor.
+			contract_currency: state.currency === undefined ? render.contract_currency : (state.currency ?? render.contract_currency),
 			invoice_currency: render.invoice_currency,
-			fx_rate: render.fx_rate,
+			fx_rate: state.fx === undefined ? render.fx_rate : state.fx,
 			contract_number: render.contract_number,
 			references: render.references,
 			client_name: render.client_name,
@@ -1385,6 +1481,51 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 		else plans.set(row.id, existing ?? { id: row.id, action: 'unchanged', before, after: before, is_visible: before.is_visible });
 	}
 	const createdStates = creates.map((entry) => (taxChanged ? { ...entry, state: retax(entry.state, taxRate) } : entry));
+	// ---- multimoneda (spec-multimoneda §4): cada línea con la tasa de SU par (nunca la del encabezado), glosa con la tasa de la línea y
+	// encabezado = Σ líneas. Solo en contratos con `requires_multicurrency_billing`; en los demás no corre (valorización de siempre).
+	let pairHeader: Partial<HeaderState> | null = null;
+	let multicurrencyChanged = false;
+
+	if (ctx.multicurrency) {
+		const live = ctx.lines.filter((row) => !removes.has(row.id));
+		const entries = [
+			...live.map((row) => ({ id: row.id, state: current.get(row.id)! })),
+			...createdStates.map((entry, index) => ({ id: `new:${index}`, state: entry.state })),
+		];
+		const revalued = revalueStates(entries, ctx.multicurrency, invoice, taxRate);
+
+		revalued.states.forEach((valued, index) => {
+			const entry = entries[index];
+			const row = index < live.length ? live[index] : null;
+			const before = row ? stateOf(row) : null;
+			// La glosa que esta edición generó se vuelve a generar con la moneda y la tasa de la línea (las fijadas a mano no se tocan).
+			const rendered = !valued.description_locked && (!before || entry.state.description !== before.description);
+			const state = rendered ? { ...valued, description: renderLine(valued, render) } : valued;
+
+			if (JSON.stringify(state) !== JSON.stringify(entry.state)) multicurrencyChanged = true;
+			if (!row) {
+				const created = index - live.length;
+
+				createdStates[created] = { ...createdStates[created], state };
+
+				return;
+			}
+			current.set(row.id, state);
+			const existing = plans.get(row.id)!;
+
+			if (existing.action !== 'unchanged') plans.set(row.id, { ...existing, after: state, is_visible: state.is_visible });
+			else if (JSON.stringify(state) !== JSON.stringify(before))
+				plans.set(row.id, {
+					id: row.id,
+					action: 'update',
+					before,
+					after: state,
+					is_visible: state.is_visible,
+					input_index: existing.input_index,
+				});
+		});
+		pairHeader = revalued.header;
+	}
 	const afterLines = [
 		...ctx.lines.filter((row) => !removes.has(row.id)).map((row) => current.get(row.id)!),
 		...createdStates.map((entry) => entry.state),
@@ -1471,7 +1612,8 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 
 	// ---- encabezado = Σ líneas. Solo se recalcula si cambió algún monto (líneas del cuerpo o IVA): una edición de fechas, glosa o
 	// presentación por tramo no toca el encabezado (conserva, por ejemplo, el neto exacto en moneda de factura de una OC).
-	const amountsChanged = touchedAmounts.size > 0 || createdStates.some((entry) => entry.input_index !== undefined) || taxChanged;
+	const amountsChanged =
+		touchedAmounts.size > 0 || createdStates.some((entry) => entry.input_index !== undefined) || taxChanged || multicurrencyChanged;
 	const beforeHeader = headerStateOf(
 		invoice,
 		ctx.lines.map((row) => stateOf(row))
@@ -1485,7 +1627,9 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 	};
 	let afterHeader = headerStateOf(invoice, afterLines, headerOverrides);
 
-	if (amountsChanged) {
+	if (amountsChanged && pairHeader) {
+		afterHeader = headerStateOf(invoice, afterLines, { ...headerOverrides, ...pairHeader });
+	} else if (amountsChanged) {
 		const amounts = headerFromLines(afterLines, { sameCurrency: !isMultiCurrency(invoice), fx, taxRate });
 
 		afterHeader = headerStateOf(invoice, afterLines, {
@@ -1623,7 +1767,7 @@ export interface BulkHeaderPlanItem {
  * bloqueos que la edición de una factura, sin tocar líneas salvo el IVA si el receptor cambia la tasa.
  */
 export function planBulkHeader(
-	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver' | 'lines'>,
+	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver' | 'lines' | 'multicurrency'>,
 	input: BulkHeaderInput
 ): BulkHeaderPlanItem {
 	const { invoice, context } = ctx;
@@ -1632,7 +1776,7 @@ export function planBulkHeader(
 	const header = planHeader(ctx, input);
 	const fx = invoiceFx(invoice);
 	const taxChanged = header.after.tax_rate !== undefined;
-	const lines = taxChanged
+	let lines = taxChanged
 		? ctx.lines.map((row) => {
 				const before = stateOf(row);
 
@@ -1643,6 +1787,18 @@ export function planBulkHeader(
 				};
 			})
 		: [];
+	// Multimoneda: con IVA nuevo, cada línea se revaloriza con la tasa de su par y el encabezado = Σ líneas (spec-multimoneda §4).
+	const pair =
+		taxChanged && ctx.multicurrency
+			? revalueStates(
+					lines.map((line) => ({ id: line.id, state: line.after })),
+					ctx.multicurrency,
+					invoice,
+					header.tax_rate
+				)
+			: null;
+
+	if (pair) lines = lines.map((line, index) => ({ ...line, after: pair.states[index] }));
 	const afterLines = taxChanged ? lines.map((line) => line.after) : ctx.lines.map((row) => stateOf(row));
 	const amounts = headerFromLines(afterLines, { sameCurrency: !isMultiCurrency(invoice), fx, taxRate: header.tax_rate });
 	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
@@ -1658,18 +1814,20 @@ export function planBulkHeader(
 	const after = headerStateOf(invoice, afterLines, {
 		...header.after,
 		tax_rate: header.after.tax_rate ?? invoice.tax_rate,
-		...(taxChanged
-			? {
-					amount_contract_currency: amounts.amount_contract_currency,
-					vat: amounts.vat,
-					amount_invoice_currency: amounts.amount_invoice_currency,
-					total_invoice_currency: amounts.total_invoice_currency,
-					tax_invoice_currency:
-						amounts.amount_invoice_currency === null || amounts.total_invoice_currency === null
-							? null
-							: round2(amounts.total_invoice_currency - amounts.amount_invoice_currency),
-				}
-			: {}),
+		...(pair
+			? pair.header
+			: taxChanged
+				? {
+						amount_contract_currency: amounts.amount_contract_currency,
+						vat: amounts.vat,
+						amount_invoice_currency: amounts.amount_invoice_currency,
+						total_invoice_currency: amounts.total_invoice_currency,
+						tax_invoice_currency:
+							amounts.amount_invoice_currency === null || amounts.total_invoice_currency === null
+								? null
+								: round2(amounts.total_invoice_currency - amounts.amount_invoice_currency),
+					}
+				: {}),
 	});
 
 	after.total_contract_currency = round2(after.amount_contract_currency + after.tax_contract_currency);

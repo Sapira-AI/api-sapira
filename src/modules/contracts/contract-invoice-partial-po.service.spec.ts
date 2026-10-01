@@ -18,6 +18,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { PartialByPoDto } from './dtos/contract-invoice-partial-po.dto';
+import { MC_UF_ITEM, mcInvoiceRow, multicurrencyRoute } from './multicurrency.test-fixtures';
 
 type Row = Record<string, unknown>;
 
@@ -349,5 +350,55 @@ describe('ContractInvoicePartialPoService (spec facturas §3.7b)', () => {
 
 		expect(route('partialByPoPreview')).toEqual({ path: ':id/invoices/:invoiceId/partial-by-po/preview', method: RequestMethod.POST, code: 200 });
 		expect(route('partialByPo')).toEqual({ path: ':id/invoices/:invoiceId/partial-by-po', method: RequestMethod.POST, code: undefined });
+	});
+});
+
+describe('ContractInvoicePartialPoService · multimoneda (spec-multimoneda §4)', () => {
+	const multicurrency = (ufLineB: boolean) => {
+		const built = build();
+		const base = built.runner.query.getMockImplementation()! as (sql: string, params?: unknown[]) => Row[];
+		const lines = [lineRow(LINE_A, 1000), lineRow(LINE_B, 500, ufLineB ? { contract_item_id: MC_UF_ITEM } : {})].map((row) => ({
+			...row,
+			line_currency: row.contract_item_id === MC_UF_ITEM ? 'UF' : 'USD',
+			line_fx: row.contract_item_id === MC_UF_ITEM ? '38000' : '950',
+			line_fx_rate_source: 'contract',
+		}));
+		const mc = multicurrencyRoute({
+			contract_id: CONTRACT_ID,
+			invoices: { 'remainder-1': mcInvoiceRow('remainder-1', CONTRACT_ID) },
+			lines: {},
+		});
+		const route = (sql: string, params: unknown[] = []) => {
+			if (sql.includes('c.billing_anchor_day')) return [{ ...contractRow, requires_multicurrency_billing: true }];
+			if (sql.includes('ii.visible_line_id') && sql.includes('ANY($1::uuid[])')) return lines;
+
+			return mc(sql, params) ?? base(sql, params);
+		};
+
+		built.runner.query.mockImplementation(route);
+		(built.dataSource.query as unknown as jest.Mock).mockImplementation(route);
+
+		return built;
+	};
+
+	it('documento con líneas en dos monedas → blocker net_exact_multi_pair (un neto exacto es una sola tasa)', async () => {
+		const { service } = multicurrency(true);
+		const preview = await service.preview(CONTRACT_ID, INV, dto(475000), HOLDING, TODAY);
+
+		expect(preview.can_apply).toBe(false);
+		expect(preview.blockers).toEqual([expect.objectContaining({ code: 'net_exact_multi_pair', message: expect.stringContaining('USD, UF') })]);
+	});
+
+	it('una sola moneda de línea: la visible nace en esa moneda y el saldo queda sin tasa de encabezado y se revaloriza por par', async () => {
+		const { service, runner } = multicurrency(false);
+
+		await service.apply(CONTRACT_ID, INV, dto(475000), HOLDING, 'auth-1', TODAY);
+		const [visible] = calls(runner.query, 'INSERT INTO invoice_items');
+
+		expect((visible[1] as unknown[])[25]).toBe('USD');
+		const moved = calls(runner.query, 'UPDATE invoice_items SET invoice_id').find(([, params]) => (params as unknown[])[2] === 'remainder-1')!;
+
+		expect((moved[1] as unknown[])[14]).toBeNull();
+		expect(calls(runner.query, 'multimoneda: revalorizar por par').map(([, params]) => (params as unknown[])[0])).toEqual([['remainder-1']]);
 	});
 });

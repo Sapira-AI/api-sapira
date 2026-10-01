@@ -363,6 +363,54 @@ Entradas: contrato (día de ciclo, agrupación, términos de pago, moneda y pol�
   reconstruye el RSM de esos contratos: el devengo no cambia. SimpliRoute CTR-2026-215 queda fuera (lo revisa Domi).
 - **Orden de despliegue**: migración `1790610000000` → assets (3 funciones) → migración `1790610000001` → código.
   `fx.entities.spec` queda en rojo hasta aplicar en producción y refrescar el snapshot (GUIA).
+- **Multimoneda (MM1–MM3, construido 01-10, sin aplicar; [`spec-multimoneda-contrato.md`](./spec-multimoneda-contrato.md))**: tres monedas
+  (ítem, contrato, factura). Con `contracts.requires_multicurrency_billing` un ítem lleva su moneda (`contract_items.currency`, precio en la
+  misma, 400 `price_currency_mismatch`). Tasas por **par y propósito** en `contract_fx_period_rates`: `invoice` = moneda del ítem → factura
+  (`fx_invoice_rates[].from_currency`), `item` = moneda del ítem → contrato, fija y pactada (MRR, TCV, devengo; `fx_item_rates[]`). La regla
+  "sin fechas = todo el contrato" se evalúa por `(propósito, from, to)`.
+  - **Esquema**: migración `1790700000000-MulticurrencyContract` (CHECK `purpose` + `item` y comentario de columna; `down` se niega con
+    tasas `item`). Assets: `validate_contract_item_currency_consistency` (ítem ≠ contrato solo con el flag), `validate_contract_currency_consistency`
+    (con el flag permite; `true → false` con ítems en otra moneda → RAISE; bypass del borrador intacto), `change_contract_currency` (rechaza
+    multimoneda), `revenue_schedule_rebuild_contract_ccy` (ítems en otra moneda × tasa `item` del mes con el asset nuevo
+    `contract_item_fx_rate`; sin tasa, montos NULL y `calc_version = 'missing_fx_rate'`, nunca 1; **sin vueltas**: ítem en la moneda de la
+    compañía o del sistema escribe esas columnas con su monto directo y `revenue_schedule_apply_fx_for_contract` no las recalcula). Orden:
+    migración → 6 assets (+ `revenue_schedule_apply_fx_for_contract`) → código.
+  - **Generador**: valorización **por línea** (`PreviewLine.currency`, `fx`, `fx_rate_source`, `amounts_invoice_currency`): mismo par → 1;
+    fija → tasa del par al inicio del período de la línea; spot → NULL. Residuo por par a su línea mayor; IVA por línea en moneda de factura;
+    encabezado en moneda de factura = Σ líneas o NULL si alguna es spot; `fx` del encabezado = la del único par convertidor, NULL con dos o
+    más. Encabezado en moneda de contrato, `totals.contract_value`, `mrr` e `items[].monthly_equivalent` con la tasa `item` (los ítems traen
+    además `currency`, `item_fx_rate`, `*_item_currency`). Pares sin tasa en `fx_missing`.
+  - **Activación**: `currency_mismatch` solo sin el flag; bloqueos por par `item_fx_rate_missing`, `fixed_fx_without_rate` (con el par) y
+    `multicurrency_spot_send_pending` (spot con pares que convierten, hasta que Leon haga el envío por par, MM4). Cada línea nace con su
+    moneda de ítem y su tasa.
+  - **Modificaciones**: tipo nuevo `multicurrency { enabled }` (eventos `MULTICURRENCY_ENABLED` / `MULTICURRENCY_DISABLED`; apagar con ítems
+    en otra moneda → `foreign_currency_items_present`); `item_add.items[].currency` (desde cotización: la de la cotización),
+    `fx_item_rates`, `fx_invoice_rates`, `enable_multicurrency` (sin flag → `multicurrency_not_enabled`); `billing_conditions` por par (400
+    con el par sin tasa); ΔMRR, MRR y TCV convertidos; encabezados recalculados por par; NC espejo con la moneda y la tasa de cada línea
+    original. Renovación: la extensión de las tasas por par queda para el bloque 2.
+  - **360**: `POST …/invoices/:id/fx` y `fx-bulk` aceptan `rates_by_pair { 'USD>CLP': tasa }`; `net_exact` solo con un par (400
+    `net_exact_multi_pair`). El detalle de factura expone por línea `currency`, `fx`, `fx_rate_source`; contrato y factura exponen
+    `requires_multicurrency_billing` y `fx_item_rates`. Consumo: la línea recalculada conserva su moneda y su par.
+  - **Operaciones sobre Por Emitir (cierre de brechas, 01-10)**: editor (una y masivo), presentación por tramo ↔ una fila, descuento puntual,
+    reorganizar (todas las operaciones), facturar por OC, reemisión de la anulación y facturas nuevas de consumos (complementaria y
+    reemisión) valorizan **cada línea con su par** con el mismo cálculo que el motor (`revalueByPair` en `multicurrency.ts` sobre
+    `valuateLinesByPair`; encabezado = Σ líneas con `multicurrencyHeader`; FX del encabezado NULL con dos o más pares; spot → NULL). Tasa de
+    la línea: la suya si conserva su moneda; si se mueve o nace, la fijada por factura para el par (`manual` / `net_exact`), si no la fija
+    pactada del período, si no NULL. Persistencia común `revalueMulticurrencyInvoices` (`multicurrency-invoices.ts`): solo Por Emitir de
+    contratos con el flag (sin el flag la edición no hace ninguna consulta extra), nunca unificadas ni facturadas por OC (su neto exacto
+    manda). Facturar por OC en un documento con líneas en dos o más monedas → blocker `net_exact_multi_pair`; con una sola moneda la visible
+    nace en ella y el saldo se revaloriza por par. La reemisión copia moneda y tasa **de cada línea** (como la NC espejo). La glosa (plantilla
+    y regeneración de descripciones) toma la moneda y la tasa de la línea. Vista previa por par en editor, masivo y reorganizar; facturar por
+    OC y las siguientes recompuestas por tramo se valorizan al aplicar.
+  - **Consolidación opcional (MM5, §7) e historial unificado (§9), construido 01-10**: `GET /contracts/:id/invoices/:invoiceId/consolidation-candidates`,
+    `POST /contracts/invoices/consolidations/preview`, `POST /contracts/invoices/consolidations` `{ invoice_ids[] (2–50), notes? }` y
+    `POST /contracts/invoices/consolidations/:invoiceId/undo { reason }` (`contract-invoice-consolidation.service.ts` + `invoice-consolidation.ts`).
+    Documento `Unificada` nuevo con **copias** de las líneas (prefijo `CTR-… - `, `contract_id` por línea, tasa por par; spot entero si una
+    línea que convierte es spot), aporte por contrato y contrato principal = mayor aporte; orígenes `is_active = false` +
+    `consolidated_into_invoice_id`; eventos `INVOICE_CONSOLIDATED` / `INVOICE_CONSOLIDATION_UNDONE` por contrato (texto libre, sin CHECK: la
+    migración no cambia). Deshacer → consolidado `Cancelada`, orígenes reactivados. Listado y detalle de factura: `legacy_unified` y
+    `contributions[]` en `Unificada`/`Consolidada` (legacy = sin evento `INVOICE_CONSOLIDATED`); todas las demás operaciones siguen
+    bloqueando con `unified_invoice` (también el consolidado v2: se deshace y se vuelve a operar).
 
 ## 4. Triggers compartidos: qué se hace
 
@@ -416,6 +464,7 @@ generación (si ningún otro camino los usa), `create_contract_cross_sell` + `ap
 | `contracts.invoice_description_template` (jsonb) + `invoice_items.description_locked` (bool, default false) + `tax_document_types.description_max_chars` (int) | Constructor de descripción (F9, spec facturas §3.6) | Migración `1790670000000` (sin aplicar; CL = 80 por UPDATE y seed 003). La API no se despliega antes de aplicarla |
 | CHECK `invoice_adjustments_type_check` + `correction` · `invoice_items_quantity_source_check` + `manual` · `invoices_nc_revenue_treatment_check` + `service_period` | Editar una PE (F11–F13, spec facturas §3.4) | Migración `1790680000000` (sin aplicar; **sin columnas**: `plan_deviation`, `source` e `is_visible` no se crean) + asset `nc_discount_revenue_adjustment` (descuento puntual y `service_period`). Orden: migración → asset → API |
 | `invoice_items.visible_line_id` (uuid NULL, FK a `invoice_items` ON DELETE SET NULL, índice parcial) | Facturar por OC (F18, spec facturas §3.7b) | Migración `1790690000000-InvoiceVisibleLine` (sin aplicar; única columna nueva de la etapa 6: `is_visible` sigue derivado = `quantity <> 0 AND visible_line_id IS NULL`). Orden: migración → API; el mapper de Odoo debe omitir las internas antes de enviar una factura por OC |
+| CHECK `contract_fx_period_rates_purpose_check` + `item` | Multimoneda: tasa pactada ítem → contrato (spec multimoneda §3) | Migración `1790700000000-MulticurrencyContract` (sin aplicar; sin columnas nuevas) + assets de validadores, `change_contract_currency`, RSM y `contract_item_fx_rate`. Orden: migración → assets → API |
 
 ## 7. Decisiones para Domi (y Leon)
 

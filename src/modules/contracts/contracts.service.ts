@@ -14,6 +14,7 @@ import {
 } from './contract-360';
 import { buildItemGroups, deriveItemStatus, type ItemGroup, type PendingInvoiceLine, type PricedContractItem } from './contract-items';
 import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
+import { isUnifiedType, UNIFIED_READ_SQL, type UnifiedReadFields, unifiedReadFields } from './invoice-consolidation-read';
 import { referenceKind } from './invoice-description';
 import { oneOffOf, type OneOffSubline } from './one-off-discount';
 import { PRICE_COLUMNS, priceSummaryFromRow } from './price-rows';
@@ -619,7 +620,11 @@ export class ContractsService {
 					tdt.country_code AS tax_document_type_country,
 					c.auto_send_to_odoo, c.auto_invoice, c.group_invoices_by_period, c.invoice_terms_and_conditions, c.notes,
 					q.id AS quote_id, q.quote_number, c.salesforce_opportunity_id, c.created_at,
-					rsm.mrr_system, rsm.mrr_contract, ds.derived_status
+					rsm.mrr_system, rsm.mrr_contract, ds.derived_status,
+					-- Multimoneda: tasas pactadas ítem → contrato (MRR, TCV y devengo de los ítems en otra moneda).
+					(SELECT COALESCE(jsonb_agg(jsonb_build_object('from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+						'period_start', r.period_start::text, 'period_end', r.period_end::text) ORDER BY r.from_currency, r.period_start), '[]'::jsonb)
+						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates
 				FROM contracts c
 				LEFT JOIN clients cl ON cl.id = c.client_id
 				LEFT JOIN client_entities ce ON ce.id = c.client_entity_id
@@ -705,6 +710,8 @@ export class ContractsService {
 			/** Banderas: factura a más de una razón social / en más de una moneda (mismas que la lista). */
 			requires_multicompany_billing: row.requires_multicompany_billing === true,
 			requires_multicurrency_billing: row.requires_multicurrency_billing === true,
+			/** Multimoneda: tasas fijas pactadas ítem → contrato (`purpose = 'item'`, "1 [from] = rate [moneda del contrato]"). Vacío sin multimoneda. */
+			fx_item_rates: ContractsService.fxItemRatesOf(row.fx_item_rates),
 			auto_send_to_odoo: row.auto_send_to_odoo === null || row.auto_send_to_odoo === undefined ? null : Boolean(row.auto_send_to_odoo),
 			auto_invoice: row.auto_invoice === null || row.auto_invoice === undefined ? null : Boolean(row.auto_invoice),
 			group_invoices_by_period:
@@ -1030,6 +1037,12 @@ export class ContractsService {
 			cancelled: toNumber(countRow?.cancelled_count),
 		};
 		const total = counts[status];
+		// Documentos unificados de la página (spec multimoneda §9): v2 (evento INVOICE_CONSOLIDATED) o legacy de solo lectura, y aporte por
+		// contrato; una sola consulta y solo si la página trae alguno.
+		const unified = await this.unifiedFields(
+			rows.filter((row) => isUnifiedType(toText(row.invoice_type))).map((row) => String(row.id)),
+			holdingId
+		);
 
 		return {
 			data: rows.map((row) => ({
@@ -1074,6 +1087,7 @@ export class ContractsService {
 				partial_billing: partialBillingOf(String(row.id), row.partial_billing_event),
 				split_reason: toText(row.split_reason),
 				split_from_invoice_id: toText(row.split_from_invoice_id),
+				...(unified.get(String(row.id)) ?? {}),
 			})),
 			items: total,
 			pages: Math.max(1, Math.ceil(total / limit)),
@@ -1115,7 +1129,11 @@ export class ContractsService {
 					${noChargeSql('i')} AS no_charge, i.nc_revenue_treatment, i.client_entity_id, i.auto_invoice, i.credit_reason,
 					${voidedSql('i')} AS voided, ${partialBillingEventSql('i')} AS partial_billing_event,
 					c.tax_document_type_id, tdt.description_max_chars AS own_description_max_chars, co.country AS company_country,
-					c.document_type AS contract_document_type, ${DESCRIPTION_LIMITS_SQL} AS description_limits
+					c.document_type AS contract_document_type, ${DESCRIPTION_LIMITS_SQL} AS description_limits,
+					COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
+					(SELECT COALESCE(jsonb_agg(jsonb_build_object('from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+						'period_start', r.period_start::text, 'period_end', r.period_end::text) ORDER BY r.from_currency, r.period_start), '[]'::jsonb)
+						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates
 				FROM invoices i
 				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
 				LEFT JOIN contracts c ON c.id = i.contract_id AND c.holding_id = i.holding_id
@@ -1134,7 +1152,8 @@ export class ContractsService {
 					ii.unit_price_contract_currency, ii.unit_price_invoice_currency, ii.subtotal_contract_currency, ii.subtotal_invoice_currency,
 					ii.tax_amount_contract_currency, ii.tax_amount_invoice_currency, ii.total_contract_currency, ii.total_invoice_currency,
 					ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end,
-					ii.contract_item_id, ii.product_id, ii.pricing_breakdown, ci.product_name, ci.account, ii.visible_line_id
+					ii.contract_item_id, ii.product_id, ii.pricing_breakdown, ci.product_name, ci.account, ii.visible_line_id,
+					ii.contract_currency AS line_currency, ii.fx_contract_to_invoice AS line_fx, ii.fx_rate_source AS line_fx_rate_source
 				FROM invoice_items ii
 				JOIN invoices i ON i.id = ii.invoice_id
 				LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
@@ -1210,6 +1229,7 @@ export class ContractsService {
 		]);
 
 		if (!header) throw new NotFoundException('Factura no encontrada');
+		const unified = await this.unifiedFields(isUnifiedType(toText(header.invoice_type)) ? [String(header.id)] : [], holdingId);
 		const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
 		const json = <T>(value: unknown): T | null => {
 			if (value === null || value === undefined) return null;
@@ -1306,6 +1326,10 @@ export class ContractsService {
 			client_address: toText(header.client_address),
 			contract_number: toText(header.contract_number),
 			tax_document_type_name: toText(header.tax_document_type_name),
+			// Multimoneda (spec-multimoneda §3): el contrato factura ítems en distintas monedas; cada línea trae su par (`currency` → moneda de
+			// factura) y su tasa; el encabezado `fx_contract_to_invoice` es NULL con dos o más pares. Tasas pactadas ítem → contrato del contrato.
+			requires_multicurrency_billing: header.requires_multicurrency_billing === true,
+			fx_item_rates: ContractsService.fxItemRatesOf(header.fx_item_rates),
 			// Constructor de descripción (spec facturas §3.6): límite de la glosa del documento del contrato (null = sin límite).
 			description_max_chars: resolveDescriptionMaxChars({
 				tax_document_type_id: toText(header.tax_document_type_id),
@@ -1346,6 +1370,11 @@ export class ContractsService {
 					billing_period_start: toText(line.billing_period_start),
 					billing_period_end: toText(line.billing_period_end),
 					pricing_breakdown: json<unknown[]>(line.pricing_breakdown),
+					// Multimoneda: moneda de origen de la línea (la del ítem; sus `*_contract_currency` están en ella), tasa de su par → moneda de
+					// factura (1 mismo par, null = spot) y su origen (`contract`, `manual`, `net_exact`, `spot`…).
+					currency: toText(line.line_currency) ?? toText(header.contract_currency),
+					fx: toNullableNumber(line.line_fx),
+					fx_rate_source: toText(line.line_fx_rate_source),
 				}))
 			),
 			references: references.map((row) => ({
@@ -1391,7 +1420,36 @@ export class ContractsService {
 				created_by: row.user_id ? { id: row.user_id as string, name: toText(row.user_name) } : null,
 				metadata: json<Record<string, unknown>>(row.metadata),
 			})),
+			// Documento unificado (spec multimoneda §9): `legacy_unified` (sin evento INVOICE_CONSOLIDATED: solo lectura) y aporte por contrato.
+			...(unified.get(String(header.id)) ?? {}),
 		};
+	}
+
+	/**
+	 * `legacy_unified` y `contributions[]` de los documentos `Unificada`/`Consolidada` dados (spec multimoneda §7/§9), en una sola consulta.
+	 * Sin ids no consulta (las demás facturas no cambian su respuesta).
+	 */
+	private async unifiedFields(invoiceIds: string[], holdingId: string): Promise<Map<string, UnifiedReadFields>> {
+		if (!invoiceIds.length) return new Map();
+
+		return unifiedReadFields(await this.dataSource.query<Row[]>(UNIFIED_READ_SQL, [invoiceIds, holdingId]));
+	}
+
+	/** Tasas pactadas ítem → contrato (jsonb agregado) en la forma de la API. */
+	static fxItemRatesOf(
+		value: unknown
+	): Array<{ from_currency: string; to_currency: string; rate: number; period_start: string; period_end: string }> {
+		const rows = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+
+		if (!Array.isArray(rows)) return [];
+
+		return rows.map((row: Row) => ({
+			from_currency: String(row.from_currency ?? '').toUpperCase(),
+			to_currency: String(row.to_currency ?? '').toUpperCase(),
+			rate: toNumber(row.rate),
+			period_start: String(row.period_start ?? '').slice(0, 10),
+			period_end: String(row.period_end ?? '').slice(0, 10),
+		}));
 	}
 
 	/** Motivo del desvío de una factura desde su último `invoice_adjustments` (columnas `deviation_*`), o null si no tiene. */

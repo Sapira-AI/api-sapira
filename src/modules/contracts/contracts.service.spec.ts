@@ -719,6 +719,79 @@ describe('ContractsService', () => {
 			);
 		});
 
+		it('facturas (multimoneda §9): documento unificado legacy o v2 con aporte por contrato en una sola consulta; sin unificados no consulta', async () => {
+			const page = [
+				{ id: 'inv-u', status: 'Por Emitir', invoice_type: 'Unificada', is_active: true },
+				{ id: 'inv-v2', status: 'Por Emitir', invoice_type: 'Unificada', is_active: true },
+				{ id: 'inv-1', status: 'Emitida', invoice_type: 'Automatica', is_active: true },
+			];
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
+				if (sql.includes('all_count')) return [{ all_count: '3' }];
+				if (sql.includes('OFFSET')) return page;
+				if (sql.includes('consolidated_v2'))
+					return [
+						{
+							invoice_id: 'inv-u',
+							consolidated_v2: false,
+							contract_id: 'ctr-a',
+							contract_number: 'CTR-1',
+							currency: 'USD',
+							lines_count: '1',
+							subtotal: '10',
+							subtotal_invoice_currency: '9500',
+						},
+						{
+							invoice_id: 'inv-u',
+							consolidated_v2: false,
+							contract_id: 'ctr-b',
+							contract_number: 'CTR-2',
+							currency: 'USD',
+							lines_count: '2',
+							subtotal: '20',
+							subtotal_invoice_currency: '19000',
+						},
+						{
+							invoice_id: 'inv-v2',
+							consolidated_v2: true,
+							contract_id: 'ctr-a',
+							contract_number: 'CTR-1',
+							currency: 'CLP',
+							lines_count: '1',
+							subtotal: '5',
+							subtotal_invoice_currency: '5',
+						},
+					];
+
+				return [];
+			});
+			const result = await service.invoices(CONTRACT_ID, 'h-1', { status: 'all' });
+			const unifiedCalls = query.mock.calls.filter(([text]) => (text as string).includes('consolidated_v2'));
+
+			expect(unifiedCalls).toHaveLength(1);
+			expect(unifiedCalls[0][1]).toEqual([['inv-u', 'inv-v2'], 'h-1']);
+			expect(result.data[0]).toMatchObject({
+				legacy_unified: true,
+				contributions: [
+					{ contract_id: 'ctr-b', contract_number: 'CTR-2', lines_count: 2, subtotal_invoice_currency: 19000 },
+					{ contract_id: 'ctr-a', contract_number: 'CTR-1', lines_count: 1, subtotal_invoice_currency: 9500 },
+				],
+			});
+			expect(result.data[1]).toMatchObject({
+				legacy_unified: false,
+				contributions: [{ contract_id: 'ctr-a', subtotal_by_currency: [{ currency: 'CLP', subtotal: 5 }] }],
+			});
+			expect(result.data[2]).not.toHaveProperty('legacy_unified');
+			expect(result.data[2]).not.toHaveProperty('contributions');
+
+			const plain = build((sql) =>
+				sql.includes('LIMIT 1') ? [{ id: CONTRACT_ID }] : sql.includes('OFFSET') ? [page[2]] : [{ all_count: '1' }]
+			);
+
+			await plain.service.invoices(CONTRACT_ID, 'h-1', {});
+			expect(plain.query.mock.calls.some(([text]) => (text as string).includes('consolidated_v2'))).toBe(false);
+		});
+
 		describe('invoiceDetail', () => {
 			const INVOICE_ID = '33333333-3333-4333-8333-333333333333';
 			const header = {
@@ -928,6 +1001,39 @@ describe('ContractsService', () => {
 					erp_reset_available: false,
 				});
 				expect(result.lines.map((line) => line.is_visible)).toEqual([true, true]);
+			});
+
+			it('documento unificado (multimoneda §9): legacy_unified y aporte por contrato; una factura común no los trae ni consulta', async () => {
+				const unified = build((sql) =>
+					sql.includes('consolidated_v2')
+						? [
+								{
+									invoice_id: INVOICE_ID,
+									consolidated_v2: false,
+									contract_id: CONTRACT_ID,
+									contract_number: 'CTR-1',
+									currency: 'CLF',
+									lines_count: '2',
+									subtotal: '110.6',
+									subtotal_invoice_currency: null,
+								},
+							]
+						: sql.includes('FROM invoices i') && sql.includes('i.id = $1::uuid AND i.contract_id = $2')
+							? [{ ...header, invoice_type: 'Unificada' }]
+							: route(sql)
+				);
+				const result = await unified.service.invoiceDetail(CONTRACT_ID, INVOICE_ID, 'h-1');
+
+				expect(result).toMatchObject({
+					invoice_type: 'Unificada',
+					legacy_unified: true,
+					contributions: [{ contract_id: CONTRACT_ID, contract_number: 'CTR-1', lines_count: 2, subtotal_invoice_currency: null }],
+				});
+				const plain = build(route);
+				const common = await plain.service.invoiceDetail(CONTRACT_ID, INVOICE_ID, 'h-1');
+
+				expect(common).not.toHaveProperty('legacy_unified');
+				expect(plain.query.mock.calls.some(([text]) => (text as string).includes('consolidated_v2'))).toBe(false);
 			});
 
 			it('responde 404 si la factura no es del contrato (o el contrato no es del holding)', async () => {
@@ -1233,6 +1339,7 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceEditService,
 			{} as never,
 			{} as never,
+			{} as never,
 			{} as never
 		);
 
@@ -1256,6 +1363,7 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never
@@ -1283,6 +1391,7 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never
@@ -1313,6 +1422,7 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never

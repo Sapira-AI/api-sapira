@@ -359,7 +359,8 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(ncLine[1].slice(10, 12)).toEqual([-533.33, -533.33]);
 		// Costura: la línea de la NC nace con su ítem (sin patrón B); el grupo es el de la emitida y las condiciones las del contrato.
 		expect(ncLine[0]).toContain('contract_item_id, holding_id, invoice_id');
-		expect((ncLine[1] as unknown[]).at(-1)).toBe(LICENCIA);
+		// $25 = contract_item_id ($26 = fecha de la tasa de la línea original, multimoneda).
+		expect((ncLine[1] as unknown[])[24]).toBe(LICENCIA);
 		expect(calls(runner.query, 'SET contract_item_id = x.contract_item_id')).toHaveLength(0);
 		expect(nc[0]).toContain('(SELECT COALESCE(r.invoice_group_id, r.id) FROM invoices r WHERE r.id = $17::uuid)');
 		expect(nc[0]).toContain('(SELECT k.invoice_terms_and_conditions FROM contracts k WHERE k.id = $2::uuid)');
@@ -895,6 +896,7 @@ describe('ContractsController (modificaciones)', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never

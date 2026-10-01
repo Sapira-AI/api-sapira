@@ -23,7 +23,7 @@ import { PaymentTermsDto } from '@/modules/clients/dtos/client-directory.dto';
 
 import { BILLING_FREQUENCIES, BILLING_METHODS, type BillingFrequency, type BillingMethod } from '../billing-engine';
 
-import { FX_INVOICE_POLICIES, FX_RATES_MAX, FxRatePeriodDto, PRICE_ENTRY_MODES, PriceSpecDto } from './create-contract.dto';
+import { FX_INVOICE_POLICIES, FX_RATES_MAX, FxItemRateDto, FxPairRateDto, PRICE_ENTRY_MODES, PriceSpecDto } from './create-contract.dto';
 
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CURRENCY = /^[A-Z]{2,4}$/;
@@ -31,8 +31,17 @@ const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? va
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const present = (value: unknown) => value !== null && value !== undefined;
 
-/** Tipos de cambio construidos (spec §4, fases A–D). */
-export const CHANGE_TYPES = ['billing_conditions', 'change_entity', 'item_remove', 'contract_cancel', 'renewal', 'item_add', 'item_change'] as const;
+/** Tipos de cambio construidos (spec §4, fases A–D; `multicurrency` = activar/desactivar multimoneda, spec-multimoneda §6). */
+export const CHANGE_TYPES = [
+	'billing_conditions',
+	'change_entity',
+	'item_remove',
+	'contract_cancel',
+	'renewal',
+	'item_add',
+	'item_change',
+	'multicurrency',
+] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 /** Tipos que la spec deja ABIERTOS: se rechazan con 400 explicando qué falta decidir (§2.6, §2.7, §2.8). */
 export const DEFERRED_CHANGE_TYPES = ['reactivate', 'pause', 'resume', 'price_adjustment'] as const;
@@ -102,6 +111,16 @@ export class ItemAddItemDto {
 	@ApiProperty()
 	@IsUUID(undefined, { message: 'Producto inválido' })
 	product_id!: string;
+
+	@ApiPropertyOptional({
+		example: 'USD',
+		description:
+			'Multimoneda: moneda del ítem. Default: la de la cotización de origen (origin.type = quote) o la del contrato. Distinta de la del contrato exige multimoneda activa o `enable_multicurrency` (blocker multicurrency_not_enabled)',
+	})
+	@Transform(upper)
+	@Matches(CURRENCY, { message: 'Moneda del ítem inválida' })
+	@IsOptional()
+	currency?: string;
 
 	@ApiProperty()
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe la cantidad' })
@@ -346,13 +365,42 @@ export class ContractChangeDto {
 	@IsOptional()
 	fx_invoice_policy?: (typeof FX_INVOICE_POLICIES)[number];
 
-	@ApiPropertyOptional({ type: [FxRatePeriodDto], description: 'Tasas fijas contrato → moneda de factura (fixed); se agregan a las guardadas' })
+	@ApiPropertyOptional({
+		type: [FxPairRateDto],
+		description:
+			'billing_conditions e item_add: tasas fijas moneda del ítem (`from_currency`, default la del contrato) → moneda de factura; se agregan a las guardadas. En multimoneda, `from_currency` es obligatorio con más de una moneda de ítem',
+	})
 	@IsArray({ message: 'fx_invoice_rates debe ser una lista' })
 	@ArrayMaxSize(FX_RATES_MAX)
 	@ValidateNested({ each: true })
-	@Type(() => FxRatePeriodDto)
+	@Type(() => FxPairRateDto)
 	@IsOptional()
-	fx_invoice_rates?: FxRatePeriodDto[];
+	fx_invoice_rates?: FxPairRateDto[];
+
+	// ---- multimoneda (item_add, multicurrency)
+	@ApiPropertyOptional({
+		type: [FxItemRateDto],
+		description: 'item_add multimoneda: tasas pactadas ítem → contrato (`purpose = item`) de las monedas nuevas; se agregan a las guardadas',
+	})
+	@IsArray({ message: 'fx_item_rates debe ser una lista' })
+	@ArrayMaxSize(FX_RATES_MAX)
+	@ValidateNested({ each: true })
+	@Type(() => FxItemRateDto)
+	@IsOptional()
+	fx_item_rates?: FxItemRateDto[];
+
+	@ApiPropertyOptional({
+		description:
+			'item_add: enciende multimoneda en la misma transacción, antes de insertar los ítems (queda en el evento del alta: `metadata.multicurrency_enabled`)',
+	})
+	@IsBoolean({ message: 'enable_multicurrency debe ser true o false' })
+	@IsOptional()
+	enable_multicurrency?: boolean;
+
+	@ApiPropertyOptional({ description: 'multicurrency: true enciende, false apaga (bloqueado con ítems en otra moneda)' })
+	@IsBoolean({ message: 'enabled debe ser true o false' })
+	@IsOptional()
+	enabled?: boolean;
 
 	// ---- change_entity
 	@ApiPropertyOptional({ description: 'Razón social receptora nueva (del mismo cliente comercial)' })

@@ -7,6 +7,7 @@
 > [`mejoras-y-brechas.md`](./mejoras-y-brechas.md) (A.4, E.2) y los benchmarks de `benchmarks/`. Cada regla se marca
 > **DECIDIDO** (con la fuente) o **ABIERTO** (qué falta decidir, opciones, recomendación). Lo que no está en ningún
 > doc y hace falta para escribir la spec va como **Supuesto**. Este documento no toma decisiones nuevas.
+> **01-10**: los ABIERTO de §2 y las preguntas de §8 quedaron decididos; alcance final y diseño del bloque 2 en **§9**.
 
 ## 0. Alcance y marco
 
@@ -345,7 +346,7 @@ piden motivo y siguen): `possible_duplicate`, `unpaid_invoice_prorated`, `pendin
 | **B · Contracción** | `item_remove`, `contract_cancel` (M2), `reactivate` en su rama "anular churn no vigente" | Reglas cerradas (U5, ROADMAP #10/#11, S2-8); reemplaza el flujo con más bugs en prod; sin generador nuevo (solo quitar líneas y NC espejo) |
 | **C · Renovación manual** (M3) sin cambio de precio, luego con cambio de precio cuando Domi confirme S3-15 | `renewal` | Necesita F1 (ya existe: `billing-engine.ts`) y F3; cubre el fin del contrato "más próximo" y TV; prerrequisito de E2 (propuesta de auto-renovación) |
 | **D · Altas y cambios de precio/cantidad** (M1) | `item_add` (cross-sell / upsell nuevo), `item_change` misma frecuencia | Reglas cerradas (fórmula unificada, S3-5/6/7/14/17, D-B/D-C) pero exige F3 completo (fusión por período, línea neta, herencia FX S6-2) y los casos de regresión (Bosch, STG-38, S04172, Pehuen, Cooprinsem) |
-| **E · Solo después de que Domi decida** | renegociación con cambio de frecuencia/término (S3-15), `pause`/`resume` (§2.6), `price_adjustment` y condiciones pactadas (§2.8, S1-18, M5 indefinido), reversión de churn con ventana (§2.7), clasificación a nivel cliente (§8), cross-sell multimoneda (M3), compañía emisora (M10) | Cada uno tiene puntos abiertos que cambian el modelo de datos |
+| **E · Decidido 01-10 → bloque 2 (§9.5)** | renegociación con cambio de frecuencia/término (S3-15), `pause`/`resume` (§2.6), `price_adjustment` y condiciones pactadas (§2.8, S1-18, M5 indefinido), reversión de churn con ventana (§2.7), clasificación a nivel cliente (§8), cross-sell multimoneda (M3), compañía emisora (M10) | Cada uno tiene puntos abiertos que cambian el modelo de datos |
 
 Transversal antes de B: U8/U9 en el RSM (saneamiento capa 1 #3–4) y la decisión de la costura `sapira.writer` (§1).
 
@@ -368,6 +369,8 @@ Ya retiradas (saneamiento 24-09): `create_contract_upsell/downsell/churn`, `regi
 `AmendmentApprovalsModal`, mutaciones sin consumidor de `useContractAmendments`.
 
 ## 8. Decisiones que necesita Domi (resumen de lo ABIERTO)
+
+> **✅ Resueltas el 01-10** (decisiones finales de Domi): la resolución de cada fila y de los ABIERTO de §2 está en **§9.1**; #9 queda pendiente (§9.6).
 
 | # | Decisión | Opciones | Recomendación |
 |---|---|---|---|
@@ -397,3 +400,168 @@ Ya retiradas (saneamiento 24-09): `create_contract_upsell/downsell/churn`, `regi
   cierra §2.6 y §2.8 con esas opciones. Ningún esquema nuevo se crea para las fases A–D.
 - **Supuesto 5**: el `Idempotency-Key` y `origin` se guardan en `contract_lifecycle_events.metadata` hasta que exista
   la tabla de eventos unificada (`spec-tablas-por-modulo.md`, módulo 10).
+
+## 9. Bloque Modificaciones · decisiones 01-10 y alcance final
+
+> 01-10-2026 · decisiones **finales** de Domi. Cierran los ABIERTO de §2 y las 13 preguntas de §8 (ver 9.1). Construido hasta hoy (28-09 → 01-10):
+> `billing_conditions`, `change_entity`, `item_remove`, `contract_cancel`, `renewal` (mismo precio), `item_add`, `item_change` (misma
+> frecuencia), con las reglas de §4.1 (`contract-changes.ts` `planChange`, `contract-changes.service.ts`). Multimoneda tiene spec propia:
+> [`spec-multimoneda-contrato.md`](./spec-multimoneda-contrato.md); este bloque usa sus tipos (`multicurrency`, `item_add` con moneda).
+
+### 9.1 Preguntas de §8 y ABIERTO de §2: resueltas
+
+| §8 # / §2 | Decisión 01-10 |
+|---|---|
+| 1 · Patrón A.4 | Changes tipados con preview sobre el modelo acumulativo (construido) |
+| 2 · S3-15 (§2.1a, §2.5a) | **Dos ítems explícitos**: RENEWAL al valor anterior + ajuste UPSELL/DOWNSELL, con el pacto aplicado registrado (9.3.4). Frecuencia o término = ítem nuevo + pacto (9.3.7) |
+| 3 · Prorrateo (§2.1b) | Reglas fijas + `first_period_invoice` (construido); **ítem con ciclo propio = sin prorrateo** (9.3.9) |
+| 4 · Acortar (§2.4) | "Terminar antes" = `item_remove` non-renewal (construido); cambiar el plazo hacia adelante = 9.3.7 |
+| 5 · Auto-renovación (§2.5b) | Cron legacy **ya desprogramado**; E2 = propuesta con **confirmación del holding** (9.3.5) |
+| 6 · Ajustes pactados (§2.8, §2.5c) | Tabla `contract_scheduled_changes` (9.3.6) incl. IPC/UF |
+| 7 · Pausa (§2.6) | Por ítem, `scope service`, tabla `contract_item_pauses` (9.3.3) |
+| 8 · Reversión de churn (§2.7) | Tres ramas por cierre de período (9.3.2) |
+| 9 · Clasificación a nivel cliente | Sin decisión: queda en pendientes (9.6) |
+| 10 · Cliente comercial (§2.10a) | **Fuera**: cambiarlo sería un error de carga, no una modificación |
+| 11 · S4-10 | Solo nuevas + conteo (construido; T&C con `apply_to_pending`) |
+| 12 · Aprobación | **Fuera** (S3-10) |
+| 13 · Costura `sapira.writer` | Construida (todas las escrituras de v2) |
+| §2.2 / §2.9 · otra moneda | Multimoneda (spec propia); cotización en otra moneda → `item_add` en su moneda |
+| §2.10b · compañía emisora | **Fuera** (intercompañía, diferido) |
+
+### 9.2 UI: un solo "Modificar contrato" guiado por intención
+
+Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contrato?"** (mismo patrón que Reorganizar en Facturas). Cada intención hace
+1–2 preguntas en lenguaje simple y arma el pedido a la API; el paso 3 es siempre el mismo preview (§4). La usuaria nunca ve los tipos.
+
+| Intención (texto en la UI) | Pregunta guía | Tipo API |
+|---|---|---|
+| Cambió el precio o la cantidad de un producto | ¿Qué producto? ¿Valores nuevos? | `item_change` |
+| Cambió cada cuánto se factura o el plazo | ¿Frecuencia / plazo nuevo? ¿Desde cuándo? | `item_change` con `billing_frequency`/`term_months` (9.3.7) |
+| Agregó un producto (incl. otra moneda o desde una cotización) | ¿Mismo ciclo del contrato o su propio día? | `item_add` (+ `enable_multicurrency`) |
+| Quitó un producto | ¿Ahora o al terminar su plazo? | `item_remove` |
+| Renueva | ¿Mismo precio o nuevo? ¿Extender el tipo de cambio? | `renewal` |
+| Acordamos un cambio futuro (reajuste, IPC/UF, nuevo precio en fecha) | ¿Cuándo y qué? | `scheduled-changes` (9.3.6) |
+| Pausa o retoma el servicio | ¿Desde/hasta? ¿Extiende el plazo? | `pause` / `resume` |
+| Termina el contrato | ¿Fecha? ¿Qué hacemos con cada factura pendiente? | `contract_cancel` (9.3.1) |
+| Vuelve a ser cliente | ¿Todo o algunos productos? | `reactivate` |
+| Cambian las condiciones de facturación | — | `billing_conditions` |
+| Cambia la razón social que recibe la factura | ¿Existe o la creamos? | `change_entity` (9.3.10) |
+| Factura productos en varias monedas | — | `multicurrency` |
+
+Desde Cotizaciones, "Asociar a contrato" entra directo a la intención "Agregó un producto" o "Cambió el precio…" según el tipo de la cotización.
+Barra del 360: **Modificar contrato** (primario) + atajos **Renovar**, **Pausar/Reanudar**, **Terminar** y en Cancelado **Reactivar** (abren el mismo
+drawer en su intención). Propuestas de renovación y pactos por vencer aparecen como tarjetas en el Resumen con sus botones.
+
+### 9.3 Diseño por operación
+
+**9.3.1 Terminar con facturas pendientes (`contract_cancel`, reemplaza `manual_lines_pending`)**. El preview devuelve `invoice_decisions_required[]`
+`{ invoice_id, invoice_number, issue_date, status_group: 'pending' | 'issued', amount_after_effective, options[], default, reason_hint }` para toda
+factura con período ≥ fecha efectiva: **Por Emitir** → `emit` (se mantiene completa y se emite: lo de después de la fecha queda facturado, aviso
+`billed_beyond_effective_date`) o `cancel` (regla actual: quitar líneas desde la fecha, prorratear la que la contiene, sin líneas → Cancelada; una
+facturada por OC se cancela entera); **Emitida** → `keep` (sin NC, mismo aviso) o `void` (NC proporcional espejo, regla actual). Defaults:
+`cancel` / `void`. Body: `change.invoice_decisions[{ invoice_id, action }]`; si falta alguna → blocker `invoice_decision_required`. Las líneas manuales
+ya no bloquean: entran a la misma decisión. El preview sugiere `effective_date_suggestions[]` (fin del último período emitido = sin NC; fin del período
+en curso) para **ajustar la fecha**. Evento `CHURN` subtipo `contract_cancel` con `metadata.invoice_decisions`.
+
+**9.3.2 Reactivar (`reactivate`)** `{ items?[{ item_id }], effective_date }` (sin lista = todo lo cancelado). Rama por fecha del churn y cierre
+(S5-7): (a) churn **aún no vigente** (`churn_date > hoy`) → **anular**: se quita el espejo CHURN/DOWNSELL (sin facturas propias), se limpian
+`churn_date`/`churn_reason_id`, se cancelan las NC Por Emitir del churn y el generador rehace las PE canceladas; (b) **vigente, mes abierto** →
+**revertir**: igual que (a) + PE nuevas desde la fecha del churn para el tramo (las NC ya emitidas quedan; aviso `credit_notes_issued_kept`); (c) **mes
+cerrado** → ítems **REACTIVATION** nuevos desde `effective_date` al valor anterior (editable), PE del generador. `contracts.status = 'Activo'` explícito.
+El evento original recibe `metadata.reversed_by`; evento nuevo `CHURN_REVERSED` (a/b) o `REACTIVATION` (c). Bloqueos: `not_cancelled`,
+`period_closed` (rama a/b sobre mes cerrado → cae en c).
+
+**9.3.3 Pausar / reanudar (`pause`, `resume`)**: por ítem (o todos los recurrentes vivos), `scope service` único. `pause { items[], pause_start,
+pause_end?, extend_term: boolean }` → fila en `contract_item_pauses`; PE con período dentro de la pausa: líneas fuera (prorrateo por días en los
+bordes, factura vacía → Cancelada); emitidas que cubren la pausa → misma decisión `keep | void` de 9.3.1; RSM con devengo y MRR 0 en el tramo
+(momentum `PAUSE`, CMRR se mantiene si hay `pause_end`). `resume { items[], resume_date }` cierra la pausa (`pause_end = resume_date − 1`), genera PE
+desde la reanudación (F1/F3) y, con `extend_term`, corre el fin del ítem en los días pausados (y el del contrato si es el más próximo; evento con
+bypass). Estado derivado `Pausado` cuando todos los recurrentes vivos están pausados (`contract-status.ts`). Eventos `PAUSE`/`RESUME`. Bloqueos:
+`item_already_paused`, `pause_overlaps`, `period_closed`. Masivo: segunda etapa (9.5).
+
+**9.3.4 Renovación con precio nuevo + extensión de FX (`renewal`)**: `items[].quantity|unit_price|discount_value` **se aceptan** (quita el 400 de
+`planRenewal`:1586). Plan: RENEWAL al valor vigente del ítem madre + ítem de ajuste (UPSELL/DOWNSELL, `related_item_id` = RENEWAL, mismo inicio y fin,
+fórmula unificada de `item_change`) + fila `contract_scheduled_changes` `trigger on_renewal`, `kind new_unit_price|quantity`, `status applied`,
+`applied_event_id`; pactos `on_renewal` `scheduled` del ítem se aplican en el mismo acto (omitibles con motivo → `skipped`). RSM mes 1 separa base
+y delta (sin `renewal_base_unit_price`). **FX**: `change.fx_invoice_rates?[]` y `fx_item_rates?[]` (multimoneda); si el contrato tiene tasa **de todo el
+contrato** (`isWholeContractRate`) por par/propósito y no se manda otra, la fila se **extiende** al nuevo fin (op `extend_fx_rates`, aviso
+`fx_rate_extended`); con tasas por período y política fija, el nuevo término sin cobertura → `fixed_fx_without_rate` con el par. Retira el pendiente
+de `isWholeContractRate` ("al extender el plazo corresponde extender esa tasa").
+
+**9.3.5 Auto-renovación v2 con confirmación del holding (R2)**. Job diario `contracts-auto-renewal` (06:00, `@Cron`, por holding): ítems recurrentes
+`auto_renew`, sin renovar ni churn, contrato `active | pending_renewal`, `end_date ≤ hoy + holding_settings.auto_renewal_notice_days` → evento
+`RENEWAL_PROPOSED` (`created_by = system`, `metadata { items, preview, pacts }`, idempotente por ítem y fin) + notificación. **Nunca renueva sola**.
+`GET /contracts/renewal-proposals` (KPI "Renuevan en 30 días"); confirmar = `POST /contracts/:id/changes` con `change.type renewal` y `origin {
+type: 'renewal_proposal', event_id }` (precio y pactos editables en el preview); omitir = `POST /contracts/:id/renewal-proposals/:eventId/dismiss
+{ reason }` (`RENEWAL_PROPOSAL_DISMISSED`); apagar = `billing_conditions.auto_renew: false` (ítems recurrentes vivos, `CONDITIONS_UPDATED`).
+Al vencer sin decisión: Por renovar con alertas crecientes (S2-1/S5-4). Funciones legacy (`process_auto_renewals`, `execute_auto_renewal_for_item`,
+`get_items_pending_auto_renewal`, `create_contract_renewal`) se retiran al switch.
+
+**9.3.6 Ajustes pactados (R1/R3/R4)**: tabla `contract_scheduled_changes` (9.4). API: `GET/POST /contracts/:id/scheduled-changes`, `PATCH
+…/:changeId` (solo `scheduled`), `POST …/:changeId/skip { reason }`, `POST …/:changeId/cancel { reason }`, `POST …/:changeId/apply/preview` y `POST
+…/:changeId/apply` (materializa con el motor de `item_change`/`renewal`). Alta: `CreateContractDto.scheduled_changes[]` (mismo DTO). Job diario
+`contracts-scheduled-changes` (05:30): pactos `on_date`/`every_n_months` con fecha ≤ hoy + aviso → evento `SCHEDULED_CHANGE_DUE` + notificación
+(**confirmación**, mismo criterio que 9.3.5); `every_n_months` crea la hija `applied` y avanza `next_effective_date`. Semántica de `kind` = §3.2 de
+[`spec-renovacion-y-ajustes-pactados.md`](./spec-renovacion-y-ajustes-pactados.md); `index` lee `indicadores_economicos` (IPC/UF/USD), sin dato →
+blocker `index_value_missing`. Reajuste sin prorrateo (rige desde el próximo inicio de período). Ítem que termina → sus pactos `cancelled`
+(`status_reason = item_ended`). Eventos `SCHEDULED_CHANGE_CREATED|SKIPPED|CANCELLED`; el aplicado es el evento normal (UPSELL/DOWNSELL subtipo
+`price_step` o `index`).
+
+**9.3.7 Cambio de frecuencia o término (`item_change`)**: `items[].billing_frequency?` y `term_months?` dejan de dar 400. Plan (S3-15): el ítem
+madre se corta al **próximo inicio de período** (`renewed_by_item_id`), nace un ítem **RENEWAL** (`renews_item_id`) con la frecuencia/plazo nuevos al
+mismo mensual (+ ajuste si cambia el precio) y una fila `contract_scheduled_changes` `applied` `kind billing_frequency` (valor = meses) o `term`.
+PE del original desde el corte: se quitan sus líneas; el generador crea las del ítem nuevo (fusión F3). Emitidas después del corte →
+`issued_after_effective_date` con fecha sugerida. Evento `UPSELL|DOWNSELL|RENEWAL` subtipo `RENEGOTIATION` con `metadata.reterm { frequency_before,
+frequency_after, term_before, term_after }`.
+
+**9.3.8 Activar multimoneda y producto de cotización en otra moneda**: ver [`spec-multimoneda-contrato.md`](./spec-multimoneda-contrato.md) §6
+(`multicurrency { enabled }`, `item_add.items[].currency`, `enable_multicurrency`, blockers `multicurrency_not_enabled`,
+`foreign_currency_items_present`, `item_fx_rate_missing`).
+
+**9.3.9 Día de ciclo por ítem**: `contract_items.billing_anchor_day` (nullable, 1–31). `NULL` = ciclo del contrato (`contracts.billing_anchor_day`,
+como hoy); con valor = **ciclo propio**: sus períodos parten ese día, **sin tramo prorrateado** (el ítem empieza un período completo en su inicio).
+Se elige al crear el ítem (alta: `items[].billing_cycle: 'contract' | 'own'`; `item_add` igual; `own` ⇒ día = día de `start_date`). Motor:
+`BillingEngineItem.billing_anchor_day?` → cuotas por ítem. Agrupación: juntas por **fecha de emisión exacta**, así un ítem del día 15 emite en su
+propia factura del 15 (o junto a otros ítems del mismo día). `mergeTarget`: una línea de ciclo propio solo se funde con una PE de **la misma
+fecha de emisión** (no basta el mes); una línea de ciclo de contrato no se funde con una PE de ciclo propio. RSM (asset): el día de ciclo del ítem
+es `COALESCE(item.billing_anchor_day, contract.billing_anchor_day, MIN(start_date))` y un ítem de ciclo propio no prorratea su primer mes (como NEW).
+Cambiar el ciclo de un ítem vivo: no se construye (9.6).
+
+**9.3.10 Cambiar razón social (con alta de una nueva)**: `change_entity` acepta `client_entity_id` **o** `new_entity { legal_name, tax_id, country,
+address?, email?, payment_terms? }`. Con `new_entity`, en la misma transacción: busca por `tax_id` normalizado en el holding → existe y está ligada
+al cliente → la usa (aviso `entity_already_exists`); existe ligada a otro cliente → blocker `entity_belongs_to_other_client` (cambiar de cliente está
+fuera); no existe → `INSERT client_entities` + `client_entity_clients` (`is_primary = false`). El resto es el `change_entity` construido. Evento
+`ENTITY_CHANGED` con `metadata.entity_created`.
+
+### 9.4 Migración del bloque (una, `1790710000000-ContractModificationsBlock2`; entity a mano, commit antes de aplicar, `schema:status` + `schema:log` en QA)
+
+| # | Cambio | Efecto exacto |
+|---|---|---|
+| 1 | Tabla **`contract_scheduled_changes`** | `id uuid pk`, `holding_id uuid not null` (FK holding, RLS 4 policies como `contract_fx_period_rates`), `contract_id uuid not null` (FK cascade), `contract_item_id uuid null` (FK; null = contrato), `group_key uuid null`, `parent_id uuid null` (FK propia, hijas de `every_n_months`), `trigger text` CHECK `on_renewal\|on_date\|every_n_months`, `effective_date date`, `anchor_date date`, `interval_months smallint` (>0), `next_effective_date date`, `kind text` CHECK `percent_uplift\|index\|new_unit_price\|quantity\|term\|billing_frequency`, `value numeric(18,6) not null` (%, precio en moneda del ítem, cantidad o meses), `index_code text`, `index_base_date date`, `index_base_value numeric(18,6)`, `index_lag_months smallint default 1`, `rounding text default 'unit_2'` CHECK `none\|unit_2\|unit_0\|monthly_0`, `status text default 'scheduled'` CHECK `scheduled\|applied\|skipped\|cancelled`, `status_reason text`, `status_changed_by uuid`, `applied_event_id uuid` (FK `contract_lifecycle_events`), `applied_at timestamptz`, `applied_value numeric(18,6)`, `origin jsonb not null default '{"type":"manual"}'`, `notes text`, `created_by uuid`, `created_at`, `updated_at` (trigger `update_updated_at_column`). CHECKs: `on_date ⇒ effective_date`, `every_n_months ⇒ anchor_date, interval_months`, `index ⇒ index_code, index_base_value`. Índices `(contract_id, status)`, `(holding_id, status, next_effective_date)`, `(contract_item_id)` |
+| 2 | Tabla **`contract_item_pauses`** | `id`, `holding_id`, `contract_id`, `contract_item_id not null`, `pause_start date not null`, `pause_end date null` (null = hasta reanudar; CHECK `pause_end ≥ pause_start`), `extend_term boolean not null default false`, `status text` CHECK `scheduled\|active\|ended\|cancelled`, `reason text`, `pause_event_id uuid`, `resume_event_id uuid`, `created_by`, `created_at`, `updated_at`; RLS por holding; índice `(contract_item_id, status)` |
+| 3 | `contract_items.billing_anchor_day smallint null` + CHECK `1..31` | Ciclo propio del ítem (9.3.9); comentario de columna |
+| 4 | `holding_settings.auto_renewal_notice_days smallint not null default 30` + CHECK `1..180` | Aviso previo de la propuesta (S2-3) |
+| 5 | `revenue_schedule_monthly_momentum_check` + `PAUSE`, `RESUME` | Filas del tramo pausado y de la reanudación en el waterfall |
+| 6 | Asset `revenue_schedule_rebuild_contract_ccy` | Lee `contract_item_pauses` (devengo/MRR 0 en el tramo, momentum PAUSE/RESUME), día de ciclo por ítem (9.3.9); se aplica junto al asset de multimoneda |
+
+Sin cambios en `contracts` ni en `invoices`. Ítems de ajuste, RENEWAL, REACTIVATION y eventos usan columnas existentes.
+
+### 9.5 Orden de construcción
+
+1. **B2-1 · Cancelación con decisiones** (9.3.1) y **razón social nueva** (9.3.10): sin esquema; quitan el bloqueo `manual_lines_pending`.
+2. **B2-2 · Esquema** (9.4 #1–#5) + **renovación con precio y FX** (9.3.4) + **frecuencia/término** (9.3.7) + pactos R1 (`on_renewal`, CRUD).
+3. **B2-3 · Reactivar** (9.3.2) y **ciclo por ítem** (9.3.9, motor + asset RSM).
+4. **B2-4 · Auto-renovación con confirmación** (9.3.5) y **pactos en fecha / IPC-UF** (R3, job diario).
+5. **B2-5 · Pausa/reanudación** (9.3.3) + asset RSM, luego pausa masiva.
+6. **B2-6 · UI por intención** (9.2) en paralelo desde B2-1; documentación funcional y tests por etapa (regla dura).
+Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moneda y la extensión de tasas por par dependen de MM1–MM3.
+
+### 9.6 Pendientes
+
+- Clasificación NEW/REACTIVATION/CROSS-SELL a nivel cliente (§8 #9) — afecta waterfall; sin decisión.
+- Cambiar el día de ciclo de un ítem vivo (período corto de transición) y del contrato.
+- Pausa `scope billing` (posponer cobro sin pausar servicio) y pausa masiva.
+- Intercompañía / cambio de compañía emisora (M10) y cambio de cliente comercial (fuera por decisión).
+- Workflow de aprobación (fuera).
+- Preguntas abiertas de pactos (IPC acumulado vs. 12 meses, desfase, redondeo, CMRR pactado): se construyen con la propuesta como default por fila
+  (ver §7 de [`spec-renovacion-y-ajustes-pactados.md`](./spec-renovacion-y-ajustes-pactados.md)).
