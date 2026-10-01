@@ -44,6 +44,8 @@ export interface PricingBreakdownRow {
 @Index('idx_invoice_items_issue_date', ['issue_date'])
 @Index('idx_invoice_items_product_id', ['product_id'])
 @Index('idx_invoice_items_status', ['status'])
+// Facturas en el 360 · etapa 6 (migración 1790690000000): desplegable de líneas internas por línea visible y filtro del envío al ERP.
+@Index('idx_invoice_items_visible_line_id', ['visible_line_id'], { where: 'visible_line_id IS NOT NULL' })
 @Index('idx_invoice_items_subscription_item_id', ['subscription_item_id'], { where: `(subscription_item_id IS NOT NULL)` })
 @Index('idx_invoice_items_custom_fields', { synchronize: false })
 @Entity('invoice_items')
@@ -129,6 +131,14 @@ export class InvoiceItem {
 		comment: 'true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla',
 	})
 	description_locked: boolean;
+
+	/**
+	 * Facturas en el 360 §3.7b (migración 1790690000000): la línea es **interna** y está ligada a la línea visible del documento (facturar
+	 * por OC). NULL = línea normal. Visible (derivado, sin columna) = `quantity <> 0 AND visible_line_id IS NULL`: solo las visibles viajan
+	 * al ERP y aparecen en el documento.
+	 */
+	@Column({ type: 'uuid', nullable: true, comment: 'línea interna ligada a la línea visible del documento; NULL = línea normal' })
+	visible_line_id?: string | null;
 
 	@Column({ type: 'text', nullable: true })
 	invoice_currency?: string;
@@ -222,6 +232,10 @@ export class InvoiceItem {
 	@ManyToOne(() => InvoiceItemsLegacyMatch, { onDelete: 'SET NULL' })
 	@JoinColumn({ name: 'legacy_match_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_items_legacy_match_id_fkey' })
 	legacy_match?: InvoiceItemsLegacyMatch;
+
+	@ManyToOne(() => InvoiceItem, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'visible_line_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_items_visible_line_id_fkey' })
+	visible_line?: InvoiceItem;
 
 	@ManyToOne(() => SubscriptionItem)
 	@JoinColumn({ name: 'subscription_item_id', referencedColumnName: 'id', foreignKeyConstraintName: 'invoice_items_subscription_item_id_fkey' })
