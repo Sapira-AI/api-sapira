@@ -39,7 +39,7 @@ BEGIN
       INTO v_next
       FROM contracts WHERE holding_id = dup.holding_id AND contract_number LIKE v_prefix || '-%';
     v_new := v_prefix || '-' || v_next;
-    UPDATE contracts SET contract_number = v_new, updated_at = now() WHERE id = dup.id;
+    UPDATE contracts SET contract_number = v_new WHERE id = dup.id;
     INSERT INTO contract_lifecycle_events (holding_id, contract_id, event_type, event_status, title, description, effective_date, metadata, created_by)
       VALUES (dup.holding_id, dup.id, 'CONTRACT_RENUMBERED', 'completed', 'Número de contrato corregido',
               'Número de contrato duplicado corregido: ' || dup.contract_number || ' → ' || v_new, CURRENT_DATE,

@@ -145,9 +145,14 @@ BEGIN
 
     -- S5-16 (D7): el mensual es monthly_price (neto: unitario × cantidad con el descuento; en CHURN/DOWNSELL = ΔMRR). final_price es
     -- TCV: en un UPSELL/CROSS-SELL a mitad de ciclo ya viene por días, y final ÷ plazo × fracción del mes prorrateaba dos veces.
-    -- final ÷ plazo solo como respaldo cuando no hay monthly_price (pago único: monthly_price NULL; filas antiguas).
+    -- final ÷ plazo solo como respaldo cuando monthly_price falta o es 0 con un final_price distinto de 0 (pago único: monthly_price
+    -- NULL; filas del legado con monthly_price mal guardado, p. ej. DOWNSELL con 0; verificado en QA CTR-0022 el 01-10).
     IF COALESCE(v_item.term_months, 0) > 0 THEN
-      v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));
+      IF COALESCE(v_item.monthly_price, 0) = 0 AND COALESCE(v_item.final_price, 0) <> 0 THEN
+        v_monthly_revenue := ROUND(v_item.final_price / v_item.term_months, 2);
+      ELSE
+        v_monthly_revenue := COALESCE(v_item.monthly_price, 0);
+      END IF;
     ELSE v_monthly_revenue := 0; END IF;
 
     -- F2: ventana activa del ítem en meses (para el devengo de NC defer_forward)

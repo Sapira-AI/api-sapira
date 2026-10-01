@@ -280,7 +280,10 @@ describe('assets RSM: fixes 01-10 (U8, S5-16, U5)', () => {
 	});
 
 	it('S5-16 (D7): el mensual es monthly_price (final ÷ plazo solo de respaldo) y la fracción del mes se aplica una vez', () => {
-		expect(sql).toContain('v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));');
+		// monthly_price manda; final ÷ plazo solo si monthly_price falta o es 0 con final_price ≠ 0 (legado, p. ej. DOWNSELL con 0).
+		expect(sql).toContain('IF COALESCE(v_item.monthly_price, 0) = 0 AND COALESCE(v_item.final_price, 0) <> 0 THEN');
+		expect(sql).toContain('v_monthly_revenue := ROUND(v_item.final_price / v_item.term_months, 2);');
+		expect(sql).toContain('v_monthly_revenue := COALESCE(v_item.monthly_price, 0);');
 		expect(sql).not.toContain('v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);');
 		// Un solo prorrateo: mensual × días vivos / días del mes.
 		expect(sql.match(/v_proration_days::numeric \/ v_days_in_month/g)).toHaveLength(1);
