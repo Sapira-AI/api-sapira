@@ -477,7 +477,7 @@
      "updatable"
     ],
     "default_value": "'company'::text",
-    "comment": "Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period) o invoice (tipo de cambio fijo de facturación, fx_invoice_policy = fixed). Regla: 1 [from_currency] = rate [to_currency]"
+    "comment": "Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period), invoice (tipo de cambio de facturación por par moneda del ítem → factura, fx_invoice_policy = fixed) o item (tasa fija pactada moneda del ítem → contrato para MRR, TCV y devengo de contratos multimoneda). Regla: 1 [from_currency] = rate [to_currency]"
    }
   ],
   "primary_keys": [
