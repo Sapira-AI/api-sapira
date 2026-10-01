@@ -328,6 +328,12 @@ BEGIN
         v_momentum := 'RESUME';
       END IF;
 
+      -- Sin tasa ítem → contrato solo es excepción si el mes tiene algo que convertir (ítem activo o facturación): un mes previo al
+      -- inicio o posterior al fin, con montos 0, no se marca missing_fx_rate (01-10, caso BOP del mes anterior al inicio en multimoneda).
+      IF v_calc_version = 'missing_fx_rate' AND NOT v_in_active AND COALESCE(v_billed_period, 0) = 0 THEN
+        v_calc_version := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency)) THEN 'v3.3-multicurrency-item-fx' ELSE 'v3.2-nc-discount-2026-07' END;
+      END IF;
+
       INSERT INTO revenue_schedule_monthly(
         id, holding_id, contract_id, contract_item_id, period_month,
         company_id, company_currency, contract_currency, system_currency,
