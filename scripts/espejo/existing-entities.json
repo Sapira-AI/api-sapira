@@ -160,6 +160,11 @@
   "file": "src/databases/postgresql/entities/cotizaciones-catalogo/products.entity.ts",
   "import": "@/databases/postgresql/entities/cotizaciones-catalogo/products.entity"
  },
+ "quote_events": {
+  "class": "QuoteEvent",
+  "file": "src/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity.ts",
+  "import": "@/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity"
+ },
  "quote_items": {
   "class": "QuoteItem",
   "file": "src/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity.ts",

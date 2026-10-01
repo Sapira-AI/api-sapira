@@ -13,6 +13,11 @@ import { QuoteStage } from '@/databases/postgresql/entities/cotizaciones-catalog
 	unique: true,
 	where: `(salesforce_opportunity_id IS NOT NULL)`,
 })
+// Cotizaciones v2 (migración `1790650000000-QuotesV2`, mapa §8): columnas aditivas; nada se renombra ni se borra. Nada que duplique
+// o se derive de datos existentes: la línea de vida y los actores salen de `quote_events`, `signed_at` es `booking_date` en las
+// firmadas y la condición de pago estructurada se deriva del texto canónico de `payment_terms` (`parsePaymentTermsText`).
+@Index('idx_quotes_holding_active', ['holding_id'], { where: `(deleted_at IS NULL)` })
+@Index('idx_quotes_valid_until', ['valid_until'], { where: `(valid_until IS NOT NULL)` })
 @Entity('quotes')
 export class Quote {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'quotes_pkey' })
@@ -74,6 +79,21 @@ export class Quote {
 
 	@Column({ type: 'text', nullable: true })
 	salesforce_opportunity_id: string;
+
+	// ---- Cotizaciones v2 (mapa §8, migración `1790650000000-QuotesV2`) ----
+
+	@Column({
+		type: 'date',
+		nullable: true,
+		comment: 'v2 (Q-A2): válida hasta; NULL = sin vencimiento. Estado mostrado "Vencida" si kind draft/sent y < hoy',
+	})
+	valid_until?: Date | null;
+
+	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'v2 (Q-A5): borrado lógico. El sync de Salesforce ignora las borradas' })
+	deleted_at?: Date | null;
+
+	@Column({ type: 'timestamp with time zone', nullable: true, default: () => 'now()', comment: 'v2: trigger quotes_set_updated_at' })
+	updated_at?: Date | null;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_quotes_holding_id' })

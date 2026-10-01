@@ -54,10 +54,7 @@ export interface PriceTierRow {
 @Check('prices_model_check', `"model" = ANY (ARRAY['standard'::text, 'graduated'::text, 'volume'::text, 'package'::text, 'seat'::text])`)
 @Check('prices_quantity_type_check', `"quantity_type" = ANY (ARRAY['fixed'::text, 'metered'::text])`)
 @Check('prices_status_check', `"status" = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])`)
-@Check(
-	'prices_contract_owner_check',
-	`("owner" = 'contract' AND "contract_id" IS NOT NULL) OR ("owner" = 'catalog' AND "contract_id" IS NULL)`
-)
+@Check('prices_contract_owner_check', `("owner" = 'contract' AND "contract_id" IS NOT NULL) OR ("owner" = 'catalog' AND "contract_id" IS NULL)`)
 @Check('prices_metered_metric_check', `"quantity_type" = 'fixed' OR "billable_metric_id" IS NOT NULL`)
 @Check('prices_cap_minimum_check', `"cap_amount" IS NULL OR "minimum_amount" IS NULL OR "cap_amount" >= "minimum_amount"`)
 @Check('prices_invoice_line_mode_check', `"invoice_line_mode" = ANY (ARRAY['single'::text, 'per_tier'::text])`)
