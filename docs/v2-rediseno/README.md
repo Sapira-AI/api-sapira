@@ -10,6 +10,9 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`matriz-scope-migracion-front.md`](./matriz-scope-migracion-front.md) | Los 18 módulos × (front viejo, rpc/endpoints, roadmap, web pública): trenes, limpieza en 2 capas, decisiones |
 | [`inventario-rpc-front-viejo.md`](./inventario-rpc-front-viejo.md) | Las 79 funciones rpc() del front viejo + los 272 endpoints de la API: mapa de brechas y lista de "no borrar" |
 | [`auditoria-contratos.md`](./auditoria-contratos.md) | Auditoría del dominio Contratos (23-09): las 27 rpc (retirar/fusionar/delegar/portar), triggers, lecturas directas, hallazgos de seguridad y propuesta del módulo `contracts` |
+| [`activacion-costura-triggers.md`](./activacion-costura-triggers.md) | Costura `sapira.writer = 'api'`: qué triggers legacy dejan de correr para la API, assets, orden de aplicación y prueba en QA |
+| [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md) | Cambios puntuales hechos desde Contratos v2 en código de integración con el ERP (envío a Odoo, scheduler), para revisión de Leon: qué, por qué, test y estado |
+| [`activacion-campos-api.md`](./activacion-campos-api.md) | Campo por campo lo que escribe la API (alta, edición, activación, cambios, consumos): regla v2 o réplica, bugs corregidos, qué cambia frente al front viejo y decisiones pendientes |
 | [`manual-modificaciones-contratos.md`](./manual-modificaciones-contratos.md) | Cómo funcionan hoy las modificaciones de contrato caso por caso (upsell, cross-sell, downsell, churn, renegociación, renovación, ítem madre, prorrateo), con fórmulas, ejemplos y lo que debe seguir funcionando |
 
 ## Specs del modelo v2
