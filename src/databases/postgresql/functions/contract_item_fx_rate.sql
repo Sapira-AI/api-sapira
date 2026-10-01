@@ -29,4 +29,4 @@ BEGIN
   LIMIT 1;
   RETURN v_rate;
 END;
-$function$;
+$function$
