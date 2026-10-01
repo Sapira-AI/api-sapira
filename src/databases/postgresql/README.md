@@ -401,6 +401,12 @@ Al analizar la cadena completa aparecieron dos cosas que cambian el diagnóstico
   y `process_partner_staging_with_transformations` filtran `= 'pending'` sobre partners que solo
   producen create/update/processed/error, así que no procesan nada. `InvoiceProcessingService` ya
   redefinió "pending" como `create | update`.
+  **Cierre parcial (27-09-2026):** `process_partner_staging_to_client_entities` y
+  `process_partner_staging_with_transformations` se retiran en `1790500000000-RetiraFuncionesOdooMuertas`,
+  junto con otras 17 del dominio Odoo (paso 0 de `docs/v2-rediseno/inventario-integracion-odoo.md`).
+  **`get_invoice_staging_stats` se queda**: `pg_stat_statements` registra 136 llamadas por PostgREST en
+  la ventana que arranca el 2025-05-06, así que alguien fuera del código auditado la invoca. Devuelve 0
+  en `pending_*` igual, pero retirarla necesita antes una ventana de observación.
 
 **Decisión: cambiar el default a `'create'`, no ampliar el CHECK.** Admitir `'pending'` habría
 legitimado un estado que ningún consumidor procesa —el loop filtra `In(['create','update','error'])`,

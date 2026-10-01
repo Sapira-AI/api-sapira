@@ -31,6 +31,11 @@ Tres cosas empujan en la misma dirección:
 
 No es un módulo: son cuatro productos distintos que comparten una pestaña.
 
+## Inventarios por integración
+
+- **Odoo**: [`inventario-integracion-odoo.md`](./inventario-integracion-odoo.md) — levantado el 27-09-2026.
+- Salesforce y BigQuery: pendientes, se levantan al llegar su turno.
+
 ## Paso 0 — Limpiar antes de portar
 
 **Nada se migra sucio** (regla de la Fase 1). Antes de escribir una línea del front nuevo:
@@ -70,7 +75,9 @@ holding del registro).
 
 ## Paso 2 — Orden por integración
 
-De menor a mayor riesgo, para que el patrón se estrene en lo barato:
+> **Decisión de Leon (27-09-2026): se empieza por Odoo**, y sigue Salesforce y después BigQuery. La tabla de
+> abajo era la propuesta original —de menor a mayor riesgo— y se conserva como registro del criterio que se
+> descartó: empezar por Odoo significa estrenar el patrón en el caso más grande y el que toca facturación.
 
 | # | Integración | Por qué ahí | Archivos |
 |---|---|---|---|
