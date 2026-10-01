@@ -13,6 +13,7 @@ import { InvoiceItem } from '@/databases/postgresql/entities/facturacion/invoice
 import { InvoiceReference } from '@/databases/postgresql/entities/facturacion/invoice-reference.entity';
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
+import { pairKey, type PairLine, upperCode, valuateLinesByPair } from '@/modules/contracts/multicurrency';
 import { INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
@@ -295,8 +296,10 @@ export class InvoiceSchedulerService {
 				return result;
 			}
 
-			// NUEVO: Calcular montos si hay conversión de moneda
-			if (invoice.contract_currency !== invoice.invoice_currency) {
+			// NUEVO: Calcular montos si hay conversión de moneda (o, en multimoneda, si alguna línea convierte con su par: MM4)
+			const convertsByPair = InvoiceSchedulerService.convertsByPair(invoice);
+
+			if (invoice.contract_currency !== invoice.invoice_currency || convertsByPair) {
 				try {
 					await this.calculateInvoiceAmountsAtIssue(invoice);
 
@@ -328,7 +331,7 @@ export class InvoiceSchedulerService {
 			}
 
 			// Validar que montos estén calculados
-			if (!invoice.amount_invoice_currency && invoice.contract_currency !== invoice.invoice_currency) {
+			if (!invoice.amount_invoice_currency && (invoice.contract_currency !== invoice.invoice_currency || convertsByPair)) {
 				result.status = 'skipped';
 				result.error = 'Montos no calculados en moneda de facturación';
 				result.details = 'La factura requiere conversión de moneda pero los montos no están calculados';
@@ -895,7 +898,9 @@ export class InvoiceSchedulerService {
 		const isZeroQuantity = (item: { quantity?: unknown }) => Number(item.quantity) === 0;
 		const isInternal = (item: { visible_line_id?: unknown }) => item.visible_line_id !== null && item.visible_line_id !== undefined;
 		const externalItems = allItems.filter((item) => !isInternal(item));
-		const itemsToSend = externalItems.some((item) => !isZeroQuantity(item)) ? externalItems.filter((item) => !isZeroQuantity(item)) : externalItems;
+		const itemsToSend = externalItems.some((item) => !isZeroQuantity(item))
+			? externalItems.filter((item) => !isZeroQuantity(item))
+			: externalItems;
 
 		if (itemsToSend.length < allItems.length) {
 			this.logger.log(
@@ -1229,6 +1234,12 @@ export class InvoiceSchedulerService {
 		exchangeRate?: number;
 		fallbackDate?: Date;
 	}> {
+		// MULTIMONEDA (MM4, spec-multimoneda §4 "Envío al ERP"; cambio puntual avisado a Leon en `cambios-integracion-para-leon.md` §4):
+		// una tasa por par (moneda de la línea → factura), nunca una sola tasa del encabezado. Facturas de una sola moneda: rama de siempre.
+		if (InvoiceSchedulerService.requiresPairValuation(invoice)) {
+			return this.calculatePairAmountsAtIssue(invoice);
+		}
+
 		// U12/B3 (spec facturas §3.2, mapa F5/S6-2): con política fija del contrato y sin tasa en la factura (`fx_contract_to_invoice`
 		// NULL), el envío se detiene y avisa (omitida, `exchange_rate`); nunca sale a spot en silencio. La tasa por factura vive en
 		// `fx_contract_to_invoice` (valor = fija confirmada desde el Contrato 360; NULL = spot pendiente).
@@ -1246,7 +1257,9 @@ export class InvoiceSchedulerService {
 		// una tasa fijada explícitamente en la factura desde el 360 (`invoice_items.fx_rate_source` = 'manual' o 'net_exact': tasa por
 		// factura, neto exacto o facturación por OC) se respeta aunque la política del contrato sea spot. Una tasa "pegada" por datos
 		// heredados (sin ese origen) sigue recalculándose a spot como antes.
-		const explicitlyFixed = (invoice.items || []).some((item) => ['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? '')));
+		const explicitlyFixed = (invoice.items || []).some((item) =>
+			['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? ''))
+		);
 
 		if ((fxPolicy === 'fixed' || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
 			this.logger.log(
@@ -1351,6 +1364,181 @@ export class InvoiceSchedulerService {
 			);
 		}
 	}
+
+	/**
+	 * ¿La factura se valoriza por par al emitir (MM4)? Sí si el contrato tiene `requires_multicurrency_billing`, si sus líneas vienen en dos o
+	 * más monedas, o si alguna línea está en una moneda distinta del `contract_currency` del encabezado (p. ej. un consolidado). Una factura
+	 * de una sola moneda (la del encabezado) sigue por la rama de siempre, con los mismos números y campos.
+	 */
+	static requiresPairValuation(invoice: InvoiceWithRelations): boolean {
+		const header = upperCode(invoice.contract_currency);
+		const currencies = new Set((invoice.items || []).map((item) => upperCode(item.contract_currency) || header));
+
+		return (
+			Boolean(invoice.contract?.requires_multicurrency_billing) ||
+			currencies.size > 1 ||
+			[...currencies].some((currency) => currency !== header)
+		);
+	}
+
+	/** Valorización por par con al menos una línea que convierte (moneda de la línea ≠ moneda de factura). */
+	static convertsByPair(invoice: InvoiceWithRelations): boolean {
+		const header = upperCode(invoice.contract_currency);
+		const target = upperCode(invoice.invoice_currency);
+
+		return (
+			InvoiceSchedulerService.requiresPairValuation(invoice) &&
+			(invoice.items || []).some((item) => (upperCode(item.contract_currency) || header) !== target)
+		);
+	}
+
+	/**
+	 * MM4 · valorización por par al emitir (spec-multimoneda §4, decisión de Domi 01-10: al ERP va siempre la moneda de la factura y la
+	 * conversión es directa moneda de la línea → factura, sin pasar por la moneda del contrato). Por cada par presente:
+	 * - misma moneda que la factura → tasa 1 (la línea no se toca si ya tiene sus montos en moneda de factura);
+	 * - línea ya fijada (`fx_rate_source` contract / manual / net_exact / manual_unify con tasa) → conserva su tasa;
+	 * - si no, spot del día de emisión de ESE par (`getExchangeRateWithFallback`); con política fija nunca se sale a spot en silencio.
+	 * Si falta la tasa de cualquier par no escribe nada y no envía (`fx_rate_missing` con el par). Escribe cada línea (unitario, subtotal,
+	 * IVA, total en moneda de factura, tasa, origen y fecha) y el encabezado = Σ líneas; `fx_contract_to_invoice` del encabezado = la tasa
+	 * del único par que convierte, NULL con dos o más. `amount_contract_currency` no se recalcula (tasa pactada ítem → contrato).
+	 */
+	private async calculatePairAmountsAtIssue(invoice: InvoiceWithRelations): Promise<{
+		success: boolean;
+		usedFallback: boolean;
+		exchangeRate?: number;
+		fallbackDate?: Date;
+	}> {
+		const label = invoice.invoice_number || invoice.id;
+		const header = upperCode(invoice.contract_currency);
+		const target = upperCode(invoice.invoice_currency);
+		const items = invoice.items || [];
+		const currencyOf = (item: InvoiceItem) => upperCode(item.contract_currency) || header;
+		const keptRate = (item: InvoiceItem) =>
+			InvoiceSchedulerService.KEPT_FX_SOURCES.has(String(item.fx_rate_source ?? '')) && Number(item.fx_contract_to_invoice) > 0
+				? Number(item.fx_contract_to_invoice)
+				: null;
+		const fixedPolicy = invoice.contract?.fx_invoice_policy === 'fixed';
+		const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
+		const spot = new Map<string, { rate: number; rate_date: Date; is_fallback: boolean }>();
+		const missing: string[] = [];
+
+		// 1) Tasas: primero se resuelven todos los pares; si falta alguno no se escribe nada (nunca un documento medio valorizado).
+		for (const currency of [...new Set(items.filter((item) => currencyOf(item) !== target && keptRate(item) === null).map(currencyOf))]) {
+			if (fixedPolicy) {
+				missing.push(pairKey(currency, target));
+				continue;
+			}
+			try {
+				const result = await this.exchangeRatesService.getExchangeRateWithFallback(currency, target, invoice.issue_date);
+
+				if (!(Number(result?.rate) > 0)) throw new Error('sin tasa');
+				spot.set(currency, { rate: Number(result.rate), rate_date: result.rate_date, is_fallback: Boolean(result.is_fallback) });
+			} catch {
+				missing.push(pairKey(currency, target));
+				await this.invoiceNotificationService.sendMissingExchangeRateNotification(invoice, issueDate, currency, target);
+			}
+		}
+		if (missing.length) {
+			const issueDateStr = Number.isNaN(issueDate.getTime()) ? String(invoice.issue_date) : issueDate.toISOString().split('T')[0];
+			const pairs = missing.map((pair) => pair.replace('>', ' → ')).join(', ');
+			const error = new Error(
+				fixedPolicy
+					? `fx_rate_missing: la factura ${label} usa tipo de cambio fijo y no tiene tasa para ${pairs}: confírmala desde el contrato antes de enviarla.`
+					: `fx_rate_missing: no hay tipo de cambio disponible para ${pairs} en fecha ${issueDateStr}. Se ha enviado notificación por correo electrónico.`
+			) as Error & { code?: string; pairs?: string[] };
+
+			error.code = 'fx_rate_missing';
+			error.pairs = missing;
+			throw error;
+		}
+
+		// 2) Valorización por línea con la convención del motor (residuo por par a la línea mayor, IVA por línea en moneda de factura).
+		const taxed = items.some((item) => Number(item.tax_amount_contract_currency || 0) !== 0);
+		const rawTaxRate = Number(invoice.tax_rate || 0);
+		const taxRate = taxed ? (rawTaxRate > 0 && rawTaxRate <= 1 ? rawTaxRate * 100 : rawTaxRate) : 0;
+		const byId = new Map(items.map((item) => [item.id, item]));
+		const valuation = valuateLinesByPair(
+			items.map(
+				(item): PairLine => ({
+					id: item.id,
+					currency: currencyOf(item),
+					unit_price: Number(item.unit_price_contract_currency || 0),
+					subtotal: Number(item.subtotal_contract_currency || 0),
+					tax_amount: Number(item.tax_amount_contract_currency || 0),
+					period_start: '',
+				})
+			),
+			target,
+			(line) => keptRate(byId.get(line.id)!) ?? spot.get(line.currency)?.rate ?? null,
+			taxRate
+		);
+
+		// 3) Escritura: líneas y encabezado = Σ líneas.
+		for (const line of valuation.lines) {
+			const item = byId.get(line.id)!;
+
+			if (line.currency === target) {
+				if (item.subtotal_invoice_currency !== null && item.subtotal_invoice_currency !== undefined) continue;
+				await this.invoiceItemRepository.update(item.id, {
+					unit_price_invoice_currency: line.unit_price,
+					subtotal_invoice_currency: line.subtotal,
+					tax_amount_invoice_currency: line.tax,
+					total_invoice_currency: line.total,
+					fx_contract_to_invoice: 1,
+				});
+				continue;
+			}
+			const spotRate = keptRate(item) === null ? spot.get(line.currency) : undefined;
+
+			await this.invoiceItemRepository.update(item.id, {
+				unit_price_invoice_currency: line.unit_price,
+				subtotal_invoice_currency: line.subtotal,
+				tax_amount_invoice_currency: line.tax,
+				total_invoice_currency: line.total,
+				fx_contract_to_invoice: line.fx,
+				...(spotRate ? { fx_rate_source: 'spot', fx_rate_date: spotRate.rate_date ?? issueDate } : {}),
+			});
+		}
+		const amountInvoiceCurrency = valuation.invoice!.subtotal;
+		const vatInvoiceCurrency = valuation.invoice!.tax;
+		const totalInvoiceCurrency = valuation.invoice!.total;
+
+		await this.invoiceRepository.update(invoice.id, {
+			amount_invoice_currency: amountInvoiceCurrency,
+			vat: vatInvoiceCurrency,
+			total_invoice_currency: totalInvoiceCurrency,
+			fx_contract_to_invoice: valuation.fx,
+		});
+
+		for (const [currency, used] of spot) {
+			if (!used.is_fallback) continue;
+			this.logger.warn(
+				`Tipo de cambio fallback usado para factura ${invoice.invoice_number}: ${currency}/${target} = ${used.rate} (fecha: ${used.rate_date})`
+			);
+			await this.invoiceNotificationService.sendExchangeRateFallbackNotification(invoice, {
+				rate: used.rate,
+				requestedDate: issueDate,
+				usedDate: used.rate_date,
+				fromCurrency: currency,
+				toCurrency: target,
+			});
+		}
+		this.logger.log(
+			`✓ Montos por par calculados para factura ${invoice.invoice_number}: ${target} ${amountInvoiceCurrency.toFixed(2)} ` +
+				`(pares: ${valuation.pairs.join(', ') || 'ninguno'}; FX encabezado: ${valuation.fx ?? 'por línea'})`
+		);
+		const fallback = [...spot.values()].find((used) => used.is_fallback);
+
+		return {
+			success: true,
+			usedFallback: Boolean(fallback),
+			exchangeRate: valuation.fx ?? undefined,
+			fallbackDate: fallback?.rate_date,
+		};
+	}
+
+	/** Orígenes de una tasa ya fijada en la línea que el envío respeta (fija del contrato, por factura, neto exacto, manual de la unificación). */
+	private static readonly KEPT_FX_SOURCES: ReadonlySet<string> = new Set(['contract', 'manual', 'net_exact', 'manual_unify']);
 
 	private async getInvoiceWithRelations(invoiceId: string): Promise<InvoiceWithRelations> {
 		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });

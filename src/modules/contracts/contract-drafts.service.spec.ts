@@ -425,7 +425,8 @@ describe('ContractDraftsService', () => {
 
 		it('desde cotización: respeta la auto-renovación desmarcada (S1-5), copia la línea y mueve la cotización', async () => {
 			const { service, runner } = build((sql) => {
-				if (sql.includes('FROM quotes WHERE id'))
+				// Multimoneda: el alta lee el flag de la cotización al validar (`loadContext`) y la bloquea al crear (FOR UPDATE).
+				if (sql.includes('FROM quotes WHERE id') || sql.includes('FROM quotes q WHERE q.id'))
 					return [{ id: QUOTE, quote_number: 'Q-1', quote_type: 'NewBusiness', booking_date: '2026-09-20', requires_multicurrency: true }];
 				if (sql.includes('FROM quote_items WHERE id = ANY'))
 					return [{ id: QUOTE_ITEM, quote_item_number: 'QL-9', custom_fields: { po: '123' } }];
@@ -1567,6 +1568,7 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 						id: ITEM_A,
 						key: ITEM_A,
 						product_id: PRODUCT,
+						currency: 'CLP',
 						product_name: 'Licencia Pro',
 						account: 'Norte',
 						item_type: 'Licencias',
@@ -1586,6 +1588,7 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 						id: ITEM_B,
 						key: ITEM_B,
 						product_id: PRODUCT,
+						currency: 'CLP',
 						product_name: 'Implementación',
 						item_type: 'Servicios',
 						quantity: 1,
@@ -2153,6 +2156,7 @@ describe('ContractsController (escritura)', () => {
 		{} as ContractInvoiceDescriptionsService,
 
 		{} as ContractInvoiceEditService,
+		{} as never,
 		{} as never,
 		{} as never,
 		{} as never

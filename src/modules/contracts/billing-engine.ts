@@ -25,6 +25,14 @@
  *   de contrato ("se valoriza al emitir"). Con tipo de cambio fijo (`fx_invoice_policy = 'fixed'`) cada factura toma la
  *   tasa que cubre el inicio de su período (`fixed_invoice_rates`, regla "1 [from] = rate [to]") y trae además sus montos
  *   en moneda de factura (`amounts_invoice_currency`); sin tasa, queda con FX null y advertencia.
+ * - **Multimoneda** (`spec-multimoneda-contrato.md` §4, decisiones 01-10): un ítem puede tener su moneda (`currency`, default la del
+ *   contrato). Con algún ítem en otra moneda, la valorización es **por línea**: cada línea tiene su par (moneda del ítem → moneda de factura);
+ *   mismo par → FX 1; fija → `findFixedRate(fixed_invoice_rates, moneda del ítem, moneda de factura, inicio del período de la línea)`; spot →
+ *   FX null y montos en moneda de factura null hasta emitir. Residuo de centavos de cada par a su línea mayor; IVA por línea en moneda de
+ *   factura. El encabezado en moneda de factura = Σ líneas solo si todas están valorizadas (si no, null); su FX = la tasa del único par
+ *   convertidor, null con dos o más. El encabezado en moneda de contrato (`subtotal`, `tax`) y los totales (`contract_value`, `mrr`,
+ *   `items[].monthly_equivalent`) convierten cada ítem con la tasa fija pactada ítem → contrato (`fixed_item_rates`, `purpose = 'item'`);
+ *   sin tasa, el ítem no suma y queda en `fx_missing` (nunca 1). Sin ítems en otra moneda todo queda como antes (una tasa por factura).
  * - Vencimiento = emisión + condición de pago; México sin condición: emisión + 1 mes; sin condición: emisión + 30 días
  *   con advertencia. Nunca `+30` fijo cuando hay condición.
  * - Glosa `PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa`, solo guion ASCII, renderizada con la plantilla de descripción del
@@ -97,6 +105,8 @@ export interface BillingEngineItem {
 	price?: PriceSpec | null;
 	/** Pricing v2: consumos registrados del ítem (uno por período de la línea), para los precios medidos. */
 	consumption?: ConsumptionInput[] | null;
+	/** Multimoneda: moneda del ítem (precio, cantidad × unitario, consumos). Default: la del contrato. */
+	currency?: string | null;
 }
 
 /** Fila de tasa fija por período (`contract_fx_period_rates`). Regla única: "1 [from_currency] = rate [to_currency]". */
@@ -119,8 +129,12 @@ export interface BillingEngineContract {
 	contract_currency: string;
 	fx_invoice_policy?: string | null;
 	payment_terms?: PaymentTerms | null;
-	/** Tasas fijas de facturación (`purpose = 'invoice'`); solo se usan con `fx_invoice_policy = 'fixed'`. */
+	/** Tasas fijas de facturación (`purpose = 'invoice'`, por par moneda del ítem → factura); solo se usan con `fx_invoice_policy = 'fixed'`. */
 	fixed_invoice_rates?: FxPeriodRate[] | null;
+	/** Multimoneda: tasas fijas pactadas ítem → contrato (`purpose = 'item'`) para los totales en moneda de contrato (MRR, TCV, encabezado). */
+	fixed_item_rates?: FxPeriodRate[] | null;
+	/** Multimoneda: `requires_multicurrency_billing`; fuerza la valorización por línea aunque todos los ítems estén en la moneda del contrato. */
+	multicurrency?: boolean | null;
 	document_type?: string | null;
 	company: { country?: string | null; tax_rate?: number | string | null };
 	entity_country?: string | null;
@@ -164,6 +178,14 @@ export interface PreviewLine {
 	prorated?: boolean;
 	/** Días del período parcial (solo con `prorated`). */
 	prorated_days?: number;
+	/** Multimoneda (solo en contratos con ítems en otra moneda): moneda del ítem; los montos de la línea están en ella. */
+	currency?: string;
+	/** Multimoneda: tasa moneda del ítem → moneda de factura de la línea (1 mismo par, fija, null = spot se valoriza al emitir). */
+	fx?: number | null;
+	/** Multimoneda: origen de la tasa (`contract` = mismo par o fija del contrato; null = spot). */
+	fx_rate_source?: 'contract' | null;
+	/** Multimoneda: montos de la línea en moneda de factura (ausente si la línea es spot). */
+	amounts_invoice_currency?: { unit_price: number; subtotal: number; tax: number; total: number };
 }
 
 /** Aporte de un ítem a los totales de la vista previa. */
@@ -175,6 +197,21 @@ export interface PreviewItemTotals {
 	monthly_equivalent: number;
 	/** Lo que el ítem suma a `totals.contract_value`. */
 	value: number;
+	/** Multimoneda (solo con ítems en otra moneda): moneda del ítem y montos en ella; `monthly_equivalent` y `value` van en moneda de contrato. */
+	currency?: string;
+	/** Multimoneda: tasa fija ítem → contrato usada (1 misma moneda; null = sin tasa, el ítem no suma). */
+	item_fx_rate?: number | null;
+	monthly_equivalent_item_currency?: number;
+	value_item_currency?: number;
+}
+
+/** Tasa fija que falta para valorizar (multimoneda): `invoice` = ítem → factura (política fija), `item` = ítem → contrato (métricas). */
+export interface FxMissingRate {
+	purpose: 'invoice' | 'item';
+	from_currency: string;
+	to_currency: string;
+	/** Primer inicio de período (`YYYY-MM-DD`) sin tasa para el par. */
+	period_start: string;
 }
 
 export interface PreviewInvoice {
@@ -207,6 +244,8 @@ export interface BillingEngineOutput {
 	indefinite_until: string | null;
 	/** Líneas cuya glosa se ajustó al límite del documento (`description_fitted`). */
 	description_fitted_lines?: number;
+	/** Multimoneda: pares sin tasa fija (uno por propósito y par, con el primer período sin tasa). Vacío sin ítems en otra moneda. */
+	fx_missing?: FxMissingRate[];
 }
 
 /** Aviso del generador cuando ajustó glosas al límite del documento (código `description_fitted`). */
@@ -830,6 +869,180 @@ function pricedLines(
 	return contractValue;
 }
 
+// ------------------------------------------------------------------ multimoneda (valorización por línea, spec-multimoneda §4)
+
+const upperCode = (value: unknown) =>
+	String(value ?? '')
+		.trim()
+		.toUpperCase();
+
+/** Moneda de un ítem del generador (default: la del contrato). */
+export const engineItemCurrency = (item: Pick<BillingEngineItem, 'currency'>, contractCurrency: string) =>
+	upperCode(item.currency) || upperCode(contractCurrency);
+
+/** Tasa fija ítem → contrato (`purpose = 'item'`) a una fecha: misma moneda → 1; sin fila → null (nunca 1). */
+export const itemToContractRate = (rates: FxPeriodRate[] | null | undefined, itemCurrency: string, contractCurrency: string, date: string) =>
+	upperCode(itemCurrency) === upperCode(contractCurrency) ? 1 : findFixedRate(rates, itemCurrency, contractCurrency, date);
+
+/** Registro de pares sin tasa (uno por propósito y par, con el primer período sin tasa). */
+class MissingRates {
+	private readonly rows = new Map<string, FxMissingRate>();
+
+	add(purpose: FxMissingRate['purpose'], from: string, to: string, periodStart: string) {
+		const key = `${purpose}|${from}|${to}`;
+		const current = this.rows.get(key);
+
+		if (!current || periodStart < current.period_start)
+			this.rows.set(key, { purpose, from_currency: from, to_currency: to, period_start: periodStart });
+	}
+
+	list(): FxMissingRate[] {
+		return [...this.rows.values()].sort((a, b) => `${a.purpose}|${a.from_currency}`.localeCompare(`${b.purpose}|${b.from_currency}`));
+	}
+}
+
+export interface MulticurrencyValuationContext {
+	contract_currency: string;
+	invoice_currency: string;
+	fx_invoice_policy: string | null | undefined;
+	fixed_invoice_rates: FxPeriodRate[] | null | undefined;
+	fixed_item_rates: FxPeriodRate[] | null | undefined;
+	tax_rate: number;
+}
+
+export interface MulticurrencyValuation {
+	/** Encabezado en moneda de contrato (Σ líneas × tasa ítem → contrato, redondeo por línea). */
+	subtotal: number;
+	tax: number;
+	total: number;
+	/** Tasa del documento: la del único par convertidor (1 sin pares), null con dos o más o si ese par es spot / no tiene tasa. */
+	fx: number | null;
+	/** Encabezado en moneda de factura = Σ líneas; ausente si alguna línea queda sin valorizar (spot o sin tasa). */
+	amounts_invoice_currency?: { subtotal: number; tax: number; total: number };
+	/** Pares convertidores del documento (`USD>CLP`), en orden. */
+	pairs: string[];
+}
+
+/**
+ * Valoriza por línea un documento de un contrato multimoneda (spec-multimoneda §4): escribe en cada línea `currency`, `fx`, `fx_rate_source`
+ * y `amounts_invoice_currency`, y devuelve el encabezado. Las líneas traen `currency` (moneda del ítem) y sus montos en esa moneda.
+ * Residuo de convertir a tasa fija: por par y tasa, a la línea de mayor subtotal (Σ líneas = conversión exacta del par). IVA por línea en
+ * moneda de factura con la tasa del documento (las líneas en la moneda de factura conservan el suyo).
+ */
+export function valuateMulticurrencyLines(
+	lines: Array<PreviewLine & { currency: string }>,
+	context: MulticurrencyValuationContext,
+	onMissing: (purpose: FxMissingRate['purpose'], from: string, to: string, periodStart: string) => void = () => undefined
+): MulticurrencyValuation {
+	const contractCurrency = upperCode(context.contract_currency);
+	const invoiceCurrency = upperCode(context.invoice_currency);
+	const fixed = context.fx_invoice_policy === 'fixed';
+	const fxOf = lines.map((line) => {
+		const currency = upperCode(line.currency);
+
+		if (currency === invoiceCurrency) return 1;
+		if (!fixed) return null;
+		const rate = findFixedRate(context.fixed_invoice_rates, currency, invoiceCurrency, line.billing_period_start);
+
+		if (rate === null) onMissing('invoice', currency, invoiceCurrency, line.billing_period_start);
+
+		return rate;
+	});
+	const subtotals = lines.map((line, index) => (fxOf[index] === null ? null : round2(line.subtotal * fxOf[index]!)));
+	// Residuo por par y tasa: Σ líneas redondeadas = Σ en moneda del ítem × tasa (a 2 decimales), en la línea mayor del grupo.
+	const groups = new Map<string, number[]>();
+
+	lines.forEach((line, index) => {
+		const fx = fxOf[index];
+
+		if (fx === null || fx === 1) return;
+		const key = `${upperCode(line.currency)}|${fx}`;
+
+		groups.set(key, [...(groups.get(key) ?? []), index]);
+	});
+	for (const indexes of groups.values()) {
+		const fx = fxOf[indexes[0]]!;
+		const exact = round2(indexes.reduce((sum, index) => sum + lines[index].subtotal, 0) * fx);
+		const rounded = indexes.reduce((sum, index) => sum + (subtotals[index] ?? 0), 0);
+		const residual = round2(exact - rounded);
+
+		if (residual !== 0) {
+			const largest = indexes.reduce(
+				(best, index) => (Math.abs(lines[index].subtotal) > Math.abs(lines[best].subtotal) ? index : best),
+				indexes[0]
+			);
+
+			subtotals[largest] = round2(subtotals[largest]! + residual);
+		}
+	}
+	let invoiceSubtotal = 0;
+	let invoiceTax = 0;
+	let allValued = true;
+	let headerSubtotal = 0;
+	let headerTax = 0;
+
+	lines.forEach((line, index) => {
+		const currency = upperCode(line.currency);
+		const fx = fxOf[index];
+
+		line.currency = currency;
+		line.fx = fx;
+		line.fx_rate_source = fx === null ? null : 'contract';
+		if (fx === null) {
+			delete line.amounts_invoice_currency;
+			allValued = false;
+		} else {
+			const subtotal = subtotals[index]!;
+			const tax = fx === 1 ? line.tax_amount : round2((subtotal * context.tax_rate) / 100);
+
+			line.amounts_invoice_currency = {
+				unit_price: fx === 1 ? line.unit_price : round6(line.unit_price * fx),
+				subtotal,
+				tax,
+				total: round2(subtotal + tax),
+			};
+			invoiceSubtotal += subtotal;
+			invoiceTax += tax;
+		}
+		const toContract = itemToContractRate(context.fixed_item_rates, currency, contractCurrency, line.billing_period_start);
+
+		if (toContract === null) onMissing('item', currency, contractCurrency, line.billing_period_start);
+		else {
+			headerSubtotal += round2(line.subtotal * toContract);
+			headerTax += round2(line.tax_amount * toContract);
+		}
+	});
+	const pairs = [...new Set(lines.map((line) => upperCode(line.currency)).filter((currency) => currency !== invoiceCurrency))].map(
+		(currency) => `${currency}>${invoiceCurrency}`
+	);
+	let fx: number | null = 1;
+
+	if (pairs.length === 1) {
+		const rates = [...new Set(lines.filter((line) => upperCode(line.currency) !== invoiceCurrency).map((line) => line.fx ?? null))];
+
+		fx = rates.length === 1 ? rates[0] : null;
+	} else if (pairs.length > 1) fx = null;
+	const subtotal = round2(headerSubtotal);
+	const tax = round2(headerTax);
+
+	return {
+		subtotal,
+		tax,
+		total: round2(subtotal + tax),
+		fx,
+		...(allValued
+			? {
+					amounts_invoice_currency: {
+						subtotal: round2(invoiceSubtotal),
+						tax: round2(invoiceTax),
+						total: round2(round2(invoiceSubtotal) + round2(invoiceTax)),
+					},
+				}
+			: {}),
+		pairs,
+	};
+}
+
 // ------------------------------------------------------------------ motor
 
 export function generateInvoices({ contract, items }: BillingEngineInput): BillingEngineOutput {
@@ -889,8 +1102,18 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 	const currency = String(contract.invoice_currency || contractCurrency).toUpperCase();
 	const fx = currency === contractCurrency ? 1 : null;
 	const fixedFx = fx === null && contract.fx_invoice_policy === 'fixed';
+	// Multimoneda: con algún ítem en otra moneda que la del contrato, la valorización es por línea (spec-multimoneda §4).
+	const lineCurrency = new Map(valid.map((item) => [item.key, engineItemCurrency(item, contractCurrency)]));
+	const multicurrency = contract.multicurrency === true || [...lineCurrency.values()].some((code) => code !== contractCurrency);
+	const missing = new MissingRates();
 
-	if (fx === null && !fixedFx) {
+	if (multicurrency) {
+		const spotPairs = [...new Set(lineCurrency.values())].filter((code) => code !== currency);
+
+		if (contract.fx_invoice_policy !== 'fixed' && spotPairs.length) {
+			warn(`Se factura en ${currency}: las líneas en ${spotPairs.join(', ')} se valorizan al emitir con el tipo de cambio del día de cada par`);
+		}
+	} else if (fx === null && !fixedFx) {
 		warn(`Se factura en ${currency} y el contrato está en ${contractCurrency}: los montos están en ${contractCurrency} y se valorizan al emitir`);
 	}
 	if (!contract.payment_terms) {
@@ -1010,6 +1233,25 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		});
 	}
 
+	// Multimoneda: el valor y el mensual de cada ítem pasan a moneda de contrato con la tasa fija pactada ítem → contrato (su inicio).
+	if (multicurrency) {
+		contractValue = 0;
+		for (const totals of itemTotals) {
+			const item = valid.find((row) => row.key === totals.item_key)!;
+			const code = lineCurrency.get(totals.item_key)!;
+			const rate = itemToContractRate(contract.fixed_item_rates, code, contractCurrency, item.start_date);
+
+			if (rate === null) missing.add('item', code, contractCurrency, item.start_date);
+			totals.currency = code;
+			totals.item_fx_rate = rate;
+			totals.monthly_equivalent_item_currency = totals.monthly_equivalent;
+			totals.value_item_currency = totals.value;
+			totals.monthly_equivalent = rate === null ? 0 : round2(totals.monthly_equivalent * rate);
+			totals.value = rate === null ? 0 : round2(totals.value * rate);
+			contractValue += totals.value;
+		}
+	}
+
 	// Agrupación
 	const together = contract.group_invoices_by_period !== false;
 	const groups = new Map<string, typeof lines>();
@@ -1052,7 +1294,29 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 				total: round2(subtotal + tax),
 			};
 
-			if (fixedFx) {
+			if (multicurrency) {
+				invoice.lines.forEach((line) => {
+					line.currency = lineCurrency.get(line.item_key) ?? contractCurrency;
+				});
+				const valuation = valuateMulticurrencyLines(
+					invoice.lines as Array<PreviewLine & { currency: string }>,
+					{
+						contract_currency: contractCurrency,
+						invoice_currency: currency,
+						fx_invoice_policy: contract.fx_invoice_policy,
+						fixed_invoice_rates: contract.fixed_invoice_rates,
+						fixed_item_rates: contract.fixed_item_rates,
+						tax_rate: taxRate,
+					},
+					(purpose, from, to, periodStart) => missing.add(purpose, from, to, periodStart)
+				);
+
+				invoice.subtotal = valuation.subtotal;
+				invoice.tax = valuation.tax;
+				invoice.total = valuation.total;
+				invoice.fx = valuation.fx;
+				if (valuation.amounts_invoice_currency) invoice.amounts_invoice_currency = valuation.amounts_invoice_currency;
+			} else if (fixedFx) {
 				const rate = findFixedRate(contract.fixed_invoice_rates, contractCurrency, currency, invoice.billing_period_start);
 
 				if (rate === null) {
@@ -1072,9 +1336,10 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 					contract.description_template ?? null,
 					{
 						...sorted[index].desc,
-						contract_currency: contractCurrency,
+						// Multimoneda: el bloque de tipo de cambio de la glosa toma el par y la tasa de la línea (spec §4 "Glosa").
+						contract_currency: multicurrency ? (line.currency ?? contractCurrency) : contractCurrency,
 						invoice_currency: currency,
-						fx_rate: invoice.fx,
+						fx_rate: multicurrency ? (line.fx ?? null) : invoice.fx,
 						contract_number: contract.description_context?.contract_number ?? null,
 						client_name: contract.description_context?.client_name ?? null,
 					},
@@ -1098,6 +1363,15 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		flag(DESCRIPTION_FITTED_CODE);
 		warn(descriptionFittedWarning(fittedLines, contract.description_max_chars ?? null));
 	}
+	const fxMissing = missing.list();
+
+	for (const row of fxMissing) {
+		warn(
+			row.purpose === 'invoice'
+				? `Tipo de cambio fijo: no hay tasa ${row.from_currency} → ${row.to_currency} para el período que empieza el ${formatDate(row.period_start)}`
+				: `Falta la tasa pactada ${row.from_currency} → ${row.to_currency} (métricas) desde el ${formatDate(row.period_start)}: esos ítems no suman a los totales en ${row.to_currency}`
+		);
+	}
 	const invoicedTotal = round2(invoices.reduce((sum, invoice) => sum + invoice.subtotal, 0));
 	const total = round2(contractValue);
 
@@ -1114,5 +1388,6 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 		warning_codes: warningCodes,
 		indefinite_until: indefiniteUntil,
 		description_fitted_lines: fittedLines,
+		...(multicurrency ? { fx_missing: fxMissing } : {}),
 	};
 }

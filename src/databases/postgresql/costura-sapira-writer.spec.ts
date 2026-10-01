@@ -97,6 +97,40 @@ describe('costura sapira.writer: guard como primera sentencia', () => {
 	});
 });
 
+describe('validadores de moneda con multimoneda (spec-multimoneda-contrato §3 #2–#4)', () => {
+	it('ítem: distinto de la moneda del contrato solo con requires_multicurrency_billing (flag off → mismo error de hoy)', () => {
+		const sql = fn('validate_contract_item_currency_consistency');
+
+		expect(sql).toContain('SELECT contract_currency, COALESCE(requires_multicurrency_billing, false) INTO v_contract_currency, v_multicurrency');
+		expect(sql).toContain('NEW.currency IS DISTINCT FROM v_contract_currency AND NOT v_multicurrency THEN');
+		expect(sql).toContain(`RAISE EXCEPTION 'Contract item currency (%) must match contract currency (%)'`);
+		// Nunca no-op: sin flag el RAISE sigue y el bypass del borrador es la única otra salida.
+		expect(sql.match(/RETURN NEW;/g)).toHaveLength(2);
+	});
+
+	it('contrato: con flag permite ítems en otra moneda; sin flag exige todos iguales; true → false con ítems en otra moneda → RAISE', () => {
+		const sql = fn('validate_contract_currency_consistency');
+		const flagOn = sql.indexOf('IF COALESCE(NEW.requires_multicurrency_billing, false) THEN RETURN NEW; END IF;');
+		const skip = sql.indexOf(`current_setting('sapira.skip_currency_validation', true) = 'on'`);
+
+		expect(skip).toBeGreaterThan(-1);
+		expect(flagOn).toBeGreaterThan(skip);
+		expect(sql).toContain(`IF TG_OP = 'UPDATE' THEN\n      IF COALESCE(OLD.requires_multicurrency_billing, false) THEN`);
+		expect(sql).toContain(`RAISE EXCEPTION 'No se puede desactivar multimoneda: hay ítems en otra moneda'`);
+		expect(sql).toContain(`RAISE EXCEPTION 'Contract currency (%) must match all contract items currency'`);
+	});
+
+	it('change_contract_currency (legacy) rechaza contratos multimoneda o con ítems en otra moneda antes de pisar ítems', () => {
+		const sql = fn('change_contract_currency');
+		const guard = sql.indexOf(`RAISE EXCEPTION 'Contrato multimoneda: cambia monedas desde Sapira v2'`);
+
+		expect(sql).toContain('IF COALESCE(v_contract.requires_multicurrency_billing, false)');
+		expect(sql).toContain('WHERE contract_id = p_contract_id AND currency IS DISTINCT FROM v_contract.contract_currency) THEN');
+		expect(guard).toBeGreaterThan(-1);
+		expect(guard).toBeLessThan(sql.indexOf(`PERFORM set_config('sapira.skip_currency_validation', 'on', true);`));
+	});
+});
+
 describe('generador legacy de facturas unificado (decisión #9)', () => {
 	it('queda un solo trigger: unified_generate_invoices_on_contract_signed (INSERT o cambio de estado)', () => {
 		const triggers = fs.readdirSync(path.join(dir, 'triggers'));

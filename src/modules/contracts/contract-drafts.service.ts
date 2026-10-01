@@ -37,6 +37,7 @@ import {
 	type UpdateContractTermsDto,
 } from './dtos/create-contract.dto';
 import { parseStoredTemplate } from './invoice-description';
+import { type CodedFieldError, codedValidationException, MULTICURRENCY_CODES, toContractCurrency, upperCode } from './multicurrency';
 import { normalizePriceSpec, PRICE_COLUMNS, priceSpecFromRow, samePriceSpec } from './price-rows';
 import {
 	type ConsumptionInput,
@@ -227,9 +228,12 @@ export const isWholeContractRate = (
 export const WHOLE_CONTRACT_RATE_CONFLICT =
 	'Una tasa para todo el contrato (sin fechas) no puede convivir con tasas por período: deja solo esa o pon fechas a todas';
 
-/** Tasa fija lista para `contract_fx_period_rates` (regla "1 [from] = rate [to]", from = moneda del contrato). */
+/**
+ * Tasa fija lista para `contract_fx_period_rates` (regla "1 [from] = rate [to]"). `company`: contrato → compañía; `invoice`: moneda del ítem
+ * (la del contrato sin multimoneda) → factura; `item`: moneda del ítem → contrato (multimoneda, métricas).
+ */
 export interface FxRateRow {
-	purpose: 'company' | 'invoice';
+	purpose: 'company' | 'invoice' | 'item';
 	from_currency: string;
 	to_currency: string;
 	rate: number;
@@ -248,6 +252,10 @@ export interface ResolvedFx {
 	fx_company_confirmed: boolean;
 	invoice_rates: FxRateRow[];
 	company_rates: FxRateRow[];
+	/** Multimoneda: tasas pactadas ítem → contrato (`purpose = 'item'`), una (o varias por período) por moneda de ítem ≠ contrato. */
+	item_rates: FxRateRow[];
+	/** Multimoneda: `requires_multicurrency_billing` efectivo (body → cotización / guardado). */
+	multicurrency: boolean;
 }
 
 interface DraftContext {
@@ -263,6 +271,8 @@ interface DraftContext {
 	billable_metrics: Map<string, string>;
 	/** Pricing v2 etapa 3: precios de catálogo referenciados por `items[].price_id` (ya validados: activos, mismo producto y moneda). */
 	catalog_prices: Map<string, CatalogPrice>;
+	/** Multimoneda: el flag cuando el body no lo trae (el de la cotización de origen al crear; el guardado al editar). */
+	multicurrency_default: boolean;
 }
 
 /** Lo que la vista previa toma del contrato guardado además del formulario (mismo insumo que la activación). */
@@ -321,6 +331,8 @@ const DRAFT_HEADER_FIELDS = [
 interface ResolvedItem {
 	key: string;
 	dto: CreateContractItemDto;
+	/** Multimoneda: moneda del ítem (default la del contrato). */
+	currency: string;
 	product_name: string;
 	unit_price: number;
 	is_recurring: boolean;
@@ -689,7 +701,7 @@ export class ContractDraftsService {
 		const metricIds = [
 			...new Set(dto.items.map((item) => item.price?.billable_metric_id).filter((id): id is string => typeof id === 'string' && id.length > 0)),
 		];
-		const [[company], [entity], [client], products, currencies, taxDocumentTypes, metrics, catalogPrices] = await Promise.all([
+		const [[company], [entity], [client], products, currencies, taxDocumentTypes, metrics, catalogPrices, [quoteFlags]] = await Promise.all([
 			db.query(
 				`SELECT id, legal_name, country, currency, contract_prefix, tax_rate,
 					COALESCE(fx_company_policy, 'monthly_avg') AS fx_company_policy
@@ -714,8 +726,15 @@ export class ContractDraftsService {
 					]) as Promise<Row[]>)
 				: Promise.resolve([] as Row[]),
 			loadCatalogPrices(db, catalogPriceIds(dto.items), holdingId),
+			// Multimoneda: sin flag en el body, el de la cotización de origen (`quotes.requires_multicurrency`).
+			dto.quote_id
+				? (db.query(`SELECT q.requires_multicurrency FROM quotes q WHERE q.id = $1 AND q.holding_id = $2`, [
+						dto.quote_id,
+						holdingId,
+					]) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
 		]);
-		const errors: FieldError[] = [];
+		const errors: CodedFieldError[] = [];
 		const metricsById = new Map(metrics.map((row) => [String(row.id), row]));
 
 		if (!client) errors.push({ field: 'client_id', message: 'El cliente no existe en el holding' });
@@ -746,8 +765,21 @@ export class ContractDraftsService {
 
 		const productNames = new Map(products.map((row) => [String(row.id), String(row.name ?? '')]));
 		const seenKeys = new Set<string>();
+		const multicurrency = dto.requires_multicurrency_billing ?? quoteFlags?.requires_multicurrency === true;
 
 		dto.items.forEach((item, index) => {
+			// Multimoneda (spec §6): un ítem en otra moneda solo con el flag; la moneda debe estar habilitada.
+			const itemCurrency = upperCode(item.currency) || upperCode(dto.contract_currency);
+
+			if (item.currency && knownCurrencies.size && !knownCurrencies.has(itemCurrency)) {
+				errors.push({ field: `items.${index}.currency`, message: `La moneda ${itemCurrency} no está habilitada` });
+			} else if (itemCurrency !== upperCode(dto.contract_currency) && !multicurrency) {
+				errors.push({
+					field: `items.${index}.currency`,
+					message: `El ítem está en ${itemCurrency} y el contrato en ${upperCode(dto.contract_currency)}: activa "Facturar ítems en distintas monedas" o usa la moneda del contrato`,
+					code: MULTICURRENCY_CODES.item_currency_requires_multicurrency,
+				});
+			}
 			if (!productNames.has(item.product_id))
 				errors.push({ field: `items.${index}.product_id`, message: 'El producto no existe en el catálogo del holding' });
 			if (item.key) {
@@ -774,7 +806,8 @@ export class ContractDraftsService {
 						catalog,
 						inline: hasPricingModel(item),
 						product_id: item.product_id,
-						contract_currency: dto.contract_currency,
+						// Multimoneda: el precio debe estar en la moneda del ítem (400 price_currency_mismatch).
+						contract_currency: upperCode(item.currency) || dto.contract_currency,
 					})
 				);
 				if (catalog && isMetered(catalog.spec) && item.billing_method === 'Anticipado' && catalog.spec.model !== 'seat') {
@@ -803,7 +836,7 @@ export class ContractDraftsService {
 			}
 		});
 
-		if (errors.length) throw validationException(errors);
+		if (errors.length) throw codedValidationException(errors);
 
 		return {
 			company: {
@@ -827,6 +860,7 @@ export class ContractDraftsService {
 			tax_document_type: taxDocumentType,
 			billable_metrics: new Map(metrics.map((row) => [String(row.id), String(row.name ?? '')])),
 			catalog_prices: catalogPrices,
+			multicurrency_default: quoteFlags?.requires_multicurrency === true,
 		};
 	}
 
@@ -856,6 +890,7 @@ export class ContractDraftsService {
 			return {
 				key: item.key || `item-${index + 1}`,
 				dto: item,
+				currency: upperCode(item.currency) || upperCode(dto.contract_currency),
 				product_name: item.product_name?.trim() || products.get(item.product_id) || 'Producto',
 				unit_price: unitPrice,
 				is_recurring: item.is_recurring !== false,
@@ -922,7 +957,8 @@ export class ContractDraftsService {
 	static resolveFx(dto: CreateContractDto, context: DraftContext, items: ResolvedItem[]): ResolvedFx {
 		const contractCurrency = dto.contract_currency.toUpperCase();
 		const companyCurrency = context.company.currency?.trim().toUpperCase() || null;
-		const errors: FieldError[] = [];
+		const errors: CodedFieldError[] = [];
+		const multicurrency = dto.requires_multicurrency_billing ?? context.multicurrency_default;
 		// La UF no se factura (el DTO rechaza invoice_currency = CLF). Contrato en UF sin moneda de facturación: CLP si la
 		// compañía factura en CLP; si no, la usuaria la elige.
 		let invoiceCurrency = (dto.invoice_currency ?? '').trim().toUpperCase();
@@ -939,7 +975,16 @@ export class ContractDraftsService {
 				invoiceCurrency = contractCurrency;
 			}
 		}
-		const invoiceFx = invoiceCurrency !== contractCurrency;
+		// Multimoneda (spec §2): monedas de los ítems; los pares que convierten al facturar son las monedas de ítem ≠ moneda de factura
+		// (sin multimoneda: solo la del contrato, como hasta hoy).
+		const itemCurrencies = [...new Set(items.map((item) => item.currency))];
+		const foreignCurrencies = itemCurrencies.filter((code) => code !== contractCurrency);
+		const convertingCurrencies = multicurrency
+			? itemCurrencies.filter((code) => code !== invoiceCurrency)
+			: invoiceCurrency !== contractCurrency
+				? [contractCurrency]
+				: [];
+		const invoiceFx = convertingCurrencies.length > 0;
 		const companyFx = Boolean(companyCurrency && companyCurrency !== contractCurrency);
 
 		if (!invoiceFx && (dto.fx_invoice_policy === 'fixed' || dto.fx_invoice_rates?.length)) {
@@ -964,11 +1009,16 @@ export class ContractDraftsService {
 			.sort();
 		const coverageStart = starts[0];
 		const coverageEnd = ends[ends.length - 1];
+		/**
+		 * Normaliza las tasas de un propósito. La regla "tasa sin fechas = todo el contrato" (y su conflicto con tasas por período), el fin >
+		 * inicio y los solapes se evalúan **por par** `(propósito, from, to)` (spec-multimoneda §6).
+		 */
 		const normalize = (
-			rates: FxRatePeriodDto[] | undefined,
-			field: 'fx_invoice_rates' | 'fx_company_rates',
+			rates: Array<FxRatePeriodDto & { from_currency?: string }> | undefined,
+			field: 'fx_invoice_rates' | 'fx_company_rates' | 'fx_item_rates',
 			purpose: FxRateRow['purpose'],
-			toCurrency: string
+			toCurrency: string,
+			defaultFrom: string
 		): FxRateRow[] => {
 			const rows = (rates ?? []).map((rate, index) => {
 				const whole = !rate.period_start && !rate.period_end;
@@ -978,7 +1028,7 @@ export class ContractDraftsService {
 					whole,
 					row: {
 						purpose,
-						from_currency: contractCurrency,
+						from_currency: upperCode(rate.from_currency) || defaultFrom,
 						to_currency: toCurrency,
 						rate: Number(rate.rate),
 						period_start: rate.period_start ?? coverageStart,
@@ -986,42 +1036,86 @@ export class ContractDraftsService {
 					},
 				};
 			});
-			const whole = rows.find((entry) => entry.whole);
 
-			// Una tasa sin fechas cubre todo: con otras del mismo propósito se superpondría siempre.
-			if (whole && rows.length > 1) {
-				errors.push({ field: `${field}.${whole.index}`, message: WHOLE_CONTRACT_RATE_CONFLICT });
+			for (const from of [...new Set(rows.map(({ row }) => row.from_currency))]) {
+				const pairRows = rows.filter(({ row }) => row.from_currency === from);
+				const whole = pairRows.find((entry) => entry.whole);
 
-				return rows.map(({ row }) => row);
+				// Una tasa sin fechas cubre todo: con otras del mismo par se superpondría siempre.
+				if (whole && pairRows.length > 1) {
+					errors.push({ field: `${field}.${whole.index}`, message: WHOLE_CONTRACT_RATE_CONFLICT });
+					continue;
+				}
+				pairRows.forEach(({ index, row }) => {
+					if (!(row.period_end > row.period_start)) {
+						errors.push({ field: `${field}.${index}.period_end`, message: 'El fin de la tasa debe ser posterior a su inicio' });
+					}
+				});
+				const sorted = [...pairRows].sort((a, b) => a.row.period_start.localeCompare(b.row.period_start));
+
+				sorted.slice(1).forEach(({ index, row }, position) => {
+					const previous = sorted[position].row;
+
+					if (row.period_start <= previous.period_end) {
+						errors.push({
+							field: `${field}.${index}.period_start`,
+							message: `La tasa se superpone con la del ${previous.period_start} al ${previous.period_end}`,
+						});
+					}
+				});
 			}
-			rows.forEach(({ index, row }) => {
-				if (!(row.period_end > row.period_start)) {
-					errors.push({ field: `${field}.${index}.period_end`, message: 'El fin de la tasa debe ser posterior a su inicio' });
-				}
-			});
-			const sorted = [...rows].sort((a, b) => a.row.period_start.localeCompare(b.row.period_start));
-
-			sorted.slice(1).forEach(({ index, row }, position) => {
-				const previous = sorted[position].row;
-
-				if (row.period_start <= previous.period_end) {
-					errors.push({
-						field: `${field}.${index}.period_start`,
-						message: `La tasa se superpone con la del ${previous.period_start} al ${previous.period_end}`,
-					});
-				}
-			});
 
 			return rows.map(({ row }) => row);
 		};
 		const invoiceRates =
-			invoiceFx && dto.fx_invoice_policy === 'fixed' ? normalize(dto.fx_invoice_rates, 'fx_invoice_rates', 'invoice', invoiceCurrency) : [];
-		const companyRates =
-			companyFx && dto.fx_company_policy === 'fixed_period'
-				? normalize(dto.fx_company_rates, 'fx_company_rates', 'company', companyCurrency!)
+			invoiceFx && dto.fx_invoice_policy === 'fixed'
+				? normalize(dto.fx_invoice_rates, 'fx_invoice_rates', 'invoice', invoiceCurrency, contractCurrency)
 				: [];
 
-		if (errors.length) throw validationException(errors);
+		// Multimoneda: cada tasa de facturación es de un par que convierte (moneda de ítem ≠ factura).
+		invoiceRates.forEach((row, index) => {
+			if (!convertingCurrencies.includes(row.from_currency)) {
+				errors.push({
+					field: `fx_invoice_rates.${index}.from_currency`,
+					message: `Ningún ítem en ${row.from_currency} se factura en ${invoiceCurrency}: la tasa no aplica`,
+				});
+			}
+		});
+		if (multicurrency && convertingCurrencies.length > 1) {
+			(dto.fx_invoice_rates ?? []).forEach((rate, index) => {
+				if (!rate.from_currency)
+					errors.push({ field: `fx_invoice_rates.${index}.from_currency`, message: 'Indica de qué moneda es la tasa (hay más de un par)' });
+			});
+		}
+		const companyRates =
+			companyFx && dto.fx_company_policy === 'fixed_period'
+				? normalize(dto.fx_company_rates, 'fx_company_rates', 'company', companyCurrency!, contractCurrency)
+				: [];
+		// Multimoneda (spec §5): tasa pactada ítem → contrato obligatoria por cada moneda de ítem ≠ contrato.
+		const itemRates = normalize(dto.fx_item_rates, 'fx_item_rates', 'item', contractCurrency, contractCurrency);
+
+		if (dto.fx_item_rates?.length && !multicurrency) {
+			errors.push({ field: 'fx_item_rates', message: 'Las tasas ítem → contrato solo aplican a contratos multimoneda' });
+		}
+		itemRates.forEach((row, index) => {
+			if (row.from_currency === contractCurrency || !foreignCurrencies.includes(row.from_currency)) {
+				errors.push({
+					field: `fx_item_rates.${index}.from_currency`,
+					message: `Ningún ítem está en ${row.from_currency} (distinta de ${contractCurrency}): la tasa no aplica`,
+				});
+			}
+		});
+		if (multicurrency) {
+			for (const code of foreignCurrencies.filter((currency) => !itemRates.some((row) => row.from_currency === currency))) {
+				errors.push({
+					field: 'fx_item_rates',
+					message: `Falta la tasa pactada ${code} → ${contractCurrency} para métricas (MRR, valor del contrato y devengo)`,
+					code: MULTICURRENCY_CODES.item_fx_rate_missing,
+				});
+			}
+		}
+
+		if (errors.length) throw codedValidationException(errors);
 
 		return {
 			invoice_currency: invoiceCurrency,
@@ -1031,7 +1125,19 @@ export class ContractDraftsService {
 			fx_company_confirmed: companyFx,
 			invoice_rates: invoiceRates,
 			company_rates: companyRates,
+			item_rates: itemRates,
+			multicurrency,
 		};
+	}
+
+	/** Valor total del contrato (TCV) en moneda de contrato: Σ `final_price` × tasa pactada ítem → contrato (1 en la moneda del contrato). */
+	static totalValue(items: ResolvedItem[], contractCurrency: string, fx: Pick<ResolvedFx, 'item_rates'>): number {
+		return round2(
+			items.reduce(
+				(sum, item) => sum + toContractCurrency(item.final_price, item.currency, contractCurrency, fx.item_rates, item.dto.start_date),
+				0
+			)
+		);
 	}
 
 	/** Defaults del contrato a partir del DTO y el contexto (mismos en la vista previa y al guardar). */
@@ -1075,6 +1181,9 @@ export class ContractDraftsService {
 				fx_invoice_policy: defaults.fx_invoice_policy,
 				// Vista previa con la tasa fija de facturación (misma regla que la activación).
 				fixed_invoice_rates: defaults.fx.invoice_rates,
+				// Multimoneda: tasas pactadas ítem → contrato (totales en moneda de contrato).
+				fixed_item_rates: defaults.fx.item_rates,
+				multicurrency: defaults.fx.multicurrency,
 				payment_terms: defaults.payment_terms,
 				document_type: defaults.document_type,
 				company: { country: context.company.country, tax_rate: context.company.tax_rate },
@@ -1106,6 +1215,7 @@ export class ContractDraftsService {
 					price: item.price_spec,
 					// Consumos ya registrados del ítem (borrador guardado): la vista previa los respeta igual que la activación.
 					consumption: extras.consumption?.get((item.dto as UpdateContractItemDto).id ?? item.key) ?? [],
+					currency: item.currency,
 				})
 			),
 		};
@@ -1165,12 +1275,13 @@ export class ContractDraftsService {
 				holdingId,
 			])) as Row[];
 			const systemCurrency = toText(settings?.system_currency) ?? 'USD';
-			const totalValue = round2(items.reduce((sum, item) => sum + item.final_price, 0));
+			// TCV en moneda de contrato: los ítems en otra moneda convierten con su tasa pactada ítem → contrato (multimoneda §5).
+			const totalValue = ContractDraftsService.totalValue(items, dto.contract_currency, defaults.fx);
 			// Compatibilidad con los consumidores actuales: fin del contrato = el mayor fin de los recurrentes; con un
 			// recurrente sin término queda NULL. v2 muestra además el próximo vencimiento por ítem (`next_item_end_date`).
 			const contractEnd = ContractDraftsService.contractEndDate(items);
 			const bookingDate = dto.booking_date ?? toIsoDate(quote?.booking_date) ?? null;
-			const flags = ContractDraftsService.billingFlags(dto, quote);
+			const flags = { ...ContractDraftsService.billingFlags(dto, quote), requires_multicurrency_billing: defaults.fx.multicurrency };
 
 			const [inserted] = (await runner.query(
 				`INSERT INTO contracts (
@@ -1241,11 +1352,11 @@ export class ContractDraftsService {
 
 			for (const item of items) {
 				const quoteItem = item.dto.quote_item_id ? quoteItems.get(item.dto.quote_item_id) : undefined;
-				const itemId = await this.insertItem(runner, contractId, holdingId, item, dto.contract_currency, quoteItem, bookingDate);
+				const itemId = await this.insertItem(runner, contractId, holdingId, item, quoteItem, bookingDate);
 
 				itemIds.push(itemId);
-				// Pricing v2: el precio inline nace en la misma transacción (owner = contract) y el ítem lo apunta.
-				if (item.price_spec) await this.insertPrice(runner, { contractId, holdingId, itemId, item, currency: dto.contract_currency, userId });
+				// Pricing v2: el precio inline nace en la misma transacción (owner = contract) y el ítem lo apunta, en la moneda del ítem.
+				if (item.price_spec) await this.insertPrice(runner, { contractId, holdingId, itemId, item, currency: item.currency, userId });
 			}
 
 			// `contracts.term` = mayor plazo de los ítems (antes `update_contract_term`).
@@ -1357,7 +1468,7 @@ export class ContractDraftsService {
 	 * antes derivaban triggers: precios (`itemPricingFields`), fin explícito (`set_contract_item_end_date`) y `auto_renew` tal
 	 * como lo eligió la usuaria (`inherit_auto_renew_from_quote_item` ya no lo pisa, S1-5).
 	 */
-	private static itemValues(item: ResolvedItem, contractCurrency: string, quoteItem: Row | undefined, bookingDate: string | null) {
+	private static itemValues(item: ResolvedItem, quoteItem: Row | undefined, bookingDate: string | null) {
 		const prices = ContractDraftsService.itemPricingFields(item);
 
 		return [
@@ -1374,8 +1485,8 @@ export class ContractDraftsService {
 			item.discount_pct,
 			item.price,
 			item.final_price,
-			// S1-2: el ítem hereda la moneda del contrato.
-			contractCurrency,
+			// S1-2: el ítem hereda la moneda del contrato; multimoneda: la suya (validada contra el flag en `loadContext`).
+			item.currency,
 			item.dto.billing_frequency,
 			item.dto.billing_method,
 			item.dto.start_date,
@@ -1403,7 +1514,6 @@ export class ContractDraftsService {
 		contractId: string,
 		holdingId: string,
 		item: ResolvedItem,
-		contractCurrency: string,
 		quoteItem: Row | undefined,
 		bookingDate: string | null
 	): Promise<string> {
@@ -1422,12 +1532,7 @@ export class ContractDraftsService {
 				$28, $29, $30, $31::jsonb,
 				${itemCategoriaSql(1, 3)}
 			) RETURNING id`,
-			[
-				contractId,
-				holdingId,
-				...ContractDraftsService.itemValues(item, contractCurrency, quoteItem, bookingDate),
-				JSON.stringify(quoteItem?.custom_fields ?? {}),
-			]
+			[contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate), JSON.stringify(quoteItem?.custom_fields ?? {})]
 		)) as Row[];
 
 		return String(row.id);
@@ -1518,7 +1623,6 @@ export class ContractDraftsService {
 		contractId: string,
 		holdingId: string,
 		item: ResolvedItem,
-		contractCurrency: string,
 		quoteItem: Row | undefined,
 		bookingDate: string | null
 	): Promise<void> {
@@ -1531,12 +1635,12 @@ export class ContractDraftsService {
 				auto_renew_term_months = $27, booking_date = $28, annual_price = $29, monthly_price = $30, billing_period_price = $31,
 				categoria = ${itemCategoriaSql(2, 4)}
 			WHERE id = $1 AND contract_id = $2 AND holding_id = $3`,
-			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, contractCurrency, quoteItem, bookingDate)]
+			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate)]
 		);
 	}
 
 	private async insertFxRates(runner: QueryRunner, contractId: string, holdingId: string, fx: ResolvedFx, userId: string, notes: string) {
-		for (const rate of [...fx.invoice_rates, ...fx.company_rates]) {
+		for (const rate of [...fx.invoice_rates, ...fx.company_rates, ...fx.item_rates]) {
 			await runner.query(
 				`INSERT INTO contract_fx_period_rates (
 					contract_id, holding_id, purpose, from_currency, to_currency, rate, period_start, period_end, notes, created_by
@@ -1585,10 +1689,13 @@ export class ContractDraftsService {
 		}
 	}
 
-	/** Tasas fijas guardadas del contrato, en la forma del DTO (`FxRatePeriodDto`), por propósito. */
-	private async loadFxRateDtos(db: Queryable, contractId: string, holdingId: string) {
+	/**
+	 * Tasas fijas guardadas del contrato, en la forma del DTO, por propósito. Multimoneda: la regla "todo el contrato" se lee **por par**
+	 * (propósito + moneda de origen); las de facturación devuelven `from_currency` cuando no es la moneda del contrato y las `item`, siempre.
+	 */
+	private async loadFxRateDtos(db: Queryable, contractId: string, holdingId: string, contractCurrency = '') {
 		const rows = (await db.query(
-			`SELECT purpose, rate, period_start::text AS period_start, period_end::text AS period_end
+			`SELECT purpose, from_currency, rate, period_start::text AS period_start, period_end::text AS period_end
 			FROM contract_fx_period_rates WHERE contract_id = $1 AND holding_id = $2 ORDER BY period_start, created_at`,
 			[contractId, holdingId]
 		)) as Row[];
@@ -1599,17 +1706,27 @@ export class ContractDraftsService {
 			[contractId, holdingId]
 		)) as Row[];
 		const coverage = { start: toText(coverageRow?.start)?.slice(0, 10) ?? null, end: toText(coverageRow?.end)?.slice(0, 10) ?? null };
-		const byPurpose = (purpose: FxRateRow['purpose']): FxRatePeriodDto[] => {
+		const contract = upperCode(contractCurrency);
+		const byPurpose = (purpose: FxRateRow['purpose']): Array<FxRatePeriodDto & { from_currency?: string }> => {
 			const own = rows.filter((row) => row.purpose === purpose);
 
-			return own.map((row) =>
-				own.length === 1 && isWholeContractRate({ period_start: toText(row.period_start), period_end: toText(row.period_end) }, coverage)
-					? { rate: toNumber(row.rate) }
-					: { rate: toNumber(row.rate), period_start: String(row.period_start), period_end: String(row.period_end) }
-			);
+			return own.map((row) => {
+				const from = upperCode(row.from_currency);
+				const samePair = own.filter((other) => upperCode(other.from_currency) === from);
+				const pair = purpose === 'item' || (purpose === 'invoice' && from && from !== contract) ? { from_currency: from } : {};
+
+				return samePair.length === 1 &&
+					isWholeContractRate({ period_start: toText(row.period_start), period_end: toText(row.period_end) }, coverage)
+					? { ...pair, rate: toNumber(row.rate) }
+					: { ...pair, rate: toNumber(row.rate), period_start: String(row.period_start), period_end: String(row.period_end) };
+			});
 		};
 
-		return { invoice: byPurpose('invoice'), company: byPurpose('company') };
+		return {
+			invoice: byPurpose('invoice'),
+			company: byPurpose('company'),
+			item: byPurpose('item') as Array<FxRatePeriodDto & { from_currency: string }>,
+		};
 	}
 
 	/**
@@ -1626,14 +1743,14 @@ export class ContractDraftsService {
 				`SELECT ci.id, ci.quote_item_id, ci.product_id, ci.product_name, ci.account, ci.item_type, ci.unit_of_measure, ci.quantity,
 					ci.unit_price, ci.annual_unit_price, ci.price_entry_mode, ci.discount_value, ci.billing_frequency, ci.billing_method,
 					ci.start_date::text AS start_date, ci.term_months, ci.is_recurring, ci.auto_renew, ci.auto_renew_term_months,
-					ci.booking_date::text AS booking_date, ${PRICE_COLUMNS}
+					ci.booking_date::text AS booking_date, ci.currency, ${PRICE_COLUMNS}
 				FROM contract_items ci
 				LEFT JOIN prices p ON p.id = ci.price_id
 				WHERE ci.contract_id = $1 AND ci.holding_id = $2
 				ORDER BY ci.start_date NULLS LAST, ci.product_name, ci.id`,
 				[contract.id, holdingId]
 			),
-			this.loadFxRateDtos(this.dataSource, String(contract.id), holdingId),
+			this.loadFxRateDtos(this.dataSource, String(contract.id), holdingId, toText(contract.contract_currency) ?? ''),
 		]);
 		const contractCurrency = toText(contract.contract_currency) ?? '';
 		const invoiceCurrency = toText(contract.invoice_currency) ?? contractCurrency;
@@ -1646,8 +1763,14 @@ export class ContractDraftsService {
 			contract_number: toText(contract.contract_number) ?? undefined,
 			contract_currency: contractCurrency,
 			invoice_currency: invoiceCurrency,
-			...(invoiceCurrency !== contractCurrency ? { fx_invoice_policy: toText(contract.fx_invoice_policy) === 'fixed' ? 'fixed' : 'spot' } : {}),
+			// Multimoneda: con pares que convierten aunque factura = contrato (ítems en otra moneda), la política también se devuelve.
+			...(invoiceCurrency !== contractCurrency ||
+			(contract.requires_multicurrency_billing === true &&
+				items.some((row) => (upperCode(row.currency) || contractCurrency) !== invoiceCurrency))
+				? { fx_invoice_policy: toText(contract.fx_invoice_policy) === 'fixed' ? 'fixed' : 'spot' }
+				: {}),
 			...(fx.invoice.length ? { fx_invoice_rates: fx.invoice } : {}),
+			...(fx.item.length ? { fx_item_rates: fx.item } : {}),
 			fx_company_policy: toText(contract.fx_company_policy) === 'fixed_period' ? 'fixed_period' : 'company_default',
 			...(fx.company.length ? { fx_company_rates: fx.company } : {}),
 			...optional('payment_terms', cleanPaymentTerms(contract.payment_terms) as UpdateContractDto['payment_terms']),
@@ -1677,6 +1800,8 @@ export class ContractDraftsService {
 					key: String(row.id),
 					...optional('quote_item_id', toText(row.quote_item_id)),
 					product_id: String(row.product_id),
+					// Multimoneda: moneda del ítem (la del contrato en contratos sin multimoneda).
+					currency: upperCode(row.currency) || contractCurrency,
 					...optional('product_name', toText(row.product_name)),
 					...optional('account', toText(row.account)),
 					item_type: toText(row.item_type) ?? '',
@@ -1768,13 +1893,23 @@ export class ContractDraftsService {
 
 	/** Tasas antes/después del PUT (propósito, tasa, período; la de todo el contrato sin fechas); `changed` si difieren. */
 	static fxRatesDiff(beforeRows: Row[], afterRows: FxRateRow[]) {
-		const view = (row: { purpose: unknown; rate: unknown; period_start: unknown; period_end: unknown }) => {
+		const view = (row: { purpose: unknown; from_currency?: unknown; rate: unknown; period_start: unknown; period_end: unknown }) => {
 			const period = { period_start: toText(row.period_start)?.slice(0, 10) ?? null, period_end: toText(row.period_end)?.slice(0, 10) ?? null };
 
-			return { purpose: toText(row.purpose), rate: toNumber(row.rate), ...period };
+			// Multimoneda: el par (moneda de origen) distingue las tasas de un mismo propósito.
+			return {
+				purpose: toText(row.purpose),
+				...(row.from_currency ? { from_currency: upperCode(row.from_currency) } : {}),
+				rate: toNumber(row.rate),
+				...period,
+			};
 		};
 		const key = (rows: Array<ReturnType<typeof view>>) =>
-			JSON.stringify([...rows].sort((a, b) => `${a.purpose}|${a.period_start}`.localeCompare(`${b.purpose}|${b.period_start}`)));
+			JSON.stringify(
+				[...rows].sort((a, b) =>
+					`${a.purpose}|${a.from_currency ?? ''}|${a.period_start}`.localeCompare(`${b.purpose}|${b.from_currency ?? ''}|${b.period_start}`)
+				)
+			);
 		const before = beforeRows.map(view);
 		const after = afterRows.map(view);
 
@@ -1795,6 +1930,7 @@ export class ContractDraftsService {
 			start_date: toText(row.start_date)?.slice(0, 10) ?? null,
 			term_months: row.term_months === null || row.term_months === undefined ? null : toNumber(row.term_months),
 			is_recurring: row.is_recurring !== false,
+			...(row.currency ? { currency: upperCode(row.currency) } : {}),
 		});
 		const before = new Map(beforeRows.map((row) => [String(row.id), view(row)]));
 		const changes: Array<{ item_id: string | null; before: ReturnType<typeof view> | null; after: ReturnType<typeof view> | null }> = [];
@@ -1808,6 +1944,7 @@ export class ContractDraftsService {
 				unit_price: item.unit_price,
 				term_months: item.dto.term_months ?? null,
 				is_recurring: item.is_recurring,
+				currency: item.currency,
 			});
 			const previous = id ? before.get(id) : undefined;
 
@@ -1902,19 +2039,37 @@ export class ContractDraftsService {
 			}
 			if (fixedErrors.length) throw validationException(fixedErrors);
 
-			const context = await this.loadContext(runner, dto, holdingId);
+			// Multimoneda: sin flag en el body se conserva el guardado. Con multimoneda ya activada, la moneda del contrato no cambia: los
+			// ítems y sus tasas ítem → contrato se pactaron contra ella (400 multicurrency_contract_currency_locked).
+			if (current.requires_multicurrency_billing === true && upperCode(current.contract_currency) !== upperCode(dto.contract_currency)) {
+				throw codedValidationException([
+					{
+						field: 'contract_currency',
+						message: `El contrato es multimoneda: su moneda (${toText(current.contract_currency)}) no se cambia; ajusta la moneda de cada ítem`,
+						code: MULTICURRENCY_CODES.multicurrency_contract_currency_locked,
+					},
+				]);
+			}
+			const context = {
+				...(await this.loadContext(
+					runner,
+					{ ...dto, requires_multicurrency_billing: dto.requires_multicurrency_billing ?? current.requires_multicurrency_billing === true },
+					holdingId
+				)),
+				multicurrency_default: current.requires_multicurrency_billing === true,
+			};
 			const items = ContractDraftsService.resolveItems(dto, context.products, context.catalog_prices);
 			const defaults = ContractDraftsService.contractDefaults(dto, context, items);
 			const existing = (await runner.query(
 				`SELECT ci.id, ci.product_id, ci.quote_item_id, ${PRICE_COLUMNS}, p.currency AS price_currency, p.product_id AS price_product_id,
 					ci.product_name, ci.account, ci.quantity, ci.unit_price, ci.discount_value, ci.billing_frequency, ci.billing_method,
-					ci.start_date::text AS start_date, ci.term_months, ci.is_recurring
+					ci.start_date::text AS start_date, ci.term_months, ci.is_recurring, ci.currency
 				FROM contract_items ci LEFT JOIN prices p ON p.id = ci.price_id
 				WHERE ci.contract_id = $1 AND ci.holding_id = $2 ORDER BY ci.id`,
 				[contractId, holdingId]
 			)) as Row[];
 			const fxBefore = (await runner.query(
-				`SELECT purpose, rate, period_start::text AS period_start, period_end::text AS period_end
+				`SELECT purpose, from_currency, rate, period_start::text AS period_start, period_end::text AS period_end
 				FROM contract_fx_period_rates WHERE contract_id = $1 AND holding_id = $2 ORDER BY purpose, period_start`,
 				[contractId, holdingId]
 			)) as Row[];
@@ -1982,17 +2137,20 @@ export class ContractDraftsService {
 				holdingId,
 			])) as Row[];
 			const systemCurrency = toText(settings?.system_currency) ?? 'USD';
-			const totalValue = round2(items.reduce((sum, item) => sum + item.final_price, 0));
+			const totalValue = ContractDraftsService.totalValue(items, dto.contract_currency, defaults.fx);
 			const contractEnd = ContractDraftsService.contractEndDate(items);
 			// `null` explícito borra la fecha de cierre (se fija al activar); ausente conserva la guardada o la de la cotización.
 			const bookingDate =
 				dto.booking_date === null ? null : (dto.booking_date ?? toText(current.booking_date) ?? toIsoDate(quote?.booking_date) ?? null);
 			// S1-15: las marcas se editan; si el body no las trae, se conservan las guardadas.
-			const flags = ContractDraftsService.billingFlags(dto, {
-				requires_multicompany: current.requires_multicompany_billing,
-				requires_multicurrency: current.requires_multicurrency_billing,
-				requires_references_for_billing: current.requires_references_for_billing,
-			});
+			const flags = {
+				...ContractDraftsService.billingFlags(dto, {
+					requires_multicompany: current.requires_multicompany_billing,
+					requires_multicurrency: current.requires_multicurrency_billing,
+					requires_references_for_billing: current.requires_references_for_billing,
+				}),
+				requires_multicurrency_billing: defaults.fx.multicurrency,
+			};
 			const before = ContractDraftsService.headerSnapshot(current);
 			const after: typeof before = {
 				client_id: context.client.id,
@@ -2027,7 +2185,12 @@ export class ContractDraftsService {
 			// Cambio de moneda: `validate_contract_currency_consistency` (contrato) y `validate_contract_item_currency_consistency`
 			// (ítems) exigen que ambos lados coincidan en cada sentencia; entre el UPDATE del encabezado y el de los ítems no lo
 			// hacen. Se apagan solo en esta transacción (GUC de la casa) y al final todos los ítems quedan en la moneda nueva.
-			if (before.contract_currency !== dto.contract_currency) {
+			// Multimoneda: también al prender/apagar el flag (los ítems se reescriben después del encabezado; apagarlo con ítems que quedan en otra
+			// moneda ya se rechazó con 400 en `loadContext`).
+			if (
+				before.contract_currency !== dto.contract_currency ||
+				before.requires_multicurrency_billing !== flags.requires_multicurrency_billing
+			) {
 				await runner.query(`SELECT set_config('sapira.skip_currency_validation', 'on', true)`);
 			}
 
@@ -2089,7 +2252,7 @@ export class ContractDraftsService {
 				const itemId = (item.dto as UpdateContractItemDto).id;
 
 				if (itemId) {
-					await this.updateItem(runner, itemId, contractId, holdingId, item, dto.contract_currency, quoteItem, bookingDate);
+					await this.updateItem(runner, itemId, contractId, holdingId, item, quoteItem, bookingDate);
 					updated.push(itemId);
 					// Pricing v2: precio nuevo, distinto o de otro catálogo → versión siguiente (la anterior se archiva); sin precio → standard fijo.
 					// Editar inline la copia de un catálogo conserva `list_price_id` si el formulario lo devuelve igual (etapa 3).
@@ -2102,7 +2265,7 @@ export class ContractDraftsService {
 					// Misma forma pero otra moneda (cambió la del contrato) u otro producto: la fila de `prices` ya no corresponde → versión nueva.
 					const ownerChanged =
 						Boolean(previous.price_id) &&
-						((previous.price_currency ?? dto.contract_currency) !== dto.contract_currency ||
+						((previous.price_currency ?? item.currency) !== item.currency ||
 							(previous.price_product_id ?? previous.product_id) !== item.dto.product_id);
 
 					if (item.price_spec && (!samePriceSpec(previous.price, item.price_spec) || catalogChanged || ownerChanged)) {
@@ -2111,7 +2274,7 @@ export class ContractDraftsService {
 							holdingId,
 							itemId,
 							item,
-							currency: dto.contract_currency,
+							currency: item.currency,
 							userId,
 							supersedes: previous.price_id ? { id: previous.price_id, version: previous.price_version } : null,
 							listPriceId,
@@ -2124,11 +2287,11 @@ export class ContractDraftsService {
 						priceChanges.push({ item_id: itemId, from: previous.price_id, to: null });
 					}
 				} else {
-					const newItemId = await this.insertItem(runner, contractId, holdingId, item, dto.contract_currency, quoteItem, bookingDate);
+					const newItemId = await this.insertItem(runner, contractId, holdingId, item, quoteItem, bookingDate);
 
 					inserted.push(newItemId);
 					if (item.price_spec)
-						await this.insertPrice(runner, { contractId, holdingId, itemId: newItemId, item, currency: dto.contract_currency, userId });
+						await this.insertPrice(runner, { contractId, holdingId, itemId: newItemId, item, currency: item.currency, userId });
 				}
 			}
 			if (toDelete.length) {
@@ -2181,9 +2344,13 @@ export class ContractDraftsService {
 						before: Object.fromEntries(changedFields.map((field) => [field, before[field]])),
 						after: Object.fromEntries(changedFields.map((field) => [field, after[field]])),
 						items: { updated, inserted, deleted: toDelete },
-						fx_rates: defaults.fx.invoice_rates.length + defaults.fx.company_rates.length,
+						fx_rates: defaults.fx.invoice_rates.length + defaults.fx.company_rates.length + defaults.fx.item_rates.length,
 						// Diff (auditoría 01-10): tasas y ítems antes/después, para saber qué cambió sin reconstruirlo.
-						fx_rates_diff: ContractDraftsService.fxRatesDiff(fxBefore, [...defaults.fx.invoice_rates, ...defaults.fx.company_rates]),
+						fx_rates_diff: ContractDraftsService.fxRatesDiff(fxBefore, [
+							...defaults.fx.invoice_rates,
+							...defaults.fx.company_rates,
+							...defaults.fx.item_rates,
+						]),
 						items_diff: ContractDraftsService.itemsDiff(existing, items, inserted),
 						price_changes: priceChanges,
 					}),

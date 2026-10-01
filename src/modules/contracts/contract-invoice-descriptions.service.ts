@@ -94,7 +94,12 @@ const LINES_SELECT = `SELECT ii.id, ii.invoice_id, ii.description, ii.descriptio
 		ii.unit_price_contract_currency, ii.subtotal_contract_currency, ii.pricing_breakdown,
 		ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end,
 		ci.product_name, ci.account, p.model AS price_model, p.quantity_type AS price_quantity_type,
-		i.contract_currency, i.invoice_currency, i.fx_contract_to_invoice, ce.legal_name, c.contract_number,
+		-- Multimoneda (spec-multimoneda §4 "Glosa"): el bloque de tipo de cambio toma la moneda y la tasa DE LA LÍNEA (su par); sin el flag, las
+		-- del encabezado como siempre.
+		CASE WHEN c.requires_multicurrency_billing IS TRUE THEN COALESCE(ii.contract_currency, i.contract_currency) ELSE i.contract_currency END AS contract_currency,
+		i.invoice_currency,
+		CASE WHEN c.requires_multicurrency_billing IS TRUE THEN ii.fx_contract_to_invoice ELSE i.fx_contract_to_invoice END AS fx_contract_to_invoice,
+		ce.legal_name, c.contract_number,
 		EXISTS (SELECT 1 FROM invoice_items vi WHERE vi.visible_line_id = ii.id) AS po_visible,
 		(SELECT COALESCE(jsonb_agg(jsonb_build_object('type', x.type, 'name', x.name, 'code', x.code)), '[]'::jsonb) FROM (
 			SELECT r.document_type_code AS type, r.document_type_name AS name, r.document_number AS code FROM invoice_references r WHERE r.invoice_id = i.id

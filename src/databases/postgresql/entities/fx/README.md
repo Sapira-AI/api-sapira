@@ -61,7 +61,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 | `created_at` | timestamp with time zone | sí | now() |  |
 | `updated_at` | timestamp with time zone | sí | now() |  |
-| `purpose` | text | no | 'company'::text | Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period) o invoice (tipo de cambio fijo de facturación, fx_invoice_policy = fixed). Regla: 1 [from_currency] = rate [to_currency] |
+| `purpose` | text | no | 'company'::text | Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period), invoice (tipo de cambio de facturación por par moneda del ítem → factura, fx_invoice_policy = fixed) o item (tasa fija pactada moneda del ítem → contrato para MRR, TCV y devengo de contratos multimoneda). Regla: 1 [from_currency] = rate [to_currency] |
 
 </details>
 <details><summary><code>fx_api_sync_log</code> → <code>fx-api-sync-log.entity.ts</code> · 10 columnas</summary>

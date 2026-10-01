@@ -27,6 +27,7 @@ import {
 	type ReorganizePlan,
 	scheduleBoard,
 } from './invoice-reorganize';
+import { loadPairRateContext, revalueMulticurrencyInvoices } from './multicurrency-invoices';
 import { type DescriptionLimitRow, resolveDescriptionMaxChars } from './tax-document-types';
 
 import type { ReorganizeInvoicesDto } from './dtos/contract-invoice-reorganize.dto';
@@ -215,7 +216,7 @@ export class ContractInvoiceReorganizeService {
 				!plan.write.cancelled.length
 			)
 				throw this.blocked([{ code: 'no_change', message: 'Las operaciones no cambian nada del cronograma', next_step: null }], preview);
-			const ids = await this.write(runner, contract.id, holdingId, plan, userId || null);
+			const ids = await this.write(runner, contract.id, holdingId, plan, userId || null, !!ctx.multicurrency);
 			const resolve = (key: string) => ids.get(key) ?? key;
 
 			if (plan.rsm_from_month) await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, $2::date)`, [contract.id, plan.rsm_from_month]);
@@ -360,7 +361,8 @@ export class ContractInvoiceReorganizeService {
 		contractId: string,
 		holdingId: string,
 		plan: ReorganizePlan,
-		userId: string | null = null
+		userId: string | null = null,
+		multicurrency = false
 	): Promise<Map<string, string>> {
 		const ids = new Map<string, string>();
 		const resolve = (key: string) => ids.get(key) ?? key;
@@ -438,17 +440,21 @@ export class ContractInvoiceReorganizeService {
 		if (plan.write.line_removes.length) {
 			await runner.query(`DELETE FROM invoice_items WHERE id = ANY($1::uuid[]) AND holding_id = $2`, [plan.write.line_removes, holdingId]);
 		}
+		// Multimoneda (spec-multimoneda §4): una línea nunca toma la tasa del encabezado de destino sino la de SU par en el documento donde queda
+		// (el plan ya la resolvió: la suya si no se mueve; si se mueve o nace, la fijada por factura, la fija pactada del período o spot);
+		// `revalueMulticurrencyInvoices` (abajo) deja moneda de la línea y encabezado = Σ líneas.
 		for (const update of plan.write.line_updates) {
 			const invoiceId = resolve(update.invoice_key);
 			const fx = fxOf.get(invoiceId) ?? { fx: null, currency: null };
+			const lineFx = multicurrency ? (update.state.fx ?? null) : fx.fx;
 
-			await this.updateLine(runner, update.id, invoiceId, update.state, fx.fx, fx.currency, holdingId);
+			await this.updateLine(runner, update.id, invoiceId, update.state, lineFx, fx.currency, holdingId);
 		}
 		for (const create of plan.write.line_creates) {
 			const invoiceId = resolve(create.invoice_key);
 			const fx = fxOf.get(invoiceId) ?? { fx: null, currency: null };
 
-			await this.insertLine(runner, invoiceId, create.state, fx.fx, fx.currency, holdingId);
+			await this.insertLine(runner, invoiceId, create.state, multicurrency ? (create.state.fx ?? null) : fx.fx, fx.currency, holdingId);
 		}
 
 		// 3. Encabezados = Σ líneas; las que quedan sin líneas → Cancelada (se conservan, con evento).
@@ -469,6 +475,11 @@ export class ContractInvoiceReorganizeService {
 			...plan.write.header_updates.map((update) => update.id),
 			...plan.write.cancelled.map((cancelled) => cancelled.id),
 		]);
+		if (multicurrency)
+			await revalueMulticurrencyInvoices(runner, holdingId, [
+				...plan.write.creates.map((create) => resolve(create.key)),
+				...plan.write.header_updates.map((update) => update.id),
+			]);
 
 		return ids;
 	}
@@ -599,11 +610,14 @@ export class ContractInvoiceReorganizeService {
 		const context = await this.invoices.loadContext(db, contractId, holdingId, today);
 		const pending = await this.invoices.loadPendingInvoices(db, contractId, holdingId, lock);
 		const pendingIds = new Set(pending.map((invoice) => invoice.id));
-		const [lines, data, [generator]] = await Promise.all([
+		const [plainLines, data, [generator]] = await Promise.all([
 			pending.length ? this.edit.loadLines(db, [...pendingIds], holdingId) : Promise.resolve(new Map()),
 			this.edit.loadPlanData(db, contractId, holdingId),
 			db.query(GENERATOR_SQL, [contractId, holdingId]) as Promise<Row[]>,
 		]);
+		// Multimoneda: con el flag, las líneas traen su moneda y su tasa (cada una se valoriza con su par al escribir).
+		const multicurrency = data.contract.requires_multicurrency_billing === true ? await loadPairRateContext(db, contractId, holdingId) : null;
+		const lines = multicurrency && pending.length ? await this.edit.loadLines(db, [...pendingIds], holdingId, true) : plainLines;
 		const pendingLineIds = new Set([...lines.values()].flat().map((line: { id: string }) => line.id));
 		const namedInvoices = [
 			...new Set(dto.operations.flatMap((op) => [...(op.invoice_ids ?? []), op.to_invoice_id ?? '', op.invoice_id ?? ''])),
@@ -641,6 +655,7 @@ export class ContractInvoiceReorganizeService {
 			known_items: plan.known_items,
 			product_names: plan.product_names,
 			rules: this.rulesOf(generator ?? {}),
+			multicurrency,
 			render: {
 				template: parseStoredTemplate(contract.invoice_description_template),
 				contract_number: toText(contract.contract_number),

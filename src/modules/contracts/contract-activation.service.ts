@@ -29,6 +29,9 @@ export const ACTIVE_STATUS = 'Activo';
 /** Origen de las líneas creadas por la activación (mismo valor que el generador viejo). */
 export const ACTIVATION_FX_RATE_SOURCE = 'scheduled-generation';
 
+/** Una factura del generador valorizada por línea (contrato multimoneda): sus líneas traen `currency` y su propio par. */
+export const isPerLineInvoice = (invoice: Pick<PreviewInvoice, 'lines'>) => invoice.lines.some((line) => line.currency !== undefined);
+
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const upper = (value: unknown) => (toText(value) ?? '').trim().toUpperCase();
@@ -118,11 +121,15 @@ export async function insertEngineInvoices(
 	const created: string[] = [];
 
 	for (const [index, invoice] of invoices.entries()) {
-		const sameCurrency = upper(invoice.currency) === contractCurrency;
-		const fixedFx = fixedRates[index] ?? null;
+		const perLine = isPerLineInvoice(invoice);
+		const sameCurrency = !perLine && upper(invoice.currency) === contractCurrency;
+		const fixedFx = perLine ? null : (fixedRates[index] ?? null);
 		// Tipo de cambio fijo: montos en moneda de factura como `apply_fixed_fx_to_contract`; spot con conversión: NULL.
 		const fixed = fixedFx !== null ? fixedFxAmounts(invoice, fixedFx) : null;
-		const fx = sameCurrency ? 1 : fixedFx;
+		const fx = perLine ? invoice.fx : sameCurrency ? 1 : fixedFx;
+		// Multimoneda (spec §3): encabezado en moneda de contrato = Σ líneas × tasa ítem → contrato (del generador); en moneda de factura =
+		// Σ líneas si todas están valorizadas (si no NULL, IVA en moneda de contrato como spot); FX = la del único par convertidor o NULL.
+		const perLineInvoice = perLine ? (invoice.amounts_invoice_currency ?? null) : null;
 		const [header] = (await runner.query(
 			`INSERT INTO invoices (
 				id, invoice_group_id, company_id, client_id, client_entity_id, contract_id,
@@ -151,11 +158,11 @@ export async function insertEngineInvoices(
 				issuer.contract_id,
 				invoice.issue_date,
 				invoice.due_date,
-				fixed ? fixed.vat : invoice.tax,
+				perLine ? (perLineInvoice?.tax ?? invoice.tax) : fixed ? fixed.vat : invoice.tax,
 				invoice.tax_rate,
 				invoice.subtotal,
-				sameCurrency ? invoice.subtotal : (fixed?.amount ?? null),
-				sameCurrency ? invoice.total : (fixed?.total ?? null),
+				perLine ? (perLineInvoice?.subtotal ?? null) : sameCurrency ? invoice.subtotal : (fixed?.amount ?? null),
+				perLine ? (perLineInvoice?.total ?? null) : sameCurrency ? invoice.total : (fixed?.total ?? null),
 				contractCurrency,
 				invoice.currency,
 				fx,
@@ -205,7 +212,16 @@ export async function insertEngineLines(
 
 	for (const [lineIndex, line] of invoice.lines.entries()) {
 		const item = units.get(line.item_key);
-		const fixedLine = fixedLines?.[lineIndex] ?? null;
+		// Multimoneda (spec §3): la línea lleva la moneda del ítem (`contract_currency` = moneda de origen) y su propia tasa ítem → factura.
+		const perLine = line.currency !== undefined;
+		const lineAmounts = perLine ? (line.amounts_invoice_currency ?? null) : null;
+		const fixedLine = perLine
+			? lineAmounts
+				? { unit_price: lineAmounts.unit_price, subtotal: lineAmounts.subtotal, tax_amount: lineAmounts.tax, total: lineAmounts.total }
+				: null
+			: (fixedLines?.[lineIndex] ?? null);
+		const lineFx = perLine ? (line.fx ?? null) : fx;
+		const lineConvert = (value: number) => (perLine ? null : convert(value));
 		const [inserted] = (await runner.query(
 			`INSERT INTO invoice_items (
 				invoice_id, contract_item_id, description, quantity, unit_of_measure,
@@ -236,22 +252,30 @@ export async function insertEngineLines(
 				line.quantity,
 				item?.unit_of_measure?.trim() || 'UND',
 				line.unit_price,
-				fixedLine ? fixedLine.unit_price : sameCurrency ? line.unit_price : fx !== null ? Math.round(line.unit_price * fx * 1e6) / 1e6 : null,
+				fixedLine
+					? fixedLine.unit_price
+					: perLine
+						? null
+						: sameCurrency
+							? line.unit_price
+							: fx !== null
+								? Math.round(line.unit_price * fx * 1e6) / 1e6
+								: null,
 				round2(line.discount_pct),
 				line.subtotal,
-				fixedLine ? fixedLine.subtotal : convert(line.subtotal),
+				fixedLine ? fixedLine.subtotal : lineConvert(line.subtotal),
 				line.tax_amount,
-				fixedLine ? fixedLine.tax_amount : convert(line.tax_amount),
+				fixedLine ? fixedLine.tax_amount : lineConvert(line.tax_amount),
 				line.total,
-				fixedLine ? fixedLine.total : convert(line.total),
+				fixedLine ? fixedLine.total : lineConvert(line.total),
 				issuer.holding_id,
 				issuer.contract_id,
 				item?.product_id ?? null,
-				contractCurrency,
+				perLine ? upper(line.currency) : contractCurrency,
 				invoice.currency,
-				fx,
-				ACTIVATION_FX_RATE_SOURCE,
-				invoice.issue_date,
+				lineFx,
+				perLine ? (lineFx === null ? null : (line.fx_rate_source ?? 'contract')) : ACTIVATION_FX_RATE_SOURCE,
+				perLine && lineFx === null ? null : invoice.issue_date,
 				line.billing_period_start,
 				line.billing_period_end,
 				// Pricing v2: origen de la cantidad y desglose por tramo tal como los produjo el motor (NULL en líneas de hoy).
@@ -308,6 +332,12 @@ export class ContractActivationService {
 						'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
 					FROM contract_fx_period_rates r
 					WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'invoice') AS fx_invoice_rates,
+				(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+						'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+						'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
+					FROM contract_fx_period_rates r
+					WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates,
+				COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
 				EXISTS (SELECT 1 FROM contract_items ci WHERE ci.contract_id = c.id AND ci.currency IS DISTINCT FROM c.contract_currency) AS currency_mismatch
 			FROM contracts c
 			LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
@@ -331,7 +361,7 @@ export class ContractActivationService {
 			`SELECT ci.contract_id, ci.id, ci.product_id, ci.product_name, ci.account, ci.unit_of_measure,
 				ci.quantity, ci.unit_price, ci.annual_unit_price, ci.discount_type, ci.discount_value, ci.final_price,
 				ci.billing_frequency, ci.billing_method, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
-				ci.term_months, ci.is_recurring, ${PRICE_COLUMNS},
+				ci.term_months, ci.is_recurring, ci.currency, ${PRICE_COLUMNS},
 				(SELECT COALESCE(jsonb_agg(jsonb_build_object(
 						'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override,
 						'apply_item_discount', e.apply_item_discount, 'is_estimated', e.is_estimated)), '[]'::jsonb)
@@ -383,6 +413,8 @@ export class ContractActivationService {
 			final_price: item.final_price === null || item.final_price === undefined ? null : toNumber(item.final_price),
 			price: priceSpecFromRow(item),
 			consumption: ContractActivationService.consumptionOf(item),
+			// Multimoneda: moneda del ítem (default la del contrato en el generador).
+			...(toText(item.currency) ? { currency: upper(item.currency) } : {}),
 		};
 	}
 
@@ -469,7 +501,10 @@ export class ContractActivationService {
 		if (incomplete > 0) {
 			block('incomplete_items', `${incomplete} ${incomplete === 1 ? 'ítem no tiene' : 'ítems no tienen'} inicio, plazo o cantidad válidos`);
 		}
-		if (contract.currency_mismatch === true) block('currency_mismatch', 'Hay ítems en una moneda distinta a la del contrato');
+		// Multimoneda (spec §2): un ítem en otra moneda solo con `requires_multicurrency_billing`.
+		const multicurrency = contract.requires_multicurrency_billing === true;
+
+		if (contract.currency_mismatch === true && !multicurrency) block('currency_mismatch', 'Hay ítems en una moneda distinta a la del contrato');
 		// Pricing v2 §3.7: un ítem por consumo se factura Vencido (salvo seat). El alta ya lo rechaza; acá cubre borradores tocados por fuera.
 		const meteredAdvance = items.filter((item) => {
 			const price = priceSpecFromRow(item);
@@ -515,6 +550,8 @@ export class ContractActivationService {
 						fx_invoice_policy: toText(contract.fx_invoice_policy),
 						payment_terms: cleanPaymentTerms(contract.payment_terms) ?? cleanPaymentTerms(contract.entity_payment_terms),
 						fixed_invoice_rates: Array.isArray(contract.fx_invoice_rates) ? (contract.fx_invoice_rates as FxPeriodRate[]) : [],
+						fixed_item_rates: Array.isArray(contract.fx_item_rates) ? (contract.fx_item_rates as FxPeriodRate[]) : [],
+						multicurrency,
 						document_type: toText(contract.document_type),
 						company: { country: toText(contract.company_country), tax_rate: contract.company_tax_rate as number | string | null },
 						entity_country: toText(contract.entity_country),
@@ -550,8 +587,12 @@ export class ContractActivationService {
 		const usesFixedFx = toText(contract.fx_invoice_policy) === 'fixed' && invoiceCurrency !== contractCurrency;
 		const invoices = engine?.invoices ?? [];
 		const fixedRates = invoices.map((invoice) => (usesFixedFx && invoice.fx !== null ? invoice.fx : null));
+		const foreignItems = multicurrency ? items.filter((item) => (upper(item.currency) || contractCurrency) !== contractCurrency) : [];
 
-		if (usesFixedFx) {
+		if (foreignItems.length && engine) {
+			// Multimoneda (spec §5, §6, §11 MM4): bloqueos por par. Fija = cada línea valorizada al activar; spot se valoriza por par al emitir (MM4).
+			for (const missing of ContractActivationService.multicurrencyBlockers(engine)) blockers.push(missing);
+		} else if (usesFixedFx) {
 			const missing = invoices.filter((invoice) => invoice.fx === null);
 
 			if (missing.length) {
@@ -592,6 +633,35 @@ export class ContractActivationService {
 			engine,
 			fixedRates,
 		};
+	}
+
+	/**
+	 * Bloqueos de activación de un contrato multimoneda (spec-multimoneda §5, §6 y §11 MM4), por par:
+	 * - `item_fx_rate_missing`: un ítem en otra moneda sin tasa pactada ítem → contrato (MRR, TCV y devengo nunca a 1);
+	 * - `fixed_fx_without_rate`: política fija y un par ítem → factura sin tasa para algún período (el documento saldría medio valorizado).
+	 * Con política spot no hay bloqueo: el envío al ERP valoriza cada par con la tasa del día de emisión (MM4, `calculateInvoiceAmountsAtIssue`).
+	 */
+	static multicurrencyBlockers(engine: BillingEngineOutput): ActivationBlocker[] {
+		const blockers: ActivationBlocker[] = [];
+		const date = (iso: string) => iso.split('-').reverse().join('/');
+
+		for (const missing of engine.fx_missing ?? []) {
+			if (missing.purpose === 'item') {
+				blockers.push({
+					code: 'item_fx_rate_missing',
+					message: `Falta la tasa pactada ${missing.from_currency} → ${missing.to_currency} para métricas desde el ${date(missing.period_start)}`,
+					next_step: 'Agrega la tasa ítem → contrato del par en el borrador (tipos de cambio por par)',
+				});
+			} else {
+				blockers.push({
+					code: 'fixed_fx_without_rate',
+					message: `Falta la tasa fija ${missing.from_currency} → ${missing.to_currency} para facturar desde el ${date(missing.period_start)}`,
+					next_step: 'Agrega la tasa de facturación del par en el borrador o usa tipo de cambio del día',
+				});
+			}
+		}
+
+		return blockers;
 	}
 
 	// ---------------------------------------------------------------- vista previa

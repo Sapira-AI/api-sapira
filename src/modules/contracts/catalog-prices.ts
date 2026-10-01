@@ -78,9 +78,9 @@ export function catalogPriceErrors(input: {
 	inline: boolean;
 	product_id: string;
 	contract_currency: string;
-}): FieldError[] {
+}): Array<FieldError & { code?: string }> {
 	const field = `${input.field}.price_id`;
-	const errors: FieldError[] = [];
+	const errors: Array<FieldError & { code?: string }> = [];
 
 	if (input.inline) errors.push({ field, message: CATALOG_PRICE_MESSAGES.both });
 	if (!input.catalog) return [...errors, { field, message: CATALOG_PRICE_MESSAGES.missing }];
@@ -89,8 +89,9 @@ export function catalogPriceErrors(input: {
 	if (input.catalog.product_id !== input.product_id) errors.push({ field, message: CATALOG_PRICE_MESSAGES.product });
 	const contractCurrency = input.contract_currency.toUpperCase();
 
+	// Multimoneda: el llamador pasa la moneda del ítem (default la del contrato); el precio debe estar en ella (400 price_currency_mismatch).
 	if (input.catalog.currency !== contractCurrency) {
-		errors.push({ field, message: CATALOG_PRICE_MESSAGES.currency(input.catalog.currency, contractCurrency) });
+		errors.push({ field, message: CATALOG_PRICE_MESSAGES.currency(input.catalog.currency, contractCurrency), code: 'price_currency_mismatch' });
 	}
 
 	return errors;

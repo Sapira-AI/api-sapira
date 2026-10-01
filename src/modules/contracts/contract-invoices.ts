@@ -3,6 +3,8 @@ import { type HeaderAmounts, headerFromLines } from './consumption';
 import { isCreditNote, PENDING_STATUS } from './contract-360';
 import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms } from './contract-drafts.service';
+import { CONSOLIDATION_EVENT_TYPES } from './invoice-consolidation-read';
+import { codedValidationException, MULTICURRENCY_CODES, pairKey, upperCode, valuateLinesByPair } from './multicurrency';
 
 /**
  * Facturas en el Contrato 360, etapas 1 y 2 (`docs/v2-rediseno/spec-facturas-en-contrato-360.md` §3.1–3.3): lógica pura, sin base.
@@ -48,6 +50,9 @@ export const INVOICE_EVENT_TYPES = {
 	reissued: 'INVOICE_REISSUED',
 	credit_note: 'INVOICE_CREDIT_NOTE_CREATED',
 	partial_billing: 'INVOICE_PARTIAL_BILLING',
+	// Multimoneda §7: consolidación opcional entre contratos (uno por contrato) y deshacerla.
+	consolidated: CONSOLIDATION_EVENT_TYPES.consolidated,
+	consolidation_undone: CONSOLIDATION_EVENT_TYPES.undone,
 } as const;
 
 export { noChargeSql } from './contract-360';
@@ -156,6 +161,10 @@ export interface ContractInvoiceLineRow {
 	tax_amount_invoice_currency: number | null;
 	total_invoice_currency: number | null;
 	created_at: string | null;
+	/** Multimoneda: moneda de origen de la línea (`invoice_items.contract_currency` = moneda del ítem); ausente = la del encabezado. */
+	currency?: string | null;
+	/** Multimoneda: inicio del período de la línea. */
+	billing_period_start?: string | null;
 }
 
 export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a intentarlo';
@@ -660,10 +669,15 @@ export interface FxInput {
 	policy: InvoiceFxPolicy;
 	rate?: number | null;
 	target_net_amount?: number | null;
+	/** Multimoneda (spec-multimoneda §4): tasa fija por par (`USD>CLP`: 1 USD = rate CLP). Con un solo par basta `rate`. */
+	rates_by_pair?: Record<string, number> | null;
 }
 
 export interface FxLineAmounts {
 	id: string;
+	/** Multimoneda: moneda de origen y tasa de la línea (su par); ausente = la tasa del encabezado (`write.fx`). */
+	currency?: string;
+	fx?: number | null;
 	before: {
 		unit_price_invoice_currency: number | null;
 		subtotal_invoice_currency: number | null;
@@ -825,6 +839,158 @@ const fxSnapshot = (invoice: ContractInvoiceRow): FxSnapshot => ({
 	total_invoice_currency: invoice.total_invoice_currency,
 });
 
+/** ¿La factura tiene líneas en otra moneda que la del encabezado (documento de un contrato multimoneda, valorizado por par)? */
+export const hasPairLines = (invoice: Pick<ContractInvoiceRow, 'contract_currency'>, lines: Array<Pick<ContractInvoiceLineRow, 'currency'>>) =>
+	lines.some((line) => Boolean(line.currency) && upperCode(line.currency) !== upperCode(invoice.contract_currency));
+
+/**
+ * Tipo de cambio de una factura de un contrato multimoneda (spec-multimoneda §4 "FX por factura"): cada línea con la tasa de su par.
+ * `fixed`: `rates_by_pair['USD>CLP']` (o `rate` si hay un solo par); un par sin tasa → `fixed_fx_without_rate` con el par. `spot`: las
+ * líneas que convierten a NULL (las de la moneda de factura quedan a 1). `net_exact`: solo con **un** par convertidor (400
+ * `net_exact_multi_pair`): el neto objetivo menos las líneas en la moneda de factura se reparte en las del par. El monto en moneda de
+ * contrato del encabezado no cambia (las métricas usan la tasa pactada ítem → contrato).
+ */
+function planFxByPair(
+	invoice: ContractInvoiceRow,
+	lines: ContractInvoiceLineRow[],
+	input: FxInput,
+	blockers: InvoiceBlocker[],
+	warnings: InvoiceWarning[],
+	before: FxSnapshot,
+	empty: () => FxPlanItem
+): FxPlanItem {
+	const invoiceCurrency = upperCode(invoice.invoice_currency) || upperCode(invoice.contract_currency);
+	const taxRate = invoice.tax_rate ?? 0;
+	const pairLines = lines.map((line) => ({
+		id: line.id,
+		currency: upperCode(line.currency) || upperCode(invoice.contract_currency),
+		unit_price: line.unit_price_contract_currency,
+		subtotal: line.subtotal_contract_currency,
+		tax_amount: line.tax_amount_contract_currency,
+		period_start: line.billing_period_start ?? invoice.period_start ?? '',
+	}));
+	const pairs = [...new Set(pairLines.map((line) => line.currency).filter((currency) => currency !== invoiceCurrency))];
+
+	if (!pairs.length) {
+		blockers.push({ code: 'same_currency', message: `Todas las líneas están en ${invoiceCurrency}: no aplica tipo de cambio`, next_step: null });
+
+		return empty();
+	}
+	const byId = new Map(lines.map((line) => [line.id, line]));
+	const finish = (valuation: ReturnType<typeof valuateLinesByPair>, source: FxRateSource | null, policy: 'spot' | 'fixed'): FxPlanItem => {
+		const header: HeaderAmounts = valuation.invoice
+			? {
+					amount_contract_currency: invoice.amount_contract_currency,
+					vat: valuation.invoice.tax,
+					amount_invoice_currency: valuation.invoice.subtotal,
+					total_invoice_currency: valuation.invoice.total,
+				}
+			: {
+					amount_contract_currency: invoice.amount_contract_currency,
+					// Spot: IVA del encabezado en moneda de contrato (como el spot de siempre), sobre el monto ya convertido a tasa pactada.
+					vat: round2((invoice.amount_contract_currency * taxRate) / 100),
+					amount_invoice_currency: null,
+					total_invoice_currency: null,
+				};
+		const planned: FxLineAmounts[] = valuation.lines.map((line) => ({
+			id: line.id,
+			currency: line.currency,
+			fx: line.fx,
+			before: lineBefore(byId.get(line.id)!),
+			after: {
+				unit_price_invoice_currency: line.unit_price,
+				subtotal_invoice_currency: line.subtotal,
+				tax_amount_invoice_currency: line.tax,
+				total_invoice_currency: line.total,
+			},
+		}));
+
+		return {
+			id: invoice.id,
+			invoice_number: invoice.invoice_number,
+			blockers,
+			warnings,
+			before,
+			after: { fx_policy: policy, fx_rate: valuation.fx, fx_rate_source: source, fx_contract_to_invoice: valuation.fx, ...header },
+			lines: planned,
+			write: { fx: valuation.fx, fx_rate_source: source, header },
+		};
+	};
+
+	if (input.policy === 'spot')
+		return finish(
+			valuateLinesByPair(pairLines, invoiceCurrency, () => null, taxRate),
+			null,
+			'spot'
+		);
+	if (input.policy === 'net_exact') {
+		if (pairs.length > 1)
+			throw codedValidationException([
+				{
+					field: 'policy',
+					message: `El neto exacto se aplica a documentos con un solo par que convierte; esta factura tiene ${pairs.map((code) => pairKey(code, invoiceCurrency)).join(', ')}: usa tasa fija por par`,
+					code: MULTICURRENCY_CODES.net_exact_multi_pair,
+				},
+			]);
+		const same = pairLines.filter((line) => line.currency === invoiceCurrency);
+		const target = Number(input.target_net_amount ?? 0) - same.reduce((sum, line) => sum + line.subtotal, 0);
+		const converting = lines.filter((line) => (upperCode(line.currency) || upperCode(invoice.contract_currency)) !== invoiceCurrency);
+		const result = netExactFx(converting, taxRate, round2(target));
+
+		if (!result) {
+			blockers.push({
+				code: 'no_priced_lines',
+				message: `El neto exacto (${input.target_net_amount}) no alcanza a cubrir las líneas en ${invoiceCurrency} o no hay líneas en ${pairs[0]} con cantidad y precio`,
+				next_step: null,
+			});
+
+			return empty();
+		}
+		// Montos exactos del neto (residuo de redondeo a la línea mayor, `netExactFx`) en las líneas del par; las de la moneda de factura a 1.
+		const exact = new Map(result.lines.map((line) => [line.id, line.after]));
+		const plan = finish(
+			valuateLinesByPair(pairLines, invoiceCurrency, () => result.fx, taxRate),
+			'net_exact',
+			'fixed'
+		);
+		const linesAfter = plan.lines.map((line) => (exact.has(line.id) ? { ...line, after: exact.get(line.id)! } : line));
+		const subtotal = round2(linesAfter.reduce((sum, line) => sum + (line.after.subtotal_invoice_currency ?? 0), 0));
+		const tax = round2(linesAfter.reduce((sum, line) => sum + (line.after.tax_amount_invoice_currency ?? 0), 0));
+		const header: HeaderAmounts = {
+			amount_contract_currency: invoice.amount_contract_currency,
+			vat: tax,
+			amount_invoice_currency: subtotal,
+			total_invoice_currency: round2(subtotal + tax),
+		};
+
+		return { ...plan, lines: linesAfter, after: { ...plan.after, ...header }, write: { fx: result.fx, fx_rate_source: 'net_exact', header } };
+	}
+	const rates = input.rates_by_pair ?? {};
+	const rateFor = (currency: string): number | null => {
+		const value = rates[pairKey(currency, invoiceCurrency)] ?? (pairs.length === 1 ? input.rate : undefined);
+
+		return value !== undefined && value !== null && Number(value) > 0 ? Math.round(Number(value) * 1e6) / 1e6 : null;
+	};
+
+	for (const currency of pairs.filter((code) => rateFor(code) === null)) {
+		blockers.push({
+			code: 'fixed_fx_without_rate',
+			message: `Falta la tasa fija ${currency} → ${invoiceCurrency} (rates_by_pair['${pairKey(currency, invoiceCurrency)}'])`,
+			next_step: `Escribe la tasa del par (1 ${currency} = X ${invoiceCurrency})`,
+		});
+	}
+	for (const key of Object.keys(rates).filter((key) => !pairs.some((code) => pairKey(code, invoiceCurrency) === key))) {
+		warnings.push({ code: 'pair_not_in_invoice', message: `La factura no tiene líneas del par ${key}: esa tasa no se usa` });
+	}
+	if (blockers.length) return empty();
+
+	return finish(
+		valuateLinesByPair(pairLines, invoiceCurrency, (line) => rateFor(line.currency), taxRate),
+		'manual',
+		'fixed'
+	);
+}
+
 /** Política y tasa de UNA factura: bloqueos comunes + `same_currency`, `uf_invoice_currency`, `sent_to_erp_draft`; matemática por política. */
 export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRow[], context: ContractInvoiceContext, input: FxInput): FxPlanItem {
 	const blockers = commonBlockers(invoice);
@@ -848,6 +1014,19 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 
 	if (partial) blockers.push(partial);
 	if (closed) blockers.push(closed);
+	// Multimoneda: el documento se valoriza por par (líneas en monedas de ítem distintas).
+	if (hasPairLines(invoice, lines)) {
+		if ((invoice.invoice_currency ?? '').toUpperCase() === 'CLF') {
+			blockers.push({
+				code: 'uf_invoice_currency',
+				message: 'La UF no se factura: cambia la moneda de facturación en Condiciones',
+				next_step: null,
+			});
+		}
+		if (blockers.length) return empty();
+
+		return planFxByPair(invoice, lines, input, blockers, warnings, before, empty);
+	}
 	if (!isMultiCurrency(invoice)) {
 		blockers.push({
 			code: 'same_currency',

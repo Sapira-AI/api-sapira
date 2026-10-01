@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { INDEFINITE_HORIZON_PERIODS } from './billing-engine';
+import { findFixedRate, type FxPeriodRate, INDEFINITE_HORIZON_PERIODS } from './billing-engine';
 
 import type { QueryRunner } from 'typeorm';
 
@@ -220,6 +220,12 @@ export const TAX_RATE_PCT_SQL = taxRatePctSql();
  * u original, u hoy). Sin tasa: FX NULL y los montos quedan como estaban (nunca se completa con 1). Se llama después de
  * insertar o actualizar facturas en una transacción v2, con los ids tocados. Dos reglas v2 sobre el trigger: el sentido de la
  * tasa según la política (`systemFxDivides`) y el IVA normalizado a porcentaje (`TAX_RATE_PCT_SQL`: 0,19 → 19).
+ *
+ * Sin vueltas (multimoneda, spec-multimoneda §5, decisión 01-10): las líneas cuya moneda (= la del ítem, ≠ la del contrato) ya es la
+ * del sistema entran con su subtotal tal cual (tasa 1), nunca ítem → contrato → sistema. El resto del encabezado en moneda de contrato
+ * (`amount_contract_currency` − Σ de esas líneas × tasa pactada ítem → contrato, redondeo por línea como `multicurrencyHeader`) se convierte
+ * como siempre. Si todo el documento está en la moneda del sistema, se completa aunque falte la tasa contrato → sistema. Facturas con
+ * líneas internas (facturar por OC) siguen por el camino del encabezado.
  */
 export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, invoiceIds: string[]): Promise<void> {
 	const ids = [...new Set(invoiceIds.filter(Boolean))];
@@ -228,7 +234,18 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 	const rows = (await db.query(
 		`SELECT i.id, c.contract_currency,
 			COALESCE(i.issue_date, i.scheduled_at, i.original_issue_date, CURRENT_DATE)::text AS fx_date,
-			COALESCE(hs.system_currency, 'USD') AS system_currency, COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_policy
+			COALESCE(hs.system_currency, 'USD') AS system_currency, COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_policy,
+			i.amount_contract_currency,
+			(SELECT COALESCE(jsonb_agg(jsonb_build_object('subtotal', ii.subtotal_contract_currency, 'period_start', ii.billing_period_start)), '[]'::jsonb)
+				FROM invoice_items ii
+				WHERE ii.invoice_id = i.id
+					AND UPPER(TRIM(ii.contract_currency)) = UPPER(TRIM(COALESCE(hs.system_currency, 'USD')))
+					AND UPPER(TRIM(ii.contract_currency)) <> UPPER(TRIM(c.contract_currency))
+					AND NOT EXISTS (SELECT 1 FROM invoice_items v WHERE v.invoice_id = i.id AND v.visible_line_id IS NOT NULL)) AS system_lines,
+			(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+					'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+					'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
+				FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.purpose = 'item') AS item_rates
 		FROM invoices i
 		JOIN contracts c ON c.id = i.contract_id
 		LEFT JOIN LATERAL (SELECT system_currency, fx_system_policy FROM holding_settings WHERE holding_id = i.holding_id LIMIT 1) hs ON true
@@ -258,7 +275,23 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 
 		if (!rates.has(key)) rates.set(key, await systemFxRate(db, holdingId, contractCurrency, systemCurrency, fxDate, policy));
 		const rate = rates.get(key) ?? null;
+		const direct = directSystemPart(row, contractCurrency, systemCurrency, fxDate);
 
+		if (direct && (rate !== null || direct.rest_contract === 0)) {
+			const rest =
+				direct.rest_contract === 0
+					? '0'
+					: `ROUND(CASE WHEN $7::boolean THEN $6::numeric / NULLIF($3::numeric, 0) ELSE $6::numeric * $3::numeric END, 2)`;
+
+			await db.query(
+				`UPDATE invoices SET fx_contract_to_system = $3::numeric, system_currency = $4,
+					amount_system_currency = ROUND($5::numeric + ${rest}, 2),
+					total_system_currency = ROUND(ROUND($5::numeric + ${rest}, 2) * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)
+				WHERE id = $1 AND holding_id = $2`,
+				[row.id, holdingId, rate, systemCurrency, direct.subtotal, direct.rest_contract, systemFxDivides(policy)]
+			);
+			continue;
+		}
 		if (rate === null) {
 			logger.warn(`Sin tasa ${contractCurrency} → ${systemCurrency} al ${fxDate} (${policy}) para la factura ${String(row.id)}`);
 			await db.query(`UPDATE invoices SET fx_contract_to_system = NULL, system_currency = $3 WHERE id = $1 AND holding_id = $2`, [
@@ -278,6 +311,44 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 			[row.id, holdingId, rate, systemCurrency, systemFxDivides(policy)]
 		);
 	}
+}
+
+/**
+ * Parte "sin vueltas" del monto en moneda del sistema de una factura multimoneda: Σ subtotales de las líneas que ya están en la moneda del
+ * sistema (directo, tasa 1) y lo que queda del encabezado en moneda de contrato para convertir (`amount_contract_currency` − Σ de esas
+ * líneas × tasa pactada ítem → contrato, redondeo por línea; sin tasa el ítem no suma, como `multicurrencyHeader`). null sin esas líneas.
+ */
+export function directSystemPart(
+	row: Row,
+	contractCurrency: string,
+	systemCurrency: string,
+	fallbackDate: string
+): { subtotal: number; rest_contract: number } | null {
+	const parse = (value: unknown): Row[] => {
+		const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+
+		return Array.isArray(parsed) ? (parsed as Row[]) : [];
+	};
+	const lines = parse(row.system_lines);
+
+	if (!lines.length) return null;
+	const itemRates = parse(row.item_rates) as unknown as FxPeriodRate[];
+	let subtotal = 0;
+	let inContract = 0;
+
+	for (const line of lines) {
+		const amount = Number(line.subtotal ?? 0);
+		const date = String(line.period_start ?? fallbackDate).slice(0, 10);
+		const rate = findFixedRate(itemRates, systemCurrency, contractCurrency, date) ?? 0;
+
+		subtotal += amount;
+		inContract += pgRound(amount * rate, 2);
+	}
+
+	return {
+		subtotal: pgRound(subtotal, 2),
+		rest_contract: pgRound(Number(row.amount_contract_currency ?? 0) - inContract, 2),
+	};
 }
 
 /**

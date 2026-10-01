@@ -615,6 +615,9 @@ export class ContractInvoicesService {
 		date: string
 	) {
 		for (const line of lines) {
+			// Multimoneda: cada línea con la tasa de su par (`line.fx`); sin ella, la del encabezado (como siempre).
+			const lineFx = line.fx !== undefined ? line.fx : fx;
+
 			await runner.query(
 				`UPDATE invoice_items SET unit_price_invoice_currency = $3, subtotal_invoice_currency = $4, tax_amount_invoice_currency = $5,
 					total_invoice_currency = $6, fx_contract_to_invoice = $7, fx_rate_source = $8, fx_rate_date = $9::date, updated_at = now()
@@ -626,9 +629,9 @@ export class ContractInvoicesService {
 					line.after.subtotal_invoice_currency,
 					line.after.tax_amount_invoice_currency,
 					line.after.total_invoice_currency,
-					fx,
-					fx === null ? null : source,
-					fx === null ? null : date,
+					lineFx,
+					lineFx === null ? null : source,
+					lineFx === null ? null : date,
 				]
 			);
 		}
@@ -936,7 +939,8 @@ export class ContractInvoicesService {
 	async loadLines(db: Queryable, invoiceId: string, holdingId: string): Promise<ContractInvoiceLineRow[]> {
 		const rows = (await db.query(
 			`SELECT ii.id, ii.quantity, ii.unit_price_contract_currency, ii.subtotal_contract_currency, ii.tax_amount_contract_currency, ii.total_contract_currency,
-				ii.unit_price_invoice_currency, ii.subtotal_invoice_currency, ii.tax_amount_invoice_currency, ii.total_invoice_currency, ii.created_at
+				ii.unit_price_invoice_currency, ii.subtotal_invoice_currency, ii.tax_amount_invoice_currency, ii.total_invoice_currency, ii.created_at,
+				ii.contract_currency, ii.billing_period_start::text AS billing_period_start
 			FROM invoice_items ii WHERE ii.invoice_id = $1 AND ii.holding_id = $2
 			ORDER BY ii.subtotal_contract_currency DESC NULLS LAST, ii.created_at, ii.id`,
 			[invoiceId, holdingId]
@@ -954,6 +958,9 @@ export class ContractInvoicesService {
 			tax_amount_invoice_currency: toNullableNumber(row.tax_amount_invoice_currency),
 			total_invoice_currency: toNullableNumber(row.total_invoice_currency),
 			created_at: toIso(row.created_at),
+			// Multimoneda: moneda de origen de la línea (la del ítem) y su período, para valorizar por par.
+			...(toText(row.contract_currency) ? { currency: toText(row.contract_currency) } : {}),
+			...(toText(row.billing_period_start) ? { billing_period_start: toText(row.billing_period_start) } : {}),
 		}));
 	}
 

@@ -40,6 +40,7 @@ import {
 	type RenderInput,
 	stateOf,
 } from './invoice-edit';
+import { loadPairRateContext, revalueMulticurrencyInvoices } from './multicurrency-invoices';
 import { PRICE_COLUMNS, priceSpecFromRow } from './price-rows';
 import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, resolveDescriptionMaxChars } from './tax-document-types';
 
@@ -73,6 +74,7 @@ const parseJson = <T>(value: unknown): T | null => {
 
 const CONTRACT_SQL = `SELECT c.id, c.contract_number, c.client_id, c.document_type, c.billing_anchor_day, c.group_invoices_by_period, c.invoice_currency,
 		c.contract_currency, c.fx_invoice_policy, c.payment_terms, c.invoice_description_template, c.tax_document_type_id,
+		c.requires_multicurrency_billing,
 		tdt.description_max_chars AS own_description_max_chars, co.country AS company_country, co.tax_rate AS company_tax_rate,
 		ce.country AS entity_country, ce.payment_terms AS entity_payment_terms, ce.legal_name AS entity_legal_name,
 		${DESCRIPTION_LIMITS_SQL} AS description_limits
@@ -101,7 +103,7 @@ const LINES_SQL = `SELECT ii.id, ii.invoice_id, ii.contract_item_id, ii.product_
 		ii.quantity, ii.unit_of_measure, ii.discount_pct, ii.unit_price_contract_currency, ii.subtotal_contract_currency, ii.tax_amount_contract_currency,
 		ii.total_contract_currency, ii.unit_price_invoice_currency, ii.subtotal_invoice_currency, ii.tax_amount_invoice_currency, ii.total_invoice_currency,
 		ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end, ii.quantity_source, ii.pricing_breakdown,
-		ii.visible_line_id
+		ii.visible_line_id, ii.contract_currency AS line_currency, ii.fx_contract_to_invoice AS line_fx, ii.fx_rate_source AS line_fx_rate_source
 	FROM invoice_items ii
 	LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
 	WHERE ii.invoice_id = ANY($1::uuid[]) AND ii.holding_id = $2
@@ -241,6 +243,9 @@ export class ContractInvoiceEditService {
 			const followingUpdated = following.filter((entry) => entry.status === 'updated' && entry.write);
 
 			for (const entry of followingUpdated) await this.writeRows(runner, entry.write!.invoice, entry.write!, holdingId);
+			// Multimoneda: cada línea con la tasa de su par y encabezado = Σ líneas (también en las siguientes recompuestas por tramo).
+			if (ctx.multicurrency)
+				await revalueMulticurrencyInvoices(runner, holdingId, [ctx.invoice.id, ...followingUpdated.map((entry) => entry.write!.invoice.id)]);
 			for (const price of plan.price_line_modes) {
 				await runner.query(
 					`UPDATE prices SET invoice_line_mode = $3, updated_at = now(), updated_by = $4
@@ -421,7 +426,8 @@ export class ContractInvoiceEditService {
 		const lines = await this.loadLines(
 			db,
 			pending.map((invoice) => invoice.id),
-			holdingId
+			holdingId,
+			!!ctx.multicurrency
 		);
 		const results: Array<FollowingResult & { item: string }> = [];
 
@@ -609,6 +615,8 @@ export class ContractInvoiceEditService {
 				await this.writeHeader(runner, plan.id, holdingId, plan.after, PENDING_STATUS);
 				for (const line of plan.lines) await this.updateLine(runner, plan.id, line.id, line.after, holdingId);
 				await refreshInvoiceSystemAmounts(runner, holdingId, [plan.id]);
+				// Multimoneda: IVA nuevo revalorizado por par (el plan ya lo trae; esto deja también el FX del encabezado).
+				if (plan.lines.some((line) => line.after.currency !== undefined)) await revalueMulticurrencyInvoices(runner, holdingId, [plan.id]);
 				eventIds.push(
 					await this.insertEvent(runner, contract.id, holdingId, userId, {
 						type: INVOICE_EVENT_TYPES.edit,
@@ -689,6 +697,9 @@ export class ContractInvoiceEditService {
 		]);
 		const extraById = new Map(extras.map((row) => [String(row.id), row]));
 		const receiver = this.receiverOf(receiverRows[0]);
+		// Multimoneda: con el flag, las líneas traen su moneda y tasa y el IVA nuevo se revaloriza por par.
+		const multicurrency = contractRow?.requires_multicurrency_billing === true ? await loadPairRateContext(db, contractId, holdingId) : null;
+		const pairLines = multicurrency ? await this.loadLines(db, ids, holdingId, true) : lines;
 		const plans = invoices.map((invoice) =>
 			planBulkHeader(
 				{
@@ -696,7 +707,8 @@ export class ContractInvoiceEditService {
 					context,
 					company_tax_rate: (contractRow?.company_tax_rate as number | string | null) ?? null,
 					receiver,
-					lines: lines.get(invoice.id) ?? [],
+					lines: pairLines.get(invoice.id) ?? [],
+					multicurrency,
 				},
 				dto
 			)
@@ -912,10 +924,17 @@ export class ContractInvoiceEditService {
 					state.tax_invoice_currency,
 					state.total_contract_currency,
 					state.total_invoice_currency,
-					invoice.contract_currency,
+					// Multimoneda: la línea nace con la moneda de su ítem y la tasa de su par (el plan ya la valorizó); si no, la del encabezado.
+					state.currency === undefined ? invoice.contract_currency : (state.currency ?? invoice.contract_currency),
 					invoice.invoice_currency,
-					fx,
-					fx === null ? null : (invoice.fx_rate_source ?? EDIT_FX_RATE_SOURCE),
+					state.currency === undefined ? fx : (state.fx ?? null),
+					state.currency === undefined
+						? fx === null
+							? null
+							: (invoice.fx_rate_source ?? EDIT_FX_RATE_SOURCE)
+						: state.fx === null || state.fx === undefined
+							? null
+							: (state.fx_rate_source ?? EDIT_FX_RATE_SOURCE),
 					state.billing_period_start,
 					state.billing_period_end,
 					state.quantity_source,
@@ -926,6 +945,16 @@ export class ContractInvoiceEditService {
 	}
 
 	private async updateLine(runner: QueryRunner, invoiceId: string, lineId: string, after: LineState, holdingId: string) {
+		if (after.currency !== undefined) {
+			// Multimoneda: además de los montos, la moneda de la línea (= del ítem) y la tasa y origen de su par.
+			await runner.query(
+				`UPDATE invoice_items SET contract_currency = COALESCE($4, contract_currency), fx_contract_to_invoice = $5::numeric,
+					fx_rate_source = CASE WHEN $5::numeric IS NULL THEN NULL ELSE $6 END,
+					fx_rate_date = CASE WHEN $5::numeric IS NULL THEN NULL WHEN fx_contract_to_invoice IS NOT DISTINCT FROM $5::numeric THEN fx_rate_date ELSE CURRENT_DATE END
+				WHERE id = $1 AND invoice_id = $2 AND holding_id = $3`,
+				[lineId, invoiceId, holdingId, after.currency, after.fx ?? null, after.fx_rate_source ?? EDIT_FX_RATE_SOURCE]
+			);
+		}
 		await runner.query(
 			`UPDATE invoice_items SET description = $4, description_locked = $5, quantity = $6, discount_pct = $7,
 				unit_price_contract_currency = $8, subtotal_contract_currency = $9, tax_amount_contract_currency = $10, total_contract_currency = $11,
@@ -1073,6 +1102,9 @@ export class ContractInvoiceEditService {
 			receiverId ? (db.query(RECEIVER_SQL, [receiverId, holdingId, contractId]) as Promise<Row[]>) : Promise.resolve([] as Row[]),
 		]);
 		const contract = data.contract;
+		// Multimoneda (spec-multimoneda §4): con el flag, contexto por par y líneas con su moneda, tasa y origen.
+		const multicurrency = contract.requires_multicurrency_billing === true ? await loadPairRateContext(db, contractId, holdingId) : null;
+		const pairLines = multicurrency ? await this.loadLines(db, [invoice.id], holdingId, true) : lines;
 		const references: DescriptionReference[] = referenceRows
 			.map((ref) => ({ kind: referenceKind(toText(ref.type), toText(ref.name)), code: toText(ref.code) ?? '' }))
 			.filter((ref) => ref.code.trim());
@@ -1091,12 +1123,13 @@ export class ContractInvoiceEditService {
 				document_type: toText(contract.document_type),
 				limits: parseJson<DescriptionLimitRow[]>(contract.description_limits),
 			}),
-			lines: lines.get(invoice.id) ?? [],
+			lines: pairLines.get(invoice.id) ?? [],
 			items: new Map(data.items.map((row) => [String(row.id), this.itemOf(row)])),
 			issued_periods: this.issuedPeriods(data.contract_lines),
 			receiver: this.receiverOf(receiverRows[0]),
 			references,
 			plan: this.deviationPlan(data, invoice.id),
+			multicurrency,
 		};
 	}
 
@@ -1188,14 +1221,26 @@ export class ContractInvoiceEditService {
 			}));
 	}
 
-	async loadLines(db: Queryable, invoiceIds: string[], holdingId: string): Promise<Map<string, EditLineRow[]>> {
+	/** Líneas por factura. `pairs` (solo contratos multimoneda): cada línea trae además su moneda, su tasa y el origen de la tasa. */
+	async loadLines(db: Queryable, invoiceIds: string[], holdingId: string, pairs = false): Promise<Map<string, EditLineRow[]>> {
 		const rows = (await db.query(LINES_SQL, [invoiceIds, holdingId])) as Row[];
 		const byInvoice = new Map<string, EditLineRow[]>();
 
 		for (const row of rows) {
 			const invoiceId = String(row.invoice_id);
+			const line = this.lineOf(row);
 
-			byInvoice.set(invoiceId, [...(byInvoice.get(invoiceId) ?? []), this.lineOf(row)]);
+			byInvoice.set(invoiceId, [
+				...(byInvoice.get(invoiceId) ?? []),
+				pairs
+					? {
+							...line,
+							currency: toText(row.line_currency),
+							fx: toNullableNumber(row.line_fx),
+							fx_rate_source: toText(row.line_fx_rate_source),
+						}
+					: line,
+			]);
 		}
 
 		return byInvoice;
