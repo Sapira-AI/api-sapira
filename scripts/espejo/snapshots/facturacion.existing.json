@@ -1079,6 +1079,17 @@
     "scale": null,
     "array": false
    },
+   "visible_line_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "invoice_currency": {
     "type": "text",
     "nullable": true,
@@ -1281,6 +1292,13 @@
     "unique": false,
     "where": "(subscription_item_id IS NOT NULL)"
    },
+   "idx_invoice_items_visible_line_id": {
+    "columns": [
+     "visible_line_id"
+    ],
+    "unique": false,
+    "where": "visible_line_id IS NOT NULL"
+   },
    "idx_invoice_items_status": {
     "columns": [
      "status"
@@ -1401,6 +1419,13 @@
      "legacy_match_id"
     ],
     "table": "invoice_items_legacy_match",
+    "onDelete": "SET NULL"
+   },
+   "invoice_items_visible_line_id_fkey": {
+    "columns": [
+     "visible_line_id"
+    ],
+    "table": "invoice_items",
     "onDelete": "SET NULL"
    },
    "invoice_items_subscription_item_id_fkey": {

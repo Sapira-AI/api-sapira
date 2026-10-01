@@ -703,6 +703,13 @@
     "ondelete": "a",
     "onupdate": "a",
     "def": "FOREIGN KEY (subscription_item_id) REFERENCES subscription_items(id)"
+   },
+   {
+    "name": "invoice_items_visible_line_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (visible_line_id) REFERENCES invoice_items(id) ON DELETE SET NULL"
    }
   ],
   "indexes": [
@@ -777,6 +784,14 @@
     ],
     "unique": false,
     "where": "subscription_item_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_visible_line_id",
+    "cols": [
+     "visible_line_id"
+    ],
+    "unique": false,
+    "where": "visible_line_id IS NOT NULL"
    }
   ],
   "triggers": [

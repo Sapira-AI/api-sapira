@@ -4603,6 +4603,17 @@
     "scale": null,
     "array": false
    },
+   "quote_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "name": {
     "type": "text",
     "nullable": false,
@@ -4892,6 +4903,13 @@
   },
   "uniques": {},
   "indices": {
+   "idx_prices_quote_id": {
+    "columns": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": "owner = 'quote'"
+   },
    "idx_prices_billable_metric_id": {
     "columns": [
      "billable_metric_id"
@@ -4931,7 +4949,7 @@
    },
    {
     "name": "prices_contract_owner_check",
-    "expression": "(\"owner\" = 'contract' AND \"contract_id\" IS NOT NULL) OR (\"owner\" = 'catalog' AND \"contract_id\" IS NULL)"
+    "expression": "(\"owner\" = 'contract' AND \"contract_id\" IS NOT NULL AND \"quote_id\" IS NULL) OR (\"owner\" = 'catalog' AND \"contract_id\" IS NULL AND \"quote_id\" IS NULL) OR (\"owner\" = 'quote' AND \"quote_id\" IS NOT NULL AND \"contract_id\" IS NULL)"
    },
    {
     "name": "prices_status_check",
@@ -4947,7 +4965,7 @@
    },
    {
     "name": "prices_owner_check",
-    "expression": "\"owner\" = ANY (ARRAY['catalog'::text, 'contract'::text])"
+    "expression": "\"owner\" = ANY (ARRAY['catalog'::text, 'contract'::text, 'quote'::text])"
    }
   ],
   "foreignKeys": {
@@ -4970,6 +4988,13 @@
      "contract_id"
     ],
     "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "prices_quote_id_fkey": {
+    "columns": [
+     "quote_id"
+    ],
+    "table": "quotes",
     "onDelete": "CASCADE"
    },
    "prices_billable_metric_id_fkey": {

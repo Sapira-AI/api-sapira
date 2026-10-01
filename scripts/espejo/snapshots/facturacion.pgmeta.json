@@ -728,7 +728,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 11636,
+  "rows": 11897,
   "columns": [
    {
     "name": "id",
@@ -1122,6 +1122,17 @@
     ],
     "default_value": "false",
     "comment": "true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla"
+   },
+   {
+    "name": "visible_line_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "línea interna ligada a la línea visible del documento; NULL = línea normal"
    }
   ],
   "primary_keys": [
@@ -1223,6 +1234,17 @@
      "subscription_item_id"
     ],
     "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_visible_line_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "visible_line_id"
+    ],
+    "target_table": "public.invoice_items",
     "target_columns": [
      "id"
     ]
@@ -2795,7 +2817,7 @@
  "overdue_check_log": {
   "name": "public.overdue_check_log",
   "rls_enabled": true,
-  "rows": 51,
+  "rows": 107,
   "columns": [
    {
     "name": "id",

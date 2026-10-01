@@ -21125,6 +21125,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla"
+				},
+				{
+					"column": "visible_line_id",
+					"attnum": 44,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "línea interna ligada a la línea visible del documento; NULL = línea normal"
 				}
 			],
 			"constraints": [
@@ -21244,6 +21260,15 @@
 					"deferred": false,
 					"ondelete": "a",
 					"onupdate": "a"
+				},
+				{
+					"name": "invoice_items_visible_line_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (visible_line_id) REFERENCES invoice_items(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
 				}
 			],
 			"indexes": [
@@ -21298,6 +21323,12 @@
 				{
 					"name": "idx_invoice_items_subscription_item_id",
 					"def": "CREATE INDEX idx_invoice_items_subscription_item_id ON public.invoice_items USING btree (subscription_item_id) WHERE (subscription_item_id IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_invoice_items_visible_line_id",
+					"def": "CREATE INDEX idx_invoice_items_visible_line_id ON public.invoice_items USING btree (visible_line_id) WHERE (visible_line_id IS NOT NULL)",
 					"unique": false,
 					"primary": false
 				},
@@ -29891,7 +29922,7 @@
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "catalog (versionado, etapa 3) o contract (precio inline del ítem o copia del catálogo)"
+					"comment": "catalog, contract o quote. Etapa 1 escribe contract (precio inline del ítem); Cotizaciones v2 escribe quote"
 				},
 				{
 					"column": "product_id",
@@ -30340,6 +30371,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "quote_id",
+					"attnum": 32,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cotizaciones v2: NOT NULL si owner = quote (precio inline del ítem de cotización), NULL si no (CHECK)"
 				}
 			],
 			"constraints": [
@@ -30373,7 +30420,7 @@
 				{
 					"name": "prices_contract_owner_check",
 					"type": "c",
-					"def": "CHECK ((((owner = 'contract'::text) AND (contract_id IS NOT NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL))))",
+					"def": "CHECK ((((owner = 'contract'::text) AND (contract_id IS NOT NULL) AND (quote_id IS NULL)) OR ((owner = 'catalog'::text) AND (contract_id IS NULL) AND (quote_id IS NULL)) OR ((owner = 'quote'::text) AND (quote_id IS NOT NULL) AND (contract_id IS NULL))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -30436,7 +30483,7 @@
 				{
 					"name": "prices_owner_check",
 					"type": "c",
-					"def": "CHECK ((owner = ANY (ARRAY['catalog'::text, 'contract'::text])))",
+					"def": "CHECK ((owner = ANY (ARRAY['catalog'::text, 'contract'::text, 'quote'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -30468,6 +30515,15 @@
 					"deferred": false,
 					"ondelete": " ",
 					"onupdate": " "
+				},
+				{
+					"name": "prices_quote_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
 				},
 				{
 					"name": "prices_status_check",
@@ -30513,6 +30569,12 @@
 				{
 					"name": "idx_prices_holding_product_status",
 					"def": "CREATE INDEX idx_prices_holding_product_status ON public.prices USING btree (holding_id, product_id, status)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_prices_quote_id",
+					"def": "CREATE INDEX idx_prices_quote_id ON public.prices USING btree (quote_id) WHERE (owner = 'quote'::text)",
 					"unique": false,
 					"primary": false
 				},
@@ -31573,6 +31635,303 @@
 				}
 			]
 		},
+		"quote_events": {
+			"comment": "Historial de la cotización: creación, edición, transiciones, duplicado, contrato y borrado",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "quote_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "type",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "CREATED, UPDATED, SENT, SIGNED, LOST, REOPENED, STAGE_CHANGED, DUPLICATED_FROM, CONTRACT_CREATED, APPLIED_TO_CONTRACT o DELETED"
+				},
+				{
+					"column": "from_stage_id",
+					"attnum": 5,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Etapa antes (NULL al crear)"
+				},
+				{
+					"column": "to_stage_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Etapa después (NULL al borrar)"
+				},
+				{
+					"column": "from_kind",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "kind de la etapa antes"
+				},
+				{
+					"column": "to_kind",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "kind de la etapa después"
+				},
+				{
+					"column": "actor_id",
+					"attnum": 9,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "users.id que ejecutó la acción (NULL si lo hizo un proceso)"
+				},
+				{
+					"column": "reason",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo (obligatorio al marcar perdida)"
+				},
+				{
+					"column": "metadata",
+					"attnum": 11,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Antes/después, ítems tocados, contrato vinculado, número de cotización…"
+				},
+				{
+					"column": "created_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "quote_events_actor_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (actor_id) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "quote_events_from_stage_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (from_stage_id) REFERENCES quote_stages(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "quote_events_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "quote_events_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "quote_events_quote_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "quote_events_to_stage_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (to_stage_id) REFERENCES quote_stages(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "quote_events_type_check",
+					"type": "c",
+					"def": "CHECK ((type = ANY (ARRAY['CREATED'::text, 'UPDATED'::text, 'SENT'::text, 'SIGNED'::text, 'LOST'::text, 'REOPENED'::text, 'STAGE_CHANGED'::text, 'DUPLICATED_FROM'::text, 'CONTRACT_CREATED'::text, 'APPLIED_TO_CONTRACT'::text, 'DELETED'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_quote_events_holding_id",
+					"def": "CREATE INDEX idx_quote_events_holding_id ON public.quote_events USING btree (holding_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_quote_events_quote_id",
+					"def": "CREATE INDEX idx_quote_events_quote_id ON public.quote_events USING btree (quote_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "quote_events_pkey",
+					"def": "CREATE UNIQUE INDEX quote_events_pkey ON public.quote_events USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_quote_events",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
 		"quote_items": {
 			"comment": null,
 			"rls": true,
@@ -32105,6 +32464,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Indica cual campo es fuente de verdad: monthly (unit_price) o annual (annual_unit_price). Default: monthly."
+				},
+				{
+					"column": "price_id",
+					"attnum": 43,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo"
 				}
 			],
 			"constraints": [
@@ -32163,6 +32538,15 @@
 					"onupdate": " "
 				},
 				{
+					"name": "quote_items_price_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (price_id) REFERENCES prices(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
 					"name": "quote_items_product_id_fkey",
 					"type": "f",
 					"def": "FOREIGN KEY (product_id) REFERENCES products(id)",
@@ -32191,6 +32575,12 @@
 				{
 					"name": "idx_quote_items_holding_id",
 					"def": "CREATE INDEX idx_quote_items_holding_id ON public.quote_items USING btree (holding_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_quote_items_price_id",
+					"def": "CREATE INDEX idx_quote_items_price_id ON public.quote_items USING btree (price_id) WHERE (price_id IS NOT NULL)",
 					"unique": false,
 					"primary": false
 				},
@@ -32438,6 +32828,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "kind",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "v2 (Q-A1): kind de sistema draft | sent | signed | lost | contract_created. NULL cuenta como draft. Backfill por nombre en la migración QuotesV2"
 				}
 			],
 			"constraints": [
@@ -32469,6 +32875,15 @@
 					"onupdate": " "
 				},
 				{
+					"name": "quote_stages_kind_check",
+					"type": "c",
+					"def": "CHECK (((kind IS NULL) OR (kind = ANY (ARRAY['draft'::text, 'sent'::text, 'signed'::text, 'lost'::text, 'contract_created'::text]))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
 					"name": "quote_stages_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
@@ -32479,6 +32894,12 @@
 				}
 			],
 			"indexes": [
+				{
+					"name": "idx_quote_stages_holding_kind_unique",
+					"def": "CREATE UNIQUE INDEX idx_quote_stages_holding_kind_unique ON public.quote_stages USING btree (holding_id, kind) WHERE (kind = ANY (ARRAY['signed'::text, 'lost'::text]))",
+					"unique": true,
+					"primary": false
+				},
 				{
 					"name": "quote_stages_holding_id_name_key",
 					"def": "CREATE UNIQUE INDEX quote_stages_holding_id_name_key ON public.quote_stages USING btree (holding_id, name)",
@@ -32871,6 +33292,54 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "valid_until",
+					"attnum": 25,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "v2 (Q-A2): válida hasta; NULL = sin vencimiento. Estado mostrado \"Vencida\" si kind draft/sent y < hoy"
+				},
+				{
+					"column": "deleted_at",
+					"attnum": 26,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "v2 (Q-A5): borrado lógico. El sync de Salesforce ignora las borradas"
+				},
+				{
+					"column": "updated_at",
+					"attnum": 27,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "v2: trigger quotes_set_updated_at"
 				}
 			],
 			"constraints": [
@@ -32931,6 +33400,12 @@
 			],
 			"indexes": [
 				{
+					"name": "idx_quotes_holding_active",
+					"def": "CREATE INDEX idx_quotes_holding_active ON public.quotes USING btree (holding_id) WHERE (deleted_at IS NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
 					"name": "idx_quotes_holding_id",
 					"def": "CREATE INDEX idx_quotes_holding_id ON public.quotes USING btree (holding_id)",
 					"unique": false,
@@ -32955,13 +33430,24 @@
 					"primary": false
 				},
 				{
+					"name": "idx_quotes_valid_until",
+					"def": "CREATE INDEX idx_quotes_valid_until ON public.quotes USING btree (valid_until) WHERE (valid_until IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
 					"name": "quotes_pkey",
 					"def": "CREATE UNIQUE INDEX quotes_pkey ON public.quotes USING btree (id)",
 					"unique": true,
 					"primary": true
 				}
 			],
-			"triggers": [],
+			"triggers": [
+				{
+					"name": "quotes_set_updated_at",
+					"def": "CREATE TRIGGER quotes_set_updated_at BEFORE UPDATE ON public.quotes FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+				}
+			],
 			"policies": [
 				{
 					"name": "Users can create quotes for their holding",
@@ -56447,6 +56933,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"quote_events": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"quote_items": [
 			{
 				"grantee": "anon",
@@ -61401,25 +62001,11 @@
 			"identity_args": "holding_id_param uuid, mapping_config jsonb, source_data jsonb, target_table text"
 		},
 		{
-			"name": "apply_field_transformations_from_frontend",
-			"def": "CREATE OR REPLACE FUNCTION public.apply_field_transformations_from_frontend(source_data jsonb, holding_id_param uuid, source_model text DEFAULT 'account.move'::text, target_table text DEFAULT 'invoices_legacy'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    mapping_config JSONB;\n    result JSONB;\nBEGIN\n    -- Obtener configuración de mapeo\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n    AND fm.source_model = source_model\n    AND fm.target_table = target_table\n    AND fm.is_active = true\n    LIMIT 1;\n    \n    -- Si no hay configuración, retornar datos originales\n    IF mapping_config IS NULL THEN\n        RETURN source_data;\n    END IF;\n    \n    -- Aplicar transformaciones usando la función existente\n    result := apply_field_mapping_to_data(\n        source_data,\n        mapping_config,\n        target_table,\n        holding_id_param\n    );\n    \n    RETURN result;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función helper que permite al frontend usar opcionalmente las transformaciones de base de datos.\nEl frontend puede seguir usando su lógica actual o migrar gradualmente a usar esta función.",
-			"identity_args": "source_data jsonb, holding_id_param uuid, source_model text, target_table text"
-		},
-		{
 			"name": "apply_fixed_fx_to_contract",
 			"def": "CREATE OR REPLACE FUNCTION public.apply_fixed_fx_to_contract(p_contract_id uuid, p_fx_rate numeric, p_policy text DEFAULT 'fixed'::text, p_invoice_ids uuid[] DEFAULT NULL::uuid[], p_target_amount numeric DEFAULT NULL::numeric)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_holding_id       uuid;\n  v_updated_invoices integer := 0;\n  v_updated_items    integer := 0;\n  v_invoice          RECORD;\n  v_base             numeric;\n  v_fx               numeric;\n  v_tax_rate         numeric;\n  v_diff             numeric;\n  v_max_item_id      uuid;\nBEGIN\n  -- Validar política\n  IF p_policy NOT IN ('fixed', 'spot') THEN\n    RETURN jsonb_build_object('success', false, 'error', 'Política FX inválida (use fixed|spot)');\n  END IF;\n\n  -- Holding del usuario actual (scoping equivalente a RLS bajo SECURITY DEFINER)\n  v_holding_id := get_current_user_holding_id();\n  IF v_holding_id IS NULL THEN\n    RETURN jsonb_build_object('success', false, 'error', 'No se pudo resolver el holding del usuario');\n  END IF;\n\n  -- El contrato debe existir y pertenecer al holding del usuario\n  IF NOT EXISTS (\n    SELECT 1 FROM contracts\n    WHERE id = p_contract_id AND holding_id = v_holding_id\n  ) THEN\n    RETURN jsonb_build_object('success', false, 'error', 'Contrato no encontrado o sin acceso');\n  END IF;\n\n  -- 1) Política FX de facturación del contrato\n  UPDATE contracts\n  SET fx_invoice_policy      = p_policy,\n      fx_invoice_confirmed_at = CASE WHEN p_policy = 'fixed' THEN now() ELSE fx_invoice_confirmed_at END\n  WHERE id = p_contract_id\n    AND holding_id = v_holding_id;\n\n  -- 1b) Modo \"subtotal (neto) exacto en moneda de facturación\" (caso OC):\n  --     FX inverso calculado desde el precio unitario; el neto de la factura\n  --     queda EXACTAMENTE en el monto ingresado, también a nivel de líneas.\n  IF p_target_amount IS NOT NULL THEN\n    IF p_policy <> 'fixed' THEN\n      RETURN jsonb_build_object('success', false, 'error', 'El subtotal exacto solo aplica con política de tipo de cambio fijo');\n    END IF;\n    IF p_invoice_ids IS NULL OR array_length(p_invoice_ids, 1) <> 1 THEN\n      RETURN jsonb_build_object('success', false, 'error', 'El subtotal exacto se aplica a una factura a la vez');\n    END IF;\n    IF p_target_amount <= 0 THEN\n      RETURN jsonb_build_object('success', false, 'error', 'El subtotal (neto) debe ser mayor a 0');\n    END IF;\n\n    SELECT * INTO v_invoice\n    FROM invoices\n    WHERE id = p_invoice_ids[1]\n      AND contract_id = p_contract_id\n      AND holding_id = v_holding_id\n      AND status = 'Por Emitir'\n      AND COALESCE(is_active, true) = true\n      AND invoice_currency IS NOT NULL\n      AND invoice_currency <> contract_currency;\n\n    IF v_invoice.id IS NULL THEN\n      RETURN jsonb_build_object('success', false, 'error', 'Factura no encontrada, no está Por Emitir o no es multimoneda');\n    END IF;\n\n    -- Base en moneda de contrato desde el PRECIO UNITARIO (cantidad × precio),\n    -- sin usar subtotales almacenados/redondeados\n    SELECT COALESCE(SUM(ii.quantity * ii.unit_price_contract_currency), 0)\n    INTO v_base\n    FROM invoice_items ii\n    WHERE ii.invoice_id = v_invoice.id;\n\n    IF v_base <= 0 THEN\n      RETURN jsonb_build_object('success', false, 'error', 'La factura no tiene líneas con cantidad y precio unitario en moneda de contrato');\n    END IF;\n\n    v_fx := p_target_amount / v_base;\n    v_tax_rate := COALESCE(v_invoice.tax_rate, 0);\n\n    -- Header: el neto queda EXACTO al monto ingresado\n    UPDATE invoices\n    SET fx_contract_to_invoice  = ROUND(v_fx, 6),\n        amount_invoice_currency = p_target_amount,\n        vat                     = ROUND(p_target_amount * v_tax_rate / 100.0, 2),\n        total_invoice_currency  = ROUND(p_target_amount * (1 + v_tax_rate / 100.0), 2)\n    WHERE id = v_invoice.id;\n\n    -- Líneas: subtotal = cantidad × precio contrato × fx (2 decimales)\n    UPDATE invoice_items ii\n    SET fx_contract_to_invoice      = ROUND(v_fx, 6),\n        subtotal_invoice_currency   = ROUND(ii.quantity * ii.unit_price_contract_currency * v_fx, 2),\n        tax_amount_invoice_currency = ROUND(ii.quantity * ii.unit_price_contract_currency * v_fx * v_tax_rate / 100.0, 2),\n        total_invoice_currency      = ROUND(ii.quantity * ii.unit_price_contract_currency * v_fx * (1 + v_tax_rate / 100.0), 2)\n    WHERE ii.invoice_id = v_invoice.id;\n    GET DIAGNOSTICS v_updated_items = ROW_COUNT;\n\n    -- Ajuste de redondeo: la suma de las líneas debe dar el neto exacto\n    -- (el ERP suma líneas). La diferencia va a la línea de mayor subtotal.\n    SELECT p_target_amount - COALESCE(SUM(ii.subtotal_invoice_currency), 0)\n    INTO v_diff\n    FROM invoice_items ii\n    WHERE ii.invoice_id = v_invoice.id;\n\n    IF v_diff <> 0 THEN\n      SELECT ii.id INTO v_max_item_id\n      FROM invoice_items ii\n      WHERE ii.invoice_id = v_invoice.id\n      ORDER BY ii.subtotal_invoice_currency DESC NULLS LAST, ii.created_at\n      LIMIT 1;\n\n      UPDATE invoice_items ii\n      SET subtotal_invoice_currency   = ii.subtotal_invoice_currency + v_diff,\n          tax_amount_invoice_currency = ROUND((ii.subtotal_invoice_currency + v_diff) * v_tax_rate / 100.0, 2),\n          total_invoice_currency      = ROUND((ii.subtotal_invoice_currency + v_diff) * (1 + v_tax_rate / 100.0), 2)\n      WHERE ii.id = v_max_item_id;\n    END IF;\n\n    -- Precio unitario por línea = subtotal final / cantidad, SIN forzar redondeo\n    -- (conserva los decimales reales, que es como se calcula el FX inverso bien)\n    UPDATE invoice_items ii\n    SET unit_price_invoice_currency = CASE WHEN COALESCE(ii.quantity, 0) <> 0\n                                           THEN ii.subtotal_invoice_currency / ii.quantity\n                                           ELSE ii.subtotal_invoice_currency END\n    WHERE ii.invoice_id = v_invoice.id;\n\n    RETURN jsonb_build_object(\n      'success', true,\n      'policy', 'fixed',\n      'mode', 'target_net_amount',\n      'fx_rate', ROUND(v_fx, 6),\n      'target_amount', p_target_amount,\n      'updated_invoices', 1,\n      'updated_items', v_updated_items\n    );\n  END IF;\n\n  -- 2) Spot: el FX se calcula al emitir. Limpiar los montos en moneda de factura\n  --    (fx + amount/vat/total del header e items) de las facturas Por Emitir\n  --    multimoneda para dejarlas como spot nativo (se recalculan al emitir).\n  IF p_policy = 'spot' THEN\n    UPDATE invoices\n    SET fx_contract_to_invoice = NULL,\n        amount_invoice_currency = NULL,\n        vat                     = NULL,\n        total_invoice_currency  = NULL\n    WHERE contract_id = p_contract_id\n      AND holding_id = v_holding_id\n      AND status = 'Por Emitir'\n      AND COALESCE(is_active, true) = true\n      AND invoice_currency IS NOT NULL\n      AND invoice_currency <> contract_currency\n      AND (p_invoice_ids IS NULL OR id = ANY(p_invoice_ids));\n    GET DIAGNOSTICS v_updated_invoices = ROW_COUNT;\n\n    UPDATE invoice_items ii\n    SET fx_contract_to_invoice    = NULL,\n        unit_price_invoice_currency = NULL,\n        subtotal_invoice_currency   = NULL,\n        tax_amount_invoice_currency = NULL,\n        total_invoice_currency      = NULL\n    FROM invoices inv\n    WHERE ii.invoice_id = inv.id\n      AND inv.contract_id = p_contract_id\n      AND inv.holding_id = v_holding_id\n      AND inv.status = 'Por Emitir'\n      AND COALESCE(inv.is_active, true) = true\n      AND inv.invoice_currency IS NOT NULL\n      AND inv.invoice_currency <> inv.contract_currency\n      AND (p_invoice_ids IS NULL OR inv.id = ANY(p_invoice_ids));\n    GET DIAGNOSTICS v_updated_items = ROW_COUNT;\n\n    RETURN jsonb_build_object('success', true, 'policy', 'spot', 'updated_invoices', v_updated_invoices, 'updated_items', v_updated_items);\n  END IF;\n\n  -- 3) Fixed: validar tasa\n  IF p_fx_rate IS NULL OR p_fx_rate <= 0 THEN\n    RETURN jsonb_build_object('success', false, 'error', 'El tipo de cambio fijo debe ser mayor a 0');\n  END IF;\n\n  -- 4) Header de facturas: fx + amount_invoice_currency + vat + total_invoice_currency\n  UPDATE invoices\n  SET fx_contract_to_invoice = p_fx_rate,\n      amount_invoice_currency = amount_contract_currency * p_fx_rate,\n      vat                     = ROUND(amount_contract_currency * p_fx_rate * COALESCE(tax_rate, 0) / 100.0, 2),\n      total_invoice_currency  = ROUND(amount_contract_currency * p_fx_rate * (1 + COALESCE(tax_rate, 0) / 100.0), 2)\n  WHERE contract_id = p_contract_id\n    AND holding_id = v_holding_id\n    AND status = 'Por Emitir'\n    AND COALESCE(is_active, true) = true\n    AND invoice_currency IS NOT NULL\n    AND invoice_currency <> contract_currency\n    AND (p_invoice_ids IS NULL OR id = ANY(p_invoice_ids));\n  GET DIAGNOSTICS v_updated_invoices = ROW_COUNT;\n\n  -- 5) Items de esas facturas: los 4 montos *_invoice_currency = *_contract_currency * fx\n  UPDATE invoice_items ii\n  SET fx_contract_to_invoice    = p_fx_rate,\n      unit_price_invoice_currency = ii.unit_price_contract_currency * p_fx_rate,\n      subtotal_invoice_currency   = ii.subtotal_contract_currency   * p_fx_rate,\n      tax_amount_invoice_currency = ii.tax_amount_contract_currency * p_fx_rate,\n      total_invoice_currency      = ii.total_contract_currency      * p_fx_rate\n  FROM invoices inv\n  WHERE ii.invoice_id = inv.id\n    AND inv.contract_id = p_contract_id\n    AND inv.holding_id = v_holding_id\n    AND inv.status = 'Por Emitir'\n    AND COALESCE(inv.is_active, true) = true\n    AND inv.invoice_currency IS NOT NULL\n    AND inv.invoice_currency <> inv.contract_currency\n    AND (p_invoice_ids IS NULL OR inv.id = ANY(p_invoice_ids));\n  GET DIAGNOSTICS v_updated_items = ROW_COUNT;\n\n  RETURN jsonb_build_object(\n    'success', true,\n    'policy', 'fixed',\n    'fx_rate', p_fx_rate,\n    'updated_invoices', v_updated_invoices,\n    'updated_items', v_updated_items\n  );\nEND;\n$function$\n",
 			"extension": null,
 			"comment": "Política FX de facturación (fijo|spot) contrato→factura. Con p_target_amount: FX inverso desde el subtotal (neto) exacto en moneda de facturación para UNA factura (caso OC), calculado desde el precio unitario.",
 			"identity_args": "p_contract_id uuid, p_fx_rate numeric, p_policy text, p_invoice_ids uuid[], p_target_amount numeric"
-		},
-		{
-			"name": "apply_partner_mapping_with_transformations",
-			"def": "CREATE OR REPLACE FUNCTION public.apply_partner_mapping_with_transformations(raw_data jsonb, mapping_config jsonb, holding_id_param uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    result JSONB := '{}';\n    mapping_entry RECORD;\n    source_field TEXT;\n    target_field TEXT;\n    source_value TEXT;\n    transformed_value TEXT;\n    transformation_type TEXT;\n    transformation_config JSONB;\nBEGIN\n    -- Si no hay configuración de mapeo, devolver objeto vacío\n    IF mapping_config IS NULL OR mapping_config->'mappings' IS NULL THEN\n        RETURN result;\n    END IF;\n    \n    -- Procesar cada mapeo\n    FOR mapping_entry IN SELECT * FROM jsonb_each(mapping_config->'mappings')\n    LOOP\n        -- Extraer información del mapeo (compatible con ambos formatos)\n        source_field := COALESCE(\n            mapping_entry.value->>'sourceField'->>'name',  -- Formato antiguo\n            mapping_entry.value->>'odoo_field'             -- Formato nuevo\n        );\n        \n        target_field := COALESCE(\n            mapping_entry.value->>'targetField'->>'name',  -- Formato antiguo\n            mapping_entry.value->>'sapira_field'           -- Formato nuevo\n        );\n        \n        transformation_type := COALESCE(\n            mapping_entry.value->>'transformation_type',\n            'direct'  -- Por defecto, transformación directa\n        );\n        \n        transformation_config := mapping_entry.value->'transformation_config';\n        \n        -- Continuar solo si tenemos campos válidos\n        IF source_field IS NOT NULL AND target_field IS NOT NULL THEN\n            -- Obtener valor del campo fuente\n            source_value := raw_data ->> source_field;\n            \n            -- Aplicar transformación\n            SELECT resolve_field_transformation(\n                transformation_type::transformation_type_enum,\n                transformation_config,\n                source_value,\n                holding_id_param\n            ) INTO transformed_value;\n            \n            -- Agregar al resultado\n            result := jsonb_set(result, ARRAY[target_field], to_jsonb(transformed_value));\n        END IF;\n    END LOOP;\n    \n    RETURN result;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Aplica mapeos de partners con soporte para transformaciones, compatible con formato antiguo y nuevo",
-			"identity_args": "raw_data jsonb, mapping_config jsonb, holding_id_param uuid"
 		},
 		{
 			"name": "apply_pending_renewal_tail",
@@ -61835,13 +62421,6 @@
 			"identity_args": "user_id uuid"
 		},
 		{
-			"name": "classify_invoice_before_insert",
-			"def": "CREATE OR REPLACE FUNCTION public.classify_invoice_before_insert()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    invoice_name TEXT;\n    invoice_number TEXT;\n    existing_invoice RECORD;\n    has_changes BOOLEAN := FALSE;\nBEGIN\n    -- ✅ REGLA: SIEMPRE permitir la inserción\n    \n    -- Extraer identificadores únicos de la factura\n    BEGIN\n        invoice_name := (NEW.raw_data::JSONB) ->> 'name';\n        invoice_number := (NEW.raw_data::JSONB) ->> 'invoice_number';\n        \n        -- Si no hay name, usar display_name como fallback\n        IF invoice_name IS NULL OR invoice_name = '' THEN\n            invoice_name := (NEW.raw_data::JSONB) ->> 'display_name';\n        END IF;\n        \n    EXCEPTION WHEN OTHERS THEN\n        invoice_name := NULL;\n        invoice_number := NULL;\n    END;\n    \n    -- Si no hay identificadores únicos, marcar como CREATE\n    IF (invoice_name IS NULL OR invoice_name = '') AND (invoice_number IS NULL OR invoice_number = '') THEN\n        NEW.processing_status := 'create';\n        NEW.integration_notes := 'Factura sin identificadores únicos - marcada para creación';\n        RETURN NEW;\n    END IF;\n\n    -- Búsqueda de factura existente por name o invoice_number\n    BEGIN\n        SELECT * INTO existing_invoice\n        FROM invoices_legacy \n        WHERE holding_id = NEW.holding_id\n            AND (\n                invoice_number = COALESCE(invoice_number, invoice_name) OR\n                invoice_number = invoice_name OR\n                odoo_integration_id = (NEW.raw_data::JSONB ->> 'id')\n            );\n        \n    EXCEPTION WHEN OTHERS THEN\n        existing_invoice := NULL;\n    END;\n\n    -- Si no existe, marcar como CREATE\n    IF existing_invoice IS NULL THEN\n        NEW.processing_status := 'create';\n        NEW.integration_notes := 'Factura nueva - marcada para creación';\n        RETURN NEW;\n    END IF;\n\n    -- ✅ COMPARACIÓN DINÁMICA USANDO MAPEO\n    BEGIN\n        has_changes := detect_invoice_changes_with_dynamic_mapping(\n            NEW.raw_data::JSONB,\n            existing_invoice.id,\n            NEW.holding_id\n        );\n        \n    EXCEPTION WHEN OTHERS THEN\n        has_changes := TRUE;\n        NEW.integration_notes := 'Error en comparación dinámica: ' || SQLERRM;\n    END;\n\n    -- Determinar estado final\n    IF has_changes THEN\n        NEW.processing_status := 'update';\n        IF NEW.integration_notes IS NULL THEN\n            NEW.integration_notes := 'Factura existente con cambios - marcada para actualización';\n        END IF;\n    ELSE\n        NEW.processing_status := 'processed';\n        NEW.integration_notes := 'Factura idéntica a la existente - marcada como procesada';\n    END IF;\n\n    -- ✅ SIEMPRE retornar NEW (nunca rechazar)\n    RETURN NEW;\n    \nEXCEPTION WHEN OTHERS THEN\n    -- ✅ Incluso con errores, SIEMPRE insertar\n    NEW.processing_status := 'error';\n    NEW.integration_notes := 'Error general en trigger: ' || SQLERRM;\n    RETURN NEW;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Clasifica facturas como create/update/processed basado en existencia y cambios detectados.",
-			"identity_args": ""
-		},
-		{
 			"name": "cleanup_duplicate_partners_by_vat",
 			"def": "CREATE OR REPLACE FUNCTION public.cleanup_duplicate_partners_by_vat(holding_id_param uuid, batch_size integer DEFAULT 100)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    deleted_count INTEGER := 0;\n    current_batch INTEGER;\nBEGIN\n    -- Eliminar registros duplicados por VAT (mantener el más reciente)\n    LOOP\n        DELETE FROM odoo_partners_stg \n        WHERE id IN (\n            SELECT s1.id \n            FROM odoo_partners_stg s1\n            JOIN (\n                SELECT raw_data ->> 'vat' as vat, MAX(created_at) as max_created\n                FROM odoo_partners_stg \n                WHERE holding_id = holding_id_param\n                    AND processing_status IN ('create', 'update')\n                    AND raw_data ->> 'vat' IS NOT NULL\n                GROUP BY raw_data ->> 'vat'\n                HAVING COUNT(*) > 1\n            ) s2 ON s1.raw_data ->> 'vat' = s2.vat\n            WHERE s1.holding_id = holding_id_param\n                AND s1.processing_status IN ('create', 'update')\n                AND s1.created_at < s2.max_created\n            LIMIT batch_size\n        );\n        \n        GET DIAGNOSTICS current_batch = ROW_COUNT;\n        deleted_count := deleted_count + current_batch;\n        \n        -- Salir si no hay más registros para eliminar\n        EXIT WHEN current_batch = 0;\n        \n        -- Pequeña pausa para evitar saturar la base de datos\n        PERFORM pg_sleep(0.1);\n    END LOOP;\n    \n    RETURN deleted_count;\nEND;\n$function$\n",
 			"extension": null,
@@ -61955,7 +62534,7 @@
 		},
 		{
 			"name": "create_default_quote_stages_for_holding",
-			"def": "CREATE OR REPLACE FUNCTION public.create_default_quote_stages_for_holding(p_holding_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\n  BEGIN\n    -- Check if the holding already has quote stages\n    IF NOT EXISTS (\n      SELECT 1 FROM public.quote_stages\n      WHERE holding_id = p_holding_id\n    ) THEN\n      -- Insert default quote stages\n      INSERT INTO public.quote_stages (holding_id, name, color, position,\n  created_at, updated_at)\n      VALUES\n        (p_holding_id, 'Borrador', '#94a3b8', 1, NOW(), NOW()),\n        (p_holding_id, 'Enviada', '#3b82f6', 2, NOW(), NOW()),\n        (p_holding_id, 'En Revisión', '#f59e0b', 3, NOW(), NOW()),\n        (p_holding_id, 'Aprobada', '#10b981', 4, NOW(), NOW()),\n        (p_holding_id, 'Rechazada', '#ef4444', 5, NOW(), NOW()),\n        (p_holding_id, 'Cerrada - Ganada', '#22c55e', 6, NOW(), NOW()),\n        (p_holding_id, 'Cerrada - Perdida', '#991b1b', 7, NOW(), NOW());\n    END IF;\n  END;\n  $function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.create_default_quote_stages_for_holding(p_holding_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\n  BEGIN\n    -- Check if the holding already has quote stages\n    IF NOT EXISTS (\n      SELECT 1 FROM public.quote_stages\n      WHERE holding_id = p_holding_id\n    ) THEN\n      -- Insert default quote stages (v2: with system kind)\n      INSERT INTO public.quote_stages (holding_id, name, color, position, is_system_stage, is_deletable, kind,\n  created_at, updated_at)\n      VALUES\n        (p_holding_id, 'Borrador', '#94a3b8', 1, true, false, 'draft', NOW(), NOW()),\n        (p_holding_id, 'Enviada', '#3b82f6', 2, true, false, 'sent', NOW(), NOW()),\n        (p_holding_id, 'Firmada', '#10b981', 3, true, false, 'signed', NOW(), NOW()),\n        (p_holding_id, 'Perdida', '#ef4444', 4, true, false, 'lost', NOW(), NOW()),\n        (p_holding_id, 'Contrato creado', '#6366f1', 5, true, false, 'contract_created', NOW(), NOW());\n    END IF;\n  END;\n  $function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": "p_holding_id uuid"
@@ -62045,53 +62624,11 @@
 			"identity_args": "user_id uuid"
 		},
 		{
-			"name": "detect_invoice_changes",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_invoice_changes(new_data jsonb, old_data jsonb, relevant_fields text[] DEFAULT ARRAY['name'::text, 'amount_total'::text, 'state'::text, 'invoice_date'::text])\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    field TEXT;\nBEGIN\n    -- Si no hay datos anteriores, siempre hay cambios\n    IF old_data IS NULL THEN\n        RETURN TRUE;\n    END IF;\n    \n    -- Comparar cada campo relevante\n    FOREACH field IN ARRAY relevant_fields\n    LOOP\n        IF (new_data ->> field) IS DISTINCT FROM (old_data ->> field) THEN\n            RETURN TRUE;\n        END IF;\n    END LOOP;\n    \n    RETURN FALSE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función de compatibilidad para detectar cambios en facturas con campos específicos",
-			"identity_args": "new_data jsonb, old_data jsonb, relevant_fields text[]"
-		},
-		{
-			"name": "detect_invoice_line_changes",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_invoice_line_changes(new_data jsonb, old_data jsonb, relevant_fields text[] DEFAULT ARRAY['name'::text, 'quantity'::text, 'price_unit'::text, 'price_subtotal'::text])\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    field TEXT;\nBEGIN\n    -- Si no hay datos anteriores, siempre hay cambios\n    IF old_data IS NULL THEN\n        RETURN TRUE;\n    END IF;\n    \n    -- Comparar cada campo relevante\n    FOREACH field IN ARRAY relevant_fields\n    LOOP\n        IF (new_data ->> field) IS DISTINCT FROM (old_data ->> field) THEN\n            RETURN TRUE;\n        END IF;\n    END LOOP;\n    \n    RETURN FALSE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función de compatibilidad para detectar cambios en líneas de factura con campos específicos",
-			"identity_args": "new_data jsonb, old_data jsonb, relevant_fields text[]"
-		},
-		{
-			"name": "detect_invoice_line_changes_with_dynamic_mapping",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_invoice_line_changes_with_dynamic_mapping(new_data jsonb, existing_line_id uuid, holding_id_param uuid)\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    mapping_config JSONB;\n    mapping_entry RECORD;\n    source_field TEXT;\n    target_field TEXT;\n    source_value TEXT;\n    target_value TEXT;\n    has_changes BOOLEAN := FALSE;\n    dynamic_sql TEXT;\nBEGIN\n    -- Obtener configuración de mapeo jerárquico para líneas\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = 'account.move'\n        AND fm.target_table = 'invoices_legacy'\n        AND fm.mapping_type = 'hierarchical'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n\n    -- Si hay mapeo configurado, usar comparación dinámica\n    IF mapping_config IS NOT NULL AND mapping_config->'line_mappings' IS NOT NULL THEN\n        -- Iterar sobre cada mapeo de línea configurado\n        FOR mapping_entry IN SELECT * FROM jsonb_each(mapping_config->'line_mappings')\n        LOOP\n            -- Extraer campo fuente (Odoo)\n            source_field := COALESCE(\n                (mapping_entry.value->>'source'),\n                (mapping_entry.value->>'odoo_field')\n            );\n            \n            -- Campo destino (invoice_items_legacy)\n            target_field := mapping_entry.key;\n            \n            IF source_field IS NOT NULL AND target_field IS NOT NULL THEN\n                -- Obtener valor de Odoo (manejo de campos anidados)\n                IF source_field LIKE '%_id' AND source_field != 'name' THEN\n                    -- Campos relacionales como product_id (tomar el nombre)\n                    source_value := new_data -> source_field ->> 1;\n                ELSE\n                    -- Campos simples\n                    source_value := new_data ->> source_field;\n                END IF;\n                \n                -- Consulta dinámica para obtener valor de invoice_items_legacy\n                BEGIN\n                    dynamic_sql := format(\n                        'SELECT %I FROM invoice_items_legacy WHERE id = $1',\n                        target_field\n                    );\n                    \n                    EXECUTE dynamic_sql INTO target_value USING existing_line_id;\n                    \n                EXCEPTION WHEN OTHERS THEN\n                    target_value := NULL;\n                    RAISE NOTICE 'Error accediendo campo %: %', target_field, SQLERRM;\n                END;\n                \n                -- Comparar valores\n                IF source_value IS DISTINCT FROM target_value THEN\n                    has_changes := TRUE;\n                    RAISE NOTICE 'Cambio detectado en línea %: % -> %', target_field, target_value, source_value;\n                    EXIT; -- Salir del loop si encuentra cambios\n                END IF;\n            END IF;\n        END LOOP;\n        \n        -- Siempre comparar odoo_line_id (crítico)\n        BEGIN\n            EXECUTE 'SELECT odoo_line_id FROM invoice_items_legacy WHERE id = $1' \n            INTO target_value USING existing_line_id;\n            \n            IF (new_data ->> 'id') IS DISTINCT FROM target_value THEN\n                has_changes := TRUE;\n                RAISE NOTICE 'Cambio detectado en odoo_line_id';\n            END IF;\n        EXCEPTION WHEN OTHERS THEN\n            has_changes := TRUE;\n        END;\n        \n    ELSE\n        -- FALLBACK: Si no hay mapeo, usar comparación básica de campos críticos\n        BEGIN\n            SELECT \n                CASE \n                    WHEN (new_data ->> 'name') IS DISTINCT FROM iil.description OR\n                         (new_data ->> 'quantity') IS DISTINCT FROM iil.quantity::TEXT OR\n                         (new_data ->> 'price_unit') IS DISTINCT FROM iil.unit_price::TEXT OR\n                         (new_data ->> 'price_subtotal') IS DISTINCT FROM iil.subtotal::TEXT OR\n                         (new_data -> 'product_id' ->> 1) IS DISTINCT FROM iil.product_name OR\n                         (new_data ->> 'id') IS DISTINCT FROM iil.odoo_line_id\n                    THEN TRUE\n                    ELSE FALSE\n                END\n            INTO has_changes\n            FROM invoice_items_legacy iil\n            WHERE iil.id = existing_line_id;\n            \n        EXCEPTION WHEN OTHERS THEN\n            has_changes := TRUE;\n        END;\n    END IF;\n\n    RETURN has_changes;\n    \nEXCEPTION WHEN OTHERS THEN\n    -- Si hay error, asumir que hay cambios\n    RAISE NOTICE 'Error en detect_invoice_line_changes_with_dynamic_mapping: %', SQLERRM;\n    RETURN TRUE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Detecta cambios en líneas de factura usando configuración de mapeo dinámico. Retorna TRUE si hay cambios.",
-			"identity_args": "new_data jsonb, existing_line_id uuid, holding_id_param uuid"
-		},
-		{
 			"name": "detect_orphaned_users",
 			"def": "CREATE OR REPLACE FUNCTION public.detect_orphaned_users()\n RETURNS TABLE(user_id uuid, email text, auth_id uuid, created_at timestamp without time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n    RETURN QUERY\n    SELECT u.id, u.email, u.auth_id, u.created_at\n    FROM public.users u\n    LEFT JOIN public.user_holdings uh ON u.id = uh.user_id\n    WHERE uh.user_id IS NULL\n    AND u.status != 'Pendiente'; -- Excluir usuarios pendientes de invitación\nEND;\n$function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": ""
-		},
-		{
-			"name": "detect_partner_changes",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_partner_changes(new_data jsonb, old_data jsonb, relevant_fields text[] DEFAULT ARRAY['name'::text, 'email'::text, 'vat'::text])\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    field TEXT;\nBEGIN\n    -- Si no hay datos anteriores, siempre hay cambios\n    IF old_data IS NULL THEN\n        RETURN TRUE;\n    END IF;\n    \n    -- Comparar cada campo relevante\n    FOREACH field IN ARRAY relevant_fields\n    LOOP\n        IF (new_data ->> field) IS DISTINCT FROM (old_data ->> field) THEN\n            RETURN TRUE;\n        END IF;\n    END LOOP;\n    \n    RETURN FALSE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función de compatibilidad para detectar cambios con campos específicos",
-			"identity_args": "new_data jsonb, old_data jsonb, relevant_fields text[]"
-		},
-		{
-			"name": "detect_partner_changes",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_partner_changes(new_data jsonb, old_data jsonb, holding_id_param uuid)\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    mapping_config JSONB;\n    mapping_entry RECORD;\n    source_field TEXT;\n    new_value TEXT;\n    old_value TEXT;\nBEGIN\n    -- Si no hay datos anteriores, es un cambio\n    IF old_data IS NULL THEN\n        RETURN TRUE;\n    END IF;\n    \n    -- Obtener el mapeo activo para este holding\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = 'res.partner'\n        AND fm.target_table = 'client_entities'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n    \n    -- Si no hay mapeo configurado, usar campos básicos\n    IF mapping_config IS NULL OR mapping_config->'mappings' IS NULL THEN\n        -- Fallback a campos básicos comunes\n        IF (new_data ->> 'name') IS DISTINCT FROM (old_data ->> 'name') OR\n           (new_data ->> 'email') IS DISTINCT FROM (old_data ->> 'email') OR\n           (new_data ->> 'vat') IS DISTINCT FROM (old_data ->> 'vat') THEN\n            RETURN TRUE;\n        END IF;\n        RETURN FALSE;\n    END IF;\n    \n    -- Comparar cada campo mapeado (compatible con nuevo formato)\n    FOR mapping_entry IN SELECT * FROM jsonb_each(mapping_config->'mappings')\n    LOOP\n        -- Extraer el nombre del campo fuente del mapeo (compatible con ambos formatos)\n        source_field := COALESCE(\n            mapping_entry.value->>'sourceField'->>'name',  -- Formato antiguo\n            mapping_entry.value->>'odoo_field'             -- Formato nuevo\n        );\n        \n        IF source_field IS NOT NULL THEN\n            -- Obtener valores para comparar\n            new_value := new_data ->> source_field;\n            old_value := old_data ->> source_field;\n            \n            -- Si hay diferencia, es un cambio\n            IF new_value IS DISTINCT FROM old_value THEN\n                RETURN TRUE;\n            END IF;\n        END IF;\n    END LOOP;\n    \n    -- No se detectaron cambios\n    RETURN FALSE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función para detectar cambios en partners, compatible con formato antiguo y nuevo de mapeos. Versión limpia sin conflictos.",
-			"identity_args": "new_data jsonb, old_data jsonb, holding_id_param uuid"
-		},
-		{
-			"name": "detect_partner_changes_with_mapping",
-			"def": "CREATE OR REPLACE FUNCTION public.detect_partner_changes_with_mapping(new_data jsonb, old_data jsonb, holding_id_param uuid)\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    mapping_config JSONB;\n    mapping_entry JSONB;\n    source_field TEXT;\nBEGIN\n    -- Si no hay datos anteriores, siempre hay cambios\n    IF old_data IS NULL THEN\n        RETURN TRUE;\n    END IF;\n    \n    -- Obtener el mapeo activo para este holding\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = 'res.partner'\n        AND fm.target_table = 'client_entities'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n    \n    -- Si no hay mapeo configurado, usar campos básicos\n    IF mapping_config IS NULL OR mapping_config->'mappings' IS NULL THEN\n        -- Fallback a campos básicos comunes\n        IF (new_data ->> 'name') IS DISTINCT FROM (old_data ->> 'name') OR\n           (new_data ->> 'email') IS DISTINCT FROM (old_data ->> 'email') OR\n           (new_data ->> 'vat') IS DISTINCT FROM (old_data ->> 'vat') THEN\n            RETURN TRUE;\n        END IF;\n        RETURN FALSE;\n    END IF;\n    \n    -- Comparar cada campo mapeado\n    FOR mapping_entry IN SELECT * FROM jsonb_each(mapping_config->'mappings')\n    LOOP\n        -- Extraer el nombre del campo fuente del mapeo\n        source_field := mapping_entry.value->>'sourceField'->>'name';\n        \n        IF source_field IS NOT NULL THEN\n            -- Comparar el valor del campo fuente\n            IF (new_data ->> source_field) IS DISTINCT FROM (old_data ->> source_field) THEN\n                RETURN TRUE;\n            END IF;\n        END IF;\n    END LOOP;\n    \n    RETURN FALSE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Detecta cambios usando los campos configurados en el mapeo activo del holding",
-			"identity_args": "new_data jsonb, old_data jsonb, holding_id_param uuid"
 		},
 		{
 			"name": "detect_similar_invoices",
@@ -62190,13 +62727,6 @@
 			"extension": null,
 			"comment": "Genera facturas reales desde contract_invoices programadas.\nACTUALIZADO 2026-02-05:\n- Ignora facturas legacy al validar si ya existen invoices (COALESCE(is_legacy, false) = false)\n- Solo genera facturas para contract_invoices con is_satisfied = false (COALESCE(is_satisfied, false) = false)\n- Esto permite que contratos legacy reconciliados generen solo las facturas pendientes",
 			"identity_args": "p_contract_id uuid"
-		},
-		{
-			"name": "get_available_transformation_types",
-			"def": "CREATE OR REPLACE FUNCTION public.get_available_transformation_types()\n RETURNS TABLE(transformation_type text, description text, requires_config boolean)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY\n    SELECT \n        unnest(enum_range(NULL::transformation_type_enum))::TEXT as transformation_type,\n        CASE unnest(enum_range(NULL::transformation_type_enum))::TEXT\n            WHEN 'direct' THEN 'Mapeo directo sin transformación'\n            WHEN 'company_mapping' THEN 'Mapeo de companies Odoo -> Sapira'\n            WHEN 'partner_mapping' THEN 'Mapeo de partners Odoo -> client_entities Sapira'\n            WHEN 'invoice_mapping' THEN 'Mapeo de invoices Odoo -> invoices_legacy Sapira'\n            WHEN 'value_mapping' THEN 'Mapeo de valores específicos usando tabla de equivalencias'\n            WHEN 'lookup_table' THEN 'Lookup genérico en tabla de referencia'\n            WHEN 'custom_function' THEN 'Función personalizada'\n            ELSE 'Transformación personalizada'\n        END as description,\n        CASE unnest(enum_range(NULL::transformation_type_enum))::TEXT\n            WHEN 'direct' THEN false\n            WHEN 'company_mapping' THEN false\n            WHEN 'partner_mapping' THEN false\n            WHEN 'invoice_mapping' THEN false\n            WHEN 'value_mapping' THEN true\n            WHEN 'lookup_table' THEN true\n            WHEN 'custom_function' THEN true\n            ELSE true\n        END as requires_config;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función que retorna todos los tipos de transformación disponibles para que el frontend los pueda mostrar en la UI.\nIncluye el nuevo tipo value_mapping junto con los existentes.",
-			"identity_args": ""
 		},
 		{
 			"name": "get_clients_by_entity",
@@ -62309,20 +62839,6 @@
 			"extension": null,
 			"comment": null,
 			"identity_args": "p_holding_id uuid, p_from_currency text, p_to_currency text, p_reference_date date, p_policy text"
-		},
-		{
-			"name": "get_hierarchical_mapping",
-			"def": "CREATE OR REPLACE FUNCTION public.get_hierarchical_mapping(holding_id_param uuid, primary_source_model text, secondary_source_model text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    mapping_record RECORD;\n    result JSONB;\nBEGIN\n    -- Buscar mapeo jerárquico activo\n    SELECT * INTO mapping_record\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = primary_source_model\n        AND (secondary_source_model IS NULL OR fm.secondary_source_model = secondary_source_model)\n        AND fm.mapping_type = 'hierarchical'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n    \n    IF NOT FOUND THEN\n        RETURN NULL;\n    END IF;\n    \n    -- Construir resultado con metadatos\n    result := jsonb_build_object(\n        'id', mapping_record.id,\n        'mapping_name', mapping_record.mapping_name,\n        'primary_source_model', mapping_record.source_model,\n        'primary_target_table', mapping_record.target_table,\n        'secondary_source_model', mapping_record.secondary_source_model,\n        'secondary_target_table', mapping_record.secondary_target_table,\n        'mapping_config', mapping_record.mapping_config,\n        'created_at', mapping_record.created_at\n    );\n    \n    RETURN result;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": null,
-			"identity_args": "holding_id_param uuid, primary_source_model text, secondary_source_model text"
-		},
-		{
-			"name": "get_invoice_integration_stats",
-			"def": "CREATE OR REPLACE FUNCTION public.get_invoice_integration_stats(holding_id_param uuid, batch_id_param uuid DEFAULT NULL::uuid)\n RETURNS TABLE(total_invoices_in_batch integer, processed_invoices integer, failed_invoices integer, total_lines_in_batch integer, processed_lines integer, failed_lines integer, integration_start_time timestamp without time zone, integration_end_time timestamp without time zone, duration_seconds integer)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY\n    WITH batch_stats AS (\n        SELECT \n            COUNT(DISTINCT ois.id) as total_invoices,\n            COUNT(DISTINCT CASE WHEN ois.processing_status = 'processed' THEN ois.id END) as proc_invoices,\n            COUNT(DISTINCT CASE WHEN ois.processing_status = 'error' THEN ois.id END) as fail_invoices,\n            COUNT(oils.id) as total_lines,\n            COUNT(CASE WHEN oils.processing_status = 'processed' THEN oils.id END) as proc_lines,\n            COUNT(CASE WHEN oils.processing_status = 'error' THEN oils.id END) as fail_lines,\n            MIN(ois.created_at) as start_time,\n            MAX(COALESCE(ois.last_integrated_at, ois.updated_at)) as end_time\n        FROM odoo_invoices_stg ois\n        LEFT JOIN odoo_invoice_lines_stg oils ON oils.invoice_staging_id = ois.id\n        WHERE ois.holding_id = holding_id_param\n            AND (batch_id_param IS NULL OR ois.integration_batch_id = batch_id_param)\n    )\n    SELECT \n        total_invoices::INTEGER,\n        proc_invoices::INTEGER,\n        fail_invoices::INTEGER,\n        total_lines::INTEGER,\n        proc_lines::INTEGER,\n        fail_lines::INTEGER,\n        start_time,\n        end_time,\n        COALESCE(EXTRACT(EPOCH FROM (end_time - start_time))::INTEGER, 0)\n    FROM batch_stats;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Obtiene estadísticas de integración de facturas por holding y/o lote",
-			"identity_args": "holding_id_param uuid, batch_id_param uuid"
 		},
 		{
 			"name": "get_invoice_items_with_credits",
@@ -63011,13 +63527,6 @@
 			"identity_args": ""
 		},
 		{
-			"name": "migrate_existing_partners_to_new_system",
-			"def": "CREATE OR REPLACE FUNCTION public.migrate_existing_partners_to_new_system(holding_id_param uuid)\n RETURNS TABLE(migrated_count integer, error_count integer)\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    partner_record RECORD;\n    mapping_config JSONB;\n    migrated INTEGER := 0;\n    errors INTEGER := 0;\nBEGIN\n    -- Obtener configuración de mapeo actualizada\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = 'res.partner'\n        AND fm.target_table = 'client_entities'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n    \n    IF mapping_config IS NULL THEN\n        RAISE NOTICE 'No se encontró configuración de mapeo actualizada';\n        RETURN QUERY SELECT 0, 0;\n        RETURN;\n    END IF;\n    \n    -- Procesar partners existentes que tengan transformaciones pendientes\n    FOR partner_record IN \n        SELECT ops.*, ce.id as client_entity_id\n        FROM odoo_partners_stg ops\n        LEFT JOIN client_entities ce ON ce.odoo_partner_id = ops.odoo_id \n            AND ce.holding_id = ops.holding_id\n        WHERE ops.holding_id = holding_id_param\n        AND ops.processing_status = 'processed'\n        -- Solo si hay cambios en el mapeo que requieran re-procesamiento\n    LOOP\n        BEGIN\n            -- Re-procesar con nuevas transformaciones si es necesario\n            -- (Esta lógica se puede expandir según necesidades específicas)\n            \n            migrated := migrated + 1;\n            \n        EXCEPTION WHEN OTHERS THEN\n            errors := errors + 1;\n            RAISE NOTICE 'Error migrando partner %: %', partner_record.odoo_id, SQLERRM;\n        END;\n    END LOOP;\n    \n    RETURN QUERY SELECT migrated, errors;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Migra partners existentes para usar nuevas transformaciones (opcional, para casos específicos)",
-			"identity_args": "holding_id_param uuid"
-		},
-		{
 			"name": "months_between_dates",
 			"def": "CREATE OR REPLACE FUNCTION public.months_between_dates(p_end date, p_start date)\n RETURNS integer\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  SELECT (EXTRACT(YEAR FROM age(p_end, p_start)) * 12\n        + EXTRACT(MONTH FROM age(p_end, p_start)))::int;\n$function$\n",
 			"extension": null,
@@ -63026,9 +63535,9 @@
 		},
 		{
 			"name": "nc_discount_revenue_adjustment",
-			"def": "CREATE OR REPLACE FUNCTION public.nc_discount_revenue_adjustment(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date)\n RETURNS numeric\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  WITH adj AS (\n    -- Fuente 1 (sin cambios): NC de descuento Emitidas y clasificadas. El\n    -- subtotal de la línea de la NC ya es negativo.\n    SELECT nc.nc_revenue_treatment AS treatment,\n           nc.issue_date AS ref_date,\n           nii.subtotal_contract_currency AS amount,\n           nii.billing_period_start AS period_start,\n           nii.billing_period_end AS period_end\n    FROM public.invoices nc\n    JOIN public.invoice_items nii ON nii.invoice_id = nc.id\n    WHERE nc.contract_id = p_contract_id\n      AND nii.contract_item_id = p_contract_item_id\n      AND nc.document_type = 'NC'\n      AND nc.credit_type = 'discount'\n      AND nc.status = 'Emitida'\n      AND nc.is_active = true\n      AND nc.nc_revenue_treatment IS NOT NULL\n\n    UNION ALL\n\n    -- Fuente 2 (facturas en el 360, etapa 4): descuento puntual de una factura\n    -- (no NC) de la línea, guardado como sublínea del pricing_breakdown\n    -- { kind: 'discount', one_off: true, amount: -X }. Cuenta desde que se\n    -- registra (también Por Emitir); cancelar la factura lo quita. Si la factura\n    -- ya tiene una NC de descuento clasificada vigente, manda la NC (sin doble\n    -- conteo).\n    SELECT i.nc_revenue_treatment,\n           i.issue_date,\n           o.amount,\n           ii.billing_period_start,\n           ii.billing_period_end\n    FROM public.invoices i\n    JOIN public.invoice_items ii ON ii.invoice_id = i.id\n    CROSS JOIN LATERAL (\n      SELECT SUM((elem->>'amount')::numeric) AS amount\n      FROM jsonb_array_elements(\n        CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array' THEN ii.pricing_breakdown ELSE '[]'::jsonb END\n      ) elem\n      WHERE elem->>'kind' = 'discount'\n        AND COALESCE((elem->>'one_off')::boolean, false)\n    ) o\n    WHERE i.contract_id = p_contract_id\n      AND ii.contract_item_id = p_contract_item_id\n      AND i.nc_revenue_treatment IS NOT NULL\n      AND i.is_active = true\n      AND COALESCE(i.document_type, '') <> 'NC'\n      AND i.status IS DISTINCT FROM 'Cancelada'\n      AND o.amount IS NOT NULL\n      AND NOT EXISTS (\n        SELECT 1 FROM public.invoices dnc\n        WHERE dnc.related_invoice_id = i.id\n          AND dnc.document_type = 'NC'\n          AND dnc.credit_type = 'discount'\n          AND dnc.status = 'Emitida'\n          AND dnc.is_active = true\n          AND dnc.nc_revenue_treatment IS NOT NULL\n      )\n  )\n  SELECT COALESCE(SUM(\n    CASE\n      -- service_period: partes iguales en los meses calendario del período de\n      -- servicio de la línea (redondeo telescópico: suma exacta). Sin período\n      -- válido degenera a impact_month (rama siguiente).\n      WHEN a.treatment = 'service_period' AND s.n_months IS NOT NULL\n      THEN CASE WHEN p_month >= s.sp_start AND p_month <= s.sp_end\n                THEN ROUND(a.amount * s.k / s.n_months, 2)\n                   - ROUND(a.amount * (s.k - 1) / s.n_months, 2)\n                ELSE 0 END\n      -- impact_month, o defer degenerado (la referencia cae después del fin\n      -- activo del ítem): todo el monto al mes de la referencia (fecha de la NC\n      -- o de emisión de la factura).\n      WHEN a.treatment IN ('impact_month', 'service_period')\n           OR m.n_months IS NULL\n      THEN CASE WHEN d.ref_month = p_month THEN a.amount ELSE 0 END\n      -- defer_forward: cuota k de n con redondeo telescópico (suma exacta).\n      WHEN a.treatment = 'defer_forward'\n           AND p_month >= d.defer_start\n           AND p_month <= p_item_active_end_month\n      THEN ROUND(a.amount * m.k / m.n_months, 2)\n         - ROUND(a.amount * (m.k - 1) / m.n_months, 2)\n      ELSE 0\n    END\n  ), 0)\n  FROM adj a\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.ref_date)::date AS ref_month,\n           GREATEST(DATE_TRUNC('month', a.ref_date)::date, p_item_start_month) AS defer_start\n  ) d\n  CROSS JOIN LATERAL (\n    SELECT\n      CASE WHEN p_item_active_end_month IS NULL OR d.defer_start > p_item_active_end_month THEN NULL\n           ELSE ((EXTRACT(YEAR FROM p_item_active_end_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n                + EXTRACT(MONTH FROM p_item_active_end_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int AS k\n  ) m\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.period_start)::date AS sp_start,\n           DATE_TRUNC('month', a.period_end)::date AS sp_end,\n      CASE WHEN a.period_start IS NULL OR a.period_end IS NULL OR a.period_end < a.period_start THEN NULL\n           ELSE ((EXTRACT(YEAR FROM a.period_end) - EXTRACT(YEAR FROM a.period_start)) * 12\n                + EXTRACT(MONTH FROM a.period_end) - EXTRACT(MONTH FROM a.period_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM a.period_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM a.period_start) + 1)::int AS k\n  ) s\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.nc_discount_revenue_adjustment(p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date)\n RETURNS numeric\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  WITH adj AS (\n    -- Fuente 1 (sin cambios): NC de descuento Emitidas y clasificadas. El\n    -- subtotal de la línea de la NC ya es negativo.\n    SELECT nc.nc_revenue_treatment AS treatment,\n           nc.issue_date AS ref_date,\n           nii.subtotal_contract_currency AS amount,\n           nii.billing_period_start AS period_start,\n           nii.billing_period_end AS period_end\n    FROM public.invoices nc\n    JOIN public.invoice_items nii ON nii.invoice_id = nc.id\n    WHERE nc.contract_id = p_contract_id\n      AND nii.contract_item_id = p_contract_item_id\n      AND nc.document_type = 'NC'\n      AND nc.credit_type = 'discount'\n      -- Una NC no vence: nace de una factura y se cierra con ella (Domi 30-09). La tarea programada del front viejo\n      -- (`check-overdue-invoices`) igual la deja en 'Vencida', así que cuenta cualquier estado de NC emitida.\n      AND nc.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')\n      AND nc.is_active = true\n      AND nc.nc_revenue_treatment IS NOT NULL\n\n    UNION ALL\n\n    -- Fuente 2 (facturas en el 360, etapa 4): descuento puntual de una factura\n    -- (no NC) de la línea, guardado como sublínea del pricing_breakdown\n    -- { kind: 'discount', one_off: true, amount: -X }. Cuenta desde que se\n    -- registra (también Por Emitir); cancelar la factura lo quita. Si la factura\n    -- ya tiene una NC de descuento clasificada vigente, manda la NC (sin doble\n    -- conteo).\n    SELECT i.nc_revenue_treatment,\n           i.issue_date,\n           o.amount,\n           ii.billing_period_start,\n           ii.billing_period_end\n    FROM public.invoices i\n    JOIN public.invoice_items ii ON ii.invoice_id = i.id\n    CROSS JOIN LATERAL (\n      SELECT SUM((elem->>'amount')::numeric) AS amount\n      FROM jsonb_array_elements(\n        CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array' THEN ii.pricing_breakdown ELSE '[]'::jsonb END\n      ) elem\n      WHERE elem->>'kind' = 'discount'\n        AND COALESCE((elem->>'one_off')::boolean, false)\n    ) o\n    WHERE i.contract_id = p_contract_id\n      AND ii.contract_item_id = p_contract_item_id\n      AND i.nc_revenue_treatment IS NOT NULL\n      AND i.is_active = true\n      AND COALESCE(i.document_type, '') <> 'NC'\n      AND i.status IS DISTINCT FROM 'Cancelada'\n      AND o.amount IS NOT NULL\n      AND NOT EXISTS (\n        SELECT 1 FROM public.invoices dnc\n        WHERE dnc.related_invoice_id = i.id\n          AND dnc.document_type = 'NC'\n          AND dnc.credit_type = 'discount'\n          AND dnc.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')\n          AND dnc.is_active = true\n          AND dnc.nc_revenue_treatment IS NOT NULL\n      )\n  )\n  SELECT COALESCE(SUM(\n    CASE\n      -- service_period: partes iguales en los meses calendario del período de\n      -- servicio de la línea (redondeo telescópico: suma exacta). Sin período\n      -- válido degenera a impact_month (rama siguiente).\n      WHEN a.treatment = 'service_period' AND s.n_months IS NOT NULL\n      THEN CASE WHEN p_month >= s.sp_start AND p_month <= s.sp_end\n                THEN ROUND(a.amount * s.k / s.n_months, 2)\n                   - ROUND(a.amount * (s.k - 1) / s.n_months, 2)\n                ELSE 0 END\n      -- impact_month, o defer degenerado (la referencia cae después del fin\n      -- activo del ítem): todo el monto al mes de la referencia (fecha de la NC\n      -- o de emisión de la factura).\n      WHEN a.treatment IN ('impact_month', 'service_period')\n           OR m.n_months IS NULL\n      THEN CASE WHEN d.ref_month = p_month THEN a.amount ELSE 0 END\n      -- defer_forward: cuota k de n con redondeo telescópico (suma exacta).\n      WHEN a.treatment = 'defer_forward'\n           AND p_month >= d.defer_start\n           AND p_month <= p_item_active_end_month\n      THEN ROUND(a.amount * m.k / m.n_months, 2)\n         - ROUND(a.amount * (m.k - 1) / m.n_months, 2)\n      ELSE 0\n    END\n  ), 0)\n  FROM adj a\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.ref_date)::date AS ref_month,\n           GREATEST(DATE_TRUNC('month', a.ref_date)::date, p_item_start_month) AS defer_start\n  ) d\n  CROSS JOIN LATERAL (\n    SELECT\n      CASE WHEN p_item_active_end_month IS NULL OR d.defer_start > p_item_active_end_month THEN NULL\n           ELSE ((EXTRACT(YEAR FROM p_item_active_end_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n                + EXTRACT(MONTH FROM p_item_active_end_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM d.defer_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM d.defer_start) + 1)::int AS k\n  ) m\n  CROSS JOIN LATERAL (\n    SELECT DATE_TRUNC('month', a.period_start)::date AS sp_start,\n           DATE_TRUNC('month', a.period_end)::date AS sp_end,\n      CASE WHEN a.period_start IS NULL OR a.period_end IS NULL OR a.period_end < a.period_start THEN NULL\n           ELSE ((EXTRACT(YEAR FROM a.period_end) - EXTRACT(YEAR FROM a.period_start)) * 12\n                + EXTRACT(MONTH FROM a.period_end) - EXTRACT(MONTH FROM a.period_start) + 1)::int\n      END AS n_months,\n      ((EXTRACT(YEAR FROM p_month) - EXTRACT(YEAR FROM a.period_start)) * 12\n       + EXTRACT(MONTH FROM p_month) - EXTRACT(MONTH FROM a.period_start) + 1)::int AS k\n  ) s\n$function$\n",
 			"extension": null,
-			"comment": "Ajuste (negativo) de recognized por ítem y mes. Fuentes: (1) NC discount Emitida con nc_revenue_treatment NOT NULL; (2) descuento puntual de una factura no NC (sublíneas {kind: discount, one_off: true} del pricing_breakdown) con nc_revenue_treatment NOT NULL, activa y no Cancelada, salvo que tenga una NC discount clasificada vigente (manda la NC). Tratamientos: impact_month (mes de la NC / emisión), defer_forward (desde ese mes hasta el fin activo del ítem), service_period (meses del período de servicio de la línea; sin período = impact_month).",
+			"comment": "Ajuste (negativo) de recognized por ítem y mes. Fuentes: (1) NC discount emitida (Emitida/Enviada/Vencida/Pagada: una NC no vence) con nc_revenue_treatment NOT NULL; (2) descuento puntual de una factura no NC (sublíneas {kind: discount, one_off: true} del pricing_breakdown) con nc_revenue_treatment NOT NULL, activa y no Cancelada, salvo que tenga una NC discount clasificada vigente (manda la NC). Tratamientos: impact_month (mes de la NC / emisión), defer_forward (desde ese mes hasta el fin activo del ítem), service_period (meses del período de servicio de la línea; sin período = impact_month).",
 			"identity_args": "p_contract_id uuid, p_contract_item_id uuid, p_month date, p_item_start_month date, p_item_active_end_month date"
 		},
 		{
@@ -63058,20 +63567,6 @@
 			"extension": null,
 			"comment": "Procesa renovaciones automáticas de items de contrato que están próximos a vencer. \nPor defecto se ejecuta 90 días (3 meses) antes del vencimiento.\nRetorna un resumen JSON con los resultados de la ejecución.",
 			"identity_args": "p_days_before_expiry integer"
-		},
-		{
-			"name": "process_partner_staging_to_client_entities",
-			"def": "CREATE OR REPLACE FUNCTION public.process_partner_staging_to_client_entities(holding_id_param uuid, batch_id_param text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    partner_record RECORD;\n    mapping_config JSONB;\n    mapped_data JSONB;\n    client_entity_data JSONB;\n    result_summary JSONB := '{\"processed\": 0, \"errors\": 0, \"details\": []}'::jsonb;\n    error_details JSONB;\n    processed_count INTEGER := 0;\n    error_count INTEGER := 0;\nBEGIN\n    -- Obtener configuración de mapeo para partners\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n    AND fm.source_model = 'res.partner'\n    AND fm.target_table = 'client_entities'\n    LIMIT 1;\n    \n    -- Si no hay configuración de mapeo, devolver error\n    IF mapping_config IS NULL THEN\n        RETURN jsonb_build_object(\n            'success', false,\n            'error', 'No se encontró configuración de mapeo para res.partner -> client_entities',\n            'processed', 0,\n            'errors', 0\n        );\n    END IF;\n    \n    -- Procesar cada partner pendiente\n    FOR partner_record IN \n        SELECT id, odoo_id, raw_data, sync_batch_id\n        FROM odoo_partners_stg \n        WHERE holding_id = holding_id_param\n        AND processing_status = 'pending'\n        AND (batch_id_param IS NULL OR sync_batch_id = batch_id_param)\n        ORDER BY created_at\n    LOOP\n        BEGIN\n            -- Aplicar mapeo de campos con el nuevo parámetro holding_id\n            mapped_data := apply_field_mapping_to_data(\n                partner_record.raw_data,\n                mapping_config,\n                'client_entities',\n                holding_id_param  -- NUEVO PARÁMETRO\n            );\n            \n            -- Agregar campos requeridos\n            client_entity_data := mapped_data || jsonb_build_object(\n                'holding_id', holding_id_param,\n                'odoo_partner_id', partner_record.odoo_id,\n                'created_at', NOW(),\n                'updated_at', NOW()\n            );\n            \n            -- Insertar o actualizar client_entity\n            INSERT INTO client_entities (\n                holding_id, odoo_partner_id, legal_name, tax_id, \n                email, phone, address, city, state, country, \n                created_at, updated_at\n            )\n            SELECT \n                (client_entity_data->>'holding_id')::UUID,\n                (client_entity_data->>'odoo_partner_id')::INTEGER,\n                client_entity_data->>'legal_name',\n                client_entity_data->>'tax_id',\n                client_entity_data->>'email',\n                client_entity_data->>'phone',\n                client_entity_data->>'address',\n                client_entity_data->>'city',\n                client_entity_data->>'state',\n                client_entity_data->>'country'\n            WHERE client_entity_data ? 'holding_id' AND client_entity_data ? 'odoo_partner_id'\n            ON CONFLICT (holding_id, odoo_partner_id) \n            DO UPDATE SET\n                legal_name = EXCLUDED.legal_name,\n                tax_id = EXCLUDED.tax_id,\n                email = EXCLUDED.email,\n                phone = EXCLUDED.phone,\n                address = EXCLUDED.address,\n                city = EXCLUDED.city,\n                state = EXCLUDED.state,\n                country = EXCLUDED.country,\n                updated_at = NOW();\n            \n            -- Marcar como procesado\n            UPDATE odoo_partners_stg \n            SET processing_status = 'processed', processed_at = NOW()\n            WHERE id = partner_record.id;\n            \n            processed_count := processed_count + 1;\n            \n        EXCEPTION\n            WHEN OTHERS THEN\n                -- Marcar como error\n                UPDATE odoo_partners_stg \n                SET processing_status = 'error', \n                    error_message = SQLERRM,\n                    processed_at = NOW()\n                WHERE id = partner_record.id;\n                \n                error_count := error_count + 1;\n                \n                -- Agregar detalles del error\n                error_details := jsonb_build_object(\n                    'partner_id', partner_record.odoo_id,\n                    'error', SQLERRM\n                );\n                \n                result_summary := jsonb_set(\n                    result_summary,\n                    '{details}',\n                    (result_summary->'details') || error_details\n                );\n        END;\n    END LOOP;\n    \n    -- Actualizar resumen\n    result_summary := jsonb_set(result_summary, '{processed}', to_jsonb(processed_count));\n    result_summary := jsonb_set(result_summary, '{errors}', to_jsonb(error_count));\n    result_summary := jsonb_set(result_summary, '{success}', to_jsonb(true));\n    \n    RETURN result_summary;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Función actualizada que pasa el holding_id a apply_field_mapping_to_data para soportar transformaciones que requieren contexto de holding.",
-			"identity_args": "holding_id_param uuid, batch_id_param text"
-		},
-		{
-			"name": "process_partner_staging_with_transformations",
-			"def": "CREATE OR REPLACE FUNCTION public.process_partner_staging_with_transformations(staging_ids uuid[] DEFAULT NULL::uuid[], holding_id_param uuid DEFAULT NULL::uuid)\n RETURNS TABLE(processed_count integer, error_count integer, details jsonb)\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    staging_record RECORD;\n    mapping_config JSONB;\n    mapped_data JSONB;\n    processed INTEGER := 0;\n    errors INTEGER := 0;\n    result_details JSONB := '[]';\n    detail_entry JSONB;\nBEGIN\n    -- Obtener configuración de mapeo\n    SELECT fm.mapping_config INTO mapping_config\n    FROM field_mappings fm\n    WHERE fm.holding_id = holding_id_param\n        AND fm.source_model = 'res.partner'\n        AND fm.target_table = 'client_entities'\n        AND fm.is_active = true\n    ORDER BY fm.created_at DESC\n    LIMIT 1;\n    \n    -- Si no hay mapeo, usar configuración básica\n    IF mapping_config IS NULL THEN\n        RAISE NOTICE 'No se encontró configuración de mapeo para holding %', holding_id_param;\n        RETURN QUERY SELECT 0, 0, '[]'::JSONB;\n        RETURN;\n    END IF;\n    \n    -- Procesar registros staging\n    FOR staging_record IN \n        SELECT * FROM odoo_partners_stg \n        WHERE (staging_ids IS NULL OR id = ANY(staging_ids))\n        AND (holding_id_param IS NULL OR holding_id = holding_id_param)\n        AND processing_status = 'pending'\n    LOOP\n        BEGIN\n            -- Aplicar mapeo con transformaciones\n            SELECT apply_partner_mapping_with_transformations(\n                staging_record.raw_data,\n                mapping_config,\n                staging_record.holding_id\n            ) INTO mapped_data;\n            \n            -- Agregar metadatos\n            mapped_data := mapped_data || jsonb_build_object(\n                'holding_id', staging_record.holding_id,\n                'odoo_partner_id', staging_record.odoo_id,\n                'sync_batch_id', staging_record.sync_batch_id,\n                'created_at', NOW(),\n                'updated_at', NOW()\n            );\n            \n            -- Insertar en tabla destino\n            INSERT INTO client_entities \n            SELECT * FROM jsonb_populate_record(null::client_entities, mapped_data)\n            ON CONFLICT (odoo_partner_id, holding_id) \n            DO UPDATE SET\n                updated_at = NOW(),\n                sync_batch_id = EXCLUDED.sync_batch_id;\n            \n            -- Marcar como procesado\n            UPDATE odoo_partners_stg \n            SET \n                processing_status = 'processed',\n                processed_at = NOW()\n            WHERE id = staging_record.id;\n            \n            processed := processed + 1;\n            \n            -- Agregar detalle de éxito\n            detail_entry := jsonb_build_object(\n                'id', staging_record.id,\n                'odoo_id', staging_record.odoo_id,\n                'status', 'success'\n            );\n            result_details := result_details || detail_entry;\n            \n        EXCEPTION WHEN OTHERS THEN\n            -- Marcar como error\n            UPDATE odoo_partners_stg \n            SET \n                processing_status = 'error',\n                error_message = SQLERRM,\n                processed_at = NOW()\n            WHERE id = staging_record.id;\n            \n            errors := errors + 1;\n            \n            -- Agregar detalle de error\n            detail_entry := jsonb_build_object(\n                'id', staging_record.id,\n                'odoo_id', staging_record.odoo_id,\n                'status', 'error',\n                'message', SQLERRM\n            );\n            result_details := result_details || detail_entry;\n            \n            RAISE NOTICE 'Error procesando partner %: %', staging_record.odoo_id, SQLERRM;\n        END;\n    END LOOP;\n    \n    RETURN QUERY SELECT processed, errors, result_details;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Procesa partners desde staging usando el nuevo sistema de transformaciones",
-			"identity_args": "staging_ids uuid[], holding_id_param uuid"
 		},
 		{
 			"name": "quantities_set_holding_from_contract_item",
@@ -63977,13 +64472,6 @@
 			"identity_args": ""
 		},
 		{
-			"name": "update_odoo_invoices_staging_updated_at",
-			"def": "CREATE OR REPLACE FUNCTION public.update_odoo_invoices_staging_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  NEW.updated_at = NOW();\n  RETURN NEW;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": null,
-			"identity_args": ""
-		},
-		{
 			"name": "update_odoo_mapping_updated_at",
 			"def": "CREATE OR REPLACE FUNCTION public.update_odoo_mapping_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  NEW.updated_at = NOW();\n  RETURN NEW;\nEND;\n$function$\n",
 			"extension": null,
@@ -64157,13 +64645,6 @@
 			"extension": null,
 			"comment": null,
 			"identity_args": ""
-		},
-		{
-			"name": "validate_hierarchical_mapping",
-			"def": "CREATE OR REPLACE FUNCTION public.validate_hierarchical_mapping(mapping_config jsonb)\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    -- Verificar que tenga las secciones requeridas\n    IF mapping_config IS NULL THEN\n        RETURN FALSE;\n    END IF;\n    \n    -- Debe tener al menos primary_mappings\n    IF NOT (mapping_config ? 'primary_mappings') THEN\n        RETURN FALSE;\n    END IF;\n    \n    -- Si es jerárquico, debe tener secondary_mappings\n    IF (mapping_config ? 'mapping_type') AND \n       (mapping_config ->> 'mapping_type' = 'hierarchical') AND\n       NOT (mapping_config ? 'secondary_mappings') THEN\n        RETURN FALSE;\n    END IF;\n    \n    -- Verificar que primary_mappings sea un objeto\n    IF jsonb_typeof(mapping_config -> 'primary_mappings') != 'object' THEN\n        RETURN FALSE;\n    END IF;\n    \n    -- Si existe secondary_mappings, verificar que sea un objeto\n    IF (mapping_config ? 'secondary_mappings') AND\n       jsonb_typeof(mapping_config -> 'secondary_mappings') != 'object' THEN\n        RETURN FALSE;\n    END IF;\n    \n    RETURN TRUE;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": null,
-			"identity_args": "mapping_config jsonb"
 		},
 		{
 			"name": "validate_holding_fx_period_rates",
@@ -64411,20 +64892,6 @@
 			"identity_args": "cstring[]"
 		},
 		{
-			"name": "verify_hierarchical_mapping_extension",
-			"def": "CREATE OR REPLACE FUNCTION public.verify_hierarchical_mapping_extension()\n RETURNS TABLE(check_name text, status boolean, details text)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY\n    -- Verificar que las columnas existen\n    SELECT \n        'mapping_type_column'::TEXT as check_name,\n        EXISTS(\n            SELECT 1 FROM information_schema.columns \n            WHERE table_name = 'field_mappings' \n            AND column_name = 'mapping_type'\n        ) as status,\n        'Columna mapping_type agregada'::TEXT as details\n    \n    UNION ALL\n    \n    SELECT \n        'secondary_source_model_column'::TEXT as check_name,\n        EXISTS(\n            SELECT 1 FROM information_schema.columns \n            WHERE table_name = 'field_mappings' \n            AND column_name = 'secondary_source_model'\n        ) as status,\n        'Columna secondary_source_model agregada'::TEXT as details\n    \n    UNION ALL\n    \n    SELECT \n        'secondary_target_table_column'::TEXT as check_name,\n        EXISTS(\n            SELECT 1 FROM information_schema.columns \n            WHERE table_name = 'field_mappings' \n            AND column_name = 'secondary_target_table'\n        ) as status,\n        'Columna secondary_target_table agregada'::TEXT as details\n    \n    UNION ALL\n    \n    -- Verificar que los índices existen\n    SELECT \n        'hierarchical_indexes'::TEXT as check_name,\n        EXISTS(\n            SELECT 1 FROM pg_indexes \n            WHERE tablename = 'field_mappings' \n            AND indexname = 'idx_field_mappings_hierarchical'\n        ) as status,\n        'Índices jerárquicos creados'::TEXT as details\n    \n    UNION ALL\n    \n    -- Verificar que las funciones existen\n    SELECT \n        'hierarchical_functions'::TEXT as check_name,\n        EXISTS(\n            SELECT 1 FROM pg_proc \n            WHERE proname = 'get_hierarchical_mapping'\n        ) as status,\n        'Funciones jerárquicas creadas'::TEXT as details;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": null,
-			"identity_args": ""
-		},
-		{
-			"name": "verify_invoice_staging_integrity",
-			"def": "CREATE OR REPLACE FUNCTION public.verify_invoice_staging_integrity()\n RETURNS TABLE(issue_type text, issue_count bigint, description text)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY\n    -- Líneas huérfanas (sin factura padre)\n    SELECT \n        'orphaned_lines'::TEXT as issue_type,\n        COUNT(*)::BIGINT as issue_count,\n        'Líneas sin factura padre en staging'::TEXT as description\n    FROM odoo_invoice_lines_stg oil\n    WHERE NOT EXISTS (\n        SELECT 1 FROM odoo_invoices_stg oi \n        WHERE oi.id = oil.invoice_staging_id\n    )\n    \n    UNION ALL\n    \n    -- Inconsistencia de holding_id\n    SELECT \n        'holding_mismatch'::TEXT as issue_type,\n        COUNT(*)::BIGINT as issue_count,\n        'Líneas con holding_id diferente a su factura padre'::TEXT as description\n    FROM odoo_invoice_lines_stg oil\n    JOIN odoo_invoices_stg oi ON oi.id = oil.invoice_staging_id\n    WHERE oil.holding_id != oi.holding_id\n    \n    UNION ALL\n    \n    -- Inconsistencia de odoo_invoice_id\n    SELECT \n        'odoo_id_mismatch'::TEXT as issue_type,\n        COUNT(*)::BIGINT as issue_count,\n        'Líneas con odoo_invoice_id diferente a su factura padre'::TEXT as description\n    FROM odoo_invoice_lines_stg oil\n    JOIN odoo_invoices_stg oi ON oi.id = oil.invoice_staging_id\n    WHERE oil.odoo_invoice_id != oi.odoo_id;\nEND;\n$function$\n",
-			"extension": null,
-			"comment": "Verifica la integridad referencial entre facturas y líneas en staging",
-			"identity_args": ""
-		},
-		{
 			"name": "word_similarity",
 			"def": "CREATE OR REPLACE FUNCTION public.word_similarity(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity$function$\n",
 			"extension": "pg_trgm",
@@ -64501,7 +64968,7 @@
 		{
 			"tipo": "funcion",
 			"firma": "anon:EXECUTE, authenticated:EXECUTE, -:EXECUTE, postgres:EXECUTE, service_role:EXECUTE",
-			"objetos": 287,
+			"objetos": 269,
 			"ejemplos": [
 				"_recalc_invoice_header_from_items",
 				"adjust_issued_invoice",
@@ -64542,7 +65009,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 138,
+			"objetos": 139,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",
