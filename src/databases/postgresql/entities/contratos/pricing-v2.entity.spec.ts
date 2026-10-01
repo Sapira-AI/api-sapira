@@ -77,11 +77,6 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 		expect(indexes(entity)).toEqual({ idx_billable_metrics_holding_status: { columns: ['holding_id', 'status'], unique: false, where: null } });
 	});
 
-	// Cotizaciones v2 (migración 1790650000000-QuotesV2, pendiente): al commitearla, volver a asertar en `prices`
-	//   columns  → quote_id: true
-	//   fks      → prices_quote_id_fkey: { table: 'quotes', onDelete: 'CASCADE' }
-	//   indexes  → idx_prices_quote_id: { columns: ['quote_id'], unique: false, where: `owner = 'quote'` }
-	// y que PRICE_OWNERS incluya 'quote' (CHECKs prices_owner_check / prices_contract_owner_check con la forma nueva).
 	it('prices: modelo, cantidad, tramos, condiciones, versiones, CHECKs de coherencia, índices (parcial por contrato) y FKs', () => {
 		const entity = meta(Price);
 
@@ -92,6 +87,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 			owner: false,
 			product_id: false,
 			contract_id: true,
+			quote_id: true,
 			name: false,
 			currency: false,
 			model: false,
@@ -133,6 +129,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 			prices_holding_id_fkey: { table: 'company_holdings', onDelete: 'CASCADE' },
 			prices_product_id_fkey: { table: 'products', onDelete: 'NO ACTION' },
 			prices_contract_id_fkey: { table: 'contracts', onDelete: 'CASCADE' },
+			prices_quote_id_fkey: { table: 'quotes', onDelete: 'CASCADE' },
 			prices_billable_metric_id_fkey: { table: 'billable_metrics', onDelete: 'NO ACTION' },
 			prices_supersedes_price_id_fkey: { table: 'prices', onDelete: 'NO ACTION' },
 			prices_list_price_id_fkey: { table: 'prices', onDelete: 'NO ACTION' },
@@ -142,6 +139,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 		expect(indexes(entity)).toEqual({
 			idx_prices_holding_product_status: { columns: ['holding_id', 'product_id', 'status'], unique: false, where: null },
 			idx_prices_contract_id: { columns: ['contract_id'], unique: false, where: `owner = 'contract'` },
+			idx_prices_quote_id: { columns: ['quote_id'], unique: false, where: `owner = 'quote'` },
 			idx_prices_billable_metric_id: { columns: ['billable_metric_id'], unique: false, where: null },
 		});
 		const numeric = (name: string) => entity.columns.find((column) => column.databaseName === name)!;
