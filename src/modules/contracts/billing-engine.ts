@@ -107,6 +107,11 @@ export interface BillingEngineItem {
 	consumption?: ConsumptionInput[] | null;
 	/** Multimoneda: moneda del ítem (precio, cantidad × unitario, consumos). Default: la del contrato. */
 	currency?: string | null;
+	/**
+	 * Día de ciclo propio del ítem (`contract_items.billing_anchor_day`, spec modificaciones §9.3.9). `null`/ausente = ciclo del contrato.
+	 * Con valor, sus cuotas parten ese día y no hay tramo prorrateado inicial (el ítem nace en su día de ciclo); se agrupa por fecha exacta.
+	 */
+	billing_anchor_day?: number | null;
 }
 
 /** Fila de tasa fija por período (`contract_fx_period_rates`). Regla única: "1 [from_currency] = rate [to_currency]". */
@@ -489,10 +494,26 @@ export const itemPricing = (
 	return { price: round2(gross), discount_pct: pct, final_price: round2(gross * (1 - pct / 100)) };
 };
 
-/** Día de ciclo por defecto: día del `MIN(start_date)` de los ítems recurrentes (o de todos si no hay recurrentes). */
-export const defaultAnchorDay = (items: Array<Pick<BillingEngineItem, 'start_date' | 'is_recurring'>>): number | null => {
-	const recurring = items.filter((item) => item.is_recurring && item.start_date);
-	const pool = recurring.length ? recurring : items.filter((item) => item.start_date);
+/** Día de ciclo 1–31 válido, o null. */
+export const validAnchorDay = (value: unknown): number | null => {
+	const day = Number(value);
+
+	return value !== null && value !== undefined && Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
+};
+
+/** Día de ciclo con que se factura un ítem: el suyo (ciclo propio, §9.3.9) o el del contrato. */
+export const itemAnchorDay = (item: Pick<BillingEngineItem, 'billing_anchor_day'>, contractAnchor: number): number =>
+	validAnchorDay(item.billing_anchor_day) ?? contractAnchor;
+
+/**
+ * Día de ciclo por defecto: día del `MIN(start_date)` de los ítems recurrentes (o de todos si no hay recurrentes). Los ítems con ciclo
+ * propio (§9.3.9) no fijan el ciclo del contrato salvo que sean los únicos.
+ */
+export const defaultAnchorDay = (items: Array<Pick<BillingEngineItem, 'start_date' | 'is_recurring' | 'billing_anchor_day'>>): number | null => {
+	const contractCycle = items.filter((item) => !validAnchorDay(item.billing_anchor_day));
+	const base = contractCycle.length ? contractCycle : items;
+	const recurring = base.filter((item) => item.is_recurring && item.start_date);
+	const pool = recurring.length ? recurring : base.filter((item) => item.start_date);
 
 	if (!pool.length) return null;
 	const first = pool.map((item) => item.start_date).sort()[0];
@@ -535,7 +556,9 @@ export const monthsBetween = (start: string, end: string, anchor: number) => {
 	return months;
 };
 
-const recurringInstallments = (item: BillingEngineItem, anchor: number, monthlyNet: number): Installment[] => {
+const recurringInstallments = (item: BillingEngineItem, contractAnchor: number, monthlyNet: number): Installment[] => {
+	// Ciclo propio del ítem (§9.3.9): sus períodos parten su día; nace en él, así que no hay tramo inicial prorrateado.
+	const anchor = itemAnchorDay(item, contractAnchor);
 	const frequency = BILLING_FREQUENCY_MONTHS[item.billing_frequency as BillingFrequency] ?? 1;
 	const vencido = item.billing_method === 'Vencido';
 	const start = item.start_date;
@@ -586,7 +609,7 @@ const recurringInstallments = (item: BillingEngineItem, anchor: number, monthlyN
  * modificaciones para ubicar "el próximo inicio de período" (S3-5/S3-6) sin duplicar la lógica.
  */
 export const itemPeriods = (
-	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method'>,
+	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method' | 'billing_anchor_day'>,
 	anchor: number
 ): Array<{ issue_date: string; period_start: string; period_end: string; months: number }> =>
 	recurringInstallments({ ...item, key: '', product_name: '', quantity: 1, unit_price: 0, is_recurring: true } as BillingEngineItem, anchor, 0).map(
@@ -595,7 +618,7 @@ export const itemPeriods = (
 
 /** Próximo inicio de período del ítem en o después de `date` (null si el ítem termina antes). */
 export const nextPeriodStart = (
-	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method'>,
+	item: Pick<BillingEngineItem, 'start_date' | 'end_date' | 'term_months' | 'billing_frequency' | 'billing_method' | 'billing_anchor_day'>,
 	anchor: number,
 	date: string
 ): string | null =>

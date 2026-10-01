@@ -23,7 +23,16 @@ import { PaymentTermsDto } from '@/modules/clients/dtos/client-directory.dto';
 
 import { BILLING_FREQUENCIES, BILLING_METHODS, type BillingFrequency, type BillingMethod } from '../billing-engine';
 
-import { FX_INVOICE_POLICIES, FX_RATES_MAX, FxItemRateDto, FxPairRateDto, PRICE_ENTRY_MODES, PriceSpecDto } from './create-contract.dto';
+import {
+	BILLING_CYCLES,
+	type BillingCycle,
+	FX_INVOICE_POLICIES,
+	FX_RATES_MAX,
+	FxItemRateDto,
+	FxPairRateDto,
+	PRICE_ENTRY_MODES,
+	PriceSpecDto,
+} from './create-contract.dto';
 
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CURRENCY = /^[A-Z]{2,4}$/;
@@ -31,7 +40,10 @@ const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? va
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const present = (value: unknown) => value !== null && value !== undefined;
 
-/** Tipos de cambio construidos (spec §4, fases A–D; `multicurrency` = activar/desactivar multimoneda, spec-multimoneda §6). */
+/**
+ * Tipos de cambio construidos (spec §4, fases A–D; `multicurrency` = activar/desactivar multimoneda, spec-multimoneda §6; `reactivate` =
+ * revertir el churn o reactivar, §9.3.2; `pause` / `resume` = pausar y reanudar el servicio por ítem, §9.3.3).
+ */
 export const CHANGE_TYPES = [
 	'billing_conditions',
 	'change_entity',
@@ -41,25 +53,40 @@ export const CHANGE_TYPES = [
 	'item_add',
 	'item_change',
 	'multicurrency',
+	'reactivate',
+	'pause',
+	'resume',
 ] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
-/** Tipos que la spec deja ABIERTOS: se rechazan con 400 explicando qué falta decidir (§2.6, §2.7, §2.8). */
-export const DEFERRED_CHANGE_TYPES = ['reactivate', 'pause', 'resume', 'price_adjustment'] as const;
-export const ORIGIN_TYPES = ['manual', 'quote'] as const;
+/** Tipos que no se construyen como cambio: se rechazan con 400 explicando el camino (reajuste = pactos §9.3.6). */
+export const DEFERRED_CHANGE_TYPES = ['price_adjustment'] as const;
+/** `contract_cancel` (§9.3.1): qué hacer con cada factura con período desde la fecha efectiva. */
+export const INVOICE_DECISION_ACTIONS = ['emit', 'cancel', 'keep', 'void'] as const;
+export type InvoiceDecisionAction = (typeof INVOICE_DECISION_ACTIONS)[number];
+
+/** Origen del cambio: manual, cotización ganada o propuesta de renovación del job `contracts-auto-renewal` (§9.3.5). */
+export const ORIGIN_TYPES = ['manual', 'quote', 'renewal_proposal'] as const;
 export const FIRST_PERIOD_INVOICE = ['cycle', 'immediate'] as const;
 export type FirstPeriodInvoice = (typeof FIRST_PERIOD_INVOICE)[number];
 export const RENEWAL_CATCH_UP = ['backdate', 'current_month'] as const;
 export const CHANGE_ITEMS_MAX = 100;
 
 export class ChangeOriginDto {
-	@ApiProperty({ enum: ORIGIN_TYPES, description: 'manual o cotización ganada' })
-	@IsIn(ORIGIN_TYPES, { message: 'Origen inválido: manual o quote' })
+	@ApiProperty({ enum: ORIGIN_TYPES, description: 'manual, cotización ganada o propuesta de renovación (confirmar, §9.3.5)' })
+	@IsIn(ORIGIN_TYPES, { message: 'Origen inválido: manual, quote o renewal_proposal' })
 	type!: (typeof ORIGIN_TYPES)[number];
 
 	@ApiPropertyOptional({ description: 'Cotización del holding (obligatoria si type = quote)' })
 	@ValidateIf((origin: ChangeOriginDto) => origin.type === 'quote')
 	@IsUUID(undefined, { message: 'Indica la cotización de origen' })
 	quote_id?: string;
+
+	@ApiPropertyOptional({
+		description: 'Evento RENEWAL_PROPOSED que se confirma (obligatorio si type = renewal_proposal; solo con change.type = renewal)',
+	})
+	@ValidateIf((origin: ChangeOriginDto) => origin.type === 'renewal_proposal')
+	@IsUUID(undefined, { message: 'Indica la propuesta de renovación (event_id)' })
+	event_id?: string;
 }
 
 /** Ítem de `item_change`: valores nuevos completos (manual §8). Frecuencia y fin no se cambian aquí (ABIERTO S3-15 → `renewal`). */
@@ -97,9 +124,26 @@ export class ItemChangeItemDto {
 	@IsOptional()
 	net_line?: boolean;
 
-	@ApiPropertyOptional({ description: 'No se acepta: renegociar la frecuencia es `renewal` (ABIERTO S3-15)' })
+	@ApiPropertyOptional({
+		enum: BILLING_FREQUENCIES,
+		description:
+			'§9.3.7: frecuencia nueva. El ítem se corta al próximo inicio de período y nace un RENEWAL con la frecuencia nueva al mismo mensual (+ ajuste si cambia el precio)',
+	})
+	@IsIn(BILLING_FREQUENCIES, { message: 'Frecuencia inválida' })
 	@IsOptional()
-	billing_frequency?: string;
+	billing_frequency?: BillingFrequency;
+
+	@ApiPropertyOptional({ description: '§9.3.7: plazo nuevo en meses desde el corte (próximo inicio de período). Default: lo que le quedaba' })
+	@IsInt({ message: 'El plazo debe ser un entero de meses' })
+	@Min(1, { message: 'El plazo mínimo es 1 mes' })
+	@Max(120, { message: 'El plazo máximo es 120 meses' })
+	@IsOptional()
+	term_months?: number;
+
+	@ApiPropertyOptional({ description: 'Ítem de la cotización de origen (origin.type = quote): queda registrado en el ajuste (`quote_item_id`)' })
+	@IsUUID(undefined, { message: 'Ítem de cotización inválido' })
+	@IsOptional()
+	quote_item_id?: string;
 
 	@ApiPropertyOptional({ description: 'No se acepta: cambiar el fin es `renewal` o `item_remove` (D-B)' })
 	@IsOptional()
@@ -108,9 +152,27 @@ export class ItemChangeItemDto {
 
 /** Ítem de `item_add`: producto nuevo (cross-sell) o existente (upsell de ítem nuevo, Supuesto 2). Hereda del contrato lo que no venga (S3-19). */
 export class ItemAddItemDto {
-	@ApiProperty()
+	@ApiPropertyOptional({ description: 'Obligatorio salvo que venga `quote_item_id` (se toma el de la cotización)' })
+	@ValidateIf((item: ItemAddItemDto) => !item.quote_item_id || present(item.product_id))
 	@IsUUID(undefined, { message: 'Producto inválido' })
-	product_id!: string;
+	product_id?: string;
+
+	@ApiPropertyOptional({
+		description:
+			'Ítem de la cotización de origen (origin.type = quote): lo que no venga en el pedido (producto, cantidad, precio o modelo, descuento, frecuencia, método, inicio, cuenta) sale de él y el ítem nuevo queda con `quote_item_id`',
+	})
+	@IsUUID(undefined, { message: 'Ítem de cotización inválido' })
+	@IsOptional()
+	quote_item_id?: string;
+
+	@ApiPropertyOptional({
+		enum: BILLING_CYCLES,
+		default: 'contract',
+		description: '§9.3.9: `own` = ciclo propio (día de su inicio, sin tramo prorrateado; se factura en su propia fecha de emisión)',
+	})
+	@IsIn(BILLING_CYCLES, { message: 'billing_cycle: contract u own' })
+	@IsOptional()
+	billing_cycle?: BillingCycle;
 
 	@ApiPropertyOptional({
 		example: 'USD',
@@ -122,17 +184,21 @@ export class ItemAddItemDto {
 	@IsOptional()
 	currency?: string;
 
-	@ApiProperty()
+	@ApiPropertyOptional({ description: 'Obligatoria salvo que venga `quote_item_id`' })
+	@ValidateIf((item: ItemAddItemDto) => !item.quote_item_id || present(item.quantity))
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe la cantidad' })
 	@Min(0.000001, { message: 'La cantidad debe ser mayor que 0' })
-	quantity!: number;
+	quantity?: number;
 
 	@ApiPropertyOptional({
 		description:
-			'Unitario mensual (o anual si price_entry_mode = annual). Obligatorio salvo que venga `price` con un modelo distinto de standard fijo o `price_id` de catálogo',
+			'Unitario mensual (o anual si price_entry_mode = annual). Obligatorio salvo que venga `price` con un modelo distinto de standard fijo, `price_id` de catálogo o `quote_item_id`',
 	})
 	@ValidateIf(
-		(item: ItemAddItemDto) => !item.price_id && !(item.price && !(item.price.model === 'standard' && item.price.quantity_type === 'fixed'))
+		(item: ItemAddItemDto) =>
+			(!item.quote_item_id || present(item.unit_price)) &&
+			!item.price_id &&
+			!(item.price && !(item.price.model === 'standard' && item.price.quantity_type === 'fixed'))
 	)
 	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio unitario' })
 	@Min(0, { message: 'El precio unitario no puede ser negativo' })
@@ -222,7 +288,10 @@ export class ItemRefDto {
 	item_id!: string;
 }
 
-/** Ítem de `renewal`: mismo precio (S3-15 por confirmar → cantidad/unitario/descuento nuevos se rechazan hasta que Domi cierre el almacenamiento). */
+/**
+ * Ítem de `renewal` (§9.3.4): sin valores = mismo precio. Con `quantity`/`unit_price`/`discount_value` = RENEWAL al valor vigente + ítem de
+ * ajuste UPSELL/DOWNSELL (S3-15, dos ítems) y una fila `contract_scheduled_changes` `on_renewal` `applied` que lo registra.
+ */
 export class RenewalItemDto {
 	@ApiProperty()
 	@IsUUID(undefined, { message: 'Ítem inválido' })
@@ -250,17 +319,124 @@ export class RenewalItemDto {
 	@IsOptional()
 	billing_method?: BillingMethod;
 
-	@ApiPropertyOptional({ description: 'No se acepta hasta cerrar S3-15' })
-	@IsOptional()
-	quantity?: number;
+	@ApiPropertyOptional({ description: 'Cantidad nueva de la renovación (default: la vigente del ítem madre)' })
+	@ValidateIf((_item: RenewalItemDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe la cantidad nueva' })
+	@Min(0.000001, { message: 'La cantidad nueva debe ser mayor que 0; para no renovar usa item_remove' })
+	quantity?: number | null;
 
-	@ApiPropertyOptional({ description: 'No se acepta hasta cerrar S3-15' })
-	@IsOptional()
-	unit_price?: number;
+	@ApiPropertyOptional({ description: 'Unitario nuevo (mensual, o anual si price_entry_mode = annual; default: el vigente)' })
+	@ValidateIf((_item: RenewalItemDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio unitario nuevo' })
+	@Min(0.000001, { message: 'El precio unitario nuevo debe ser mayor que 0' })
+	unit_price?: number | null;
 
-	@ApiPropertyOptional({ description: 'No se acepta hasta cerrar S3-15' })
+	@ApiPropertyOptional({ enum: PRICE_ENTRY_MODES, default: 'monthly' })
+	@IsIn(PRICE_ENTRY_MODES, { message: 'Modo de precio inválido: monthly o annual' })
 	@IsOptional()
-	discount_value?: number;
+	price_entry_mode?: (typeof PRICE_ENTRY_MODES)[number];
+
+	@ApiPropertyOptional({ description: 'Descuento % nuevo (default: el vigente)' })
+	@ValidateIf((_item: RenewalItemDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 4 }, { message: 'Descuento inválido' })
+	@Min(0, { message: 'El descuento no puede ser negativo' })
+	@Max(100, { message: 'El descuento no puede superar 100 %' })
+	discount_value?: number | null;
+}
+
+/** Ítem de `reactivate` (§9.3.2): sin lista = todo lo cancelado. Cantidad/unitario solo cambian en la rama de mes cerrado (REACTIVATION nuevo). */
+export class ReactivateItemDto {
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'Ítem inválido' })
+	item_id!: string;
+
+	@ApiPropertyOptional({ description: 'Rama c (mes cerrado): cantidad del REACTIVATION (default: la anterior)' })
+	@ValidateIf((_item: ReactivateItemDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Cantidad inválida' })
+	@Min(0.000001, { message: 'La cantidad debe ser mayor que 0' })
+	quantity?: number | null;
+
+	@ApiPropertyOptional({ description: 'Rama c (mes cerrado): unitario mensual del REACTIVATION (default: el anterior)' })
+	@ValidateIf((_item: ReactivateItemDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Precio inválido' })
+	@Min(0.000001, { message: 'El precio debe ser mayor que 0' })
+	unit_price?: number | null;
+}
+
+/** `contract_cancel` (§9.3.1): decisión por factura listada en `invoice_decisions_required` del preview. */
+export class InvoiceDecisionDto {
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'Factura inválida' })
+	invoice_id!: string;
+
+	@ApiProperty({ enum: INVOICE_DECISION_ACTIONS, description: 'Por Emitir: emit | cancel. Emitida: keep | void' })
+	@IsIn(INVOICE_DECISION_ACTIONS, { message: 'Acción inválida: emit, cancel, keep o void' })
+	action!: InvoiceDecisionAction;
+}
+
+/** `change_entity` (§9.3.10): razón social nueva (se busca por identificador tributario normalizado en el holding antes de crearla). */
+export class NewEntityDto {
+	@ApiProperty()
+	@Transform(trim)
+	@IsString({ message: 'Escribe la razón social' })
+	@MaxLength(300)
+	legal_name!: string;
+
+	@ApiProperty({ description: 'Identificador tributario (RUT, NIT, RFC…)' })
+	@Transform(trim)
+	@IsString({ message: 'Escribe el identificador tributario' })
+	@MaxLength(40)
+	tax_id!: string;
+
+	@ApiProperty({ example: 'Chile' })
+	@Transform(trim)
+	@IsString({ message: 'Escribe el país' })
+	@MaxLength(80)
+	country!: string;
+
+	@ApiPropertyOptional()
+	@Transform(trim)
+	@IsString({ message: 'Dirección inválida' })
+	@MaxLength(500)
+	@IsOptional()
+	address?: string;
+
+	@ApiPropertyOptional()
+	@Transform(trim)
+	@IsString({ message: 'Correo inválido' })
+	@MaxLength(200)
+	@IsOptional()
+	email?: string;
+
+	@ApiPropertyOptional({ type: PaymentTermsDto })
+	@ValidateIf((_entity: NewEntityDto, value: unknown) => present(value))
+	@IsObject({ message: 'Condición de pago inválida' })
+	@ValidateNested()
+	@Type(() => PaymentTermsDto)
+	payment_terms?: PaymentTermsDto | null;
+}
+
+/** `renewal` (§9.3.4): qué hacer con cada pacto `on_renewal` del ítem (default: se aplica con su valor). */
+export class ScheduledChangeDecisionDto {
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'Pacto inválido' })
+	scheduled_change_id!: string;
+
+	@ApiProperty({ enum: ['apply', 'skip'] })
+	@IsIn(['apply', 'skip'], { message: 'Acción inválida: apply o skip' })
+	action!: 'apply' | 'skip';
+
+	@ApiPropertyOptional({ description: 'apply: valor a usar en vez del pactado (queda en `applied_value`)' })
+	@ValidateIf((_decision: ScheduledChangeDecisionDto, value: unknown) => present(value))
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Valor inválido' })
+	value?: number | null;
+
+	@ApiPropertyOptional({ description: 'skip: motivo (obligatorio)' })
+	@Transform(trim)
+	@IsString({ message: 'Motivo inválido' })
+	@MaxLength(500)
+	@IsOptional()
+	reason?: string;
 }
 
 /**
@@ -273,7 +449,10 @@ export class ContractChangeDto {
 	type!: ChangeType | (typeof DEFERRED_CHANGE_TYPES)[number];
 
 	// ---- ítems (item_change, item_add, item_remove, renewal)
-	@ApiPropertyOptional({ description: 'Ítems según el tipo (ItemChangeItemDto | ItemAddItemDto | ItemRefDto | RenewalItemDto)' })
+	@ApiPropertyOptional({
+		description:
+			'Ítems según el tipo (ItemChangeItemDto | ItemAddItemDto | ItemRefDto | RenewalItemDto | ReactivateItemDto; pause/resume: ItemRefDto, sin lista = todos los recurrentes vivos / pausados)',
+	})
 	@IsArray({ message: 'items debe ser una lista' })
 	@ArrayMaxSize(CHANGE_ITEMS_MAX, { message: `Máximo ${CHANGE_ITEMS_MAX} ítems por cambio` })
 	@IsOptional()
@@ -417,6 +596,78 @@ export class ContractChangeDto {
 	@IsBoolean({ message: 'apply_to_pending_invoices debe ser true o false' })
 	@IsOptional()
 	apply_to_pending_invoices?: boolean;
+
+	@ApiPropertyOptional({
+		type: NewEntityDto,
+		description:
+			'change_entity (§9.3.10), en vez de client_entity_id: se busca por identificador tributario en el holding (del cliente → se usa con aviso entity_already_exists; de otro cliente → blocker entity_belongs_to_other_client); si no existe se crea ligada al cliente (is_primary = false)',
+	})
+	@ValidateIf((_change: ContractChangeDto, value: unknown) => present(value))
+	@IsObject({ message: 'Razón social nueva inválida' })
+	@ValidateNested()
+	@Type(() => NewEntityDto)
+	new_entity?: NewEntityDto | null;
+
+	// ---- contract_cancel
+	@ApiPropertyOptional({
+		type: [InvoiceDecisionDto],
+		description:
+			'contract_cancel (§9.3.1) y pause (§9.3.3): una decisión por factura de `invoice_decisions_required` del preview (Por Emitir: emit | cancel; Emitida: keep | void). Si falta alguna → blocker invoice_decision_required',
+	})
+	@IsArray({ message: 'invoice_decisions debe ser una lista' })
+	@ArrayMaxSize(500)
+	@ValidateNested({ each: true })
+	@Type(() => InvoiceDecisionDto)
+	@IsOptional()
+	invoice_decisions?: InvoiceDecisionDto[];
+
+	// ---- billing_conditions: auto-renovación (§9.3.5)
+	@ApiPropertyOptional({
+		description:
+			'billing_conditions (§9.3.5): enciende (true) o apaga (false) `auto_renew` en los ítems recurrentes vivos del contrato (sin baja ni renovación). Apagado, el job contracts-auto-renewal no los propone',
+	})
+	@IsBoolean({ message: 'auto_renew debe ser true o false' })
+	@IsOptional()
+	auto_renew?: boolean;
+
+	// ---- pause / resume (§9.3.3)
+	@ApiPropertyOptional({ example: '2026-11-01', description: 'pause: primer día pausado (default: effective_date)' })
+	@Matches(ISO_DATE, { message: 'Inicio de la pausa inválido (YYYY-MM-DD)' })
+	@IsOptional()
+	pause_start?: string;
+
+	@ApiPropertyOptional({ example: '2027-01-31', nullable: true, description: 'pause: último día pausado; null/ausente = hasta reanudar' })
+	@ValidateIf((_change: ContractChangeDto, value: unknown) => present(value))
+	@Matches(ISO_DATE, { message: 'Fin de la pausa inválido (YYYY-MM-DD)' })
+	pause_end?: string | null;
+
+	@ApiPropertyOptional({
+		default: false,
+		description: 'pause: al terminar la pausa el fin del ítem se corre en los días pausados (con fin conocido, en el acto; abierta, al reanudar)',
+	})
+	@IsBoolean({ message: 'extend_term debe ser true o false' })
+	@IsOptional()
+	extend_term?: boolean;
+
+	@ApiPropertyOptional({
+		example: '2027-02-01',
+		description: 'resume: primer día con servicio (default: effective_date); la pausa termina el día anterior',
+	})
+	@Matches(ISO_DATE, { message: 'Fecha de reanudación inválida (YYYY-MM-DD)' })
+	@IsOptional()
+	resume_date?: string;
+
+	// ---- renewal (pactos on_renewal, §9.3.4)
+	@ApiPropertyOptional({
+		type: [ScheduledChangeDecisionDto],
+		description: 'renewal: aplicar (default, con valor opcional) u omitir con motivo cada pacto `on_renewal` de los ítems renovados',
+	})
+	@IsArray({ message: 'scheduled_change_decisions debe ser una lista' })
+	@ArrayMaxSize(200)
+	@ValidateNested({ each: true })
+	@Type(() => ScheduledChangeDecisionDto)
+	@IsOptional()
+	scheduled_change_decisions?: ScheduledChangeDecisionDto[];
 }
 
 /** Body de `POST /contracts/:id/changes` y `POST /contracts/:id/changes/preview` (spec §4). */

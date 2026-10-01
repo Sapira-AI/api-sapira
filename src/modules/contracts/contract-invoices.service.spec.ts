@@ -717,6 +717,8 @@ describe('ContractsController (facturas del contrato)', () => {
 		{} as never,
 		{} as never,
 		{} as never,
+		{} as never,
+		{} as never,
 		{} as never
 	);
 	const req = { user: { sub: 'auth-1' } };

@@ -65,6 +65,16 @@
   "file": "src/databases/postgresql/entities/contratos/consumption-entry-revision.entity.ts",
   "import": "@/databases/postgresql/entities/contratos/consumption-entry-revision.entity"
  },
+ "contract_item_pauses": {
+  "class": "ContractItemPause",
+  "file": "src/databases/postgresql/entities/contratos/contract-item-pause.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/contract-item-pause.entity"
+ },
+ "contract_scheduled_changes": {
+  "class": "ContractScheduledChange",
+  "file": "src/databases/postgresql/entities/contratos/contract-scheduled-change.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/contract-scheduled-change.entity"
+ },
  "contracts": {
   "class": "Contract",
   "file": "src/databases/postgresql/entities/contratos/contract.entity.ts",

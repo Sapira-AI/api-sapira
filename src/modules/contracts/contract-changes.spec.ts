@@ -223,7 +223,7 @@ describe('contract_cancel (M2 total)', () => {
 	it('un contrato ya cancelado no se cancela de nuevo (not_active)', () => {
 		const plan = planChange(context({ contract: contractRowCancelled() }), request({ type: 'contract_cancel' }));
 
-		expect(plan.preview.blockers.map((blocker) => blocker.code)).toEqual(['not_active']);
+		expect(plan.preview.blockers.map((blocker) => blocker.code)).toContain('not_active');
 	});
 });
 
@@ -300,10 +300,7 @@ describe('renewal (M3, mismo precio)', () => {
 		});
 		expect(plan.preview.contract.after.status).toBe('pending_renewal');
 	});
-	it('rechaza cambio de precio (S3-15 pendiente), catch-up en el mes actual, fin no entero y bloquea ítems churneados o ya renovados', () => {
-		expect(fields(() => planChange(context(), request({ type: 'renewal', items: [{ item_id: LICENCIA, unit_price: 120 }] })))).toEqual([
-			'change.items.0.unit_price',
-		]);
+	it('rechaza catch-up en el mes actual y fin no entero; bloquea ítems churneados o ya renovados (el precio nuevo se acepta, §9.3.4)', () => {
 		expect(fields(() => planChange(context(), request({ type: 'renewal', catch_up: 'current_month', items: [{ item_id: LICENCIA }] })))).toEqual([
 			'change.catch_up',
 		]);
@@ -696,21 +693,13 @@ describe('item_change (M1 precio/cantidad)', () => {
 		expect(plan.event).toMatchObject({ type: 'UPSELL', subtype: 'RENEGOTIATION', amount_delta: 51.2 });
 		expect(plan.preview.items.groups_after.find((group) => group.product_name === 'Licencia')).toMatchObject({ quantity: 140, mrr: 2240 });
 	});
-	it('bloquea si ya está facturado en firme después de la fecha (con fecha sugerida) y rechaza frecuencia, fin, sin cambio y 100 %', () => {
+	it('bloquea si ya está facturado en firme después de la fecha (con fecha sugerida) y rechaza fin, sin cambio y 100 % (la frecuencia es §9.3.7)', () => {
 		const blocked = planChange(
 			context(),
 			request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] }, { effective_date: '2026-09-15' })
 		);
 
 		expect(blocked.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-10-01') });
-		expect(
-			fields(() =>
-				planChange(
-					context(),
-					request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 10, unit_price: 100, billing_frequency: 'Anual' }] })
-				)
-			)
-		).toEqual(['change.items.0.billing_frequency', 'change.items.0.quantity']);
 		expect(
 			fields(() =>
 				planChange(
@@ -960,10 +949,8 @@ describe('change_entity (M5)', () => {
 });
 
 describe('tipos diferidos y forma del pedido', () => {
-	it('reactivate, pause, resume y price_adjustment → 400 explicando qué falta decidir; items obligatorios en los tipos de ítems', () => {
-		for (const type of ['reactivate', 'pause', 'resume', 'price_adjustment'] as const) {
-			expect(fields(() => planChange(context(), request({ type })))).toEqual(['change.type']);
-		}
+	it('price_adjustment → 400 explicando el camino (pacto); items obligatorios en los tipos de ítems', () => {
+		expect(fields(() => planChange(context(), request({ type: 'price_adjustment' })))).toEqual(['change.type']);
 		expect(fields(() => planChange(context(), request({ type: 'item_remove' })))).toEqual(['change.items']);
 		expect(fields(() => planChange(context(), request({ type: 'item_add' }, { origin: { type: 'quote' } as never })))).toEqual([
 			'origin.quote_id',
@@ -1066,26 +1053,34 @@ describe('auditoría 01-10: facturas por OC, borrador en el ERP, anuladas, NC pr
 		expect(codes(plan)).toContain('consumption_line_kept');
 	});
 
-	it('contract_cancel: bloquea con manual_lines_pending si una Por Emitir desde la fecha tiene líneas a mano; la facturada por OC se omite', () => {
+	it('contract_cancel (§9.3.1): las líneas a mano ya no bloquean (entran a la decisión); la facturada por OC con cancel se cancela entera, con emit queda', () => {
 		const manual = planChange(
 			context({ invoices: withInvoice('inv-12', (invoice) => licenciaLine(invoice, { quantity_source: 'manual' })) }),
-			request({ type: 'contract_cancel' }, { effective_date: '2026-12-01' })
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'cancel' }] }, { effective_date: '2026-12-01' })
 		);
 
-		expect(manual.preview.blockers).toContainEqual({
-			code: 'manual_lines_pending',
-			message: expect.stringContaining('editadas a mano'),
-			next_step: 'Edita o cancela esas facturas primero',
+		expect(manual.preview.blockers.map((blocker) => blocker.code)).not.toContain('manual_lines_pending');
+		expect(manual.preview.can_apply).toBe(true);
+		expect(manual.preview.invoices.cancelled.map((invoice) => invoice.id)).toEqual(['inv-12']);
+		expect(manual.preview.invoice_decisions_required?.[0]).toMatchObject({
+			invoice_id: 'inv-12',
+			reason_hint: expect.stringContaining('a mano'),
 		});
-		expect(manual.preview.can_apply).toBe(false);
 		const po = planChange(
 			context({ invoices: withInvoice('inv-12', partial) }),
-			request({ type: 'contract_cancel' }, { effective_date: '2026-12-01' })
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'cancel' }] }, { effective_date: '2026-12-01' })
 		);
 
-		expect(po.preview.invoices.cancelled).toEqual([]);
+		expect(po.preview.invoices.cancelled.map((invoice) => invoice.id)).toEqual(['inv-12']);
+		expect(ops(po, 'cancel_invoice').map((op) => op.invoice_id)).toEqual(['inv-12']);
 		expect(ops(po, 'delete_line')).toEqual([]);
-		expect(codes(po)).toContain('partial_billing_skipped');
+		const kept = planChange(
+			context({ invoices: withInvoice('inv-12', partial) }),
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'emit' }] }, { effective_date: '2026-12-01' })
+		);
+
+		expect(kept.preview.invoices.cancelled).toEqual([]);
+		expect(codes(kept)).toContain('billed_beyond_effective_date');
 	});
 
 	it('item_change: la línea sumada no cae en una Por Emitir por OC (mergeTarget la salta y avisa)', () => {

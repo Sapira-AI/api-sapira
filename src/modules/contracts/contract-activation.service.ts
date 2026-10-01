@@ -12,6 +12,7 @@ import {
 	normalizeTaxRate,
 	type PreviewInvoice,
 	round2,
+	validAnchorDay,
 } from './billing-engine';
 import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms, DRAFT_STATUS, METERED_ADVANCE_MESSAGE, resolveUserId } from './contract-drafts.service';
@@ -361,7 +362,7 @@ export class ContractActivationService {
 			`SELECT ci.contract_id, ci.id, ci.product_id, ci.product_name, ci.account, ci.unit_of_measure,
 				ci.quantity, ci.unit_price, ci.annual_unit_price, ci.discount_type, ci.discount_value, ci.final_price,
 				ci.billing_frequency, ci.billing_method, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
-				ci.term_months, ci.is_recurring, ci.currency, ${PRICE_COLUMNS},
+				ci.term_months, ci.is_recurring, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS},
 				(SELECT COALESCE(jsonb_agg(jsonb_build_object(
 						'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override,
 						'apply_item_discount', e.apply_item_discount, 'is_estimated', e.is_estimated)), '[]'::jsonb)
@@ -415,6 +416,8 @@ export class ContractActivationService {
 			consumption: ContractActivationService.consumptionOf(item),
 			// Multimoneda: moneda del ítem (default la del contrato en el generador).
 			...(toText(item.currency) ? { currency: upper(item.currency) } : {}),
+			// Ciclo propio (spec modificaciones §9.3.9): sus períodos parten su día, sin tramo prorrateado.
+			...(validAnchorDay(item.billing_anchor_day) ? { billing_anchor_day: validAnchorDay(item.billing_anchor_day) } : {}),
 		};
 	}
 

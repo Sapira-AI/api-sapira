@@ -48,6 +48,7 @@ import {
 	type PriceSpec,
 	validatePriceSpec,
 } from './pricing-engine';
+import { draftScheduledChangeErrors, insertScheduledChange, loadScheduledChanges, scheduledChangeToDto } from './scheduled-change-rows';
 import {
 	catalogForCountry,
 	CONTRACT_TAX_DOCUMENT_KINDS,
@@ -212,11 +213,15 @@ interface CompanyRow {
 	fx_company_policy: string;
 }
 
+/** §9.3.9: `billing_cycle = own` ⇒ día de ciclo = día de `start_date` (sin tramo prorrateado); si no, null (ciclo del contrato). */
+export const ownCycleAnchor = (item: { billing_cycle?: string | null; start_date?: string | null; is_recurring?: boolean | null }): number | null =>
+	item.billing_cycle === 'own' && item.is_recurring !== false && item.start_date ? Number(item.start_date.slice(8, 10)) || null : null;
+
 /**
  * Tasa "para todo el contrato" (el formulario la manda sin fechas; decisión de Domi 01-10): se guarda con el **rango de los ítems del
  * contrato** (inicio del primero → fin del último, horizonte de 12 períodos si hay indefinidos). Al leer, una tasa única de un propósito
  * que cubre ese rango vuelve sin fechas ("Todo el contrato"). No convive con tasas por período del mismo propósito (400). Al extender el
- * plazo (renovación / modificación) corresponde extender esa tasa: pendiente del bloque de modificaciones.
+ * plazo, la renovación la extiende al nuevo fin (op `extend_fx_rates`, aviso `fx_rate_extended`, spec modificaciones §9.3.4).
  */
 export const isWholeContractRate = (
 	row: { period_start?: string | null; period_end?: string | null },
@@ -347,6 +352,8 @@ interface ResolvedItem {
 	list_price_id: string | null;
 	/** Nombre del precio a guardar en la copia: el del catálogo, o el del producto en el inline. */
 	price_name: string | null;
+	/** Ciclo propio (§9.3.9, `billing_cycle = own`): día de `start_date`; null = ciclo del contrato. */
+	billing_anchor_day: number | null;
 }
 
 /**
@@ -903,6 +910,7 @@ export class ContractDraftsService {
 				price_spec: price,
 				list_price_id: catalog?.id ?? null,
 				price_name: catalog?.name ?? null,
+				billing_anchor_day: ownCycleAnchor(item),
 			};
 		});
 	}
@@ -1216,6 +1224,8 @@ export class ContractDraftsService {
 					// Consumos ya registrados del ítem (borrador guardado): la vista previa los respeta igual que la activación.
 					consumption: extras.consumption?.get((item.dto as UpdateContractItemDto).id ?? item.key) ?? [],
 					currency: item.currency,
+					// Ciclo propio (§9.3.9): sus períodos parten el día de su inicio, sin tramo prorrateado.
+					billing_anchor_day: item.billing_anchor_day,
 				})
 			),
 		};
@@ -1268,6 +1278,9 @@ export class ContractDraftsService {
 			await setApiWriter(runner);
 			const context = await this.loadContext(runner, dto, holdingId);
 			const items = ContractDraftsService.resolveItems(dto, context.products, context.catalog_prices);
+			const pactErrors = draftScheduledChangeErrors(dto.scheduled_changes, items);
+
+			if (pactErrors.length) throw codedValidationException(pactErrors);
 			const defaults = ContractDraftsService.contractDefaults(dto, context, items);
 			const quote = dto.quote_id ? await this.lockQuote(runner, dto, holdingId) : null;
 			const contractNumber = await this.reserveNumber(runner, dto, context, holdingId, now);
@@ -1363,6 +1376,15 @@ export class ContractDraftsService {
 			await syncContractTerm(runner, contractId, holdingId);
 			// Tasas fijas de facturación y de compañía, con su propósito, en la misma transacción.
 			await this.insertFxRates(runner, contractId, holdingId, defaults.fx, userId, 'Cargada al crear el contrato (v2)');
+			// Ajustes pactados al crear (§9.3.6): `item_key` = `key` del ítem del formulario.
+			await this.insertDraftScheduledChanges(
+				runner,
+				contractId,
+				holdingId,
+				userId,
+				dto,
+				new Map(items.map((item, index) => [item.key, itemIds[index]]))
+			);
 
 			const quoteStageUpdated = quote
 				? await this.markQuoteContractCreated(runner, String(quote.id), holdingId, {
@@ -1502,6 +1524,8 @@ export class ContractDraftsService {
 			prices.annual_price,
 			prices.monthly_price,
 			prices.billing_period_price,
+			// §9.3.9: ciclo propio del ítem (día de su inicio) o NULL = el del contrato.
+			item.billing_anchor_day,
 		];
 	}
 
@@ -1523,14 +1547,14 @@ export class ContractDraftsService {
 				quantity, unit_price, annual_unit_price, price_entry_mode, discount_type, discount_value,
 				price, final_price, currency, billing_frequency, billing_method, start_date, end_date, term_months,
 				is_recurring, quote_item_id, quote_item_number, auto_renew, auto_renew_term_months, booking_date,
-				annual_price, monthly_price, billing_period_price, custom_fields, categoria
+				annual_price, monthly_price, billing_period_price, billing_anchor_day, custom_fields, categoria
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, $7,
 				$8, $9, $10, $11, $12, $13,
 				$14, $15, $16, $17, $18, $19, $20, $21,
 				$22, $23, $24, $25, $26, $27,
-				$28, $29, $30, $31::jsonb,
-				${itemCategoriaSql(1, 3)}
+				$28, $29, $30, $31, $32::jsonb,
+				${itemCategoriaSql(1, 3, 19)}
 			) RETURNING id`,
 			[contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate), JSON.stringify(quoteItem?.custom_fields ?? {})]
 		)) as Row[];
@@ -1633,10 +1657,33 @@ export class ContractDraftsService {
 				price = $15, final_price = $16, currency = $17, billing_frequency = $18, billing_method = $19, start_date = $20, end_date = $21,
 				term_months = $22, is_recurring = $23, quote_item_id = $24, quote_item_number = $25, auto_renew = $26,
 				auto_renew_term_months = $27, booking_date = $28, annual_price = $29, monthly_price = $30, billing_period_price = $31,
-				categoria = ${itemCategoriaSql(2, 4)}
+				billing_anchor_day = $32, categoria = ${itemCategoriaSql(2, 4, 20)}
 			WHERE id = $1 AND contract_id = $2 AND holding_id = $3`,
 			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate)]
 		);
+	}
+
+	/** Pactos del formulario (`scheduled_changes[]`, §9.3.6), con el ítem resuelto desde su `item_key` (o `contract_item_id`). */
+	private async insertDraftScheduledChanges(
+		runner: QueryRunner,
+		contractId: string,
+		holdingId: string,
+		userId: string,
+		dto: CreateContractDto,
+		idByKey: Map<string, string>
+	): Promise<void> {
+		for (const pact of dto.scheduled_changes ?? []) {
+			const ref = pact.item_key ?? pact.contract_item_id ?? null;
+
+			await insertScheduledChange(runner, {
+				contract_id: contractId,
+				holding_id: holdingId,
+				contract_item_id: ref ? (idByKey.get(ref) ?? null) : null,
+				dto: pact,
+				user_id: userId,
+				origin: dto.quote_id ? { type: 'quote', quote_id: dto.quote_id } : { type: 'manual' },
+			});
+		}
 	}
 
 	private async insertFxRates(runner: QueryRunner, contractId: string, holdingId: string, fx: ResolvedFx, userId: string, notes: string) {
@@ -1738,12 +1785,12 @@ export class ContractDraftsService {
 		const contract = await this.loadDraftHeader(this.dataSource, resolved.id, holdingId);
 
 		ContractDraftsService.assertDraft(contract);
-		const [items, fx] = await Promise.all([
+		const [items, fx, pacts] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT ci.id, ci.quote_item_id, ci.product_id, ci.product_name, ci.account, ci.item_type, ci.unit_of_measure, ci.quantity,
 					ci.unit_price, ci.annual_unit_price, ci.price_entry_mode, ci.discount_value, ci.billing_frequency, ci.billing_method,
 					ci.start_date::text AS start_date, ci.term_months, ci.is_recurring, ci.auto_renew, ci.auto_renew_term_months,
-					ci.booking_date::text AS booking_date, ci.currency, ${PRICE_COLUMNS}
+					ci.booking_date::text AS booking_date, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS}
 				FROM contract_items ci
 				LEFT JOIN prices p ON p.id = ci.price_id
 				WHERE ci.contract_id = $1 AND ci.holding_id = $2
@@ -1751,6 +1798,7 @@ export class ContractDraftsService {
 				[contract.id, holdingId]
 			),
 			this.loadFxRateDtos(this.dataSource, String(contract.id), holdingId, toText(contract.contract_currency) ?? ''),
+			loadScheduledChanges(this.dataSource, String(contract.id), holdingId),
 		]);
 		const contractCurrency = toText(contract.contract_currency) ?? '';
 		const invoiceCurrency = toText(contract.invoice_currency) ?? contractCurrency;
@@ -1825,8 +1873,12 @@ export class ContractDraftsService {
 						row.auto_renew_term_months === null || row.auto_renew_term_months === undefined ? null : toNumber(row.auto_renew_term_months)
 					),
 					...optional('booking_date', toText(row.booking_date)),
+					// §9.3.9: ciclo propio (día de su inicio) o el del contrato.
+					billing_cycle: row.billing_anchor_day === null || row.billing_anchor_day === undefined ? 'contract' : 'own',
 				};
 			}),
+			// Pactos del borrador (§9.3.6), con `item_key` = id del ítem (la `key` que devuelve este formulario).
+			scheduled_changes: pacts.filter((pact) => pact.status === 'scheduled').map((pact) => scheduledChangeToDto(pact)),
 		};
 
 		return {
@@ -2059,6 +2111,12 @@ export class ContractDraftsService {
 				multicurrency_default: current.requires_multicurrency_billing === true,
 			};
 			const items = ContractDraftsService.resolveItems(dto, context.products, context.catalog_prices);
+			const pactErrors = draftScheduledChangeErrors(
+				dto.scheduled_changes,
+				items.map((item) => ({ ...item, id: (item.dto as UpdateContractItemDto).id ?? null }))
+			);
+
+			if (pactErrors.length) throw codedValidationException(pactErrors);
 			const defaults = ContractDraftsService.contractDefaults(dto, context, items);
 			const existing = (await runner.query(
 				`SELECT ci.id, ci.product_id, ci.quote_item_id, ${PRICE_COLUMNS}, p.currency AS price_currency, p.product_id AS price_product_id,
@@ -2246,12 +2304,16 @@ export class ContractDraftsService {
 			const updated: string[] = [];
 			const inserted: string[] = [];
 			const priceChanges: Array<{ item_id: string; from: string | null; to: string | null }> = [];
+			// Ítem del formulario (key o id) → id guardado, para los pactos (`scheduled_changes[].item_key`).
+			const idByKey = new Map<string, string>();
 
 			for (const item of items) {
 				const quoteItem = item.dto.quote_item_id ? quoteItems.get(item.dto.quote_item_id) : undefined;
 				const itemId = (item.dto as UpdateContractItemDto).id;
 
 				if (itemId) {
+					idByKey.set(item.key, itemId);
+					idByKey.set(itemId, itemId);
 					await this.updateItem(runner, itemId, contractId, holdingId, item, quoteItem, bookingDate);
 					updated.push(itemId);
 					// Pricing v2: precio nuevo, distinto o de otro catálogo → versión siguiente (la anterior se archiva); sin precio → standard fijo.
@@ -2289,6 +2351,7 @@ export class ContractDraftsService {
 				} else {
 					const newItemId = await this.insertItem(runner, contractId, holdingId, item, quoteItem, bookingDate);
 
+					idByKey.set(item.key, newItemId);
 					inserted.push(newItemId);
 					if (item.price_spec)
 						await this.insertPrice(runner, { contractId, holdingId, itemId: newItemId, item, currency: item.currency, userId });
@@ -2313,6 +2376,14 @@ export class ContractDraftsService {
 			// Tasas fijas: v2 es dueño de las del borrador; se reemplazan por las del formulario (las dos finalidades).
 			await runner.query(`DELETE FROM contract_fx_period_rates WHERE contract_id = $1 AND holding_id = $2`, [contractId, holdingId]);
 			await this.insertFxRates(runner, contractId, holdingId, defaults.fx, userId, 'Cargada al editar el borrador (v2)');
+			// Pactos del borrador (§9.3.6): con `scheduled_changes` en el body se reemplazan los `scheduled`; ausente = no se tocan.
+			if (dto.scheduled_changes !== undefined) {
+				await runner.query(`DELETE FROM contract_scheduled_changes WHERE contract_id = $1 AND holding_id = $2 AND status = 'scheduled'`, [
+					contractId,
+					holdingId,
+				]);
+				await this.insertDraftScheduledChanges(runner, contractId, holdingId, userId, dto, idByKey);
+			}
 
 			const summary = [
 				changedFields.length ? `campos: ${changedFields.join(', ')}` : null,

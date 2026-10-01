@@ -27,6 +27,7 @@ import {
 	DEFAULT_PAYMENT_TERMS_PRESETS,
 	formatContractNumber,
 	MISSING_SOFT_DELETE_MESSAGE,
+	ownCycleAnchor,
 	parsePaymentTermsText,
 	WHOLE_CONTRACT_RATE_CONFLICT,
 } from './contract-drafts.service';
@@ -308,10 +309,10 @@ describe('ContractDraftsService', () => {
 			const [[itemSql]] = calls(runner.query, 'INSERT INTO contract_items');
 
 			// Categoría con la regla de `calculate_contract_item_categoria` sin contar borradores borrados (deleted_at).
-			expect(itemSql).toContain(itemCategoriaSql(1, 3));
+			expect(itemSql).toContain(itemCategoriaSql(1, 3, 19));
 			expect(itemSql).toContain('p.deleted_at IS NULL');
 			expect(itemParams.slice(8, 11)).toEqual([100, 1200, 'monthly']);
-			expect(itemParams.slice(-4, -1)).toEqual([2400, 180, 180]);
+			expect(itemParams.slice(-5, -2)).toEqual([2400, 180, 180]);
 			const termIndex = runner.query.mock.calls.findIndex(([sql]) => (sql as string).includes('UPDATE contracts c SET term'));
 
 			expect(termIndex).toBeGreaterThan(runner.query.mock.calls.findIndex(([sql]) => (sql as string).includes('INSERT INTO contract_items')));
@@ -1583,6 +1584,7 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 						is_recurring: true,
 						auto_renew: false,
 						booking_date: '2026-09-20',
+						billing_cycle: 'contract',
 					},
 					{
 						id: ITEM_B,
@@ -1602,8 +1604,10 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 						term_months: 1,
 						is_recurring: false,
 						auto_renew: false,
+						billing_cycle: 'contract',
 					},
 				],
+				scheduled_changes: [],
 			});
 			// Lo que devuelve pasa la validación del body de editar tal cual.
 			expect(
@@ -1818,9 +1822,9 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 			);
 
 			// La categoría se recalcula con el cliente y el producto guardados (sin contar borradores borrados).
-			expect(updateSql).toContain(`categoria = ${itemCategoriaSql(2, 4)}`);
+			expect(updateSql).toContain(`categoria = ${itemCategoriaSql(2, 4, 20)}`);
 			expect(updateParams.slice(0, 3)).toEqual([ITEM_A, 'contract-1', 'h-1']);
-			expect(updateParams).toHaveLength(31);
+			expect(updateParams).toHaveLength(32);
 			expect(updateParams).toEqual(expect.arrayContaining([PRODUCT, 'Licencia Pro', 3, 100, 'Porcentaje', 10, 3600, 3240, 'CLP']));
 			const [[, insertParams]] = calls(runner.query, 'INSERT INTO contract_items');
 
@@ -2159,6 +2163,8 @@ describe('ContractsController (escritura)', () => {
 		{} as never,
 		{} as never,
 		{} as never,
+		{} as never,
+		{} as never,
 		{} as never
 	);
 
@@ -2194,5 +2200,86 @@ describe('ContractsController (escritura)', () => {
 		expect(drafts.invoicePreview).toHaveBeenCalledWith('c-1', 'h-1');
 		expect(drafts.update).toHaveBeenCalledWith('c-1', updateDto, 'h-1', 'auth-1');
 		expect(drafts.updateTerms).toHaveBeenCalledWith('c-1', terms, 'h-1', 'auth-1');
+	});
+});
+
+describe('ContractDraftsService · bloque B2 (ciclo propio §9.3.9 y pactos al crear §9.3.6)', () => {
+	const ownItem = (overrides: Record<string, unknown> = {}) => ({
+		key: 'k2',
+		product_id: PRODUCT,
+		item_type: 'Licencias',
+		quantity: 1,
+		unit_price: 300,
+		billing_frequency: 'Mensual' as const,
+		billing_method: 'Anticipado' as const,
+		start_date: '2026-10-15',
+		term_months: 3,
+		is_recurring: true,
+		billing_cycle: 'own' as const,
+		...overrides,
+	});
+
+	it('billing_cycle own: el ítem guarda billing_anchor_day = día de inicio y la vista previa lo factura en su día sin tramo prorrateado', async () => {
+		const { service, runner } = build();
+		const dto = baseDto({ items: [...baseDto().items, ownItem()] });
+		const preview = await service.preview(dto, 'h-1');
+		const own = preview.invoices.filter((invoice) => invoice.lines.some((line) => line.item_key === 'k2'));
+
+		expect(own.map((invoice) => [invoice.issue_date, invoice.subtotal])).toEqual([
+			['2026-10-15', 300],
+			['2026-11-15', 300],
+			['2026-12-15', 300],
+		]);
+		await service.create(dto, 'h-1', 'auth-1', NOW);
+		const items = calls(runner.query, 'INSERT INTO contract_items');
+
+		expect(items[0][0]).toContain('billing_period_price, billing_anchor_day, custom_fields, categoria');
+		expect(items[0][1][30]).toBeNull();
+		expect(items[1][1][30]).toBe(15);
+		// Categoría a nivel cliente con el inicio del ítem como fecha (§9.1 #9).
+		expect(items[0][0]).toContain('$19::date');
+		expect(ownCycleAnchor({ billing_cycle: 'own', start_date: '2026-10-31' })).toBe(31);
+		expect(ownCycleAnchor({ billing_cycle: 'own', start_date: '2026-10-31', is_recurring: false })).toBeNull();
+	});
+
+	it('scheduled_changes[]: se insertan con el id del ítem resuelto por item_key; item_key ajeno → 400 sin escribir', async () => {
+		const { service, runner } = build((sql) => (sql.includes('INSERT INTO contract_scheduled_changes') ? [{ id: 'pact-1' }] : undefined));
+
+		await service.create(
+			baseDto({
+				scheduled_changes: [
+					{ item_key: 'k1', trigger: 'on_renewal', kind: 'percent_uplift', value: 5 },
+					{
+						trigger: 'every_n_months',
+						anchor_date: '2027-10-01',
+						interval_months: 12,
+						kind: 'index',
+						value: 0,
+						index_code: 'IPC',
+						index_base_value: 120,
+					},
+				],
+			}),
+			'h-1',
+			'auth-1',
+			NOW
+		);
+		const pacts = calls(runner.query, 'INSERT INTO contract_scheduled_changes');
+
+		expect(pacts.map(([, params]) => [params[2], params[4], params[8], params[9]])).toEqual([
+			['item-1', 'on_renewal', null, 'percent_uplift'],
+			[null, 'every_n_months', '2027-10-01', 'index'],
+		]);
+		const bad = build();
+
+		await expect(
+			bad.service.create(
+				baseDto({ scheduled_changes: [{ item_key: 'otro', trigger: 'on_renewal', kind: 'quantity', value: 3 }] }),
+				'h-1',
+				'auth-1',
+				NOW
+			)
+		).rejects.toMatchObject({ response: { errors: [expect.objectContaining({ field: 'scheduled_changes.0.contract_item_id' })] } });
+		expect(calls(bad.runner.query, 'INSERT INTO contracts')).toHaveLength(0);
 	});
 });

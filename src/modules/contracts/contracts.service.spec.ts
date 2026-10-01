@@ -1340,6 +1340,8 @@ describe('ContractsController', () => {
 			{} as never,
 			{} as never,
 			{} as never,
+			{} as never,
+			{} as never,
 			{} as never
 		);
 
@@ -1363,6 +1365,8 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never,
@@ -1394,6 +1398,8 @@ describe('ContractsController', () => {
 			{} as never,
 			{} as never,
 			{} as never,
+			{} as never,
+			{} as never,
 			{} as never
 		);
 
@@ -1422,6 +1428,8 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never,

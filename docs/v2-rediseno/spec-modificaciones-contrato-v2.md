@@ -304,8 +304,8 @@ piden motivo y siguen): `possible_duplicate`, `unpaid_invoice_prorated`, `pendin
   cantidad. `item_change` con consumo en alguna Por Emitir es línea neta (`consumption_net_line`) y la línea se tarifa con la cantidad
   registrada y el precio nuevo vía motor (`pricing_breakdown` reescrito, `consumption_quantity_kept`); la baja no prorratea esa línea
   (`consumption_line_kept`); moneda/FX y documento solo revalorizan montos (la cantidad y el vínculo `consumption_entries.invoice_id` quedan).
-- `contract_cancel` con Por Emitir que tienen líneas editadas a mano desde la fecha efectiva → blocker `manual_lines_pending` ("Edita o
-  cancela esas facturas primero"); el rediseño completo de la cancelación queda diferido.
+- ~~`contract_cancel` con Por Emitir que tienen líneas editadas a mano desde la fecha efectiva → blocker `manual_lines_pending`~~ —
+  reemplazado el 01-10 por la decisión por factura de §9.3.1 (las líneas a mano entran a la misma decisión).
 - `billing_conditions` moneda/FX: las facturas con tasa fijada por factura (`fx_rate_source` `manual`/`net_exact`) conservan moneda y tasa
   (`invoice_fx_kept`); en spot (`fx` NULL) `fx_rate_source` y `fx_rate_date` quedan NULL.
 - `change_entity`: el IVA de cada Por Emitir se re-deriva de su documento como en el editor (`taxRateForDocument`) y se guarda normalizado
@@ -420,7 +420,7 @@ Ya retiradas (saneamiento 24-09): `create_contract_upsell/downsell/churn`, `regi
 | 6 · Ajustes pactados (§2.8, §2.5c) | Tabla `contract_scheduled_changes` (9.3.6) incl. IPC/UF |
 | 7 · Pausa (§2.6) | Por ítem, `scope service`, tabla `contract_item_pauses` (9.3.3) |
 | 8 · Reversión de churn (§2.7) | Tres ramas por cierre de período (9.3.2) |
-| 9 · Clasificación a nivel cliente | Sin decisión: queda en pendientes (9.6) |
+| 9 · Clasificación a nivel cliente | **Decidido 01-10** (construido): los borradores nunca cuentan como contrato anterior (solo activados); si todos los contratos activados del cliente están cancelados con el churn vigente, los ítems de un contrato nuevo (y los de `reactivate` rama c) son **REACTIVATION**; con al menos uno vigente, UPSELL/CROSS-SELL. Sin override manual (`itemCategoriaSql` / `classifyClientItem`) |
 | 10 · Cliente comercial (§2.10a) | **Fuera**: cambiarlo sería un error de carga, no una modificación |
 | 11 · S4-10 | Solo nuevas + conteo (construido; T&C con `apply_to_pending`) |
 | 12 · Aprobación | **Fuera** (S3-10) |
@@ -556,11 +556,71 @@ Sin cambios en `contracts` ni en `invoices`. Ítems de ajuste, RENEWAL, REACTIVA
 6. **B2-6 · UI por intención** (9.2) en paralelo desde B2-1; documentación funcional y tests por etapa (regla dura).
 Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moneda y la extensión de tasas por par dependen de MM1–MM3.
 
-### 9.6 Pendientes
+### 9.6 Construido B2-1 a B2-3 (01-10, código listo; migración sin aplicar) y desvíos
 
-- Clasificación NEW/REACTIVATION/CROSS-SELL a nivel cliente (§8 #9) — afecta waterfall; sin decisión.
+- **B2-1**: `contract_cancel` con `invoice_decisions_required[]` / `change.invoice_decisions[]` / `effective_date_suggestions[]` (9.3.1) y
+  `change_entity` con `new_entity` (9.3.10). **B2-2**: migración `1790710000000-ContractModificationsBlock2` (9.4 #1–#5) + entities + 8 policies
+  y 2 triggers como assets; `renewal` con precio, pactos `on_renewal` y extensión de FX (9.3.4); `item_change` con frecuencia/plazo (9.3.7);
+  pactos R1 (CRUD, `apply/preview`, `apply`, `CreateContractDto.scheduled_changes[]`). **B2-3**: `reactivate` (9.3.2) y ciclo propio por ítem
+  (9.3.9, motor + asset RSM). Además: `GET /quotes/:id/contract-targets` y `quote_item_id` en `item_add` / `item_change`; clasificación a
+  nivel cliente (9.1 #9). Detalle de contrato API en [`mapa-v2-contratos.md`](./mapa-v2-contratos.md) §2d.
+- Desvíos y supuestos (a confirmar con Domi):
+  1. `PATCH …/scheduled-changes/:changeId` deja un evento **`SCHEDULED_CHANGE_UPDATED`** (antes/después) además de los tres de 9.3.6.
+  2. Renovación con precio y cambio de frecuencia/plazo facturan **una línea neta** por período ligada al RENEWAL (el ajuste no tiene
+     líneas propias), como la línea neta de S3-14.
+  3. Cambio de frecuencia/plazo: el ítem cortado queda con `end_date` = corte − 1 y `term_months`/`final_price` = mensual × meses que le
+     quedan (el mensual no cambia), además de `renewed_by_item_id`. Solo plazo sin cambio de precio → evento `RENEWAL` subtipo `RENEGOTIATION`.
+  4. Pacto `index`: `value` = puntos sobre la variación del índice (IPC + `value`); 0 = solo el índice. Desfase con `index_lag_months`.
+  5. Pacto de alcance contrato (`contract_item_id` NULL) `on_renewal` se aplica a todos los ítems renovados en el acto (una sola fila).
+  6. Extensión de FX: también la tasa `company` "de todo el contrato", además de `invoice` e `item`.
+  7. `contract_cancel` con `void` sobre una emitida de varios ítems emite una NC espejo **por ítem** (regla de la baja sin cambios).
+  8. `reactivate` (a/b) rehace las PE solo por los días que ninguna factura vigente cubre (una NC emitida "descubre" sus días); las líneas
+     sin ítem que la cancelación quitó no se rehacen. Bloqueo nuevo `scheduled_change_not_scheduled` (pacto ya aplicado/omitido).
+  9. `prices.quote_id` no se puede llenar en precios del contrato (CHECK `prices_contract_owner_check`): el vínculo con la cotización queda
+     en `contract_items.quote_item_id` y en el evento (`metadata.origin`, `metadata.quote_items`).
+  10. `contract_scheduled_changes.contract_item_id` borra en cascada (los ítems de un borrador que se quitan se llevan sus pactos);
+      `status_changed_by` y `created_by` son `users.id` sin FK.
+  11. Hasta aplicar la migración, los specs de deriva entity↔prod (`contratos`, `base-tenancy`) fallan por `billing_anchor_day` y
+      `auto_renewal_notice_days` (se refresca el snapshot después de aplicar, como en las migraciones anteriores).
+
+### 9.6b Construido B2-4 y B2-5 (01-10, código listo; misma migración sin aplicar, sin cambios de esquema nuevos) y desvíos
+
+- **B2-4** (9.3.5 / 9.3.6): `ContractsScheduler` (`contracts.scheduler.ts`, `America/Santiago`, `CONTRACT_JOBS_ENABLED=false` apaga) con
+  `contracts-scheduled-changes` (05:30) y `contracts-auto-renewal` (06:00) → `ContractRenewalsService`; reglas puras en `contract-renewals.ts`.
+  `GET /contracts/renewal-proposals` (`{ data, counts { open, renew_in_30_days, overdue } }`), `POST /contracts/:id/renewal-proposals/:eventId/dismiss
+  { reason }`, confirmar = `renewal` con `origin { type: 'renewal_proposal', event_id }` (blocker `renewal_proposal_not_open`; la propuesta
+  queda `confirmed` con `confirmed_by_event_id`), `billing_conditions.auto_renew`. Detalle: `renewal_proposals[]` (abiertas). El aplicado de
+  `every_n_months` ya creaba la hija `applied` y avanzaba `next_effective_date` (`recordPactApplication`); `index` lee
+  `indicadores_economicos (codigo, fecha, valor)` con `index_lag_months`.
+- **B2-5** (9.3.3 / 9.4 #6): `pause` / `resume` en `contract-changes.ts` (`planPause`, `planResume`) y el servicio (`insert_pause`,
+  `update_pause`, `pause_event_id` / `resume_event_id`); `deriveContractStatus` + `derivedStatusLateral` derivan **Pausado** cuando todos los
+  recurrentes vivos están pausados hoy; detalle `pauses[]` y `GET /contracts/:id/items` `items[].pauses[]`; asset
+  `revenue_schedule_rebuild_contract_ccy` con devengo prorrateado por días pausados (sobre los días activos del ítem en el mes), MRR 0 con el fin
+  de mes pausado, CMRR 0 solo si la pausa es abierta y `momentum` `PAUSE` (primer mes con fin de mes pausado) / `RESUME` (mes del día siguiente
+  al fin; ninguno si pausa y reanudación caen en el mismo mes). B2-3 intacto.
+- Desvíos y supuestos (a confirmar con Domi):
+  12. Actor "sistema" de los jobs = uuid `00000000-0000-0000-0000-000000000000` en `created_by` (columna NOT NULL sin FK) +
+      `metadata.created_by_system`; las propuestas y avisos nacen `event_status = 'Pending'` y pasan a `Completed` al confirmar/omitir.
+  13. Una propuesta por **contrato** y corrida (agrupa sus ítems); la idempotencia es por ítem y fin (`metadata.proposal_keys`), en cualquier
+      estado: una propuesta omitida no se repite para el mismo fin. Ítems ya renovados u omitidos por otra vía no se listan (la propuesta sin
+      ítems pendientes desaparece de la lista sin cambiar de estado).
+  14. Notificaciones `contract_renewal_proposed` / `contract_scheduled_change_due` (source `contracts`) a los suscritos por tipo + super
+      admins (`include_super_admins`); omitir cierra la notificación; confirmar no (queda para B2-6).
+  15. El aviso de un pacto `index` lleva la variación a la fecha o `index_value_missing` en `metadata.blockers` (no bloquea el aviso).
+  16. `pause` usa `pause_start` como fecha efectiva (y `resume`, `resume_date`); sin lista pausa todos los recurrentes vivos y cada ítem
+      arrastra sus ajustes vivos (UPSELL/DOWNSELL con `related_item_id`) con su propia fila. `pause_end` posterior al fin del ítem → 400.
+  17. `extend_term` con `pause_end` conocido corre el fin **al pausar** (y factura el tramo nuevo); reanudar antes devuelve la diferencia
+      (baja de líneas desde el nuevo fin, NC si hubiera emitidas). Pausa abierta: el fin se corre al reanudar.
+  18. Bloqueo nuevo `not_paused` (reanudar sin pausa vigente o futura); reanudar antes de que empiece la pausa la deja `cancelled`.
+  19. La NC por días pausados (`void`) usa `credit_reason = downsell` (regla de la NC espejo de las bajas parciales).
+  20. `ALLOWED_STATES`: con el contrato Pausado se admiten `billing_conditions`, `change_entity`, `item_remove`, `contract_cancel`,
+      `renewal`, `multicurrency` y `resume`; `pause` solo en Activo / Por renovar.
+
+### 9.7 Pendientes
+
 - Cambiar el día de ciclo de un ítem vivo (período corto de transición) y del contrato.
-- Pausa `scope billing` (posponer cobro sin pausar servicio) y pausa masiva.
+- Pausa `scope billing` (posponer cobro sin pausar servicio) y pausa masiva (varios contratos).
+- Cerrar la notificación de la propuesta al confirmarla; alertas crecientes al vencer sin decisión (S2-1/S5-4).
 - Intercompañía / cambio de compañía emisora (M10) y cambio de cliente comercial (fuera por decisión).
 - Workflow de aprobación (fuera).
 - Preguntas abiertas de pactos (IPC acumulado vs. 12 meses, desfase, redondeo, CMRR pactado): se construyen con la propuesta como default por fila

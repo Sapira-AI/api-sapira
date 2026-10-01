@@ -43,6 +43,8 @@ export interface ContractItem {
 	renewed_by_item_id: string | null;
 	auto_renew: boolean;
 	currency: string | null;
+	/** Ciclo propio del ítem (§9.3.9, `contract_items.billing_anchor_day`); null/ausente = ciclo del contrato. */
+	billing_anchor_day?: number | null;
 	status: ContractItemStatus;
 }
 
@@ -56,6 +58,18 @@ export interface PricedItemFields {
 	catalog_price: CatalogPriceRef | null;
 	/** `true` si el ítem tiene precio declarado: `unit_price` es el unitario mensual equivalente guardado, no el del modelo. */
 	uses_price_model: boolean;
+	/** Pausas del ítem (`contract_item_pauses`, spec modificaciones §9.3.3), todas las del ítem; `active_today` = cubre hoy. */
+	pauses?: Array<{
+		id: string;
+		pause_start: string;
+		pause_end: string | null;
+		extend_term: boolean;
+		status: string;
+		reason: string | null;
+		pause_event_id: string | null;
+		resume_event_id: string | null;
+		active_today: boolean;
+	}>;
 }
 
 export interface PricedContractItem extends ContractItem, PricedItemFields {}

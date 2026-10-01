@@ -27,6 +27,14 @@ DECLARE
   v_mrr_contracted NUMERIC(15,2);
   v_cmrr NUMERIC(15,2);
   v_billing_day int;
+  -- B2-3 (spec modificaciones §9.3.9): día de ciclo del contrato; el de cada ítem = COALESCE(ítem, contrato, MIN(start_date)).
+  v_contract_billing_day int;
+  -- B2-5 (spec modificaciones §9.3.3): pausas del ítem (contract_item_pauses no canceladas; pause_end NULL = hasta reanudar).
+  v_paused_days int;
+  v_active_days int;
+  v_paused_eom boolean;
+  v_paused_open_eom boolean;
+  v_momentum text;
   v_is_first_active_period boolean;
   v_days_in_month int;
   v_proration_days int;
@@ -52,7 +60,7 @@ DECLARE
   v_system_direct NUMERIC;
   v_monthly_price_item NUMERIC(15,2);
 BEGIN
-  SELECT c.id, c.holding_id, c.company_id, c.contract_currency,
+  SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,
     co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency
   INTO v_contract
   FROM contracts c
@@ -89,11 +97,13 @@ BEGIN
     )
   );
 
-  SELECT EXTRACT(DAY FROM MIN(ci.start_date))::int INTO v_billing_day
+  -- B2-3 (§9.3.9): el día guardado del contrato manda; sin él, el del primer recurrente de ciclo del contrato (los de ciclo propio no cuentan).
+  SELECT COALESCE(v_contract.billing_anchor_day, EXTRACT(DAY FROM MIN(ci.start_date))::int) INTO v_contract_billing_day
   FROM contract_items ci
   WHERE ci.contract_id = p_contract_id
     AND COALESCE(ci.categoria, '') NOT IN ('DOWNSELL', 'CHURN')
-    AND COALESCE(ci.is_recurring, false) = true;
+    AND COALESCE(ci.is_recurring, false) = true
+    AND ci.billing_anchor_day IS NULL;
 
   -- FIX 1.4: removido guard COALESCE(is_total_row, false) = false del DELETE
   IF p_from_month IS NULL THEN
@@ -112,6 +122,8 @@ BEGIN
     v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(p_from_month, v_contract_start_date), v_contract_start_date))::date;
     v_last_period := DATE_TRUNC('month', v_contract_end_date)::date;
     v_is_recurring := COALESCE(v_item.is_recurring, false);
+    -- B2-3 (§9.3.9): día de ciclo del ítem = COALESCE(item.billing_anchor_day, contract.billing_anchor_day, MIN(start_date)).
+    v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);
     v_item_ccy := UPPER(TRIM(COALESCE(v_item.currency, v_contract.contract_currency)));
     v_company_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))
       AND v_item_ccy = UPPER(TRIM(v_contract.company_currency)) THEN 1 ELSE 0 END;
@@ -183,13 +195,25 @@ BEGIN
         v_in_active := true;
         v_is_first_active_period := (v_cur = DATE_TRUNC('month', v_item.start_date)::date);
         -- FIX 1.3: prorrateo solo aplica a UPSELL/CROSS-SELL/DOWNSELL.
-        -- Items NEW, RENEWAL, REACTIVATION, sin categoria nunca prorratean.
+        -- Items NEW, RENEWAL, REACTIVATION, sin categoria nunca prorratean; B2-3 (§9.3.9): un ítem de ciclo propio tampoco (como NEW).
         IF v_is_first_active_period AND v_billing_day IS NOT NULL AND EXTRACT(DAY FROM v_item.start_date)::int <> v_billing_day
+           AND v_item.billing_anchor_day IS NULL
            AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL') THEN
           v_days_in_month := EXTRACT(DAY FROM (DATE_TRUNC('month', v_item.start_date) + INTERVAL '1 month' - INTERVAL '1 day'))::int;
           v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;
           v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);
         ELSE v_recognized_period := v_monthly_revenue; END IF;
+        -- B2-5 (§9.3.3): días pausados del mes (dentro del tramo activo del ítem) → devengo prorrateado por días; mes completo pausado → 0.
+        v_active_days := (LEAST(v_eom_of_cur, v_item.end_date) - GREATEST(v_cur, v_item.start_date)) + 1;
+        SELECT COALESCE(SUM(GREATEST(0, (LEAST(COALESCE(p.pause_end, v_item.end_date), v_eom_of_cur, v_item.end_date)
+                 - GREATEST(p.pause_start, v_cur, v_item.start_date)) + 1)), 0)::int
+          INTO v_paused_days
+          FROM contract_item_pauses p
+         WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled'
+           AND p.pause_start <= v_eom_of_cur AND COALESCE(p.pause_end, v_item.end_date) >= v_cur;
+        IF v_paused_days > 0 AND v_active_days > 0 THEN
+          v_recognized_period := ROUND(v_recognized_period * GREATEST(v_active_days - v_paused_days, 0)::numeric / v_active_days, 2);
+        END IF;
       ELSE
         -- Item no activo en este mes. v_billed_period puede ser > 0 (capturado arriba).
         v_in_active := false;
@@ -230,6 +254,32 @@ BEGIN
         v_cmrr := COALESCE(v_item.monthly_price, v_monthly_revenue);
       ELSE v_cmrr := 0; END IF;
 
+      -- B2-5 (§9.3.3): pausado al fin de mes → MRR 0; CMRR se mantiene si la pausa tiene fin (compromiso conocido), 0 si es abierta.
+      -- Momentum PAUSE en el primer mes pausado (fin de mes en pausa) y RESUME en el mes del día siguiente al fin de la pausa; sin pausa,
+      -- NULL (lo asigna trg_assign_momentum como hasta hoy).
+      SELECT COALESCE(bool_or(true), false), COALESCE(bool_or(p.pause_end IS NULL), false)
+        INTO v_paused_eom, v_paused_open_eom
+        FROM contract_item_pauses p
+       WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled'
+         AND p.pause_start <= v_eom_of_cur AND (p.pause_end IS NULL OR p.pause_end >= v_eom_of_cur);
+      IF v_paused_eom AND v_is_recurring THEN
+        v_mrr_contracted := 0;
+        IF v_paused_open_eom THEN v_cmrr := 0; END IF;
+      END IF;
+      v_momentum := NULL;
+      IF v_is_recurring AND v_paused_eom AND EXISTS (
+           SELECT 1 FROM contract_item_pauses p
+            WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled' AND DATE_TRUNC('month', p.pause_start)::date = v_cur) THEN
+        v_momentum := 'PAUSE';
+      ELSIF v_is_recurring AND NOT v_paused_eom AND EXISTS (
+           SELECT 1 FROM contract_item_pauses p
+            WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled' AND p.pause_end IS NOT NULL
+              AND DATE_TRUNC('month', p.pause_end + 1)::date = v_cur
+              AND DATE_TRUNC('month', p.pause_start)::date < v_cur
+              AND p.pause_end < v_item.end_date) THEN
+        v_momentum := 'RESUME';
+      END IF;
+
       INSERT INTO revenue_schedule_monthly(
         id, holding_id, contract_id, contract_item_id, period_month,
         company_id, company_currency, contract_currency, system_currency,
@@ -248,7 +298,8 @@ BEGIN
         mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,
         product_name, calc_version, is_total_row,
         fx_contract_to_company, fx_contract_to_system,
-        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date
+        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,
+        momentum
       ) VALUES (
         gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,
         v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,
@@ -274,7 +325,8 @@ BEGIN
         CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
         CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,
         CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,
-        CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL
+        CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,
+        v_momentum  -- B2-5: PAUSE / RESUME; NULL = trg_assign_momentum
       );
       v_cur := (v_cur + INTERVAL '1 month')::date;
     END LOOP;

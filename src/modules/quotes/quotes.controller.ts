@@ -172,6 +172,17 @@ export class QuotesController {
 		return await this.quotes.duplicate(id, body ?? {}, holdingId, authIdOf(req));
 	}
 
+	@Get(':id/contract-targets')
+	@ApiOperation({
+		summary: 'Contratos donde aplicar la cotización',
+		description:
+			'Contratos Activos (vigentes o Por renovar) del cliente de la cotización, con sugerencia por ítem cotizado: `item_change` (producto vivo en el contrato, con el ítem madre y sus valores actuales) o `item_add` (producto nuevo, en la moneda de la cotización), `blockers` (quote_not_signed, quote_already_applied, new_business_quote_on_existing_contract) y `warnings` (pending_renewal_item_add, multicurrency_not_enabled). Se aplica con `POST /contracts/:id/changes` y `origin { type: quote, quote_id }` (`items[].quote_item_id`)',
+	})
+	@ApiParam(QUOTE_PARAM)
+	async contractTargets(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.quotes.contractTargets(id, holdingId);
+	}
+
 	@Post(':id/contract')
 	@ApiOperation({
 		summary: 'Crear contrato desde la cotización',
