@@ -432,6 +432,11 @@
     "expr": "price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])"
    },
    {
+    "name": "contract_items_billing_anchor_day_check",
+    "type": "c",
+    "expr": "(billing_anchor_day IS NULL) OR ((billing_anchor_day >= 1) AND (billing_anchor_day <= 31))"
+   },
+   {
     "name": "contract_items_billing_frequency_check",
     "type": "c",
     "expr": "billing_frequency = ANY (ARRAY['Mensual'::text, 'Anual'::text, 'Semestral'::text, 'Trimestral'::text, 'Bianual'::text])"
@@ -2782,6 +2787,311 @@
     ],
     "cmd": "ALL",
     "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_scheduled_changes": {
+  "comment": "Ajustes pactados del contrato o de un ítem (renovación con precio, IPC/UF, escalamientos, plazo, frecuencia): disparo, valor y estado (spec modificaciones §9.3.6)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "value": {
+    "precision": 18,
+    "scale": 6
+   },
+   "index_base_value": {
+    "precision": 18,
+    "scale": 6
+   },
+   "applied_value": {
+    "precision": 18,
+    "scale": 6
+   }
+  },
+  "constraints": [
+   {
+    "name": "contract_scheduled_changes_applied_event_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (applied_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_scheduled_changes_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_scheduled_changes_contract_item_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_scheduled_changes_every_n_months_check",
+    "type": "c",
+    "expr": "(trigger <> 'every_n_months'::text) OR ((anchor_date IS NOT NULL) AND (interval_months IS NOT NULL))"
+   },
+   {
+    "name": "contract_scheduled_changes_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_scheduled_changes_index_check",
+    "type": "c",
+    "expr": "(kind <> 'index'::text) OR ((index_code IS NOT NULL) AND (index_base_value IS NOT NULL))"
+   },
+   {
+    "name": "contract_scheduled_changes_interval_months_check",
+    "type": "c",
+    "expr": "(interval_months IS NULL) OR (interval_months > 0)"
+   },
+   {
+    "name": "contract_scheduled_changes_kind_check",
+    "type": "c",
+    "expr": "kind = ANY (ARRAY['percent_uplift'::text, 'index'::text, 'new_unit_price'::text, 'quantity'::text, 'term'::text, 'billing_frequency'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_on_date_check",
+    "type": "c",
+    "expr": "(trigger <> 'on_date'::text) OR (effective_date IS NOT NULL)"
+   },
+   {
+    "name": "contract_scheduled_changes_parent_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (parent_id) REFERENCES contract_scheduled_changes(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_scheduled_changes_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_rounding_check",
+    "type": "c",
+    "expr": "rounding = ANY (ARRAY['none'::text, 'unit_2'::text, 'unit_0'::text, 'monthly_0'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['scheduled'::text, 'applied'::text, 'skipped'::text, 'cancelled'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_trigger_check",
+    "type": "c",
+    "expr": "trigger = ANY (ARRAY['on_renewal'::text, 'on_date'::text, 'every_n_months'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_scheduled_changes_contract_status",
+    "cols": [
+     "contract_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_scheduled_changes_holding_status_next",
+    "cols": [
+     "holding_id",
+     "status",
+     "next_effective_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_contract_scheduled_changes_item",
+    "cols": [
+     "contract_item_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_contract_scheduled_changes_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_contract_scheduled_changes (DELETE, public)",
+   "tenant_isolation_insert_contract_scheduled_changes (INSERT, public)",
+   "tenant_isolation_select_contract_scheduled_changes (SELECT, public)",
+   "tenant_isolation_update_contract_scheduled_changes (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_contract_scheduled_changes",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_contract_scheduled_changes",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))"
+   },
+   {
+    "name": "tenant_isolation_select_contract_scheduled_changes",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_contract_scheduled_changes",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   }
+  ]
+ },
+ "contract_item_pauses": {
+  "comment": "Pausas de servicio por ítem (spec modificaciones §9.3.3): devengo y MRR 0 en el tramo; pause_end NULL = hasta reanudar",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "contract_item_pauses_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_item_pauses_contract_item_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_item_pauses_dates_check",
+    "type": "c",
+    "expr": "(pause_end IS NULL) OR (pause_end >= pause_start)"
+   },
+   {
+    "name": "contract_item_pauses_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "contract_item_pauses_pause_event_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (pause_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_item_pauses_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_resume_event_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (resume_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "contract_item_pauses_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['scheduled'::text, 'active'::text, 'ended'::text, 'cancelled'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_contract_item_pauses_item_status",
+    "cols": [
+     "contract_item_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [
+   "trg_contract_item_pauses_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_contract_item_pauses (DELETE, public)",
+   "tenant_isolation_insert_contract_item_pauses (INSERT, public)",
+   "tenant_isolation_select_contract_item_pauses (SELECT, public)",
+   "tenant_isolation_update_contract_item_pauses (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_contract_item_pauses",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_contract_item_pauses",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))"
+   },
+   {
+    "name": "tenant_isolation_select_contract_item_pauses",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_contract_item_pauses",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
     "with_check": null
    }
   ]

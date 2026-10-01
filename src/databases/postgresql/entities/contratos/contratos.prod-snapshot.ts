@@ -55,6 +55,7 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			booking_date: true,
 			renewal_base_unit_price: true,
 			price_id: true,
+			billing_anchor_day: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -94,6 +95,7 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		uniques: {},
 		checks: [
 			'chk_contract_items_price_entry_mode',
+			'contract_items_billing_anchor_day_check',
 			'contract_items_billing_frequency_check',
 			'contract_items_billing_method_check',
 			'contract_items_categoria_check',

@@ -80,7 +80,8 @@ describe('item_remove (M2)', () => {
 			start_date: '2026-11-15',
 			end_date: '2026-12-31',
 			related_item_id: LICENCIA,
-			booking_date: '2026-11-15',
+			// D-CTR-4: la baja se registra hoy (booking) aunque rija desde la fecha efectiva (start_date): el CMRR la anticipa.
+			booking_date: '2026-09-28',
 		});
 		expect(ops(plan, 'update_item')).toEqual([
 			{ kind: 'update_item', item_id: LICENCIA, set: { churn_date: '2026-11-15', churn_monthly_amount: 1000 } },

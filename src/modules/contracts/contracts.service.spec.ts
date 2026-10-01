@@ -392,6 +392,42 @@ describe('ContractsService', () => {
 			expect(query.mock.calls[0][0]).toContain('c.holding_id = $2');
 		});
 
+		it('history expone metadata (jsonb tal cual) y subtype por evento; las modificaciones sin evento llevan metadata null', async () => {
+			const metadata = { entity_created: true, reterm: { from: 12, to: 24 }, invoice_decisions: [{ invoice_id: 'i-1', action: 'keep' }] };
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID, status: 'Activo' }];
+				if (sql.includes('FROM contract_amendments a'))
+					return [{ id: 'a-1', type: 'PRICE', status: 'draft', created_at: '2026-08-01T00:00:00Z' }];
+				if (sql.includes('FROM contract_lifecycle_events e'))
+					return [
+						{
+							id: 'e-1',
+							event_type: 'AMENDMENT_APPLIED',
+							event_subtype: 'billing_conditions',
+							title: 'Condiciones',
+							description: null,
+							effective_date: '2026-10-01',
+							amount_delta: null,
+							items_affected: null,
+							metadata,
+							created_at: new Date('2026-10-01T12:00:00Z'),
+							user_id: null,
+						},
+						{ id: 'e-2', event_type: 'NOTE', event_subtype: null, metadata: '{"a":1}', created_at: '2026-09-01T00:00:00Z' },
+					];
+				return [];
+			});
+
+			const { data } = await service.history(CONTRACT_ID, 'h-1');
+
+			const eventsSql = query.mock.calls.find(([sql]) => (sql as string).includes('e.items_affected, e.metadata'))![0] as string;
+			expect(eventsSql).toContain('FROM contract_lifecycle_events e');
+			expect(data.map((e) => e.id)).toEqual(['e-1', 'e-2', 'a-1']);
+			expect(data[0]).toMatchObject({ subtype: 'billing_conditions', metadata });
+			expect(data[1].metadata).toEqual({ a: 1 });
+			expect(data[2].metadata).toBeNull();
+		});
+
 		it('invoices responde 404 si el contrato no es del holding', async () => {
 			const { service } = build(notInHolding);
 

@@ -1556,7 +1556,7 @@ export class ContractsService {
 		const [events, amendments] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT e.id, e.event_type, e.event_subtype, e.title, COALESCE(e.description, e.summary) AS description,
-					e.effective_date::text AS effective_date, e.amount_delta, e.items_affected, e.created_at,
+					e.effective_date::text AS effective_date, e.amount_delta, e.items_affected, e.metadata, e.created_at,
 					u.id AS user_id, COALESCE(u.name, u.email) AS user_name
 				FROM contract_lifecycle_events e
 				LEFT JOIN users u ON u.id = e.created_by
@@ -1579,6 +1579,16 @@ export class ContractsService {
 		]);
 		const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
 		const user = (row: Row) => (row.user_id ? { id: row.user_id as string, name: toText(row.user_name) } : null);
+		// `metadata` (jsonb) tal cual: el 360 lee de ahí razón social nueva, reterm, decisiones de facturas, etc.
+		const metadataOf = (value: unknown): Record<string, unknown> | null => {
+			if (value === null || value === undefined) return null;
+			if (typeof value !== 'string') return value as Record<string, unknown>;
+			try {
+				return JSON.parse(value) as Record<string, unknown>;
+			} catch {
+				return null;
+			}
+		};
 
 		const data = [
 			...events.map((row) => ({
@@ -1590,6 +1600,7 @@ export class ContractsService {
 				effective_date: toText(row.effective_date),
 				amount_delta: toNullableNumber(row.amount_delta),
 				items_affected: (row.items_affected as unknown) ?? null,
+				metadata: metadataOf(row.metadata),
 				created_at: iso(row.created_at),
 				created_by: user(row),
 			})),
@@ -1605,6 +1616,7 @@ export class ContractsService {
 					effective_date: toText(row.effective_date),
 					amount_delta: null,
 					items_affected: null,
+					metadata: null,
 					created_at: iso(row.created_at),
 					created_by: user(row),
 				};

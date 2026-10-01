@@ -1496,7 +1496,8 @@ export class ContractsController {
 	@Get(':id/history')
 	@ApiOperation({
 		summary: 'Historial del contrato',
-		description: 'Eventos del ciclo de vida (tipo normalizado) y modificaciones sin evento, más nuevos primero',
+		description:
+			'Eventos del ciclo de vida (tipo normalizado) y modificaciones sin evento, más nuevos primero. Cada evento: `{ id, type, subtype, title, description, effective_date, amount_delta, items_affected, metadata (jsonb tal cual; null en modificaciones sin evento), created_at, created_by }`',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	async history(@Param('id') id: string, @HoldingId() holdingId: string) {

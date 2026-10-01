@@ -2090,7 +2090,8 @@ function planItemRemove(p: Planner, itemIds: string[], label: 'item_remove' | 'c
 				term_months: term,
 				related_item_id: item.id,
 				renews_item_id: null,
-				booking_date: p.effective,
+				// D-CTR-4 (spec-revenue-y-metricas §6, Domi 01-10): la baja/ajuste se registra hoy; `start_date` es la fecha efectiva. Así el CMRR anticipa la contracción desde el booking.
+				booking_date: p.ctx.today,
 				auto_renew: false,
 				price_id: null,
 				quote_item_id: null,
@@ -3774,7 +3775,8 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			term_months: term,
 			related_item_id: item.id,
 			renews_item_id: null,
-			booking_date: p.effective,
+			// D-CTR-4 (spec-revenue-y-metricas §6, Domi 01-10): la baja/ajuste se registra hoy; `start_date` es la fecha efectiva. Así el CMRR anticipa la contracción desde el booking.
+			booking_date: ctx.today,
 			auto_renew: false,
 			price_id: null,
 			// Desde cotización: el ajuste queda ligado a su ítem cotizado.

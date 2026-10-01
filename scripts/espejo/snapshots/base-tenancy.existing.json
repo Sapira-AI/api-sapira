@@ -1336,11 +1336,26 @@
     "precision": null,
     "scale": null,
     "array": true
+   },
+   "auto_renewal_notice_days": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 30,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {},
   "checks": [
+   {
+    "name": "holding_settings_auto_renewal_notice_days_check",
+    "expression": "\"auto_renewal_notice_days\" >= 1 AND \"auto_renewal_notice_days\" <= 180"
+   },
    {
     "name": "holding_settings_fx_system_policy_check",
     "expression": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
