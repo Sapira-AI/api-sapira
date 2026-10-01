@@ -7,7 +7,7 @@ import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
 import { round2 } from './billing-engine';
 import { PENDING_STATUS, voidedSql } from './contract-360';
-import { insertMirrorCreditNote } from './contract-changes.service';
+import { insertCreditNoteReference, insertMirrorCreditNote } from './contract-changes.service';
 import { resolveUserId } from './contract-drafts.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { type ContractInvoiceRow, INVOICE_EVENT_TYPES, type InvoiceBlocker } from './contract-invoices';
@@ -30,51 +30,15 @@ import { revalueMulticurrencyInvoices } from './multicurrency-invoices';
 
 import type { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
 
+// Se re-exportan desde aquí (antes vivían en este archivo; ahora en `contract-changes.service.ts` para modificaciones y consumo).
+export { insertCreditNoteReference, NC_REFERENCE_CODES } from './contract-changes.service';
+
 type Row = Record<string, unknown>;
 type Queryable = Pick<DataSource, 'query'> | QueryRunner;
 
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
-
-/**
- * Referencia de la NC a su factura (como la NC electrónica: tipo y folio del documento original, código SII del motivo: 1 = anula,
- * 3 = corrige montos) y cierre de la original al anular (`Cancelada`, como la función legacy `cancel_invoice_with_credit_note`): sale
- * de vencimientos y cobranza y queda neteada. Decisión de Domi 01-10.
- */
-export const NC_REFERENCE_CODES = { cancellation: '1', discount: '3' } as const;
-const ORIGINAL_DOCUMENT_CODE_SQL = `SELECT COALESCE(t.code, CASE WHEN i.document_type = 'FACTURA_EXPORTACION' THEN '110' ELSE '33' END) AS code,
-		COALESCE(t.name, 'Factura electrónica') AS name
-	FROM invoices i LEFT JOIN contracts c ON c.id = i.contract_id LEFT JOIN tax_document_types t ON t.id = c.tax_document_type_id
-	WHERE i.id = $1 AND i.holding_id = $2`;
-
-export async function insertCreditNoteReference(
-	runner: QueryRunner,
-	creditNoteId: string,
-	original: { id: string; invoice_number: string | null; issue_date: string | null },
-	holdingId: string,
-	kind: keyof typeof NC_REFERENCE_CODES,
-	reason: string,
-	userId: string | null
-): Promise<void> {
-	const [doc] = (await runner.query(ORIGINAL_DOCUMENT_CODE_SQL, [original.id, holdingId])) as Row[];
-
-	await runner.query(
-		`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
-		[
-			creditNoteId,
-			holdingId,
-			original.invoice_number ?? original.id,
-			toText(doc?.code) ?? '33',
-			toText(doc?.name) ?? 'Factura electrónica',
-			NC_REFERENCE_CODES[kind],
-			reason,
-			original.issue_date,
-			userId,
-		]
-	);
-}
 
 /** `invoice_items.fx_rate_source` de las líneas de una reemisión cuando la original no tenía origen de tasa. */
 export const REISSUE_FX_RATE_SOURCE = 'reissue';
@@ -187,7 +151,7 @@ export type CreditNotePreview = Omit<DiscountPlan, 'errors' | 'mirror'>;
  * Facturas en el Contrato 360, etapa 6 (`docs/v2-rediseno/spec-facturas-en-contrato-360.md` §3.8 y §8): **anular una emitida con NC espejo
  * y reemitir** (o no) y **NC de descuento parcial sobre una emitida** con tratamiento de devengo. Ambas con preview (mismo cálculo, sin
  * escribir) y aplicación en **una transacción** con `setApiWriter` como primera sentencia, el contrato y la factura bloqueados, la NC por
- * `insertMirrorCreditNote` (Por Emitir, sin vencimiento, `related_invoice_id` = la original), devengo reconstruido desde el mes del período y
+ * `insertMirrorCreditNote` (estado de la original, nunca Por Emitir; sin vencimiento, `related_invoice_id` = la original), devengo reconstruido desde el mes del período y
  * evento en `contract_lifecycle_events`. La emitida no se toca (queda `voided` por derivación). Nunca escribe `invoices.updated_at`.
  */
 @Injectable()
@@ -545,7 +509,7 @@ export class ContractInvoiceVoidService {
 		return this.creditNotePreview(plan);
 	}
 
-	/** Crea la NC de descuento (Por Emitir, sin vencimiento, `nc_revenue_treatment`), reconstruye el devengo y registra el evento. */
+	/** Crea la NC de descuento (estado de la factura, nunca Por Emitir; sin vencimiento, `nc_revenue_treatment`), reconstruye el devengo y registra el evento. */
 	async createCreditNote(idOrNumber: string, invoiceId: string, dto: DiscountCreditNoteDto, holdingId: string, authId: string, today = new Date()) {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
 		const userId = await resolveUserId(this.dataSource, authId);

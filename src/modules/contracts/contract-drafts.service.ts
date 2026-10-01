@@ -6,7 +6,7 @@ import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/clie
 import { CONTRACT_DOCUMENT_TYPES, type ContractDocumentType } from '@/databases/postgresql/entities/contratos/contract.entity';
 
 import { setApiWriter } from './api-writer';
-import { itemCategoriaSql, pricingFields, syncContractTerm } from './api-written-fields';
+import { itemCategoriaSql, latestContractEnd, pricingFields, syncContractTerm } from './api-written-fields';
 import {
 	type BillingEngineInput,
 	type BillingEngineItem,
@@ -22,6 +22,7 @@ import {
 	round2,
 	suggestDocumentType,
 } from './billing-engine';
+import { todayFor } from './business-date';
 import { type CatalogPrice, catalogPriceErrors, catalogPriceIds, loadCatalogPrices } from './catalog-prices';
 import { ContractsService } from './contracts.service';
 import {
@@ -110,12 +111,8 @@ const toIsoDate = (value: unknown) => {
 
 	return String(value).slice(0, 10);
 };
-const todayIso = (now = new Date()) => {
-	// Fecha local de la API (TZ America/Santiago en main.ts), no UTC.
-	const offset = now.getTimezoneOffset() * 60_000;
-
-	return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-};
+// "Hoy" del holding (America/Santiago), la misma regla que cambios, consumo y activación (`business-date.ts`).
+const todayIso = (now = new Date()) => todayFor(null, now);
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 
 /** 409 cuando falta `contracts.deleted_at` (migración `1790358766159-AddContractBillingFields` sin aplicar). */
@@ -1436,13 +1433,12 @@ export class ContractDraftsService {
 
 	// ---------------------------------------------------------------- ítems y tasas (crear y editar)
 
-	/** Fin del contrato = el mayor fin de los recurrentes; `null` sin recurrentes o si alguno no tiene término. */
+	/**
+	 * Fin del contrato = el mayor fin de los recurrentes; `null` sin recurrentes o si alguno no tiene término. Misma regla que la activación y
+	 * las modificaciones (`latestContractEnd`, decisión de Domi 01-10).
+	 */
 	static contractEndDate(items: ResolvedItem[]): string | null {
-		const recurringEnds = items.filter((item) => item.is_recurring).map((item) => item.end_date);
-
-		if (!recurringEnds.length || recurringEnds.some((end) => end === null)) return null;
-
-		return [...(recurringEnds as string[])].sort().reverse()[0];
+		return latestContractEnd(items.map((item) => ({ is_recurring: item.is_recurring, end_date: item.end_date }))) ?? null;
 	}
 
 	/**

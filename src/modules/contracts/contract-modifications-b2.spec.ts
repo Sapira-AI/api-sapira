@@ -447,6 +447,34 @@ describe('item_change con frecuencia o plazo (§9.3.7, S3-15)', () => {
 		});
 	});
 
+	it('D3/MF-h: un ajuste vivo con fin distinto al del original se corta y se absorbe con él (adjustment_end_mismatch), no queda suelto', () => {
+		const upsell = itemRow({
+			id: 'up-1',
+			categoria: 'UPSELL',
+			related_item_id: LICENCIA,
+			quantity: 5,
+			monthly_price: 500,
+			billing_period_price: 500,
+			start_date: '2026-10-01',
+			end_date: '2027-03-31',
+			term_months: 6,
+		});
+		const plan = planChange(
+			context({ items: [itemRow(), soporteRow(), upsell] }),
+			request(
+				{ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 15, unit_price: 100, billing_frequency: 'Anual', term_months: 12 }] },
+				{ reason: 'ok' }
+			)
+		);
+
+		expect(ops(plan, 'update_item').map((op) => [op.item_id, op.set.end_date])).toEqual([
+			[LICENCIA, '2026-11-30'],
+			['up-1', '2026-11-30'],
+		]);
+		expect(codes(plan)).toContain('adjustment_end_mismatch');
+		expect(inserted(plan)[0]).toMatchObject({ categoria: 'RENEWAL', quantity: 15, end_date: '2027-11-30' });
+	});
+
 	it('plazo con precio nuevo → RENEWAL + UPSELL de ajuste; emitida después del corte → issued_after_effective_date con fecha', () => {
 		const plan = planChange(
 			context(),
@@ -671,6 +699,38 @@ describe('reactivate (§9.3.2, S2-8 / S3-9 / S5-7)', () => {
 		expect(plan.event.type).toBe('CHURN_REVERSED');
 	});
 
+	it('(b2) NC de la baja nacida con el estado de su factura (Emitida, sin folio ni ERP = pendiente de emisión electrónica) se cancela como la Por Emitir', () => {
+		const pendingEmission: ChangeInvoiceRow = {
+			...invoiceRow('09'),
+			id: 'nc-3',
+			document_type: 'NC',
+			status: 'Emitida',
+			invoice_number: null,
+			odoo_invoice_id: null,
+			sent_to_odoo_at: null,
+			lines: [],
+		};
+
+		pendingEmission.lines = [
+			{
+				...invoiceRow('09').lines[0],
+				id: 'nc-3-lic',
+				invoice_id: 'nc-3',
+				subtotal: -533.33,
+				billing_period_start: '2026-09-15',
+				billing_period_end: '2026-09-30',
+			},
+		];
+		const ctx = cancelled('2026-09-15');
+		const plan = planChange(
+			{ ...ctx, invoices: [...ctx.invoices, pendingEmission] },
+			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
+		);
+
+		expect(ops(plan, 'cancel_invoice').map((op) => op.invoice_id)).toEqual(['nc-3']);
+		expect(codes(plan)).not.toContain('credit_notes_issued_kept');
+	});
+
 	it('(c) mes cerrado → REACTIVATION nuevo desde la fecha efectiva al valor anterior; con otro contrato vigente del cliente es UPSELL', () => {
 		const closed = cancelled('2026-09-15', {
 			contract: contractRow({ status: 'Cancelado', churn_date: '2026-09-15', cutoff_date: '2026-09-30' }),
@@ -844,6 +904,23 @@ describe('cotización → contrato: item_add / item_change con quote_item_id (S3
 			quote_items: new Map(items.map((item) => [item.id, item])),
 		});
 	const origin = { origin: { type: 'quote' as const, quote_id: QUOTE }, reason: 'ok' };
+
+	it('D3/MF-h: item_add desde cotización de un producto existente termina con su ítem relacionado (no con el contrato)', () => {
+		const ctx = {
+			...quoteCtx([quoteItem({ product_id: PRODUCT_LICENCIA, product_name: 'Licencia', start_date: '2026-12-01' })]),
+			items: [itemRow({ end_date: '2027-06-30', term_months: 18 }), soporteRow()],
+		};
+		const plan = planChange(ctx, request({ type: 'item_add', items: [{ quote_item_id: 'qi-1' }] }, { ...origin, effective_date: '2026-11-01' }));
+
+		expect(inserted(plan)[0]).toMatchObject({
+			categoria: 'UPSELL',
+			related_item_id: LICENCIA,
+			quote_item_id: 'qi-1',
+			start_date: '2026-12-01',
+			end_date: '2027-06-30',
+			term_months: 7,
+		});
+	});
 
 	it('item_add: producto, cantidad, precio e inicio salen del ítem cotizado (S3-4) y el ítem queda con quote_item_id', () => {
 		const plan = planChange(quoteCtx([quoteItem()]), request({ type: 'item_add', items: [{ quote_item_id: 'qi-1' }] }, origin));

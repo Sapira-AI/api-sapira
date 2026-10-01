@@ -1,6 +1,6 @@
 import { addMonths, computeDueDate, diffDays, round2 } from './billing-engine';
 import { type HeaderAmounts, headerFromLines } from './consumption';
-import { isCreditNote, PENDING_STATUS } from './contract-360';
+import { creditNotePendingEmission, isCreditNote, PENDING_STATUS } from './contract-360';
 import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms } from './contract-drafts.service';
 import { CONSOLIDATION_EVENT_TYPES } from './invoice-consolidation-read';
@@ -167,6 +167,9 @@ export interface ContractInvoiceLineRow {
 	billing_period_start?: string | null;
 }
 
+/** Mismo código que el scheduler (`invoice-scheduler.service.ts` `CREDIT_NOTE_SEND_PENDING`). */
+export const CREDIT_NOTE_SEND_PENDING_CODE = 'credit_note_send_pending';
+
 export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a intentarlo';
 
 // ---------------------------------------------------------------- bloqueos comunes
@@ -176,10 +179,15 @@ export function commonBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[] {
 	const blockers: InvoiceBlocker[] = [];
 
 	if (isCreditNote(invoice.document_type) || invoice.document_type === 'ND') {
+		// Las NC que crea la API nacen siempre Emitida y quedan pendientes de emisión electrónica (no son facturas por enviar).
+		const pendingEmission = creditNotePendingEmission(invoice);
+
 		blockers.push({
 			code: 'credit_note',
-			message: 'Las notas de crédito y débito no se editan desde el contrato',
-			next_step: 'Gestiónala en Facturación',
+			message: pendingEmission
+				? 'Nota de crédito pendiente de emisión electrónica: no se edita desde el contrato'
+				: 'Las notas de crédito y débito no se editan desde el contrato',
+			next_step: pendingEmission ? 'Se emitirá cuando exista la emisión de NC en el ERP' : 'Gestiónala en Facturación',
 		});
 
 		return blockers;
@@ -293,7 +301,16 @@ export interface SendNowPlan {
 
 /** Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `erp_send_disabled`, `tax_rate_missing`). */
 export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoiceContext): SendNowPlan {
-	const blockers = commonBlockers(invoice);
+	// NC/ND: el envío al ERP (`out_refund`) todavía no existe (Leon); se rechaza con un código propio, no el genérico de edición.
+	const blockers = commonBlockers(invoice).map((blocker) =>
+		blocker.code === 'credit_note'
+			? {
+					code: CREDIT_NOTE_SEND_PENDING_CODE,
+					message: 'El envío de notas de crédito y débito al ERP todavía no está disponible',
+					next_step: 'Se enviará cuando exista la emisión de NC en el ERP',
+				}
+			: blocker
+	);
 	const warnings: InvoiceWarning[] = [];
 	const policy = effectiveFxPolicy(invoice, context);
 

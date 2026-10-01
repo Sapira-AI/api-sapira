@@ -217,7 +217,7 @@ describe('assets del bloque B2', () => {
 		expect(sql).toContain('AND ci.billing_anchor_day IS NULL;');
 		expect(sql).toContain('v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);');
 		expect(sql).toContain(
-			"AND v_item.billing_anchor_day IS NULL\n           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL') THEN"
+			"AND v_item.billing_anchor_day IS NULL\n           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN"
 		);
 		// Formato del generador: la función cierra con `$function$;` y su COMMENT.
 		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
@@ -245,5 +245,85 @@ describe('assets del bloque B2', () => {
 		// B2-3 intacto.
 		expect(sql).toContain('v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);');
 		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('assets RSM: fixes 01-10 (U8, S5-16, U5)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'revenue_schedule_rebuild_contract_ccy.sql'), 'utf8');
+	const itemLoop = sql.slice(sql.indexOf('FOR v_item IN SELECT * FROM contract_items'), sql.indexOf('WHILE v_cur <= v_last_period LOOP'));
+
+	it('U8: el rebuild parcial carga el devengo acumulado y los saldos de la última fila previa del ítem (no reinicia en 0)', () => {
+		// Mes de inicio normalizado al día 1: DELETE, primer período, cola y split usan el mismo mes.
+		expect(sql).toContain("v_from_month date := DATE_TRUNC('month', p_from_month)::date;");
+		expect(sql).toContain('AND period_month >= v_from_month');
+		expect(sql).toContain('GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date)');
+		expect(sql).not.toMatch(/period_month >= p_from_month|v_tail_period >= p_from_month/);
+		// Rebuild completo: igual que antes (todo en 0, facturado previo de las facturas).
+		expect(itemLoop).toContain('v_recognized_cum := 0; v_billed_cum := v_billed_cum_initial;');
+		// Parcial: última fila del ítem antes del primer mes, sin la cola PENDING_RENEWAL ni el delta del split de renovación.
+		const partial = itemLoop.slice(itemLoop.indexOf('IF v_from_month IS NOT NULL THEN'));
+
+		expect(partial).toContain('AND r.contract_item_id = v_item.id');
+		expect(partial).toContain('AND r.period_month < v_first_period');
+		expect(partial).toContain("AND COALESCE(r.momentum, '') <> 'PENDING_RENEWAL'");
+		expect(partial).toContain('ORDER BY r.period_month DESC, (r.recognized_cum_contract_ccy IS NULL),');
+		// En moneda del ítem: columna directa (sin vueltas), misma moneda tal cual, si no contrato ÷ tasa item del mes de esa fila.
+		expect(partial).toContain('CASE WHEN v_company_direct = 1 THEN v_prev.recognized_cum_ccy END,');
+		expect(partial).toContain('CASE WHEN v_system_direct = 1 THEN v_prev.recognized_cum_system_ccy END,');
+		expect(partial).toContain('CASE WHEN v_item_ccy = UPPER(TRIM(v_contract.contract_currency)) THEN v_prev.recognized_cum_contract_ccy END,');
+		expect(partial).toContain('ROUND(v_prev.recognized_cum_contract_ccy / NULLIF(public.contract_item_fx_rate(p_contract_id, v_item_ccy');
+		// Saldos al cierre del mes previo desde los acumulados (misma fórmula que cada _eom del loop).
+		expect(partial).toContain('v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);');
+		expect(partial).toContain('v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);');
+		// La carga ocurre antes del loop de meses (el primer mes ya parte del acumulado).
+		expect(itemLoop.indexOf('v_recognized_cum := 0;')).toBeLessThan(itemLoop.indexOf('IF v_from_month IS NOT NULL THEN'));
+	});
+
+	it('S5-16 (D7): el mensual es monthly_price (final ÷ plazo solo de respaldo) y la fracción del mes se aplica una vez', () => {
+		expect(sql).toContain('v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));');
+		expect(sql).not.toContain('v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);');
+		// Un solo prorrateo: mensual × días vivos / días del mes.
+		expect(sql.match(/v_proration_days::numeric \/ v_days_in_month/g)).toHaveLength(1);
+		expect(sql).toContain('v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);');
+	});
+
+	it('U5: CHURN y REACTIVATION prorratean el primer mes por días vivos como UPSELL / CROSS-SELL / DOWNSELL', () => {
+		expect(sql).toContain("IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN");
+		expect(sql).toContain('v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;');
+		// B2-3 y B2-5 intactos: ciclo propio no prorratea y las pausas siguen después del prorrateo.
+		expect(sql).toContain('AND v_item.billing_anchor_day IS NULL');
+		expect(sql.indexOf("'CHURN', 'REACTIVATION') THEN")).toBeLessThan(sql.indexOf('v_active_days := (LEAST(v_eom_of_cur'));
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('asset RSM apply_pending_renewal_tail (D19 · S2-10, 01-10)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'apply_pending_renewal_tail.sql'), 'utf8');
+	const flat = sql.replace(/\s+/g, ' ');
+
+	it('contratos Cancelado o nunca activados: sin cola y se borran las filas PENDING_RENEWAL que quedaran', () => {
+		expect(flat).toContain('c.contract_currency, c.status,');
+		expect(flat).toContain("IF v_contract.status IN ('Cancelado', 'Borrador', 'En revisión') THEN");
+		expect(flat).toContain("DELETE FROM public.revenue_schedule_monthly WHERE contract_id = p_contract_id AND momentum = 'PENDING_RENEWAL';");
+		// El corte va antes del recorrido de ítems.
+		expect(flat.indexOf("'contract_not_eligible'")).toBeLessThan(flat.indexOf('FOR v_item IN'));
+	});
+
+	it('ítems con churn, renovados o espejos de baja siguen fuera', () => {
+		expect(flat).toContain('AND ci.churn_date IS NULL');
+		expect(flat).toContain('AND ci.renewed_by_item_id IS NULL');
+		expect(flat).toContain("NOT IN ('DOWNSELL', 'CHURN')");
+	});
+
+	it('meses con pausa activa o programada del ítem (abierta o que cubre el fin del mes) no suman cola', () => {
+		expect(flat).toContain('FROM public.contract_item_pauses pz WHERE pz.contract_item_id = v_item.id');
+		expect(flat).toContain("AND pz.status IN ('active', 'scheduled')");
+		expect(flat).toContain('AND pz.pause_start <= v_month_end AND (pz.pause_end IS NULL OR pz.pause_end >= v_month_end)');
+		// La pausa se revisa antes del INSERT del mes y salta al mes siguiente.
+		const loop = flat.slice(flat.indexOf('WHILE v_cur <= v_end_period LOOP'));
+
+		expect(loop.indexOf('contract_item_pauses')).toBeLessThan(loop.indexOf('INSERT INTO public.revenue_schedule_monthly'));
+		expect(loop).toContain('CONTINUE;');
+		expect(flat).toContain("'v1.3-pending-renewal-eligible-unpaused'");
 	});
 });

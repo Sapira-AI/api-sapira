@@ -232,9 +232,11 @@ const build = (handler: Handler = () => undefined) => {
 		detail: jest.fn().mockResolvedValue({ id: CONTRACT_ID, contract_number: 'CTR-2026-001' }),
 	} as unknown as ContractsService;
 
-	const invoiceEdit = new ContractInvoiceEditService(dataSource, contracts, new ContractInvoicesService(dataSource, contracts, {} as never));
+	const invoicesService = new ContractInvoicesService(dataSource, contracts, {} as never);
+	const invoiceEdit = new ContractInvoiceEditService(dataSource, contracts, invoicesService);
+	const descriptions = new ContractInvoiceDescriptionsService(dataSource, contracts, invoicesService);
 
-	return { service: new ContractChangesService(dataSource, contracts, invoiceEdit), runner, dataSource, contracts };
+	return { service: new ContractChangesService(dataSource, contracts, invoiceEdit, descriptions), runner, dataSource, contracts, descriptions };
 };
 const sqlOf = (mock: jest.Mock) => mock.mock.calls.map(([sql]) => sql as string);
 const calls = (mock: jest.Mock, needle: string) => mock.mock.calls.filter(([sql]) => (sql as string).includes(needle));
@@ -333,7 +335,7 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(contracts.detail).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
 	});
 
-	it('emitida en el rango → NC espejo Por Emitir con montos negativos y la línea con su ítem; la emitida no se modifica', async () => {
+	it('emitida en el rango → NC espejo con el estado de la emitida (nunca Por Emitir), referencia a la original, montos negativos y la línea con su ítem; la emitida no se modifica', async () => {
 		const { service, runner } = build();
 
 		await service.apply(
@@ -346,11 +348,15 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		);
 		const [nc] = calls(runner.query, `'NC', $17`);
 
-		expect(nc[1][6]).toBe('Por Emitir');
+		// Decisión 01-10: la NC nace siempre Emitida, sin vencimiento ni vínculo con el ERP.
+		expect(nc[1][6]).toBe('Emitida');
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
+		expect(nc[0]).not.toContain('odoo_invoice_id');
 		expect(nc[1][30]).toBe('Automatica');
-		expect(nc[0]).toContain('$6, $6, $6, NULL');
-		expect(nc[1][30]).toBe('Automatica');
+		const [reference] = calls(runner.query, 'INSERT INTO invoice_references');
+
+		// Referencia a la emitida (folio y tipo del original, código 3 = corrige montos).
+		expect((reference[1] as unknown[]).slice(2, 6)).toEqual(['F-09', '33', 'Factura electrónica', '3']);
 		// 1.000 × 16/30 = 533,33 neto, IVA 101,33; espejo de inv-09 con su moneda y FX.
 		expect(nc[1].slice(10, 14)).toEqual([-533.33, -533.33, -101.33, -634.66]);
 		expect(nc[1][16]).toBe('inv-09');
@@ -434,6 +440,51 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 
 		expect(firstIndex(sql, 'UPDATE quotes SET quote_stage_id')).toBeGreaterThan(firstIndex(sql, 'INSERT INTO contract_lifecycle_events'));
 		expect(calls(runner.query, 'UPDATE quotes SET quote_stage_id')[0][1]).toEqual(['q-1', HOLDING, 'stage-1']);
+		// Historial de la cotización: APPLIED_TO_CONTRACT con el contrato y el evento del cambio, después de mover la etapa.
+		expect(firstIndex(sql, 'INSERT INTO quote_events')).toBeGreaterThan(firstIndex(sql, 'UPDATE quotes SET quote_stage_id'));
+		const [quoteEvent] = calls(runner.query, 'INSERT INTO quote_events');
+
+		expect(quoteEvent[0]).toContain("'APPLIED_TO_CONTRACT'");
+		const params = quoteEvent[1] as unknown[];
+
+		expect(params.slice(0, 2)).toEqual([HOLDING, 'q-1']);
+		expect(params[3]).toBe('stage-1');
+		expect(params[5]).toBe('contract_created');
+		expect(params[6]).toBe('user-1');
+		expect(JSON.parse(params[7] as string)).toMatchObject({
+			contract_id: CONTRACT_ID,
+			change_event_id: 'event-1',
+			change_type: 'item_add',
+			stage_updated: true,
+		});
+	});
+
+	it('origen cotización sin etapa "Contrato creado": la cotización queda en su etapa pero el evento APPLIED_TO_CONTRACT se registra igual', async () => {
+		const { service, runner } = build((sql) => {
+			if (sql.includes('FROM products')) return [{ id: PRODUCT_SOPORTE.replace('b', 'c'), name: 'Analítica' }];
+			if (sql.includes('FROM quotes q'))
+				return [{ id: 'q-1', quote_type: 'Upselling', already_applied: false, quote_stage_id: 'stage-sent', kind: 'sent' }];
+			if (sql.includes('FROM quote_stages')) return [];
+
+			return undefined;
+		});
+
+		await service.apply(
+			CONTRACT_ID,
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_SOPORTE.replace('b', 'c'), quantity: 2, unit_price: 300 }] },
+				{ origin: { type: 'quote', quote_id: 'q-1' }, reason: 'ok' }
+			),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		expect(calls(runner.query, 'UPDATE quotes SET quote_stage_id')).toHaveLength(0);
+		const params = calls(runner.query, 'INSERT INTO quote_events')[0][1] as unknown[];
+
+		expect(params.slice(2, 6)).toEqual(['stage-sent', 'stage-sent', 'sent', 'sent']);
+		expect(JSON.parse(params[7] as string)).toMatchObject({ stage_updated: false });
 	});
 
 	it('item_add con `price`: inserta la fila de prices (owner contract, v1) después del ítem y lo apunta con price_id', async () => {
@@ -1210,5 +1261,183 @@ describe('ContractChangesService · B2-4 / B2-5 (spec modificaciones §9.3.3, §
 				today
 			)
 		).rejects.toMatchObject({ response: expect.objectContaining({ code: 'blocked' }) });
+	});
+});
+
+describe('ContractChangesService · item_update (spec modificaciones §9.2, corregir un dato)', () => {
+	/** Las líneas de noviembre de Licencia vienen con la glosa escrita a mano (`description_locked`). */
+	const withLockedNovember = (sql: string) =>
+		sql.includes('FROM invoice_items ii') && sql.includes('ii.description_locked') && sql.includes('ORDER BY ii.billing_period_start')
+			? MONTHS.flatMap(lineDbRows).map((line) => ({ ...line, description_locked: line.id === 'line-11-lic' }))
+			: undefined;
+
+	it('escribe la cuenta y regenera solo las glosas de las PE no protegidas del ítem; sin RSM, sin facturas, evento ITEM_CORRECTED', async () => {
+		const { service, runner, descriptions } = build(withLockedNovember);
+		const regenerate = jest
+			.spyOn(descriptions, 'regenerateLines')
+			.mockResolvedValue([
+				{ line_id: 'line-10-lic', invoice_id: 'inv-10', before: 'Periodo 10', after: 'Licencia Norte', length: 14 } as never,
+			]);
+		const result = await service.apply(
+			CONTRACT_ID,
+			request({ type: 'item_update', items: [{ item_id: LICENCIA, account: '  Norte  ' }] }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		const sql = sqlOf(runner.query);
+		const [update] = calls(runner.query, 'UPDATE contract_items SET account');
+
+		expect(update[1]).toEqual([LICENCIA, HOLDING, 'Norte']);
+		// PE de octubre y diciembre (noviembre está protegida; Soporte y las emitidas no se tocan).
+		expect(regenerate).toHaveBeenCalledWith(runner, CONTRACT_ID, HOLDING, ['line-10-lic', 'line-12-lic']);
+		expect(firstIndex(sql, 'UPDATE contract_items SET account')).toBeLessThan(firstIndex(sql, 'INSERT INTO contract_lifecycle_events'));
+		expect(sql.some((text) => text.includes('revenue_schedule_rebuild'))).toBe(false);
+		expect(sql.some((text) => text.includes('UPDATE invoice_items SET quantity') || text.includes('INSERT INTO invoices'))).toBe(false);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+		const metadata = JSON.parse(event[1][10] as string) as Row;
+
+		expect(event[1][2]).toBe('ITEM_CORRECTED');
+		expect(event[1][8]).toBe(0);
+		expect(metadata.items).toEqual([
+			{ item_id: LICENCIA, product_name: 'Licencia', changes: [{ field: 'account', before: null, after: 'Norte' }] },
+		]);
+		expect(metadata.descriptions_regenerated).toEqual([
+			{ line_id: 'line-10-lic', invoice_id: 'inv-10', before: 'Periodo 10', after: 'Licencia Norte' },
+		]);
+		expect(result.items_after).toEqual([
+			{
+				item_id: LICENCIA,
+				product_name: 'Licencia',
+				account_before: null,
+				account: 'Norte',
+				changes: [{ field: 'account', before: null, after: 'Norte' }],
+			},
+		]);
+		expect(result.warnings.map((warning) => warning.code)).toEqual(['pending_descriptions_updated']);
+		expect(result.rsm.mrr_delta).toBe(0);
+	});
+
+	it('corrección de cantidad: escribe el ítem en su lugar, reescribe las PE, registra el motivo del ajuste, regenera glosas después y reconstruye el devengo completo', async () => {
+		const { service, runner, descriptions } = build();
+		const regenerate = jest.spyOn(descriptions, 'regenerateLines').mockResolvedValue([]);
+		const result = await service.apply(
+			CONTRACT_ID,
+			request({ type: 'item_update', items: [{ item_id: LICENCIA, quantity: 12 }] }, { effective_date: '2026-09-28' }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		const sql = sqlOf(runner.query);
+		const [update] = calls(runner.query, 'UPDATE contract_items SET');
+
+		expect(update[0]).toContain('quantity = $5');
+		expect(update[0]).toContain('monthly_price');
+		expect(update[0]).not.toContain('categoria');
+		expect(update[0]).not.toContain('booking_date');
+		expect(calls(runner.query, 'INSERT INTO contract_items')).toHaveLength(0);
+		expect(calls(runner.query, 'INSERT INTO invoice_adjustments').map((call) => call[1])).toEqual([
+			['inv-10', HOLDING, 'correction', 600, expect.stringContaining('parte 1 de 3'), 'user-1'],
+			['inv-11', HOLDING, 'correction', 600, expect.stringContaining('parte 2 de 3'), 'user-1'],
+			['inv-12', HOLDING, 'correction', 600, expect.stringContaining('parte 3 de 3'), 'user-1'],
+		]);
+		expect(regenerate).toHaveBeenCalledWith(runner, CONTRACT_ID, HOLDING, ['line-10-lic', 'line-11-lic', 'line-12-lic']);
+		expect(firstIndex(sql, 'UPDATE invoice_items SET quantity')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoice_adjustments'));
+		expect(calls(runner.query, 'revenue_schedule_rebuild')[0][1]).toEqual([CONTRACT_ID, '2026-01-01']);
+		// Ninguna emitida se toca ni recibe NC.
+		expect(calls(runner.query, 'UPDATE invoice_items SET quantity').map((call) => call[1][0])).toEqual([
+			'line-10-lic',
+			'line-11-lic',
+			'line-12-lic',
+		]);
+		expect(calls(runner.query, 'INSERT INTO invoices')).toHaveLength(0);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1][2]).toBe('ITEM_CORRECTED');
+		expect(result.issued_difference).toMatchObject({ amount: 1800 });
+	});
+
+	it('el aviso pending_descriptions_updated es informativo: se aplica sin motivo', async () => {
+		const { service, runner, descriptions } = build();
+
+		jest.spyOn(descriptions, 'regenerateLines').mockResolvedValue([]);
+		const result = await service.apply(
+			CONTRACT_ID,
+			request({ type: 'item_update', items: [{ item_id: LICENCIA, account: 'Norte' }] }, { reason: undefined, reason_id: undefined }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+
+		expect(result.warnings.map((warning) => warning.code)).toEqual(['pending_descriptions_updated']);
+		expect(calls(runner.query, 'UPDATE contract_items SET account').length).toBe(1);
+	});
+
+	it('otro ítem con cuenta; ítem ajeno → 409 blocked item_not_found sin escribir', async () => {
+		const { service, runner, descriptions } = build();
+
+		jest.spyOn(descriptions, 'regenerateLines').mockResolvedValue([]);
+		await service.apply(
+			CONTRACT_ID,
+			request({ type: 'item_update', items: [{ item_id: SOPORTE, account: 'Sur' }] }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		expect(calls(runner.query, 'UPDATE contract_items SET account')[0][1]).toEqual([SOPORTE, HOLDING, 'Sur']);
+
+		const other = build();
+
+		await expect(
+			other.service.apply(
+				CONTRACT_ID,
+				request({ type: 'item_update', items: [{ item_id: 'e0000000-0000-4000-8000-000000000099', account: 'Sur' }] }),
+				HOLDING,
+				'auth-1',
+				undefined,
+				today
+			)
+		).rejects.toMatchObject({ response: expect.objectContaining({ code: 'blocked' }) });
+		expect(calls(other.runner.query, 'UPDATE contract_items').length).toBe(0);
+	});
+});
+
+describe('ContractChangesService.extendHorizonForHolding (job contracts-extend-horizon)', () => {
+	/** Licencia sin término (sin plazo ni fin): el horizonte llega a ago-2027 desde hoy (28-09-2026). */
+	const openEnded = (sql: string) => {
+		if (sql.includes('SELECT DISTINCT c.id FROM contracts c')) return [{ id: CONTRACT_ID }];
+		if (sql.includes('FROM contract_items ci') && sql.includes('LEFT JOIN prices'))
+			return itemDbRows.map((row) => (row.id === LICENCIA ? { ...row, term_months: null, end_date: null } : row));
+
+		return undefined;
+	};
+
+	it('por contrato: costura, bloqueo, crea las Por Emitir que faltan y un evento HORIZON_EXTENDED del sistema; sin devengo', async () => {
+		const { service, runner } = build(openEnded);
+		const extended = await service.extendHorizonForHolding(HOLDING, 'system', today);
+		const sql = sqlOf(runner.query);
+
+		expect(extended).toBe(1);
+		expect(sql[0]).toContain('sapira.writer');
+		expect(firstIndex(sql, 'FOR UPDATE')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoices'));
+		expect(calls(runner.query, 'INSERT INTO invoices')).toHaveLength(8);
+		expect(calls(runner.query, 'revenue_schedule_rebuild')).toHaveLength(0);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1][2]).toBe('HORIZON_EXTENDED');
+		expect(event[1][6]).toBe('system');
+		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('sin nada que extender (ítems con plazo) no escribe ni registra evento', async () => {
+		const { service, runner } = build((sql) => (sql.includes('SELECT DISTINCT c.id FROM contracts c') ? [{ id: CONTRACT_ID }] : undefined));
+
+		expect(await service.extendHorizonForHolding(HOLDING, 'system', today)).toBe(0);
+		expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
+		expect(runner.rollbackTransaction).toHaveBeenCalled();
 	});
 });

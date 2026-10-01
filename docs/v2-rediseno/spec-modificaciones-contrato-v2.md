@@ -437,7 +437,8 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 |---|---|---|
 | Cambió el precio o la cantidad de un producto | ¿Qué producto? ¿Valores nuevos? | `item_change` |
 | Cambió cada cuánto se factura o el plazo | ¿Frecuencia / plazo nuevo? ¿Desde cuándo? | `item_change` con `billing_frequency`/`term_months` (9.3.7) |
-| Agregó un producto (incl. otra moneda o desde una cotización) | ¿Mismo ciclo del contrato o su propio día? | `item_add` (+ `enable_multicurrency`) |
+| Agregó un producto (incl. otra moneda o desde una cotización) | ¿Qué producto y para qué cuenta? (¿mismo ciclo del contrato o su propio día?) | `item_add` (+ `enable_multicurrency`) |
+| Corregir un dato mal cargado (F4, reemplaza "Cambia la cuenta de un producto") | ¿Qué producto? ¿Qué dato estaba mal? | `item_update` (ver 9.2.1) |
 | Quitó un producto | ¿Ahora o al terminar su plazo? | `item_remove` |
 | Renueva | ¿Mismo precio o nuevo? ¿Extender el tipo de cambio? | `renewal` |
 | Acordamos un cambio futuro (reajuste, IPC/UF, nuevo precio en fecha) | ¿Cuándo y qué? | `scheduled-changes` (9.3.6) |
@@ -447,6 +448,34 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 | Cambian las condiciones de facturación | — | `billing_conditions` |
 | Cambia la razón social que recibe la factura | ¿Existe o la creamos? | `change_entity` (9.3.10) |
 | Factura productos en varias monedas | — | `multicurrency` |
+
+#### 9.2.1 Corregir un dato mal cargado (`item_update`, F4 · decisión de Domi 01-10)
+
+El "editar ítem" de la app vieja, como **corrección** (no modificación). `items[{ item_id, account?, product_name? (glosa), item_type?,
+quantity?, unit_price?, price_entry_mode?, discount_value? (%) }]`; el front agrupa por producto + cuenta (la cuenta, la glosa y el tipo van a
+todos los ítems del grupo; los valores, al ítem madre vigente). Cualquier estado salvo En revisión y Cancelado. Construido en
+`contract-changes.ts` `planItemUpdate` / `correctItemInvoices` / `correctedLine`.
+
+1. **Guard**: si cambia el valor (cantidad, precio, modo del precio o descuento), el mes de la fecha efectiva debe estar abierto
+   (`period_closed`, mismo chequeo que el resto). Cuenta, glosa y tipo no lo piden. El valor se corrige en **un ítem por cambio**, sin modelo
+   de precio (los tramos se editan en el precio del ítem) ni espejos de baja (400 en el campo).
+2. **Corrección en su lugar**: el ítem se reescribe (sin ítem espejo, sin UPSELL/DOWNSELL, misma `categoria` y `booking_date`);
+   `price`/`final_price` con `itemPricing` y `monthly_price`/`billing_period_price`/anual con `pricingFields`; `total_value` del contrato
+   recalculado; devengo reconstruido **completo** (desde el primer mes del contrato; los cerrados se saltan).
+3. **Por Emitir** del ítem reescritas con los valores corregidos (unitario del período escalado: conserva el prorrateo), respetando lo hecho a
+   mano: línea editada (`quantity_source = manual`, no se toca), consumo registrado (conserva la cantidad; con monto informado no se toca),
+   glosa escrita a mano (`description_locked`), descuento puntual (se reaplica, % o monto, sobre el neto nuevo) y tasa fijada por factura (se
+   conserva). Aviso `correction_overrides_preserved` con la lista. Las glosas generadas se regeneran después (`pending_descriptions_updated`).
+4. **Emitidas intactas**. Si alguna emitida (no NC/ND, no anulada, no unificada) tiene el ítem, la diferencia por período entre lo emitido y lo
+   que debió emitirse con los valores corregidos se reparte en partes iguales (redondeo telescópico) entre las Por Emitir del ítem, en el
+   unitario de su línea, con el motivo del desvío en `invoice_adjustments` (`type = correction`, `amount_diff` = la parte). Preview
+   `issued_difference { item_id, currency, amount, issued_invoices[{ invoice_id, invoice_number, issued, expected, difference }],
+   distributed_over[{ invoice_id, invoice_number, issue_date, amount }] }` y aviso `issued_difference_distributed`: "Ya existe la factura
+   F-0123 emitida por este ítem: la diferencia de USD 120,00 se distribuye entre las 3 facturas por emitir. Si lo que quieres es cambiar el
+   acuerdo desde una fecha, usa Cambió el precio o la cantidad". Sin Por Emitir donde repartir → bloqueo `no_pending_invoices_for_correction`
+   (next_step: usa "Cambió el precio o la cantidad"); una parte que dejaría una factura en negativo → `correction_difference_exceeds_pending`.
+5. **Evento** `ITEM_CORRECTED` (subtipo `value` o `data`, `amount_delta` 0) con `metadata.items[{ item_id, product_name, changes[{ field,
+   before, after }] }]`, `issued_difference` y `preserved`. Reemplaza a `ITEM_UPDATED` (el 360 sigue leyendo los eventos viejos).
 
 Desde Cotizaciones, "Asociar a contrato" entra directo a la intención "Agregó un producto" o "Cambió el precio…" según el tipo de la cotización.
 Barra del 360: **Modificar contrato** (primario) + atajos **Renovar**, **Pausar/Reanudar**, **Terminar** y en Cancelado **Reactivar** (abren el mismo
@@ -615,6 +644,22 @@ Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moned
   19. La NC por días pausados (`void`) usa `credit_reason = downsell` (regla de la NC espejo de las bajas parciales).
   20. `ALLOWED_STATES`: con el contrato Pausado se admiten `billing_conditions`, `change_entity`, `item_remove`, `contract_cancel`,
       `renewal`, `multicurrency` y `resume`; `pause` solo en Activo / Por renovar.
+
+### 9.6c Construido 01-10 (cierre): F4, NC siempre Emitida, tramos con consumo, horizonte de indefinidos
+
+- **F4 · Corregir un dato mal cargado**: §9.2.1 (`item_update` extendido; evento `ITEM_CORRECTED`). Tests `contract-changes.spec.ts`
+  "item_update · corregir un dato mal cargado" y `contract-changes.service.spec.ts` "corrección de cantidad…".
+- **NC**: `creditNoteStatusFor` devuelve siempre `Emitida` (la factura acreditada puede estar Emitida, Enviada, Pagada, Vencida o
+  parcialmente pagada; nunca se copia Pagada/Vencida). Sobre una Por Emitir no se crea NC (se reescribe la factura).
+- **`item_change` en un ítem por tramos con consumo registrado**: el período con consumo se re-tarifa con la cantidad registrada por el motor
+  (`pricedItemInvoicesByPeriod` con `consumption`, filas por tramo en `per_tier`), nunca por el camino de una fila; aviso
+  `consumption_quantity_kept`.
+- **Indefinidos**: job diario `contracts-extend-horizon` (05:45, `contracts.scheduler.ts`): por contrato Activo, los recurrentes sin término vivos
+  (sin churn, sin renovar, sin pausa abierta) reciben las Por Emitir que faltan para tener siempre 12 períodos desde hoy, solo hacia adelante
+  desde el último día facturado (`planHorizonExtension` + `restoreItemBilling` + `mergeTarget`); idempotente con el contrato bloqueado;
+  evento `HORIZON_EXTENDED` por contrato solo si creó algo. Tests `contract-horizon.spec.ts`.
+- **RSM**: `apply_pending_renewal_tail` v1.3 sin cola en Cancelado/Borrador/En revisión (borra la que hubiera) ni en meses con pausa
+  activa/programada del ítem (asset sin aplicar).
 
 ### 9.7 Pendientes
 

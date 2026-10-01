@@ -517,7 +517,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa de una modificación de contrato',
 		description:
-			'Mismo body que aplicar. `change.type`: billing_conditions (incl. auto_renew) | change_entity (client_entity_id o new_entity) | item_remove | contract_cancel (invoice_decisions) | renewal (precio nuevo, pactos on_renewal, extensión de tasas; origin renewal_proposal confirma una propuesta) | item_add (billing_cycle, quote_item_id) | item_change (frecuencia/plazo §9.3.7, quote_item_id) | multicurrency | reactivate (§9.3.2) | pause { items?, pause_start?, pause_end?, extend_term?, invoice_decisions? } | resume { items?, resume_date? } (§9.3.3); price_adjustment → 400. Devuelve antes/después del contrato, ítems, facturas, RSM, advertencias y bloqueos con el paso siguiente, y según el tipo `invoice_decisions_required`, `effective_date_suggestions`, `scheduled_changes`, `fx_rates_extended`, `reactivation`, `pauses`. No escribe nada',
+			'Mismo body que aplicar. `change.type`: billing_conditions (incl. auto_renew) | change_entity (client_entity_id o new_entity) | item_remove | contract_cancel (invoice_decisions) | renewal (precio nuevo, pactos on_renewal, extensión de tasas; origin renewal_proposal confirma una propuesta) | item_add (billing_cycle, quote_item_id) | item_change (frecuencia/plazo §9.3.7, quote_item_id) | multicurrency | reactivate (§9.3.2) | pause { items?, pause_start?, pause_end?, extend_term?, invoice_decisions? } | resume { items?, resume_date? } (§9.3.3); price_adjustment → 400. Devuelve antes/después del contrato, ítems, facturas, RSM, advertencias y bloqueos con el paso siguiente, y según el tipo `invoice_decisions_required`, `effective_date_suggestions` (contract_cancel, item_remove, pause), `scheduled_changes`, `fx_rates_extended`, `reactivation`, `pauses`. No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiResponse({
@@ -890,7 +890,10 @@ export class ContractsController {
 		status: 200,
 		description: '{ sent, status: sent | error | skipped, odoo_invoice_id, message, blockers: [], warnings[], event_id, invoice }',
 	})
-	@ApiResponse({ status: 409, description: '`code: blocked` con `blockers[]` y `preview`' })
+	@ApiResponse({
+		status: 409,
+		description: '`code: blocked` con `blockers[]` y `preview`; NC/ND → `code: credit_note_send_pending` (envío de NC al ERP aún no disponible)',
+	})
 	async sendNow(
 		@Param('id') id: string,
 		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
@@ -1217,7 +1220,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa: anular una emitida con NC espejo (y reemitir)',
 		description:
-			'`{ reason: issue_error | client_request | other, notes?, reissue, reissue_changes?: <cuerpo del editor §3.4> }`. NC espejo completa (montos exactos en ambas monedas, IVA de cada línea, tasa, receptor; `credit_type = cancellation`, Por Emitir, sin vencimiento) y, con `reissue`, la Por Emitir que la reemplaza (copia o con cambios por la lógica del editor), consumos del período que se liberan, avisos y bloqueos. No escribe nada',
+			'`{ reason: issue_error | client_request | other, notes?, reissue, reissue_changes?: <cuerpo del editor §3.4> }`. NC espejo completa (montos exactos en ambas monedas, IVA de cada línea, tasa, receptor; `credit_type = cancellation`, con el estado de la original —nunca Por Emitir—, sin vencimiento, pendiente de emisión electrónica) y, con `reissue`, la Por Emitir que la reemplaza (copia o con cambios por la lógica del editor), consumos del período que se liberan, avisos y bloqueos. No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)
@@ -1291,7 +1294,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'NC de descuento parcial sobre una emitida',
 		description:
-			'Una transacción: NC Por Emitir sin vencimiento (`credit_type = discount`, `credit_reason`, `nc_revenue_treatment`, `related_invoice_id`), devengo reconstruido y evento INVOICE_CREDIT_NOTE_CREATED. La NC se emite desde Facturación; al emitirse, `nc_discount_revenue_adjustment` aplica el devengo',
+			'Una transacción: NC con el estado de la factura (nunca Por Emitir; pendiente de emisión electrónica) sin vencimiento (`credit_type = discount`, `credit_reason`, `nc_revenue_treatment`, `related_invoice_id`), devengo reconstruido y evento INVOICE_CREDIT_NOTE_CREATED. La NC se emite desde Facturación; al emitirse, `nc_discount_revenue_adjustment` aplica el devengo',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)

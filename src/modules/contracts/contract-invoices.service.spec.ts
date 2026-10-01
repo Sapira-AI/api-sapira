@@ -212,6 +212,18 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 			expect(runner.query).not.toHaveBeenCalled();
 		});
 
+		it('NC Por Emitir: 409 `credit_note_send_pending` (envío de NC al ERP pendiente) y no llama al scheduler', async () => {
+			const { service, scheduler } = build({ [INV_A]: invoiceRow(INV_A, { document_type: 'NC' }) });
+			const error = await service.sendNow(CONTRACT_ID, INV_A, {}, HOLDING, 'auth-1', TODAY).catch((caught: unknown) => caught);
+
+			expect(error).toBeInstanceOf(ConflictException);
+			const body = (error as ConflictException).getResponse() as Row;
+
+			expect(body.code).toBe('credit_note_send_pending');
+			expect((body.blockers as Array<{ code: string }>).map((blocker) => blocker.code)).toEqual(['credit_note_send_pending']);
+			expect(scheduler.sendInvoiceById).not.toHaveBeenCalled();
+		});
+
 		it('sin bloqueos envía ESA factura con el scheduler (dryRun false, origen manual) y deja INVOICE_SENT_MANUALLY con invoice_id', async () => {
 			const { service, scheduler, runner, contracts } = build({
 				[INV_A]: invoiceRow(INV_A, { fx_contract_to_invoice: '950' }),

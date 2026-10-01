@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { diffDays } from './billing-engine';
+import { todayFor } from './business-date';
 import {
 	type BlockerContext,
 	buildLifecycle,
@@ -34,7 +35,7 @@ const toText = (value: unknown) => (value === null || value === undefined ? null
 const toBool = (value: unknown) => (value === null || value === undefined ? null : Boolean(value));
 const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
 const isoDay = (value: unknown) => iso(value)?.slice(0, 10) ?? null;
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+const isoDate = (date: Date) => todayFor(null, date);
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
 

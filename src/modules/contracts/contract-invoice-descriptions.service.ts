@@ -376,6 +376,39 @@ export class ContractInvoiceDescriptionsService {
 		}
 	}
 
+	/**
+	 * Modificaciones (`item_update`, corregir un dato del ítem, spec modificaciones §9.2): regenera con la plantilla del contrato la glosa de las líneas
+	 * Por Emitir indicadas, dentro de la transacción del cambio (ya con `setApiWriter` y el contrato bloqueado). Mismas reglas que "aplicar
+	 * plantilla": salta las protegidas (`description_locked`), las editadas a mano, la visible de una factura por OC y las facturas bloqueadas
+	 * (no Por Emitir, unificadas, con borrador en el ERP). Devuelve las líneas escritas; el evento lo registra el cambio.
+	 */
+	async regenerateLines(runner: QueryRunner, contractId: string, holdingId: string, lineIds: string[]): Promise<DescriptionLinePlan[]> {
+		const ids = [...new Set(lineIds)];
+
+		if (!ids.length) return [];
+		const context = await this.loadContract(runner, contractId, holdingId);
+		const lines = await this.linesOf(runner, contractId, holdingId, `AND ii.id = ANY($3::uuid[])`, [ids]);
+
+		if (!lines.length) return [];
+		const invoices = await this.invoices.loadInvoicesByIds(
+			runner,
+			contractId,
+			holdingId,
+			[...new Set(lines.map((line) => line.invoice_id))],
+			true
+		);
+		const plans = planDescriptions(this.withBlockers(lines, invoices), {
+			mode: 'apply_template',
+			contract_template: context.template,
+			max_chars: context.max_chars,
+		});
+		const applied = plans.filter((plan) => !plan.skipped_reason);
+
+		await this.writeLines(runner, holdingId, applied);
+
+		return applied;
+	}
+
 	// ---------------------------------------------------------------- referencias OC/HES (§3.7a)
 
 	/**

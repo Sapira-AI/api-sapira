@@ -23,7 +23,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { deriveContractStatus, type StatusItem } from './contract-status';
 import { ContractSubscriptionsService, parseSubscriptionStatus } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
-import { ContractsService, parseStatusFilter } from './contracts.service';
+import { ContractsService, electronicEmissionOf, parseStatusFilter } from './contracts.service';
 import { QueryContractSubscriptionsDto } from './dtos/query-contract-subscriptions.dto';
 import { QueryContractsDto } from './dtos/query-contracts.dto';
 
@@ -1156,6 +1156,22 @@ describe('ContractsService', () => {
 		expect(parseStatusFilter('active,all')).toEqual([]);
 		expect(parseStatusFilter('in_review,draft,expired')).toEqual(['draft', 'expired']);
 		expect(parseStatusFilter("active,x' OR 1=1")).toEqual(['active']);
+	});
+});
+
+describe('electronicEmissionOf (NC creadas por la API, decisión 01-10)', () => {
+	it('NC con el estado de su factura y sin folio ni ERP → pendiente de emisión electrónica; factura o NC emitida en el ERP → no', () => {
+		expect(
+			electronicEmissionOf({ document_type: 'NC', status: 'Emitida', invoice_number: null, odoo_invoice_id: null, sent_to_odoo_at: null })
+		).toEqual({
+			electronic_emission_pending: true,
+			electronic_emission_label: 'Pendiente de emisión electrónica',
+		});
+		expect(electronicEmissionOf({ document_type: 'NC', status: 'Emitida', invoice_number: 'NC-1', odoo_invoice_id: 5 })).toEqual({
+			electronic_emission_pending: false,
+			electronic_emission_label: null,
+		});
+		expect(electronicEmissionOf({ document_type: 'FACTURA', status: 'Por Emitir' }).electronic_emission_pending).toBe(false);
 	});
 });
 

@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 
 import {
+	creditNotePendingEmission,
 	isVisibleLine,
 	noChargeSql,
 	partialBillingEventSql,
@@ -55,6 +56,24 @@ export const erpSyncStateOf = (row: { status?: unknown; odoo_invoice_id?: unknow
 
 	return row.status === 'Por Emitir' ? ('draft' as const) : ('sent' as const);
 };
+
+/**
+ * Emisión electrónica de una NC/ND: `electronic_emission_pending` = creada por la API sin folio ni vínculo con el ERP (la emisión de NC en
+ * Odoo es de Leon); la UI la muestra con `electronic_emission_label` y no como factura por enviar.
+ */
+export const electronicEmissionOf = (row: Record<string, unknown>) => {
+	const pending = creditNotePendingEmission({
+		document_type: toTextOrNull(row.document_type),
+		status: toTextOrNull(row.status),
+		invoice_number: toTextOrNull(row.invoice_number),
+		odoo_invoice_id: (row.odoo_invoice_id as number | string | null | undefined) ?? null,
+		sent_to_odoo_at: (row.sent_to_odoo_at as string | Date | null | undefined) ?? null,
+	});
+
+	return { electronic_emission_pending: pending, electronic_emission_label: pending ? 'Pendiente de emisión electrónica' : null };
+};
+
+const toTextOrNull = (value: unknown) => (value === null || value === undefined ? null : String(value));
 
 /** Tipos de `invoice_adjustments` que son un motivo de desvío contra el plan (el resto, p. ej. `reagenda`, no). */
 const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
@@ -1102,6 +1121,8 @@ export class ContractsService {
 				no_charge: row.no_charge === true,
 				erp_sync_state: erpSyncStateOf(row),
 				erp_reset_available: ContractsService.erpResetAvailable(row),
+				// NC/ND creada por la API sin emisión electrónica todavía (nace con el estado de su factura; Leon: emisión de NC en Odoo).
+				...electronicEmissionOf(row),
 				// Etapa 6 (spec facturas §3.7b–3.8): anulada con NC (derivado), documentos vinculados (NC y reemisión, ambos sentidos), facturación
 				// por OC (cubierta o saldo, desde su evento) y motivo de división (`reissue`, `partial_by_po`, `reorganize`).
 				voided: row.voided === true,
@@ -1309,6 +1330,7 @@ export class ContractsService {
 			fx_confirmed_at: iso(header.fx_confirmed_at),
 			issued_externally: header.issued_externally === true,
 			erp_sync_state: erpSyncStateOf(header),
+			...electronicEmissionOf(header),
 			// "Restablecer borrador del ERP" disponible (Por Emitir activa vinculada al ERP, no NC/unificada).
 			erp_reset_available: ContractsService.erpResetAvailable({ ...header, doc_type: header.document_type }),
 			// Sin cobro: Cancelada porque todas sus líneas quedaron en 0 (evento INVOICE_NO_CHARGE); se reactiva al recuperar cantidad.

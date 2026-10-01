@@ -511,6 +511,45 @@ export function classifyClientItem(previous: ClientContractRef[], productId: str
 	return activated.some((contract) => contract.product_ids.includes(productId)) ? 'UPSELL' : 'CROSS-SELL';
 }
 
+/** Espejos de baja y rebajas (mismo criterio que `liveRecurring` de `contract-changes.ts`): no cuentan para el fin del contrato. */
+const REMOVAL_ITEM_CATEGORIES = new Set(['CHURN', 'DOWNSELL']);
+
+export interface ContractEndItem {
+	is_recurring?: boolean | null;
+	end_date?: string | null;
+	categoria?: string | null;
+	churn_date?: string | null;
+	renewed_by_item_id?: string | null;
+}
+
+/** Ítems recurrentes vivos para el fin del contrato: no son espejos de baja, no tienen baja (`churn_date`) ni fueron renovados. */
+export const liveEndItems = <T extends ContractEndItem>(items: T[]): T[] =>
+	items.filter(
+		(item) =>
+			item.is_recurring !== false &&
+			!REMOVAL_ITEM_CATEGORIES.has(String(item.categoria ?? '').toUpperCase()) &&
+			!item.churn_date &&
+			!item.renewed_by_item_id
+	);
+
+/**
+ * `contracts.contract_end_date`, **una sola regla** para alta, PUT, activación y toda modificación (decisión de Domi 01-10, cobertura D15 /
+ * Huecos #5): el **mayor** `end_date` de los ítems recurrentes vivos; si alguno vivo es indefinido (sin fin) → `null`. `undefined` cuando no
+ * queda ningún recurrente vivo (quien llama conserva el fin guardado, p. ej. `contract_cancel`). El "próximo vencimiento" de la lista es otro
+ * valor derivado (`next_item_end_date`) y no usa esta regla.
+ */
+export function latestContractEnd(items: ContractEndItem[]): string | null | undefined {
+	const live = liveEndItems(items);
+
+	if (!live.length) return undefined;
+	if (live.some((item) => !item.end_date)) return null;
+
+	return live
+		.map((item) => String(item.end_date).slice(0, 10))
+		.sort()
+		.reverse()[0];
+}
+
 /**
  * `contracts.term` (antes `update_contract_term`, AFTER INSERT/UPDATE/DELETE de `contract_items`): `MAX(term_months)` de los
  * ítems. Regla v2 (S1-12 / mapa §3, término indefinido): con algún recurrente sin término ni fin el contrato no tiene plazo

@@ -292,6 +292,7 @@ describe('ContractsScheduler', () => {
 		const renewals = {
 			proposeRenewals: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 2 }]),
 			flagDueScheduledChanges: jest.fn().mockResolvedValue([]),
+			extendHorizons: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 1 }]),
 		} as unknown as ContractRenewalsService;
 		const config = { get: jest.fn().mockReturnValue(enabled) } as unknown as ConfigService;
 
@@ -304,14 +305,17 @@ describe('ContractsScheduler', () => {
 
 		expect(meta('autoRenewalDaily')).toMatchObject({ cronTime: '0 6 * * *', name: 'contracts-auto-renewal', timeZone: 'America/Santiago' });
 		expect(meta('scheduledChangesDaily')).toMatchObject({ cronTime: '30 5 * * *', name: 'contracts-scheduled-changes' });
+		expect(meta('extendHorizonDaily')).toMatchObject({ cronTime: '45 5 * * *', name: 'contracts-extend-horizon', timeZone: 'America/Santiago' });
 		const on = scheduler(undefined);
 
 		expect(await on.scheduler.autoRenewalDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 2 }]);
 		await on.scheduler.scheduledChangesDaily();
 		expect(on.renewals.flagDueScheduledChanges).toHaveBeenCalled();
+		expect(await on.scheduler.extendHorizonDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 1 }]);
 		const off = scheduler('false');
 
 		expect(await off.scheduler.autoRenewalDaily()).toBeNull();
 		expect(off.renewals.proposeRenewals).not.toHaveBeenCalled();
+		expect(await off.scheduler.extendHorizonDaily()).toBeNull();
 	});
 });

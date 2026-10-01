@@ -255,7 +255,8 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		const ncParams = nc[1] as unknown[];
 
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
-		expect(ncParams[6]).toBe('Por Emitir');
+		// Decisión 01-10: la NC nace siempre Emitida, nunca Por Emitir.
+		expect(ncParams[6]).toBe('Emitida');
 		expect(ncParams.slice(10, 14)).toEqual([-1500, -1425000, -270750, -1695750]);
 		expect(ncParams[16]).toBe(INV);
 		expect(ncParams[17]).toBe('other');
@@ -394,7 +395,7 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		expect(error.getResponse()).toMatchObject({ code: 'deviation_reason_required' });
 	});
 
-	it('NC de descuento: NC Por Emitir con treatment, línea cantidad 1 y unitario = −monto, devengo y evento INVOICE_CREDIT_NOTE_CREATED', async () => {
+	it('NC de descuento: NC (estado de su factura, nunca Por Emitir) con treatment, línea cantidad 1 y unitario = −monto, devengo y evento INVOICE_CREDIT_NOTE_CREATED', async () => {
 		const { service, runner } = build();
 		const result = await service.createCreditNote(
 			CONTRACT_ID,
@@ -407,6 +408,7 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		const [nc] = calls(runner.query, `'NC', $17`);
 		const params = nc[1] as unknown[];
 
+		expect(params[6]).toBe('Emitida');
 		expect(params.slice(10, 14)).toEqual([-100, -95000, -18050, -113050]);
 		expect([params[17], params[28], params[29]]).toEqual(['one_time_discount', 'discount', 'defer_forward']);
 		const [ncLine] = calls(runner.query, 'INSERT INTO invoice_items');

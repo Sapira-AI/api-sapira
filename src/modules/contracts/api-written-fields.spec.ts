@@ -9,6 +9,7 @@ import {
 	frequencyMultiplier,
 	invoiceTermsSql,
 	itemCategoriaSql,
+	latestContractEnd,
 	mirrorInvoiceSystemAmounts,
 	pgRound,
 	pricingFields,
@@ -34,6 +35,29 @@ const db = (handler: (sql: string, params: unknown[]) => unknown = () => undefin
 	return { runner: { query } as unknown as QueryRunner, query };
 };
 const sqls = (query: jest.Mock) => query.mock.calls.map(([sql]) => sql as string);
+
+describe('latestContractEnd: una sola regla para contract_end_date (decisión de Domi 01-10)', () => {
+	it('mayor fin de los recurrentes vivos; indefinido → null; sin vivos → undefined (se conserva el guardado)', () => {
+		expect(
+			latestContractEnd([
+				{ is_recurring: true, end_date: '2026-12-31' },
+				{ is_recurring: true, end_date: '2027-06-30' },
+				// No cuentan: no recurrente, espejo de baja, con baja y renovado.
+				{ is_recurring: false, end_date: '2028-01-31' },
+				{ is_recurring: true, end_date: '2029-01-31', categoria: 'CHURN' },
+				{ is_recurring: true, end_date: '2029-01-31', churn_date: '2026-10-01' },
+				{ is_recurring: true, end_date: '2029-01-31', renewed_by_item_id: 'r-1' },
+			])
+		).toBe('2027-06-30');
+		expect(
+			latestContractEnd([
+				{ is_recurring: true, end_date: '2026-12-31' },
+				{ is_recurring: true, end_date: null },
+			])
+		).toBeNull();
+		expect(latestContractEnd([{ is_recurring: false, end_date: '2026-12-31' }])).toBeUndefined();
+	});
+});
 
 describe('api-writer', () => {
 	it('setApiWriter fija la marca local a la transacción', async () => {

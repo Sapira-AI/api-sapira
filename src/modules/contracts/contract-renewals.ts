@@ -16,6 +16,7 @@ export const RENEWAL_PROPOSAL_DISMISSED = 'RENEWAL_PROPOSAL_DISMISSED';
 export const SCHEDULED_CHANGE_DUE = 'SCHEDULED_CHANGE_DUE';
 export const AUTO_RENEWAL_JOB = 'contracts-auto-renewal';
 export const SCHEDULED_CHANGES_JOB = 'contracts-scheduled-changes';
+export const EXTEND_HORIZON_JOB = 'contracts-extend-horizon';
 export const RENEWAL_PROPOSED_NOTIFICATION_TYPE = 'contract_renewal_proposed';
 export const SCHEDULED_CHANGE_DUE_NOTIFICATION_TYPE = 'contract_scheduled_change_due';
 /** Aviso previo por defecto (`holding_settings.auto_renewal_notice_days`, migración B2: default 30). */

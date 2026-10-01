@@ -501,3 +501,27 @@ describe('ContractInvoiceDescriptionsService (spec facturas §3.6–3.7a)', () =
 		});
 	});
 });
+
+describe('ContractInvoiceDescriptionsService.regenerateLines (item_update, spec modificaciones §9.2)', () => {
+	it('regenera con la plantilla y la cuenta nueva solo las líneas no protegidas; la escrita a mano queda igual', async () => {
+		const { service, runner } = build({
+			items: [
+				itemRow('l-1', INV_A, { account: 'Sur', description: STANDARD }),
+				itemRow('l-2', INV_A, { account: 'Sur', description: 'Texto a mano', description_locked: true }),
+			],
+		});
+		const applied = await service.regenerateLines(runner as never, CONTRACT_ID, HOLDING, ['l-1', 'l-2']);
+
+		expect(applied.map((plan) => [plan.line_id, plan.after])).toEqual([['l-1', 'Licencia Cuenta Sur - Periodo 01/10/2026 a 31/10/2026']]);
+		expect(calls(runner.query, 'UPDATE invoice_items ii SET description').map(([, params]) => params)).toEqual([
+			['l-1', HOLDING, 'Licencia Cuenta Sur - Periodo 01/10/2026 a 31/10/2026', false],
+		]);
+	});
+
+	it('sin líneas no consulta nada', async () => {
+		const { service, runner } = build();
+
+		await expect(service.regenerateLines(runner as never, CONTRACT_ID, HOLDING, [])).resolves.toEqual([]);
+		expect(runner.query).not.toHaveBeenCalled();
+	});
+});

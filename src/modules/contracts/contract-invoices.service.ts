@@ -14,6 +14,7 @@ import {
 	type ContractInvoiceContext,
 	type ContractInvoiceLineRow,
 	type ContractInvoiceRow,
+	CREDIT_NOTE_SEND_PENDING_CODE,
 	type ErpResetPlan,
 	EXPLICIT_FX_SOURCES,
 	type FxPlanItem,
@@ -150,6 +151,14 @@ export class ContractInvoicesService {
 		const invoice = await this.loadInvoice(this.dataSource, contract.id, invoiceId, holdingId);
 		const plan = planSendNow(invoice, context);
 
+		if (plan.blockers.some((blocker) => blocker.code === CREDIT_NOTE_SEND_PENDING_CODE)) {
+			throw new ConflictException({
+				message: 'El envío de notas de crédito y débito al ERP todavía no está disponible',
+				code: CREDIT_NOTE_SEND_PENDING_CODE,
+				blockers: plan.blockers,
+				preview: this.sendNowPreview(invoice, plan),
+			});
+		}
 		if (!plan.can_apply) throw this.blocked(plan.blockers, this.sendNowPreview(invoice, plan));
 		const result = await this.scheduler.sendInvoiceById(invoice.id, false, 'manual');
 		const sent = result.status === 'sent';

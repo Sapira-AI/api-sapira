@@ -4,6 +4,7 @@ import { DataSource, type QueryRunner } from 'typeorm';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { setApiWriter } from './api-writer';
+import { todayFor } from './business-date';
 import { indexVariation } from './contract-changes';
 import { ContractChangesService } from './contract-changes.service';
 import { resolveUserId } from './contract-drafts.service';
@@ -14,6 +15,7 @@ import {
 	type DueCandidate,
 	dueKey,
 	dueScheduledChanges,
+	EXTEND_HORIZON_JOB,
 	groupRenewalCandidates,
 	loadOpenRenewalProposals,
 	noticeLimit,
@@ -44,7 +46,7 @@ const toText = (value: unknown) => (value === null || value === undefined ? null
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+const isoDate = (date: Date) => todayFor(null, date);
 
 /** Resultado de una corrida por holding (try/catch por holding: un holding que falla no detiene a los demás). */
 export interface JobHoldingResult {
@@ -273,6 +275,14 @@ export class ContractRenewalsService {
 	}
 
 	// ---------------------------------------------------------------- job contracts-scheduled-changes (§9.3.6)
+
+	/**
+	 * Job `contracts-extend-horizon`: por holding, las Por Emitir que faltan para que los ítems sin término tengan siempre 12 períodos desde
+	 * hoy (`ContractChangesService.extendHorizonForHolding`; evento `HORIZON_EXTENDED` por contrato solo si creó algo).
+	 */
+	async extendHorizons(today = new Date()): Promise<JobHoldingResult[]> {
+		return await this.perHolding(EXTEND_HORIZON_JOB, (holdingId) => this.changes.extendHorizonForHolding(holdingId, SYSTEM_ACTOR_ID, today));
+	}
 
 	async flagDueScheduledChanges(today = new Date()): Promise<JobHoldingResult[]> {
 		return await this.perHolding(SCHEDULED_CHANGES_JOB, (holdingId) => this.flagDueForHolding(holdingId, today));

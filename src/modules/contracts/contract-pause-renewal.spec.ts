@@ -231,6 +231,29 @@ describe('pause (§9.3.3, S2-12)', () => {
 		expect(plan.preview.contract.after.end_date).toBe('2027-01-30');
 	});
 
+	it('D3/MF-h: extend_term lleva los ajustes vivos al nuevo fin de su original (alineado: mismos días; desalineado: hasta el fin del original)', () => {
+		const adjustment = (id: string, end: string) =>
+			itemRow({
+				id,
+				categoria: 'UPSELL',
+				related_item_id: LICENCIA,
+				quantity: 2,
+				monthly_price: 200,
+				billing_period_price: 200,
+				start_date: '2026-10-01',
+				end_date: end,
+				term_months: 3,
+			});
+		const plan = planChange(
+			context({ items: [itemRow(), soporteRow(), adjustment('up-ok', '2026-12-31'), adjustment('up-short', '2026-11-30')] }),
+			request({ type: 'pause', items: [{ item_id: LICENCIA }], pause_start: '2026-11-01', pause_end: '2026-11-30', extend_term: true })
+		);
+		const ends = new Map<string, string>();
+
+		for (const op of ops(plan, 'update_item')) if (op.set.end_date) ends.set(op.item_id, op.set.end_date);
+		expect(Object.fromEntries(ends)).toEqual({ [LICENCIA]: '2027-01-30', 'up-ok': '2027-01-30', 'up-short': '2027-01-30' });
+	});
+
 	it('todos los recurrentes vivos pausados hoy → estado Pausado; reanudar se admite en Pausado y pausar no', () => {
 		const ctx = context({ today: '2026-10-05' });
 		const plan = planChange(ctx, request({ type: 'pause', pause_start: '2026-10-01' }));

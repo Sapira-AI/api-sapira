@@ -1000,15 +1000,16 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 		expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
 	});
 
-	it('reissue: NC espejo completa de la emitida (issue_error / cancellation, Por Emitir) + factura nueva del período con las otras líneas intactas y la del ítem recalculada; CONSUMPTION_REISSUE', async () => {
+	it('reissue: NC espejo completa de la emitida (issue_error / cancellation, con el estado de la emitida y referencia) + factura nueva del período con las otras líneas intactas y la del ítem recalculada; CONSUMPTION_REISSUE', async () => {
 		const { service, runner } = build(issuedWorld());
 		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, on_issued: 'reissue' }, HOLDING, 'auth-1');
 		const [nc] = calls(runner.query, `'NC', $17`);
 
 		// NC: −(64,80 + 100) = −164,80 neto, IVA −31,31, total −196,11; espejo de inv-paid; reason issue_error, type cancellation.
-		expect(nc[1][6]).toBe('Por Emitir');
+		// Decisión 01-10: la NC nace siempre Emitida (aunque la factura que anula esté Pagada) y referencia su folio (código 1 = anula).
+		expect(nc[1][6]).toBe('Emitida');
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
-		expect(nc[0]).toContain('$6, $6, $6, NULL');
+		expect(calls(runner.query, 'INSERT INTO invoice_references')[0][1]).toEqual(expect.arrayContaining(['1']));
 		expect(nc[1].slice(10, 14)).toEqual([-164.8, -164.8, -31.31, -196.11]);
 		expect(nc[1][16]).toBe('inv-paid');
 		expect(nc[1][17]).toBe('issue_error');

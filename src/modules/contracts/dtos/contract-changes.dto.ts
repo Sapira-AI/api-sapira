@@ -42,7 +42,8 @@ const present = (value: unknown) => value !== null && value !== undefined;
 
 /**
  * Tipos de cambio construidos (spec §4, fases A–D; `multicurrency` = activar/desactivar multimoneda, spec-multimoneda §6; `reactivate` =
- * revertir el churn o reactivar, §9.3.2; `pause` / `resume` = pausar y reanudar el servicio por ítem, §9.3.3).
+ * revertir el churn o reactivar, §9.3.2; `pause` / `resume` = pausar y reanudar el servicio por ítem, §9.3.3; `item_update` = corregir un
+ * dato mal cargado del ítem, §9.2 / F4).
  */
 export const CHANGE_TYPES = [
 	'billing_conditions',
@@ -56,6 +57,7 @@ export const CHANGE_TYPES = [
 	'reactivate',
 	'pause',
 	'resume',
+	'item_update',
 ] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 /** Tipos que no se construyen como cambio: se rechazan con 400 explicando el camino (reajuste = pactos §9.3.6). */
@@ -271,10 +273,22 @@ export class ItemAddItemDto {
 	@IsOptional()
 	start_date?: string;
 
-	@ApiPropertyOptional({ description: 'Default: fin del contrato (co-terminación, D-B). Si lo supera se acota con aviso' })
+	@ApiPropertyOptional({
+		description:
+			'Default: producto existente (UPSELL) = fin de su ítem relacionado (`related_item_id`, D3); producto nuevo = fin del contrato (co-terminación, D-B). Si lo supera se acota con aviso',
+	})
 	@Matches(ISO_DATE, { message: 'Fecha de fin inválida (YYYY-MM-DD)' })
 	@IsOptional()
 	end_date?: string;
+
+	@ApiPropertyOptional({
+		description: 'Plazo en meses desde el inicio (fin = inicio + n − 1 día) si no viene `end_date`; mismo tope que `end_date`',
+	})
+	@IsInt({ message: 'El plazo debe ser un entero de meses' })
+	@Min(1, { message: 'El plazo mínimo es 1 mes' })
+	@Max(120, { message: 'El plazo máximo es 120 meses' })
+	@IsOptional()
+	term_months?: number;
 
 	@ApiPropertyOptional({ default: true })
 	@IsBoolean({ message: 'is_recurring debe ser true o false' })
@@ -342,6 +356,56 @@ export class RenewalItemDto {
 	@Min(0, { message: 'El descuento no puede ser negativo' })
 	@Max(100, { message: 'El descuento no puede superar 100 %' })
 	discount_value?: number | null;
+}
+
+/**
+ * Ítem de `item_update` = "Corregir un dato mal cargado" (§9.2, F4): cuenta, glosa (`product_name`), tipo y, para un solo ítem por cambio,
+ * cantidad, precio (`unit_price` en el modo `price_entry_mode`) y descuento %. Corrección en su lugar: sin ítems espejo ni UPSELL/DOWNSELL;
+ * con valor, reescribe las Por Emitir y reparte la diferencia de lo emitido. La forma (al menos un campo, rangos) la valida el plan
+ * (`contract-changes.ts` `planItemUpdate`).
+ */
+export class ItemUpdateItemDto {
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'Ítem inválido' })
+	item_id!: string;
+
+	@ApiPropertyOptional({ nullable: true, description: 'Cuenta nueva del ítem (se recorta; vacía o null = sin cuenta)' })
+	@ValidateIf((_item: ItemUpdateItemDto, value: unknown) => present(value))
+	@IsString({ message: 'Cuenta inválida' })
+	@MaxLength(128, { message: 'La cuenta no puede superar 128 caracteres' })
+	account?: string | null;
+
+	@ApiPropertyOptional({ description: 'Glosa del ítem (nombre con que se factura; se recorta, no puede quedar vacía)' })
+	@IsString({ message: 'Glosa inválida' })
+	@MaxLength(500, { message: 'La glosa no puede superar 500 caracteres' })
+	@IsOptional()
+	product_name?: string;
+
+	@ApiPropertyOptional({ nullable: true, description: 'Tipo del ítem (texto libre; vacío o null = sin tipo)' })
+	@ValidateIf((_item: ItemUpdateItemDto, value: unknown) => present(value))
+	@IsString({ message: 'Tipo inválido' })
+	@MaxLength(64, { message: 'El tipo no puede superar 64 caracteres' })
+	item_type?: string | null;
+
+	@ApiPropertyOptional({ description: 'Cantidad correcta (> 0)' })
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Cantidad inválida' })
+	@IsOptional()
+	quantity?: number;
+
+	@ApiPropertyOptional({ description: 'Precio unitario correcto (mensual, o anual con price_entry_mode = annual)' })
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Precio inválido' })
+	@IsOptional()
+	unit_price?: number;
+
+	@ApiPropertyOptional({ enum: PRICE_ENTRY_MODES })
+	@IsIn(PRICE_ENTRY_MODES, { message: 'Modo de precio inválido: monthly o annual' })
+	@IsOptional()
+	price_entry_mode?: (typeof PRICE_ENTRY_MODES)[number];
+
+	@ApiPropertyOptional({ description: 'Descuento % correcto (0–100; 0 = sin descuento)' })
+	@IsNumber({ maxDecimalPlaces: 4 }, { message: 'Descuento inválido' })
+	@IsOptional()
+	discount_value?: number;
 }
 
 /** Ítem de `reactivate` (§9.3.2): sin lista = todo lo cancelado. Cantidad/unitario solo cambian en la rama de mes cerrado (REACTIVATION nuevo). */
@@ -451,7 +515,7 @@ export class ContractChangeDto {
 	// ---- ítems (item_change, item_add, item_remove, renewal)
 	@ApiPropertyOptional({
 		description:
-			'Ítems según el tipo (ItemChangeItemDto | ItemAddItemDto | ItemRefDto | RenewalItemDto | ReactivateItemDto; pause/resume: ItemRefDto, sin lista = todos los recurrentes vivos / pausados)',
+			'Ítems según el tipo (ItemChangeItemDto | ItemAddItemDto | ItemRefDto | RenewalItemDto | ReactivateItemDto | ItemUpdateItemDto; pause/resume: ItemRefDto, sin lista = todos los recurrentes vivos / pausados)',
 	})
 	@IsArray({ message: 'items debe ser una lista' })
 	@ArrayMaxSize(CHANGE_ITEMS_MAX, { message: `Máximo ${CHANGE_ITEMS_MAX} ítems por cambio` })

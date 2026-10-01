@@ -4,6 +4,16 @@ CREATE OR REPLACE FUNCTION public.revenue_schedule_rebuild_contract_ccy(p_contra
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+-- Fixes RSM 01-10 (cobertura-contratos-v2 U8, D7/S5-16, U5; decisiones de la dueña 01-10). Sin aplicar: entra con `postgres:assets`.
+--  U8     rebuild parcial (p_from_month): el devengo acumulado y los saldos al cierre del mes previo se cargan de la última fila RSM del
+--         ítem antes del mes de inicio (en moneda del ítem); antes partían en 0 e inflaban el diferido.
+--  S5-16  mensual = contract_items.monthly_price (neto: unitario × cantidad con el descuento; CHURN/DOWNSELL = final ÷ plazo = ΔMRR);
+--         final_price solo es TCV. final ÷ plazo queda solo de respaldo sin monthly_price (pago único / filas antiguas). Fracción del mes una vez.
+--  U5     CHURN y REACTIVATION prorratean el primer mes por días vivos igual que UPSELL / CROSS-SELL / DOWNSELL.
+-- Verificación tras aplicar en QA (un contrato por caso): 1) rebuild(c, NULL) y luego rebuild(c, mes) → mismas filas desde el mes
+-- (recognized_cum, deferred/unbilled_eom); 2) UPSELL a mitad de ciclo (Bosch): mes 1 = monthly_price × días/días_mes (180,46, no 169,95);
+-- 3) baja early a mitad de ciclo: fila CHURN del mes = −monthly_price × días restantes/días_mes; 4) contrato sin tasa compañía/sistema:
+-- *_ccy / *_system_ccy NULL y calc_version missing_fx_rate (revenue_schedule_apply_fx_for_contract).
 DECLARE
   v_contract RECORD;
   v_item RECORD;
@@ -59,6 +69,9 @@ DECLARE
   v_company_direct NUMERIC;
   v_system_direct NUMERIC;
   v_monthly_price_item NUMERIC(15,2);
+  -- U8: mes de inicio normalizado al día 1 y última fila previa del ítem (rebuild parcial).
+  v_from_month date := DATE_TRUNC('month', p_from_month)::date;
+  v_prev RECORD;
 BEGIN
   SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,
     co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency
@@ -113,13 +126,13 @@ BEGIN
   ELSE
     DELETE FROM revenue_schedule_monthly
     WHERE contract_id = p_contract_id
-      AND period_month >= p_from_month
+      AND period_month >= v_from_month
       AND contract_item_id IS NOT NULL;
   END IF;
 
   FOR v_item IN SELECT * FROM contract_items WHERE contract_id = p_contract_id ORDER BY start_date, id
   LOOP
-    v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(p_from_month, v_contract_start_date), v_contract_start_date))::date;
+    v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date))::date;
     v_last_period := DATE_TRUNC('month', v_contract_end_date)::date;
     v_is_recurring := COALESCE(v_item.is_recurring, false);
     -- B2-3 (§9.3.9): día de ciclo del ítem = COALESCE(item.billing_anchor_day, contract.billing_anchor_day, MIN(start_date)).
@@ -130,8 +143,11 @@ BEGIN
     v_system_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))
       AND v_item_ccy = UPPER(TRIM(v_contract.system_currency)) THEN 1 ELSE 0 END;
 
+    -- S5-16 (D7): el mensual es monthly_price (neto: unitario × cantidad con el descuento; en CHURN/DOWNSELL = ΔMRR). final_price es
+    -- TCV: en un UPSELL/CROSS-SELL a mitad de ciclo ya viene por días, y final ÷ plazo × fracción del mes prorrateaba dos veces.
+    -- final ÷ plazo solo como respaldo cuando no hay monthly_price (pago único: monthly_price NULL; filas antiguas).
     IF COALESCE(v_item.term_months, 0) > 0 THEN
-      v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);
+      v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));
     ELSE v_monthly_revenue := 0; END IF;
 
     -- F2: ventana activa del ítem en meses (para el devengo de NC defer_forward)
@@ -153,6 +169,36 @@ BEGIN
 
     v_recognized_cum := 0; v_billed_cum := v_billed_cum_initial;
     v_deferred_balance_eom := 0; v_unbilled_balance_eom := 0;
+
+    -- U8: rebuild parcial → el devengo acumulado sigue la serie: se carga de la última fila del ítem antes del primer mes, en moneda
+    -- del ítem (columna directa si la hay; misma moneda que el contrato tal cual; si no, contrato ÷ tasa item de ese mes). Los saldos
+    -- al cierre del mes previo salen de los acumulados (igual que cada _eom del loop). Rebuild completo: sin cambio (todo en 0).
+    IF v_from_month IS NOT NULL THEN
+      SELECT r.period_month, r.recognized_cum_contract_ccy, r.recognized_cum_ccy, r.recognized_cum_system_ccy
+        INTO v_prev
+        FROM revenue_schedule_monthly r
+       WHERE r.contract_id = p_contract_id
+         AND r.contract_item_id = v_item.id
+         AND r.period_month < v_first_period
+         AND COALESCE(r.is_total_row, false) = false
+         AND COALESCE(r.momentum, '') <> 'PENDING_RENEWAL'  -- cola de apply_pending_renewal_tail: acumulados en 0
+       -- En el mismo mes manda la fila del rebuild: con acumulado de contrato, y no la del delta de apply_renewal_price_split
+       -- (UPSELL/DOWNSELL sobre un RENEWAL, sin acumulados).
+       ORDER BY r.period_month DESC, (r.recognized_cum_contract_ccy IS NULL),
+         (COALESCE(r.momentum, '') IN ('UPSELL', 'DOWNSELL') AND COALESCE(v_item.categoria, '') = 'RENEWAL')
+       LIMIT 1;
+      IF FOUND THEN
+        v_recognized_cum := COALESCE(
+          CASE WHEN v_company_direct = 1 THEN v_prev.recognized_cum_ccy END,
+          CASE WHEN v_system_direct = 1 THEN v_prev.recognized_cum_system_ccy END,
+          CASE WHEN v_item_ccy = UPPER(TRIM(v_contract.contract_currency)) THEN v_prev.recognized_cum_contract_ccy END,
+          ROUND(v_prev.recognized_cum_contract_ccy / NULLIF(public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency,
+            v_prev.period_month, (v_prev.period_month + INTERVAL '1 month' - INTERVAL '1 day')::date), 0), 2),
+          0);
+      END IF;
+      v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);
+      v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);
+    END IF;
 
     v_cur := v_first_period;
     WHILE v_cur <= v_last_period LOOP
@@ -194,11 +240,12 @@ BEGIN
                       + (COALESCE(v_item.term_months, 0) || ' months')::interval)::date THEN
         v_in_active := true;
         v_is_first_active_period := (v_cur = DATE_TRUNC('month', v_item.start_date)::date);
-        -- FIX 1.3: prorrateo solo aplica a UPSELL/CROSS-SELL/DOWNSELL.
-        -- Items NEW, RENEWAL, REACTIVATION, sin categoria nunca prorratean; B2-3 (§9.3.9): un ítem de ciclo propio tampoco (como NEW).
+        -- FIX 1.3: prorrateo solo aplica a UPSELL/CROSS-SELL/DOWNSELL; U5 (01-10): también CHURN y REACTIVATION (el espejo de una
+        -- baja a mitad de ciclo devenga solo los días vivos del mes, no el mes completo).
+        -- Items NEW, RENEWAL, sin categoria nunca prorratean; B2-3 (§9.3.9): un ítem de ciclo propio tampoco (como NEW).
         IF v_is_first_active_period AND v_billing_day IS NOT NULL AND EXTRACT(DAY FROM v_item.start_date)::int <> v_billing_day
            AND v_item.billing_anchor_day IS NULL
-           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL') THEN
+           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN
           v_days_in_month := EXTRACT(DAY FROM (DATE_TRUNC('month', v_item.start_date) + INTERVAL '1 month' - INTERVAL '1 day'))::int;
           v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;
           v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);
@@ -343,7 +390,7 @@ BEGIN
         (v_tail_period + INTERVAL '1 month' - INTERVAL '1 day')::date);
       v_monthly_price := ROUND(v_monthly_price_item * v_item_rate, 2);
 
-      IF p_from_month IS NULL OR v_tail_period >= p_from_month THEN
+      IF v_from_month IS NULL OR v_tail_period >= v_from_month THEN
         INSERT INTO revenue_schedule_monthly(
           id, holding_id, contract_id, contract_item_id, period_month,
           company_id, company_currency, contract_currency, system_currency,
@@ -463,7 +510,7 @@ BEGIN
      WHERE ci.contract_id = p_contract_id
        AND COALESCE(ci.categoria, '') = 'RENEWAL'
        AND ci.renewal_base_unit_price IS NOT NULL
-       AND (p_from_month IS NULL OR DATE_TRUNC('month', ci.start_date)::date >= p_from_month)
+       AND (v_from_month IS NULL OR DATE_TRUNC('month', ci.start_date)::date >= v_from_month)
   LOOP
     BEGIN
       PERFORM apply_renewal_price_split(v_renewal_split_item_id);
@@ -474,4 +521,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item.';
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días.';
