@@ -273,8 +273,22 @@ describe('InvoiceSchedulerService', () => {
 	it('no envía al ERP las líneas internas de una línea visible (facturación por OC): solo viaja la visible', async () => {
 		const { service } = createService();
 		const base = buildInvoice('Uruguay', null, []);
-		const visible = { id: 'item-v', description: 'OC 123 · septiembre', quantity: 1, unit_price_invoice_currency: 900, discount_pct: 0, visible_line_id: null };
-		const internal = { id: 'item-i', description: 'PATHFINDER+', quantity: 28, unit_price_invoice_currency: 32.14, discount_pct: 0, visible_line_id: 'item-v' };
+		const visible = {
+			id: 'item-v',
+			description: 'OC 123 · septiembre',
+			quantity: 1,
+			unit_price_invoice_currency: 900,
+			discount_pct: 0,
+			visible_line_id: null,
+		};
+		const internal = {
+			id: 'item-i',
+			description: 'PATHFINDER+',
+			quantity: 28,
+			unit_price_invoice_currency: 32.14,
+			discount_pct: 0,
+			visible_line_id: 'item-v',
+		};
 
 		const payload = await service.mapInvoiceToOdooFormat({ ...base, items: [visible, internal] } as typeof base);
 
@@ -287,7 +301,12 @@ describe('InvoiceSchedulerService', () => {
 		const base = buildInvoice('Chile', null, []);
 
 		const items = base.items.map((item) => ({ ...item, fx_rate_source: 'manual' }));
-		const result = await service.calculateInvoiceAmountsAtIssue({ ...base, items, fx_contract_to_invoice: 950.5, contract: { ...(base.contract ?? {}), fx_invoice_policy: 'spot' } } as typeof base);
+		const result = await service.calculateInvoiceAmountsAtIssue({
+			...base,
+			items,
+			fx_contract_to_invoice: 950.5,
+			contract: { ...(base.contract ?? {}), fx_invoice_policy: 'spot' },
+		} as typeof base);
 
 		expect(result).toEqual({ success: true, usedFallback: false, exchangeRate: 950.5 });
 		expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
@@ -402,6 +421,198 @@ describe('InvoiceSchedulerService', () => {
 			tax_amount_invoice_currency: 63,
 			total_invoice_currency: 413,
 			fx_contract_to_invoice: 3.5,
+		});
+	});
+
+	describe('MM4 · multimoneda: una tasa por par al emitir (spec-multimoneda §4)', () => {
+		const usdLine = {
+			id: 'line-usd',
+			contract_currency: 'USD',
+			unit_price_contract_currency: 50,
+			subtotal_contract_currency: 100,
+			tax_amount_contract_currency: 16,
+			total_contract_currency: 116,
+			fx_contract_to_invoice: null,
+			fx_rate_source: null,
+		};
+		const mxnLine = {
+			id: 'line-mxn',
+			contract_currency: 'MXN',
+			unit_price_contract_currency: 500,
+			subtotal_contract_currency: 500,
+			tax_amount_contract_currency: 80,
+			total_contract_currency: 580,
+			unit_price_invoice_currency: 500,
+			subtotal_invoice_currency: 500,
+			tax_amount_invoice_currency: 80,
+			total_invoice_currency: 580,
+			fx_contract_to_invoice: 1,
+			fx_rate_source: 'contract',
+		};
+		const multiInvoice = (items: unknown[], contract: Record<string, unknown> = {}) =>
+			({
+				id: 'invoice-mm',
+				invoice_number: 'INV-MM',
+				issue_date: new Date('2026-10-01'),
+				contract_currency: 'USD',
+				invoice_currency: 'MXN',
+				tax_rate: 16,
+				amount_contract_currency: 127.03,
+				items,
+				contract: { requires_multicurrency_billing: true, fx_invoice_policy: 'spot', ...contract },
+			}) as any;
+		const rateDate = new Date('2026-10-01');
+
+		it('contrato USD facturado en MXN (spot): la línea MXN queda a 1 sin tocar, la USD a la tasa USD→MXN del día; encabezado = Σ líneas con la tasa del único par', async () => {
+			const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService } = createService();
+
+			exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 18.5, is_fallback: false, rate_date: rateDate });
+
+			await expect(service.calculateInvoiceAmountsAtIssue(multiInvoice([usdLine, mxnLine]))).resolves.toEqual({
+				success: true,
+				usedFallback: false,
+				exchangeRate: 18.5,
+				fallbackDate: undefined,
+			});
+			expect(exchangeRatesService.getExchangeRateWithFallback).toHaveBeenCalledTimes(1);
+			expect(exchangeRatesService.getExchangeRateWithFallback).toHaveBeenCalledWith('USD', 'MXN', new Date('2026-10-01'));
+			expect(invoiceItemRepository.update).toHaveBeenCalledTimes(1);
+			expect(invoiceItemRepository.update).toHaveBeenCalledWith('line-usd', {
+				unit_price_invoice_currency: 925,
+				subtotal_invoice_currency: 1850,
+				tax_amount_invoice_currency: 296,
+				total_invoice_currency: 2146,
+				fx_contract_to_invoice: 18.5,
+				fx_rate_source: 'spot',
+				fx_rate_date: rateDate,
+			});
+			// Nunca ida y vuelta por la moneda del contrato: amount_contract_currency no se toca.
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-mm', {
+				amount_invoice_currency: 2350,
+				vat: 376,
+				total_invoice_currency: 2726,
+				fx_contract_to_invoice: 18.5,
+			});
+		});
+
+		it('dos pares que convierten (USD y CLF en CLP): cada par con su spot y el FX del encabezado queda NULL', async () => {
+			const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService } = createService();
+			const rates: Record<string, number> = { USD: 950, CLF: 39000 };
+
+			exchangeRatesService.getExchangeRateWithFallback.mockImplementation(async (from: string) => ({
+				rate: rates[from],
+				is_fallback: false,
+				rate_date: rateDate,
+			}));
+			await service.calculateInvoiceAmountsAtIssue({
+				...multiInvoice([
+					usdLine,
+					{
+						...usdLine,
+						id: 'line-clf',
+						contract_currency: 'CLF',
+						unit_price_contract_currency: 2,
+						subtotal_contract_currency: 2,
+						tax_amount_contract_currency: 0.38,
+						total_contract_currency: 2.38,
+					},
+				]),
+				contract_currency: 'CLP',
+				invoice_currency: 'CLP',
+				tax_rate: 19,
+			});
+
+			expect(exchangeRatesService.getExchangeRateWithFallback.mock.calls.map((call) => `${call[0]}>${call[1]}`).sort()).toEqual([
+				'CLF>CLP',
+				'USD>CLP',
+			]);
+			expect(invoiceItemRepository.update).toHaveBeenCalledWith(
+				'line-clf',
+				expect.objectContaining({ subtotal_invoice_currency: 78000, fx_contract_to_invoice: 39000, fx_rate_source: 'spot' })
+			);
+			expect(invoiceItemRepository.update).toHaveBeenCalledWith(
+				'line-usd',
+				expect.objectContaining({ subtotal_invoice_currency: 95000, fx_contract_to_invoice: 950 })
+			);
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-mm', {
+				amount_invoice_currency: 173000,
+				vat: 32870,
+				total_invoice_currency: 205870,
+				fx_contract_to_invoice: null,
+			});
+		});
+
+		it('una línea con tasa manual ya fijada conserva su tasa y su origen; no se consulta Banco Central', async () => {
+			const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService } = createService();
+
+			await service.calculateInvoiceAmountsAtIssue(
+				multiInvoice([{ ...usdLine, fx_contract_to_invoice: 19, fx_rate_source: 'manual' }, mxnLine])
+			);
+
+			expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+			expect(invoiceItemRepository.update).toHaveBeenCalledWith('line-usd', {
+				unit_price_invoice_currency: 950,
+				subtotal_invoice_currency: 1900,
+				tax_amount_invoice_currency: 304,
+				total_invoice_currency: 2204,
+				fx_contract_to_invoice: 19,
+			});
+			expect(invoiceRepository.update).toHaveBeenCalledWith(
+				'invoice-mm',
+				expect.objectContaining({ amount_invoice_currency: 2400, fx_contract_to_invoice: 19 })
+			);
+		});
+
+		it('falta la tasa de un par → fx_rate_missing con el par, no escribe nada (no se envía)', async () => {
+			const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService, invoiceNotificationService } = createService();
+
+			exchangeRatesService.getExchangeRateWithFallback.mockRejectedValue(new Error('No hay tasa'));
+
+			await expect(service.calculateInvoiceAmountsAtIssue(multiInvoice([usdLine, mxnLine]))).rejects.toMatchObject({
+				code: 'fx_rate_missing',
+				pairs: ['USD>MXN'],
+				message: expect.stringContaining('USD → MXN'),
+			});
+			expect(invoiceNotificationService.sendMissingExchangeRateNotification).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.any(Date),
+				'USD',
+				'MXN'
+			);
+			expect(invoiceItemRepository.update).not.toHaveBeenCalled();
+			expect(invoiceRepository.update).not.toHaveBeenCalled();
+		});
+
+		it('política fija con una línea que convierte sin tasa → fx_rate_missing (nunca spot en silencio)', async () => {
+			const { service, invoiceRepository, exchangeRatesService } = createService();
+
+			await expect(
+				service.calculateInvoiceAmountsAtIssue(multiInvoice([usdLine, mxnLine], { fx_invoice_policy: 'fixed' }))
+			).rejects.toMatchObject({
+				code: 'fx_rate_missing',
+			});
+			expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+			expect(invoiceRepository.update).not.toHaveBeenCalled();
+		});
+
+		it('detección: una sola moneda sin el flag sigue la rama de siempre; contrato CLP con líneas UF en factura CLP sí convierte por par', () => {
+			const single = {
+				contract_currency: 'USD',
+				invoice_currency: 'PEN',
+				items: [{ contract_currency: 'USD' }, { contract_currency: null }],
+				contract: {},
+			} as any;
+			const ufInClp = {
+				contract_currency: 'CLP',
+				invoice_currency: 'CLP',
+				items: [{ contract_currency: 'CLF' }, { contract_currency: 'CLP' }],
+				contract: {},
+			} as any;
+
+			expect(InvoiceSchedulerService.requiresPairValuation(single)).toBe(false);
+			expect(InvoiceSchedulerService.convertsByPair(single)).toBe(false);
+			expect(InvoiceSchedulerService.requiresPairValuation(ufInClp)).toBe(true);
+			expect(InvoiceSchedulerService.convertsByPair(ufInClp)).toBe(true);
 		});
 	});
 });

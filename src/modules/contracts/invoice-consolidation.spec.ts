@@ -328,7 +328,7 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(plan.can_apply).toBe(true);
 		});
 
-		it('spot con dos pares (o un par distinto del encabezado) → multicurrency_spot_send_pending', () => {
+		it('spot con dos pares (o un par distinto del encabezado) se puede consolidar: el envío valoriza cada par al emitir (MM4)', () => {
 			const plan = planConsolidation(
 				ctx({
 					lines: [
@@ -346,7 +346,8 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 				})
 			);
 
-			expect(codes(plan.blockers)).toEqual(['multicurrency_spot_send_pending']);
+			expect(codes(plan.blockers)).toEqual([]);
+			expect(plan.header).toMatchObject({ spot: true, amount_invoice_currency: null });
 		});
 
 		it('monedas de contrato distintas: encabezado en moneda de factura y Σ moneda del sistema de los orígenes', () => {

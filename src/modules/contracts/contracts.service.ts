@@ -734,7 +734,9 @@ export class ContractsService {
 				c.client_entity_id, ce.odoo_partner_id,
 				(SELECT COUNT(*) FROM contract_items ci WHERE ci.contract_id = c.id) AS items_count,
 				(SELECT COUNT(*) FROM contract_items ci WHERE ci.contract_id = c.id AND ci.product_id IS NULL) AS items_without_product,
-				(SELECT COALESCE(SUM(ci.final_price), 0) FROM contract_items ci WHERE ci.contract_id = c.id) AS items_total,
+				(SELECT COALESCE(SUM(ROUND(ci.final_price * COALESCE(public.contract_item_fx_rate(c.id, ci.currency, c.contract_currency,
+					COALESCE(ci.start_date, CURRENT_DATE), COALESCE(ci.end_date, ci.start_date, CURRENT_DATE)), 0), 2)), 0)
+					FROM contract_items ci WHERE ci.contract_id = c.id) AS items_total,
 				inv.invoices_count, inv.invoiced_total,
 				(SELECT COUNT(*) FROM invoices i
 					WHERE i.contract_id = c.id AND i.holding_id = $2 AND i.is_active = true AND i.status = 'Por Emitir'

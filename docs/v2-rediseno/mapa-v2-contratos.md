@@ -380,9 +380,11 @@ Entradas: contrato (día de ciclo, agrupación, términos de pago, moneda y pol�
     encabezado en moneda de factura = Σ líneas o NULL si alguna es spot; `fx` del encabezado = la del único par convertidor, NULL con dos o
     más. Encabezado en moneda de contrato, `totals.contract_value`, `mrr` e `items[].monthly_equivalent` con la tasa `item` (los ítems traen
     además `currency`, `item_fx_rate`, `*_item_currency`). Pares sin tasa en `fx_missing`.
-  - **Activación**: `currency_mismatch` solo sin el flag; bloqueos por par `item_fx_rate_missing`, `fixed_fx_without_rate` (con el par) y
-    `multicurrency_spot_send_pending` (spot con pares que convierten, hasta que Leon haga el envío por par, MM4). Cada línea nace con su
-    moneda de ítem y su tasa.
+  - **Activación**: `currency_mismatch` solo sin el flag; bloqueos por par `item_fx_rate_missing` y `fixed_fx_without_rate` (con el par).
+    Con política spot ya no bloquea (`multicurrency_spot_send_pending` quitado con MM4, 01-10). Cada línea nace con su moneda de ítem y su tasa.
+  - **Envío al ERP (MM4, 01-10)**: `calculateInvoiceAmountsAtIssue` valoriza por par al emitir (spot del día de cada par, tasas fijadas por
+    línea se respetan, falta una tasa → `fx_rate_missing` y no se envía; encabezado = Σ líneas). Cambio puntual en código de Leon,
+    avisado en [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md) §4.
   - **Modificaciones**: tipo nuevo `multicurrency { enabled }` (eventos `MULTICURRENCY_ENABLED` / `MULTICURRENCY_DISABLED`; apagar con ítems
     en otra moneda → `foreign_currency_items_present`); `item_add.items[].currency` (desde cotización: la de la cotización),
     `fx_item_rates`, `fx_invoice_rates`, `enable_multicurrency` (sin flag → `multicurrency_not_enabled`); `billing_conditions` por par (400

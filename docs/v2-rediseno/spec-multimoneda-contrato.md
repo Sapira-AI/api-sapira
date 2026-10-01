@@ -28,7 +28,7 @@
   con un solo par contrato → factura; `mergeTarget` (:1135) funde por receptor, **moneda de factura**, documento y mes; `planBillingConditions`
   (:2331-2348) cambia moneda/política con tasas `contrato → factura`. `insertMirrorCreditNote` (`contract-changes.service.ts:1290`) copia a cada
   línea de la NC el `contract_currency` y `fx_contract_to_invoice` **del encabezado** de la original.
-- **Envío** (`invoice-scheduler.service.ts:1226`, Leon): spot = una tasa `invoice.contract_currency → invoice.invoice_currency` aplicada a todas las
+- **Envío** (`invoice-scheduler.service.ts:1226`, Leon; *punto de partida previo a MM4, ver §4*): spot = una tasa `invoice.contract_currency → invoice.invoice_currency` aplicada a todas las
   líneas; el mapper a Odoo ya manda `price_unit = unit_price_invoice_currency` **por línea** (:992).
 - **Devengo**: `revenue_schedule_rebuild_contract_ccy` toma `final_price / term_months` y `SUM(ii.subtotal_contract_currency)` por
   `contract_item_id` (:104, :119, :138) y escribe todo como moneda del contrato: **asume moneda del ítem = moneda del contrato**.
@@ -115,6 +115,13 @@ Sin columnas nuevas en `contracts`, `contract_items`, `invoices`, `invoice_items
   `(contract_currency, invoice_currency)` de la línea, toma la fija ya escrita o la spot del día de emisión del par (`getExchangeRateWithFallback`),
   escribe cada línea y recalcula el encabezado = Σ. Si falta la tasa de **cualquier** par → no envía (`fx_rate_missing` con el par). El mapper ya manda
   `price_unit` por línea; `currency_id` = moneda de factura. Se avisa en [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md).
+  **Construido (01-10, MM4)**: rama nueva `calculatePairAmountsAtIssue` solo si el contrato tiene el flag, las líneas traen dos o más monedas o
+  alguna difiere del `contract_currency` del encabezado; si no, el código de siempre. Línea en moneda de factura → 1 (no se reescribe si ya
+  tiene montos); línea fijada (`contract` / `manual` / `net_exact` / `manual_unify` con tasa) → la suya; si no, spot del par
+  (`fx_rate_source = 'spot'`, `fx_rate_date` = fecha de la tasa); con política fija y sin tasa → `fx_rate_missing` sin consultar Banco Central.
+  Valorización con `valuateLinesByPair` (residuo por par, IVA por línea); encabezado = Σ líneas, FX = tasa del único par o NULL;
+  `amount_contract_currency` no se toca. `sendInvoiceToOdoo` también valoriza cuando el encabezado es de la misma moneda que la factura pero
+  alguna línea convierte (contrato CLP con ítems UF). Mapper verificado sin cambios.
 - **Notas de crédito**: toda NC (anular, descuento, modificaciones, consumo) **reusa la tasa y la moneda de cada línea original**:
   `insertMirrorCreditNote` copia `line.contract_currency`, `line.fx_contract_to_invoice`, `line.fx_rate_source`, `line.fx_rate_date` (hoy copia los del
   encabezado: en multimoneda la NC quedaría mal valorizada). El encabezado de la NC = Σ líneas.
@@ -222,8 +229,8 @@ consolidado ya enviado bloquea igual; (7) deshacer **no borra**: el consolidado 
   `{ consolidated, origins[], undone, consolidated_invoice_id, status: 'Cancelada', restored_invoice_ids, event_ids }`.
 - **Bloqueos**: `credit_note`, `not_pending`, `already_consolidated`, `legacy_invoice`, `no_contract`, `partial_billing_invoice`,
   `open_consumption`, `sent_to_erp_draft` (`action: 'erp_reset'`), `period_closed`, `single_contract`, `company_mismatch`, `entity_mismatch`,
-  `currency_mismatch`, `month_mismatch`, `document_type_mismatch`, `export_type_mismatch`, `series_mismatch`, `tax_rate_mismatch`,
-  `multicurrency_spot_send_pending` (spot con más de un par, hasta MM4). Deshacer: `not_consolidated`, `legacy_unified`, `not_pending`,
+  `currency_mismatch`, `month_mismatch`, `document_type_mismatch`, `export_type_mismatch`, `series_mismatch`, `tax_rate_mismatch`
+  (`multicurrency_spot_send_pending` se quitó con MM4: el consolidado spot con varios pares se valoriza por par al emitir). Deshacer: `not_consolidated`, `legacy_unified`, `not_pending`,
   `sent_to_erp_draft`, `no_origins`. Avisos: `auto_invoice_differs`, `auto_send_to_erp_differs`, `pair_rates_differ`, `spot_document`,
   `references_inherited`, `description_fitted`.
 - **Desviaciones de lo escrito arriba**: (a) no existe `needs_reference`: el consolidado hereda `invoices.requires_references_for_billing` =
@@ -268,7 +275,7 @@ contract_number, lines_count, subtotal_invoice_currency | null, subtotal_by_curr
 | S4-5 · unificar por moneda | Contrato multimoneda (§2) |
 | Unificar pierde OC/HES, serie, `auto_invoice`, `contract_id` de línea; deshacer deja borrador huérfano | Consolidación v2 (§7) |
 | NC con tasa del encabezado en documento de varios pares | `insertMirrorCreditNote` por línea (§4) |
-| Spot del scheduler con una sola tasa por documento | Tasa por par al emitir (§4, Leon) |
+| Spot del scheduler con una sola tasa por documento | Tasa por par al emitir (§4, MM4 construido 01-10) |
 
 ## 11. Orden de construcción y decisiones
 
@@ -278,8 +285,8 @@ contract_number, lines_count, subtotal_invoice_currency | null, subtotal_by_curr
    residuo por par; MRR con tasa `item`.
 3. **MM3 · Modificaciones**: `multicurrency`, `item_add` con moneda y desde cotización, `billing_conditions` por par, NC por línea, extensión de tasas
    en `renewal` (bloque 2).
-4. **MM4 · Envío (Leon)**: spot por par al emitir y aviso en `cambios-integracion-para-leon.md`. Hasta entonces, un contrato multimoneda con política
-   spot **no se activa** (blocker `multicurrency_spot_send_pending`); con fija sí (líneas ya valorizadas).
+4. **MM4 · Envío (Leon)** — **construido 01-10** (cambio puntual avisado en `cambios-integracion-para-leon.md` §4): spot por par al emitir. Se quitó
+   el blocker `multicurrency_spot_send_pending` (activación y consolidación): un contrato multimoneda con política spot ya se activa.
 5. **MM5 · Consolidación opcional** (§7) y vista de solo lectura del histórico (§9).
 6. **MM6 · UI del lab** en paralelo a MM2–MM5 + documentación funcional (`docs/documentacion-funcional/contratos/`).
 

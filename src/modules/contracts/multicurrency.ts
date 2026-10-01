@@ -21,8 +21,6 @@ export const MULTICURRENCY_CODES = {
 	price_currency_mismatch: 'price_currency_mismatch',
 	/** 400: cambiar la moneda de un contrato que ya tiene multimoneda activada (los ítems y sus tasas se pactaron contra la anterior). */
 	multicurrency_contract_currency_locked: 'multicurrency_contract_currency_locked',
-	/** Blocker de activación: contrato multimoneda spot (el envío por par es de Leon, MM4). */
-	multicurrency_spot_send_pending: 'multicurrency_spot_send_pending',
 	/** Blocker de modificación: ítem en otra moneda sin el flag. */
 	multicurrency_not_enabled: 'multicurrency_not_enabled',
 	/** Blocker de modificación: apagar multimoneda con ítems en otra moneda. */

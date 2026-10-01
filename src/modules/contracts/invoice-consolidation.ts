@@ -10,7 +10,7 @@ import {
 } from './contract-invoices';
 import { isUnifiedType } from './invoice-consolidation-read';
 import { DESCRIPTION_FITTED_CODE, fitDescription, referenceKind } from './invoice-description';
-import { MULTICURRENCY_CODES, pairKey, upperCode } from './multicurrency';
+import { pairKey, upperCode } from './multicurrency';
 
 /**
  * Consolidación opcional entre contratos (caso socio, `docs/v2-rediseno/spec-multimoneda-contrato.md` §7) y lectura del historial
@@ -49,7 +49,6 @@ export const CONSOLIDATION_BLOCKERS = {
 	export_type_mismatch: 'export_type_mismatch',
 	series_mismatch: 'series_mismatch',
 	tax_rate_mismatch: 'tax_rate_mismatch',
-	spot_send_pending: MULTICURRENCY_CODES.multicurrency_spot_send_pending,
 	// Deshacer
 	not_consolidated: 'not_consolidated',
 	legacy_unified: 'legacy_unified',
@@ -717,15 +716,6 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 		auto_send_to_erp: autoSend,
 		requires_references_for_billing: requiresReferences,
 	};
-
-	// ---- spot con más de un par o un par que no es el del encabezado: el envío por par es de Leon (MM4)
-	if (valued.spot && (valued.pairs.length > 1 || valued.pairs.some((pair) => pair.split('>')[0] !== contractCurrency))) {
-		blockers.push({
-			code: CONSOLIDATION_BLOCKERS.spot_send_pending,
-			message: `El documento quedaría spot con ${valued.pairs.join(', ')}: el envío al ERP aún valoriza una sola tasa por documento (moneda del contrato → factura)`,
-			next_step: 'Fija el tipo de cambio de las facturas de origen (FX por factura) antes de consolidar',
-		});
-	}
 
 	// ---- avisos
 	if (new Set(invoices.map((invoice) => invoice.auto_invoice)).size > 1)

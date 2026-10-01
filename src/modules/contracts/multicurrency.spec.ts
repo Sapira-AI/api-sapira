@@ -226,10 +226,8 @@ describe('activación multimoneda: bloqueos por par', () => {
 		expect(plan.check.blockers.map((blocker) => blocker.message).join(' | ')).toContain('USD → CLP');
 	});
 
-	it('spot con pares que convierten → multicurrency_spot_send_pending (el envío por par es de Leon, MM4)', () => {
-		expect(codes(ContractActivationService.evaluate('a', draft({ fx_invoice_policy: 'spot' }), items))).toEqual([
-			'multicurrency_spot_send_pending',
-		]);
+	it('spot con pares que convierten se activa sin bloqueo: el envío valoriza cada par al emitir (MM4)', () => {
+		expect(codes(ContractActivationService.evaluate('a', draft({ fx_invoice_policy: 'spot' }), items))).toEqual([]);
 	});
 });
 

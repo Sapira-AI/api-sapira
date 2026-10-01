@@ -293,7 +293,7 @@ export class ContractsController {
 	@ApiResponse({
 		status: 409,
 		description:
-			'`code: blocked` con `blockers[]` (credit_note, not_pending, already_consolidated, legacy_invoice, no_contract, partial_billing_invoice, open_consumption, sent_to_erp_draft (action erp_reset), period_closed, single_contract, company_mismatch, entity_mismatch, currency_mismatch, month_mismatch, document_type_mismatch, export_type_mismatch, series_mismatch, tax_rate_mismatch, multicurrency_spot_send_pending)',
+			'`code: blocked` con `blockers[]` (credit_note, not_pending, already_consolidated, legacy_invoice, no_contract, partial_billing_invoice, open_consumption, sent_to_erp_draft (action erp_reset), period_closed, single_contract, company_mismatch, entity_mismatch, currency_mismatch, month_mismatch, document_type_mismatch, export_type_mismatch, series_mismatch, tax_rate_mismatch)',
 	})
 	async consolidate(@Body() body: ConsolidateInvoicesDto, @HoldingId() holdingId: string, @Request() req: AuthRequest) {
 		return await this.contractInvoiceConsolidationService.apply(body, holdingId, authIdOf(req));

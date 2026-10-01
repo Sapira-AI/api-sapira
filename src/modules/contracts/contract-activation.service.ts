@@ -590,8 +590,8 @@ export class ContractActivationService {
 		const foreignItems = multicurrency ? items.filter((item) => (upper(item.currency) || contractCurrency) !== contractCurrency) : [];
 
 		if (foreignItems.length && engine) {
-			// Multimoneda (spec §5, §6, §11 MM4): bloqueos por par. Fija = cada línea valorizada al activar; spot espera el envío por par (Leon).
-			for (const missing of ContractActivationService.multicurrencyBlockers(engine, contract, items)) blockers.push(missing);
+			// Multimoneda (spec §5, §6, §11 MM4): bloqueos por par. Fija = cada línea valorizada al activar; spot se valoriza por par al emitir (MM4).
+			for (const missing of ContractActivationService.multicurrencyBlockers(engine)) blockers.push(missing);
 		} else if (usesFixedFx) {
 			const missing = invoices.filter((invoice) => invoice.fx === null);
 
@@ -638,15 +638,12 @@ export class ContractActivationService {
 	/**
 	 * Bloqueos de activación de un contrato multimoneda (spec-multimoneda §5, §6 y §11 MM4), por par:
 	 * - `item_fx_rate_missing`: un ítem en otra moneda sin tasa pactada ítem → contrato (MRR, TCV y devengo nunca a 1);
-	 * - `fixed_fx_without_rate`: política fija y un par ítem → factura sin tasa para algún período (el documento saldría medio valorizado);
-	 * - `multicurrency_spot_send_pending`: política spot con pares que convierten: el envío al ERP todavía valoriza con una sola tasa por
-	 *   documento (MM4 de Leon); hasta entonces el contrato multimoneda spot no se activa.
+	 * - `fixed_fx_without_rate`: política fija y un par ítem → factura sin tasa para algún período (el documento saldría medio valorizado).
+	 * Con política spot no hay bloqueo: el envío al ERP valoriza cada par con la tasa del día de emisión (MM4, `calculateInvoiceAmountsAtIssue`).
 	 */
-	static multicurrencyBlockers(engine: BillingEngineOutput, contract: Row, items: Row[]): ActivationBlocker[] {
+	static multicurrencyBlockers(engine: BillingEngineOutput): ActivationBlocker[] {
 		const blockers: ActivationBlocker[] = [];
 		const date = (iso: string) => iso.split('-').reverse().join('/');
-		const contractCurrency = upper(contract.contract_currency);
-		const invoiceCurrency = upper(contract.invoice_currency) || contractCurrency;
 
 		for (const missing of engine.fx_missing ?? []) {
 			if (missing.purpose === 'item') {
@@ -662,17 +659,6 @@ export class ContractActivationService {
 					next_step: 'Agrega la tasa de facturación del par en el borrador o usa tipo de cambio del día',
 				});
 			}
-		}
-		const convertingPairs = [
-			...new Set(items.map((item) => upper(item.currency) || contractCurrency).filter((currency) => currency !== invoiceCurrency)),
-		];
-
-		if (toText(contract.fx_invoice_policy) !== 'fixed' && convertingPairs.length) {
-			blockers.push({
-				code: 'multicurrency_spot_send_pending',
-				message: `Contrato multimoneda con tipo de cambio del día (${convertingPairs.map((currency) => `${currency} → ${invoiceCurrency}`).join(', ')}): el envío al ERP por par todavía no está disponible`,
-				next_step: 'Usa tipo de cambio fijo con la tasa de cada par, o espera el envío por par al ERP',
-			});
 		}
 
 		return blockers;
