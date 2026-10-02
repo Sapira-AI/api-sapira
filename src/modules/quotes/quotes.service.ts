@@ -15,14 +15,16 @@ import { PRICE_COLUMNS, priceSpecFromRow, priceSummaryFromRow, samePriceSpec } f
 import { DEFAULT_INVOICE_LINE_MODE, isMetered, priceLine, type PriceSpec, validatePriceSpec } from '@/modules/contracts/pricing-engine';
 
 import { type ContractTarget, contractTargetsOf } from './quote-contract-targets';
+import { type DiffValue, headerChanges, itemChanges, type QuoteItemSnapshot } from './quote-edit-diff';
 import { itemsIncomplete, quoteTotals, type ResolvedQuoteItem, resolveQuoteItems, type StoredQuoteItem } from './quote-items';
 import { QUOTE_EVENTS_LATERAL, QUOTE_NOT_DELETED, type QuoteListRow, quoteListRow, QuoteListService } from './quote-list.service';
 import {
 	DELETABLE_STAGE_KINDS,
 	deriveQuoteStatus,
-	EDITABLE_STAGE_KINDS,
+	EDIT_CONFIRMATION_STAGE_KINDS,
 	formatQuoteNumber,
 	isStageKind,
+	normalizeQuoteType,
 	QUOTE_CONTRACT_LATERAL,
 	QUOTE_STATUS_LABELS,
 	QUOTE_TYPE_CODES,
@@ -82,6 +84,9 @@ export const conflict = (code: string, message: string, extra: Record<string, un
 
 interface QuoteContext {
 	client: { id: string; name: string | null; country: string | null };
+	/** Nombres del contacto y vendedor elegidos (para el diff del historial). */
+	contactName: string | null;
+	sellerName: string | null;
 	products: Map<string, string>;
 	/** Precios de catálogo pedidos por `price_id`, ya como `PriceSpec` (etapa 3). */
 	catalogPrices: Map<string, { spec: PriceSpec; name: string | null }>;
@@ -115,6 +120,7 @@ export class QuotesService {
 	private async loadRow(db: Queryable, quoteId: string, holdingId: string, today: string, lock = false): Promise<Row> {
 		const [row] = (await db.query(
 			`SELECT ${QuoteListService.ROW_COLUMNS}, q.quote_stage_id, q.client_contact_id, q.seller_id,
+				sl.email AS seller_email, sl.phone AS seller_phone, cc.email AS contact_email, cc.phone AS contact_phone,
 				q.requires_multicompany, q.requires_multicurrency, q.requires_references_for_billing, q.requires_contract_document
 			FROM quotes q
 			LEFT JOIN quote_stages qs ON qs.id = q.quote_stage_id
@@ -204,7 +210,7 @@ export class QuotesService {
 	async detail(quoteId: string, holdingId: string, now = new Date()) {
 		const today = todayIso(now);
 		const row = await this.loadRow(this.dataSource, quoteId, holdingId, today);
-		const [items, events, documents, [entitiesRow]] = await Promise.all([
+		const [items, events, documents, [entitiesRow], [issuerRow], [entityRow]] = await Promise.all([
 			this.loadItems(this.dataSource, quoteId, holdingId),
 			this.dataSource.query<Row[]>(
 				`SELECT e.id, e.type, e.from_kind, e.to_kind, e.reason, e.metadata, e.created_at,
@@ -231,6 +237,27 @@ export class QuotesService {
 						[row.client_id, holdingId]
 					)
 				: Promise.resolve([{ entities: 0 }] as Row[]),
+			// Emisor para el PDF (solo lectura): la cotización no guarda compañía; se usa la del holding en el país del cliente o, si no hay, la más antigua.
+			this.dataSource.query<Row[]>(
+				`SELECT h.name AS holding_name, h.logo_url AS holding_logo_url, h.website AS holding_website, h.email AS holding_email, h.phone AS holding_phone,
+					co.id AS company_id, co.legal_name, co.tax_id, co.legal_address, co.country, co.email, co.phone, co.website, co.logo_url, co.tax_rate
+				FROM company_holdings h
+				LEFT JOIN LATERAL (
+					SELECT c.* FROM companies c WHERE c.holding_id = h.id
+					ORDER BY (c.country IS NOT DISTINCT FROM $2) DESC, c.created_at, c.id LIMIT 1
+				) co ON true
+				WHERE h.id = $1`,
+				[holdingId, toText(row.client_country)]
+			),
+			// Razón social del cliente para el PDF: la propia del cliente primero (mismo orden que el formulario).
+			row.client_id
+				? this.dataSource.query<Row[]>(
+						`SELECT ce.id, ce.legal_name, ce.tax_id, ce.country, ce.legal_address, ce.email FROM client_entities ce WHERE ce.holding_id = $2
+						AND (ce.client_id = $1 OR EXISTS (SELECT 1 FROM client_entity_clients x WHERE x.client_entity_id = ce.id AND x.client_id = $1 AND x.holding_id = $2))
+						ORDER BY (ce.client_id = $1) DESC, ce.legal_name LIMIT 1`,
+						[row.client_id, holdingId]
+					)
+				: Promise.resolve([] as Row[]),
 		]);
 		const header = quoteListRow(row);
 		const itemViews = items.map((item) => QuotesService.itemView(item));
@@ -238,9 +265,25 @@ export class QuotesService {
 		const kind = (toText(row.kind) ?? 'draft') as QuoteStageKind;
 		const hasContract = header.contract !== null;
 		const canCreateContract = header.status === 'signed' && !hasContract;
+		const editLocked = QuotesService.editLocked(kind, hasContract);
 
 		return {
 			...header,
+			contact: header.contact ? { ...header.contact, email: toText(row.contact_email), phone: toText(row.contact_phone) } : null,
+			seller: header.seller ? { ...header.seller, email: toText(row.seller_email), phone: toText(row.seller_phone) } : null,
+			/** Emisor del documento (PDF de la cotización), solo lectura. */
+			issuer: QuotesService.issuerView(issuerRow),
+			/** Razón social del cliente que va en el documento, solo lectura. */
+			client_entity: entityRow
+				? {
+						id: String(entityRow.id),
+						legal_name: toText(entityRow.legal_name),
+						tax_id: toText(entityRow.tax_id),
+						country: toText(entityRow.country),
+						address: toText(entityRow.legal_address),
+						email: toText(entityRow.email),
+					}
+				: null,
 			client_contact_id: toText(row.client_contact_id),
 			quote_stage_id: toText(row.quote_stage_id),
 			status_label: QUOTE_STATUS_LABELS[header.status],
@@ -256,7 +299,9 @@ export class QuotesService {
 				client: header.client ? { id: header.client.id, name: header.client.name } : null,
 			},
 			alerts,
-			can_edit: EDITABLE_STAGE_KINDS.includes(kind) && !hasContract,
+			can_edit: !editLocked,
+			/** Editar una firmada/perdida exige confirmarlo (`confirm_edit_after_signature`); el cambio queda con el diff en el historial. */
+			edit_requires_confirmation: !editLocked && EDIT_CONFIRMATION_STAGE_KINDS.includes(kind),
 			can_delete: DELETABLE_STAGE_KINDS.includes(kind) && !hasContract,
 			can_create_contract: canCreateContract,
 			can_apply_to_contract: canCreateContract,
@@ -281,6 +326,26 @@ export class QuotesService {
 				uploaded_at: iso(document.uploaded_at),
 				uploaded_by: document.user_id ? { id: String(document.user_id), name: toText(document.user_name) } : null,
 			})),
+		};
+	}
+
+	/** Emisor del PDF: la compañía elegida y, si falta, los datos del holding (nombre, logo, sitio). `null` sin holding. */
+	private static issuerView(row: Row | undefined) {
+		if (!row) return null;
+
+		return {
+			company_id: row.company_id ? String(row.company_id) : null,
+			legal_name: toText(row.legal_name) ?? toText(row.holding_name),
+			trade_name: toText(row.holding_name),
+			tax_id: toText(row.tax_id),
+			address: toText(row.legal_address),
+			country: toText(row.country),
+			email: toText(row.email) ?? toText(row.holding_email),
+			phone: toText(row.phone) ?? toText(row.holding_phone),
+			website: toText(row.website) ?? toText(row.holding_website),
+			logo_url: toText(row.logo_url) ?? toText(row.holding_logo_url),
+			/** Tasa de impuesto de la compañía en porcentaje (19 = 19 %); `null` si no está configurada. */
+			tax_rate: toNullableNumber(row.tax_rate),
 		};
 	}
 
@@ -367,14 +432,10 @@ export class QuotesService {
 			id: header.id,
 			quote_number: header.quote_number,
 			status: header.status,
-			editable: EDITABLE_STAGE_KINDS.includes(kind) && !header.contract,
-			edit_blocker: header.contract
-				? 'quote_has_contract'
-				: kind === 'signed'
-					? 'quote_signed_locked'
-					: EDITABLE_STAGE_KINDS.includes(kind)
-						? null
-						: 'quote_not_editable',
+			editable: !QuotesService.editLocked(kind, header.contract !== null),
+			/** Único bloqueo de edición (Domi 02-10): tener contrato (vínculo o etapa "Contrato creado"). */
+			edit_blocker: QuotesService.editLocked(kind, header.contract !== null) ? ('quote_has_contract' as const) : null,
+			edit_requires_confirmation: !QuotesService.editLocked(kind, header.contract !== null) && EDIT_CONFIRMATION_STAGE_KINDS.includes(kind),
 			created_at: header.created_at,
 			form: {
 				client_id: header.client?.id ?? null,
@@ -600,13 +661,13 @@ export class QuotesService {
 				Row[]
 			>,
 			dto.client_contact_id
-				? (db.query(`SELECT id, client_id FROM client_contacts WHERE id = $1 AND holding_id = $2`, [
+				? (db.query(`SELECT id, client_id, name FROM client_contacts WHERE id = $1 AND holding_id = $2`, [
 						dto.client_contact_id,
 						holdingId,
 					]) as Promise<Row[]>)
 				: Promise.resolve([] as Row[]),
 			dto.seller_id
-				? (db.query(`SELECT id FROM sellers WHERE id = $1 AND holding_id = $2`, [dto.seller_id, holdingId]) as Promise<Row[]>)
+				? (db.query(`SELECT id, name FROM sellers WHERE id = $1 AND holding_id = $2`, [dto.seller_id, holdingId]) as Promise<Row[]>)
 				: Promise.resolve([] as Row[]),
 			db.query(`SELECT id, name FROM products WHERE id = ANY($1::uuid[]) AND holding_id = $2`, [productIds, holdingId]) as Promise<Row[]>,
 			loadCatalogPrices(db, catalogIds, holdingId),
@@ -676,6 +737,8 @@ export class QuotesService {
 
 		return {
 			client: { id: String(client.id), name: toText(client.name_commercial), country: toText(client.country) },
+			contactName: toText(contact?.name),
+			sellerName: toText(seller?.name),
 			products: productMap,
 			catalogPrices,
 			draftStage: draftStage ? { id: String(draftStage.id), name: String(draftStage.name) } : null,
@@ -1115,30 +1178,86 @@ export class QuotesService {
 
 	// ---------------------------------------------------------------- editar
 
-	/** Bloquea la cotización y devuelve su estado; 409 si no se puede editar (§5a). */
-	private async lockEditable(runner: QueryRunner, quoteId: string, holdingId: string, today: string): Promise<Row> {
+	/** Snapshot comparable de un ítem guardado (antes de editar). */
+	private static storedSnapshot(row: Row): QuoteItemSnapshot {
+		return {
+			product_id: toText(row.product_id),
+			product_name: toText(row.product_name),
+			quantity: toNullableNumber(row.quantity),
+			unit_price: toNullableNumber(row.unit_price),
+			annual_unit_price: toNullableNumber(row.annual_unit_price),
+			price_entry_mode: toText(row.price_entry_mode) ?? 'monthly',
+			discount_value: toNullableNumber(row.discount_value),
+			final_price: toNullableNumber(row.final_price),
+			start_date: isoDate(row.start_date),
+			end_date: isoDate(row.end_date),
+			term_months: toNullableNumber(row.term_months),
+			billing_frequency: toText(row.billing_frequency),
+			billing_method: toText(row.billing_method),
+			is_recurring: row.is_recurring !== false,
+			price_id: toText(row.price_id),
+		};
+	}
+
+	/** Snapshot del ítem resuelto (después de editar), con los mismos campos que `storedSnapshot`. */
+	private static resolvedSnapshot(item: ResolvedQuoteItem, priceId: string | null): QuoteItemSnapshot {
+		return {
+			product_id: item.dto.product_id,
+			product_name: item.product_name,
+			quantity: item.dto.quantity,
+			unit_price: item.unit_price,
+			annual_unit_price: item.annual_unit_price,
+			price_entry_mode: item.price_entry_mode,
+			discount_value: item.discount_pct,
+			final_price: item.final_price,
+			start_date: item.dto.start_date ?? null,
+			end_date: item.end_date,
+			term_months: item.dto.term_months ?? null,
+			billing_frequency: item.dto.billing_frequency,
+			billing_method: item.dto.billing_method,
+			is_recurring: item.is_recurring,
+			price_id: priceId,
+		};
+	}
+
+	/** Con contrato (vínculo creado/aplicado o etapa de kind `contract_created`) la cotización no se edita ni se mueve (Domi 02-10). */
+	private static editLocked(kind: QuoteStageKind, hasContract: boolean): boolean {
+		return hasContract || kind === 'contract_created';
+	}
+
+	/**
+	 * Bloquea la cotización y devuelve su estado (§5a, Domi 02-10): se edita en cualquier etapa salvo con contrato (409
+	 * `quote_has_contract`); en `signed`/`lost` exige `confirm_edit_after_signature: true` (409 `edit_requires_confirmation`).
+	 */
+	private async lockEditable(runner: QueryRunner, quoteId: string, holdingId: string, today: string, confirmed: boolean): Promise<Row> {
 		const row = await this.loadRow(runner, quoteId, holdingId, today, true);
 		const kind = (toText(row.kind) ?? 'draft') as QuoteStageKind;
 		const hasContract = Boolean(row.contract_id || row.applied_contract_id);
 
-		if (hasContract) {
+		if (QuotesService.editLocked(kind, hasContract)) {
 			throw conflict(
 				'quote_has_contract',
-				`La cotización ya tiene un contrato (${toText(row.contract_number) ?? toText(row.applied_contract_number) ?? 'sin número'})`
+				hasContract
+					? `La cotización ya tiene un contrato (${toText(row.contract_number) ?? toText(row.applied_contract_number) ?? 'sin número'}): no se edita`
+					: 'La cotización está en "Contrato creado": no se edita'
 			);
 		}
-		if (kind === 'signed') throw conflict('quote_signed_locked', 'La cotización está firmada: destrábala (volver a Enviada) para editarla');
-		if (!EDITABLE_STAGE_KINDS.includes(kind))
-			throw conflict('quote_not_editable', `Una cotización en etapa "${toText(row.stage_name) ?? kind}" no se edita`);
+		if (EDIT_CONFIRMATION_STAGE_KINDS.includes(kind) && !confirmed) {
+			throw conflict(
+				'edit_requires_confirmation',
+				`La cotización está ${kind === 'signed' ? 'firmada' : 'perdida'}: confirma que quieres editarla (el cambio queda en el historial con el detalle)`
+			);
+		}
 
 		return row;
 	}
 
 	/**
-	 * `PUT /quotes/:id` (solo `draft`/`sent` sin contrato): reemplaza el encabezado e ítems en **una transacción**. Los ítems con
+	 * `PUT /quotes/:id` (cualquier etapa sin contrato; firmada/perdida con `confirm_edit_after_signature`): reemplaza el encabezado e ítems en **una transacción**. Los ítems con
 	 * `id` se actualizan (conservan el id que referencian `contract_items.quote_item_id`), sin `id` se crean, los ausentes se
 	 * eliminan (409 `item_linked_to_contract` si un contrato los referencia). Recalcula precio, final, mensual, período y total.
-	 * Conserva número, origen SF, etapa y fecha de creación; deja el evento `UPDATED`.
+	 * Conserva número, origen SF, etapa y fecha de creación; deja el evento `UPDATED` con el diff campo a campo (`changes`, `item_changes`)
+	 * y, en firmada/perdida, `edited_after_signature: true`.
 	 */
 	async update(quoteId: string, dto: UpdateQuoteDto, holdingId: string, authId: string, now = new Date()) {
 		const today = todayIso(now);
@@ -1150,10 +1269,14 @@ export class QuotesService {
 		// Costura `sapira.writer = 'api'`: primera sentencia de la transacción v2.
 		await setApiWriter(runner);
 		try {
-			const current = await this.lockEditable(runner, quoteId, holdingId, today);
+			const current = await this.lockEditable(runner, quoteId, holdingId, today, dto.confirm_edit_after_signature === true);
+			const currentKind = (toText(current.kind) ?? 'draft') as QuoteStageKind;
 			const context = await this.loadContext(runner, dto, holdingId);
 			const existing = (await runner.query(
 				`SELECT qi.id, qi.price_id, p.version AS price_version, ${PRICE_COLUMNS},
+					qi.product_id, qi.product_name, qi.quantity, qi.unit_price, qi.annual_unit_price, qi.price_entry_mode, qi.discount_value,
+					qi.final_price, qi.start_date::text AS start_date, qi.end_date::text AS end_date, qi.term_months, qi.billing_frequency,
+					qi.billing_method, qi.is_recurring,
 					(SELECT c.contract_number FROM contract_items ci JOIN contracts c ON c.id = ci.contract_id
 						WHERE ci.quote_item_id = qi.id AND c.deleted_at IS NULL ORDER BY c.created_at LIMIT 1) AS linked_contract_number
 				FROM quote_items qi LEFT JOIN prices p ON p.id = qi.price_id
@@ -1242,6 +1365,60 @@ export class QuotesService {
 					userId
 				);
 			}
+			const bookingDate = dto.booking_date === undefined ? isoDate(current.booking_date) : dto.booking_date;
+			const afterHeader: Record<string, DiffValue> = {
+				client_id: context.client.id,
+				client_contact_id: dto.client_contact_id ?? null,
+				seller_id: dto.seller_id ?? null,
+				quote_type: dto.quote_type,
+				quote_date: header.quoteDate,
+				valid_until: header.validUntil,
+				booking_date: bookingDate,
+				currency: dto.currency,
+				total_amount: header.totals.total_amount,
+				payment_terms: header.termsText,
+				notes: dto.notes ?? null,
+				requires_multicompany: dto.requires_multicompany === true,
+				requires_multicurrency: dto.requires_multicurrency === true,
+				requires_references_for_billing: dto.requires_references_for_billing === true,
+				requires_contract_document: dto.requires_contract_document === true,
+			};
+			const beforeHeader: Record<string, DiffValue> = {
+				client_id: toText(current.client_id),
+				client_contact_id: toText(current.client_contact_id),
+				seller_id: toText(current.seller_id),
+				quote_type: normalizeQuoteType(toText(current.quote_type)) ?? toText(current.quote_type),
+				quote_date: isoDate(current.quote_date),
+				valid_until: isoDate(current.valid_until),
+				booking_date: isoDate(current.booking_date),
+				currency: toText(current.currency),
+				total_amount: toNumber(current.total_amount),
+				payment_terms: toText(current.payment_terms),
+				notes: toText(current.notes),
+				requires_multicompany: current.requires_multicompany === true,
+				requires_multicurrency: current.requires_multicurrency === true,
+				requires_references_for_billing: current.requires_references_for_billing === true,
+				requires_contract_document: current.requires_contract_document === true,
+			};
+			const changes = headerChanges(beforeHeader, afterHeader, {
+				client_id: { before: toText(current.client_name), after: context.client.name },
+				client_contact_id: { before: toText(current.contact_name), after: context.contactName },
+				seller_id: { before: toText(current.seller_name), after: context.sellerName },
+			});
+			const priceChangeByItem = new Map(priceChanges.map((change) => [change.item_id, change.to]));
+			let insertedIndex = 0;
+			const item_changes = itemChanges(
+				new Map(existing.map((row) => [String(row.id), QuotesService.storedSnapshot(row)])),
+				resolved.map((item) => {
+					const id = (item.dto as UpdateQuoteDto['items'][number]).id ?? null;
+					const previous = id ? existingById.get(id) : undefined;
+					const priceId = id && priceChangeByItem.has(id) ? (priceChangeByItem.get(id) ?? null) : toText(previous?.price_id);
+
+					// Los nuevos se insertaron en el mismo orden: `inserted[n]` es el id del n-ésimo ítem sin id.
+					return { id: id ?? inserted[insertedIndex++] ?? null, snapshot: QuotesService.resolvedSnapshot(item, priceId) };
+				})
+			);
+
 			// Quién editó queda en el evento `UPDATED`; `updated_at` lo pone el trigger `quotes_set_updated_at`.
 			await runner.query(
 				`UPDATE quotes SET
@@ -1258,7 +1435,7 @@ export class QuotesService {
 					dto.quote_type,
 					header.quoteDate,
 					header.validUntil,
-					dto.booking_date === undefined ? isoDate(current.booking_date) : dto.booking_date,
+					bookingDate,
 					dto.currency,
 					header.totals.total_amount,
 					header.termsText,
@@ -1282,6 +1459,11 @@ export class QuotesService {
 					items: { updated, inserted, deleted: toDelete.map((row) => String(row.id)) },
 					price_changes: priceChanges,
 					total_amount: { from: toNumber(current.total_amount), to: header.totals.total_amount },
+					currency: dto.currency,
+					/** Diff campo a campo (Domi 02-10): encabezado y por ítem (agregado, quitado, cambiado) con antes/después. */
+					changes,
+					item_changes,
+					...(EDIT_CONFIRMATION_STAGE_KINDS.includes(currentKind) ? { edited_after_signature: true, stage_kind: currentKind } : {}),
 				},
 			});
 			await runner.commitTransaction();
@@ -1416,8 +1598,9 @@ export class QuotesService {
 	// ---------------------------------------------------------------- transiciones (§5a)
 
 	/**
-	 * `POST /quotes/:id/stage` `{ stage_id | kind, booking_date?, reason? }`: valida la transición entre kinds (`transitionError`),
-	 * exige ítems completos y booking al firmar, motivo al perder; escribe solo etapa y booking (la línea de vida —`sent_at`, `lost_at`,
+	 * `POST /quotes/:id/stage` `{ stage_id | kind, booking_date?, reason? }`: valida la transición entre kinds (`transitionError`: libre
+	 * entre draft/sent/signed/lost, nada con contract_created ni con contrato), exige ítems completos y booking al firmar, motivo al
+	 * perder; conserva `booking_date` salvo que venga en el body; escribe solo etapa y booking (la línea de vida —`sent_at`, `lost_at`,
 	 * motivo, actor— es el evento; `updated_at` lo pone el trigger).
 	 */
 	async transition(quoteId: string, dto: QuoteStageTransitionDto, holdingId: string, authId: string, now = new Date()) {
@@ -1444,7 +1627,8 @@ export class QuotesService {
 				);
 			}
 			if (error) throw conflict(error, `No se puede pasar de ${QUOTE_STATUS_LABELS[fromKind]} a ${QUOTE_STATUS_LABELS[toKind]}`);
-			let bookingDate = isoDate(row.booking_date);
+			// Salir de firmada/perdida no limpia nada en silencio: `booking_date` se conserva salvo que el usuario la cambie (Domi 02-10).
+			const bookingDate = dto.booking_date ?? isoDate(row.booking_date);
 
 			if (toKind === 'signed') {
 				const items = (await runner.query(
@@ -1457,7 +1641,6 @@ export class QuotesService {
 
 				if (!items.length) incomplete.push({ field: 'items', message: 'La cotización no tiene ítems' });
 				if (incomplete.length) throw conflict('items_incomplete', 'Completa los ítems antes de marcar firmada', { errors: incomplete });
-				bookingDate = dto.booking_date ?? bookingDate;
 				if (!bookingDate) throw conflict('booking_date_required', 'Indica la fecha de cierre del negocio (booking)');
 			}
 			if (toKind === 'lost' && !dto.reason?.trim()) throw validationException([{ field: 'reason', message: 'Indica el motivo de la pérdida' }]);
@@ -1477,7 +1660,12 @@ export class QuotesService {
 				fromKind,
 				toKind,
 				reason: dto.reason?.trim() ?? null,
-				metadata: { from_stage: toText(row.stage_name), to_stage: target.name, booking_date: bookingDate },
+				metadata: {
+					from_stage: toText(row.stage_name),
+					to_stage: target.name,
+					booking_date: bookingDate,
+					...(bookingDate !== isoDate(row.booking_date) ? { booking_date_before: isoDate(row.booking_date) } : {}),
+				},
 			});
 			await runner.commitTransaction();
 		} catch (error) {

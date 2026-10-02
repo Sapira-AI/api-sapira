@@ -373,10 +373,12 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async remove(@Param('id') id: string, @HoldingId() holdingId: string) {
-		await this.clientsService.findOne(id, holdingId);
-
-		return await this.clientsService.remove(id);
+	@ApiResponse({
+		status: HttpStatus.CONFLICT,
+		description: 'client_in_use (contratos, facturas, suscripciones o cotizaciones) o client_owns_entities',
+	})
+	async remove(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.clientsService.remove(id, holdingId);
 	}
 
 	@Post(':id/entities')
@@ -442,10 +444,12 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente, razón social o relación no encontrada',
 	})
+	@ApiResponse({
+		status: HttpStatus.CONFLICT,
+		description: 'entity_client_in_use: el cliente tiene contratos, facturas o suscripciones con esa razón social',
+	})
 	async unassignEntity(@Param('id') id: string, @Param('entityId') entityId: string, @HoldingId() holdingId: string) {
-		await this.clientsService.findOne(id, holdingId);
-
-		return await this.clientsService.unassignEntity(id, entityId);
+		return await this.clientsService.unassignEntity(id, entityId, holdingId);
 	}
 
 	@Put(':id/entities/:entityId/set-primary')

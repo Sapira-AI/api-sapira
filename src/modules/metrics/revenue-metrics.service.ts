@@ -1,16 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import {
-	type CurrencyContext,
-	inactiveEmptyRowSql,
-	MetricsDataService,
-	PENDING,
-	realGapSql,
-	SqlParams,
-	unconvertedSql,
-} from './metrics-data.service';
+import { type CurrencyContext, inactiveEmptyRowSql, MetricsDataService, realGapSql, SqlParams, unconvertedSql } from './metrics-data.service';
 import { addMonths, currentMonth, type Month, monthStart, resolveRange } from './metrics-period';
-import { balancesAt, forwardSchedule, indexByItem, journalMonths, type RevenueItemMonth, rollforward } from './revenue-balances';
+import { balancesAt, forwardSchedule, indexByItem, type JournalAccount, journalMonths, type RevenueItemMonth, rollforward } from './revenue-balances';
+import { NOT_PENDING_RENEWAL, notPendingRenewalOf } from './rsm-momentum';
 
 import type {
 	ExceptionsDto,
@@ -50,7 +43,8 @@ const DIMENSION_SQL: Record<RevenueDimension, { key: string; label: string }> = 
 	},
 };
 
-const SCHEDULE_SORT: Record<ScheduleSortField, string> = {
+/** Orden del detalle (whitelist); los saldos iniciales y movimientos salen del mes anterior del ítem (`pv`). */
+const scheduleSort = (s: string): Record<ScheduleSortField, string> => ({
 	period: 'r.period_month',
 	contract_number: 'c.contract_number',
 	client_name: 'cl.name_commercial',
@@ -61,7 +55,26 @@ const SCHEDULE_SORT: Record<ScheduleSortField, string> = {
 	deferred_eom: 'deferred_eom',
 	unbilled_eom: 'unbilled_eom',
 	mrr: 'mrr',
-};
+	deferred_opening: `deferred_opening${s}`,
+	deferred_change: `deferred_change${s}`,
+	unbilled_opening: `unbilled_opening${s}`,
+	unbilled_change: `unbilled_change${s}`,
+});
+
+const CURRENCY_SUFFIXES = ['_contract_ccy', '_ccy', '_system_ccy'] as const;
+
+/**
+ * Saldo inicial (= saldo al cierre del mes anterior del mismo ítem; sin fila anterior, 0) y movimiento (cierre − inicial) por fila, en
+ * las tres monedas. Necesita el CTE `pv` (cierre del mes anterior por ítem, fila regular antes que la CHURN de la cola, R4).
+ */
+const openingColumns = () =>
+	CURRENCY_SUFFIXES.flatMap((cs) =>
+		(['deferred', 'unbilled'] as const).flatMap((balance) => {
+			const opening = `CASE WHEN pv.item_key IS NULL THEN 0 ELSE pv.${balance}${cs} END`;
+
+			return [`${opening} AS ${balance}_opening${cs}`, `r.${balance}_balance_eom${cs} - (${opening}) AS ${balance}_change${cs}`];
+		})
+	).join(',\n\t\t\t\t\t');
 
 const JOINS = `
 	LEFT JOIN contracts c ON c.id = r.contract_id
@@ -87,7 +100,7 @@ export class RevenueMetricsService {
 		return [
 			`r.holding_id = ${params.add(holdingId)}`,
 			`COALESCE(r.is_total_row, false) = false`,
-			`r.momentum IS DISTINCT FROM '${PENDING}'`,
+			NOT_PENDING_RENEWAL,
 			`r.period_month BETWEEN ${params.add(monthStart(from))}::date AND ${params.add(monthStart(to))}::date`,
 			`c.deleted_at IS NULL`,
 			...this.data.rsmFilters(
@@ -231,7 +244,7 @@ export class RevenueMetricsService {
 			), rsm AS (
 				SELECT to_char(r.period_month, 'YYYY-MM') AS period, SUM(r.billed_period_system_ccy) AS amount
 				FROM revenue_schedule_monthly r JOIN contracts c ON c.id = r.contract_id
-				WHERE r.holding_id = ${holding} AND r.momentum IS DISTINCT FROM '${PENDING}' AND r.billed_period_system_ccy IS NOT NULL
+				WHERE r.holding_id = ${holding} AND ${NOT_PENDING_RENEWAL} AND r.billed_period_system_ccy IS NOT NULL
 					AND r.period_month BETWEEN ${start}::date AND ${end}::date ${filterSql}
 				GROUP BY 1
 			)
@@ -296,7 +309,7 @@ export class RevenueMetricsService {
 		const where = [
 			`r.holding_id = ${holding}`,
 			`COALESCE(r.is_total_row, false) = false`,
-			`r.momentum IS DISTINCT FROM '${PENDING}'`,
+			NOT_PENDING_RENEWAL,
 			`r.period_month > ${asOfDate}::date`,
 			`c.deleted_at IS NULL`,
 			...this.data.rsmFilters(
@@ -413,27 +426,47 @@ export class RevenueMetricsService {
 		const { from, to } = resolveRange(query.from, query.to);
 		const currency = await this.data.resolveCurrency(holdingId, query);
 		const s = suffix(currency.mode);
-		const params = new SqlParams();
-		const where = this.where(holdingId, query, params, from, to);
+		const build = (params: SqlParams) => {
+			const where = this.where(holdingId, query, params, from, to);
 
-		if (query.search) {
-			const p = params.add(`%${query.search.replace(/[%_]/g, '')}%`);
+			if (query.search) {
+				const p = params.add(`%${query.search.replace(/[%_]/g, '')}%`);
 
-			where.push(`(c.contract_number ILIKE ${p} OR cl.name_commercial ILIKE ${p} OR COALESCE(ci.product_name, r.product_name) ILIKE ${p})`);
-		}
+				where.push(`(c.contract_number ILIKE ${p} OR cl.name_commercial ILIKE ${p} OR COALESCE(ci.product_name, r.product_name) ILIKE ${p})`);
+			}
+
+			return where;
+		};
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
-		const order = `${SCHEDULE_SORT[query.sortBy ?? 'period']} ${query.sortOrder === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, r.id`;
+		const order = `${scheduleSort(s)[query.sortBy ?? 'period']} ${query.sortOrder === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, r.id`;
 		const unconv = unconvertedSql(currency.mode, `r.recognized_period${s}`);
-		const base = `FROM revenue_schedule_monthly r ${JOINS} WHERE ${where.join(' AND ')}`;
+		// Parámetros propios por consulta: el CTE del mes anterior solo va en la de filas (un `$n` sin usar rompe Postgres).
+		const rowParams = new SqlParams();
+		const pvHolding = rowParams.add(holdingId);
+		const pvFrom = rowParams.add(monthStart(addMonths(from, -1)));
+		const pvTo = rowParams.add(monthStart(addMonths(to, -1)));
+		const rowWhere = build(rowParams);
+		const countParams = new SqlParams();
+		const countWhere = build(countParams);
+		const previous = `pv AS (
+				SELECT COALESCE(p.contract_item_id, p.subscription_item_id, p.subscription_id) AS item_key, p.period_month,
+					${CURRENCY_SUFFIXES.flatMap((cs) => (['deferred', 'unbilled'] as const).map((balance) => `(ARRAY_AGG(p.${balance}_balance_eom${cs} ORDER BY (p.momentum = 'CHURN')))[1] AS ${balance}${cs}`)).join(',\n\t\t\t\t\t')}
+				FROM revenue_schedule_monthly p
+				WHERE p.holding_id = ${pvHolding} AND COALESCE(p.is_total_row, false) = false AND ${notPendingRenewalOf('p')}
+					AND p.period_month BETWEEN ${pvFrom}::date AND ${pvTo}::date
+				GROUP BY 1, 2
+			)`;
 		const [rows, [totals]] = await Promise.all([
 			this.data.query(
-				`SELECT r.id::text AS id, to_char(r.period_month, 'YYYY-MM') AS period, r.momentum,
+				`WITH ${previous}
+				SELECT r.id::text AS id, to_char(r.period_month, 'YYYY-MM') AS period, r.momentum,
 					COALESCE(r.contract_id, r.subscription_id)::text AS contract_id, c.contract_number,
 					CASE WHEN r.contract_id IS NOT NULL THEN 'contract' ELSE 'subscription' END AS source,
 					cl.id::text AS client_id, cl.name_commercial AS client_name, cl.country AS client_country,
 					ce.legal_name AS entity_name, ce.country AS entity_country, co.legal_name AS company_name,
 					COALESCE(ci.product_name, r.product_name) AS product,
+					COALESCE(r.contract_item_id, r.subscription_item_id)::text AS item_id, ci.currency AS item_currency,
 					r.contract_currency, r.company_currency, r.system_currency,
 					r.recognized_period_contract_ccy, r.recognized_period_ccy, r.recognized_period_system_ccy,
 					r.billed_period_contract_ccy, r.billed_period_ccy, r.billed_period_system_ccy,
@@ -441,22 +474,26 @@ export class RevenueMetricsService {
 					r.unbilled_balance_eom_contract_ccy, r.unbilled_balance_eom_ccy, r.unbilled_balance_eom_system_ccy,
 					r.mrr_period_contracted_contract_ccy, r.mrr_period_contracted_ccy, r.mrr_period_contracted_system_ccy,
 					r.cmrr_period_contract_ccy, r.cmrr_period_ccy, r.cmrr_period_system_ccy,
+					${openingColumns()},
 					r.fx_to_company_source, r.fx_to_system_source, r.calc_version,
 					r.recognized_period${s} AS recognized, r.billed_period${s} AS billed,
 					r.deferred_balance_eom${s} AS deferred_eom, r.unbilled_balance_eom${s} AS unbilled_eom, r.mrr_period_contracted${s} AS mrr,
 					${realGapSql(unconv)} AS unconverted
-				${base}
+				FROM revenue_schedule_monthly r ${JOINS}
+				LEFT JOIN pv ON pv.item_key = COALESCE(r.contract_item_id, r.subscription_item_id, r.subscription_id)
+					AND pv.period_month = (r.period_month - interval '1 month')::date
+				WHERE ${rowWhere.join(' AND ')}
 				ORDER BY ${order}
 				LIMIT ${Number(limit)} OFFSET ${(page - 1) * Number(limit)}`,
-				params.values
+				rowParams.values
 			),
 			this.data.query(
 				`SELECT COUNT(*) AS n,
 					SUM(r.recognized_period${s}) FILTER (WHERE NOT ${unconv}) AS recognized,
 					SUM(r.billed_period${s}) FILTER (WHERE NOT ${unconv}) AS billed,
 					COUNT(*) FILTER (WHERE ${realGapSql(unconv)}) AS unconverted
-				${base}`,
-				params.values
+				FROM revenue_schedule_monthly r ${JOINS} WHERE ${countWhere.join(' AND ')}`,
+				countParams.values
 			),
 		]);
 		const money = (value: unknown) => (value === null || value === undefined ? null : round2(Number(value)));
@@ -477,6 +514,9 @@ export class RevenueMetricsService {
 				entity_country: str(row.entity_country),
 				company_name: str(row.company_name),
 				product: str(row.product),
+				// Ítem de la fila (D-CTR-2: el 360 › Devengo agrupa por ítem) y su moneda (multimoneda: la del ítem, que puede no ser la del contrato).
+				item_id: str(row.item_id),
+				item_currency: str(row.item_currency) ?? str(row.contract_currency),
 				currencies: { contract: str(row.contract_currency), company: str(row.company_currency), system: str(row.system_currency) },
 				amounts: {
 					contract: this.amountsOf(row, '_contract_ccy', money),
@@ -488,6 +528,11 @@ export class RevenueMetricsService {
 				deferred_eom: money(row.deferred_eom),
 				unbilled_eom: money(row.unbilled_eom),
 				mrr: money(row.mrr),
+				// Saldo inicial (cierre del mes anterior del ítem) y movimiento del mes, en la moneda leída (aditivo: el 360 › Devengo no cambia).
+				deferred_opening: money(row[`deferred_opening${s}`]),
+				deferred_change: money(row[`deferred_change${s}`]),
+				unbilled_opening: money(row[`unbilled_opening${s}`]),
+				unbilled_change: money(row[`unbilled_change${s}`]),
 				fx_source: { company: str(row.fx_to_company_source), system: str(row.fx_to_system_source) },
 				calc_version: str(row.calc_version),
 				unconverted: Boolean(row.unconverted),
@@ -509,10 +554,19 @@ export class RevenueMetricsService {
 			unbilled_eom: money(row[`unbilled_balance_eom${s}`]),
 			mrr: money(row[`mrr_period_contracted${s}`]),
 			cmrr: money(row[`cmrr_period${s}`]),
+			deferred_opening: money(row[`deferred_opening${s}`]),
+			deferred_change: money(row[`deferred_change${s}`]),
+			unbilled_opening: money(row[`unbilled_opening${s}`]),
+			unbilled_change: money(row[`unbilled_change${s}`]),
 		};
 	}
 
-	/** Asientos del reconocimiento por mes de UNA compañía en su moneda, con las cuentas de `company_account_mappings` (§3). */
+	/**
+	 * Asientos por mes de UNA compañía en su moneda (§1.7 "Asientos"), con el movimiento del período de diferido y por facturar: líneas
+	 * (a)–(d) + tipo de cambio por contrato (`journalMonths`), saldo inicial · movimiento · saldo final por cuenta y, con `groupBy`, las
+	 * líneas abiertas por mercado, industria, segmento, contrato, cliente o producto con subtotal por valor. Cuentas de
+	 * `company_account_mappings`; cuentas por cobrar y diferencia de cambio aún no están en el mapping (salen sin código).
+	 */
 	async journal(holdingId: string, query: RevenueJournalDto) {
 		const companies = query.companyId?.split(',').filter(Boolean) ?? [];
 
@@ -523,7 +577,8 @@ export class RevenueMetricsService {
 			});
 		}
 		const { to, months } = resolveRange(query.from, query.to);
-		const filters = { ...query, currency: 'company' as const };
+		const { groupBy, ...rest } = query;
+		const filters = { ...rest, currency: 'company' as const };
 		const currency = await this.data.resolveCurrency(holdingId, filters);
 		const [{ rows, unconverted }, [company], [mapping], cutoffs] = await Promise.all([
 			this.rows(holdingId, filters, currency, to),
@@ -532,22 +587,29 @@ export class RevenueMetricsService {
 			this.cutoffs(holdingId, companies[0]),
 		]);
 		const cutoff = cutoffs[0]?.cutoff_date ?? null;
-		const accounts = {
-			revenue: { code: str(mapping?.revenue_account_code), name: str(mapping?.revenue_account_name) ?? 'Ingresos' },
+		const accounts: Record<JournalAccount, { code: string | null; name: string }> = {
+			receivable: { code: null, name: 'Cuentas por cobrar' },
 			deferred: { code: str(mapping?.deferred_account_code), name: str(mapping?.deferred_account_name) ?? 'Ingresos diferidos' },
 			unbilled: { code: str(mapping?.unbilled_account_code), name: str(mapping?.unbilled_account_name) ?? 'Ingresos por facturar' },
-			configured: Boolean(mapping),
+			revenue: { code: str(mapping?.revenue_account_code), name: str(mapping?.revenue_account_name) ?? 'Ingresos' },
+			fx_difference: { code: null, name: 'Diferencia de cambio' },
 		};
+		const journal = journalMonths(rows, months, groupBy ?? null);
+		const used = new Set(journal.flatMap((month) => month.entries.map((entry) => entry.account)));
 
 		return {
 			company: { id: companies[0], name: str(company?.legal_name) },
 			currency: currency.code,
-			accounts,
+			group_by: groupBy ?? null,
+			accounts: { ...accounts, configured: Boolean(mapping) },
+			/** Cuentas con movimiento y sin código contable (el front avisa "sin código"). */
+			missing_codes: (Object.keys(accounts) as JournalAccount[]).filter((account) => used.has(account) && !accounts[account].code),
 			cutoff_date: cutoff,
-			months: journalMonths(rows, months).map((month) => ({
+			months: journal.map((month) => ({
 				...month,
 				closed: Boolean(cutoff && lastDay(month.period) <= cutoff),
-				entries: month.entries.map((entry) => ({ ...entry, code: accounts[entry.account].code, name: accounts[entry.account].name })),
+				entries: month.entries.map((entry) => ({ ...entry, ...accounts[entry.account] })),
+				postings: month.postings.map((posting) => ({ ...posting, ...accounts[posting.account] })),
 			})),
 			unconverted,
 		};

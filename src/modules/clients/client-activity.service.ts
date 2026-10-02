@@ -7,6 +7,17 @@ type Row = Record<string, unknown>;
 export const CLIENT_ACTIVITY_TYPES = ['note', 'contract', 'invoice', 'payment', 'collection', 'quote', 'document'] as const;
 export type ClientActivityType = (typeof CLIENT_ACTIVITY_TYPES)[number];
 
+/** `date` de Postgres → `YYYY-MM-DD` (el driver puede entregarlo como texto o como `Date` a medianoche local). */
+const dayOf = (value: unknown): string => {
+	if (value instanceof Date) {
+		const pad = (n: number) => String(n).padStart(2, '0');
+
+		return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+	}
+
+	return String(value ?? '').slice(0, 10);
+};
+
 const text = (value: unknown) => (value === null || value === undefined || value === '' ? null : String(value));
 
 /**
@@ -14,61 +25,73 @@ const text = (value: unknown) => (value === null || value === undefined || value
  * primera rama, así que sin ella filtrar sin notas dejaba columnas sin nombre y la consulta fallaba.
  */
 const FEED_COLUMNS = `SELECT NULL::text AS type, NULL::text AS id, NULL::timestamptz AS occurred_at, NULL::text AS title, NULL::text AS detail,
-	NULL::text AS actor, NULL::text AS actor_id, NULL::text AS ref_kind, NULL::text AS ref_id, NULL::numeric AS amount, NULL::text AS currency
+	NULL::text AS actor, NULL::text AS actor_id, NULL::text AS ref_kind, NULL::text AS ref_id, NULL::numeric AS amount, NULL::text AS currency,
+	NULL::date AS occurred_day, NULL::text AS ref_parent_id
 	WHERE false`;
 
+/** Zona del negocio (la misma de `metrics-period.ts` y de `process.env.TZ` en `main.ts`). */
+export const ACTIVITY_TIME_ZONE = 'America/Santiago';
+
 /**
- * Cada fuente aporta filas con la misma forma. `$1` = cliente, `$2` = holding. El orden y la paginación se aplican
+ * Día del evento. Las fuentes con solo fecha (emisión de factura, fecha de pago, cotización sin `created_at`) lo traen en
+ * `occurred_day`: castearlas a `timestamptz` las dejaba a medianoche UTC, que en Chile es el día anterior a las 21:00, y quedaban
+ * mezcladas con los eventos con hora de otro día. Las fuentes con hora se llevan al día de la zona del negocio.
+ */
+const OCCURRED_ON = `COALESCE(feed.occurred_day, (feed.occurred_at AT TIME ZONE '${ACTIVITY_TIME_ZONE}')::date)`;
+
+/**
+ * Cada fuente aporta filas con la misma forma. `occurred_day` (fecha sin hora) va solo en las fuentes que no guardan hora;
+ * `ref_parent_id` es el contrato de la factura (su vista rápida vive en el Contrato 360). `$1` = cliente, `$2` = holding. El orden y la paginación se aplican
  * sobre la unión. Contactos y acciones de agentes no entran: sus tablas no guardan fecha ni cliente.
  */
 const SOURCES: Record<ClientActivityType, string[]> = {
 	note: [
 		`SELECT 'note' AS type, n.id::text AS id, n.created_at AS occurred_at, 'Nota' AS title, n.body AS detail,
-			u.name AS actor, n.created_by::text AS actor_id, NULL::text AS ref_kind, NULL::text AS ref_id, NULL::numeric AS amount, NULL::text AS currency
+			u.name AS actor, n.created_by::text AS actor_id, NULL::text AS ref_kind, NULL::text AS ref_id, NULL::numeric AS amount, NULL::text AS currency, NULL::date, NULL
 		FROM client_activity_notes n LEFT JOIN users u ON u.id = n.created_by
 		WHERE n.client_id = $1 AND n.holding_id = $2 AND n.deleted_at IS NULL`,
 	],
 	contract: [
 		`SELECT 'contract', 'created-' || c.id::text, c.created_at::timestamptz, 'Contrato creado ' || COALESCE(c.contract_number, ''), c.status,
-			NULL, NULL, 'contract', c.id::text, c.total_value, c.contract_currency
+			NULL, NULL, 'contract', c.id::text, c.total_value, c.contract_currency, NULL, NULL
 		FROM contracts c WHERE c.client_id = $1 AND c.holding_id = $2 AND c.created_at IS NOT NULL`,
 		`SELECT 'contract', e.id::text, COALESCE(e.completed_at, e.created_at),
 			COALESCE(NULLIF(e.title, ''), initcap(replace(e.event_type, '_', ' '))) || ' · ' || COALESCE(c.contract_number, ''),
-			COALESCE(NULLIF(e.summary, ''), e.description), NULL, e.created_by::text, 'contract', c.id::text, e.amount_delta, c.contract_currency
+			COALESCE(NULLIF(e.summary, ''), e.description), NULL, e.created_by::text, 'contract', c.id::text, e.amount_delta, c.contract_currency, NULL, NULL
 		FROM contract_lifecycle_events e JOIN contracts c ON c.id = e.contract_id
 		WHERE c.client_id = $1 AND c.holding_id = $2`,
 		`SELECT 'contract', l.id::text, l.changed_at, 'Contrato modificado · ' || COALESCE(c.contract_number, ''),
-			COALESCE(NULLIF(l.reason, ''), array_to_string(l.fields_changed, ', ')), l.changed_by_name, l.changed_by::text, 'contract', c.id::text, NULL, NULL
+			COALESCE(NULLIF(l.reason, ''), array_to_string(l.fields_changed, ', ')), l.changed_by_name, l.changed_by::text, 'contract', c.id::text, NULL, NULL, NULL, NULL
 		FROM contract_change_log l JOIN contracts c ON c.id = l.contract_id
 		WHERE c.client_id = $1 AND c.holding_id = $2`,
 	],
 	invoice: [
 		`SELECT 'invoice', i.id::text, i.issue_date::timestamptz, 'Factura emitida ' || COALESCE(i.invoice_number, ''), i.status,
-			NULL, NULL, 'invoice', i.id::text, i.total_invoice_currency, i.invoice_currency
+			NULL, NULL, 'invoice', i.id::text, i.total_invoice_currency, i.invoice_currency, i.issue_date, i.contract_id::text
 		FROM invoices i WHERE i.client_id = $1 AND i.holding_id = $2 AND i.is_active AND i.issue_date IS NOT NULL
 			AND i.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')`,
 	],
 	payment: [
 		`SELECT 'payment', p.id::text, p.payment_date::timestamptz, 'Pago recibido · ' || COALESCE(i.invoice_number, ''), NULLIF(concat_ws(' · ', p.method, p.reference), ''),
-			NULL, p.created_by::text, 'invoice', i.id::text, p.amount, p.currency
+			NULL, p.created_by::text, 'invoice', i.id::text, p.amount, p.currency, p.payment_date::date, i.contract_id::text
 		FROM invoice_payments p JOIN invoices i ON i.id = p.invoice_id
 		WHERE i.client_id = $1 AND i.holding_id = $2 AND p.confirmed AND p.payment_date IS NOT NULL`,
 	],
 	collection: [
 		`SELECT 'collection', g.id::text, g.sent_at, 'Gestión de cobranza · ' || COALESCE(i.invoice_number, ''), NULLIF(concat_ws(' · ', g.channel, g.subject), ''),
-			NULL, g.sent_by::text, 'invoice', i.id::text, NULL, NULL
+			NULL, g.sent_by::text, 'invoice', i.id::text, NULL, NULL, NULL, i.contract_id::text
 		FROM invoice_collection_logs g JOIN invoices i ON i.id = g.invoice_id
 		WHERE i.client_id = $1 AND i.holding_id = $2 AND g.sent_at IS NOT NULL`,
 	],
 	quote: [
 		`SELECT 'quote', q.id::text, COALESCE(q.created_at::timestamptz, q.quote_date::timestamptz), 'Cotización ' || COALESCE(q.quote_number, ''), qs.name,
-			s.name, NULL, 'quote', q.id::text, q.total_amount, q.currency
+			s.name, NULL, 'quote', q.id::text, q.total_amount, q.currency, CASE WHEN q.created_at IS NULL THEN q.quote_date::date END, NULL
 		FROM quotes q LEFT JOIN quote_stages qs ON qs.id = q.quote_stage_id LEFT JOIN sellers s ON s.id = q.seller_id
 		WHERE q.client_id = $1 AND q.holding_id = $2`,
 	],
 	document: [
 		`SELECT 'document', d.id::text, d.uploaded_at::timestamptz, 'Documento subido', d.document_name,
-			u.name, d.uploaded_by::text, 'document', d.id::text, NULL, NULL
+			u.name, d.uploaded_by::text, 'document', d.id::text, NULL, NULL, NULL, NULL
 		FROM client_documents d LEFT JOIN users u ON u.id = d.uploaded_by
 		WHERE d.client_id = $1 AND d.holding_id = $2 AND d.deleted_at IS NULL AND d.uploaded_at IS NOT NULL`,
 	],
@@ -107,8 +130,10 @@ export class ClientActivityService {
 
 		const [rows, [countRow], currentUserId] = await Promise.all([
 			this.dataSource.query<Row[]>(
-				`SELECT * FROM (${union}) feed WHERE occurred_at IS NOT NULL
-				ORDER BY occurred_at DESC, id LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
+				`SELECT feed.*, ${OCCURRED_ON} AS occurred_on, (feed.occurred_day IS NOT NULL) AS all_day
+				FROM (${union}) feed WHERE occurred_at IS NOT NULL
+				ORDER BY ${OCCURRED_ON} DESC, (feed.occurred_day IS NOT NULL), occurred_at DESC, type, id
+				LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
 				[clientId, holdingId]
 			),
 			this.dataSource.query<Row[]>(`SELECT COUNT(*) AS total FROM (${union}) feed WHERE occurred_at IS NOT NULL`, [clientId, holdingId]),
@@ -121,10 +146,14 @@ export class ClientActivityService {
 				id: String(row.id),
 				type: row.type as ClientActivityType,
 				occurred_at: new Date(String(row.occurred_at)).toISOString(),
+				/** Día del evento en la zona del negocio (`YYYY-MM-DD`): agrupa la línea de tiempo. */
+				occurred_on: dayOf(row.occurred_on),
+				/** Solo fecha, sin hora (no se muestra hora). */
+				all_day: row.all_day === true || row.all_day === 't',
 				title: String(row.title ?? '').trim(),
 				detail: text(row.detail),
 				actor: text(row.actor),
-				ref: row.ref_kind ? { kind: String(row.ref_kind), id: String(row.ref_id) } : null,
+				ref: row.ref_kind ? { kind: String(row.ref_kind), id: String(row.ref_id), contract_id: text(row.ref_parent_id) } : null,
 				amount: row.amount === null || row.amount === undefined ? null : Number(row.amount),
 				currency: text(row.currency),
 				/** Solo el autor puede borrar su nota. */

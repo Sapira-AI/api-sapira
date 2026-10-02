@@ -156,6 +156,12 @@ export class BillingFiltersDto {
 	@IsOptional()
 	deviation_unexplained?: boolean;
 
+	@ApiPropertyOptional({ description: 'Solo facturas de exportación (`export_type = 1`)' })
+	@Transform(bool)
+	@IsBoolean({ message: 'export_only debe ser true o false' })
+	@IsOptional()
+	export_only?: boolean;
+
 	@ApiPropertyOptional({ description: 'Incluir Canceladas cuando no se filtra por estado' })
 	@Transform(bool)
 	@IsBoolean({ message: 'include_cancelled debe ser true o false' })

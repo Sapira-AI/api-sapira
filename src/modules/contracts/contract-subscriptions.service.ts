@@ -54,6 +54,8 @@ export interface SubscriptionListFilters {
 	status?: string;
 	search?: string;
 	clientId?: string;
+	/** Razón social (`subscriptions.client_entity_id`). */
+	entityId?: string;
 	sortBy?: SubscriptionSortField;
 	sortOrder?: 'asc' | 'desc';
 }
@@ -80,12 +82,13 @@ export class ContractSubscriptionsService {
 	) {}
 
 	async list(holdingId: string, filters: SubscriptionListFilters, asOfDate = new Date()) {
-		const { page = 1, limit = 25, search, clientId, sortBy = 'start_date', sortOrder = 'desc' } = filters;
+		const { page = 1, limit = 25, search, clientId, entityId, sortBy = 'start_date', sortOrder = 'desc' } = filters;
 		const statuses = parseSubscriptionStatus(filters.status);
 		const params: unknown[] = [holdingId, isoDate(asOfDate)];
 		const where = [`s.holding_id = $1`];
 
 		if (clientId) where.push(`s.client_id = $${params.push(clientId)}`);
+		if (entityId) where.push(`s.client_entity_id = $${params.push(entityId)}`);
 		if (search?.trim()) {
 			const n = params.push(`%${search.trim()}%`);
 

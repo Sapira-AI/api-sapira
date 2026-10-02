@@ -62,29 +62,17 @@ describe('quote-status · estado mostrado', () => {
 describe('quote-status · transiciones (§5a)', () => {
 	const matrix = (from: QuoteStageKind) => Object.fromEntries(QUOTE_STAGE_KINDS.map((to) => [to, transitionError(from, to, false)]));
 
-	it('draft ⇄ sent, draft|sent → signed|lost, signed → sent|lost, lost → draft; nada entra ni sale de contract_created', () => {
-		expect(matrix('draft')).toEqual({ draft: null, sent: null, signed: null, lost: null, contract_created: 'invalid_transition' });
-		expect(matrix('sent')).toEqual({ draft: null, sent: null, signed: null, lost: null, contract_created: 'invalid_transition' });
-		expect(matrix('signed')).toEqual({
-			draft: 'invalid_transition',
-			sent: null,
-			signed: 'invalid_transition',
-			lost: null,
-			contract_created: 'invalid_transition',
-		});
-		expect(matrix('lost')).toEqual({
-			draft: null,
-			sent: 'invalid_transition',
-			signed: 'invalid_transition',
-			lost: 'invalid_transition',
-			contract_created: 'invalid_transition',
-		});
+	it('libre entre draft, sent, signed y lost en ambos sentidos (Domi 02-10); nada entra ni sale de contract_created', () => {
+		const free = { draft: null, sent: null, signed: null, lost: null, contract_created: 'invalid_transition' };
+
+		for (const from of ['draft', 'sent', 'signed', 'lost'] as const) expect(matrix(from)).toEqual(free);
 		expect(matrix('contract_created')).toEqual(Object.fromEntries(QUOTE_STAGE_KINDS.map((to) => [to, 'invalid_transition'])));
 	});
 
 	it('con contrato vinculado nada se mueve (409 quote_has_contract antes que cualquier otra regla)', () => {
 		expect(transitionError('signed', 'sent', true)).toBe('quote_has_contract');
 		expect(transitionError('draft', 'sent', true)).toBe('quote_has_contract');
+		expect(transitionError('lost', 'signed', true)).toBe('quote_has_contract');
 	});
 
 	it('nombra el evento según el salto', () => {
@@ -92,8 +80,12 @@ describe('quote-status · transiciones (§5a)', () => {
 		expect(transitionEventType('sent', 'signed')).toBe('SIGNED');
 		expect(transitionEventType('sent', 'lost')).toBe('LOST');
 		expect(transitionEventType('signed', 'sent')).toBe('REOPENED');
+		expect(transitionEventType('signed', 'draft')).toBe('REOPENED');
 		expect(transitionEventType('lost', 'draft')).toBe('REOPENED');
-		expect(transitionEventType('sent', 'draft')).toBe('REOPENED');
+		expect(transitionEventType('lost', 'sent')).toBe('REOPENED');
+		expect(transitionEventType('lost', 'signed')).toBe('SIGNED');
+		expect(transitionEventType('signed', 'lost')).toBe('LOST');
+		expect(transitionEventType('sent', 'draft')).toBe('STAGE_CHANGED');
 		expect(transitionEventType('draft', 'draft')).toBe('STAGE_CHANGED');
 	});
 });

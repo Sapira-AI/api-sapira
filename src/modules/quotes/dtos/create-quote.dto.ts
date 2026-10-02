@@ -276,8 +276,19 @@ export class UpdateQuoteItemDto extends CreateQuoteItemDto {
 	id?: string;
 }
 
-/** Body de `PUT /quotes/:id` (solo `draft`/`sent` sin contrato): el formulario completo. `quote_number` no cambia al editar. */
+/**
+ * Body de `PUT /quotes/:id` (cualquier etapa salvo con contrato): el formulario completo. `quote_number` no cambia al editar. En
+ * `signed`/`lost` exige `confirm_edit_after_signature: true` (409 `edit_requires_confirmation`).
+ */
 export class UpdateQuoteDto extends CreateQuoteDto {
+	@ApiPropertyOptional({
+		default: false,
+		description: 'Obligatorio (true) al editar una cotización firmada o perdida: el cambio queda en el historial con el detalle',
+	})
+	@IsBoolean({ message: 'Valor inválido' })
+	@IsOptional()
+	confirm_edit_after_signature?: boolean;
+
 	@ApiProperty({ type: [UpdateQuoteItemDto] })
 	@IsArray({ message: 'Agrega al menos un ítem' })
 	@ArrayMinSize(1, { message: 'Agrega al menos un ítem' })

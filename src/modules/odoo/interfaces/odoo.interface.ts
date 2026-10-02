@@ -130,6 +130,8 @@ export interface OdooPartner {
 	contact_address_complete: string;
 	vat: string;
 	commercial_partner_id: [number, string];
+	/** Empresa padre de un contacto (`false` si no tiene). */
+	parent_id?: [number, string] | false;
 	is_company: boolean;
 	company_type: string;
 	category_id: number[];

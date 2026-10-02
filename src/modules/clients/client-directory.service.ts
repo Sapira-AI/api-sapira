@@ -1,12 +1,57 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
+import { withApiWriter } from '@/modules/contracts/api-writer';
+
+import { findEntitiesLinkedToPartners, findEntityWithTaxId, insertClientEntity, partnerAlreadyLinkedMessage } from './client-entity-writer';
 import { OPEN_INVOICE_STATUSES } from './client-metrics.service';
 
 type Row = Record<string, unknown>;
 
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+/** "2 contratos" (vacío si es 0). La usan los bloqueos de eliminar y desasignar. */
+export const plural = (count: number, one: string, many: string) => (count > 0 ? `${count.toLocaleString('es-CL')} ${count === 1 ? one : many}` : '');
+/** "2 contratos y 5 facturas" / "1 contrato, 2 facturas y 1 suscripción". */
+export const joinEs = (parts: string[]) => (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}` : (parts[0] ?? ''));
+
+/** Condición de pago solo con el campo de su tipo (`days` o `day`), como la guarda el CHECK de la base. */
+const cleanTerms = (terms: CreateEntityInput['payment_terms']): PaymentTerms | null => {
+	if (!terms) return null;
+	if (terms.kind === 'day_of_next_month' && Number.isInteger(terms.day)) return { kind: 'day_of_next_month', day: Number(terms.day) };
+	if ((terms.kind === 'net' || terms.kind === 'end_of_month') && Number.isInteger(terms.days))
+		return { kind: terms.kind, days: Number(terms.days) };
+
+	return null;
+};
+
+/** Bloqueo explicativo (`{ code, message, next_step? }`). */
+export interface EntityBlocker {
+	code: string;
+	message: string;
+	next_step?: string;
+}
+
+/** 409 con `code` (lo lee `GlobalExceptionFilter` de la propiedad `code` de la excepción) y detalle en el cuerpo. */
+export function conflict(code: string, message: string, extra: Record<string, unknown> = {}): ConflictException {
+	return Object.assign(new ConflictException({ message, code, ...extra }), { code });
+}
+
+/** Alta de razón social (`CreateClientEntityDto` sin `allow_duplicate_tax_id`). */
+export interface CreateEntityInput {
+	client_id: string;
+	legal_name: string;
+	tax_id: string;
+	country: string;
+	legal_address?: string;
+	email?: string;
+	phone?: string;
+	economic_activity?: string;
+	client_number?: string;
+	/** Forma validada por `PaymentTermsDto` (espejo del CHECK de la base). */
+	payment_terms?: { kind: string; days?: number; day?: number } | null;
+}
 
 /** Columnas ordenables (lista blanca → expresión SQL; nunca se interpola el input). */
 export const ENTITY_SORT_FIELDS = {
@@ -292,15 +337,162 @@ export class ClientDirectoryService {
 		const newTaxId = typeof changes.tax_id === 'string' ? changes.tax_id.trim() : undefined;
 
 		if (newTaxId && newTaxId !== entity.tax_id && !allowDuplicateTaxId) {
-			const [duplicate] = await this.dataSource.query<Row[]>(
-				`SELECT legal_name FROM client_entities WHERE holding_id = $1 AND id <> $2 AND lower(regexp_replace(tax_id, '[^0-9kK]', '', 'g')) = lower(regexp_replace($3, '[^0-9kK]', '', 'g')) LIMIT 1`,
-				[holdingId, entityId, newTaxId]
-			);
+			const duplicate = await findEntityWithTaxId(this.dataSource, holdingId, newTaxId, entityId);
 
 			if (duplicate) throw new ConflictException(`Ya existe la razón social "${duplicate.legal_name}" con ese RUT / ID tributario`);
 		}
 
 		return this.updateRow('client_entities', entityId, holdingId, ClientDirectoryService.ENTITY_FIELDS, changes);
+	}
+
+	/**
+	 * Alta de una razón social ligada a un cliente comercial del holding (`insertClientEntity`, el mismo camino de
+	 * `change_entity` con `new_entity`). Misma regla de RUT duplicado que la edición: 409 `duplicate_tax_id` salvo
+	 * `allowDuplicateTaxId` tras confirmar. Si el cliente no tiene razón social principal, esta pasa a serlo.
+	 * `odooPartnerId` ("Traer desde ERP", vía `ClientEntityErpService.createWithPartner`, que ya validó el partner en el ERP): nace
+	 * vinculada en la misma transacción, que repite la regla de unicidad del vínculo (409 `partner_already_linked`).
+	 */
+	async createEntity(
+		holdingId: string,
+		data: CreateEntityInput,
+		allowDuplicateTaxId = false,
+		{ odooPartnerId = null }: { odooPartnerId?: number | null } = {}
+	) {
+		await this.assertClientsInHolding([data.client_id], holdingId);
+		const taxId = data.tax_id.trim();
+
+		if (!allowDuplicateTaxId) {
+			const duplicate = await findEntityWithTaxId(this.dataSource, holdingId, taxId);
+
+			if (duplicate)
+				throw conflict(
+					'duplicate_tax_id',
+					`Ya existe la razón social "${duplicate.legal_name ?? 'sin nombre'}" con ese RUT / ID tributario`,
+					{
+						existing: duplicate,
+					}
+				);
+		}
+
+		return withApiWriter(this.dataSource, async (runner) => {
+			if (odooPartnerId) {
+				const other = (await findEntitiesLinkedToPartners(runner, holdingId, [odooPartnerId])).get(odooPartnerId);
+
+				if (other) throw conflict('partner_already_linked', partnerAlreadyLinkedMessage(other), { linked_entity: other });
+			}
+			const id = await insertClientEntity(
+				runner,
+				holdingId,
+				{
+					client_id: data.client_id,
+					legal_name: data.legal_name.trim(),
+					tax_id: taxId,
+					country: data.country.trim(),
+					address: data.legal_address?.trim() || null,
+					email: data.email?.trim() || null,
+					payment_terms: cleanTerms(data.payment_terms),
+					phone: data.phone?.trim() || null,
+					economic_activity: data.economic_activity?.trim() || null,
+					client_number: data.client_number?.trim() || null,
+					odoo_partner_id: odooPartnerId,
+				},
+				{ makePrimaryIfNone: true }
+			);
+			const [row] = (await runner.query(`SELECT * FROM client_entities WHERE id = $1 AND holding_id = $2`, [id, holdingId])) as Row[];
+
+			return row;
+		});
+	}
+
+	/** Uso de la razón social que impide eliminarla (FK sin cascada) y los documentos que quedarían sin razón social. */
+	private async entityUsage(holdingId: string, entityId: string) {
+		const [row] = await this.dataSource.query<Row[]>(
+			`SELECT
+				(SELECT COUNT(*) FROM contracts WHERE client_entity_id = $1) AS contracts,
+				(SELECT COUNT(*) FROM invoices WHERE client_entity_id = $1) AS invoices,
+				(SELECT COUNT(*) FROM invoices_legacy WHERE client_entity_id = $1) AS legacy_invoices,
+				(SELECT COUNT(*) FROM subscriptions WHERE client_entity_id = $1) AS subscriptions,
+				(SELECT COUNT(*) FROM client_documents WHERE client_entity_id = $1) AS documents
+			FROM client_entities ce WHERE ce.id = $1 AND ce.holding_id = $2`,
+			[entityId, holdingId]
+		);
+
+		if (!row) throw new NotFoundException('Razón social no encontrada');
+
+		return {
+			contracts: toNumber(row.contracts),
+			invoices: toNumber(row.invoices),
+			legacy_invoices: toNumber(row.legacy_invoices),
+			subscriptions: toNumber(row.subscriptions),
+			documents: toNumber(row.documents),
+		};
+	}
+
+	/**
+	 * ¿Se puede eliminar? Bloqueos `entity_in_use` por contratos, facturas (también anuladas e históricas) y suscripciones.
+	 * Las cotizaciones no apuntan a la razón social (se ligan al cliente comercial), así que no bloquean.
+	 */
+	async deletionCheck(holdingId: string, entityId: string) {
+		const usage = await this.entityUsage(holdingId, entityId);
+		const parts = [
+			plural(usage.contracts, 'contrato', 'contratos'),
+			plural(usage.invoices, 'factura', 'facturas'),
+			plural(usage.legacy_invoices, 'factura histórica', 'facturas históricas'),
+			plural(usage.subscriptions, 'suscripción', 'suscripciones'),
+		].filter(Boolean);
+		const blockers: EntityBlocker[] = parts.length
+			? [
+					{
+						code: 'entity_in_use',
+						message: `La razón social tiene ${parts.join(', ')}: eliminarla dejaría ese historial sin receptor.`,
+						next_step:
+							'Si está duplicada, reasigna sus contratos y facturas a la razón social correcta (Modificar contrato › Cambiar razón social) y vuelve a intentarlo.',
+					},
+				]
+			: [];
+
+		return { can_delete: blockers.length === 0, usage, blockers };
+	}
+
+	/**
+	 * Elimina una razón social sin uso (la tabla no tiene borrado lógico): primero sus vínculos con clientes comerciales y,
+	 * si era la principal de alguno, la siguiente más antigua de ese cliente pasa a serlo. Los documentos quedan en el
+	 * cliente sin razón social (FK `SET NULL`).
+	 */
+	async deleteEntity(holdingId: string, entityId: string) {
+		const check = await this.deletionCheck(holdingId, entityId);
+
+		if (!check.can_delete) throw conflict('entity_in_use', check.blockers[0].message, { blockers: check.blockers, usage: check.usage });
+
+		try {
+			return await withApiWriter(this.dataSource, async (runner) => {
+				const links = (await runner.query(
+					`DELETE FROM client_entity_clients WHERE client_entity_id = $1 AND holding_id = $2 RETURNING client_id, is_primary`,
+					[entityId, holdingId]
+				)) as Row[] | [Row[], number];
+				const removed = (Array.isArray(links[0]) ? links[0] : links) as Row[];
+
+				await runner.query(`DELETE FROM client_entities WHERE id = $1 AND holding_id = $2`, [entityId, holdingId]);
+				const orphanedPrimary = removed.filter((link) => link.is_primary).map((link) => String(link.client_id));
+
+				if (orphanedPrimary.length)
+					await runner.query(
+						`UPDATE client_entity_clients SET is_primary = true WHERE id IN (
+							SELECT DISTINCT ON (client_id) id FROM client_entity_clients
+							WHERE client_id = ANY($1::uuid[]) AND holding_id = $2 ORDER BY client_id, created_at, id)`,
+						[orphanedPrimary, holdingId]
+					);
+
+				return { deleted: true, id: entityId, unlinked_clients: removed.length, documents_unlinked: check.usage.documents };
+			});
+		} catch (error) {
+			// FK que la revisión no conoce (tabla nueva): se explica en vez de un 500.
+			if ((error as { code?: string })?.code === '23503')
+				throw conflict('entity_in_use', 'La razón social todavía está referenciada por otros registros y no se puede eliminar', {
+					blockers: [{ code: 'entity_in_use', message: 'La razón social todavía está referenciada por otros registros' }],
+				});
+			throw error;
+		}
 	}
 
 	async createContact(holdingId: string, data: Partial<Record<(typeof ClientDirectoryService.CONTACT_FIELDS)[number], string | null>>) {

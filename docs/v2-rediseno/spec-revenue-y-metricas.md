@@ -133,6 +133,27 @@ de 100%) o `basis=logos`, igual que Stripe y ChartMogul. Segmentable con los mis
 - **Roll-forward** (tabla puente estándar de Stripe/Maxio/Recurly/Chargebee), por período y compañía:
   diferido inicial + facturado − reconocido contra diferido ± reclasificación con por-facturar = diferido final; y el espejo para por
   facturar (activo contractual). Cada cifra abre la lista de clientes → contratos → ítems ("explicar esta cifra", Stripe).
+- **Asientos** (Domi 02-10; `revenue-balances.ts` `contractJournalLines` / `journalMonths`): por compañía y mes, en su moneda (`*_ccy`),
+  con el **movimiento del período** de las dos cuentas de balance, derivado de los saldos por contrato con la **misma regla de netting del
+  roll-forward** (nunca montos inventados). Por contrato: `net = Σ billed_cum − Σ recognized_cum` (inicial = cierre de M−1), D = max(net, 0),
+  U = max(−net, 0), B = facturado del mes (neto de NC, como lo trae el RSM), R = reconocido del mes; `fx = (net final − net inicial) −
+  (B − R)` (conversión mensual de los acumulados, R7). El fx va contra **por facturar** si el contrato no tuvo diferido ni al inicio ni al
+  cierre; si no, contra **diferido**. `Ut = (U final − U inicial) + (fx si va contra por facturar)`.
+  - Ut ≥ 0: **(c)** = min(Ut, max(R, 0)); **(d)** = (c) − Ut. Ut < 0: **(d)** = min(−Ut, max(B, 0)); **(c)** = (d) + Ut.
+  - **(a)** = B − (d); **(b)** = R − (c).
+  - Asientos: (a) Dr Cuentas por cobrar / Cr Ingresos diferidos; (b) Dr Ingresos diferidos / Cr Ingresos; (c) Dr Ingresos por facturar /
+    Cr Ingresos; (d) Dr Cuentas por cobrar / Cr Ingresos por facturar; TC: Dr Diferencia de cambio / Cr Diferido o Por facturar. Un
+    monto negativo invierte debe y haber (NC, reversos).
+  - Por construcción: (a)+(d) = B, (b)+(c) = R, (a) − (b) + fx diferido = ΔD, (c) − (d) − fx por facturar = ΔU. Sumado sobre los contratos:
+    facturado, reconocido, ΔD, ΔU y Σ fx = las cifras del roll-forward del mes (test `revenue-balances.spec.ts`). Cada cuenta muestra saldo
+    inicial · debe · haber · saldo final (`balances`, `reconciles`); cada línea es un par debe = haber, así que el mes cuadra.
+  - **Apertura** (`groupBy=market|industry|segment|contract|client|product`), siempre dentro de la compañía: contrato, cliente y los campos
+    de `clients` (`market`, `industry`, `segment`, las mismas fuentes de Métricas "por dimensión") toman el contrato entero; por
+    **producto**, (a)/(d) se prorratean por el facturado de cada ítem del contrato, (b)/(c) por su reconocido (si el contrato no facturó o
+    no reconoció, por la otra base) y el fx es el de cada ítem (exacto). Sin valor → "Sin asignar". Cada valor tiene subtotal que cuadra.
+  - Cuentas: `company_account_mappings` (ingresos, diferido, por facturar). **Cuentas por cobrar y diferencia de cambio no existen en el
+    mapping** (no se agregan aquí: sin migraciones); salen con nombre y sin código, y el front avisa (`missing_codes`). Pendiente para Domi
+    agregarlas al mapping.
 - **Reconocimiento futuro (RPO)**: meses futuros del RSM (`recognized_period`) separados en *ya facturado* (consume el diferido del ítem en
   orden) y *por facturar* (backlog contratado), 12 meses + "Posterior" y corte corto/largo plazo. Es el waterfall proyectado de
   NetSuite/Recurly y la revelación de IFRS 15 §120. El waterfall histórico mes-de-factura × mes-de-reconocimiento (Stripe) **no** se puede
@@ -246,8 +267,8 @@ Comunes: `from`, `to` (`YYYY-MM`, default últimos 12 meses), `currency` (§1.1)
 | `GET /metrics/revenue/rollforward?period=YYYY-MM\|from&to` | `{ deferred: { opening, billed, recognized, reclass, fx_difference?, closing }, unbilled: { opening, recognized_unbilled, billed, reclass, closing }, check }` |
 | `GET /metrics/revenue/forward?as_of=YYYY-MM` | `{ months: [{ period, from_deferred, unbilled_backlog }], thereafter, short_term, long_term }` (RPO) |
 | `GET /metrics/revenue/by-dimension?dimension=client\|client_entity\|client_country\|entity_country\|product\|company\|recurring&measure=recognized\|billed&top=10` | `{ dimension, periods[], rows: [{ key, label, values[], total }], others, totals[] }` |
-| `GET /metrics/revenue/schedule` (paginado, `sortBy`, `sortOrder`, `limit` ≤ 1000) | filas período × contrato × ítem con compañía, contrato, cliente, razón social, países, producto, las 3 monedas y sus montos, `fx_source`, `unconverted` por fila; + `totals` del filtro. Sirve también para "explicar esta cifra" (mismos filtros que la celda) |
-| `GET /metrics/revenue/journal?company_id&from&to` | `{ company, currency, accounts: { revenue, unbilled, deferred, configured }, months: [{ period, closed, entries: [{ code, name, debit, credit }], balanced, difference }] }` |
+| `GET /metrics/revenue/schedule` (paginado, `sortBy`, `sortOrder`, `limit` ≤ 1000) | filas período × contrato × ítem con compañía, contrato, cliente, razón social, países, producto, las 3 monedas y sus montos, `fx_source`, `unconverted` por fila; + `totals` del filtro (reconocido y facturado; los saldos por fila no se suman). Sirve también para "explicar esta cifra" (mismos filtros que la celda). **02-10 (aditivo)**: `deferred_opening`, `deferred_change`, `unbilled_opening`, `unbilled_change` por fila y en `amounts.{contract,company,system}`: inicial = `*_balance_eom` de la fila del mes anterior del mismo ítem (fila regular antes que la CHURN; 0 si no hay fila anterior), movimiento = cierre − inicial; ordenables (`sortBy=deferred_opening\|deferred_change\|unbilled_opening\|unbilled_change`). El 360 › Devengo (D-CTR-2) lee el mismo endpoint sin cambios |
+| `GET /metrics/revenue/journal?companyId&from&to&groupBy=market\|industry\|segment\|contract\|client\|product` | `{ company, currency, group_by, accounts: { receivable, deferred, unbilled, revenue, fx_difference, configured }, missing_codes[], cutoff_date, months: [{ period, closed, recognized, billed, entries: [{ account, code, name, debit, credit }] (por cuenta), postings: [{ line, group, account, code, name, debit, credit }], balances: { deferred, unbilled }: { opening, debit, credit, movement, closing, difference, reconciles }, groups: [{ key, label, debit, credit, balanced }], balanced, fx_difference }], unconverted }` (fórmulas en §1.7 "Asientos"; query en camelCase como el resto del módulo) |
 | `GET /metrics/revenue/exceptions` (paginado) | contratos sin tipo de cambio, ítems sin regla de devengo (RSM vacío con facturas), diferido negativo, compañías sin mapping de cuentas, cambios en meses cerrados (`updated_at` > corte) |
 
 **Métricas**
@@ -322,8 +343,8 @@ Barra: rango · base MRR/CMRR · compañía · segmentos (filtros guardados) · 
 
 ## 6. Dependencias (se anotan, no se construyen aquí)
 
-- **D-CTR-1** (Contratos): mover `NOT_PENDING_RENEWAL` a `metrics` y que Contratos lo importe de ahí (hoy vive en `contracts.service.ts`). ✅ Domi 01-10: sí; lo hace la sesión de Contratos cuando `metrics` publique el módulo.
-- **D-CTR-2** (Contratos): 360 › Devengo puede leer `GET /metrics/revenue/schedule?contract_id=` en vez de cálculo propio. ✅ Domi 01-10: sí, con condiciones: el endpoint devuelve el RSM por contrato/ítem tal cual (sin agregados ni semántica extra); el 360 muestra por defecto la moneda del contrato y suma el mismo selector de tres monedas (contrato / compañía / sistema) de Revenue; en multimoneda cada ítem muestra además su moneda.
+- **D-CTR-1** (Contratos): mover `NOT_PENDING_RENEWAL` a `metrics` y que Contratos lo importe de ahí (hoy vive en `contracts.service.ts`). ✅ Domi 01-10: sí; lo hace la sesión de Contratos cuando `metrics` publique el módulo. **Hecho 02-10**: una sola definición en `src/modules/metrics/rsm-momentum.ts` (`PENDING`, `NOT_PENDING_RENEWAL`), reexportada por `metrics-data.service.ts`; Métricas y Contratos (`contracts.service.ts`, `contract-360.service.ts`) la importan; test `rsm-momentum.spec.ts` (sin literales repetidos).
+- **D-CTR-2** (Contratos): 360 › Devengo puede leer `GET /metrics/revenue/schedule?contract_id=` en vez de cálculo propio. ✅ Domi 01-10: sí, con condiciones: el endpoint devuelve el RSM por contrato/ítem tal cual (sin agregados ni semántica extra); el 360 muestra por defecto la moneda del contrato y suma el mismo selector de tres monedas (contrato / compañía / sistema) de Revenue; en multimoneda cada ítem muestra además su moneda. **Hecho 02-10**: el endpoint suma por fila `item_id` e `item_currency` (sin cambiar sus montos ni filtros); el 360 lee `GET /api/contratos/:id/devengo` → `/metrics/revenue/schedule?contractId=&currency=` (rango del contrato, máx. 36 meses), con el `Segmented` de Ingresos (contrato por defecto); `GET /contracts/:id/revenue` se retiró (sin otros llamadores).
 - **D-CTR-4** (Contratos v2, API): para que el CMRR anticipe una baja (D7), los ítems espejo de baja deben nacer con `booking_date` =
   fecha en que se **registra** la baja, no la efectiva. Hoy la API v2 escribe `booking_date: p.effective` en
   `contract-changes.ts:2093` (espejo CHURN/DOWNSELL de `item_remove` / `contract_cancel`) y `:3777` (DOWNSELL de `item_change`). La baja

@@ -139,6 +139,7 @@ const build = (invoices: Record<string, Row> = { [INV_A]: invoiceRow(INV_A) }, c
 	} as unknown as ContractsService;
 	const scheduler = {
 		sendInvoiceById: jest.fn().mockResolvedValue({ invoiceId: INV_A, status: 'sent', odooInvoiceId: 9001 }),
+		lastSendAttempt: jest.fn().mockResolvedValue(null),
 	} as unknown as InvoiceSchedulerService;
 
 	return { service: new ContractInvoicesService(dataSource, contracts, scheduler), runner, dataSource, contracts, scheduler };
@@ -256,13 +257,14 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 			expect(contracts.invoiceDetail).toHaveBeenCalledWith(CONTRACT_ID, INV_A, HOLDING);
 		});
 
-		it('si el ERP no la recibe (omitida o error) responde sent: false con el motivo y sin evento', async () => {
+		it('si el ERP no la recibe (omitida o error) responde sent: false con el motivo traducido y sin evento', async () => {
 			const { service, scheduler, runner } = build();
 
 			(scheduler.sendInvoiceById as jest.Mock).mockResolvedValue({
 				invoiceId: INV_A,
 				status: 'skipped',
 				error: 'Sin tipo de cambio',
+				errorType: 'exchange_rate',
 				details: 'Se avisó por correo',
 			});
 			const result = await service.sendNow(CONTRACT_ID, INV_A, {}, HOLDING, 'auth-1', TODAY);
@@ -272,9 +274,36 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 				status: 'skipped',
 				odoo_invoice_id: null,
 				event_id: null,
-				message: 'Sin tipo de cambio. Se avisó por correo',
+				message:
+					'Falta el tipo de cambio para valorizar la factura en su moneda. Confirma la tasa desde Tipo de cambio de la factura y vuelve a enviarla.',
+				error: { category: 'fx_rate_missing', action: 'fx', raw: 'Sin tipo de cambio. Se avisó por correo' },
 			});
 			expect(calls(runner.query, 'INSERT INTO contract_lifecycle_events')).toHaveLength(0);
+		});
+
+		it('error del ERP: el mensaje nunca es el técnico; el detalle trae last_send_attempt del log', async () => {
+			const { service, scheduler } = build();
+			const attempt = {
+				at: '2026-10-02T12:00:00.000Z',
+				ok: false,
+				category: 'partner_not_linked',
+				message: 'La razón social no está vinculada en Odoo',
+			};
+
+			(scheduler.sendInvoiceById as jest.Mock).mockResolvedValue({
+				invoiceId: INV_A,
+				status: 'skipped',
+				error: 'Cliente no tiene odoo_partner_id',
+				errorType: 'validation',
+			});
+			(scheduler.lastSendAttempt as jest.Mock).mockResolvedValue(attempt);
+			const result = await service.sendNow(CONTRACT_ID, INV_A, {}, HOLDING, 'auth-1', TODAY);
+
+			expect(result.message).toBe('La razón social no está vinculada en Odoo. Vincúlala en Clientes › Razones sociales y vuelve a enviarla.');
+			expect(result.message).not.toContain('odoo_partner_id');
+			expect(result.error).toMatchObject({ category: 'partner_not_linked', action: 'client_entity' });
+			expect(result.invoice).toMatchObject({ id: INV_A, last_send_attempt: attempt });
+			expect(scheduler.lastSendAttempt).toHaveBeenCalledWith(INV_A, HOLDING);
 		});
 	});
 

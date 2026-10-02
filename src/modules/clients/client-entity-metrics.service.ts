@@ -147,7 +147,7 @@ export class ClientEntityMetricsService {
 			this.dataSource.query<Row[]>(
 				`SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.status,
 					i.total_system_currency AS amount, i.invoice_currency, i.total_invoice_currency AS amount_invoice_currency,
-					c.id AS client_id, c.name_commercial AS client_name, ct.contract_number,
+					c.id AS client_id, c.name_commercial AS client_name, i.contract_id, ct.contract_number,
 					CASE WHEN i.status = ANY($4) AND i.due_date < $3::date THEN $3::date - i.due_date ELSE 0 END AS days_overdue
 				FROM invoices i
 				LEFT JOIN clients c ON c.id = i.client_id
@@ -188,6 +188,7 @@ export class ClientEntityMetricsService {
 				amount_invoice_currency: toNumber(row.amount_invoice_currency),
 				client_id: (row.client_id as string) ?? null,
 				client_name: (row.client_name as string) ?? null,
+				contract_id: (row.contract_id as string) ?? null,
 				contract_number: (row.contract_number as string) ?? null,
 				days_overdue: toNumber(row.days_overdue),
 			})),

@@ -4,6 +4,7 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
+import { insertClientEntity } from '@/modules/clients/client-entity-writer';
 
 import { setApiWriter } from './api-writer';
 import {
@@ -586,29 +587,8 @@ export class ContractChangesService {
 					]);
 					break;
 				case 'insert_entity': {
-					const entity = op.entity;
-					const [row] = (await runner.query(
-						`INSERT INTO client_entities (holding_id, client_id, legal_name, tax_id, country, legal_address, email, payment_terms)
-						VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) RETURNING id`,
-						[
-							holdingId,
-							entity.client_id,
-							entity.legal_name,
-							entity.tax_id,
-							entity.country,
-							entity.address,
-							entity.email,
-							entity.payment_terms ? JSON.stringify(entity.payment_terms) : null,
-						]
-					)) as Row[];
-
-					createdEntityId = String(row.id);
-					// Ligada al cliente comercial del contrato como razón social adicional (no principal).
-					await runner.query(
-						`INSERT INTO client_entity_clients (client_entity_id, client_id, holding_id, is_primary) VALUES ($1, $2, $3, false)
-						ON CONFLICT (client_entity_id, client_id) DO NOTHING`,
-						[createdEntityId, entity.client_id, holdingId]
-					);
+					// Mismo camino que el alta desde Cliente 360 (`POST /client-entities`): `insertClientEntity`.
+					createdEntityId = await insertClientEntity(runner, holdingId, op.entity);
 					issuer.client_entity_id = createdEntityId;
 					break;
 				}

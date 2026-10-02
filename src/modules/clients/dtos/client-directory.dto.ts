@@ -7,6 +7,7 @@ import {
 	IsBoolean,
 	IsIn,
 	IsInt,
+	IsNotEmpty,
 	IsOptional,
 	IsString,
 	IsUUID,
@@ -189,6 +190,109 @@ export class UpdateClientEntityDto {
 	@IsBoolean()
 	@IsOptional()
 	allow_duplicate_tax_id?: boolean;
+}
+
+/** Alta de razón social (`POST /client-entities`): mismos campos que la edición, con cliente, nombre, RUT y país obligatorios. */
+export class CreateClientEntityDto {
+	@ApiProperty({ description: 'Cliente comercial al que queda ligada' })
+	@IsUUID('all', { message: 'Elige un cliente comercial' })
+	client_id!: string;
+
+	@ApiProperty()
+	@IsString({ message: 'Escribe la razón social' })
+	@IsNotEmpty({ message: 'Escribe la razón social' })
+	@MaxLength(200)
+	legal_name!: string;
+
+	@ApiProperty({ description: 'RUT / NIT / RFC…' })
+	@IsString({ message: 'Escribe el identificador tributario' })
+	@IsNotEmpty({ message: 'Escribe el identificador tributario' })
+	@MaxLength(40)
+	tax_id!: string;
+
+	@ApiProperty({ example: 'Chile' })
+	@IsString({ message: 'Escribe el país' })
+	@IsNotEmpty({ message: 'Escribe el país' })
+	@MaxLength(80)
+	country!: string;
+
+	@ApiPropertyOptional()
+	@IsString()
+	@MaxLength(300)
+	@IsOptional()
+	legal_address?: string;
+
+	@ApiPropertyOptional()
+	@IsString()
+	@MaxLength(200)
+	@IsOptional()
+	email?: string;
+
+	@ApiPropertyOptional()
+	@IsString()
+	@MaxLength(60)
+	@IsOptional()
+	phone?: string;
+
+	@ApiPropertyOptional()
+	@IsString()
+	@MaxLength(200)
+	@IsOptional()
+	economic_activity?: string;
+
+	@ApiPropertyOptional()
+	@IsString()
+	@MaxLength(80)
+	@IsOptional()
+	client_number?: string;
+
+	@ApiPropertyOptional({ type: PaymentTermsDto, nullable: true })
+	@IsOptional()
+	@ValidateIf((_, value) => value !== null)
+	@ValidateNested()
+	@Type(() => PaymentTermsDto)
+	payment_terms?: PaymentTermsDto | null;
+
+	@ApiPropertyOptional({ description: 'Crear aunque el RUT ya exista en otra razón social del holding (tras confirmar la alerta)' })
+	@IsBoolean()
+	@IsOptional()
+	allow_duplicate_tax_id?: boolean;
+
+	@ApiPropertyOptional({
+		description:
+			'"Traer desde ERP": partner del ERP con el que nace vinculada (misma transacción). 409 `partner_already_linked` si otra razón social lo usa; 404 si no existe o está archivado',
+	})
+	@Type(() => Number)
+	@IsInt({ message: 'Cliente del ERP inválido' })
+	@Min(1, { message: 'Cliente del ERP inválido' })
+	@IsOptional()
+	odoo_partner_id?: number;
+}
+
+/** "Traer desde ERP" (`POST /client-entities/erp-partner/search`): RUT o nombre tal como están en el ERP. */
+export class SearchNewErpPartnerDto {
+	@ApiProperty({ description: 'RUT o nombre a buscar' })
+	@IsString({ message: 'Escribe el RUT o el nombre' })
+	@IsNotEmpty({ message: 'Escribe el RUT o el nombre' })
+	@MaxLength(120)
+	query!: string;
+}
+
+/** Búsqueda de partners de Odoo para una razón social. Sin `query`: por su RUT (y su nombre si no aparece). */
+export class SearchErpPartnerDto {
+	@ApiPropertyOptional({ description: 'RUT o nombre a buscar' })
+	@IsString()
+	@MaxLength(120)
+	@IsOptional()
+	query?: string;
+}
+
+export class LinkErpPartnerDto {
+	@ApiProperty({ description: 'ID del partner en Odoo' })
+	@Type(() => Number)
+	@IsInt({ message: 'Partner inválido' })
+	@Min(1, { message: 'Partner inválido' })
+	odoo_partner_id!: number;
 }
 
 export class ContactFieldsDto {

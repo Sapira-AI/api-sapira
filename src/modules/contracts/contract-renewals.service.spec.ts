@@ -14,7 +14,17 @@ import { NotificationsService } from '@/modules/notifications/notifications.serv
 
 import { API_WRITER_SQL } from './api-writer';
 import { ContractChangesService } from './contract-changes.service';
-import { RENEWAL_PROPOSED, SYSTEM_ACTOR_ID } from './contract-renewals';
+import {
+	dueReminders,
+	loadRenewalReminder,
+	reminderLabel,
+	reminderLadder,
+	reminderThreshold,
+	reminderTone,
+	RENEWAL_PROPOSED,
+	RENEWAL_REMINDER,
+	SYSTEM_ACTOR_ID,
+} from './contract-renewals';
 import { ContractRenewalsService } from './contract-renewals.service';
 import { ContractsScheduler } from './contracts.scheduler';
 import { ContractsService } from './contracts.service';
@@ -287,12 +297,159 @@ describe('propuestas: lista y omitir (§9.3.5)', () => {
 	});
 });
 
+describe('alertas crecientes antes del vencimiento (S2-1 / S5-4, 7b)', () => {
+	const reminderRow = (end: string, item = ITEM) => ({
+		id: item,
+		contract_id: CONTRACT,
+		contract_number: 'CTR-2026-001',
+		product_name: 'Licencia',
+		end_date: end,
+	});
+	const isReminderQuery = (sql: string) =>
+		sql.includes('FROM contract_items ci') && sql.includes("'expired'") && !sql.includes('ci.auto_renew = true');
+
+	it('escalera: el primer aviso es auto_renewal_notice_days y luego 60/30/15/7/0; vencido, cada 7 días', () => {
+		expect(reminderLadder(30)).toEqual([30, 15, 7, 0]);
+		expect(reminderLadder(90)).toEqual([90, 60, 30, 15, 7, 0]);
+		expect(reminderLadder(45)).toEqual([45, 30, 15, 7, 0]);
+		const ladder = reminderLadder(30);
+
+		expect([31, 30, 20, 15, 10, 7, 3, 0, -1, -6, -7, -13, -14, -20].map((days) => reminderThreshold(days, ladder))).toEqual([
+			null,
+			30,
+			30,
+			15,
+			15,
+			7,
+			7,
+			0,
+			0,
+			0,
+			-7,
+			-7,
+			-14,
+			-14,
+		]);
+		expect([40, 12, 0, -9].map((days) => reminderTone(reminderThreshold(days, reminderLadder(60)) ?? 99))).toEqual([
+			'info',
+			'warning',
+			'danger',
+			'danger',
+		]);
+		expect(reminderLabel(12)).toBe('Vence en 12 días · sin decisión');
+		expect(reminderLabel(0)).toBe('Vence hoy · sin decisión');
+		expect(reminderLabel(-9)).toBe('Vencido hace 9 días · sin decisión');
+	});
+
+	it('dueReminders: por contrato el fin más próximo; idempotente por contrato, fin y escalón; solo el escalón actual', () => {
+		const items = [
+			{ item_id: 'a', contract_id: 'k1', contract_number: 'K1', product_name: 'A', end_date: '2026-10-08' },
+			{ item_id: 'b', contract_id: 'k1', contract_number: 'K1', product_name: 'B', end_date: '2026-10-08' },
+			{ item_id: 'c', contract_id: 'k1', contract_number: 'K1', product_name: 'C', end_date: '2026-11-20' },
+		];
+		const [due] = dueReminders(items, new Set(), '2026-09-28', 30);
+
+		expect(due).toMatchObject({ contract_id: 'k1', end_date: '2026-10-08', days_to_end: 10, threshold_days: 15, key: 'k1:2026-10-08:15' });
+		expect(due.items.map((item) => item.item_id)).toEqual(['a', 'b']);
+		expect(dueReminders(items, new Set(['k1:2026-10-08:15']), '2026-09-28', 30)).toEqual([]);
+		// Al día siguiente sigue en el mismo escalón: no repite. A 7 días escala.
+		expect(dueReminders(items, new Set(['k1:2026-10-08:15']), '2026-09-29', 30)).toEqual([]);
+		expect(dueReminders(items, new Set(['k1:2026-10-08:15']), '2026-10-01', 30)[0].threshold_days).toBe(7);
+		// Vencido sin decisión: semanal.
+		expect(dueReminders(items, new Set(['k1:2026-10-08:0']), '2026-10-15', 30)[0]).toMatchObject({ threshold_days: -7, days_to_end: -7 });
+		// Antes del primer aviso no hay alerta.
+		expect(dueReminders(items, new Set(), '2026-08-01', 30)).toEqual([]);
+	});
+
+	it('job: evento RENEWAL_REMINDER con metadata { threshold_days, items[] } (costura primero, contrato bloqueado) y notificación escalada', async () => {
+		const { service, runner, notifications } = build((sql) => (isReminderQuery(sql) ? [reminderRow('2026-10-01')] : undefined));
+
+		expect(await service.remindRenewalsForHolding(HOLDING, today)).toBe(1);
+		expect(runner.query.mock.calls[0][0]).toBe(API_WRITER_SQL);
+		expect(runner.query.mock.calls[1][0]).toContain('FOR UPDATE');
+		const [insert] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(insert[0]).toContain(`'${RENEWAL_REMINDER}'`);
+		expect((insert[1] as unknown[])[4]).toBe(SYSTEM_ACTOR_ID);
+		expect(JSON.parse((insert[1] as unknown[])[7] as string)).toMatchObject({
+			job: 'contracts-renewal-reminders',
+			threshold_days: 7,
+			days_to_end: 3,
+			reminder_key: `${CONTRACT}:2026-10-01:7`,
+			items: [{ item_id: ITEM, product_name: 'Licencia', end_date: '2026-10-01' }],
+		});
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1]).toMatchObject({
+			type: 'contract_renewal_reminder',
+			severity: 'warning',
+			title: 'CTR-2026-001: vence en 3 días · sin decisión',
+			deduplication_key: `contracts:renewal-reminder:${CONTRACT}:2026-10-01`,
+			recipients: { include_super_admins: true },
+		});
+	});
+
+	it('job: idempotente (clave ya enviada, también con el lock) y el SQL excluye ítems renovados o dados de baja', async () => {
+		const sent: Handler = (sql) =>
+			isReminderQuery(sql)
+				? [reminderRow('2026-10-01')]
+				: sql.includes("metadata->>'reminder_key'")
+					? [{ key: `${CONTRACT}:2026-10-01:7` }]
+					: undefined;
+		const first = build(sent);
+
+		expect(await first.service.remindRenewalsForHolding(HOLDING, today)).toBe(0);
+		expect(first.dataSource.createQueryRunner).not.toHaveBeenCalled();
+		let reads = 0;
+		const race = build((sql) =>
+			isReminderQuery(sql)
+				? [reminderRow('2026-10-01')]
+				: sql.includes("metadata->>'reminder_key'")
+					? ++reads > 1
+						? [{ key: `${CONTRACT}:2026-10-01:7` }]
+						: []
+					: undefined
+		);
+
+		expect(await race.service.remindRenewalsForHolding(HOLDING, today)).toBe(0);
+		expect(race.notifications.createOrUpdate).not.toHaveBeenCalled();
+		const [query] = calls(first.dataSource.query as unknown as jest.Mock, 'FROM contract_items ci');
+
+		expect(query[0]).toContain('ci.renewed_by_item_id IS NULL AND ci.churn_date IS NULL');
+		expect(query[0]).toContain("ds.derived_status IN ('active', 'pending_renewal', 'expired')");
+		// Sin candidatos (renovado o con baja) no hay alerta.
+		expect(await build().service.remindRenewalsForHolding(HOLDING, today)).toBe(0);
+	});
+
+	it('detalle: la última alerta con días recalculados y tono; null si sus ítems ya se renovaron o dieron de baja', async () => {
+		const event = {
+			id: 'ev-9',
+			created_at: '2026-09-27T09:00:00Z',
+			metadata: { threshold_days: 7, items: [{ item_id: ITEM, product_name: 'Licencia', end_date: '2026-10-01' }] },
+		};
+		const db = (pending: boolean) => ({
+			query: jest.fn(async (sql: string) =>
+				sql.includes(`'${RENEWAL_REMINDER}'`) ? [event] : sql.includes('FROM contract_items') ? (pending ? [{ id: ITEM }] : []) : []
+			),
+		});
+
+		await expect(loadRenewalReminder(db(true), CONTRACT, HOLDING, '2026-10-03')).resolves.toMatchObject({
+			event_id: 'ev-9',
+			end_date: '2026-10-01',
+			days_to_end: -2,
+			threshold_days: 0,
+			tone: 'danger',
+			label: 'Vencido hace 2 días · sin decisión',
+		});
+		await expect(loadRenewalReminder(db(false), CONTRACT, HOLDING, '2026-10-03')).resolves.toBeNull();
+	});
+});
+
 describe('ContractsScheduler', () => {
 	const scheduler = (enabled: string | undefined) => {
 		const renewals = {
 			proposeRenewals: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 2 }]),
 			flagDueScheduledChanges: jest.fn().mockResolvedValue([]),
 			extendHorizons: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 1 }]),
+			remindRenewals: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 3 }]),
 		} as unknown as ContractRenewalsService;
 		const config = { get: jest.fn().mockReturnValue(enabled) } as unknown as ConfigService;
 
@@ -317,5 +474,12 @@ describe('ContractsScheduler', () => {
 		expect(await off.scheduler.autoRenewalDaily()).toBeNull();
 		expect(off.renewals.proposeRenewals).not.toHaveBeenCalled();
 		expect(await off.scheduler.extendHorizonDaily()).toBeNull();
+		expect(meta('renewalRemindersDaily')).toMatchObject({
+			cronTime: '15 6 * * *',
+			name: 'contracts-renewal-reminders',
+			timeZone: 'America/Santiago',
+		});
+		expect(await on.scheduler.renewalRemindersDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 3 }]);
+		expect(await off.scheduler.renewalRemindersDaily()).toBeNull();
 	});
 });

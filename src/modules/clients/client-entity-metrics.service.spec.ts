@@ -61,15 +61,28 @@ describe('ClientEntityMetricsService', () => {
 			if (sql.includes('FROM client_entities')) return [entityRow];
 			if (sql.includes('all_count')) return [{ all_count: '60', open_count: '50', overdue_count: '45', paid_count: '10' }];
 
-			return [{ id: 'i-1', invoice_number: 'F-1', status: 'Vencida', amount: '10', days_overdue: '12', client_name: 'Andes' }];
+			return [
+				{
+					id: 'i-1',
+					invoice_number: 'F-1',
+					status: 'Vencida',
+					amount: '10',
+					days_overdue: '12',
+					client_name: 'Andes',
+					contract_id: 'k-1',
+					contract_number: 'CTR-1',
+				},
+			];
 		});
 
 		const page = await service.getInvoices('e-1', 'h-1', { page: 2, limit: 20, clientId: 'c-1', status: 'overdue' }, asOf);
 
 		expect(page).toMatchObject({ items: 45, pages: 3, currentPage: 2, limit: 20, counts: { all: 60, open: 50, overdue: 45, paid: 10 } });
-		expect(page.data[0]).toMatchObject({ invoice_number: 'F-1', days_overdue: 12, amount: 10 });
+		// `contract_id`: el N° de contrato enlaza al Contrato 360 y la fila abre la vista rápida de la factura.
+		expect(page.data[0]).toMatchObject({ invoice_number: 'F-1', days_overdue: 12, amount: 10, contract_id: 'k-1', contract_number: 'CTR-1' });
 		const [sql, params] = query.mock.calls.find(([text]) => (text as string).includes('LIMIT'))!;
 
+		expect(sql).toContain('i.contract_id');
 		expect(sql).toContain('OFFSET 20');
 		expect(sql).toContain('i.due_date < $3::date');
 		expect(sql).toContain('i.client_id = $5');

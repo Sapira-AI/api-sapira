@@ -113,6 +113,16 @@ describe('SQL de Facturación: todo parámetro agregado está referenciado', () 
 		expect(unreferencedParams(query)).toEqual([]);
 	});
 
+	it('export_only: solo facturas de exportación (export_type = 1); sin el filtro no se acota', async () => {
+		const { query, read } = build(() => []);
+
+		await read.invoices(HOLDING, { export_only: true }, NOW);
+		expect(query.mock.calls.some(([sql]) => String(sql).includes('i.export_type = 1'))).toBe(true);
+		query.mockClear();
+		await read.invoices(HOLDING, {}, NOW);
+		expect(query.mock.calls.some(([sql]) => String(sql).includes('i.export_type = 1'))).toBe(false);
+	});
+
 	it('la página decora las Por Emitir con bloqueos del 360, documentos vinculados y unificadas (lotes sin parámetros sueltos)', async () => {
 		const { query, read } = build((sql) => {
 			if (sql.includes('SELECT d.* FROM d') && sql.includes('LIMIT')) return [{ ...invoiceRow, invoice_type: 'Unificada' }];

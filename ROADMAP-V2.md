@@ -5,7 +5,8 @@
 > "00-plan-y-metodo" del 21-08 (historia en git) y reemplaza las copias que divergían en
 > `sapira-ai` y `front-sapira`. El backlog de fixes del producto vivo es **otra documentación**:
 > [`docs/ROADMAP-OPERATIVO.md`](docs/ROADMAP-OPERATIVO.md) (copia espejo; canónico en `sapira-ai/docs/ROADMAP-OPERATIVO.md`) (ver [convención](#-fixes-del-producto-vivo--convención)).
-> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-09-21**.
+> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-10-02**.
+> **Estado al día y plan del switch:** [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) (leer primero en una sesión nueva).
 
 ## 🎯 Estrategia
 
@@ -73,7 +74,14 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
   - [ ] Contraseñas (REGISTRO punto 9) y el acuerdo de no operar la rama por Supabase
     (merge/rebase/reset) mientras convivan los dos mecanismos.
 
-### Fase 1 — Replicar el front que funciona en `front-sapira`, consumiendo la API 🔜 · ambos
+### Fase 1 — Replicar el front que funciona en `front-sapira`, consumiendo la API 🔄 EN CURSO · ambos
+
+> **Avance al 02-10:** Fases 1 y 2 se están haciendo juntas, módulo a módulo, en el laboratorio de `front-sapira`
+> (`/lab/<modulo>`): cada módulo se construye una sola vez contra `api-sapira`, ya con el diseño nuevo. Construidos:
+> Clientes, Contratos, Cotizaciones, Facturación, Ingresos, Métricas y la primera versión de Precios. Faltan:
+> Configuración (usuarios, roles, permisos), Notificaciones, Automatizaciones, Integraciones, segunda vuelta de Precios,
+> onboarding/datos históricos y documentación de soporte. Detalle, pendientes por decisión y pasos previos al switch en
+> [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md).
 
 Los pasos 4–5 originales ("inventario y versión final de funciones/triggers") **reformulados**: la
 limpieza no es una gran sesión única sino **el paso 0 de cada módulo** que se migra — auditoría y
@@ -101,8 +109,11 @@ electrónica nativa, KAME. Cada grupo pasa por spec cerrada con Domi ANTES de co
 [GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md). Insumos: `docs/v2-rediseno/` + ítems
 20–25 del roadmap operativo.
 
-**Paso 7 — el switch — va módulo por módulo** al cierre de cada uno (Fase 1→2 por módulo), con
-`lib/app-links.ts` en `front-sapira` redirigiendo lo no migrado a la app actual.
+**Paso 7 — el switch.** Los módulos se construyen en el laboratorio y los usuarios siguen en la app actual hasta el
+switch (`lib/app-links.ts` en `front-sapira` redirige lo no migrado). Antes: auditoría de datos por holding y rebuild
+del devengo. Después, tras un tiempo prudente de pruebas: drop y limpieza de los triggers y funciones que solo usa el
+front actual. **Regla (Domi, 02-10): no se arreglan cosas que solo afectan al front actual.** Pasos en
+[`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) §5.
 
 ## 🛤️ Los tres carriles (forma de trabajo: sesiones separadas y frescas por carril)
 

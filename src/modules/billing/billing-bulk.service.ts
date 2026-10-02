@@ -58,6 +58,7 @@ export class BillingBulkService {
 						blockers: blockers.map(withAction),
 						warnings: (response.warnings ?? []) as FanOutResult['warnings'],
 						message: preview ? null : ((response as { message?: string }).message ?? null),
+						error: preview ? null : ((response as { error?: FanOutResult['error'] }).error ?? null),
 					});
 				} catch (error) {
 					results.push(...this.failure(contractId, [invoiceId], numbers, error));

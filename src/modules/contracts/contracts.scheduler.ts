@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 
-import { AUTO_RENEWAL_JOB, EXTEND_HORIZON_JOB, SCHEDULED_CHANGES_JOB } from './contract-renewals';
+import { AUTO_RENEWAL_JOB, EXTEND_HORIZON_JOB, RENEWAL_REMINDERS_JOB, SCHEDULED_CHANGES_JOB } from './contract-renewals';
 import { ContractRenewalsService, type JobHoldingResult } from './contract-renewals.service';
 
 /**
@@ -11,6 +11,8 @@ import { ContractRenewalsService, type JobHoldingResult } from './contract-renew
  * - `contracts-extend-horizon` (05:45): ítems recurrentes sin término → las Por Emitir que faltan para tener siempre 12 períodos desde hoy
  *   (evento `HORIZON_EXTENDED` por contrato solo si creó algo; idempotente con el contrato bloqueado).
  * - `contracts-auto-renewal` (06:00): ítems `auto_renew` por vencer → evento `RENEWAL_PROPOSED` + notificación. **Nunca renueva sola.**
+ * - `contracts-renewal-reminders` (06:15): ítems que terminan sin decisión → alertas crecientes (`auto_renewal_notice_days`, 60/30/15/7/0 días
+ *   antes del fin y cada 7 días vencido), evento `RENEWAL_REMINDER` (idempotente por contrato, fin y escalón) + notificación (S2-1 / S5-4).
  * Por holding con try/catch (un holding que falla no detiene a los demás) e idempotentes (por ítem y fin / por pacto y fecha, revisado con el
  * contrato bloqueado): dos réplicas o un reintento no duplican eventos. `CONTRACT_JOBS_ENABLED=false` los apaga. Reemplazan al cron legacy
  * `process_auto_renewals` (ya desprogramado; sus funciones se retiran al switch).
@@ -41,6 +43,11 @@ export class ContractsScheduler {
 	@Cron('0 6 * * *', { name: AUTO_RENEWAL_JOB, timeZone: 'America/Santiago' })
 	async autoRenewalDaily(): Promise<JobHoldingResult[] | null> {
 		return await this.run(AUTO_RENEWAL_JOB, () => this.renewals.proposeRenewals(new Date()));
+	}
+
+	@Cron('15 6 * * *', { name: RENEWAL_REMINDERS_JOB, timeZone: 'America/Santiago' })
+	async renewalRemindersDaily(): Promise<JobHoldingResult[] | null> {
+		return await this.run(RENEWAL_REMINDERS_JOB, () => this.renewals.remindRenewals(new Date()));
 	}
 
 	private async run(job: string, work: () => Promise<JobHoldingResult[]>): Promise<JobHoldingResult[] | null> {

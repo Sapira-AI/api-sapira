@@ -4,7 +4,9 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
+import { erpErrorSentence, type ErpErrorTranslation, translateErpError } from '@/modules/invoices/erp-error-translation';
 import { InvoiceSchedulerService } from '@/modules/invoices/invoice-scheduler.service';
+import type { LastSendAttempt } from '@/modules/invoices/last-send-attempt';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
@@ -33,6 +35,7 @@ import {
 	type ReschedulePlanItem,
 	type SendNowPlan,
 	type StoredFxPolicy,
+	UNMAPPED_PRODUCTS_SQL,
 } from './contract-invoices';
 import { ContractsService } from './contracts.service';
 
@@ -74,7 +77,7 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 		i.client_entity_id, i.company_id, ce.legal_name,
 		l.period_start::text AS period_start, l.period_end::text AS period_end,
 		COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product, COALESCE(l.priced_base, 0) AS priced_base,
-		COALESCE(l.internal_lines, 0) AS internal_lines,
+		COALESCE(l.internal_lines, 0) AS internal_lines, ${UNMAPPED_PRODUCTS_SQL('i')} AS unmapped_products,
 		(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 			+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
 	FROM invoices i
@@ -156,6 +159,7 @@ export function contractInvoiceRowOf(row: Row): ContractInvoiceRow {
 		period_end: toText(row.period_end),
 		lines_count: toNumber(row.lines_count),
 		lines_without_product: toNumber(row.lines_without_product),
+		unmapped_products: Array.isArray(row.unmapped_products) ? row.unmapped_products.map(String) : [],
 		references_count: toNumber(row.references_count),
 		priced_base: toNumber(row.priced_base),
 		internal_lines: toNumber(row.internal_lines),
@@ -177,11 +181,14 @@ export interface SendNowResult {
 	sent: boolean;
 	status: 'sent' | 'error' | 'skipped';
 	odoo_invoice_id: number | null;
+	/** Enviada: confirmación. No enviada: la frase traducida (`translateErpError`: qué pasó + paso siguiente), nunca el texto técnico. */
 	message: string;
+	/** No enviada: categoría, mensaje, paso siguiente, acción y texto técnico (`raw`, "detalle técnico"). null si se envió. */
+	error: ErpErrorTranslation | null;
 	blockers: InvoiceBlocker[];
 	warnings: InvoiceWarning[];
 	event_id: string | null;
-	invoice: Awaited<ReturnType<ContractsService['invoiceDetail']>>;
+	invoice: Awaited<ReturnType<ContractsService['invoiceDetail']>> & { last_send_attempt: LastSendAttempt | null };
 }
 
 /**
@@ -275,19 +282,32 @@ export class ContractInvoicesService {
 		} else {
 			this.logger.warn(`Envío manual de la factura ${invoice.id} no realizado (${result.status}): ${result.error ?? ''}`);
 		}
+		const error = sent ? null : translateErpError([result.error, result.details].filter(Boolean).join('. ') || null, result.errorType);
 
 		return {
 			sent,
 			status: result.status,
 			odoo_invoice_id: result.odooInvoiceId ?? null,
-			message: sent
-				? `Factura enviada al ERP (borrador ${result.odooInvoiceId ?? ''})`.trim()
-				: [result.error, result.details].filter(Boolean).join('. ') || 'El ERP no recibió la factura',
+			message: sent ? `Factura enviada al ERP (borrador ${result.odooInvoiceId ?? ''})`.trim() : erpErrorSentence(error!),
+			error,
 			blockers: [],
 			warnings: plan.warnings,
 			event_id: eventId,
-			invoice: await this.contracts.invoiceDetail(contract.id, invoice.id, holdingId),
+			invoice: await this.invoiceDetail(contract.id, invoice.id, holdingId),
 		};
+	}
+
+	/**
+	 * Detalle de la factura (`ContractsService.invoiceDetail`) más `last_send_attempt`: el último intento de envío al ERP del log del
+	 * scheduler, traducido a palabras de la usuaria (`translateErpError`). Lo usan `GET …/invoices/:invoiceId` y "Enviar al ERP ahora".
+	 */
+	async invoiceDetail(idOrNumber: string, invoiceId: string, holdingId: string) {
+		const [detail, lastSendAttempt] = await Promise.all([
+			this.contracts.invoiceDetail(idOrNumber, invoiceId, holdingId),
+			this.scheduler.lastSendAttempt(invoiceId, holdingId),
+		]);
+
+		return { ...detail, last_send_attempt: lastSendAttempt };
 	}
 
 	private sendNowPreview(invoice: ContractInvoiceRow, plan: SendNowPlan) {

@@ -100,6 +100,26 @@ describe('BillingBulkService (fan-out por contrato)', () => {
 		).rejects.toBeInstanceOf(BadRequestException);
 	});
 
+	it('enviar al ERP: una que el ERP rechaza trae el mensaje traducido y el error (categoría, paso, acción)', async () => {
+		const error = {
+			category: 'partner_not_linked',
+			message: 'La razón social no está vinculada en Odoo',
+			next_step: 'Vincúlala',
+			action: 'client_entity',
+			raw: 'x',
+		};
+		const sendNow = jest.fn(async () => ({
+			sent: false,
+			blockers: [],
+			warnings: [],
+			message: 'La razón social no está vinculada en Odoo. Vincúlala.',
+			error,
+		}));
+		const result = await build({ sendNow }).sendNow(HOLDING, { invoice_ids: ['i1'] }, 'auth', false);
+
+		expect(result.results[0]).toMatchObject({ ok: false, message: 'La razón social no está vinculada en Odoo. Vincúlala.', error });
+	});
+
 	it('restablecer borrador: erp-reset masivo del contrato', async () => {
 		const erpResetBulk = jest.fn(async (_contractId: string, body: { invoice_ids: string[] }) => ({
 			updated: body.invoice_ids,

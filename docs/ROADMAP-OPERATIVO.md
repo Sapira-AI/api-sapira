@@ -7,7 +7,7 @@
 
 # 🗺️ Roadmap de desarrollo Sapira — backlog unificado
 
-> **Actualizado:** 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
+> **Actualizado:** 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
 > Estructura: **✅ Desplegado y probado** · **🟡 Terminado, en validación de producción** · **🔴 Pendientes** ordenados de rápido a complejo (⚡ tandas rápidas → 🔨 medios → 🏗️ complejos) + **carril León (api-sapira)** · **🟣 Estratégico** (se trabaja en la versión nueva del sistema, no aquí).
 > Convención: al cerrar un ítem, moverlo a "Desplegado" con commit/migración. Este doc es la fuente de verdad del orden; el detalle técnico vive en los docs/memorias referenciados.
 > Todo ítem de esta versión fue **verificado contra el estado real** (código del repo, api-sapira y funciones vivas en Supabase prod) el 24-08 — no es solo consolidación de memorias.
@@ -41,6 +41,44 @@
 | V7 | **Tab Cuentas por Cobrar (AR v1)** + calendario de cobros | QA visual final | Cifras validadas vs SQL (TiMining 306K) |
 | V8 | **Multiselect filtros en prod** | Validar 2 min en prod (`97e4039`); si falla, reabrir investigación | Solo fallaba en producción |
 | V9 | **MRR legacy link/merge** + verificación de imports SF nuevos (sesión B junction) | Un caso real en prod y cerrar | `e90e224` |
+
+---
+
+## 🟢 Resuelto en v2 (front nuevo) — no se arregla en el front actual
+
+> **Regla acordada (Domi, 02-10):** no se invierte tiempo en fixes que solo afectan al front actual. Lo que ya está
+> resuelto en la versión nueva llega a las usuarias con el switch. Después del switch, tras un tiempo prudente de
+> pruebas, se hace el drop y la limpieza de los triggers y funciones que ya no se usan. Estado completo del avance y
+> plan del switch: `api-sapira/docs/v2-rediseno/estado-v2-y-plan-switch.md`.
+> Marcado el 02-10 con lo construido en el laboratorio de `front-sapira`. **Resuelto** = construido y revisado por Domi
+> en el lab; **Parcial** = cubierto en parte o por confirmar al revisar el módulo. Los ítems que no aparecen aquí no se
+> evaluaron: siguen como están abajo.
+
+| Ítem de este backlog | Estado en v2 | Dónde quedó |
+|---|---|---|
+| Alerta de duplicado al crear razón social + eliminar razón social sin referencias (15–16 sep) | ✅ Resuelto en v2 | Clientes: "Crear igual" si el identificador ya existe; Eliminar con verificación de uso (360 de la razón social y en lote) |
+| Medios #1 · Fallos silenciosos → bloqueos explicativos (sin partner, producto sin mapeo, resultado del vínculo) | ✅ Resuelto en v2 | Contratos y Facturación: bloqueos con motivo y solución; el producto sin mapeo ya no se envía con producto por defecto (validar con Leon antes de desplegar). Clientes: "Vincular con ERP" muestra siempre el resultado |
+| Carril León · Resolver el partner del ERP al crear razones sociales | ✅ Resuelto en v2 | Clientes: "Traer desde ERP" (la razón social nace vinculada) y búsqueda tolerante a puntos, guion y cero inicial |
+| Medios #10 · Gestión de razones sociales desde su pestaña | ✅ Resuelto en v2 | Clientes: lista de razones sociales con alta, vista rápida, 360, asignar/desasignar cliente y acciones en lote |
+| Medios #12 · Renegociación (cantidad + precio, frecuencia, plazo) | ✅ Resuelto en v2 | Contratos: "Modificar contrato" por intención |
+| Medios #13 · Cambiar la razón social de un contrato activo, con historial | ✅ Resuelto en v2 | Contratos: Modificar facturación |
+| Complejos #1 · Grupo Modificaciones (upsell/cross-sell/downsell, plazo, ciclo, clasificación, cotización → contrato) | ✅ Resuelto en v2 | Contratos: modificaciones v2 (`spec-modificaciones-contrato-v2.md`, `cobertura-contratos-v2.md`) |
+| Complejos #3 · Guard raíz del trigger standardize | ✅ Resuelto de raíz en v2 | La API escribe los campos derivados y los triggers heredados no corren para ella (`sapira.writer = 'api'`); se eliminan después del switch |
+| Complejos #7 · Vista previa antes de persistir | ✅ Resuelto en v2 | Contratos: "Lo que vas a hacer" y facturas afectadas como vista previa real |
+| Complejos #8 · Propagación a los datos del contrato (fecha de término, total) | ✅ Resuelto en v2 | `contract_end_date` = término del último ítem vigente; la API recalcula los derivados |
+| Complejos #9 · Pausa / reactivación | ✅ Resuelto en v2 (a nivel contrato) | Contratos: Pausar, Reanudar y Reactivar. Pausa solo de facturación: deseada, no construida |
+| Tanda 3 #1 · Churn con fecha de registro en vez de la efectiva | ✅ Resuelto en v2 | `booking_date` solo para CMRR; devengo, facturación y MRR desde la fecha efectiva; baja prorrateada |
+| Estratégico #25 · Contratos indefinidos + ajustes planificados | ✅ Resuelto en v2 | Ítem indefinido, pactos (cambios futuros, también en el alta) y propuestas de renovación |
+| Medios #7 · Correlativo de contratos | 🟡 Parcial | Índice único en producción (migración `1790720000000`); confirmar el generador secuencial al revisar el alta |
+| Medios #5 · Visibilidad del tipo de cambio | 🟡 Parcial | Multimoneda v2: par y tipo de cambio en vista previa y vista rápida. El backfill de facturas antiguas no se hizo |
+| Medios #11 · Términos de pago por cliente / razón social | 🟡 Parcial | Condiciones de pago estructuradas en la razón social y en la cotización; confirmar el caso SAT MX |
+| Medios #4 · Editar ítem de cotización no recalcula precios | 🟡 Parcial | Cotizaciones v2 recalcula y alinea el total al guardar; confirmar en la revisión del módulo |
+| Complejos #5 · Descuento con tratamiento de NC | 🟡 Parcial | NC de descuento con tratamiento de devengo desde la factura; el caso "Por Emitir" por confirmar |
+| Complejos #6 · Sesión RSM | 🟡 Parcial | Reglas aprobadas en v2 (mensual = precio mensual, baja prorrateada, sin tipo de cambio = vacío); falta el rebuild completo por holding, previo al switch |
+| Complejos #4 · Matriz fiscal / tipo de documento | 🟡 Parcial | Documento tributario en el alta del contrato; la matriz por país sigue pendiente |
+| Mensajes ilegibles (CFDI, import) | 🟡 Parcial | Errores del envío al ERP traducidos a lenguaje claro con la solución; los de importación siguen en el carril León |
+| Estratégico #20 · Modelos de precio por tramos | 🟡 Parcial | Precios v2, primera versión; falta la segunda vuelta |
+| Medios #9 Panel de vendedores · #6 Productos · Complejos #10 Notificaciones | ⏳ Módulos por construir en v2 | Integraciones, Configuración y Notificaciones |
 
 ---
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -6,9 +6,18 @@ import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
 import { ClientDirectoryService } from './client-directory.service';
+import { ClientEntityErpService } from './client-entity-erp.service';
 import { ClientEntityMetricsService } from './client-entity-metrics.service';
 import { ClientMetricsService } from './client-metrics.service';
-import { AssignClientEntitiesDto, QueryClientEntitiesDto, UpdateClientEntityDto } from './dtos/client-directory.dto';
+import {
+	AssignClientEntitiesDto,
+	CreateClientEntityDto,
+	LinkErpPartnerDto,
+	QueryClientEntitiesDto,
+	SearchErpPartnerDto,
+	SearchNewErpPartnerDto,
+	UpdateClientEntityDto,
+} from './dtos/client-directory.dto';
 import { QueryEntityContractsDto } from './dtos/query-client-contracts.dto';
 import { QueryEntityInvoicesDto } from './dtos/query-entity-invoices.dto';
 
@@ -22,7 +31,8 @@ export class ClientEntitiesController {
 	constructor(
 		private readonly entityMetrics: ClientEntityMetricsService,
 		private readonly directory: ClientDirectoryService,
-		private readonly clientMetrics: ClientMetricsService
+		private readonly clientMetrics: ClientMetricsService,
+		private readonly erp: ClientEntityErpService
 	) {}
 
 	@Get()
@@ -42,7 +52,39 @@ export class ClientEntitiesController {
 		});
 	}
 
+	@Post()
+	@ApiOperation({
+		summary: 'Crear una razón social ligada a un cliente comercial',
+		description:
+			'Mismo camino que `change_entity` con `new_entity`. 409 `duplicate_tax_id` si el RUT ya existe en el holding (reintentar con `allow_duplicate_tax_id`)',
+	})
+	async create(@Body() body: CreateClientEntityDto, @HoldingId() holdingId: string) {
+		const { allow_duplicate_tax_id: allowDuplicate, odoo_partner_id: partnerId, ...data } = body;
+
+		if (partnerId) return await this.erp.createWithPartner(holdingId, data, partnerId, allowDuplicate ?? false);
+
+		return await this.directory.createEntity(holdingId, data, allowDuplicate ?? false);
+	}
+
 	// Rutas fijas antes de `:id` para que Nest no las capture como id.
+	@Get('erp-connection')
+	@ApiOperation({
+		summary: '¿El holding tiene una integración de ERP activa?',
+		description: 'Solo lee la configuración (no llama al ERP): habilita "Traer desde ERP". `name` = nombre de la conexión',
+	})
+	async erpConnection(@HoldingId() holdingId: string) {
+		return await this.erp.connection(holdingId);
+	}
+
+	@Post('erp-partner/search')
+	@ApiOperation({
+		summary: 'Buscar en el ERP para crear una razón social ("Traer desde ERP")',
+		description: 'Por RUT (si el texto parece uno) o por nombre; cada candidato trae correo y dirección y dice si otra razón social ya lo usa',
+	})
+	async searchNewErpPartner(@Body() body: SearchNewErpPartnerDto, @HoldingId() holdingId: string) {
+		return await this.erp.searchForNew(holdingId, body.query);
+	}
+
 	@Get('stats')
 	@ApiOperation({ summary: 'Totales de razones sociales (total y sin cliente asignado)' })
 	async stats(@HoldingId() holdingId: string) {
@@ -117,5 +159,59 @@ export class ClientEntitiesController {
 		const { allow_duplicate_tax_id: allowDuplicate, ...changes } = body;
 
 		return await this.directory.updateEntity(holdingId, id, changes, allowDuplicate ?? false);
+	}
+
+	@Get(':id/deletion-check')
+	@ApiOperation({
+		summary: '¿Se puede eliminar la razón social?',
+		description: 'Uso (contratos, facturas, suscripciones) y bloqueos `entity_in_use`',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async deletionCheck(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.directory.deletionCheck(holdingId, id);
+	}
+
+	@Delete(':id')
+	@ApiOperation({ summary: 'Eliminar una razón social sin uso', description: '409 `entity_in_use` si tiene contratos, facturas o suscripciones' })
+	@ApiParam({ name: 'id', type: String })
+	async remove(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.directory.deleteEntity(holdingId, id);
+	}
+
+	@Get(':id/erp-partner')
+	@ApiOperation({
+		summary: 'Partner de Odoo vinculado a la razón social',
+		description: 'Leído en Odoo; `archived` si ya no está activo; `blockers` si Odoo no responde',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async currentErpPartner(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.erp.current(holdingId, id);
+	}
+
+	@Post(':id/erp-partner/search')
+	@ApiOperation({
+		summary: 'Buscar el partner de Odoo de la razón social',
+		description: 'Por RUT (y por nombre si no aparece) o por `query`; cada candidato dice por qué coincidió y si otra razón social ya lo usa',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async searchErpPartner(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: SearchErpPartnerDto, @HoldingId() holdingId: string) {
+		return await this.erp.search(holdingId, id, body.query);
+	}
+
+	@Put(':id/erp-partner')
+	@ApiOperation({
+		summary: 'Vincular la razón social con un partner de Odoo',
+		description: '409 `partner_already_linked` si otra razón social del holding lo usa; 404 si no existe o está archivado en Odoo',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async linkErpPartner(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: LinkErpPartnerDto, @HoldingId() holdingId: string) {
+		return await this.erp.link(holdingId, id, body.odoo_partner_id);
+	}
+
+	@Delete(':id/erp-partner')
+	@ApiOperation({ summary: 'Desvincular la razón social de su partner de Odoo' })
+	@ApiParam({ name: 'id', type: String })
+	async unlinkErpPartner(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.erp.unlink(holdingId, id);
 	}
 }

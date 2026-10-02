@@ -672,7 +672,14 @@ export function buildAging(rows: AgingRow[], asOf: string): AgingResult {
 // ---------------------------------------------------------------- cola Por emitir (§4.2)
 
 /** Bloqueos del envío al ERP que no aplican cuando la factura se emite fuera del ERP (2 de 3 clientes sin ERP, S4-14: `mark-issued`). */
-export const ERP_ONLY_CODES = ['erp_send_disabled', 'no_erp_integration', 'no_erp_partner', 'already_sent', 'tax_rate_missing'] as const;
+export const ERP_ONLY_CODES = [
+	'erp_send_disabled',
+	'no_erp_integration',
+	'no_erp_partner',
+	'already_sent',
+	'tax_rate_missing',
+	'product_without_erp_mapping',
+] as const;
 
 /** Acción de la UI que resuelve cada bloqueo de la cola. */
 export const BLOCKER_ACTIONS: Record<string, string> = {
@@ -684,6 +691,7 @@ export const BLOCKER_ACTIONS: Record<string, string> = {
 	already_sent: 'erp_reset',
 	no_erp_partner: 'client_entity',
 	item_without_product: 'contract_items',
+	product_without_erp_mapping: 'map_product',
 	tax_rate_missing: 'company_settings',
 	erp_send_disabled: 'billing_conditions',
 	no_erp_integration: 'integrations',
@@ -836,6 +844,8 @@ export interface FanOutResult {
 	blockers: BillingBlocker[];
 	warnings: Array<{ code: string; message: string }>;
 	message?: string | null;
+	/** Envío al ERP que no salió: categoría, mensaje, paso siguiente, acción y texto técnico (`translateErpError`); ausente/null si no aplica. */
+	error?: { category: string; message: string; next_step: string; action: string; raw: string | null } | null;
 }
 
 /**

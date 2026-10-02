@@ -17,6 +17,9 @@ export const SCHEDULED_CHANGE_DUE = 'SCHEDULED_CHANGE_DUE';
 export const AUTO_RENEWAL_JOB = 'contracts-auto-renewal';
 export const SCHEDULED_CHANGES_JOB = 'contracts-scheduled-changes';
 export const EXTEND_HORIZON_JOB = 'contracts-extend-horizon';
+export const RENEWAL_REMINDERS_JOB = 'contracts-renewal-reminders';
+export const RENEWAL_REMINDER = 'RENEWAL_REMINDER';
+export const RENEWAL_REMINDER_NOTIFICATION_TYPE = 'contract_renewal_reminder';
 export const RENEWAL_PROPOSED_NOTIFICATION_TYPE = 'contract_renewal_proposed';
 export const SCHEDULED_CHANGE_DUE_NOTIFICATION_TYPE = 'contract_scheduled_change_due';
 /** Aviso previo por defecto (`holding_settings.auto_renewal_notice_days`, migración B2: default 30). */
@@ -95,6 +98,168 @@ export function dueScheduledChanges(candidates: DueCandidate[], notified: Set<st
 	const limit = noticeLimit(today, noticeDays);
 
 	return candidates.filter((pact) => pact.due_date && pact.due_date <= limit && !notified.has(dueKey(pact.id, pact.due_date)));
+}
+
+// ---------------------------------------------------------------- alertas crecientes antes del vencimiento (S2-1 / S5-4, 7b)
+
+/** Escalera fija después del primer aviso (días antes del fin; 0 = el día del fin). Vencido sin decisión: cada 7 días. */
+export const REMINDER_LADDER = [60, 30, 15, 7, 0] as const;
+export const OVERDUE_REMINDER_EVERY_DAYS = 7;
+
+/**
+ * Umbrales de aviso del holding: el primero es `holding_settings.auto_renewal_notice_days` (mismo significado: cuántos días antes empieza
+ * a avisar) y después la escalera fija con los escalones menores que él. Ej.: 30 → [30, 15, 7, 0]; 90 → [90, 60, 30, 15, 7, 0].
+ */
+export function reminderLadder(noticeDays: number): number[] {
+	const first = Math.min(180, Math.max(1, Math.round(noticeDays || DEFAULT_NOTICE_DAYS)));
+
+	return [first, ...REMINDER_LADDER.filter((threshold) => threshold < first)];
+}
+
+/**
+ * Escalón alcanzado a `daysToEnd` días del fin: el menor umbral ≥ días que faltan (antes del primero, null). Vencido: 0 la primera semana y
+ * luego −7, −14… (un aviso por semana mientras siga sin decisión).
+ */
+export function reminderThreshold(daysToEnd: number, ladder: number[]): number | null {
+	if (daysToEnd < 0) {
+		const weeks = Math.floor(-daysToEnd / OVERDUE_REMINDER_EVERY_DAYS);
+
+		return weeks === 0 ? 0 : -OVERDUE_REMINDER_EVERY_DAYS * weeks;
+	}
+	const reached = ladder.filter((threshold) => daysToEnd <= threshold);
+
+	return reached.length ? Math.min(...reached) : null;
+}
+
+/** Clave de idempotencia: una alerta por contrato, fin y escalón (un fin nuevo tras renovar parte de cero). */
+export const reminderKey = (contractId: string, endDate: string, threshold: number) => `${contractId}:${endDate}:${threshold}`;
+
+/** Tono de la alerta: info lejos del fin, warning en la última quincena, error desde el día del fin (vencido sin decisión). */
+export const reminderTone = (threshold: number): 'info' | 'warning' | 'danger' => (threshold <= 0 ? 'danger' : threshold <= 15 ? 'warning' : 'info');
+
+/** Texto corto: "Vence en 12 días · sin decisión", "Vence hoy · sin decisión", "Vencido hace 9 días · sin decisión". */
+export function reminderLabel(daysToEnd: number): string {
+	if (daysToEnd > 0) return `Vence en ${daysToEnd} ${daysToEnd === 1 ? 'día' : 'días'} · sin decisión`;
+	if (daysToEnd === 0) return 'Vence hoy · sin decisión';
+
+	return `Vencido hace ${-daysToEnd} ${daysToEnd === -1 ? 'día' : 'días'} · sin decisión`;
+}
+
+/** Ítem recurrente que termina sin decisión (sin renovar ni baja), candidato a alerta. */
+export interface ReminderCandidate {
+	item_id: string;
+	contract_id: string;
+	contract_number: string | null;
+	product_name: string | null;
+	end_date: string;
+}
+
+export interface DueReminder {
+	contract_id: string;
+	contract_number: string | null;
+	end_date: string;
+	days_to_end: number;
+	threshold_days: number;
+	key: string;
+	items: Array<{ item_id: string; product_name: string | null; end_date: string }>;
+}
+
+/**
+ * Alertas que tocan hoy: por contrato, el fin más próximo de sus ítems sin decisión; si ese fin alcanzó un escalón que no se avisó
+ * (`sent`, claves `reminderKey`), una alerta con los ítems que terminan ese día. Solo el escalón actual (si el job no corrió, no se ponen al
+ * día los anteriores).
+ */
+export function dueReminders(candidates: ReminderCandidate[], sent: Set<string>, today: string, noticeDays: number): DueReminder[] {
+	const ladder = reminderLadder(noticeDays);
+	const byContract = new Map<string, ReminderCandidate[]>();
+	const out: DueReminder[] = [];
+
+	for (const candidate of candidates) {
+		if (!candidate.end_date) continue;
+		byContract.set(candidate.contract_id, [...(byContract.get(candidate.contract_id) ?? []), candidate]);
+	}
+	for (const [contractId, items] of byContract) {
+		const end = items.map((item) => item.end_date).sort()[0];
+		const daysToEnd = diffDays(today, end);
+		const threshold = reminderThreshold(daysToEnd, ladder);
+
+		if (threshold === null) continue;
+		const key = reminderKey(contractId, end, threshold);
+
+		if (sent.has(key)) continue;
+		out.push({
+			contract_id: contractId,
+			contract_number: items[0].contract_number,
+			end_date: end,
+			days_to_end: daysToEnd,
+			threshold_days: threshold,
+			key,
+			items: items
+				.filter((item) => item.end_date === end)
+				.map((item) => ({ item_id: item.item_id, product_name: item.product_name, end_date: item.end_date })),
+		});
+	}
+
+	return out;
+}
+
+/** Última alerta vigente del contrato (detalle › tarjeta del Resumen): días al fin recalculados hoy y tono del escalón. */
+export interface RenewalReminderView {
+	event_id: string;
+	end_date: string;
+	days_to_end: number;
+	threshold_days: number;
+	tone: 'info' | 'warning' | 'danger';
+	label: string;
+	items: Array<{ item_id: string; product_name: string | null; end_date: string }>;
+	sent_at: string | null;
+}
+
+/**
+ * La alerta más reciente del contrato cuyos ítems siguen sin renovar ni baja (si ya se decidió, null). El escalón es el de hoy (no el del
+ * envío) para que la tarjeta no quede atrasada entre corridas.
+ */
+export async function loadRenewalReminder(
+	db: Queryable,
+	contractId: string,
+	holdingId: string,
+	today: string,
+	noticeDays = DEFAULT_NOTICE_DAYS
+): Promise<RenewalReminderView | null> {
+	const [row] = ((await db.query(
+		`SELECT e.id, e.metadata, e.created_at FROM contract_lifecycle_events e
+		WHERE e.contract_id = $1 AND e.holding_id = $2 AND e.event_type = '${RENEWAL_REMINDER}'
+		ORDER BY e.created_at DESC LIMIT 1`,
+		[contractId, holdingId]
+	)) ?? []) as Row[];
+
+	if (!row) return null;
+	const metadata = (parseJson(row.metadata) ?? {}) as Row;
+	const items = (Array.isArray(metadata.items) ? metadata.items : []) as DueReminder['items'];
+
+	if (!items.length) return null;
+	const pendingRows = ((await db.query(
+		`SELECT id FROM contract_items WHERE id = ANY($1::uuid[]) AND holding_id = $2 AND renewed_by_item_id IS NULL AND churn_date IS NULL`,
+		[items.map((item) => String(item.item_id)), holdingId]
+	)) ?? []) as Row[];
+	const pending = new Set(pendingRows.map((item) => String(item.id)));
+	const open = items.filter((item) => pending.has(String(item.item_id)));
+
+	if (!open.length) return null;
+	const end = open.map((item) => item.end_date).sort()[0];
+	const daysToEnd = diffDays(today, end);
+	const threshold = reminderThreshold(daysToEnd, reminderLadder(noticeDays)) ?? toNumber(metadata.threshold_days);
+
+	return {
+		event_id: String(row.id),
+		end_date: end,
+		days_to_end: daysToEnd,
+		threshold_days: threshold,
+		tone: reminderTone(threshold),
+		label: reminderLabel(daysToEnd),
+		items: open,
+		sent_at: isoTime(row.created_at),
+	};
 }
 
 /** Ítem de una propuesta (`metadata.items`). */

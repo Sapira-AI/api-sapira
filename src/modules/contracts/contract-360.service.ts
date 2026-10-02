@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
+
 import { diffDays } from './billing-engine';
 import { todayFor } from './business-date';
 import {
@@ -16,14 +18,16 @@ import {
 	invoiceCurrencyInUse,
 	normalizeFxRates,
 	paymentTermsLabel,
+	PENDING_STATUS,
 	pickNextInvoice,
 	type ScheduleInvoice,
 	type StoredFxRateRow,
 	summarizeItems,
 	typicalPaymentTermsLabel,
+	UNMAPPED_PRODUCTS_SQL,
 } from './contract-360';
 import { type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
-import { CONTRACT_DATES_LATERAL, ContractsService, NEXT_ITEM_END_LATERAL, NOT_PENDING_RENEWAL } from './contracts.service';
+import { CONTRACT_DATES_LATERAL, ContractsService, NEXT_ITEM_END_LATERAL } from './contracts.service';
 import { ContractDocumentsStorageService } from './storage/contract-documents-storage.service';
 import { documentTypeLabel } from './tax-document-types';
 
@@ -124,6 +128,7 @@ export class Contract360Service {
 				l.period_start::text AS period_start, l.period_end::text AS period_end,
 				COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product,
 				COALESCE(l.has_non_recurring, false) AS has_non_recurring,
+				CASE WHEN i.status = '${PENDING_STATUS}' AND i.is_active THEN ${UNMAPPED_PRODUCTS_SQL('i')} ELSE '{}'::text[] END AS unmapped_products,
 				(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 					+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
 			FROM invoices i
@@ -158,6 +163,7 @@ export class Contract360Service {
 			period_end: toText(row.period_end),
 			lines_count: toNumber(row.lines_count),
 			lines_without_product: toNumber(row.lines_without_product),
+			unmapped_products: Array.isArray(row.unmapped_products) ? row.unmapped_products.map(String) : [],
 			has_non_recurring: row.has_non_recurring === true,
 			references_count: toNumber(row.references_count),
 			related_invoice_id: toText(row.related_invoice_id),

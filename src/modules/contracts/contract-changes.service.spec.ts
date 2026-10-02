@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { flattenValidationErrors } from '@/core/utils/validation-errors';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import * as entityWriter from '@/modules/clients/client-entity-writer';
 
 import { ConsumptionService } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
@@ -1020,6 +1021,36 @@ describe('ContractChangesService · bloque B2 (spec modificaciones §9)', () => 
 		expect(metadata).toContain('"entity_created":true');
 		expect(metadata).not.toContain('new:entity');
 		expect(result.created.entity_id).toBe('entity-new');
+	});
+
+	it('change_entity con new_entity crea la razón social por el camino compartido con Cliente 360 (insertClientEntity)', async () => {
+		const spy = jest.spyOn(entityWriter, 'insertClientEntity');
+		const { service } = build((sql) =>
+			sql.includes('INSERT INTO client_entities')
+				? [{ id: 'entity-new' }]
+				: sql.includes('FROM client_entities ce CROSS JOIN contracts c')
+					? []
+					: undefined
+		);
+
+		await service.apply(
+			CONTRACT_ID,
+			request(
+				{ type: 'change_entity', new_entity: { legal_name: 'Cliente Norte SpA', tax_id: '76.543.210-K', country: 'Chile' } },
+				{ effective_date: '2026-10-01' }
+			),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0][1]).toBe(HOLDING);
+		expect(spy.mock.calls[0][2]).toMatchObject({ client_id: 'client-1', legal_name: 'Cliente Norte SpA', tax_id: '76.543.210-K' });
+		// Sin `makePrimaryIfNone`: la razón social del contrato queda como adicional del cliente.
+		expect(spy.mock.calls[0][3]).toBeUndefined();
+		spy.mockRestore();
 	});
 
 	it('renewal con precio nuevo: el ajuste apunta al id real del RENEWAL y el pacto aplicado queda ligado al evento (applied_event_id)', async () => {

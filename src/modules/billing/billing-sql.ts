@@ -168,6 +168,8 @@ export function invoicesCte(
 
 	if (sources.length && sources.length < INVOICE_SOURCES.length) base.push(`(${sources.map((source) => SOURCE_SQL[source]).join(' OR ')})`);
 	if (filters.contract_id) base.push(`i.contract_id = ${params.add(filters.contract_id)}::uuid`);
+	// Facturas de exportación (vista sugerida "Exportación" del front): `invoices.export_type` = 1 (CHECK 0/1).
+	if (filters.export_only) base.push(`i.export_type = 1`);
 	const currencies = splitList(filters.invoice_currency).map((code) => code.toUpperCase());
 
 	if (currencies.length) base.push(`UPPER(COALESCE(i.invoice_currency, i.contract_currency)) = ANY(${params.add(currencies)}::text[])`);

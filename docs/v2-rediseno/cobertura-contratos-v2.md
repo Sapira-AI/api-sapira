@@ -52,7 +52,7 @@
 | D11 · F8 | Reprogramar pierde `original_issue_date` | UPDATE directo del front | Cerrado | `ci` reschedule `COALESCE(original_issue_date)` · `contract-invoices.spec.ts` | |
 | D12 · S4-11 | Bianual = 1 / 12 / 24 | 3 lógicas de frecuencia | Cerrado | `be:72` `BILLING_FREQUENCY_MONTHS` · test "bianual = 24 meses" | |
 | D13 · 22-09 (a) | Merge por fecha exacta mezcla meses | AssignToContract | Cerrado | `cc` `mergeTarget` (mes; ciclo propio = fecha exacta) · b2 spec "mergeTarget" | |
-| D14 · S2-1 / Tanda 2 | Vencimiento por fecha del contrato; Expirado nunca corre | `auto_expire_contracts` sin llamador | Cerrado | `contract-status.ts` (estado derivado), `contracts.service.ts:127` `next_item_end_date` | Alertas crecientes al vencer (S5-4): pendiente |
+| D14 · S2-1 / Tanda 2 | Vencimiento por fecha del contrato; Expirado nunca corre | `auto_expire_contracts` sin llamador | Cerrado | `contract-status.ts` (estado derivado), `contracts.service.ts:127` `next_item_end_date` | Alertas crecientes al vencer (S5-4): cerrado 02-10 (job `contracts-renewal-reminders`, ver §3) |
 | D15 · S2-13 | Fin del contrato = una sola regla | `contract_end_date` nunca se actualizaba | Cerrado | Decisión de Domi 01-10: **mayor** fin de los recurrentes vivos (indefinido → NULL) en alta/PUT (`drafts` `contractEndDate`), activación (`act` `persist`) y toda modificación (`cc` `Planner.finish`, co-terminación de `planItemAdd`), con el helper `api-written-fields.ts` `latestContractEnd` · tests `api-written-fields.spec.ts` "latestContractEnd…", `contract-changes.spec.ts` "contract_end_date = mayor fin…", `contract-activation.service.spec.ts` | El "próximo vencimiento" de la lista sigue derivado aparte (`next_item_end_date`) |
 | D16 | Zona horaria / off-by-one | `Date` locales en el FV | Cerrado | Motor ISO/UTC (`be:297-320`) + "hoy" único `contracts/business-date.ts` `todayFor` (America/Santiago; los holdings no guardan zona) en `ccs` (preview/apply), `cons` (`todayIso`, list, pending), `drafts` `todayIso`, `act` (booking y evento, antes `CURRENT_DATE`), `contract-renewals.service.ts` y `contract-scheduled-changes.service.ts` (jobs), `contract-360.service.ts` · `business-date.spec.ts` | El scheduler de facturas (Leon) ya usaba Santiago (`getBusinessTodayString`) |
 | D17 · Complejos #1 | `term` actualizado sin fin (inconsistentes) | Upsell inline | Cerrado | Fin explícito + `term_months` entero (`renewal` exige meses enteros, `cc:2860`) | |
@@ -151,7 +151,7 @@
 | Propagar fin y TV al encabezado | Complejos #8 | Parcial (dos semánticas, D15) | este |
 | Descuento puntual con tratamiento NC | Complejos #5 | Cerrado | este |
 | Variables con factura emitida | Complejos #2 · S7-8 | Cerrado | este |
-| Notificaciones de renovación y pactos | Complejos #10 · §9.6b | Parcial (cerrar al confirmar, alertas crecientes) | este |
+| Notificaciones de renovación y pactos | Complejos #10 · §9.6b | Parcial (alertas crecientes cerradas 02-10; falta cerrar la notificación al confirmar) | este |
 | Sesión RSM (sub-bugs B/C, md5, duplicados, overrides) | Complejos #6 | Pendiente | Revenue-Métricas |
 | Fallos silenciosos al enviar → bloqueos | Medios #1 | Cerrado en el 360 (`send-now` blockers) | este |
 | FX visible por factura · "Tipo de cambio: 1" | Medios #5 · Tanda 2 | Cerrado | este |
@@ -176,6 +176,11 @@
 | Preguntas IPC (acumulado, desfase, redondeo, CMRR pactado) | Renovación §7 #2–#5 | Parcial (construido con la propuesta, sin confirmar) | este |
 | KPI "Renuevan en 30 días" en la lista | §9.6b | Cerrado: lo cubre el KPI "Vencen en 30 días" de la lista (decisión de Domi 01-10) | este |
 | Dedup import legacy, partner Odoo al crear razones | Carril León | Pendiente | después del switch |
+| Alertas crecientes antes del vencimiento (7b) | S2-1 · S5-4 · §9.7 | Cerrado (02-10, sin commit): job `contracts-renewal-reminders` 06:15 (`contracts.scheduler.ts`, `contract-renewals.service.ts` `remindRenewalsForHolding`): ítems recurrentes que terminan sin renovar ni baja; escalones `auto_renewal_notice_days` (primer aviso) → 60/30/15/7/0 y semanal vencido; evento `RENEWAL_REMINDER` `{ threshold_days, items[] }` idempotente por contrato+fin+escalón; notificación con tono creciente (misma clave por fin); `renewal_reminder` en el detalle → tarjeta del Resumen · `contract-renewals.service.spec.ts` "alertas crecientes…", `PendientesResumen.test.tsx` | este |
+| Pactos en el alta (7a) | §9.3.6 | Cerrado (02-10, front sin commit): "Cambios pactados" por ítem recurrente en el paso Ítems con el mismo `PactoForm`; `scheduled_changes[]` con `item_key`; Revisar y borrador ida y vuelta (`formFromDraft`); la vista previa no los lleva · `pactos-alta.test.ts`, `CambiosPactados.test.tsx` | este |
+| Producto sin mapeo al ERP | Pedido de Domi 02-10 | Cerrado (02-10, sin commit): bloqueo `product_without_erp_mapping` (360, envío, cola de Facturación; `UNMAPPED_PRODUCTS_SQL` = criterio del scheduler) y el scheduler rechaza en vez de mandar el producto 1 (Leon §8) · `contract-invoices.spec.ts`, `invoice-scheduler.service.spec.ts` | este |
+| Errores del envío al ERP en palabras de la usuaria | Pedido de Domi 02-10 | Cerrado (02-10, sin commit): `translateErpError` (11 categorías), notificación "No se pudo enviar la factura <folio> de <cliente>", `last_send_attempt` en el detalle (log del scheduler) y aviso "Último intento de envío" en la vista rápida (Leon §9) · `erp-error-translation.spec.ts`, `ErpErrorAviso.test.tsx` | este |
+| D-CTR-1 · D-CTR-2 | spec revenue §6 | Cerrado (02-10, sin commit): `NOT_PENDING_RENEWAL` vive en `metrics/rsm-momentum.ts` (Contratos lo importa); 360 › Devengo lee `GET /metrics/revenue/schedule?contractId=` (con `item_id`/`item_currency`) con el selector contrato/compañía/sistema de Ingresos; `GET /contracts/:id/revenue` retirado · `rsm-momentum.spec.ts`, `metrics-sql.spec.ts`, `ContratoDevengoTab.test.tsx` | este |
 
 ## 4. Funciones, triggers y crons del legado
 

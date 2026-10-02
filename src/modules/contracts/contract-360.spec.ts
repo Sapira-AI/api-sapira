@@ -215,6 +215,14 @@ describe('computeBlockers', () => {
 		).toEqual([]);
 	});
 
+	it('producto sin mapeo al ERP: bloquea con los productos nombrados solo si el contrato envía al ERP', () => {
+		const [blocker] = computeBlockers(invoice({ unmapped_products: ['Plan Pro'] }), context({ auto_send: true }));
+
+		expect(blocker.code).toBe('product_without_erp_mapping');
+		expect(blocker.message).toContain('«Plan Pro»');
+		expect(codes(invoice({ unmapped_products: ['Plan Pro'] }), context({ auto_send: false }))).toEqual([]);
+	});
+
 	it('sin razón social el mensaje lo dice', () => {
 		const [blocker] = computeBlockers(invoice(), context({ auto_send: true, has_erp_partner: false, has_entity: false }));
 

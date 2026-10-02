@@ -233,6 +233,34 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 		});
 	});
 
+	describe('planSendNow: product_without_erp_mapping (producto sin mapeo al ERP)', () => {
+		it('bloquea nombrando los productos, con el paso y la acción map_product', () => {
+			const plan = planSendNow(invoice({ unmapped_products: ['Soporte Premium'] }), context());
+			const blocker = plan.blockers.find((entry) => entry.code === 'product_without_erp_mapping')!;
+
+			expect(plan.can_apply).toBe(false);
+			expect(blocker.message).toContain('«Soporte Premium»');
+			expect(blocker.next_step).toBe('Mapea el producto en Integraciones › Odoo');
+			expect(blocker.action).toBe('map_product');
+		});
+
+		it('varios productos: muestra hasta tres y "y N más"', () => {
+			const plan = planSendNow(invoice({ unmapped_products: ['A', 'B', 'C', 'D', 'E'] }), context());
+
+			expect(plan.blockers.find((entry) => entry.code === 'product_without_erp_mapping')!.message).toContain('«A», «B», «C» y 2 más');
+		});
+
+		it('solo si la factura va por el ERP; sin productos pendientes no bloquea', () => {
+			expect(codes(planSendNow(invoice({ unmapped_products: ['A'] }), context({ auto_send_to_erp: false })).blockers)).not.toContain(
+				'product_without_erp_mapping'
+			);
+			expect(codes(planSendNow(invoice({ unmapped_products: ['A'] }), context({ has_erp_integration: false })).blockers)).not.toContain(
+				'product_without_erp_mapping'
+			);
+			expect(codes(planSendNow(invoice({ unmapped_products: [] }), context()).blockers)).toEqual([]);
+		});
+	});
+
 	describe('invoiceDueDate (vencimiento por condición de pago)', () => {
 		it('condición del contrato antes que la de la razón social; México sin condición = +1 mes; sin nada = +30 días', () => {
 			expect(invoiceDueDate('2026-10-15', context())).toBe('2026-11-14');

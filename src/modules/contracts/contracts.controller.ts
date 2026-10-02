@@ -782,18 +782,18 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Detalle de una factura del contrato',
 		description:
-			'Solo lectura: encabezado (fechas programada y real, monedas, tipo de cambio por factura derivado `fx_policy` (same_currency | spot | fixed) / `fx_rate` (= `fx_contract_to_invoice`) / `fx_rate_source` (de las líneas) / `fx_confirmed_at` (último evento FX), IVA, ERP y `erp_sync_state`, `issued_externally` (evento)), líneas con `pricing_breakdown` y `quantity_source`, referencias (OC/HES), ajustes posteriores a la emisión, documentos relacionados (NC, original, consolidada, dividida) e `history[]` (eventos del contrato que nombran la factura)',
+			'Solo lectura: encabezado (fechas programada y real, monedas, tipo de cambio por factura derivado `fx_policy` (same_currency | spot | fixed) / `fx_rate` (= `fx_contract_to_invoice`) / `fx_rate_source` (de las líneas) / `fx_confirmed_at` (último evento FX), IVA, ERP y `erp_sync_state`, `issued_externally` (evento)), líneas con `pricing_breakdown` y `quantity_source`, referencias (OC/HES), ajustes posteriores a la emisión, documentos relacionados (NC, original, consolidada, dividida), `history[]` (eventos del contrato que nombran la factura) y `last_send_attempt` (último intento de envío al ERP del log del scheduler, traducido: `{ at, ok, operation, category, message, next_step, action, raw }` o null)',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam({ name: 'invoiceId', type: String, description: 'UUID de la factura' })
 	@ApiResponse({
 		status: 200,
 		description:
-			'{ ...factura, fx_policy, fx_rate, fx_rate_source, fx_confirmed_at, issued_externally, erp_sync_state, lines[], references[], adjustments[], related_documents[], history[] }',
+			'{ ...factura, fx_policy, fx_rate, fx_rate_source, fx_confirmed_at, issued_externally, erp_sync_state, lines[], references[], adjustments[], related_documents[], history[], last_send_attempt }',
 	})
 	@ApiResponse({ status: 404, description: 'Contrato de otro holding o factura que no es del contrato' })
 	async invoiceDetail(@Param('id') id: string, @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string, @HoldingId() holdingId: string) {
-		return await this.contractsService.invoiceDetail(id, invoiceId, holdingId);
+		return await this.contractInvoicesService.invoiceDetail(id, invoiceId, holdingId);
 	}
 
 	// ---------------------------------------------------------------- facturas del contrato: operaciones (spec facturas §3.1–3.3)
@@ -868,7 +868,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa: enviar una factura al ERP ahora',
 		description:
-			'Bloqueos del 360 (already_sent, erp_send_disabled, no_erp_integration, no_erp_partner, needs_reference, item_without_product, fixed_fx_without_rate, tax_rate_missing, not_pending…), avisos (past_issue_date, spot_fx) y resumen (receptor, documento, total, FX). No escribe nada',
+			'Bloqueos del 360 (already_sent, erp_send_disabled, no_erp_integration, no_erp_partner, needs_reference, item_without_product, product_without_erp_mapping, fixed_fx_without_rate, tax_rate_missing, not_pending…), avisos (past_issue_date, spot_fx) y resumen (receptor, documento, total, FX). No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)
@@ -1507,13 +1507,5 @@ export class ContractsController {
 		return await this.contractsService.history(id, holdingId);
 	}
 
-	@Get(':id/revenue')
-	@ApiOperation({
-		summary: 'Devengo del contrato',
-		description: 'Resumen mensual del revenue schedule: reconocido, facturado, MRR, diferido y por facturar',
-	})
-	@ApiParam(CONTRACT_PARAM)
-	async revenue(@Param('id') id: string, @HoldingId() holdingId: string) {
-		return await this.contractsService.revenue(id, holdingId);
-	}
+	// D-CTR-2: el devengo del contrato se lee de `GET /metrics/revenue/schedule?contractId=` (una sola fuente); `GET /contracts/:id/revenue` se retiró.
 }

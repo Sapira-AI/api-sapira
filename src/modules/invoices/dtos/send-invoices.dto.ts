@@ -81,6 +81,14 @@ export class InvoiceResultDto {
 	error?: string;
 
 	@ApiProperty({
+		description:
+			'Tipo técnico del error (el mismo `error_type` del log: validation, exchange_rate, tax_validation, product_without_erp_mapping, odoo_rejection…); lo usa `translateErpError`',
+		required: false,
+		example: 'odoo_rejection',
+	})
+	errorType?: string;
+
+	@ApiProperty({
 		description: 'Detalles adicionales del procesamiento',
 		required: false,
 		example: 'Factura enviada exitosamente a Odoo',

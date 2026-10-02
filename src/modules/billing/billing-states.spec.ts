@@ -343,6 +343,19 @@ describe('cola Por emitir (§4.2)', () => {
 		expect(queueBlockers(all, 'erp').map((entry) => entry.code)).toEqual(['no_erp_integration', 'erp_send_disabled', 'needs_reference']);
 	});
 
+	it('producto sin mapeo al ERP: acción map_product por el ERP y se quita si la factura se emite fuera del ERP', () => {
+		const unmapped = {
+			code: 'product_without_erp_mapping',
+			message: 'x',
+			next_step: 'Mapea el producto en Integraciones › Odoo',
+			action: 'map_product',
+		};
+
+		expect(queueBlockers([unmapped], 'erp').map((entry) => [entry.code, entry.action])).toEqual([['product_without_erp_mapping', 'map_product']]);
+		expect(queueBlockers([{ ...unmapped, action: undefined }], 'erp')[0].action).toBe('map_product');
+		expect(queueBlockers([unmapped], 'external')).toEqual([]);
+	});
+
 	it('grupo: borrador en el ERP > bloqueada > rezagada > lista; conteo por código', () => {
 		const row = { odoo_invoice_id: null, sent_to_odoo_at: null, issue_date: '2026-10-10', scheduled_at: null };
 
