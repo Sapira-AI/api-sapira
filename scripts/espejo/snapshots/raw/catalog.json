@@ -4502,6 +4502,645 @@
 				}
 			]
 		},
+		"budget_lines": {
+			"comment": "Celdas de un presupuesto: período (primer día del mes, trimestre o año), dimensión y monto en la moneda del presupuesto",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "budget_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "period_start",
+					"attnum": 4,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "dimension_type",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'total'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "dimension_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "company, seller, product, client: id de la entidad; NULL en total, segment y market"
+				},
+				{
+					"column": "dimension_key",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "segment, market: valor del cliente (clients.segment / clients.market)"
+				},
+				{
+					"column": "amount",
+					"attnum": 8,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,2)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 2,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 9,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 10,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "budget_lines_amount_check",
+					"type": "c",
+					"def": "CHECK ((amount >= (0)::numeric))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budget_lines_budget_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "budget_lines_dimension_check",
+					"type": "c",
+					"def": "CHECK ((((dimension_type = 'total'::text) AND (dimension_id IS NULL) AND (dimension_key IS NULL)) OR ((dimension_type = ANY (ARRAY['segment'::text, 'market'::text])) AND (dimension_id IS NULL) AND (dimension_key IS NOT NULL)) OR ((dimension_type = ANY (ARRAY['company'::text, 'seller'::text, 'product'::text, 'client'::text])) AND (dimension_id IS NOT NULL) AND (dimension_key IS NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budget_lines_dimension_type_check",
+					"type": "c",
+					"def": "CHECK ((dimension_type = ANY (ARRAY['total'::text, 'company'::text, 'seller'::text, 'product'::text, 'segment'::text, 'market'::text, 'client'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budget_lines_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "budget_lines_period_start_check",
+					"type": "c",
+					"def": "CHECK ((EXTRACT(day FROM period_start) = (1)::numeric))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budget_lines_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "budget_lines_pkey",
+					"def": "CREATE UNIQUE INDEX budget_lines_pkey ON public.budget_lines USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_budget_lines_budget",
+					"def": "CREATE INDEX idx_budget_lines_budget ON public.budget_lines USING btree (budget_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_budget_lines_holding_period",
+					"def": "CREATE INDEX idx_budget_lines_holding_period ON public.budget_lines USING btree (holding_id, period_start)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "uq_budget_lines_cell",
+					"def": "CREATE UNIQUE INDEX uq_budget_lines_cell ON public.budget_lines USING btree (budget_id, period_start, dimension_type, COALESCE(dimension_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(dimension_key, ''::text))",
+					"unique": true,
+					"primary": false
+				}
+			],
+			"triggers": [
+				{
+					"name": "trg_budget_lines_updated_at",
+					"def": "CREATE TRIGGER trg_budget_lines_updated_at BEFORE UPDATE ON public.budget_lines FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
+				}
+			],
+			"policies": [
+				{
+					"name": "tenant_isolation_delete_budget_lines",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "DELETE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_insert_budget_lines",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "INSERT",
+					"qual": null,
+					"with_check": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))"
+				},
+				{
+					"name": "tenant_isolation_select_budget_lines",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "SELECT",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_update_budget_lines",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "UPDATE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				}
+			]
+		},
+		"budgets": {
+			"comment": "Presupuestos por holding (caja, facturación, bookings, MRR): cabecera por kind, año fiscal y escenario; las celdas en budget_lines (budgets-forecast-real.md)",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "kind",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "name",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "scenario",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'base'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "currency",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Moneda de sistema del holding al guardar (los montos de las líneas van en esta moneda)"
+				},
+				{
+					"column": "period_granularity",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'month'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "fiscal_year",
+					"attnum": 8,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Año fiscal (= año calendario)"
+				},
+				{
+					"column": "status",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'active'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "notes",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 11,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 13,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "budgets_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "budgets_kind_check",
+					"type": "c",
+					"def": "CHECK ((kind = ANY (ARRAY['cash_in'::text, 'billing'::text, 'bookings'::text, 'mrr'::text, 'new_mrr'::text, 'expansion_mrr'::text, 'contraction_mrr'::text, 'churn_mrr'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budgets_period_granularity_check",
+					"type": "c",
+					"def": "CHECK ((period_granularity = ANY (ARRAY['month'::text, 'quarter'::text, 'year'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budgets_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budgets_scenario_check",
+					"type": "c",
+					"def": "CHECK ((scenario = ANY (ARRAY['base'::text, 'optimistic'::text, 'pessimistic'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "budgets_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "budgets_pkey",
+					"def": "CREATE UNIQUE INDEX budgets_pkey ON public.budgets USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "uq_budgets_holding_kind_year_scenario",
+					"def": "CREATE UNIQUE INDEX uq_budgets_holding_kind_year_scenario ON public.budgets USING btree (holding_id, kind, fiscal_year, scenario) WHERE (status <> 'archived'::text)",
+					"unique": true,
+					"primary": false
+				}
+			],
+			"triggers": [
+				{
+					"name": "trg_budgets_updated_at",
+					"def": "CREATE TRIGGER trg_budgets_updated_at BEFORE UPDATE ON public.budgets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
+				}
+			],
+			"policies": [
+				{
+					"name": "tenant_isolation_delete_budgets",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "DELETE",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_insert_budgets",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "INSERT",
+					"qual": null,
+					"with_check": "(holding_id = get_current_user_holding_id())"
+				},
+				{
+					"name": "tenant_isolation_select_budgets",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "SELECT",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_update_budgets",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "UPDATE",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
 		"churn_reasons": {
 			"comment": null,
 			"rls": true,
@@ -49111,6 +49750,234 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"budget_lines": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"budgets": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"churn_reasons": [
 			{
 				"grantee": "anon",
@@ -66420,7 +67287,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 141,
+			"objetos": 143,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

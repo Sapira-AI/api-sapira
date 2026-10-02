@@ -1172,6 +1172,28 @@
     ]
    },
    {
+    "name": "budget_lines_holding_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budgets_holding_id_fkey",
+    "source_table": "public.budgets",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "claude_skills_holding_id_fkey",
     "source_table": "public.claude_skills",
     "source_columns": [

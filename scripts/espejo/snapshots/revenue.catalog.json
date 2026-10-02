@@ -774,5 +774,242 @@
     "with_check": null
    }
   ]
+ },
+ "budgets": {
+  "comment": "Presupuestos por holding (caja, facturación, bookings, MRR): cabecera por kind, año fiscal y escenario; las celdas en budget_lines (budgets-forecast-real.md)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "budgets_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "budgets_kind_check",
+    "type": "c",
+    "expr": "kind = ANY (ARRAY['cash_in'::text, 'billing'::text, 'bookings'::text, 'mrr'::text, 'new_mrr'::text, 'expansion_mrr'::text, 'contraction_mrr'::text, 'churn_mrr'::text])"
+   },
+   {
+    "name": "budgets_period_granularity_check",
+    "type": "c",
+    "expr": "period_granularity = ANY (ARRAY['month'::text, 'quarter'::text, 'year'::text])"
+   },
+   {
+    "name": "budgets_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "budgets_scenario_check",
+    "type": "c",
+    "expr": "scenario = ANY (ARRAY['base'::text, 'optimistic'::text, 'pessimistic'::text])"
+   },
+   {
+    "name": "budgets_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "uq_budgets_holding_kind_year_scenario",
+    "cols": [
+     "holding_id",
+     "kind",
+     "fiscal_year",
+     "scenario"
+    ],
+    "unique": true,
+    "where": "status <> 'archived'::text"
+   }
+  ],
+  "triggers": [
+   "trg_budgets_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_budgets (DELETE, public)",
+   "tenant_isolation_insert_budgets (INSERT, public)",
+   "tenant_isolation_select_budgets (SELECT, public)",
+   "tenant_isolation_update_budgets (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_budgets",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_budgets",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(holding_id = get_current_user_holding_id())"
+   },
+   {
+    "name": "tenant_isolation_select_budgets",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_budgets",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "budget_lines": {
+  "comment": "Celdas de un presupuesto: período (primer día del mes, trimestre o año), dimensión y monto en la moneda del presupuesto",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {
+   "amount": {
+    "precision": 18,
+    "scale": 2
+   }
+  },
+  "constraints": [
+   {
+    "name": "budget_lines_amount_check",
+    "type": "c",
+    "expr": "amount >= (0)::numeric"
+   },
+   {
+    "name": "budget_lines_budget_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "budget_lines_dimension_check",
+    "type": "c",
+    "expr": "((dimension_type = 'total'::text) AND (dimension_id IS NULL) AND (dimension_key IS NULL)) OR ((dimension_type = ANY (ARRAY['segment'::text, 'market'::text])) AND (dimension_id IS NULL) AND (dimension_key IS NOT NULL)) OR ((dimension_type = ANY (ARRAY['company'::text, 'seller'::text, 'product'::text, 'client'::text])) AND (dimension_id IS NOT NULL) AND (dimension_key IS NULL))"
+   },
+   {
+    "name": "budget_lines_dimension_type_check",
+    "type": "c",
+    "expr": "dimension_type = ANY (ARRAY['total'::text, 'company'::text, 'seller'::text, 'product'::text, 'segment'::text, 'market'::text, 'client'::text])"
+   },
+   {
+    "name": "budget_lines_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "budget_lines_period_start_check",
+    "type": "c",
+    "expr": "EXTRACT(day FROM period_start) = (1)::numeric"
+   },
+   {
+    "name": "budget_lines_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_budget_lines_budget",
+    "cols": [
+     "budget_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_budget_lines_holding_period",
+    "cols": [
+     "holding_id",
+     "period_start"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "uq_budget_lines_cell",
+    "cols": null,
+    "unique": true,
+    "where": null,
+    "expr": "CREATE UNIQUE INDEX uq_budget_lines_cell ON public.budget_lines USING btree (budget_id, period_start, dimension_type, COALESCE(dimension_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(dimension_key, ''::text))"
+   }
+  ],
+  "triggers": [
+   "trg_budget_lines_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()"
+  ],
+  "policies": [
+   "tenant_isolation_delete_budget_lines (DELETE, public)",
+   "tenant_isolation_insert_budget_lines (INSERT, public)",
+   "tenant_isolation_select_budget_lines (SELECT, public)",
+   "tenant_isolation_update_budget_lines (UPDATE, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "tenant_isolation_delete_budget_lines",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "DELETE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_insert_budget_lines",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))"
+   },
+   {
+    "name": "tenant_isolation_select_budget_lines",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "SELECT",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   },
+   {
+    "name": "tenant_isolation_update_budget_lines",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "UPDATE",
+    "qual": "((holding_id = get_current_user_holding_id()) AND (budget_id IN ( SELECT budgets.id\n   FROM budgets\n  WHERE (budgets.holding_id = get_current_user_holding_id()))))",
+    "with_check": null
+   }
+  ]
  }
 }

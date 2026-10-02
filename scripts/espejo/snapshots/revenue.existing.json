@@ -1446,5 +1446,365 @@
     "onDelete": "RESTRICT"
    }
   }
+ },
+ "budgets": {
+  "class": "Budget",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "kind": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "scenario": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "base",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_granularity": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "month",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fiscal_year": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "active",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "uq_budgets_holding_kind_year_scenario": {
+    "columns": [
+     "holding_id",
+     "kind",
+     "fiscal_year",
+     "scenario"
+    ],
+    "unique": true,
+    "where": "(status <> 'archived'::text)"
+   }
+  },
+  "checks": [
+   {
+    "name": "budgets_status_check",
+    "expression": "\"status\" = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])"
+   },
+   {
+    "name": "budgets_period_granularity_check",
+    "expression": "\"period_granularity\" = ANY (ARRAY['month'::text, 'quarter'::text, 'year'::text])"
+   },
+   {
+    "name": "budgets_scenario_check",
+    "expression": "\"scenario\" = ANY (ARRAY['base'::text, 'optimistic'::text, 'pessimistic'::text])"
+   },
+   {
+    "name": "budgets_kind_check",
+    "expression": "\"kind\" = ANY (ARRAY['cash_in'::text, 'billing'::text, 'bookings'::text, 'mrr'::text, 'new_mrr'::text, 'expansion_mrr'::text, 'contraction_mrr'::text, 'churn_mrr'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "budgets_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "budget_lines": {
+  "class": "BudgetLine",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "budget_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_start": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dimension_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "total",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dimension_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dimension_key": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "amount": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_budget_lines_holding_period": {
+    "columns": [
+     "holding_id",
+     "period_start"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_budget_lines_budget": {
+    "columns": [
+     "budget_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "uq_budget_lines_cell": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "budget_lines_period_start_check",
+    "expression": "EXTRACT(DAY FROM \"period_start\") = 1"
+   },
+   {
+    "name": "budget_lines_amount_check",
+    "expression": "\"amount\" >= 0"
+   },
+   {
+    "name": "budget_lines_dimension_check",
+    "expression": "(\"dimension_type\" = 'total' AND \"dimension_id\" IS NULL AND \"dimension_key\" IS NULL) OR (\"dimension_type\" = ANY (ARRAY['segment'::text, 'market'::text]) AND \"dimension_id\" IS NULL AND \"dimension_key\" IS NOT NULL) OR (\"dimension_type\" = ANY (ARRAY['company'::text, 'seller'::text, 'product'::text, 'client'::text]) AND \"dimension_id\" IS NOT NULL AND \"dimension_key\" IS NULL)"
+   },
+   {
+    "name": "budget_lines_dimension_type_check",
+    "expression": "\"dimension_type\" = ANY (ARRAY['total'::text, 'company'::text, 'seller'::text, 'product'::text, 'segment'::text, 'market'::text, 'client'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "budget_lines_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "budget_lines_budget_id_fkey": {
+    "columns": [
+     "budget_id"
+    ],
+    "table": "budgets",
+    "onDelete": "CASCADE"
+   }
+  }
  }
 }

@@ -1,19 +1,16 @@
-# Módulo 7 · Revenue / períodos — 5 tablas de prod (2026-10-02)
+# Módulo 7 · Revenue / períodos — 7 tablas de prod (2026-10-02)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
 > Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-02 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/revenue.{pgmeta,catalog}.json`); metadata real de las entities existentes en `revenue.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
-## A · Tablas que YA tenían entity en el repo (0) — no se tocaron ni se duplicaron
+## A · Tablas que YA tenían entity en el repo (2) — no se tocaron ni se duplicaron
 
-Ninguna: todas las tablas de este módulo carecían de entity.
+Estas entities están **prendidas en producción** exactamente como estaban (`database.module.ts` las carga por el glob `src/**/*.entity.ts` y sus módulos las registran en `forFeature`). "Estado vs prod" = diff entre lo que la entity declara hoy (metadata TypeORM real) y la DB en vivo; es el insumo para completarlas en el paso 3 con Leon.
 
-**Tablas nuevas con entity propia (02-10, migración `1790750000000-Budgets`, NO aplicada)**: no son espejos ni están en el snapshot de prod
-hasta aplicar la migración y refrescarlo (`yarn schema:snapshot`).
-
-| Tabla | Archivo · clase | Estado | Notas |
-|---|---|---|---|
-| `budgets` | `src/databases/postgresql/entities/revenue/budget.entity.ts` · `Budget` | ⚠️ no existe en prod | CHECK `budgets_kind_check`, `budgets_scenario_check`, `budgets_period_granularity_check`, `budgets_status_check`; único parcial `uq_budgets_holding_kind_year_scenario` |
-| `budget_lines` | `src/databases/postgresql/entities/revenue/budget-line.entity.ts` · `BudgetLine` | ⚠️ no existe en prod | CHECK `budget_lines_dimension_type_check`, `budget_lines_dimension_check`, `budget_lines_amount_check`, `budget_lines_period_start_check`; índice de expresión `uq_budget_lines_cell` (asset, no declarado) |
+| Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
+|---|---|---|---|---|---|---|
+| `budgets` (0) | `src/databases/postgresql/entities/revenue/budget.entity.ts` · `Budget` | ⚠️ difiere de prod | — | — | — | nombre de PK `budgets_pkey`<br>CHECK `budgets_kind_check`<br>CHECK `budgets_period_granularity_check`<br>CHECK `budgets_scenario_check`<br>CHECK `budgets_status_check` |
+| `budget_lines` (0) | `src/databases/postgresql/entities/revenue/budget-line.entity.ts` · `BudgetLine` | ⚠️ difiere de prod | — | — | — | nombre de PK `budget_lines_pkey`<br>CHECK `budget_lines_amount_check`<br>CHECK `budget_lines_dimension_check`<br>CHECK `budget_lines_dimension_type_check`<br>CHECK `budget_lines_period_start_check`<br>índice con expresión `uq_budget_lines_cell` |
 
 ## B · Tablas SIN entity previa → espejos generados (5): 5 promovidas, 0 apagadas
 
