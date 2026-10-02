@@ -76,7 +76,7 @@ export const electronicEmissionOf = (row: Record<string, unknown>) => {
 const toTextOrNull = (value: unknown) => (value === null || value === undefined ? null : String(value));
 
 /** Tipos de `invoice_adjustments` que son un motivo de desvío contra el plan (el resto, p. ej. `reagenda`, no). */
-const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
+export const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
 
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));

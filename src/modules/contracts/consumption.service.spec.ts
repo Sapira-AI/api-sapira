@@ -12,6 +12,7 @@ import { fieldErrorsOf, flattenValidationErrors } from '@/core/utils/validation-
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
 import { lineDescription } from './billing-engine';
+import { todayFor } from './business-date';
 import { ConsumptionController } from './consumption.controller';
 import { consumptionPeriodClosed, ConsumptionService, fitConsumptionGlosa } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
@@ -773,7 +774,8 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 
 		expect(runner.commitTransaction).toHaveBeenCalled();
 		const [header] = calls(runner.query, 'INSERT INTO invoices');
-		const today = new Date().toISOString().slice(0, 10);
+		// "Hoy" en la zona del holding (America/Santiago), igual que el servicio: en UTC ya puede ser el día siguiente después de las 21:00.
+		const today = todayFor(null);
 
 		// Clon de la Por Emitir del período con fecha de hoy y vencimiento a 30 días; montos = la diferencia (13,50).
 		expect(header[0]).toContain(`'Por Emitir'`);

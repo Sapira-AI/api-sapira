@@ -17,7 +17,7 @@ export class InvoiceCollectionSettings {
 	@Column({ type: 'uuid', nullable: false })
 	holding_id: string;
 
-	@Column({ type: 'boolean', nullable: false, default: true })
+	@Column({ type: 'boolean', nullable: false, default: false })
 	dunning_enabled: boolean;
 
 	@Column({ type: 'text', nullable: true })

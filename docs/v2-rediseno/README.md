@@ -22,6 +22,9 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`spec-tablas-por-modulo.md`](./spec-tablas-por-modulo.md) | Las tablas de prod con veredicto por módulo: definió los dominios de `entities/` y guía lo nuevo y la limpieza |
 | [`spec-agentes-ia.md`](./spec-agentes-ia.md) | Funcionalidad agéntica: catálogo de acciones, agentes configurables, add-ons |
 | [`spec-revenue-y-metricas.md`](./spec-revenue-y-metricas.md) | Revenue y Métricas v2: inventario del front viejo, definiciones únicas (MRR, movimientos, NRR/GRR, netting, RPO, legacy), endpoints `/metrics/*`, revisión de industria y propuestas sobre el devengo |
+| [`spec-facturacion-v2.md`](./spec-facturacion-v2.md) | Facturación v2: inventario del front viejo, estados derivados, cola Por emitir, NC, cobranza, recordatorios y endpoints `/billing/*` |
+| [`mapa-v2-facturacion.md`](./mapa-v2-facturacion.md) | Lo construido de Facturación v2 en la API (módulo `billing`): formas exactas de respuesta, códigos de bloqueo, asset de pagos y brechas |
+| [`cobertura-facturacion-v2.md`](./cobertura-facturacion-v2.md) | Auditoría funcional de Facturación v2: front viejo → v2, bugs del legado verificados, casos de negocio, arreglos y brechas por riesgo |
 | [`flexibilidad-con-trazabilidad.md`](./flexibilidad-con-trazabilidad.md) | Principio de producto: facturar distinto a lo planificado, con todo registrado |
 | [`budgets-forecast-real.md`](./budgets-forecast-real.md) | Feature: presupuesto vs proyección vs real |
 | [`spec-preonboarding-prueba-guiada.md`](./spec-preonboarding-prueba-guiada.md) | Flujo comercial pre-onboarding: sandbox guiado, clickwrap, sizing declarado, calculadora web (propuesta en discusión) |

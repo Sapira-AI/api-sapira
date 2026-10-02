@@ -113,6 +113,18 @@ límites de caracteres CFDI/PE).
 - **Impacto para el envío**: son Por Emitir normales con su fecha de emisión futura (12 períodos adelante): el scheduler de facturas las
   toma cuando llega su fecha, igual que las de la activación. No cambia el envío ni la emisión automática.
 
+## 7. Facturación v2: pagos, correos y recordatorios desde la API (01-10-2026)
+
+- **Qué**: módulo `billing` ([`mapa-v2-facturacion.md`](./mapa-v2-facturacion.md)). No toca el envío a Odoo: las acciones masivas de la
+  cola Por emitir llaman al `send-now` del 360 por factura (que delega en `sendInvoiceById`), agrupadas por contrato.
+- **Pagos**: `POST /billing/payments` escribe `invoice_payments` con `sapira.writer = 'api'` y recalcula el estado en la API (Pagada solo con
+  pagos en la moneda de la factura, nunca sobre Por Emitir; al anular un pago vuelve a Emitida/Enviada/Vencida). Asset escrito, **no
+  aplicado**: `after_invoice_payment_change` con el guard de la costura (el front viejo sigue igual). El webhook de Odoo no cambia
+  (B-F2 `partial` → Pagada sigue siendo propuesta para ti).
+- **Correo**: `EmailsService.send` (SendGrid) acepta varios destinatarios, `bcc` y adjuntos (compatibles con las llamadas existentes).
+  Job `billing-reminders` 08:00 America/Santiago, apagado salvo `BILLING_REMINDERS_ENABLED=true` y `dunning_enabled` del holding.
+- **Estado**: sin commit al 01-10; va en la rama `domi`.
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se
