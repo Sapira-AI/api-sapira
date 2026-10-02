@@ -84,7 +84,7 @@ Filtros comunes (query, listas separadas por coma): `from`, `to` (`YYYY-MM`), `d
 `BillingReconciliationController` + `BillingReconciliationService` (mismos guards; lecturas `VIEW_FACTURACION`, escrituras `EDIT_FACTURACION`);
 puros `billing-reconciliation-statement.ts` (cartola → líneas normalizadas, huella por línea) y `billing-reconciliation-match.ts` (motor D1–D4 +
 F1, formas, diferencia con motivo, `planMatch`). Tablas: `bank_movements`, `bank_upload_batches`, `bank_column_mappings`, `company_bank_accounts`,
-`invoice_payments` (+ `original_amount`, `fx_rate`, `settlement_reason`, migración `1790740000000`, sin aplicar).
+`invoice_payments` (+ `original_amount`, `fx_rate`, `settlement_reason`, migración `1790740000000`, aplicada en QA y producción el 02-10).
 
 | Ruta | Respuesta |
 |---|---|
@@ -148,18 +148,18 @@ amount_contract`; `unconverted` cuenta solo valorizadas sin conversión; `system
 
 | Asset | Cambio |
 |---|---|
-| `src/databases/postgresql/functions/after_invoice_payment_change.sql` | Guard de la costura como primera sentencia (`sapira.writer = 'api'` → `RETURN NULL`): los pagos de v2 no pasan por `recalc_invoice_status` (que marca Pagada sumando monedas distintas y pasa una Por Emitir a Enviada, B-F3/B-F14). Es la función de los tres triggers de `invoice_payments` (`trg_recalc_after_insert`, `trg_recalc_after_update`, `trg_recalc_after_delete`), así que los tres quedan no-op para la API. `trg_set_invoice_payment_defaults` no se toca (solo rellena NULL; la API escribe holding, moneda y autor). Cubierto por `costura-sapira-writer.spec.ts`. Mientras no se aplique, la API reescribe el estado después del INSERT/UPDATE del pago |
+| `src/databases/postgresql/functions/after_invoice_payment_change.sql` | Guard de la costura como primera sentencia (`sapira.writer = 'api'` → `RETURN NULL`): los pagos de v2 no pasan por `recalc_invoice_status` (que marca Pagada sumando monedas distintas y pasa una Por Emitir a Enviada, B-F3/B-F14). Es la función de los tres triggers de `invoice_payments` (`trg_recalc_after_insert`, `trg_recalc_after_update`, `trg_recalc_after_delete`), así que los tres quedan no-op para la API. `trg_set_invoice_payment_defaults` no se toca (solo rellena NULL; la API escribe holding, moneda y autor). Cubierto por `costura-sapira-writer.spec.ts`. Aplicado en QA y producción el 02-10 (api v0.0.73/74) |
 
 | `src/databases/postgresql/special-index/uq_bank_movements_fingerprint.sql` | Índice único parcial de huella por línea de cartola (`holding_id`, `original_row_data->>'fingerprint'`); también lo crea la migración `1790740000000-BankReconciliationV2` (`IF NOT EXISTS`) |
 
-Migraciones escritas, **sin aplicar**: `1790730000000-CollectionDunningDefaultOff` y `1790740000000-BankReconciliationV2` (spec-conciliacion §2.1:
+Migraciones **aplicadas en QA y producción el 02-10**: `1790730000000-CollectionDunningDefaultOff` y `1790740000000-BankReconciliationV2` (spec-conciliacion §2.1:
 estado `Ignorado` + `ignore_reason`, índice de huella, `invoice_payments.original_amount`/`fx_rate`/`settlement_reason` con dos CHECK). Hasta
 aplicarla fallan a propósito los specs de deriva `conciliacion.entities.spec.ts` y `facturacion.entities.spec.ts`, y `/billing/invoices/summary`,
 `/billing/invoices/:id/payments` y `/billing/reconciliation/*` leen columnas que aún no existen: **aplicar antes de desplegar**. Cambios de código fuera del módulo: `ContractsModule` exporta `ContractInvoicesService`; `contract-invoices.service.ts`
 exporta `CONTRACT_INVOICE_SELECT`, `CONTRACT_CONTEXT_SELECT`, `contractInvoiceRowOf`, `contractInvoiceContextOf` (refactor sin cambio de
 comportamiento); `contracts.service.ts` exporta `DEVIATION_ADJUSTMENT_TYPES`; `EmailsService.send` (varios `to`, `bcc`, adjuntos).
 
-Migración escrita (02-10), **sin aplicar**: `1790750000000-Budgets` (reemplaza a `CashInGoals`, que nunca se aplicó): tablas `budgets` y
+Migración **aplicada en QA y producción el 02-10** (v0.0.75/76): `1790750000000-Budgets` (reemplaza a `CashInGoals`, que nunca se aplicó): tablas `budgets` y
 `budget_lines` con RLS (8 policies como assets), triggers de `updated_at` y el índice de celda (asset en `special-index/`). Efecto exacto en
 `budgets-forecast-real.md` → "Construido 02-10: esquema". Módulo `budgets` (`GET /budgets`, `GET /budgets/:id`, `PUT /budgets`,
 `POST /budgets/:id/archive`; permisos de Facturación). Hasta aplicarla, los reportes muestran "sin presupuesto" y guardar responde 409
@@ -177,7 +177,7 @@ Migración escrita (02-10), **sin aplicar**: `1790750000000-Budgets` (reemplaza 
   `trigger_auto_populate_invoice_fx_to_system`, `trigger_auto_populate_invoice_tax_rate` (BEFORE) y `trg_rsm_on_invoice_change` (AFTER) ya
   son no-op para la API (bloque de Contratos). `trigger_sync_invoice_items_on_invoice_update` (`sync_invoice_items_on_invoice_update`) **no**
   tiene guard ni es invariante: copia `status`/`issue_date` de la factura a sus `invoice_items`; sigue corriendo para la API (también en
-  `mark-issued` y en el cambio de estado por pagos) y es lo que mantiene ese espejo. Pendiente decidir: guard + la API lo escribe, o se deja.
+  `mark-issued` y en el cambio de estado por pagos) y es lo que mantiene ese espejo. Decisión de Domi 02-10: se deja como está: espejo de status e issue_date en las líneas, invariante simple hasta el switch; la API no escribe esos campos.
 - `client_contacts` cuelga del cliente, no de la razón social (la spec decía "contactos de la razón social").
 - `plan_deviation` es el último motivo registrado (`invoice_adjustments`), no el conciliador del 360 (correrlo por factura en la lista de
   holding es caro); `deviation_unexplained` = desvío registrado sin motivo.

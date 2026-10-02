@@ -33,7 +33,7 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 | R1 | Pestaña "Suscripciones" → **Invoices** + columna **Fuente** (proveedor · cuenta) | API `subscriptionInvoices` (`source_*`); LAB `_lib/tabs.ts` (`?tab=invoices`, `?tab=suscripciones` redirige), `SuscripcionesTab.tsx:sourceLabel` | `billing-sql.spec.ts`, `tabs.test.ts`, `SuscripcionesTab.test.tsx`, `FacturacionView.test.tsx` |
 | R2 | Cobranza sin período por defecto (saldos) | LAB `_lib/tabla-filtros.ts:hasDefaultPeriod`, `CobranzaTab.tsx` (sin "Todo lo pendiente") | `tabla-filtros.test.ts`, `CobranzaTab.test.tsx`, `FacturacionView.test.tsx` |
 | R3 | Antigüedad sin tramo "CLF"; por compañía | API `billing-states.ts:buildAging` (`review`, `by_company`), `aging?group=company`; LAB `CobranzaTab.tsx:Antiguedad` | `billing-sql.spec.ts`, `CobranzaTab.test.tsx` |
-| R4 | Reportes compactos (top 10 + Otros), filtros completos, **proyección** Mensual · Semanal · Diaria con Vencido por cobrar, **meta anual** | API `billing-forecast.ts`, `forecast`, `goalProgress`, `BillingCollectionsService.goal/saveGoal`, migración `1790750000000` (sin aplicar); LAB `CobranzaProyeccion.tsx`, `_lib/cobranza.ts`, `CuentasPorCobrarReport.tsx` | `billing-forecast.spec.ts`, `billing-collections.service.spec.ts`, `cobranza.test.ts`, `CobranzaTab.test.tsx` |
+| R4 | Reportes compactos (top 10 + Otros), filtros completos, **proyección** Mensual · Semanal · Diaria con Vencido por cobrar, **meta anual** | API `billing-forecast.ts`, `forecast`, `goalProgress`, `BillingCollectionsService.goal/saveGoal`, migración `1790750000000-Budgets` (tablas `budgets`, `budget_lines`; aplicada en QA y producción el 02-10, v0.0.75/76); LAB `CobranzaProyeccion.tsx`, `_lib/cobranza.ts`, `CuentasPorCobrarReport.tsx` | `billing-forecast.spec.ts`, `billing-collections.service.spec.ts`, `cobranza.test.ts`, `CobranzaTab.test.tsx` |
 | R5 | Orden por Emisión no alternaba | Causa: ciclo de `DataTable` asc → desc → sin orden y la pestaña volvía al orden por defecto (Emisión desc) = clic sin efecto. LAB `facturas-columns.tsx:sortAfterClick`; API `to-issue` con `sortBy` | `FacturasTab.test.tsx`, `billing-sql.spec.ts` |
 | R6 | Columnas opcionales de montos (contrato y factura, TC) | API `contractCurrencyTotals` + XLSX; LAB `facturas-columns.tsx:amountColumns`, `_lib/exportar-seleccion.ts:optionalExportColumns` | `billing-forecast.spec.ts`, `exportar-seleccion.test.ts` |
 | R7 | Acciones solo cuando tienen sentido | LAB `_lib/acciones-masivas.ts:bulkBarActions` (oculta lo que nunca aplica), `PagosCorreosPanel.tsx:mailActionsOf`, Cobranza usa la misma barra | `acciones-masivas.test.ts`, `PagosCorreosPanel.test.tsx`, `FacturasTab.test.tsx` |
@@ -78,7 +78,7 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 | Recordatorios automáticos (configurables, nunca implementados) | `billing-collections.service.ts:runReminders`, `billing.scheduler.ts:remindersDaily`; LAB `RecordatoriosDrawer.tsx` | `billing-collections.service.spec.ts`, `billing.module.spec.ts` | Cerrado |
 | Antigüedad AR (`reports/ARAgingReport.tsx`) | `billing-read.service.ts:aging`, `billing-states.ts:buildAging`; LAB `CobranzaTab.tsx` | `billing-states.spec.ts`, `billing-sql.spec.ts` | Cerrado (A6) |
 | Vencidas (edge `check-overdue-invoices`, `mark_overdue_invoices`) | Derivado en lectura (`is_overdue`, `payment_state`, `days_overdue`) | `billing-states.spec.ts` | Cerrado |
-| Conciliación bancaria (`conciliacion/**`: cartola, mapeo, lotes, motor, conciliar, deshacer) | **Revertido el 02-10** ([`spec-conciliacion-v2.md`](./spec-conciliacion-v2.md)): API `billing-reconciliation.controller.ts` + `billing-reconciliation.service.ts` (importar con huella por línea y lock, revertir, plantillas, cola, KPIs, sugerencias persistidas, conciliar con vista previa todo o nada por ítem, deshacer con `void`, ignorar/reabrir), puros `billing-reconciliation-statement.ts:parseStatement` y `billing-reconciliation-match.ts:suggestMatches/planMatch`; pagos por `billing-payments.service.ts:register(…, options)`; migración `1790740000000-BankReconciliationV2` **sin aplicar** | `billing-reconciliation-statement.spec.ts`, `billing-reconciliation-match.spec.ts`, `billing-reconciliation.service.spec.ts`, `billing-payments.service.spec.ts`, `billing-states.spec.ts` | Cerrado en API (requiere M1 aplicada) |
+| Conciliación bancaria (`conciliacion/**`: cartola, mapeo, lotes, motor, conciliar, deshacer) | **Revertido el 02-10** ([`spec-conciliacion-v2.md`](./spec-conciliacion-v2.md)): API `billing-reconciliation.controller.ts` + `billing-reconciliation.service.ts` (importar con huella por línea y lock, revertir, plantillas, cola, KPIs, sugerencias persistidas, conciliar con vista previa todo o nada por ítem, deshacer con `void`, ignorar/reabrir), puros `billing-reconciliation-statement.ts:parseStatement` y `billing-reconciliation-match.ts:suggestMatches/planMatch`; pagos por `billing-payments.service.ts:register(…, options)`; migración `1790740000000-BankReconciliationV2` (aplicada en QA y producción el 02-10) | `billing-reconciliation-statement.spec.ts`, `billing-reconciliation-match.spec.ts`, `billing-reconciliation.service.spec.ts`, `billing-payments.service.spec.ts`, `billing-states.spec.ts` | Cerrado (migración aplicada en QA y producción 02-10) |
 | Facturas Legacy (`tabs/FacturasLegacyTab.tsx`) / reabrir período | — (datos históricos, Configuración) | — | Fuera por decisión |
 | Realtime que recarga todo / `diagnose-odoo-invoices` | Invalidación de React Query (`useInvalidateFacturacion`) / Leon | — | Fuera por decisión |
 
@@ -90,7 +90,7 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 |---|---|---|
 | B-F1 | `summary`: `GROUP BY` moneda, `system` con `total_system_currency`, `unconverted` aparte; sin corte (SQL agregado). Doble resta de anulación corregida (A1) | Cerrado |
 | B-F2 | `odoo-webhook.service.ts:determineInvoiceStatus` sigue: `payment_state ≠ not_paid → Pagada`. En v2 `paymentStateOf` da `paid` si `status = 'Pagada'` (gana sobre los pagos): una parcial del ERP se ve **pagada con saldo 0** | Pendiente (Leon; ver G2) |
-| B-F3 | `planPayments`: `not_issued` sobre Por Emitir; `statusAfterPayments` nunca toca Por Emitir. Asset `after_invoice_payment_change.sql` con guard escrito **pero no aplicado**: mientras tanto el trigger corre y la API reescribe el estado después | Cerrado en API (asset pendiente, G1) |
+| B-F3 | `planPayments`: `not_issued` sobre Por Emitir; `statusAfterPayments` nunca toca Por Emitir. Asset `after_invoice_payment_change.sql` con guard aplicado en QA y producción desde el 02-10 (api v0.0.73/74): los pagos de la API no pasan por `recalc_invoice_status` | Cerrado |
 | B-F4 | `payment_state = partial` + `balance` en fila y en `payments_summary` | Cerrado |
 | B-F5 | Un solo vencido derivado: `is_overdue` = receivable ∧ no pagada ∧ `due_date < todayFor` (texto `YYYY-MM-DD`), excluye NC e inactivas | Cerrado |
 | B-F6 | NC fuera de `isReceivable` / AR / vencidas; `statusAfterPayments` no toca NC. Las 26 NC "Vencida" de prod siguen en la base (corrección del dato: Domi) | Cerrado (dato pendiente) |
@@ -110,7 +110,7 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 | U3 / S4b | Sin unificar en v2; consolidación del 360 | Cerrado |
 | S4b NC | NC espejo por línea (`contract-invoice-void.service.ts`) | Cerrado |
 
-**Conteo** (21 filas): Cerrado 18 · Parcial 1 · Pendiente 2 (B-F3 cerrado en API con asset por aplicar; B-F6 con dato por corregir).
+**Conteo** (21 filas): Cerrado 18 · Parcial 1 · Pendiente 2 (B-F3 cerrado con el asset aplicado el 02-10; B-F6 con dato por corregir).
 
 ## 3. Casos de negocio
 
@@ -143,14 +143,14 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 
 | # | Riesgo | Brecha | Propuesta |
 |---|---|---|---|
-| G1 | Alto | Asset `after_invoice_payment_change.sql` (guard `sapira.writer`) sin aplicar: el trigger legacy recalcula (suma monedas, toca Por Emitir) en cada pago v2 y la API lo pisa después | Aplicarlo en QA con `schema:status`/`schema:log` antes de abrir pagos v2 a usuarios |
+| G1 | Alto | **Cerrada 02-10**: asset `after_invoice_payment_change.sql` (guard `sapira.writer`) aplicado en QA y producción (api v0.0.73/74) | Cerrado |
 | G2 | Alto | Webhook Odoo `partial`/`in_payment` → `Pagada`; v2 muestra `paid`, saldo 0, fuera de AR y de cobranza | Leon: `partial → Enviada`; mientras, `paymentStateOf`/`balance` podrían priorizar pagos registrados cuando existan |
-| G3 | Alto | `invoice_collection_settings.dunning_enabled` default `true` en la base y 1 fila en prod: el job solo queda apagado por `BILLING_REMINDERS_ENABLED` | Migración `1790730000000-CollectionDunningDefaultOff` (default `false`, entity actualizada; pendiente de aplicar) y fila de prod a `false` antes de encender la variable |
+| G3 | Alto | `invoice_collection_settings.dunning_enabled` default `true` en la base y 1 fila en prod: el job solo queda apagado por `BILLING_REMINDERS_ENABLED` | Migración `1790730000000-CollectionDunningDefaultOff` (default `false`, entity actualizada; aplicada en QA y producción el 02-10); verificar fila de prod en `false` antes de encender la variable |
 | G4 | Medio | `invoices.controller.ts` (Leon) sin `HoldingScopeGuard` (B-F13) | Leon: agregar el guard y `@HoldingId()` |
 | G5 | Medio | Rechazo electrónico de Odoo (`rejected`) invisible en Facturación (B-F12) | Leer el último log de envío por factura o persistir el estado (Leon) y mostrarlo como `electronic_state` |
 | G6 | — | **Cerrada (A6)**: una regla de saldo en lista, resumen y antigüedad + aviso `paid_without_full_payments` | — |
 | G7 | — | **Cerrada (A7)**: cobranza y proforma rechazan facturas sin contrato con `no_contract` | — |
-| G8 | Bajo | `trigger_sync_invoice_items_on_invoice_update` sin guard ni decisión (mapa §7) | Decidir: guard + la API escribe `invoice_items.status/issue_date`, o dejarlo como invariante documentado |
+| G8 | Bajo | `trigger_sync_invoice_items_on_invoice_update` sin guard (mapa §7) | **Cerrada 02-10**: se deja como está: espejo de status e issue_date en las líneas, invariante simple hasta el switch; la API no escribe esos campos |
 | G9 | Bajo | LAB no oculta escrituras sin `EDIT_FACTURACION` (el usuario ve 403 al confirmar) | Exponer permisos en `/billing/filters` o en la sesión y deshabilitar acciones |
 | G10 | Bajo | Sin presets del viejo, calendario mes × cliente ni referencias/descripciones masivas entre contratos | Presets como vistas guardadas de sistema; masivo de referencias vía fan-out a `bulk-edit` |
 | G11 | Bajo | Sin test de UI en `NotasCreditoTab`, `CobranzaTab`, `PagosCorreosPanel`; `proforma` de la API sin test | Un test de render + acción por pieza; spec de `proforma` (bloqueos NC/cancelada, adjunto, `invoice_emails`) |
@@ -164,5 +164,5 @@ Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`),
 - Front: `npx vitest run app/(protected)/lab/facturacion app/api/facturacion lib/schemas/facturacion-schemas.test.ts` → 15 archivos, 55 tests OK.
 - `eslint --fix` solo sobre los archivos tocados.
 - 02-10 (conciliación v2): `npx jest src/modules/billing` → 12 suites, 145 tests OK; `tsc -p tsconfig.build.json` exit 0. Fallan a propósito
-  hasta aplicar `1790740000000`: `conciliacion.entities.spec.ts` (`bank_movements.ignore_reason`) y `facturacion.entities.spec.ts`
+  (antes de aplicar `1790740000000`, ya aplicada el 02-10): `conciliacion.entities.spec.ts` (`bank_movements.ignore_reason`) y `facturacion.entities.spec.ts`
   (`invoice_payments`: 3 columnas, 2 CHECK).

@@ -168,12 +168,13 @@
 | ND · NC real a Odoo | S4-8 · S4-9 | Pendiente | Facturación (Leon) |
 | Retirar del ERP por API · refresco de glosa al emitir · límites MX/PE | Facturas §6/§8 | Pendiente | Facturación (Leon) |
 | Mover PE no emitidas al mes siguiente al cierre | S6 propuesta 6 | Parcial (reprogramar masivo; sin aviso de cierre) | Facturación |
-| Equivalente indicativo spot · KPIs que suman `monthly_price` sin convertir | Multimoneda §12 · flujo §6 | Pendiente | Revenue-Métricas |
+| Equivalente indicativo spot | Multimoneda §12 · flujo §6 | Pendiente | Revenue-Métricas |
+| KPIs de la lista y el resumen en moneda sistema | Multimoneda §12 · flujo §6 | Corregido: la lista y el resumen leen `mrr_period_system_ccy` del RSM (`contracts.service.ts`); queda solo el respaldo local `draftMrr` de un borrador mientras llega la vista previa del motor | Cerrado |
 | Revalorizar la tasa `item` como modificación | Multimoneda §12 | Pendiente | este |
 | Cambiar ciclo de un ítem vivo | §9.7 | Pendiente | este |
 | Editar un consolidado en sitio | Multimoneda §7 (g) | Pendiente | este |
 | Preguntas IPC (acumulado, desfase, redondeo, CMRR pactado) | Renovación §7 #2–#5 | Parcial (construido con la propuesta, sin confirmar) | este |
-| KPI "Renuevan en 30 días" en la lista | §9.6b | Pendiente (lista cerrada, requiere OK) | este |
+| KPI "Renuevan en 30 días" en la lista | §9.6b | Cerrado: lo cubre el KPI "Vencen en 30 días" de la lista (decisión de Domi 01-10) | este |
 | Dedup import legacy, partner Odoo al crear razones | Carril León | Pendiente | después del switch |
 
 ## 4. Funciones, triggers y crons del legado
