@@ -418,6 +418,8 @@ export interface AgingRow {
 	invoice_number?: string | null;
 	company_id?: string | null;
 	company_name?: string | null;
+	/** País de la compañía emisora (distingue compañías homónimas: "SimpliRoute S.A.S · Colombia"). */
+	company_country?: string | null;
 	contract_id?: string | null;
 	contract_number?: string | null;
 	issue_date?: string | null;
@@ -444,6 +446,7 @@ export interface AgingInvoice {
 	client_name: string | null;
 	company_id: string | null;
 	company_name: string | null;
+	company_country: string | null;
 	contract_id: string | null;
 	contract_number: string | null;
 	status: string | null;
@@ -455,6 +458,38 @@ export interface AgingInvoice {
 	balance: number;
 	balance_system: number | null;
 	last_payment_date: string | null;
+}
+
+/**
+ * Monedas que no son de facturación: una factura con `invoice_currency` CLF/UF es un dato por revisar (la UF se convierte a CLP al emitir).
+ * La antigüedad y la proyección no las muestran como moneda: van en `review` (conteo por compañía), nunca como tramo ni columna.
+ */
+export const NON_INVOICING_CURRENCIES = ['CLF', 'UF'] as const;
+
+export const isNonInvoicingCurrency = (currency: string | null | undefined) =>
+	(NON_INVOICING_CURRENCIES as readonly string[]).includes((currency ?? '').trim().toUpperCase());
+
+/** Facturas con saldo en una moneda que no es de facturación (CLF/UF): conteo por compañía, sin montos agregados. */
+export interface AgingReview {
+	invoices: number;
+	by_company: Array<{ company_id: string | null; name: string | null; invoices: number; currencies: string[] }>;
+}
+
+/** Antigüedad de una compañía en una moneda de factura (`group=company`). */
+export interface AgingCompany {
+	company_id: string | null;
+	name: string | null;
+	/** País de la compañía (`companies.country`). */
+	country: string | null;
+	currency: string;
+	buckets: AgingBuckets;
+	bucket_counts: AgingBuckets;
+	total: number;
+	invoices: number;
+	total_system: number;
+	unconverted: number;
+	/** Facturas CLF/UF de la compañía (datos por revisar, no suman). */
+	review_invoices: number;
 }
 
 export interface AgingResult {
@@ -475,6 +510,10 @@ export interface AgingResult {
 	invoices: AgingInvoice[];
 	/** Saldo en moneda de sistema por tramo (solo facturas convertidas). */
 	system: { buckets: AgingBuckets; total: number; unconverted: number };
+	/** Por compañía y moneda de factura (mayor saldo primero dentro de la compañía). */
+	by_company: AgingCompany[];
+	/** Facturas CLF/UF con saldo: fuera de los tramos, contadas por compañía. */
+	review: AgingReview;
 }
 
 /** Días vencidos al corte (0 si no vence o vence hoy o después). */
@@ -495,10 +534,42 @@ export function buildAging(rows: AgingRow[], asOf: string): AgingResult {
 	const weights = new Map<object, { weighted: number; overdue: number }>();
 	const invoices: AgingInvoice[] = [];
 	const system = { buckets: emptyBuckets(), total: 0, unconverted: 0 };
+	const companies = new Map<string, AgingCompany>();
+	const review = new Map<string, AgingReview['by_company'][number]>();
+	const companyOf = (row: AgingRow, currency: string) => {
+		const key = `${row.company_id ?? 'none'}|${currency}`;
+		const entry = companies.get(key) ?? {
+			company_id: row.company_id ?? null,
+			name: row.company_name ?? null,
+			country: row.company_country ?? null,
+			currency,
+			buckets: emptyBuckets(),
+			bucket_counts: emptyBuckets(),
+			total: 0,
+			invoices: 0,
+			total_system: 0,
+			unconverted: 0,
+			review_invoices: 0,
+		};
+
+		companies.set(key, entry);
+
+		return entry;
+	};
 
 	for (const row of rows) {
 		if (!(row.balance > PAYMENT_EPSILON)) continue;
 		const currency = (row.currency ?? '—').toUpperCase();
+
+		if (isNonInvoicingCurrency(currency)) {
+			const key = row.company_id ?? 'none';
+			const entry = review.get(key) ?? { company_id: row.company_id ?? null, name: row.company_name ?? null, invoices: 0, currencies: [] };
+
+			entry.invoices += 1;
+			if (!entry.currencies.includes(currency)) entry.currencies.push(currency);
+			review.set(key, entry);
+			continue;
+		}
 		const bucket = agingBucketOf(row.due_date, asOf);
 		const days = daysOverdueAt(row.due_date, asOf);
 		const balanceSystem = row.balance_system === undefined || row.balance_system === null ? null : round2(row.balance_system);
@@ -546,6 +617,14 @@ export function buildAging(rows: AgingRow[], asOf: string): AgingResult {
 			system.buckets[bucket] = round2(system.buckets[bucket] + balanceSystem);
 			system.total = round2(system.total + balanceSystem);
 		}
+		const company = companyOf(row, currency);
+
+		company.buckets[bucket] = round2(company.buckets[bucket] + row.balance);
+		company.bucket_counts[bucket] += 1;
+		company.total = round2(company.total + row.balance);
+		company.invoices += 1;
+		if (balanceSystem === null) company.unconverted += 1;
+		else company.total_system = round2(company.total_system + balanceSystem);
 		currencies.set(currency, total);
 		clients.set(key, client);
 		invoices.push({
@@ -555,6 +634,7 @@ export function buildAging(rows: AgingRow[], asOf: string): AgingResult {
 			client_name: row.client_name,
 			company_id: row.company_id ?? null,
 			company_name: row.company_name ?? null,
+			company_country: row.company_country ?? null,
 			contract_id: row.contract_id ?? null,
 			contract_number: row.contract_number ?? null,
 			status: row.status ?? null,
@@ -579,6 +659,13 @@ export function buildAging(rows: AgingRow[], asOf: string): AgingResult {
 				b.balance - a.balance
 		),
 		system,
+		by_company: [...companies.values()]
+			.map((entry) => ({ ...entry, review_invoices: review.get(entry.company_id ?? 'none')?.invoices ?? 0 }))
+			.sort((a, b) => (a.name ?? '￿').localeCompare(b.name ?? '￿', 'es') || b.total - a.total),
+		review: {
+			invoices: [...review.values()].reduce((sum, entry) => sum + entry.invoices, 0),
+			by_company: [...review.values()].sort((a, b) => b.invoices - a.invoices),
+		},
 	};
 }
 

@@ -154,6 +154,10 @@ export const INVOICE_HEADER = [
 	'Neto',
 	'IVA',
 	'Total',
+	'Moneda contrato',
+	'Neto (contrato)',
+	'IVA (contrato)',
+	'Total (contrato)',
 	'Total moneda sistema',
 	'Pagado',
 	'Saldo',
@@ -184,6 +188,11 @@ export interface ExportInvoice {
 	amount_invoice_currency: number | null;
 	vat: number | null;
 	total_invoice_currency: number | null;
+	/** Moneda y montos del contrato (`contractCurrencyTotals`): opcionales para no romper llamadas previas. */
+	contract_currency?: string | null;
+	amount_contract_currency?: number | null;
+	vat_contract_currency?: number | null;
+	total_contract_currency?: number | null;
 	total_system_currency: number | null;
 	paid_amount: number;
 	balance: number | null;
@@ -214,6 +223,10 @@ export function invoiceCells(row: ExportInvoice, relatedNumber?: string | null):
 		row.amount_invoice_currency,
 		row.vat,
 		row.total_invoice_currency,
+		row.contract_currency ?? null,
+		row.amount_contract_currency ?? null,
+		row.vat_contract_currency ?? null,
+		row.total_contract_currency ?? null,
 		row.total_system_currency,
 		row.paid_amount,
 		row.balance,

@@ -26,6 +26,7 @@ import { AgentsModule } from './modules/agents/agents.module';
 import { BancoCentralModule } from './modules/banco-central/banco-central.module';
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ClaudeModule } from './modules/claude/claude.module';
 import { ClientsModule } from './modules/clients';
 import { ContractsModule } from './modules/contracts';
@@ -101,6 +102,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		ClientsModule,
 		ContractsModule,
 		BillingModule,
+		BudgetsModule,
 		QuotesModule,
 		OdooModule,
 		SalesforceModule,

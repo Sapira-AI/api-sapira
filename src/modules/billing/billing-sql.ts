@@ -81,11 +81,20 @@ export const paidWithoutFullPaymentsWarnings = (count: number) =>
 			]
 		: [];
 
+/**
+ * Factura de suscripción (Stripe): con `subscription_id` o `stripe_id`, `invoice_type = 'Suscripción'` (la sincronización de Stripe) o
+ * `document_type = 'Invoice'` sin contrato (los borradores de Stripe llegan sin suscripción enlazada ni líneas). Un contrato con
+ * `document_type = 'Invoice'` sigue siendo de contrato.
+ */
+export const subscriptionSql = (alias = 'i') =>
+	`(${alias}.subscription_id IS NOT NULL OR ${alias}.stripe_id IS NOT NULL OR ${alias}.invoice_type = 'Suscripción'
+		OR (${alias}.document_type = 'Invoice' AND ${alias}.contract_id IS NULL))`;
+
 /** Regla SQL de cada origen (sobre `invoices i`): suscripción manda; luego contrato; el resto es "otra". */
 export const SOURCE_SQL: Record<InvoiceSource, string> = {
-	subscription: 'i.subscription_id IS NOT NULL',
-	contract: '(i.subscription_id IS NULL AND i.contract_id IS NOT NULL)',
-	other: '(i.subscription_id IS NULL AND i.contract_id IS NULL)',
+	subscription: subscriptionSql('i'),
+	contract: `(NOT ${subscriptionSql('i')} AND i.contract_id IS NOT NULL)`,
+	other: `(NOT ${subscriptionSql('i')} AND i.contract_id IS NULL)`,
 };
 
 export interface CteOptions {
@@ -107,7 +116,9 @@ export interface CteOptions {
 
 /**
  * `WITH base AS (…), d AS (…)` + el WHERE de `d` (filtros por estado derivado). El holding va siempre como `$1`-equivalente del `params`.
- * Columnas de `d`: las de la factura (fechas como texto), contrato, cliente, razón social, compañía, documento acreditado, desvío y los
+ * Columnas de `d`: las de la factura (fechas como texto), contrato, cliente (con `client_segment`/`client_market`), razón social, compañía (con
+ * `company_country`), documento acreditado, desvío, el documento
+ * tributario del contrato (`tax_document_name`/`tax_document_kind`, catálogo global `tax_document_types`) y los
  * derivados `document_kind`, `paid_amount`, `total_due`, `balance`, `payment_state`, `erp_state`, `electronic_state`, `is_overdue`,
  * `days_overdue`, `voided`, `issued_externally`.
  */
@@ -142,6 +153,15 @@ export function invoicesCte(
 		const values = splitList(value);
 
 		if (values.length) base.push(`${column} = ANY(${params.add(values)}::${type}[])`);
+	}
+	// Segmento y mercado del cliente (texto libre de `clients.segment` / `clients.market`, reporte AR del front anterior): igualdad exacta.
+	for (const [value, column] of [
+		[filters.segment, 'cl.segment'],
+		[filters.market, 'cl.market'],
+	] as Array<[string | undefined, string]>) {
+		const values = splitList(value);
+
+		if (values.length) base.push(`TRIM(${column}) = ANY(${params.add(values)}::text[])`);
 	}
 	if (options.ids) base.push(`i.id = ANY(${params.add(options.ids)}::uuid[])`);
 	const sources = splitList(filters.source).filter((value): value is InvoiceSource => (INVOICE_SOURCES as readonly string[]).includes(value));
@@ -192,7 +212,8 @@ export function invoicesCte(
 
 	const cte = `WITH base AS (
 		SELECT i.id, i.contract_id, c.contract_number, COALESCE(i.client_id, c.client_id) AS client_id, cl.name_commercial AS client_name,
-			i.client_entity_id, ce.legal_name AS client_entity_name, i.company_id, co.legal_name AS company_name,
+			i.client_entity_id, ce.legal_name AS client_entity_name, i.company_id, co.legal_name AS company_name, co.country AS company_country,
+			NULLIF(TRIM(cl.segment), '') AS client_segment, NULLIF(TRIM(cl.market), '') AS client_market,
 			i.invoice_number, i.document_type, i.credit_type, i.credit_reason, i.nc_revenue_treatment, i.invoice_type, i.export_type, i.invoice_series,
 			i.status, i.issue_date::text AS issue_date, i.scheduled_at::text AS scheduled_at, i.due_date::text AS due_date,
 			i.contract_currency, UPPER(COALESCE(i.invoice_currency, i.contract_currency)) AS invoice_currency, i.fx_contract_to_invoice,
@@ -200,8 +221,10 @@ export function invoicesCte(
 			i.related_invoice_id, ri.invoice_number AS related_invoice_number, ri.status AS related_invoice_status,
 			ri.issue_date::text AS related_invoice_issue_date, ri.is_active AS related_invoice_active, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, COALESCE(i.auto_invoice, false) AS auto_invoice,
 			i.odoo_invoice_id, i.sent_to_odoo_at, i.consolidated_into_invoice_id, i.created_at, i.subscription_id, i.stripe_id,
+			${subscriptionSql('i')} AS is_subscription,
 			COALESCE(i.total_invoice_currency, i.amount_invoice_currency) AS total_due,
 			(co.odoo_integration_id IS NOT NULL) AS has_erp_integration, (ce.odoo_partner_id IS NOT NULL) AS has_erp_partner,
+			tdt.name AS tax_document_name, tdt.kind AS tax_document_kind,
 			${documentKindSql('i')} AS document_kind,
 			COALESCE(pay.paid, 0) AS paid_amount,
 			${voidedSql('i')} AS voided,
@@ -216,6 +239,7 @@ export function invoicesCte(
 		LEFT JOIN client_entities ce ON ce.id = i.client_entity_id AND ce.holding_id = i.holding_id
 		LEFT JOIN companies co ON co.id = i.company_id AND co.holding_id = i.holding_id
 		LEFT JOIN invoices ri ON ri.id = i.related_invoice_id AND ri.holding_id = i.holding_id
+		LEFT JOIN tax_document_types tdt ON tdt.id = c.tax_document_type_id
 		LEFT JOIN LATERAL (
 			SELECT SUM(p.amount) AS paid FROM invoice_payments p
 			WHERE p.invoice_id = i.id AND p.holding_id = i.holding_id AND p.confirmed = true

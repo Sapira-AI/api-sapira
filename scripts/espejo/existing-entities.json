@@ -20,6 +20,16 @@
   "file": "src/databases/postgresql/entities/contratos/billable-metric.entity.ts",
   "import": "@/databases/postgresql/entities/contratos/billable-metric.entity"
  },
+ "budget_lines": {
+  "class": "BudgetLine",
+  "file": "src/databases/postgresql/entities/revenue/budget-line.entity.ts",
+  "import": "@/databases/postgresql/entities/revenue/budget-line.entity"
+ },
+ "budgets": {
+  "class": "Budget",
+  "file": "src/databases/postgresql/entities/revenue/budget.entity.ts",
+  "import": "@/databases/postgresql/entities/revenue/budget.entity"
+ },
  "client_activity_notes": {
   "class": "ClientActivityNote",
   "file": "src/databases/postgresql/entities/clientes/client-activity-note.entity.ts",

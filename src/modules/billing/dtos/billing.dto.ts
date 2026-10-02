@@ -52,6 +52,8 @@ const UUID_LIST =
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CURRENCY_LIST = /^[A-Za-z]{3}(,[A-Za-z]{3}){0,19}$/;
+/** Valores de texto del cliente (segmento, mercado) separados por coma: hasta 20, de 1 a 120 caracteres cada uno, sin coma dentro. */
+const TEXT_LIST = /^[^,]{1,120}(,[^,]{1,120}){0,19}$/;
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const list = (values: readonly string[]) => new RegExp(`^(${values.map(escape).join('|')})(,(${values.map(escape).join('|')})){0,9}$`);
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -177,6 +179,16 @@ export class BillingFiltersDto {
 	@Matches(list(INVOICE_SOURCES), { message: `source debe ser uno o varios de: ${INVOICE_SOURCES.join(', ')}` })
 	@IsOptional()
 	source?: string;
+
+	@ApiPropertyOptional({ description: 'Segmento del cliente (`clients.segment`); varios separados por coma' })
+	@Matches(TEXT_LIST, { message: 'segment debe ser uno o varios valores (hasta 20) separados por coma' })
+	@IsOptional()
+	segment?: string;
+
+	@ApiPropertyOptional({ description: 'Mercado del cliente (`clients.market`); varios separados por coma' })
+	@Matches(TEXT_LIST, { message: 'market debe ser uno o varios valores (hasta 20) separados por coma' })
+	@IsOptional()
+	market?: string;
 }
 
 class BillingPageDto extends BillingFiltersDto {
@@ -194,6 +206,21 @@ class BillingPageDto extends BillingFiltersDto {
 	@Max(200, { message: 'limit máximo 200' })
 	@IsOptional()
 	limit?: number;
+}
+
+/** Clase de pago de la lista Pagos y ajustes: `cash` = pago monetario (Cobrado), `adjustment` = ajuste no monetario (`settlement_reason`). */
+export const PAYMENT_KINDS = ['cash', 'adjustment'] as const;
+export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+
+/**
+ * Pagos y ajustes del holding (`GET /billing/payments`): filtros comunes sobre la factura; `from`/`to` (YYYY-MM) por **fecha de pago**;
+ * `kind` = pagos monetarios o ajustes no monetarios.
+ */
+export class BillingPaymentsListQueryDto extends BillingPageDto {
+	@ApiPropertyOptional({ enum: PAYMENT_KINDS, description: '`cash` = pagos monetarios; `adjustment` = ajustes no monetarios; sin él, ambos' })
+	@IsIn(PAYMENT_KINDS, { message: `kind debe ser uno de: ${PAYMENT_KINDS.join(', ')}` })
+	@IsOptional()
+	kind?: PaymentKind;
 }
 
 export class BillingInvoicesQueryDto extends BillingPageDto {
@@ -238,6 +265,16 @@ export class BillingToIssueQueryDto extends BillingPageDto {
 	@Matches(/^[a-z_]{2,60}$/, { message: 'blocker_code inválido' })
 	@IsOptional()
 	blocker_code?: string;
+
+	@ApiPropertyOptional({ enum: INVOICE_SORT_FIELDS, description: 'Orden de la página (sin él, el de la cola: fecha de emisión ascendente)' })
+	@IsIn(INVOICE_SORT_FIELDS, { message: `sortBy debe ser uno de: ${INVOICE_SORT_FIELDS.join(', ')}` })
+	@IsOptional()
+	sortBy?: InvoiceSortField;
+
+	@ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc' })
+	@IsIn(['asc', 'desc'])
+	@IsOptional()
+	sortOrder?: 'asc' | 'desc';
 }
 
 export class BillingAgingQueryDto {
@@ -270,6 +307,132 @@ export class BillingAgingQueryDto {
 	@IsIn(['invoices'], { message: 'detail debe ser invoices' })
 	@IsOptional()
 	detail?: 'invoices';
+
+	@ApiPropertyOptional({ enum: ['company'], description: 'Con `company`, agrega `by_company` (antigüedad por compañía en cada moneda de factura)' })
+	@IsIn(['company'], { message: 'group debe ser company' })
+	@IsOptional()
+	group?: 'company';
+
+	@ApiPropertyOptional({ description: 'Búsqueda: folio, cliente, razón social o contrato' })
+	@Transform(trim)
+	@IsString()
+	@MaxLength(120)
+	@IsOptional()
+	q?: string;
+
+	@ApiPropertyOptional({ description: 'Segmento del cliente (`clients.segment`); varios separados por coma' })
+	@Matches(TEXT_LIST, { message: 'segment debe ser uno o varios valores (hasta 20) separados por coma' })
+	@IsOptional()
+	segment?: string;
+
+	@ApiPropertyOptional({ description: 'Mercado del cliente (`clients.market`); varios separados por coma' })
+	@Matches(TEXT_LIST, { message: 'market debe ser uno o varios valores (hasta 20) separados por coma' })
+	@IsOptional()
+	market?: string;
+}
+
+/**
+ * Proyección de cobros (`GET /billing/receivables/forecast`): mismos filtros que la antigüedad + granularidad y rango por **vencimiento**
+ * (`from`/`to` YYYY-MM-DD; default: desde el corte, 12 meses, 12 semanas o 21 días).
+ */
+export class BillingForecastQueryDto extends BillingAgingQueryDto {
+	@ApiPropertyOptional({ enum: CALENDAR_GRANULARITIES, default: 'month' })
+	@IsIn(CALENDAR_GRANULARITIES, { message: `granularity debe ser uno de: ${CALENDAR_GRANULARITIES.join(', ')}` })
+	@IsOptional()
+	granularity?: CalendarGranularity;
+
+	@ApiPropertyOptional({ description: 'Inicio del rango YYYY-MM-DD (default: la fecha de corte)' })
+	@Matches(ISO_DATE, { message: 'from debe ser YYYY-MM-DD' })
+	@IsOptional()
+	from?: string;
+
+	@ApiPropertyOptional({ description: 'Fin del rango YYYY-MM-DD (máximo 24 meses, 26 semanas o 62 días)' })
+	@Matches(ISO_DATE, { message: 'to debe ser YYYY-MM-DD' })
+	@IsOptional()
+	to?: string;
+}
+
+/** Meta anual de cobranza (`GET /billing/receivables/goal`): año (default: el del corte) + compañía y origen como la antigüedad. */
+export class BillingGoalQueryDto {
+	@ApiPropertyOptional({ description: 'Año (default: el año en curso)' })
+	@Type(() => Number)
+	@IsInt({ message: 'year debe ser un año' })
+	@Min(2000, { message: 'year debe ser un año' })
+	@Max(2100, { message: 'year debe ser un año' })
+	@IsOptional()
+	year?: number;
+
+	@ApiPropertyOptional({ description: 'Compañía emisora; varias separadas por coma' })
+	@Matches(UUID_LIST, { message: 'company_id debe ser uno o varios UUID separados por coma' })
+	@IsOptional()
+	company_id?: string;
+
+	@ApiPropertyOptional({ description: `Origen (${INVOICE_SOURCES.join(', ')}); Cobranza usa contract,other` })
+	@Matches(list(INVOICE_SOURCES), { message: `source debe ser uno o varios de: ${INVOICE_SOURCES.join(', ')}` })
+	@IsOptional()
+	source?: string;
+}
+
+/** Reparto anual del presupuesto de ingresos a caja en una compañía. */
+export class ReceivablesGoalCompanyDto {
+	@ApiProperty({ description: 'Compañía emisora del holding' })
+	@IsUUID(undefined, { message: 'company_id debe ser un UUID' })
+	company_id!: string;
+
+	@ApiProperty({ description: 'Monto anual de la compañía (moneda de sistema, ≥ 0)' })
+	@IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false }, { message: 'Monto inválido (hasta 2 decimales)' })
+	@Min(0, { message: 'El monto no puede ser negativo' })
+	@Max(1e15, { message: 'Monto inválido' })
+	amount!: number;
+}
+
+/**
+ * `PUT /billing/receivables/goal`: presupuesto de ingresos a caja del año (presupuesto `cash_in` de `budgets`) en moneda de sistema.
+ * `amount: null` lo archiva. `monthly` (12 montos, ene–dic) lo distribuye por mes y debe sumar `amount`; `companies` lo reparte por compañía
+ * (debe sumar `amount`).
+ */
+export class ReceivablesGoalDto {
+	@ApiProperty({ description: 'Año del presupuesto' })
+	@IsInt({ message: 'Indica el año' })
+	@Min(2000, { message: 'Año inválido' })
+	@Max(2100, { message: 'Año inválido' })
+	year!: number;
+
+	@ApiProperty({ nullable: true, description: 'Presupuesto anual en moneda de sistema (≥ 0); null lo archiva' })
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Monto inválido' })
+	@Min(0, { message: 'El presupuesto no puede ser negativo' })
+	@Max(1e15, { message: 'Monto inválido' })
+	@IsOptional()
+	amount!: number | null;
+
+	@ApiPropertyOptional({ type: [Number], nullable: true, description: 'Distribución mensual: 12 montos (enero a diciembre) que suman el anual' })
+	@IsArray({ message: 'monthly debe ser una lista de 12 montos' })
+	@ArrayMinSize(12, { message: 'La distribución mensual lleva 12 montos' })
+	@ArrayMaxSize(12, { message: 'La distribución mensual lleva 12 montos' })
+	@IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false }, { each: true, message: 'Monto mensual inválido (hasta 2 decimales)' })
+	@Min(0, { each: true, message: 'Un monto mensual no puede ser negativo' })
+	@Max(1e15, { each: true, message: 'Monto inválido' })
+	@IsOptional()
+	monthly?: number[] | null;
+
+	@ApiPropertyOptional({ type: [ReceivablesGoalCompanyDto], nullable: true, description: 'Reparto anual por compañía (suma el anual)' })
+	@IsArray({ message: 'companies debe ser una lista' })
+	@ArrayMaxSize(50, { message: 'Hasta 50 compañías' })
+	@ValidateNested({ each: true })
+	@Type(() => ReceivablesGoalCompanyDto)
+	@IsOptional()
+	companies?: ReceivablesGoalCompanyDto[] | null;
+}
+
+/** `GET /billing/receivables/dso-trend`: filtros de la antigüedad + meses hacia atrás (default 12, máximo 24). */
+export class BillingDsoTrendQueryDto extends BillingAgingQueryDto {
+	@ApiPropertyOptional({ default: 12, maximum: 24, description: 'Meses de la tendencia (el último es el mes en curso, al corte)' })
+	@Type(() => Number)
+	@IsInt({ message: 'months debe ser un entero' })
+	@Min(1, { message: 'months mínimo 1' })
+	@Max(24, { message: 'months máximo 24' })
+	@IsOptional()
+	months?: number;
 }
 
 /**

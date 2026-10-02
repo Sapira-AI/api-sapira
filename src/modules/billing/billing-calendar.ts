@@ -46,12 +46,20 @@ export interface CalendarInvoiceRow {
 	contract_id: string | null;
 	contract_number: string | null;
 	date: string;
+	/**
+	 * Moneda en la que cuenta (ver `calendarAmountOf`): la de la factura si está emitida; la del **contrato** si no (Por Emitir), que suma a la
+	 * fila "Total UF" de esa moneda.
+	 */
 	currency: string | null;
-	/** Total en la moneda de la factura (`null` = spot sin valorizar). */
+	/** Total en `currency` (`null` = sin monto conocido: cuenta la factura, no suma). */
 	amount: number | null;
-	/** Total en moneda de sistema (`null` = sin conversión). */
+	/** Total en moneda de sistema (`null` = sin conversión: no suma al total del sistema). */
 	amount_system: number | null;
 	state: CalendarState;
+	/** No emitida que cuenta en la moneda del contrato, distinta de la de la factura (se valoriza al emitir). */
+	in_contract_currency?: boolean;
+	/** Moneda de la factura (cuando `currency` es la del contrato). */
+	invoice_currency?: string | null;
 }
 
 export interface CurrencyAmount {
@@ -62,11 +70,14 @@ export interface CurrencyAmount {
 
 export interface CalendarTotals {
 	invoices: number;
+	/** Por moneda en la que cuenta cada factura: la de la factura (emitida) o la del contrato (no emitida). */
 	by_currency: CurrencyAmount[];
-	/** Suma en moneda de sistema de las convertidas. */
+	/** Suma en moneda de sistema de las que tienen monto en sistema. */
 	system: number;
-	/** Facturas sin conversión a sistema o sin valorizar (no suman a `system`). */
+	/** Facturas sin monto en moneda de sistema (no suman a `system`). */
 	unconverted: number;
+	/** No emitidas que cuentan en la moneda del contrato, distinta de la de la factura (aviso "se valoriza al emitir"). */
+	in_contract_currency: number;
 	by_state: Record<string, number>;
 }
 
@@ -79,6 +90,9 @@ export interface CalendarCell extends CalendarTotals {
 		amount: number | null;
 		contract_id: string | null;
 		date: string;
+		/** No emitida en la moneda del contrato (distinta de la de la factura). */
+		in_contract_currency?: boolean;
+		invoice_currency?: string | null;
 	}>;
 }
 
@@ -180,23 +194,54 @@ export function calendarStateOf(row: {
 	return 'issued';
 }
 
-const emptyTotals = (): CalendarTotals => ({ invoices: 0, by_currency: [], system: 0, unconverted: 0, by_state: {} });
+const emptyTotals = (): CalendarTotals => ({ invoices: 0, by_currency: [], system: 0, unconverted: 0, in_contract_currency: 0, by_state: {} });
 
-function addTo(target: CalendarTotals, row: CalendarInvoiceRow) {
-	const currency = (row.currency ?? '—').toUpperCase();
-	let entry = target.by_currency.find((item) => item.currency === currency);
+function addAmount(list: CurrencyAmount[], currency: string, amount: number | null) {
+	let entry = list.find((item) => item.currency === currency);
 
 	if (!entry) {
 		entry = { currency, amount: 0, invoices: 0 };
-		target.by_currency.push(entry);
-		target.by_currency.sort((a, b) => a.currency.localeCompare(b.currency));
+		list.push(entry);
+		list.sort((a, b) => a.currency.localeCompare(b.currency));
 	}
-	target.invoices += 1;
 	entry.invoices += 1;
-	if (row.amount !== null) entry.amount = round2(entry.amount + row.amount);
-	if (row.amount_system === null || row.amount === null) target.unconverted += 1;
-	else target.system = round2(target.system + row.amount_system);
+	if (amount !== null) entry.amount = round2(entry.amount + amount);
+}
+
+/**
+ * Moneda y monto con que cuenta una factura en el calendario (regla 02-10): **emitida** ⇒ su moneda y su total (si difiere del contrato,
+ * siempre tiene su tipo de cambio); **no emitida** (Por Emitir) ⇒ la moneda del **contrato** y su total en ella (neto + IVA convertido; sin
+ * tipo de cambio todavía, el neto), así suma a la fila "Total UF" de esa moneda en vez de quedar "sin valorizar".
+ */
+export function calendarAmountOf(row: {
+	status: string | null;
+	invoice_currency: string | null;
+	total_due: number | null;
+	contract_currency: string | null;
+	amount_contract: number | null;
+	total_contract: number | null;
+}): { currency: string | null; amount: number | null; in_contract_currency: boolean } {
+	const invoiceCurrency = row.invoice_currency?.toUpperCase() ?? null;
+	const contractCurrency = row.contract_currency?.toUpperCase() ?? null;
+
+	if (row.status !== 'Por Emitir' || !contractCurrency || contractCurrency === invoiceCurrency) {
+		return {
+			currency: invoiceCurrency ?? contractCurrency,
+			amount: row.total_due ?? (row.status === 'Por Emitir' ? row.amount_contract : null),
+			in_contract_currency: false,
+		};
+	}
+
+	return { currency: contractCurrency, amount: row.total_contract ?? row.amount_contract, in_contract_currency: true };
+}
+
+function addTo(target: CalendarTotals, row: CalendarInvoiceRow) {
+	target.invoices += 1;
 	target.by_state[row.state] = (target.by_state[row.state] ?? 0) + 1;
+	if (row.in_contract_currency) target.in_contract_currency += 1;
+	addAmount(target.by_currency, (row.currency ?? '—').toUpperCase(), row.amount);
+	if (row.amount_system === null) target.unconverted += 1;
+	else target.system = round2(target.system + row.amount_system);
 }
 
 /**
@@ -246,6 +291,7 @@ export function buildCalendar(
 				amount: row.amount,
 				contract_id: row.contract_id,
 				date,
+				...(row.in_contract_currency ? { in_contract_currency: true, invoice_currency: row.invoice_currency ?? null } : {}),
 			});
 		}
 		group.cells[key] = cell;

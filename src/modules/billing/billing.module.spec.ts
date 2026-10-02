@@ -9,6 +9,7 @@ import { DataSource } from 'typeorm';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import { BudgetsService } from '@/modules/budgets/budgets.service';
 import { ContractInvoicesService } from '@/modules/contracts/contract-invoices.service';
 import { ContractsService } from '@/modules/contracts/contracts.service';
 import { EmailsService } from '@/modules/emails/emails.service';
@@ -27,7 +28,8 @@ import { BILLING_REMINDERS_JOB, BillingScheduler } from './billing.scheduler';
 
 /**
  * Cableado sin levantar Nest contra la base: (1) cada dependencia de constructor tiene provider en el módulo o la exporta un módulo importado
- * (`ContractsModule` → `ContractInvoicesService`, `ContractsService`; `EmailsModule` → `EmailsService`; `DataSource`; `ConfigService` global);
+ * (`ContractsModule` → `ContractInvoicesService`, `ContractsService`; `EmailsModule` → `EmailsService`; `BudgetsModule` → `BudgetsService`;
+ * `DataSource`; `ConfigService` global);
  * (2) Nest resuelve el grafo real del módulo con esas piezas externas sustituidas.
  */
 describe('BillingModule (DI)', () => {
@@ -47,7 +49,7 @@ describe('BillingModule (DI)', () => {
 				});
 			}
 		}
-		expect(exported).toEqual(expect.arrayContaining([ContractInvoicesService, ContractsService, EmailsService]));
+		expect(exported).toEqual(expect.arrayContaining([ContractInvoicesService, ContractsService, EmailsService, BudgetsService]));
 	});
 
 	it('Nest resuelve controladores (incluida conciliación), servicios y el job (apagado sin BILLING_REMINDERS_ENABLED)', async () => {
@@ -60,6 +62,7 @@ describe('BillingModule (DI)', () => {
 				{ provide: ContractInvoicesService, useValue: {} },
 				{ provide: ContractsService, useValue: {} },
 				{ provide: EmailsService, useValue: {} },
+				{ provide: BudgetsService, useValue: {} },
 			],
 		})
 			// Los guards de ruta los aporta la app (AuthModule/GuardsModule globales); aquí se sustituyen.

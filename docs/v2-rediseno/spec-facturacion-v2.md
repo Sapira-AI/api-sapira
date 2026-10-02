@@ -344,6 +344,18 @@ holding, cola Por emitir, NC, cobranza y recordatorios; toda operación sobre un
    exigiendo además `BILLING_REMINDERS_ENABLED=true`.
 6. **Permiso de pagos/cobranza**: **Default**: reusar el permiso de facturación del catálogo si existe (`permissions`); si no, admin del holding.
 
+7. **Fuente de las invoices de Stripe (revisión 02-10)**: la pestaña Invoices (antes "Suscripciones") muestra **Fuente = proveedor · cuenta**
+   (`subscriptions.source` + `stripe_connections.name` por `subscriptions.connection_id` o `stripe_invoices_stg.connection_id`; si no hay
+   conexión, `raw_data->>'account_name'` de Stripe; `source_livemode`). **Pendiente (no se construye)**: hoy hay una sola cuenta de Stripe por
+   holding. Una **segunda cuenta** (p. ej. **Stripe México**, que además exige **factura electrónica CFDI** por cada cobro) necesita: filtro por
+   cuenta, compañía emisora por conexión (hoy la compañía sale de la suscripción) y el flujo de emisión de CFDI desde la invoice de Stripe.
+   Verificar en datos que `subscriptions.connection_id` venga poblado por la integración (si no, la cuenta sale del staging).
+8. **Presupuesto de ingresos a caja (revisión 02-10; antes "meta anual de cobranza")**: el front anterior no tenía meta (`ARAgingReport` solo
+   proyectaba). Decisión de Domi 02-10: no un jsonb en `invoice_collection_settings` (la migración `CashInGoals` se reemplazó sin aplicarse)
+   sino el **modelo genérico de presupuestos** (`budgets` + `budget_lines`, migración `1790750000000-Budgets`, `budgets-forecast-real.md`):
+   la meta es el presupuesto `cash_in` del año (anual, mensual opcional y reparto opcional por compañía). **Escrita, sin aplicar**: hasta
+   aplicarla, los reportes muestran "sin presupuesto" y guardar responde 409 `budget_storage_missing`.
+
 **Pendientes de Leon (no se construyen; Facturación solo muestra el estado)**: NC/ND a Odoo como `out_refund` y NC de anulación → `Cancelada`
 al emitirse; Retirar del ERP por API; webhook `partial` ≠ Pagada (B-F2); vínculo invoice ↔ DTE nativo (SII) con estados propios
 (`aceptado/rechazado/reparo`) y equivalentes SUNAT/CFDI; consolidar líneas iguales solo en el DTE; límites de glosa MX/PE.

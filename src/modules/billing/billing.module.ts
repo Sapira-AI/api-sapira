@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
+import { BudgetsModule } from '@/modules/budgets/budgets.module';
 import { ContractsModule } from '@/modules/contracts/contracts.module';
 import { EmailsModule } from '@/modules/emails/emails.module';
 
@@ -20,9 +21,10 @@ import { BillingScheduler } from './billing.scheduler';
  * proforma, recordatorios (job `billing-reminders`, apagado por defecto) y el fan-out de la cola Por emitir hacia los servicios del contrato
  * (`ContractsModule` exporta `ContractInvoicesService` y `ContractsService`; `EmailsModule`, el envío SendGrid). Conciliación bancaria v2
  * (`spec-conciliacion-v2.md`): `BillingReconciliationController` + `BillingReconciliationService` (pagos por `BillingPaymentsService`).
+ * Presupuesto de ingresos a caja (meta de cobranza y proyección): `BudgetsModule` exporta `BudgetsService`.
  */
 @Module({
-	imports: [PostgreSQLDatabaseModule, ContractsModule, EmailsModule],
+	imports: [PostgreSQLDatabaseModule, ContractsModule, EmailsModule, BudgetsModule],
 	controllers: [BillingController, BillingReconciliationController],
 	providers: [
 		BillingReadService,

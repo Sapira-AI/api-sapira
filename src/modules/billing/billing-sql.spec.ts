@@ -5,7 +5,8 @@ import { DataSource } from 'typeorm';
 
 import { BillingPaymentsService } from './billing-payments.service';
 import { BillingReadService } from './billing-read.service';
-import { documentKindSql, invoicesCte, monthEndOf, nextMonthStart, SqlParams } from './billing-sql';
+import { documentKindSql, invoicesCte, monthEndOf, nextMonthStart, SOURCE_SQL, SqlParams, subscriptionSql } from './billing-sql';
+import { INVOICE_SOURCES } from './billing-states';
 
 const HOLDING = '05583c6e-9364-4672-a610-0744324e44b4';
 const CLIENT = 'bb0caa69-162e-4b9e-8e54-9aff347abf1f';
@@ -95,7 +96,16 @@ describe('SQL de Facturación: todo parámetro agregado está referenciado', () 
 		);
 		await read.subscriptionInvoices(HOLDING, {}, NOW);
 		await read.invoices(HOLDING, { source: 'contract,other' }, NOW);
-		await read.aging(HOLDING, { source: 'contract,other' }, NOW);
+		await read.aging(HOLDING, { source: 'contract,other', group: 'company', q: 'acme' }, NOW);
+		await read.toIssue(HOLDING, { sortBy: 'client_name', sortOrder: 'asc', group: 'ready' }, NOW);
+		await read.forecast(
+			HOLDING,
+			{ granularity: 'week', from: '2026-10-01', to: '2026-12-31', company_id: HOLDING, source: 'contract,other', q: 'x' },
+			NOW
+		);
+		await read.goalProgress(HOLDING, { year: 2026, company_id: HOLDING, source: 'contract,other' }, { '2026-01': 1000 }, NOW);
+		await read.dsoTrend(HOLDING, { months: 3, segment: 'Enterprise', market: 'Chile', company_id: HOLDING }, NOW);
+		await read.aging(HOLDING, { segment: 'Enterprise,Pyme', market: 'Chile' }, NOW);
 		await read.filters(HOLDING);
 		await read.exportBatches(HOLDING, { ...ALL_FILTERS, blocked: true }, async () => undefined, NOW);
 
@@ -315,13 +325,63 @@ describe('origen y suscripciones', () => {
 		const params = new SqlParams();
 		const { cte } = invoicesCte(HOLDING, { source: 'contract,other' }, params, { today: '2026-10-01' });
 
-		expect(cte).toContain('((i.subscription_id IS NULL AND i.contract_id IS NOT NULL) OR (i.subscription_id IS NULL AND i.contract_id IS NULL))');
+		expect(cte).toContain(`(${SOURCE_SQL.contract} OR ${SOURCE_SQL.other})`);
 		expect(invoicesCte(HOLDING, { source: 'contract,subscription,other' }, new SqlParams(), { today: '2026-10-01' }).cte).not.toContain(
-			'i.subscription_id IS NULL AND'
+			SOURCE_SQL.contract
 		);
 		expect(invoicesCte(HOLDING, { source: 'subscription' }, new SqlParams(), { today: '2026-10-01' }).cte).toContain(
-			'(i.subscription_id IS NOT NULL)'
+			`(${SOURCE_SQL.subscription})`
 		);
+	});
+
+	/** Evalúa una regla de `SOURCE_SQL` sobre una fila (traducción literal del SQL: IS [NOT] NULL, =, AND/OR/NOT). */
+	const sourceOf = (row: Record<string, unknown>) =>
+		INVOICE_SOURCES.filter((source) => {
+			const js = SOURCE_SQL[source]
+				.replace(/\s+/g, ' ')
+				.replace(/i\.(\w+) IS NOT NULL/g, '(r.$1 != null)')
+				.replace(/i\.(\w+) IS NULL/g, '(r.$1 == null)')
+				.replace(/i\.(\w+) = '([^']*)'/g, "(r.$1 === '$2')")
+				.replace(/\bAND\b/g, '&&')
+				.replace(/\bOR\b/g, '||')
+				.replace(/\bNOT\b/g, '!');
+
+			return (new Function('r', `return ${js};`) as (r: Record<string, unknown>) => boolean)(row);
+		});
+
+	it('borrador de Stripe sin suscripción enlazada (Suscripción / Invoice, sin contrato ni líneas) es de suscripción, no "Sin contrato"', () => {
+		const stripeDraft = {
+			invoice_number: 'B4C5701F-0032',
+			invoice_type: 'Suscripción',
+			document_type: 'Invoice',
+			contract_id: null,
+			subscription_id: null,
+			stripe_id: null,
+			status: 'Por Emitir',
+		};
+
+		expect(sourceOf(stripeDraft)).toEqual(['subscription']);
+		expect(sourceOf({ ...stripeDraft, invoice_type: 'Importada' })).toEqual(['subscription']);
+		expect(sourceOf({ ...stripeDraft, document_type: 'FACTURA' })).toEqual(['subscription']);
+		expect(sourceOf({ ...stripeDraft, invoice_type: 'Manual', document_type: 'FACTURA', stripe_id: 'in_1' })).toEqual(['subscription']);
+		// Una factura de contrato con `document_type = 'Invoice'` sigue siendo de contrato; sin nada de lo anterior, "otra".
+		expect(sourceOf({ ...stripeDraft, invoice_type: 'Automatica', contract_id: CONTRACT })).toEqual(['contract']);
+		expect(sourceOf({ ...stripeDraft, invoice_type: 'Importada', document_type: 'FACTURA' })).toEqual(['other']);
+	});
+
+	it('resumen: la parte de suscripciones usa la misma regla de origen (d.is_subscription), no solo subscription_id', async () => {
+		const { query, read } = build();
+
+		await read.summary(HOLDING, {}, NOW);
+		const sqls = query.mock.calls.map(([text]) => String(text));
+		const summarySql = sqls.find((text) => text.includes('AS billed_system_subscription'))!;
+		const collectedSql = sqls.find((text) => text.includes('AS collected_system_subscription'))!;
+
+		expect(summarySql).toContain(`${subscriptionSql('i')} AS is_subscription`);
+		expect(summarySql).toContain('d.is_subscription), 0) AS billed_system_subscription');
+		expect(summarySql).toContain('d.is_subscription), 0) AS credited_system_subscription');
+		expect(collectedSql).toContain('d.is_subscription) AS collected_system_subscription');
+		expect(sqls.join('\n')).not.toContain('d.subscription_id IS NOT NULL');
 	});
 
 	it('resumen: Facturado y Cobrado incluyen suscripciones y devuelven su parte aparte', async () => {
@@ -411,6 +471,10 @@ describe('origen y suscripciones', () => {
 						period_end: '2026-09-30',
 						charge_state: 'failed',
 						charge_attempts: '2',
+						source_provider: 'stripe',
+						source_account: 'Sapira Chile',
+						source_connection_id: 'conn-1',
+						source_livemode: true,
 					},
 				];
 			if (sql.includes('AS total') && sql.includes("s.charge_state = 'failed'"))
@@ -427,14 +491,73 @@ describe('origen y suscripciones', () => {
 			charge_attempts: 2,
 			stripe_id: 'in_123',
 			document_url: expect.stringContaining('stripe.com'),
+			source_provider: 'stripe',
+			source_account: 'Sapira Chile',
+			source_connection_id: 'conn-1',
+			source_livemode: true,
 		});
 		const sql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes('SELECT s.* FROM s'))!;
 
-		expect(sql).toContain('(i.subscription_id IS NOT NULL)');
+		// Fuente = proveedor de la suscripción + cuenta conectada (la conexión de la suscripción o la del staging de la factura).
+		expect(sql).toContain('LEFT JOIN stripe_connections sc ON sc.holding_id = $');
+		expect(sql).toContain('COALESCE(sb.connection_id, st.connection_id)');
+		expect(sql).toContain("st.raw_data->>'account_name'");
+
+		expect(sql).toContain(`(${SOURCE_SQL.subscription})`);
 		expect(sql).toContain("st.raw_data->>'status' = 'uncollectible'");
+		// Borrador de Stripe (Por Emitir): cobro abierto.
+		expect(sql).toContain("WHEN d.status = 'Por Emitir' OR st.raw_data->>'status' = 'draft' THEN 'open'");
 		expect(sql).toContain('LEFT JOIN stripe_invoices_stg st ON st.holding_id = $');
 		expect(sql).toMatch(/WHERE s\.charge_state = ANY\(\$\d+::text\[\]\)/);
 		expect(sql).toContain('ORDER BY COALESCE(s.issue_date, s.scheduled_at)');
+		expect(unreferencedParams(query)).toEqual([]);
+	});
+});
+
+describe('pagos y ajustes (Cobranza)', () => {
+	it('lista pagos confirmados por fecha de pago, separa ajustes no monetarios y suma por moneda', async () => {
+		const { query, read } = build((sql) => {
+			if (sql.includes('AS created_by_name'))
+				return [
+					{
+						id: 'p1',
+						invoice_id: INVOICE,
+						invoice_number: 'F-1',
+						client_name: 'Acme',
+						amount: '1000',
+						currency: 'CLP',
+						payment_date: '2026-09-10',
+						settlement_reason: null,
+					},
+					{
+						id: 'p2',
+						invoice_id: INVOICE,
+						invoice_number: 'F-1',
+						client_name: 'Acme',
+						amount: '5',
+						currency: 'CLP',
+						payment_date: '2026-09-11',
+						settlement_reason: 'bank_fee',
+					},
+				];
+			if (sql.includes('AS adjustments_count'))
+				return [{ currency: 'CLP', payments: '2', cash: '1000', cash_count: '1', adjustments: '5', adjustments_count: '1' }];
+
+			return [];
+		});
+		const result = await read.paymentsList(HOLDING, { from: '2026-09', to: '2026-09', company_id: HOLDING, source: 'contract,other' }, NOW);
+
+		expect(result).toMatchObject({ total: 2, totals: [{ currency: 'CLP', cash: 1000, cash_count: 1, adjustments: 5, adjustments_count: 1 }] });
+		expect(result.data.map((row) => row.kind)).toEqual(['cash', 'adjustment']);
+		const sql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes('AS created_by_name'))!;
+
+		expect(sql).toMatch(/p\.payment_date >= \$\d+::date AND p\.payment_date < \$\d+::date/);
+		expect(sql).toContain('p.confirmed = true');
+		// El período no filtra la emisión de la factura (va sobre la fecha de pago).
+		expect(sql).not.toContain('COALESCE(i.issue_date, i.scheduled_at) >=');
+		expect(unreferencedParams(query)).toEqual([]);
+		await read.paymentsList(HOLDING, { kind: 'adjustment' }, NOW);
+		expect(query.mock.calls.at(-1)![0]).toContain('p.settlement_reason IS NOT NULL');
 		expect(unreferencedParams(query)).toEqual([]);
 	});
 });
@@ -484,6 +607,8 @@ describe('calendario de facturación', () => {
 
 		expect(sql).toContain(`i.status IS DISTINCT FROM 'Cancelada'`);
 		expect(sql).toContain('COALESCE(d.issue_date, d.scheduled_at)::date >= $');
+		// Solo facturas vivas por defecto: sin NC/ND (salvo filtro de tipo).
+		expect(sql).toContain(`AND d.document_kind = 'invoice'`);
 		expect(unreferencedParams(query)).toEqual([]);
 	});
 
@@ -521,6 +646,9 @@ describe('CTE de facturas', () => {
 		// Pagos solo confirmados y en la moneda de la factura (B-F14).
 		expect(cte).toContain('p.confirmed = true');
 		expect(cte).toContain('UPPER(p.currency) = UPPER(COALESCE(i.invoice_currency, i.contract_currency))');
+		// Nombre real del documento tributario (catálogo global, por el contrato): "Factura exenta", "Factura de exportación"…
+		expect(cte).toContain('LEFT JOIN tax_document_types tdt ON tdt.id = c.tax_document_type_id');
+		expect(cte).toContain('tdt.name AS tax_document_name');
 	});
 
 	it('con status explícito no excluye Canceladas; include_inactive suma orígenes consolidados', () => {
@@ -633,5 +761,115 @@ describe('cola Por emitir: bloqueos del 360 por factura y grupos', () => {
 		expect(byId.c.blocked_reasons.map((blocker) => blocker.code)).toEqual(['already_sent', 'sent_to_erp_draft']);
 		expect(byId.d).toMatchObject({ group: 'ready', issue_path: 'external', blocked_reasons: [] });
 		expect(result).toMatchObject({ total: 4, currentPage: 1, pages: 1, limit: 10, truncated: false });
+	});
+});
+
+describe('antigüedad por compañía, proyección y meta (revisión 02-10)', () => {
+	const agingRow = (overrides: Record<string, unknown>) => ({
+		client_id: CLIENT,
+		client_name: 'Acme',
+		currency: 'CLP',
+		due_date: '2026-09-15',
+		balance: '1000',
+		balance_system: '1',
+		id: INVOICE,
+		invoice_number: 'F-1',
+		company_id: HOLDING,
+		company_name: 'Sapira SpA',
+		status: 'Emitida',
+		issue_date: '2026-09-01',
+		last_payment_date: null,
+		paid_without_full_payments: false,
+		...overrides,
+	});
+
+	it('group=company: por compañía y moneda; CLF/UF van a "por revisar" (conteo por compañía), nunca como moneda', async () => {
+		const { read } = build((sql) =>
+			sql.includes('lp.last_payment_date')
+				? [
+						agingRow({}),
+						agingRow({ id: 'x', currency: 'CLF', balance: '15', balance_system: '600' }),
+						agingRow({ id: 'y', currency: 'USD', balance: '10', balance_system: '10' }),
+					]
+				: []
+		);
+		const result = await read.aging(HOLDING, { group: 'company' }, NOW);
+
+		expect(result.by_currency.map((entry) => entry.currency)).toEqual(['CLP', 'USD']);
+		expect(result.by_company).toEqual([
+			expect.objectContaining({ company_id: HOLDING, name: 'Sapira SpA', currency: 'CLP', total: 1000, review_invoices: 1 }),
+			expect.objectContaining({ company_id: HOLDING, currency: 'USD', total: 10, review_invoices: 1 }),
+		]);
+		expect(result.review).toEqual({ invoices: 1, by_company: [{ company_id: HOLDING, name: 'Sapira SpA', invoices: 1, currencies: ['CLF'] }] });
+		expect(result.system.total).toBe(11);
+		expect('by_company' in (await read.aging(HOLDING, {}, NOW))).toBe(false);
+	});
+
+	it('proyección: vencido aparte, columnas por vencimiento, comportamiento de pago por cliente y SQL de 12 meses', async () => {
+		const { query, read } = build((sql) => {
+			if (sql.includes('lp.last_payment_date'))
+				return [
+					agingRow({ due_date: '2026-09-15' }),
+					agingRow({ id: 'b', due_date: '2026-10-20', balance: '500', balance_system: '0.5' }),
+					agingRow({ id: 'c', due_date: null }),
+				];
+			if (sql.includes('avg_days_to_pay')) return [{ client_id: CLIENT, avg_days_to_pay: '42', avg_days_late: '12', paid_invoices: '3' }];
+
+			return [];
+		});
+		const result = await read.forecast(HOLDING, { granularity: 'month' }, NOW);
+
+		expect(result.periods).toHaveLength(12);
+		expect(result.overdue.system).toBe(1);
+		expect(result.columns['2026-10'].system).toBe(0.5);
+		expect(result.no_due_date.invoices).toBe(1);
+		expect(result.clients[0]).toMatchObject({ client_id: CLIENT, avg_days_to_pay: 42, avg_days_late: 12, paid_invoices: 3 });
+		expect(result.payment_behaviour).toEqual({ avg_days_to_pay: 42, avg_days_late: 12, clients: 1 });
+		const behaviourSql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes('avg_days_to_pay'))!;
+
+		expect(behaviourSql).toContain("d.status = 'Pagada'");
+		expect(behaviourSql).toMatch(/lp\.last_date > \$\d+::date - 365/);
+		await expect(read.forecast(HOLDING, { granularity: 'day', from: '2026-10-01', to: '2027-10-01' }, NOW)).rejects.toThrow(/62 columnas/);
+	});
+
+	it('meta: cobrado del año (solo pagos monetarios) + saldo que vence en el año = proyectado; % de cumplimiento', async () => {
+		const { query, read } = build((sql) => {
+			if (sql.includes('lp.last_payment_date'))
+				return [
+					agingRow({ due_date: '2026-09-15', balance_system: '100' }),
+					agingRow({ id: 'z', due_date: '2027-02-01', balance_system: '50' }),
+				];
+			if (sql.includes("to_char(p.payment_date, 'YYYY-MM')")) return [{ month: '2026-03', collected: '400', unconverted: '0' }];
+
+			return [];
+		});
+		const result = await read.goalProgress(HOLDING, { year: 2026 }, { '2026-01': 1000 }, NOW);
+
+		expect(result).toMatchObject({
+			year: 2026,
+			currency: 'USD',
+			goal: 1000,
+			collected: 400,
+			overdue: 100,
+			open_due: 100,
+			projected: 500,
+			pct_collected: 40,
+			pct_projected: 50,
+		});
+		expect(result.months.find((month) => month.month === '2026-10')?.expected).toBe(100);
+		const sql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes("to_char(p.payment_date, 'YYYY-MM')"))!;
+
+		expect(sql).toContain('p.settlement_reason IS NULL');
+	});
+
+	it('cola Por emitir con sortBy: la página sale en el orden pedido (lista blanca)', async () => {
+		const { query, read } = build();
+
+		await read.toIssue(HOLDING, { sortBy: 'client_name', sortOrder: 'asc' }, NOW);
+		await read.toIssue(HOLDING, {}, NOW);
+		const queueSql = query.mock.calls.map(([text]) => String(text)).filter((text) => text.includes("d.status = 'Por Emitir' AND d.is_active"));
+
+		expect(queueSql[0]).toContain('ORDER BY d.client_name ASC NULLS LAST');
+		expect(queueSql[1]).toContain('ORDER BY COALESCE(d.issue_date, d.scheduled_at) NULLS LAST, d.id');
 	});
 });

@@ -133,6 +133,8 @@ export { InvoicesLegacy } from '@/databases/postgresql/entities/legacy/invoices-
 export { MrrLegacy } from '@/databases/postgresql/entities/legacy/mrr-legacy.entity';
 export { AccountingPeriodCutoff } from '@/databases/postgresql/entities/revenue/accounting-period-cutoff.entity';
 export { AccountingPeriodEvent } from '@/databases/postgresql/entities/revenue/accounting-period-event.entity';
+export { BudgetLine } from '@/databases/postgresql/entities/revenue/budget-line.entity';
+export { Budget } from '@/databases/postgresql/entities/revenue/budget.entity';
 export { MrrAdjustment } from '@/databases/postgresql/entities/revenue/mrr-adjustment.entity';
 export { RevenueRule } from '@/databases/postgresql/entities/revenue/revenue-rule.entity';
 export { RevenueScheduleMonthly } from '@/databases/postgresql/entities/revenue/revenue-schedule-monthly.entity';

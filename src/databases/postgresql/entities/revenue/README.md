@@ -7,6 +7,14 @@
 
 Ninguna: todas las tablas de este módulo carecían de entity.
 
+**Tablas nuevas con entity propia (02-10, migración `1790750000000-Budgets`, NO aplicada)**: no son espejos ni están en el snapshot de prod
+hasta aplicar la migración y refrescarlo (`yarn schema:snapshot`).
+
+| Tabla | Archivo · clase | Estado | Notas |
+|---|---|---|---|
+| `budgets` | `src/databases/postgresql/entities/revenue/budget.entity.ts` · `Budget` | ⚠️ no existe en prod | CHECK `budgets_kind_check`, `budgets_scenario_check`, `budgets_period_granularity_check`, `budgets_status_check`; único parcial `uq_budgets_holding_kind_year_scenario` |
+| `budget_lines` | `src/databases/postgresql/entities/revenue/budget-line.entity.ts` · `BudgetLine` | ⚠️ no existe en prod | CHECK `budget_lines_dimension_type_check`, `budget_lines_dimension_check`, `budget_lines_amount_check`, `budget_lines_period_start_check`; índice de expresión `uq_budget_lines_cell` (asset, no declarado) |
+
 ## B · Tablas SIN entity previa → espejos generados (5): 5 promovidas, 0 apagadas
 
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |

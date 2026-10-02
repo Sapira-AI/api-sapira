@@ -57,8 +57,11 @@ const toIso = (value: unknown) => (value instanceof Date ? value.toISOString() :
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
-/** SELECT de una factura con lo que necesitan las operaciones (alias `i`); lo reutiliza la cola Por emitir de Facturación (`billing`). */
-export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.invoice_number, i.status, i.document_type, i.invoice_type, i.is_active, i.is_legacy,
+/**
+ * SELECT de una factura con lo que necesitan las operaciones (alias `i`); lo reutiliza la cola Por emitir de Facturación (`billing`), que
+ * agrupa por `contract_id` para cargar el contexto de cada contrato (sin esa columna, toda factura quedaba como "sin contrato").
+ */
+export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_number, i.status, i.document_type, i.invoice_type, i.is_active, i.is_legacy,
 		i.issue_date::text AS issue_date, i.original_issue_date::text AS original_issue_date, i.scheduled_at::text AS scheduled_at, i.due_date::text AS due_date,
 		i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat, i.total_invoice_currency,
 		i.fx_contract_to_invoice, i.tax_rate, l.fx_rate_source, COALESCE(l.fx_explicit, false) AS fx_explicit, i.nc_revenue_treatment,

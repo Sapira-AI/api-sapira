@@ -97,7 +97,9 @@
   "revenue_rules",
   "mrr_adjustments",
   "accounting_period_cutoff",
-  "accounting_period_events"
+  "accounting_period_events",
+  "budgets",
+  "budget_lines"
  ],
  "legacy": [
   "invoices_legacy",

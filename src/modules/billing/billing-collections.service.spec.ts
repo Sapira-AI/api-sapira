@@ -3,10 +3,11 @@ jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 import { BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { BudgetsService } from '@/modules/budgets/budgets.service';
 import type { ContractsService } from '@/modules/contracts/contracts.service';
 import type { EmailsService } from '@/modules/emails/emails.service';
 
-import { BillingCollectionsService, DEFAULT_COLLECTION_SETTINGS } from './billing-collections.service';
+import { BillingCollectionsService, DEFAULT_COLLECTION_SETTINGS, goalBudgetLines } from './billing-collections.service';
 import { BillingReadService } from './billing-read.service';
 
 import type { ConfigService } from '@nestjs/config';
@@ -77,9 +78,10 @@ function build(
 	const invoices = jest.spyOn(read, 'invoices');
 	const send = jest.fn().mockResolvedValue(undefined);
 	const config = { get: jest.fn(() => undefined) } as unknown as ConfigService;
-	const service = new BillingCollectionsService(dataSource, read, { send } as unknown as EmailsService, {} as ContractsService, config);
+	const budgets = new BudgetsService(dataSource);
+	const service = new BillingCollectionsService(dataSource, read, { send } as unknown as EmailsService, {} as ContractsService, config, budgets);
 
-	return { service, send, query, runnerQuery, rowsByIds, invoices };
+	return { service, send, query, runnerQuery, rowsByIds, invoices, budgets, read };
 }
 
 describe('BillingCollectionsService', () => {
@@ -228,5 +230,128 @@ describe('BillingCollectionsService', () => {
 				email_body_template: 'Hola {{nombre}}',
 			})
 		).rejects.toBeInstanceOf(BadRequestException);
+	});
+});
+
+const COMPANY_A = 'aaaaaaaa-0000-4000-8000-000000000001';
+const COMPANY_B = 'bbbbbbbb-0000-4000-8000-000000000002';
+const BUDGET_ROW = {
+	id: 'b0000000-0000-4000-8000-000000000001',
+	kind: 'cash_in',
+	name: 'Presupuesto de ingresos a caja 2026',
+	scenario: 'base',
+	currency: 'USD',
+	period_granularity: 'year',
+	fiscal_year: 2026,
+	status: 'active',
+	notes: null,
+	created_at: '2026-10-01T00:00:00Z',
+	updated_at: '2026-10-01T00:00:00Z',
+};
+
+describe('presupuesto de ingresos a caja (budgets kind cash_in, reemplaza cash_in_goals)', () => {
+	it('GET: lee el presupuesto activo del año (anual ÷ 12 por mes) y lo compara con cobrado, proyectado y a la fecha', async () => {
+		const { service, query } = build();
+
+		query.mockImplementation(async (sql: string) => {
+			if (sql.includes('FROM budgets b')) return [BUDGET_ROW];
+			if (sql.includes('FROM budget_lines')) {
+				return [
+					{
+						budget_id: BUDGET_ROW.id,
+						period_start: '2026-01-01',
+						dimension_type: 'total',
+						dimension_id: null,
+						dimension_key: null,
+						amount: '1200',
+					},
+					{
+						budget_id: BUDGET_ROW.id,
+						period_start: '2026-01-01',
+						dimension_type: 'company',
+						dimension_id: COMPANY_A,
+						dimension_key: null,
+						amount: '1200',
+					},
+				];
+			}
+			if (sql.includes('holding_settings')) return [{ system_currency: 'USD' }];
+			if (sql.includes("to_char(p.payment_date, 'YYYY-MM')")) return [{ month: '2026-05', collected: '300', unconverted: '0' }];
+
+			return [];
+		});
+		const goal = await service.goal(HOLDING, { year: 2026 }, NOW);
+
+		expect(goal).toMatchObject({ year: 2026, goal: 1200, collected: 300, pct_collected: 25, scope: 'holding', budget_ytd: 1000, pct_ytd: 30 });
+		expect(goal.months[0]).toMatchObject({ month: '2026-01', budget: 100 });
+		expect(goal.budget).toMatchObject({ period_granularity: 'year', total: 1200, companies: [{ company_id: COMPANY_A, amount: 1200 }] });
+		expect(goal).not.toHaveProperty('storage_ready');
+		// Con compañía filtrada: la suma de su reparto; una compañía sin reparto → 0.
+		await expect(service.goal(HOLDING, { year: 2026, company_id: COMPANY_A }, NOW)).resolves.toMatchObject({ goal: 1200, scope: 'companies' });
+	});
+
+	it('GET sin presupuesto (o sin la tabla, migración sin aplicar): goal null, scope none, sin fallar', async () => {
+		const { service, query } = build();
+		const missing = Object.assign(new Error('relation "budgets" does not exist'), { code: '42P01' });
+
+		query.mockImplementation(async (sql: string) => {
+			if (sql.includes('FROM budgets b')) throw missing;
+			if (sql.includes('holding_settings')) return [{ system_currency: 'USD' }];
+
+			return [];
+		});
+
+		await expect(service.goal(HOLDING, {}, NOW)).resolves.toMatchObject({ year: 2026, goal: null, scope: 'none', budget: null, pct_ytd: null });
+	});
+
+	it('PUT: upsert del presupuesto cash_in (mensual + reparto por compañía que cuadra por mes); amount null lo archiva', async () => {
+		const { service, budgets } = build();
+		const upsert = jest.spyOn(budgets, 'upsert').mockResolvedValue({} as never);
+		const archive = jest.spyOn(budgets, 'archiveFor').mockResolvedValue();
+
+		jest.spyOn(service, 'goal').mockResolvedValue({} as never);
+		await service.saveGoal(
+			HOLDING,
+			{
+				year: 2026,
+				amount: 1200,
+				monthly: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+				companies: [
+					{ company_id: COMPANY_A, amount: 900 },
+					{ company_id: COMPANY_B, amount: 300 },
+				],
+			},
+			'auth-1',
+			NOW
+		);
+		const [, dto, authId] = upsert.mock.calls[0];
+
+		expect(authId).toBe('auth-1');
+		expect(dto).toMatchObject({ kind: 'cash_in', fiscal_year: 2026, scenario: 'base', period_granularity: 'month', status: 'active' });
+		expect(dto.lines).toHaveLength(36);
+		expect(dto.lines.filter((line) => line.period_start === '2026-03-01')).toEqual([
+			{ period_start: '2026-03-01', dimension_type: 'total', amount: 100 },
+			{ period_start: '2026-03-01', dimension_type: 'company', dimension_id: COMPANY_A, amount: 75 },
+			{ period_start: '2026-03-01', dimension_type: 'company', dimension_id: COMPANY_B, amount: 25 },
+		]);
+		await service.saveGoal(HOLDING, { year: 2026, amount: null }, null, NOW);
+		expect(archive).toHaveBeenCalledWith(HOLDING, 'cash_in', 2026);
+	});
+
+	it('PUT: solo anual = una línea year; distribución o reparto que no suman el anual → 400 errors[]', () => {
+		expect(goalBudgetLines({ year: 2026, amount: 1000 })).toEqual([{ period_start: '2026-01-01', dimension_type: 'total', amount: 1000 }]);
+		expect(() => goalBudgetLines({ year: 2026, amount: 1000, monthly: Array.from({ length: 12 }, () => 80) })).toThrow(BadRequestException);
+		try {
+			goalBudgetLines({
+				year: 2026,
+				amount: 1000,
+				companies: [
+					{ company_id: COMPANY_A, amount: 600 },
+					{ company_id: COMPANY_A, amount: 400 },
+				],
+			});
+		} catch (error) {
+			expect((error as BadRequestException).getResponse()).toMatchObject({ errors: [{ field: 'companies' }] });
+		}
 	});
 });

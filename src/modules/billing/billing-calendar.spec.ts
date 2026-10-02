@@ -3,6 +3,7 @@ import {
 	BEFORE_KEY,
 	buildCalendar,
 	CALENDAR_CELL_ITEMS,
+	calendarAmountOf,
 	type CalendarInvoiceRow,
 	calendarPeriods,
 	calendarStateOf,
@@ -77,7 +78,16 @@ describe('calendario: agregación', () => {
 			[
 				row({ id: 'a', date: '2026-10-05', amount: 1000, amount_system: 1.1 }),
 				row({ id: 'b', date: '2026-10-20', currency: 'USD', amount: 50, amount_system: 50, state: 'overdue' }),
-				row({ id: 'c', date: '2026-11-01', amount: null, amount_system: null, state: 'to_issue' }),
+				row({
+					id: 'c',
+					date: '2026-11-01',
+					currency: 'CLF',
+					amount: 15,
+					amount_system: null,
+					state: 'to_issue',
+					in_contract_currency: true,
+					invoice_currency: 'CLP',
+				}),
 				row({ id: 'd', client_id: 'c2', client_name: 'Beta', date: '2026-12-31', amount: 10, amount_system: 0.01 }),
 				row({ id: 'fuera', date: '2027-01-01' }),
 			],
@@ -100,20 +110,52 @@ describe('calendario: agregación', () => {
 			by_state: { issued: 1, overdue: 1 },
 		});
 		expect(october.items.map((item) => item.id)).toEqual(['a', 'b']);
+		// No emitida en otra moneda de contrato: cuenta en la moneda del contrato (suma a "Total CLF"), no al sistema si no tiene monto en él.
 		expect(result.rows[0].cells['2026-11']).toMatchObject({
 			invoices: 1,
 			unconverted: 1,
 			system: 0,
-			by_currency: [{ currency: 'CLP', amount: 0, invoices: 1 }],
+			in_contract_currency: 1,
+			by_currency: [{ currency: 'CLF', amount: 15, invoices: 1 }],
 		});
-		expect(result.rows[0].totals).toMatchObject({ invoices: 3, system: 51.1, unconverted: 1 });
+		expect(result.rows[0].cells['2026-11'].items[0]).toMatchObject({ id: 'c', in_contract_currency: true, invoice_currency: 'CLP', amount: 15 });
+		expect(result.rows[0].totals).toMatchObject({ invoices: 3, system: 51.1, unconverted: 1, in_contract_currency: 1 });
 		expect(result.totals['2026-12']).toMatchObject({ invoices: 1, system: 0.01 });
 		expect(result.grand_total).toMatchObject({
 			invoices: 4,
 			by_currency: [
-				{ currency: 'CLP', amount: 1010, invoices: 3 },
+				{ currency: 'CLF', amount: 15, invoices: 1 },
+				{ currency: 'CLP', amount: 1010, invoices: 2 },
 				{ currency: 'USD', amount: 50, invoices: 1 },
 			],
+		});
+		expect(result.grand_total).not.toHaveProperty('unvalued');
+	});
+
+	it('moneda con que cuenta: emitida en la de la factura; no emitida en la del contrato (total con IVA o, sin tipo de cambio, el neto)', () => {
+		const base = { invoice_currency: 'CLP', contract_currency: 'UF', amount_contract: 10, total_contract: null, total_due: null };
+
+		expect(calendarAmountOf({ ...base, status: 'Emitida', total_due: 450000 })).toEqual({
+			currency: 'CLP',
+			amount: 450000,
+			in_contract_currency: false,
+		});
+		expect(calendarAmountOf({ ...base, status: 'Por Emitir' })).toEqual({ currency: 'UF', amount: 10, in_contract_currency: true });
+		expect(calendarAmountOf({ ...base, status: 'Por Emitir', total_due: 450000, total_contract: 11.9 })).toEqual({
+			currency: 'UF',
+			amount: 11.9,
+			in_contract_currency: true,
+		});
+		// Misma moneda: su total; sin total aún, el neto (nunca 0 ni "sin valorizar").
+		expect(calendarAmountOf({ ...base, contract_currency: 'clp', status: 'Por Emitir', total_due: 1190 })).toEqual({
+			currency: 'CLP',
+			amount: 1190,
+			in_contract_currency: false,
+		});
+		expect(calendarAmountOf({ ...base, contract_currency: 'CLP', status: 'Por Emitir' })).toEqual({
+			currency: 'CLP',
+			amount: 10,
+			in_contract_currency: false,
 		});
 	});
 

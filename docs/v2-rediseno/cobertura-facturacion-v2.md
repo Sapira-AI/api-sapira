@@ -26,6 +26,20 @@ Estado: **Cerrado** (construido y con test) · **Parcial** (construido con hueco
 Docs alineadas: `mapa-v2-facturacion.md` §3/§4 (regla de KPIs, `no_contract`), `front-sapira/docs/documentacion-funcional/facturacion/README.md`
 (reglas), definición del KPI en LAB `_lib/estados.ts` (`DEFINICIONES_FACTURACION.facturado`). Reglas de desarrollo: sin cambio (no se tocó convención).
 
+## 0b. Revisión del dueño 02-10 (sin commit)
+
+| # | Pedido | Cambio | Test |
+|---|---|---|---|
+| R1 | Pestaña "Suscripciones" → **Invoices** + columna **Fuente** (proveedor · cuenta) | API `subscriptionInvoices` (`source_*`); LAB `_lib/tabs.ts` (`?tab=invoices`, `?tab=suscripciones` redirige), `SuscripcionesTab.tsx:sourceLabel` | `billing-sql.spec.ts`, `tabs.test.ts`, `SuscripcionesTab.test.tsx`, `FacturacionView.test.tsx` |
+| R2 | Cobranza sin período por defecto (saldos) | LAB `_lib/tabla-filtros.ts:hasDefaultPeriod`, `CobranzaTab.tsx` (sin "Todo lo pendiente") | `tabla-filtros.test.ts`, `CobranzaTab.test.tsx`, `FacturacionView.test.tsx` |
+| R3 | Antigüedad sin tramo "CLF"; por compañía | API `billing-states.ts:buildAging` (`review`, `by_company`), `aging?group=company`; LAB `CobranzaTab.tsx:Antiguedad` | `billing-sql.spec.ts`, `CobranzaTab.test.tsx` |
+| R4 | Reportes compactos (top 10 + Otros), filtros completos, **proyección** Mensual · Semanal · Diaria con Vencido por cobrar, **meta anual** | API `billing-forecast.ts`, `forecast`, `goalProgress`, `BillingCollectionsService.goal/saveGoal`, migración `1790750000000` (sin aplicar); LAB `CobranzaProyeccion.tsx`, `_lib/cobranza.ts`, `CuentasPorCobrarReport.tsx` | `billing-forecast.spec.ts`, `billing-collections.service.spec.ts`, `cobranza.test.ts`, `CobranzaTab.test.tsx` |
+| R5 | Orden por Emisión no alternaba | Causa: ciclo de `DataTable` asc → desc → sin orden y la pestaña volvía al orden por defecto (Emisión desc) = clic sin efecto. LAB `facturas-columns.tsx:sortAfterClick`; API `to-issue` con `sortBy` | `FacturasTab.test.tsx`, `billing-sql.spec.ts` |
+| R6 | Columnas opcionales de montos (contrato y factura, TC) | API `contractCurrencyTotals` + XLSX; LAB `facturas-columns.tsx:amountColumns`, `_lib/exportar-seleccion.ts:optionalExportColumns` | `billing-forecast.spec.ts`, `exportar-seleccion.test.ts` |
+| R7 | Acciones solo cuando tienen sentido | LAB `_lib/acciones-masivas.ts:bulkBarActions` (oculta lo que nunca aplica), `PagosCorreosPanel.tsx:mailActionsOf`, Cobranza usa la misma barra | `acciones-masivas.test.ts`, `PagosCorreosPanel.test.tsx`, `FacturasTab.test.tsx` |
+| R8 | Calendario: sin valorizar en moneda del contrato; rango elegible; pie plegable | API `billing-calendar.ts` (`unvalued`); LAB `_lib/calendario.ts` (ventanas), `FacturacionCalendario.tsx` | `billing-calendar.spec.ts`, `calendario.test.ts`, `FacturacionCalendario.test.tsx` |
+| R9 | "Limpiar filtros" quita el período; folio con el documento real; aviso de scroll horizontal | LAB `FacturacionFiltros.tsx:clearedFields`, `_lib/estados.ts:documentLabel` (API `tax_document_name`), `FacturacionUi.tsx:ScrollShadowX` | `FacturasTab.test.tsx`, `FacturacionUi.test.tsx`, `billing-sql.spec.ts` |
+
 ## 1. Front viejo → v2
 
 | Capacidad vieja (archivo) | v2 · archivo : función | Test | Estado |

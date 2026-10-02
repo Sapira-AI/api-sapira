@@ -5,13 +5,18 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
+import { alignToPeriods, budgetMonthlyByDimension, round2, splitWeighted } from '@/modules/budgets/budgets-rules';
+import { type BudgetDetail, BudgetsService } from '@/modules/budgets/budgets.service';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
 import { resolveUserId } from '@/modules/contracts/contract-drafts.service';
 import { ContractsService } from '@/modules/contracts/contracts.service';
 import { EmailsService } from '@/modules/emails/emails.service';
 
+import { addDays } from './billing-calendar';
+import { buildForecastBudget, type ForecastBudget } from './billing-forecast';
 import { BillingReadService, mapInvoiceRow } from './billing-read.service';
+import { splitList } from './billing-sql';
 import {
 	type BillingBlocker,
 	cleanEmails,
@@ -25,7 +30,14 @@ import {
 	unknownTemplateVariables,
 } from './billing-states';
 
-import type { CollectionDto, CollectionSettingsDto, ProformaDto } from './dtos/billing.dto';
+import type {
+	BillingForecastQueryDto,
+	BillingGoalQueryDto,
+	CollectionDto,
+	CollectionSettingsDto,
+	ProformaDto,
+	ReceivablesGoalDto,
+} from './dtos/billing.dto';
 
 type Row = Record<string, unknown>;
 type InvoiceView = ReturnType<typeof mapInvoiceRow>;
@@ -82,7 +94,8 @@ export class BillingCollectionsService {
 		private readonly read: BillingReadService,
 		private readonly emails: EmailsService,
 		private readonly contracts: ContractsService,
-		private readonly config: ConfigService
+		private readonly config: ConfigService,
+		private readonly budgets: BudgetsService
 	) {}
 
 	// ---------------------------------------------------------------- configuración
@@ -148,6 +161,149 @@ export class BillingCollectionsService {
 		});
 
 		return await this.settings(holdingId);
+	}
+
+	// ---------------------------------------------------------------- presupuesto de ingresos a caja
+
+	/**
+	 * Presupuesto `cash_in` activo (escenario base) de un año, en moneda de sistema por mes, según el filtro de compañía: sin filtro, el total;
+	 * con compañías, la suma de su reparto (`companies`) o nada si el presupuesto no está repartido (`unavailable`).
+	 */
+	private budgetMonthsFor(budget: BudgetDetail | undefined, companyIds: string[]): { months: Record<string, number> | null; scope: GoalScope } {
+		if (!budget) return { months: null, scope: 'none' };
+		if (!companyIds.length) return { months: budget.monthly, scope: 'holding' };
+		const byCompany = budgetMonthlyByDimension(budget.lines, budget.period_granularity, 'company', budget.fiscal_year);
+
+		if (!byCompany.size) return { months: null, scope: 'unavailable' };
+		const months: Record<string, number> = Object.fromEntries(Object.keys(budget.monthly).map((month) => [month, 0]));
+
+		for (const id of companyIds) {
+			for (const [month, amount] of Object.entries(byCompany.get(id.toLowerCase()) ?? {}))
+				months[month] = round2((months[month] ?? 0) + amount);
+		}
+
+		return { months, scope: 'companies' };
+	}
+
+	/**
+	 * Presupuesto de ingresos a caja vs cobrado vs proyectado del año (`GET /billing/receivables/goal`): el presupuesto `cash_in` del año
+	 * (`budgets`, migración `1790750000000-Budgets`) por mes (mensual, o anual ÷ 12), su definición para editarlo (`budget`) y el alcance según el
+	 * filtro de compañía (`scope`).
+	 */
+	async goal(holdingId: string, query: BillingGoalQueryDto, now = new Date()) {
+		const year = query.year ?? Number(todayFor(null, now).slice(0, 4));
+		const [budget] = await this.budgets.activeFor(holdingId, 'cash_in', [year]);
+		const { months, scope } = this.budgetMonthsFor(budget, splitList(query.company_id));
+		const progress = await this.read.goalProgress(holdingId, { ...query, year }, months, now);
+
+		return { ...progress, scope, budget: budget ? goalBudgetOf(budget) : null };
+	}
+
+	/**
+	 * Guarda (o archiva con `amount: null`) el presupuesto de ingresos a caja del año (`PUT /billing/receivables/goal`): monto anual; con
+	 * `monthly` (12 montos que suman el anual), granularidad mensual; sin él, una línea anual. `companies` reparte el anual por compañía (debe
+	 * sumar el anual; con distribución mensual, cada mes se reparte en la misma proporción). Escribe con `BudgetsService.upsert`.
+	 */
+	async saveGoal(holdingId: string, dto: ReceivablesGoalDto, authId: string | null = null, now = new Date()) {
+		if (dto.amount === null || dto.amount === undefined) {
+			await this.budgets.archiveFor(holdingId, 'cash_in', dto.year);
+
+			return await this.goal(holdingId, { year: dto.year }, now);
+		}
+		const lines = goalBudgetLines(dto);
+
+		await this.budgets.upsert(
+			holdingId,
+			{
+				kind: 'cash_in',
+				fiscal_year: dto.year,
+				scenario: 'base',
+				name: `Presupuesto de ingresos a caja ${dto.year}`,
+				period_granularity: dto.monthly?.length ? 'month' : 'year',
+				status: 'active',
+				lines,
+			},
+			authId
+		);
+
+		return await this.goal(holdingId, { year: dto.year }, now);
+	}
+
+	/**
+	 * Proyección de cobros (`GET /billing/receivables/forecast`) + presupuesto de ingresos a caja por período (`budget`): mensual = el del mes
+	 * (o anual ÷ 12), semana/día = prorrateo por días; cobrado del período hasta el corte y proyectado (vence en el período; el del corte suma lo
+	 * vencido). Solo se compara con filtros que el presupuesto tiene (holding o compañías con reparto): con cliente, moneda, segmento, mercado o
+	 * búsqueda el alcance es `unavailable`.
+	 */
+	async forecast(holdingId: string, query: BillingForecastQueryDto, now = new Date()) {
+		const result = await this.read.forecast(holdingId, query, now);
+		const first = result.periods[0];
+		const last = result.periods[result.periods.length - 1];
+		const years = [...new Set([Number(first.start.slice(0, 4)), ...result.periods.map((period) => Number(period.end.slice(0, 4)))])];
+		const budgets = await this.budgets.activeFor(holdingId, 'cash_in', years);
+		const companyIds = splitList(query.company_id).map((id) => id.toLowerCase());
+		const narrowing = Boolean(query.client_id || query.currency || query.q || query.segment || query.market);
+		let scope: GoalScope = budgets.length ? (narrowing ? 'unavailable' : companyIds.length ? 'companies' : 'holding') : 'none';
+		const monthly: Record<string, number> = {};
+		const companies = new Map<string, Record<string, number>>();
+
+		for (const budget of budgets) {
+			const byCompany = budgetMonthlyByDimension(budget.lines, budget.period_granularity, 'company', budget.fiscal_year);
+
+			for (const [id, months] of byCompany) companies.set(id, { ...(companies.get(id) ?? {}), ...months });
+			if (scope === 'companies' && !byCompany.size) scope = 'unavailable';
+			if (scope === 'holding') Object.assign(monthly, budget.monthly);
+			if (scope === 'companies') {
+				for (const month of Object.keys(budget.monthly)) {
+					monthly[month] = round2(companyIds.reduce((sum, id) => sum + (byCompany.get(id)?.[month] ?? 0), 0));
+				}
+			}
+		}
+		const comparable = scope === 'holding' || scope === 'companies';
+		const cutEnd = last.end < result.as_of ? last.end : result.as_of;
+		const collected =
+			comparable && first.start <= result.as_of
+				? (await this.read.collectedBetween(holdingId, first.start, addDays(cutEnd, 1), query, result.as_of, 'day')).byKey
+				: {};
+		const series = buildForecastBudget({
+			forecast: result,
+			asOf: result.as_of,
+			budgetByPeriod: comparable ? alignToPeriods(monthly, result.periods) : null,
+			collectedByDay: collected,
+		});
+
+		return {
+			...result,
+			budget: {
+				scope,
+				currency: budgets[0]?.currency ?? null,
+				budget_ids: budgets.map((budget) => budget.id),
+				missing_years: years.filter((year) => !budgets.some((budget) => budget.fiscal_year === year)),
+				...series,
+				by_company: comparable
+					? [...companies]
+							.filter(([id]) => !companyIds.length || companyIds.includes(id))
+							.map(([id, months]) => {
+								const budget = alignToPeriods(months, result.periods);
+								const values = Object.values(budget).filter((value): value is number => value !== null);
+
+								return {
+									company_id: id,
+									budget,
+									total: values.length ? round2(values.reduce((sum, value) => sum + value, 0)) : null,
+								};
+							})
+					: [],
+				reason:
+					scope === 'none'
+						? 'Sin presupuesto de ingresos a caja para estos años'
+						: scope === 'unavailable'
+							? narrowing
+								? 'El presupuesto se define por holding o por compañía: quita los filtros de cliente, moneda, segmento, mercado o búsqueda para compararlo'
+								: 'El presupuesto no está repartido por compañía'
+							: null,
+			} satisfies ForecastBudget,
+		};
 	}
 
 	// ---------------------------------------------------------------- proforma
@@ -689,4 +845,97 @@ export function proformaHtml(
 		`<p><strong>Total: ${escapeHtml(total)}</strong></p>` +
 		(invoice.status === 'Por Emitir' ? '<p style="color:#666;font-size:12px">Documento no tributario.</p>' : '')
 	);
+}
+
+/** Alcance del presupuesto frente a los filtros: total del holding, suma de compañías, no comparable o sin presupuesto. */
+export type GoalScope = ForecastBudget['scope'];
+
+/** Definición del presupuesto `cash_in` para editarlo: anual, por mes (12) y reparto anual por compañía. */
+export function goalBudgetOf(budget: BudgetDetail) {
+	const byCompany = budgetMonthlyByDimension(budget.lines, budget.period_granularity, 'company', budget.fiscal_year);
+
+	return {
+		id: budget.id,
+		name: budget.name,
+		currency: budget.currency,
+		period_granularity: budget.period_granularity,
+		total: budget.total,
+		monthly: Object.entries(budget.monthly)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([month, amount]) => ({ month, amount })),
+		companies: [...byCompany].map(([company_id, months]) => ({
+			company_id,
+			amount: round2(Object.values(months).reduce((sum, amount) => sum + amount, 0)),
+		})),
+		updated_at: budget.updated_at,
+	};
+}
+
+/**
+ * Líneas del presupuesto `cash_in` desde el formulario (ver `saveGoal`). 400 `errors[]` si la distribución mensual o el reparto por compañía
+ * no suman el anual (±0,01) o repiten una compañía.
+ */
+export function goalBudgetLines(dto: ReceivablesGoalDto) {
+	const amount = round2(dto.amount ?? 0);
+	const monthly = dto.monthly?.length ? dto.monthly.map(round2) : null;
+	const companies = dto.companies?.length
+		? dto.companies.map((entry) => ({ id: entry.company_id.toLowerCase(), amount: round2(entry.amount) }))
+		: [];
+	const errors: Array<{ field: string; message: string }> = [];
+	const close = (a: number, b: number) => Math.abs(round2(a) - round2(b)) <= 0.01;
+
+	if (monthly && monthly.length !== 12) errors.push({ field: 'monthly', message: 'La distribución mensual lleva 12 montos (enero a diciembre)' });
+	else if (
+		monthly &&
+		!close(
+			monthly.reduce((sum, value) => sum + value, 0),
+			amount
+		)
+	) {
+		errors.push({
+			field: 'monthly',
+			message: `La distribución mensual suma ${round2(monthly.reduce((sum, value) => sum + value, 0))} y el anual es ${amount}`,
+		});
+	}
+	if (new Set(companies.map((entry) => entry.id)).size !== companies.length)
+		errors.push({ field: 'companies', message: 'Una compañía aparece dos veces en el reparto' });
+	else if (
+		companies.length &&
+		!close(
+			companies.reduce((sum, entry) => sum + entry.amount, 0),
+			amount
+		)
+	) {
+		errors.push({
+			field: 'companies',
+			message: `El reparto por compañía suma ${round2(companies.reduce((sum, entry) => sum + entry.amount, 0))} y el anual es ${amount}`,
+		});
+	}
+	if (errors.length) throw validationException(errors);
+	const year = dto.year;
+	const pad = (value: number) => String(value).padStart(2, '0');
+	const lines: Array<{ period_start: string; dimension_type: 'total' | 'company'; dimension_id?: string; amount: number }> = [];
+
+	if (monthly) {
+		monthly.forEach((total, index) => {
+			const period = `${year}-${pad(index + 1)}-01`;
+
+			lines.push({ period_start: period, dimension_type: 'total', amount: total });
+			if (companies.length) {
+				// Cada mes se reparte entre las compañías en la proporción de su anual: el mes cuadra exacto (el residuo va a la última).
+				splitWeighted(
+					total,
+					companies.map((entry) => entry.amount)
+				).forEach((value, position) =>
+					lines.push({ period_start: period, dimension_type: 'company', dimension_id: companies[position].id, amount: value })
+				);
+			}
+		});
+	} else {
+		lines.push({ period_start: `${year}-01-01`, dimension_type: 'total', amount });
+		for (const entry of companies)
+			lines.push({ period_start: `${year}-01-01`, dimension_type: 'company', dimension_id: entry.id, amount: entry.amount });
+	}
+
+	return lines;
 }
