@@ -11,6 +11,8 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
  */
 @Entity('holding_settings')
 @Check('holding_settings_fx_system_policy_check', "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])")
+// Bloque Modificaciones B2 (migración 1790710000000-ContractModificationsBlock2): aviso previo de la renovación (S2-3).
+@Check('holding_settings_auto_renewal_notice_days_check', '"auto_renewal_notice_days" >= 1 AND "auto_renewal_notice_days" <= 180')
 export class HoldingSettings {
 	@PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'holding_settings_pkey' })
 	holding_id: string;
@@ -36,6 +38,15 @@ export class HoldingSettings {
 	/** Monedas utilizadas en el holding */
 	@Column({ type: 'text', comment: 'Monedas utilizadas en el holding', array: true, nullable: true, default: () => 'ARRAY[]::text[]' })
 	currencies_in_use?: string[];
+
+	/** Días de aviso previo de la propuesta de renovación automática (S2-3, spec modificaciones §9.3.5; default 30, 1–180). */
+	@Column({
+		type: 'smallint',
+		comment: 'Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)',
+		nullable: false,
+		default: 30,
+	})
+	auto_renewal_notice_days: number;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'holding_settings_holding_id_fkey' })

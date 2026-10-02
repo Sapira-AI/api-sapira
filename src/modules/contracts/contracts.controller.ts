@@ -18,6 +18,8 @@ import { ContractInvoicePartialPoService } from './contract-invoice-partial-po.s
 import { ContractInvoiceReorganizeService } from './contract-invoice-reorganize.service';
 import { ContractInvoiceVoidService } from './contract-invoice-void.service';
 import { ContractInvoicesService } from './contract-invoices.service';
+import { ContractRenewalsService } from './contract-renewals.service';
+import { ContractScheduledChangesService } from './contract-scheduled-changes.service';
 import { ContractSubscriptionsService } from './contract-subscriptions.service';
 import { ContractsService } from './contracts.service';
 import { ActivateContractsDto, BulkContractIdsDto, BulkContractSettingsDto } from './dtos/bulk-contracts.dto';
@@ -44,6 +46,13 @@ import {
 	RescheduleInvoicesBulkDto,
 	SendInvoiceNowDto,
 } from './dtos/contract-invoices.dto';
+import { DismissRenewalProposalDto } from './dtos/contract-renewals.dto';
+import {
+	ApplyScheduledChangeDto,
+	CreateScheduledChangeDto,
+	ScheduledChangeReasonDto,
+	UpdateScheduledChangeDto,
+} from './dtos/contract-scheduled-changes.dto';
 import { CreateContractDto, PricePreviewDto, UpdateContractDto, UpdateContractTermsDto } from './dtos/create-contract.dto';
 import { QueryContractFormOptionsDto } from './dtos/query-contract-form-options.dto';
 import { QueryContractInvoicesDto } from './dtos/query-contract-invoices.dto';
@@ -92,7 +101,9 @@ export class ContractsController {
 		private readonly contractInvoiceReorganizeService: ContractInvoiceReorganizeService,
 		private readonly contractInvoiceVoidService: ContractInvoiceVoidService,
 		private readonly contractInvoicePartialPoService: ContractInvoicePartialPoService,
-		private readonly contractInvoiceConsolidationService: ContractInvoiceConsolidationService
+		private readonly contractInvoiceConsolidationService: ContractInvoiceConsolidationService,
+		private readonly contractScheduledChangesService: ContractScheduledChangesService,
+		private readonly contractRenewalsService: ContractRenewalsService
 	) {}
 
 	@Get()
@@ -118,6 +129,17 @@ export class ContractsController {
 	})
 	async summary(@HoldingId() holdingId: string) {
 		return await this.contractsService.summary(holdingId);
+	}
+
+	@Get('renewal-proposals')
+	@ApiOperation({
+		summary: 'Propuestas de renovación abiertas (§9.3.5)',
+		description:
+			'Eventos RENEWAL_PROPOSED del job contracts-auto-renewal sin confirmar ni omitir, con los ítems que siguen sin renovar ni baja, fin más próximo, días que faltan, Σ mensual, preview y pactos on_renewal. `counts { open, renew_in_30_days, overdue }` = KPI "Renuevan en 30 días". Confirmar = POST /contracts/:id/changes con change.type renewal y origin { type: renewal_proposal, event_id }',
+	})
+	@ApiResponse({ status: 200, description: '{ data: RenewalProposalView[], counts: { open, renew_in_30_days, overdue } }' })
+	async renewalProposals(@HoldingId() holdingId: string) {
+		return await this.contractRenewalsService.listProposals(holdingId);
 	}
 
 	@Get('filter-options')
@@ -495,7 +517,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa de una modificación de contrato',
 		description:
-			'Mismo body que aplicar. `change.type`: billing_conditions | change_entity | item_remove | contract_cancel | renewal | item_add | item_change (reactivate, pause, resume y price_adjustment → 400 hasta decidirse). Devuelve antes/después del contrato, ítems (agregados, ajustados, dados de baja, ítem madre después), facturas (actualizadas, creadas, canceladas, NC espejo), RSM, advertencias y bloqueos con el paso siguiente. No escribe nada',
+			'Mismo body que aplicar. `change.type`: billing_conditions (incl. auto_renew) | change_entity (client_entity_id o new_entity) | item_remove | contract_cancel (invoice_decisions) | renewal (precio nuevo, pactos on_renewal, extensión de tasas; origin renewal_proposal confirma una propuesta) | item_add (billing_cycle, quote_item_id) | item_change (frecuencia/plazo §9.3.7, quote_item_id) | multicurrency | reactivate (§9.3.2) | pause { items?, pause_start?, pause_end?, extend_term?, invoice_decisions? } | resume { items?, resume_date? } (§9.3.3); price_adjustment → 400. Devuelve antes/después del contrato, ítems, facturas, RSM, advertencias y bloqueos con el paso siguiente, y según el tipo `invoice_decisions_required`, `effective_date_suggestions` (contract_cancel, item_remove, pause), `scheduled_changes`, `fx_rates_extended`, `reactivation`, `pauses`. No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiResponse({
@@ -524,7 +546,7 @@ export class ContractsController {
 	@ApiResponse({
 		status: 409,
 		description:
-			'`code: blocked` con el `preview` (bloqueos: period_closed, not_active, issued_after_effective_date, item_already_churned, item_already_renewed, unified_invoice_in_range, fixed_fx_without_rate, quote_already_applied, new_business_quote_on_existing_contract, uf_invoice_currency)',
+			'`code: blocked` con el `preview` (bloqueos: period_closed, not_active, issued_after_effective_date, item_already_churned, item_already_renewed, unified_invoice_in_range, fixed_fx_without_rate, quote_already_applied, new_business_quote_on_existing_contract, uf_invoice_currency, invoice_decision_required, entity_belongs_to_other_client, not_cancelled, index_value_missing, scheduled_change_not_scheduled, renewal_proposal_not_open, item_already_paused, pause_overlaps, not_paused)',
 	})
 	async applyChange(
 		@Param('id') id: string,
@@ -534,6 +556,143 @@ export class ContractsController {
 		@Headers('idempotency-key') idempotencyKey?: string
 	) {
 		return await this.contractChangesService.apply(id, body, holdingId, authIdOf(req), idempotencyKey);
+	}
+
+	@Post(':id/renewal-proposals/:eventId/dismiss')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Omitir una propuesta de renovación (§9.3.5)',
+		description: '`{ reason }`. La propuesta queda dismissed (no se vuelve a proponer para el mismo fin); evento RENEWAL_PROPOSAL_DISMISSED',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiParam({ name: 'eventId', type: String, description: 'Evento RENEWAL_PROPOSED' })
+	@ApiResponse({ status: 200, description: '{ proposal_event_id, event_id, status: dismissed, reason }' })
+	@ApiResponse({ status: 404, description: '`code: renewal_proposal_not_found`' })
+	@ApiResponse({ status: 409, description: '`code: renewal_proposal_not_open` (ya confirmada u omitida)' })
+	async dismissRenewalProposal(
+		@Param('id') id: string,
+		@Param('eventId', ParseUUIDPipe) eventId: string,
+		@Body() body: DismissRenewalProposalDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractRenewalsService.dismiss(id, eventId, body.reason, holdingId, authIdOf(req));
+	}
+
+	// ---------------------------------------------------------------- ajustes pactados (spec modificaciones §9.3.6)
+
+	@Get(':id/scheduled-changes')
+	@ApiOperation({
+		summary: 'Ajustes pactados del contrato',
+		description: 'Todos los pactos (scheduled, applied, skipped, cancelled) con su ítem, disparo, valor y evento aplicado',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	async scheduledChanges(@Param('id') id: string, @HoldingId() holdingId: string) {
+		return await this.contractScheduledChangesService.list(id, holdingId);
+	}
+
+	@Post(':id/scheduled-changes')
+	@ApiOperation({
+		summary: 'Crear un ajuste pactado',
+		description:
+			'`{ contract_item_id?, trigger: on_renewal|on_date|every_n_months, effective_date?, anchor_date?, interval_months?, kind: percent_uplift|index|new_unit_price|quantity|term|billing_frequency, value, index_code?, index_base_value?, index_lag_months?, rounding?, notes? }`. Evento SCHEDULED_CHANGE_CREATED',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiResponse({ status: 400, description: '`errors[{ field, message }]` (campos por disparo y tipo, ítem ajeno o con baja)' })
+	@ApiResponse({ status: 409, description: '`code: scheduled_change_contract_not_open` (contrato cancelado)' })
+	async createScheduledChange(
+		@Param('id') id: string,
+		@Body() body: CreateScheduledChangeDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractScheduledChangesService.create(id, body, holdingId, authIdOf(req));
+	}
+
+	@Patch(':id/scheduled-changes/:changeId')
+	@ApiOperation({
+		summary: 'Editar un ajuste pactado programado',
+		description: 'Solo `scheduled`. Evento SCHEDULED_CHANGE_UPDATED con antes/después',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiResponse({ status: 409, description: '`code: scheduled_change_not_editable`' })
+	async updateScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: UpdateScheduledChangeDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractScheduledChangesService.update(id, changeId, body, holdingId, authIdOf(req));
+	}
+
+	@Post(':id/scheduled-changes/:changeId/skip')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Omitir un ajuste pactado',
+		description: '`{ reason }`. every_n_months: omite solo la próxima ocurrencia. Evento SCHEDULED_CHANGE_SKIPPED',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	async skipScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ScheduledChangeReasonDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractScheduledChangesService.skip(id, changeId, body, holdingId, authIdOf(req));
+	}
+
+	@Post(':id/scheduled-changes/:changeId/cancel')
+	@HttpCode(200)
+	@ApiOperation({ summary: 'Cancelar un ajuste pactado', description: '`{ reason }`. Evento SCHEDULED_CHANGE_CANCELLED' })
+	@ApiParam(CONTRACT_PARAM)
+	async cancelScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ScheduledChangeReasonDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractScheduledChangesService.cancel(id, changeId, body, holdingId, authIdOf(req));
+	}
+
+	@Post(':id/scheduled-changes/:changeId/apply/preview')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Vista previa de aplicar un ajuste pactado',
+		description:
+			'`{ effective_date?, value?, reason?, notes? }`. on_renewal → renewal; precio/cantidad/índice → item_change desde el próximo inicio de período (sin prorrateo); plazo/frecuencia → item_change §9.3.7. Mismo ChangePreview; sin dato del índice → blocker index_value_missing',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	async previewScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ApplyScheduledChangeDto,
+		@HoldingId() holdingId: string
+	) {
+		return await this.contractScheduledChangesService.applyPreview(id, changeId, body, holdingId);
+	}
+
+	@Post(':id/scheduled-changes/:changeId/apply')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Aplicar un ajuste pactado',
+		description:
+			'Materializa el pacto con el motor de modificaciones (una transacción). El evento es el del cambio (UPSELL/DOWNSELL subtipo price_step o index, RENEWAL, RENEGOTIATION) con `metadata.scheduled_change_id`; la fila queda applied con `applied_event_id` (every_n_months: hija applied y la madre avanza)',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiHeader({ name: 'Idempotency-Key', required: false })
+	@ApiResponse({ status: 409, description: '`code: blocked` con el preview o `scheduled_change_not_editable`' })
+	async applyScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ApplyScheduledChangeDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest,
+		@Headers('idempotency-key') idempotencyKey?: string
+	) {
+		return await this.contractScheduledChangesService.apply(id, changeId, body, holdingId, authIdOf(req), idempotencyKey);
 	}
 
 	@Get(':id/documents')
@@ -731,7 +890,10 @@ export class ContractsController {
 		status: 200,
 		description: '{ sent, status: sent | error | skipped, odoo_invoice_id, message, blockers: [], warnings[], event_id, invoice }',
 	})
-	@ApiResponse({ status: 409, description: '`code: blocked` con `blockers[]` y `preview`' })
+	@ApiResponse({
+		status: 409,
+		description: '`code: blocked` con `blockers[]` y `preview`; NC/ND → `code: credit_note_send_pending` (envío de NC al ERP aún no disponible)',
+	})
 	async sendNow(
 		@Param('id') id: string,
 		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
@@ -1058,7 +1220,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa: anular una emitida con NC espejo (y reemitir)',
 		description:
-			'`{ reason: issue_error | client_request | other, notes?, reissue, reissue_changes?: <cuerpo del editor §3.4> }`. NC espejo completa (montos exactos en ambas monedas, IVA de cada línea, tasa, receptor; `credit_type = cancellation`, Por Emitir, sin vencimiento) y, con `reissue`, la Por Emitir que la reemplaza (copia o con cambios por la lógica del editor), consumos del período que se liberan, avisos y bloqueos. No escribe nada',
+			'`{ reason: issue_error | client_request | other, notes?, reissue, reissue_changes?: <cuerpo del editor §3.4> }`. NC espejo completa (montos exactos en ambas monedas, IVA de cada línea, tasa, receptor; `credit_type = cancellation`, con el estado de la original —nunca Por Emitir—, sin vencimiento, pendiente de emisión electrónica) y, con `reissue`, la Por Emitir que la reemplaza (copia o con cambios por la lógica del editor), consumos del período que se liberan, avisos y bloqueos. No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)
@@ -1132,7 +1294,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'NC de descuento parcial sobre una emitida',
 		description:
-			'Una transacción: NC Por Emitir sin vencimiento (`credit_type = discount`, `credit_reason`, `nc_revenue_treatment`, `related_invoice_id`), devengo reconstruido y evento INVOICE_CREDIT_NOTE_CREATED. La NC se emite desde Facturación; al emitirse, `nc_discount_revenue_adjustment` aplica el devengo',
+			'Una transacción: NC con el estado de la factura (nunca Por Emitir; pendiente de emisión electrónica) sin vencimiento (`credit_type = discount`, `credit_reason`, `nc_revenue_treatment`, `related_invoice_id`), devengo reconstruido y evento INVOICE_CREDIT_NOTE_CREATED. La NC se emite desde Facturación; al emitirse, `nc_discount_revenue_adjustment` aplica el devengo',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)
@@ -1337,7 +1499,8 @@ export class ContractsController {
 	@Get(':id/history')
 	@ApiOperation({
 		summary: 'Historial del contrato',
-		description: 'Eventos del ciclo de vida (tipo normalizado) y modificaciones sin evento, más nuevos primero',
+		description:
+			'Eventos del ciclo de vida (tipo normalizado) y modificaciones sin evento, más nuevos primero. Cada evento: `{ id, type, subtype, title, description, effective_date, amount_delta, items_affected, metadata (jsonb tal cual; null en modificaciones sin evento), created_at, created_by }`',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	async history(@Param('id') id: string, @HoldingId() holdingId: string) {

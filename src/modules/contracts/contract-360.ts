@@ -34,7 +34,7 @@ export const isVisibleLine = (quantity: number, visibleLineId?: string | null): 
 
 /**
  * ¿La factura está anulada con NC? (etapa 6, §3.8; derivado, sin columna): tiene una NC de anulación activa vinculada
- * (`related_invoice_id`, `credit_type = 'cancellation'`). Vale para v2 (la original conserva su estado y la NC nace Por Emitir) y para el
+ * (`related_invoice_id`, `credit_type = 'cancellation'`). Vale para v2 (la original conserva su estado y la NC nace con ese estado, pendiente de emisión electrónica) y para el
  * flujo viejo (`create_credit_note_safe`: original y NC quedan Canceladas). Fragmento SQL sobre el alias de `invoices` dado.
  */
 export const voidedSql = (
@@ -143,6 +143,34 @@ const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10
 
 /** Nota de crédito (`NC`, `NOTA_CREDITO`, `Nota de crédito`). */
 export const isCreditNote = (documentType: string | null | undefined) => /^(NC|NOTA[\s_-]*(DE[\s_-]*)?CR[EÉ]DITO)/i.test((documentType ?? '').trim());
+
+/**
+ * Estado con que nace una NC creada por la API (decisiones de Domi 01-10): **siempre `Emitida`**, sea cual sea el estado emitido de la
+ * factura que acredita (`Emitida`, `Enviada`, `Pagada`, `Vencida`, parcialmente pagada…): el cobro y el vencimiento son de la factura, no
+ * de la NC (una NC no se paga ni vence). Nunca Por Emitir: sobre una factura Por Emitir no se crea NC (se reescribe la factura). La emisión
+ * electrónica queda pendiente (`odoo_invoice_id`/`sent_to_odoo_at` NULL) hasta que exista la emisión de NC en Odoo (Leon): el 360 la
+ * muestra "pendiente de emisión electrónica" (`creditNotePendingEmission`) y el scheduler no la envía.
+ */
+export const creditNoteStatusFor = (): string => 'Emitida';
+
+/**
+ * NC/ND pendiente de emisión electrónica (decisión de Domi 01-10): las NC que crea la API nacen siempre `Emitida` (no Por Emitir),
+ * sin folio ni vínculo con el ERP hasta que exista la emisión de NC en Odoo (Leon). También cuentan las NC v2 previas que nacieron Por Emitir.
+ * El 360 las muestra "pendiente de emisión electrónica", no como facturas por enviar.
+ */
+export const creditNotePendingEmission = (row: {
+	document_type: string | null | undefined;
+	status: string | null | undefined;
+	invoice_number?: string | null;
+	odoo_invoice_id?: number | string | null;
+	sent_to_odoo_at?: string | Date | null;
+}): boolean =>
+	(isCreditNote(row.document_type) || (row.document_type ?? '').trim().toUpperCase() === 'ND') &&
+	row.status !== CANCELLED_STATUS &&
+	(row.status === PENDING_STATUS ||
+		((row.odoo_invoice_id === null || row.odoo_invoice_id === undefined) &&
+			(row.sent_to_odoo_at === null || row.sent_to_odoo_at === undefined) &&
+			!(row.invoice_number ?? '').trim()));
 
 /** Factura que suma: `FACTURA*`, `Invoice` o sin tipo (las facturas antiguas no lo guardan). */
 export const isInvoiceDocument = (documentType: string | null | undefined) => {

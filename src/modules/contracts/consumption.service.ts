@@ -6,6 +6,7 @@ import { type FieldError, validationException } from '@/core/utils/validation-er
 import { setApiWriter } from './api-writer';
 import { invoiceTermsSql, refreshInvoiceSystemAmounts } from './api-written-fields';
 import { computeDueDate, descriptionFittedWarning, lineDescription, normalizeTaxRate, round2 } from './billing-engine';
+import { todayFor } from './business-date';
 import {
 	additionalDifference,
 	type AdditionalDifference,
@@ -90,7 +91,7 @@ const DEFAULT_LIMIT = 25;
 /** Revisiones por entry que devuelve `GET /contracts/:id/consumption` (más nuevas primero). */
 export const MAX_REVISIONS = 20;
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => todayFor();
 /** Línea del período con la fecha de envío al ERP (borrador): `odoo_invoice_id` o `sent_to_odoo_at` = borrador vigente. */
 type PeriodLine = ConsumptionPeriodLine & { sent_to_odoo_at?: string | null };
 const hasErpDraft = (line: PeriodLine) => (line.odoo_invoice_id !== null && line.odoo_invoice_id !== undefined) || Boolean(line.sent_to_odoo_at);
@@ -264,7 +265,7 @@ export interface ConsumptionWriteResult extends IssuedOutcomeView {
 	warning_codes: string[];
 	/** `true` si la clave de idempotencia ya estaba registrada: no se escribió nada. */
 	idempotent: boolean;
-	/** `reissue`: NC espejo creada (Por Emitir, montos negativos). */
+	/** `reissue`: NC espejo creada (estado de la emitida, nunca Por Emitir; montos negativos). */
 	credit_note: { id: string | null; number: string | null; total: number } | null;
 	/** `reissue`: la emitida que la NC anula (nunca se modifica). */
 	cancelled_invoice: { id: string; invoice_number: string | null } | null;
@@ -534,7 +535,7 @@ export class ConsumptionService {
 			is_legacy: row.is_legacy === true,
 		}));
 
-		return buildConsumption({ entries, quantities, items, lines, today: today.toISOString().slice(0, 10) });
+		return buildConsumption({ entries, quantities, items, lines, today: todayFor(null, today) });
 	}
 
 	// ---------------------------------------------------------------- lectura: pendientes de informar
@@ -547,7 +548,7 @@ export class ConsumptionService {
 	async pending(holdingId: string, query: QueryConsumptionPendingDto, contractId?: string, today = new Date()) {
 		const limit = query.limit ?? DEFAULT_LIMIT;
 		const page = query.page ?? 1;
-		const params: unknown[] = [holdingId, today.toISOString().slice(0, 10)];
+		const params: unknown[] = [holdingId, todayFor(null, today)];
 		const where: string[] = [
 			`i.holding_id = $1`,
 			`i.is_active = true`,
@@ -1622,6 +1623,11 @@ export class ConsumptionService {
 						line_suffix: () => ` (NC espejo por reemisión de ${header.invoice_number ?? header.id})`,
 						// Anulación completa: cada línea copia su IVA guardado (la NC cancela la emitida al centavo).
 						exact: true,
+						reference: {
+							kind: 'cancellation',
+							reason: `Reemisión por consumo corregido de "${item.product_name ?? ''}"`,
+							user_id: userId,
+						},
 					}
 				);
 				const invoiceId = await this.insertInvoiceHeader(runner, header, draft, holdingId);

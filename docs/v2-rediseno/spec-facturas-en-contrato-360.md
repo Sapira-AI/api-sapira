@@ -477,7 +477,7 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
   siguen en la lista plana).
 ### 3.8 Anular con NC espejo y reemitir
 
-- Ya existe la pieza: `insertMirrorCreditNote` (NC exacta en moneda, FX, IVA, receptor; nace Por Emitir; `credit_type = cancellation`).
+- Ya existe la pieza: `insertMirrorCreditNote` (NC exacta en moneda, FX, IVA, receptor; nace siempre `Emitida` —nunca Por Emitir, Pagada ni Vencida, decisión 01-10—; `credit_type = cancellation`).
 - **Ajustes 01-10 (decisiones de Domi)**: (1) con **NC de descuento vigentes** la NC de anulación acredita lo que queda de cada línea (original −
   NC de descuento, cruzadas por ítem y período como `PREVIOUS_DISCOUNTS_SQL`; esas líneas van cantidad 1 × −monto) y avisa
   `previous_credit_notes_considered` con los folios; nunca bloquea (si ya no queda nada → `no_lines`). (2) **Factura por OC**: la NC (anular o
@@ -493,15 +493,20 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
   del período pasan a `cancelled` y se liberan (S7-8). Emitidas con NC previa → bloqueo `already_voided`; con pago conciliado → aviso
   `paid_invoice_voided` (Facturación decide la devolución). Evento `INVOICE_VOIDED` / `INVOICE_REISSUED`. **RSM**: rebuild del mes del
   período (la NC resta y la PE de reemplazo suma; cierra ROADMAP #10 para este camino). La NC se **emite** desde Facturación (S4-8 con Leon:
-  `out_refund`); el 360 la muestra en `related_documents` y en la fila con badge "NC".
+  `out_refund`; hasta entonces queda "pendiente de emisión electrónica"); el 360 la muestra en `related_documents` y en la fila con badge "NC".
 
 **Etapa 6 construida — Anular / reemitir y NC de descuento (API, 30-09)** — `invoice-void.ts` (pura) + `contract-invoice-void.service.ts` +
 `dtos/contract-invoice-credit-notes.dto.ts`. Rutas `POST …/:invoiceId/void/preview`, `POST …/:invoiceId/void`, `POST …/:invoiceId/credit-note/preview`,
 `POST …/:invoiceId/credit-note`. Sin esquema nuevo.
 - **Convención de anulada** (la de v2, igual que la reemisión por consumo corregido): la emitida **no se toca** (conserva su estado); queda
   anulada por derivación (`voided` = tiene una NC de anulación activa vinculada, `voidedSql`). El flujo viejo (`create_credit_note_safe`) dejaba
-  original y NC en `Cancelada`; v2 no lo copia porque la NC nace Por Emitir y "NC + factura se cierran juntas".
-- **NC** (`insertMirrorCreditNote`): Por Emitir, **sin `due_date`** (regla para toda NC que crea la API, también modificaciones y consumo),
+  original y NC en `Cancelada`; v2 no lo copia porque la NC queda pendiente de emisión electrónica y "NC + factura se cierran juntas".
+- **NC** (`insertMirrorCreditNote`): **nunca Por Emitir** (decisión de Domi 01-10): nace **siempre `Emitida`** (`creditNoteStatusFor`,
+  corrección 01-10: con la factura que acredita en cualquier estado emitido —Emitida, Enviada, Pagada, Vencida, parcialmente pagada— la NC es
+  `Emitida`, nunca Pagada ni Vencida: el cobro y el vencimiento son de la factura; sobre una Por Emitir no se crea NC), `odoo_invoice_id`/`sent_to_odoo_at` NULL y **pendiente de emisión electrónica**
+  (`creditNotePendingEmission`; el 360 la lista con `electronic_emission_pending` / "Pendiente de emisión electrónica", no como factura por
+  enviar; el scheduler excluye NC/ND y el envío manual responde 409 `credit_note_send_pending`), **sin `due_date`** y con su fila en
+  `invoice_references` a la original (regla para toda NC que crea la API, también modificaciones y consumo),
   `related_invoice_id` = la original, `invoice_type = Manual`, montos negativos en ambas monedas con la tasa, IVA, receptor y emisor de la
   original, cada línea con su ítem y período. Anular: `credit_type = cancellation`, `nc_revenue_treatment` NULL, cada línea con cantidad o monto
   al 100 % con **su IVA guardado** (`exact`: la NC cancela el documento al centavo aunque el IVA de la original no sea subtotal × tasa); las
@@ -720,5 +725,5 @@ PE completa (#11, ya lo cubre `item_remove` v2), Bosch `end_date` (#2), cuadre P
   factura como la NC electrónica: tipo y folio del documento original, código SII del motivo (1 = anula documento, 3 = corrige montos) y
   la razón; viaja a Odoo con las referencias de siempre. **Doble descuento en devengo resuelto un paso antes**: la original anulada queda
   `Cancelada`, y la función `nc_discount_revenue_adjustment` ya excluye `Cancelada`, así que su descuento puntual deja de contar sin tocar
-  la función; la reemisión trae el suyo. Pendiente (Leon, emisión de NC hacia Odoo): cuando la NC de anulación se emite, pasa también a
+  la función; la reemisión trae el suyo. Las NC nacen siempre `Emitida` (nunca Por Emitir, Pagada ni Vencida, 01-10) y pendientes de emisión electrónica. Pendiente (Leon, emisión de NC hacia Odoo): cuando la NC de anulación se emite, pasa también a
   `Cancelada` (par cerrado, como las 74 NC de anulación de producción); la NC de descuento sigue su estado emitido normal.

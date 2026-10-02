@@ -69,7 +69,9 @@
   "billable_metrics",
   "prices",
   "consumption_entries",
-  "consumption_entry_revisions"
+  "consumption_entry_revisions",
+  "contract_scheduled_changes",
+  "contract_item_pauses"
  ],
  "facturacion": [
   "billing_references",

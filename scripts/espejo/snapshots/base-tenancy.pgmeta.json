@@ -1304,6 +1304,17 @@
     ]
    },
    {
+    "name": "contract_item_pauses_holding_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_lifecycle_events_holding_id_fkey",
     "source_table": "public.contract_lifecycle_events",
     "source_columns": [
@@ -1317,6 +1328,17 @@
    {
     "name": "contract_notifications_holding_id_fkey",
     "source_table": "public.contract_notifications",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_holding_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
     "source_columns": [
      "holding_id"
     ],
@@ -2881,6 +2903,17 @@
     ],
     "default_value": "ARRAY[]::text[]",
     "comment": "Monedas utilizadas en el holding"
+   },
+   {
+    "name": "auto_renewal_notice_days",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "30",
+    "comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
    }
   ],
   "primary_keys": [

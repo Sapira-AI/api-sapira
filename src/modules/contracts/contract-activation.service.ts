@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { setApiWriter } from './api-writer';
-import { invoiceTermsSql, refreshContractSystemFx, refreshInvoiceSystemAmounts } from './api-written-fields';
+import { invoiceTermsSql, latestContractEnd, refreshContractSystemFx, refreshInvoiceSystemAmounts } from './api-written-fields';
 import {
 	type BillingEngineItem,
 	type BillingEngineOutput,
@@ -12,7 +12,9 @@ import {
 	normalizeTaxRate,
 	type PreviewInvoice,
 	round2,
+	validAnchorDay,
 } from './billing-engine';
+import { todayFor } from './business-date';
 import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms, DRAFT_STATUS, METERED_ADVANCE_MESSAGE, resolveUserId } from './contract-drafts.service';
 import { UF_CURRENCY } from './dtos/create-contract.dto';
@@ -361,7 +363,7 @@ export class ContractActivationService {
 			`SELECT ci.contract_id, ci.id, ci.product_id, ci.product_name, ci.account, ci.unit_of_measure,
 				ci.quantity, ci.unit_price, ci.annual_unit_price, ci.discount_type, ci.discount_value, ci.final_price,
 				ci.billing_frequency, ci.billing_method, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
-				ci.term_months, ci.is_recurring, ci.currency, ${PRICE_COLUMNS},
+				ci.term_months, ci.is_recurring, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS},
 				(SELECT COALESCE(jsonb_agg(jsonb_build_object(
 						'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override,
 						'apply_item_discount', e.apply_item_discount, 'is_estimated', e.is_estimated)), '[]'::jsonb)
@@ -415,6 +417,8 @@ export class ContractActivationService {
 			consumption: ContractActivationService.consumptionOf(item),
 			// Multimoneda: moneda del ítem (default la del contrato en el generador).
 			...(toText(item.currency) ? { currency: upper(item.currency) } : {}),
+			// Ciclo propio (spec modificaciones §9.3.9): sus períodos parten su día, sin tramo prorrateado.
+			...(validAnchorDay(item.billing_anchor_day) ? { billing_anchor_day: validAnchorDay(item.billing_anchor_day) } : {}),
 		};
 	}
 
@@ -683,7 +687,7 @@ export class ContractActivationService {
 	 * `POST /contracts/activate`: activa solo los que no tienen bloqueos, **cada uno en su propia transacción** (un fallo
 	 * no frena al resto). Revalida dentro de la transacción, con el contrato bloqueado.
 	 */
-	async activate(ids: string[], holdingId: string, authId: string) {
+	async activate(ids: string[], holdingId: string, authId: string, now = new Date()) {
 		const userId = await resolveUserId(this.dataSource, authId);
 		const activated: Array<{ id: string; contract_number: string | null; invoices_created: number; warning_codes: string[] }> = [];
 		const skipped: Array<{ id: string; contract_number: string | null; blockers: ActivationBlocker[] }> = [];
@@ -710,7 +714,7 @@ export class ContractActivationService {
 					continue;
 				}
 
-				const invoicesCreated = await this.persist(runner, plan, holdingId, userId);
+				const invoicesCreated = await this.persist(runner, plan, holdingId, userId, todayFor(null, now));
 
 				await runner.commitTransaction();
 				activated.push({ id, contract_number: contractNumber, invoices_created: invoicesCreated, warning_codes: plan.check.warning_codes });
@@ -740,7 +744,7 @@ export class ContractActivationService {
 	 * 4. `revenue_schedule_rebuild(contrato)` explícito (el rebuild del trigger de activación no corre);
 	 * 5. evento `ACTIVATION`.
 	 */
-	private async persist(runner: QueryRunner, plan: ActivationPlan, holdingId: string, userId: string): Promise<number> {
+	private async persist(runner: QueryRunner, plan: ActivationPlan, holdingId: string, userId: string, today: string): Promise<number> {
 		const contract = plan.contract!;
 		const engine = plan.engine!;
 		const contractId = String(contract.id);
@@ -773,10 +777,19 @@ export class ContractActivationService {
 		// Booking: se respeta si existe (S2-7). Moneda de la compañía: la de la compañía emisora (regla v2; el trigger
 		// `set_contract_company_currency` solo la copiaba si venía NULL y dejaba contratos desalineados, auditoría S5b).
 		await runner.query(
-			`UPDATE contracts SET booking_date = COALESCE(booking_date, CURRENT_DATE),
-				company_currency = COALESCE((SELECT co.currency FROM companies co WHERE co.id = contracts.company_id), company_currency)
+			`UPDATE contracts SET booking_date = COALESCE(booking_date, $4::date),
+				company_currency = COALESCE((SELECT co.currency FROM companies co WHERE co.id = contracts.company_id), company_currency),
+				contract_end_date = $5::date
 			WHERE id = $1 AND holding_id = $2 AND status = $3`,
-			[contractId, holdingId, DRAFT_STATUS]
+			// "Hoy" del holding (business-date.ts), no CURRENT_DATE del servidor de base (UTC). Fin del contrato con la regla única
+			// (`latestContractEnd`: mayor fin de los recurrentes vivos; null con alguno indefinido), todavía en borrador (sin guard).
+			[
+				contractId,
+				holdingId,
+				DRAFT_STATUS,
+				today,
+				latestContractEnd(plan.items.map((item) => ({ is_recurring: item.is_recurring !== false, end_date: toText(item.end_date) }))) ?? null,
+			]
 		);
 		await refreshContractSystemFx(runner, contractId, holdingId);
 
@@ -805,7 +818,7 @@ export class ContractActivationService {
 			`INSERT INTO contract_lifecycle_events (
 				contract_id, holding_id, event_type, event_status, title, description, created_by, completed_at, effective_date, metadata
 				, items_affected
-			) VALUES ($1, $2, 'ACTIVATION', 'Completed', 'Contrato activado', $3, $4, now(), CURRENT_DATE, $5::jsonb, $6::jsonb)`,
+			) VALUES ($1, $2, 'ACTIVATION', 'Completed', 'Contrato activado', $3, $4, now(), $7::date, $5::jsonb, $6::jsonb)`,
 			[
 				contractId,
 				holdingId,
@@ -845,6 +858,7 @@ export class ContractActivationService {
 					items_affected: itemsAffected,
 				}),
 				JSON.stringify(itemsAffected),
+				today,
 			]
 		);
 

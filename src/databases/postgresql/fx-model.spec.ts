@@ -23,7 +23,7 @@ describe('assets FX: purpose y dirección', () => {
 		);
 
 		expect(fixedBranch).toContain('CASE WHEN cpr_direct.rate > 0 THEN cpr_direct.rate END');
-		expect(fixedBranch).toContain('CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) ELSE 1.0 END');
+		expect(fixedBranch).toContain('CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) END');
 		expect(fixedBranch).not.toContain('1.0 / cpr_direct.rate');
 		expect(sql).toContain(`AND cpr_direct.purpose = 'company'`);
 		expect(sql).toContain(`AND cpr_inverse.purpose = 'company'`);
@@ -31,8 +31,9 @@ describe('assets FX: purpose y dirección', () => {
 		expect(sql).toContain(FixHankaCompanyFxRatesDirection1790610000001.RSM_MARKER);
 		// Firma sin cambios.
 		expect(sql).toContain('revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)');
-		// Las tasas del holding (sistema) mantienen su convención.
-		expect(sql).toContain('CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) ELSE 1.0 END');
+		// Las tasas del holding (sistema) mantienen su convención (directa 1/rate, inversa rate), sin 1,0 de relleno (S5-10).
+		expect(sql).toContain('CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) END,');
+		expect(sql).toContain('CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate END');
 	});
 
 	it('calculate_contract_fx_rate y bulk_confirm_fx_policy leen solo tasas de la compañía', () => {
@@ -148,9 +149,43 @@ describe('assets FX: purpose y dirección', () => {
 		}
 		// Ninguna columna de compañía/sistema se escribe sin pasar por el filtro de directos.
 		expect(sql.match(/= ROUND\(r\.\w+_contract_ccy \* COALESCE\(f[cs]\.rate, 1\.0\), 2\),/g)).toBeNull();
+		expect(sql).toContain(`WHEN r.calc_version = 'missing_fx_rate' AND r.recognized_cum_contract_ccy IS NULL THEN r.calc_version`);
+	});
+
+	it('S5-10 (01-10): sin tasa compañía/sistema nunca 1,0 → columnas NULL, fuente y calc_version missing_fx_rate; directas intactas', () => {
+		const sql = asset('revenue_schedule_apply_fx_for_contract');
+
+		// Ninguna rama de tasa ni el UPDATE rellenan con 1,0 (la única tasa 1 es la de misma moneda contrato = compañía / sistema).
+		expect(sql).not.toMatch(/ELSE 1\.0 END/);
+		expect(sql).not.toMatch(/COALESCE\(f[cs]\.rate, 1\.0\)/);
+		expect(sql.match(/SELECT rsm\.period_month, 1\.0::numeric AS rate, NULL::text AS src/g)).toHaveLength(2);
+		// Promedio mensual: directa o 1/inversa, NULL sin ninguna (compañía y sistema).
+		expect(
+			sql.match(
+				/COALESCE\(\s+CASE WHEN ema_direct\.avg_rate > 0 THEN ema_direct\.avg_rate END,\s+CASE WHEN ema_inverse\.avg_rate > 0 THEN ROUND\(1\.0 \/ ema_inverse\.avg_rate, 6\) END\s+\) AS rate/g
+			)
+		).toHaveLength(2);
+		// Columnas convertidas = monto de contrato × tasa (NULL × … = NULL); fx_contract_to_* = la tasa (NULL sin tasa).
+		for (const [prefix, alias, list] of [
+			['', 'fc', 'v_company_direct_items'],
+			['_system', 'fs', 'v_system_direct_items'],
+		] as const) {
+			for (const amount of ['recognized_period', 'recognized_cum', 'billed_period', 'deferred_balance_eom', 'mrr_period', 'cmrr_period'])
+				expect(sql).toContain(`ELSE ROUND(r.${amount}_contract_ccy * ${alias}.rate, 2) END`);
+			expect(sql).toContain(
+				`ELSE CASE WHEN ${alias}.rate IS NULL THEN 'missing_fx_rate' ELSE COALESCE(${alias}.src, 'no_conversion_needed') END END`
+			);
+			expect(sql).toContain(`WHEN ${alias}.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(${list}), false) THEN 'missing_fx_rate'`);
+			expect(sql).toMatch(new RegExp(`recognized_period${prefix}_ccy\\s+= CASE WHEN r\\.contract_item_id = ANY\\(${list}\\)`));
+		}
 		expect(sql).toContain(
-			`calc_version                        = CASE WHEN r.calc_version = 'missing_fx_rate' THEN r.calc_version ELSE 'v4-fx-normalized' END`
+			`fx_contract_to_company          = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_contract_to_company ELSE fc.rate END`
 		);
+		expect(sql).toContain(
+			`fx_contract_to_system               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_contract_to_system ELSE fs.rate END`
+		);
+		expect(sql).toContain(`ELSE 'v4-fx-normalized' END`);
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
 	});
 });
 

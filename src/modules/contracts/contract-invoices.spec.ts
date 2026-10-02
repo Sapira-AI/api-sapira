@@ -1,4 +1,5 @@
 import { headerFromLines } from './consumption';
+import { creditNotePendingEmission, creditNoteStatusFor } from './contract-360';
 import {
 	commonBlockers,
 	type ContractInvoiceContext,
@@ -110,6 +111,26 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(commonBlockers(invoice({ is_legacy: true })))).toEqual(['legacy_invoice']);
 			expect(codes(commonBlockers(invoice({ document_type: 'NC' })))).toEqual(['credit_note']);
 			expect(codes(commonBlockers(invoice({ document_type: 'ND', status: 'Emitida' })))).toEqual(['credit_note']);
+		});
+
+		it('NC creada por la API (estado de su factura, sin folio ni ERP) = pendiente de emisión electrónica; envío → credit_note_send_pending', () => {
+			const pending = invoice({ document_type: 'NC', status: 'Emitida', invoice_number: null, odoo_invoice_id: null, sent_to_odoo_at: null });
+
+			expect(creditNotePendingEmission(pending)).toBe(true);
+			expect(creditNotePendingEmission(invoice({ document_type: 'NC', status: 'Por Emitir' }))).toBe(true);
+			expect(creditNotePendingEmission(invoice({ document_type: 'NC', status: 'Emitida', invoice_number: 'NC-10', odoo_invoice_id: 9 }))).toBe(
+				false
+			);
+			expect(creditNotePendingEmission(invoice({ document_type: 'NC', status: 'Cancelada' }))).toBe(false);
+			expect(creditNotePendingEmission(invoice({ document_type: 'FACTURA', status: 'Emitida' }))).toBe(false);
+			expect(commonBlockers(pending)[0]).toMatchObject({
+				code: 'credit_note',
+				message: expect.stringContaining('pendiente de emisión electrónica'),
+			});
+			expect(codes(planSendNow(pending, context()).blockers)).toContain('credit_note_send_pending');
+			expect(codes(planSendNow(pending, context()).blockers)).not.toContain('credit_note');
+			// Corrección 01-10: la NC nace siempre Emitida, aunque su factura esté Pagada, Vencida o parcialmente pagada.
+			expect(creditNoteStatusFor()).toBe('Emitida');
 		});
 
 		it('los nombres de evento son los de la spec (§4) con el envío manual propio de la etapa 1', () => {

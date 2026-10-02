@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
@@ -37,6 +37,17 @@ interface InvoiceWithRelations extends Invoice {
 	contract?: Contract;
 	references?: InvoiceReference[];
 }
+
+/**
+ * Notas de crédito / débito: las NC de v2 nacen con el estado de su factura (decisión 01-10; las previas nacieron Por Emitir) y el envío a
+ * Odoo como `out_refund` todavía no existe (integración de Leon). Hasta entonces no salen por el envío automático ni por el manual (`docs/v2-rediseno/cambios-integracion-para-leon.md`).
+ */
+export const NON_SENDABLE_DOCUMENT_TYPES = ['NC', 'ND'] as const;
+
+export const CREDIT_NOTE_SEND_PENDING = 'credit_note_send_pending';
+
+export const isNonSendableDocumentType = (documentType: string | null | undefined): boolean =>
+	(NON_SENDABLE_DOCUMENT_TYPES as readonly string[]).includes((documentType ?? '').trim().toUpperCase());
 
 interface ProcessOptions {
 	dryRun: boolean;
@@ -191,6 +202,9 @@ export class InvoiceSchedulerService {
 			.andWhere('inv.issue_date <= :businessToday', { businessToday })
 			.andWhere('inv.sent_to_odoo_at IS NULL')
 			.andWhere('inv.is_active = true')
+			.andWhere('(inv.document_type IS NULL OR inv.document_type NOT IN (:...nonSendableDocumentTypes))', {
+				nonSendableDocumentTypes: [...NON_SENDABLE_DOCUMENT_TYPES],
+			})
 			.andWhere("TO_CHAR(inv.issue_date, 'YYYY-MM') = :businessCurrentMonth", { businessCurrentMonth })
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
@@ -245,6 +259,16 @@ export class InvoiceSchedulerService {
 	 */
 	async sendInvoiceById(invoiceId: string, dryRun: boolean, schedulerSource: 'manual' | 'automatic' = 'manual'): Promise<InvoiceResultDto> {
 		const invoice = await this.getInvoiceWithRelations(invoiceId);
+
+		if (isNonSendableDocumentType(invoice.document_type)) {
+			throw new ConflictException({
+				message:
+					'El envío de notas de crédito y débito al ERP todavía no está disponible: se emitirán cuando exista la emisión de NC en Odoo',
+				code: CREDIT_NOTE_SEND_PENDING,
+				invoice_id: invoice.id,
+				document_type: invoice.document_type,
+			});
+		}
 
 		return await this.sendInvoiceToOdoo(invoice, dryRun, schedulerSource);
 	}

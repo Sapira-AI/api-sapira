@@ -38,6 +38,7 @@ export type ContractDocumentType = (typeof CONTRACT_DOCUMENT_TYPES)[number];
 @Index('idx_contracts_currency', ['contract_currency'])
 @Index('idx_contracts_current_step_id', ['current_step_id'])
 @Index('idx_contracts_holding_id', ['holding_id'])
+@Index('contracts_holding_number_unique', ['holding_id', 'contract_number'], { unique: true, where: `(deleted_at IS NULL)` })
 @Index('idx_contracts_sf_opp', ['salesforce_opportunity_id'], { where: `(salesforce_opportunity_id IS NOT NULL)` })
 @Index('idx_contracts_tax_document_type_id', ['tax_document_type_id'])
 @Index('idx_contracts_workflow_started_at', ['workflow_started_at'])

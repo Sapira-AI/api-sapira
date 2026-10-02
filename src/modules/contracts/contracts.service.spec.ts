@@ -23,7 +23,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { deriveContractStatus, type StatusItem } from './contract-status';
 import { ContractSubscriptionsService, parseSubscriptionStatus } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
-import { ContractsService, parseStatusFilter } from './contracts.service';
+import { ContractsService, electronicEmissionOf, parseStatusFilter } from './contracts.service';
 import { QueryContractSubscriptionsDto } from './dtos/query-contract-subscriptions.dto';
 import { QueryContractsDto } from './dtos/query-contracts.dto';
 
@@ -390,6 +390,42 @@ describe('ContractsService', () => {
 			expect(query).toHaveBeenCalledTimes(1);
 			expect(query.mock.calls[0][1]).toEqual([CONTRACT_ID, 'h-otro']);
 			expect(query.mock.calls[0][0]).toContain('c.holding_id = $2');
+		});
+
+		it('history expone metadata (jsonb tal cual) y subtype por evento; las modificaciones sin evento llevan metadata null', async () => {
+			const metadata = { entity_created: true, reterm: { from: 12, to: 24 }, invoice_decisions: [{ invoice_id: 'i-1', action: 'keep' }] };
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID, status: 'Activo' }];
+				if (sql.includes('FROM contract_amendments a'))
+					return [{ id: 'a-1', type: 'PRICE', status: 'draft', created_at: '2026-08-01T00:00:00Z' }];
+				if (sql.includes('FROM contract_lifecycle_events e'))
+					return [
+						{
+							id: 'e-1',
+							event_type: 'AMENDMENT_APPLIED',
+							event_subtype: 'billing_conditions',
+							title: 'Condiciones',
+							description: null,
+							effective_date: '2026-10-01',
+							amount_delta: null,
+							items_affected: null,
+							metadata,
+							created_at: new Date('2026-10-01T12:00:00Z'),
+							user_id: null,
+						},
+						{ id: 'e-2', event_type: 'NOTE', event_subtype: null, metadata: '{"a":1}', created_at: '2026-09-01T00:00:00Z' },
+					];
+				return [];
+			});
+
+			const { data } = await service.history(CONTRACT_ID, 'h-1');
+
+			const eventsSql = query.mock.calls.find(([sql]) => (sql as string).includes('e.items_affected, e.metadata'))![0] as string;
+			expect(eventsSql).toContain('FROM contract_lifecycle_events e');
+			expect(data.map((e) => e.id)).toEqual(['e-1', 'e-2', 'a-1']);
+			expect(data[0]).toMatchObject({ subtype: 'billing_conditions', metadata });
+			expect(data[1].metadata).toEqual({ a: 1 });
+			expect(data[2].metadata).toBeNull();
 		});
 
 		it('invoices responde 404 si el contrato no es del holding', async () => {
@@ -1123,6 +1159,22 @@ describe('ContractsService', () => {
 	});
 });
 
+describe('electronicEmissionOf (NC creadas por la API, decisión 01-10)', () => {
+	it('NC con el estado de su factura y sin folio ni ERP → pendiente de emisión electrónica; factura o NC emitida en el ERP → no', () => {
+		expect(
+			electronicEmissionOf({ document_type: 'NC', status: 'Emitida', invoice_number: null, odoo_invoice_id: null, sent_to_odoo_at: null })
+		).toEqual({
+			electronic_emission_pending: true,
+			electronic_emission_label: 'Pendiente de emisión electrónica',
+		});
+		expect(electronicEmissionOf({ document_type: 'NC', status: 'Emitida', invoice_number: 'NC-1', odoo_invoice_id: 5 })).toEqual({
+			electronic_emission_pending: false,
+			electronic_emission_label: null,
+		});
+		expect(electronicEmissionOf({ document_type: 'FACTURA', status: 'Por Emitir' }).electronic_emission_pending).toBe(false);
+	});
+});
+
 describe('deriveContractStatus', () => {
 	const today = '2026-09-25';
 	const item = (patch: Partial<StatusItem> = {}): StatusItem => ({
@@ -1340,6 +1392,8 @@ describe('ContractsController', () => {
 			{} as never,
 			{} as never,
 			{} as never,
+			{} as never,
+			{} as never,
 			{} as never
 		);
 
@@ -1363,6 +1417,8 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never,
@@ -1394,6 +1450,8 @@ describe('ContractsController', () => {
 			{} as never,
 			{} as never,
 			{} as never,
+			{} as never,
+			{} as never,
 			{} as never
 		);
 
@@ -1422,6 +1480,8 @@ describe('ContractsController', () => {
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
+			{} as never,
+			{} as never,
 			{} as never,
 			{} as never,
 			{} as never,

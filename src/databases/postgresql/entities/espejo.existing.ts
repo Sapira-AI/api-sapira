@@ -57,9 +57,11 @@ export { ContractClaus } from '@/databases/postgresql/entities/contratos/contrac
 export { ContractDocument } from '@/databases/postgresql/entities/contratos/contract-document.entity';
 export { ContractInvoice } from '@/databases/postgresql/entities/contratos/contract-invoice.entity';
 export { ContractItemChangeLog } from '@/databases/postgresql/entities/contratos/contract-item-change-log.entity';
+export { ContractItemPause } from '@/databases/postgresql/entities/contratos/contract-item-pause.entity';
 export { ContractItem } from '@/databases/postgresql/entities/contratos/contract-item.entity';
 export { ContractLifecycleEvent } from '@/databases/postgresql/entities/contratos/contract-lifecycle-event.entity';
 export { ContractNotification } from '@/databases/postgresql/entities/contratos/contract-notification.entity';
+export { ContractScheduledChange } from '@/databases/postgresql/entities/contratos/contract-scheduled-change.entity';
 export { ContractTemplate } from '@/databases/postgresql/entities/contratos/contract-template.entity';
 export { ContractWorkflowHistory } from '@/databases/postgresql/entities/contratos/contract-workflow-history.entity';
 export { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';

@@ -16,9 +16,10 @@ import {
 	syncContractTerm,
 } from './api-written-fields';
 import { type FxPeriodRate, normalizeCountry, normalizeTaxRate, round2 } from './billing-engine';
+import { todayFor } from './business-date';
 import { catalogPriceIds, loadCatalogPrices } from './catalog-prices';
 import { headerAmounts } from './consumption';
-import { PENDING_STATUS, voidedSql } from './contract-360';
+import { creditNoteStatusFor, PENDING_STATUS, voidedSql } from './contract-360';
 import { insertEngineInvoices, insertEngineLines, type InvoiceIssuer, type InvoiceLineUnits } from './contract-activation.service';
 import {
 	type ChangeContext,
@@ -28,18 +29,25 @@ import {
 	type ChangeItemRow,
 	type ChangePlan,
 	type ChangePreview,
+	type ContractFxRateRow,
+	type ItemPauseRow,
 	mirrorCreditNoteAmounts,
+	NEW_ENTITY_KEY,
 	planChange,
+	planHorizonExtension,
+	type PlanOptions,
 	validateChangeRequest,
 	type WriteOp,
 } from './contract-changes';
 import { cleanPaymentTerms, QUOTE_CONTRACT_CREATED_STAGE, resolveUserId } from './contract-drafts.service';
+import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService, type PendingTermsPlan } from './contract-invoice-edit.service';
 import { ContractsService } from './contracts.service';
 import { parseStoredTemplate } from './invoice-description';
 import { type ContractConversion, itemRate, multicurrencyHeader, upperCode } from './multicurrency';
-import { PRICE_COLUMNS } from './price-rows';
-import { DEFAULT_INVOICE_LINE_MODE } from './pricing-engine';
+import { PRICE_COLUMNS, priceSpecFromRow } from './price-rows';
+import { DEFAULT_INVOICE_LINE_MODE, type PricedSubline } from './pricing-engine';
+import { loadScheduledChanges } from './scheduled-change-rows';
 import { DESCRIPTION_LIMITS_SQL, descriptionMaxCharsOfRow } from './tax-document-types';
 
 import type { ContractChangeRequestDto } from './dtos/contract-changes.dto';
@@ -52,10 +60,14 @@ const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6 || 0;
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
+/**
+ * Avisos que solo informan lo que el cambio hace (no son un riesgo que justificar): no piden motivo. `pending_descriptions_updated` =
+ * `item_update` (§9.2, corregir un dato) regenera la glosa de las Por Emitir del ítem con los datos corregidos.
+ */
+export const INFORMATIVE_WARNINGS: ReadonlySet<string> = new Set(['pending_descriptions_updated']);
 /** Origen de las líneas y NC que crean las modificaciones. */
 export const CHANGES_FX_RATE_SOURCE = 'contract-change';
-/** Estado con que nace la NC espejo (Supuesto: la emite Facturación; S4-8 pendiente con Leon). */
-export const CREDIT_NOTE_STATUS = PENDING_STATUS;
+export { creditNoteStatusFor } from './contract-360';
 
 /**
  * Líneas de las NC de descuento vigentes (`credit_type = 'discount'`, activas, no Canceladas) de las facturas del contrato, con la factura que
@@ -115,11 +127,24 @@ export function requestHash(dto: unknown): string {
 		.digest('hex');
 }
 
+/** Lo que crea el cambio: ítems (clave → id), facturas, NC, razón social nueva (§9.3.10) y pactos aplicados (§9.3.4/§9.3.6). */
+export interface ChangeCreated {
+	items: Record<string, string>;
+	invoices: string[];
+	credit_notes: string[];
+	entity_id?: string | null;
+	scheduled_changes?: string[];
+	/** `pause` (§9.3.3): filas nuevas de `contract_item_pauses` (se ligan al evento con `pause_event_id`). */
+	pauses?: string[];
+	/** `resume` (§9.3.3): pausas cerradas (se ligan al evento con `resume_event_id`). */
+	resumed_pauses?: string[];
+}
+
 export interface ChangeApplyResult extends ChangePreview {
 	applied: boolean;
 	idempotent: boolean;
 	event_id: string | null;
-	created: { items: Record<string, string>; invoices: string[]; credit_notes: string[] };
+	created: ChangeCreated;
 	/** Contrato 360 después del cambio (`GET /contracts/:id`). */
 	detail: unknown;
 }
@@ -142,17 +167,24 @@ export class ContractChangesService {
 	constructor(
 		private readonly dataSource: DataSource,
 		private readonly contracts: ContractsService,
-		private readonly invoiceEdit: ContractInvoiceEditService
+		private readonly invoiceEdit: ContractInvoiceEditService,
+		private readonly descriptions: ContractInvoiceDescriptionsService
 	) {}
 
 	// ---------------------------------------------------------------- vista previa
 
 	/** `POST /contracts/:id/changes/preview`: no escribe nada. */
-	async preview(idOrNumber: string, dto: ContractChangeRequestDto, holdingId: string, today = new Date()): Promise<ChangePreview> {
+	async preview(
+		idOrNumber: string,
+		dto: ContractChangeRequestDto,
+		holdingId: string,
+		today = new Date(),
+		options: PlanOptions = {}
+	): Promise<ChangePreview> {
 		validateChangeRequest(dto);
 		const resolved = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const ctx = await this.loadContext(this.dataSource, resolved.id, holdingId, dto, today.toISOString().slice(0, 10));
-		const plan = planChange(ctx, dto);
+		const ctx = await this.loadContext(this.dataSource, resolved.id, holdingId, dto, todayFor(null, today));
+		const plan = planChange(ctx, dto, options);
 
 		await this.planPendingTerms(this.dataSource, ctx, dto, plan, holdingId, false);
 
@@ -213,7 +245,8 @@ export class ContractChangesService {
 		holdingId: string,
 		authId: string,
 		idempotencyKey?: string,
-		today = new Date()
+		today = new Date(),
+		options: PlanOptions = {}
 	): Promise<ChangeApplyResult> {
 		validateChangeRequest(dto);
 		const resolved = await this.contracts.resolveContract(idOrNumber, holdingId);
@@ -256,15 +289,16 @@ export class ContractChangesService {
 						items: (metadata.created_items as Record<string, string> | undefined) ?? {},
 						invoices: (metadata.created_invoices as string[] | undefined) ?? [],
 						credit_notes: (metadata.created_credit_notes as string[] | undefined) ?? [],
+						entity_id: (metadata.created_entity_id as string | null | undefined) ?? null,
+						scheduled_changes: (metadata.scheduled_changes_applied as string[] | undefined) ?? [],
+						pauses: (metadata.created_pauses as string[] | undefined) ?? [],
+						resumed_pauses: (metadata.resumed_pauses as string[] | undefined) ?? [],
 					};
 					// La respuesta repite el preview guardado al aplicar (eventos anteriores sin preview: el contrato actual sin reglas).
 					const stored = metadata.preview as ChangePreview | undefined;
 					const preview =
 						stored ??
-						this.previewWithoutRules(
-							await this.loadContext(this.dataSource, resolved.id, holdingId, dto, today.toISOString().slice(0, 10)),
-							dto
-						);
+						this.previewWithoutRules(await this.loadContext(this.dataSource, resolved.id, holdingId, dto, todayFor(null, today)), dto);
 
 					return {
 						...preview,
@@ -280,8 +314,8 @@ export class ContractChangesService {
 					};
 				}
 			}
-			const ctx = await this.loadContext(runner, resolved.id, holdingId, dto, today.toISOString().slice(0, 10));
-			const plan = planChange(ctx, dto);
+			const ctx = await this.loadContext(runner, resolved.id, holdingId, dto, todayFor(null, today));
+			const plan = planChange(ctx, dto, options);
 			const pendingTerms = await this.planPendingTerms(runner, ctx, dto, plan, holdingId, true);
 
 			if (!plan.preview.can_apply) {
@@ -293,8 +327,8 @@ export class ContractChangesService {
 					preview: plan.preview,
 				});
 			}
-			// Las advertencias son blandas: piden motivo y siguen (flexibilidad con trazabilidad).
-			if (plan.preview.warnings.length && !dto.reason?.trim() && !dto.notes?.trim()) {
+			// Las advertencias son blandas: piden motivo y siguen (flexibilidad con trazabilidad). Las informativas no piden motivo.
+			if (plan.preview.warnings.some((warning) => !INFORMATIVE_WARNINGS.has(warning.code)) && !dto.reason?.trim() && !dto.notes?.trim()) {
 				await runner.rollbackTransaction();
 				active = false;
 				throw validationException([
@@ -329,10 +363,18 @@ export class ContractChangesService {
 				await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, $2::date)`, [ctx.contract.id, plan.event.rsm_from_month]);
 			}
 			const eventId = await this.insertEvent(runner, ctx, plan, created, holdingId, userId, key, key ? requestHash(dto) : null);
+
+			await this.linkEvent(runner, plan, created, eventId, holdingId, dto);
 			let quoteStageUpdated: boolean | null = null;
 
 			if (dto.origin?.type === 'quote' && dto.origin.quote_id)
-				quoteStageUpdated = await this.markQuoteContractCreated(runner, dto.origin.quote_id, holdingId);
+				quoteStageUpdated = await this.markQuoteContractCreated(runner, dto.origin.quote_id, holdingId, {
+					contractId: ctx.contract.id,
+					contractNumber: ctx.contract.contract_number,
+					changeEventId: eventId,
+					changeType: dto.change.type,
+					userId,
+				});
 			await runner.commitTransaction();
 			active = false;
 			if (quoteStageUpdated === false)
@@ -359,6 +401,70 @@ export class ContractChangesService {
 		}
 	}
 
+	// ---------------------------------------------------------------- job: horizonte de los ítems sin término
+
+	/**
+	 * Job `contracts-extend-horizon` para un holding (`planHorizonExtension`): por contrato Activo con ítems recurrentes sin término vivos, una
+	 * transacción con la costura y el contrato bloqueado (`FOR UPDATE`, así dos réplicas no duplican: la segunda ve el horizonte cubierto) que
+	 * crea las Por Emitir que faltan y un evento `HORIZON_EXTENDED` (actor sistema) solo si creó algo. Un contrato con bloqueos (p. ej. tasa fija
+	 * faltante) se omite con un aviso en el log. Devuelve cuántos contratos se extendieron.
+	 */
+	async extendHorizonForHolding(holdingId: string, actorId: string, today = new Date()): Promise<number> {
+		const day = todayFor(null, today);
+		const contracts = (await this.dataSource.query(
+			`SELECT DISTINCT c.id FROM contracts c
+			JOIN contract_items ci ON ci.contract_id = c.id AND ci.holding_id = c.holding_id
+			WHERE c.holding_id = $1 AND c.deleted_at IS NULL AND c.status = 'Activo'
+				AND COALESCE(ci.is_recurring, true) AND ci.end_date IS NULL AND ci.term_months IS NULL AND ci.churn_date IS NULL
+			ORDER BY c.id`,
+			[holdingId]
+		)) as Row[];
+		const dto = {
+			effective_date: day,
+			origin: { type: 'manual' },
+			change: { type: 'item_add', items: [] },
+		} as unknown as ContractChangeRequestDto;
+		let extended = 0;
+
+		for (const row of contracts ?? []) {
+			const contractId = String(row.id);
+			const runner = this.dataSource.createQueryRunner();
+
+			await runner.connect();
+			await runner.startTransaction();
+			try {
+				await setApiWriter(runner);
+				await runner.query(`SELECT id FROM contracts WHERE id = $1 AND holding_id = $2 AND deleted_at IS NULL FOR UPDATE`, [
+					contractId,
+					holdingId,
+				]);
+				const ctx = await this.loadContext(runner, contractId, holdingId, dto, day);
+				const plan = planHorizonExtension(ctx);
+
+				if (!plan || !plan.preview.can_apply) {
+					if (plan)
+						this.logger.warn(
+							`contracts-extend-horizon: contrato ${contractId} omitido: ${plan.preview.blockers.map((blocker) => blocker.message).join('; ')}`
+						);
+					await runner.rollbackTransaction();
+					continue;
+				}
+				const created = await this.execute(runner, ctx, plan, holdingId, actorId);
+
+				await this.insertEvent(runner, ctx, plan, created, holdingId, actorId, null);
+				await runner.commitTransaction();
+				extended += 1;
+			} catch (error) {
+				await runner.rollbackTransaction();
+				throw error;
+			} finally {
+				await runner.release();
+			}
+		}
+
+		return extended;
+	}
+
 	/** Preview "vacío" para la respuesta idempotente: el cambio ya se aplicó, así que solo se informa el contrato actual. */
 	private previewWithoutRules(ctx: ChangeContext, dto: ContractChangeRequestDto): ChangePreview {
 		const preview = planChange(ctx, dto).preview;
@@ -379,7 +485,7 @@ export class ContractChangesService {
 		const invoices: string[] = [];
 		const creditNotes: string[] = [];
 		const byInvoice = new Map(ctx.invoices.map((invoice) => [invoice.id, invoice]));
-		const issuer: InvoiceIssuer = {
+		const issuer: InvoiceIssuer & { client_entity_id: string | null } = {
 			contract_id: contract.id,
 			holding_id: holdingId,
 			company_id: contract.company_id,
@@ -423,10 +529,21 @@ export class ContractChangesService {
 		const order: Array<WriteOp['kind']> = [
 			// Multimoneda: el flag va primero (el validador de ítems lo lee al insertar uno en otra moneda).
 			'set_multicurrency',
+			// §9.3.10: la razón social nueva existe antes de reasignar contrato y facturas.
+			'insert_entity',
 			'insert_item',
 			'update_item',
+			// §9.3.3: pausas después de los ítems (el devengo las lee al reconstruirse, después de todo).
+			'insert_pause',
+			'update_pause',
+			// `reactivate`: el espejo se borra después de limpiar el churn del ítem.
+			'delete_item',
 			'delete_line',
 			'update_line',
+			// `item_update` (§9.2): la glosa se regenera con los datos ya escritos en el ítem y en la línea (cuenta, glosa, cantidad, precio).
+			'regenerate_descriptions',
+			// Corrección: motivo del desvío de la Por Emitir que recibe su parte de la diferencia emitida.
+			'insert_invoice_adjustment',
 			'recompute_header',
 			'cancel_invoice',
 			'create_invoices',
@@ -435,7 +552,11 @@ export class ContractChangesService {
 			'update_invoices_document',
 			'update_invoices_fx',
 			'insert_fx_rates',
+			'extend_fx_rates',
 			'update_contract',
+			// Pactos al final (los ítems nuevos ya tienen id); el enlace al evento va después de insertarlo.
+			'insert_scheduled_change',
+			'update_scheduled_change',
 		];
 		const ops = [...plan.ops].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 		const resolveKey = (key: string) => {
@@ -445,6 +566,15 @@ export class ContractChangesService {
 
 			return id;
 		};
+		// Ítem existente o clave `new:N` de un ítem que crea el mismo cambio.
+		const resolveRef = (ref: string | null) => (ref && ref.startsWith('new:') ? resolveKey(ref) : ref);
+		// §9.3.10: id real de la razón social creada en el acto (reemplaza `NEW_ENTITY_KEY` en contrato, facturas y evento).
+		let createdEntityId: string | null = null;
+		const resolveEntity = (value: unknown) => (value === NEW_ENTITY_KEY ? createdEntityId : value);
+		const pactIds: string[] = [];
+		const groupKeys = new Map<string, string>();
+		const pauseIds: string[] = [];
+		const resumedPauseIds: string[] = [];
 
 		for (const op of ops) {
 			switch (op.kind) {
@@ -454,6 +584,146 @@ export class ContractChangesService {
 						holdingId,
 						op.enabled,
 					]);
+					break;
+				case 'insert_entity': {
+					const entity = op.entity;
+					const [row] = (await runner.query(
+						`INSERT INTO client_entities (holding_id, client_id, legal_name, tax_id, country, legal_address, email, payment_terms)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) RETURNING id`,
+						[
+							holdingId,
+							entity.client_id,
+							entity.legal_name,
+							entity.tax_id,
+							entity.country,
+							entity.address,
+							entity.email,
+							entity.payment_terms ? JSON.stringify(entity.payment_terms) : null,
+						]
+					)) as Row[];
+
+					createdEntityId = String(row.id);
+					// Ligada al cliente comercial del contrato como razón social adicional (no principal).
+					await runner.query(
+						`INSERT INTO client_entity_clients (client_entity_id, client_id, holding_id, is_primary) VALUES ($1, $2, $3, false)
+						ON CONFLICT (client_entity_id, client_id) DO NOTHING`,
+						[createdEntityId, entity.client_id, holdingId]
+					);
+					issuer.client_entity_id = createdEntityId;
+					break;
+				}
+				case 'delete_item':
+					// Espejo de baja sin facturas propias (`reactivate` §9.3.2): primero sus filas de devengo (FK), después el ítem.
+					await runner.query(`DELETE FROM revenue_schedule_monthly WHERE contract_item_id = $1 AND holding_id = $2`, [
+						op.item_id,
+						holdingId,
+					]);
+					await runner.query(`DELETE FROM contract_items WHERE id = $1 AND holding_id = $2 AND contract_id = $3`, [
+						op.item_id,
+						holdingId,
+						contract.id,
+					]);
+					break;
+				case 'extend_fx_rates':
+					for (const rate of op.rates) {
+						await runner.query(
+							`UPDATE contract_fx_period_rates SET period_end = $3::date,
+								notes = COALESCE(notes || E'\n', '') || 'Extendida al nuevo fin por renovación (v2)'
+							WHERE id = $1 AND holding_id = $2 AND contract_id = $4`,
+							[rate.id, holdingId, rate.period_end, contract.id]
+						);
+					}
+					break;
+				case 'insert_scheduled_change': {
+					const row = op.row;
+					const group = row.group_key ? (groupKeys.get(row.group_key) ?? randomUUID()) : null;
+
+					if (row.group_key && group) groupKeys.set(row.group_key, group);
+					const [inserted] = (await runner.query(
+						`INSERT INTO contract_scheduled_changes (
+							holding_id, contract_id, contract_item_id, group_key, parent_id, trigger, effective_date, kind, value, status,
+							status_reason, status_changed_by, applied_value, applied_at, origin, notes, created_by
+						) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $10 = 'applied' THEN now() END, $14::jsonb, $15, $12)
+						RETURNING id`,
+						[
+							holdingId,
+							contract.id,
+							resolveRef(row.contract_item_ref),
+							group,
+							row.parent_id,
+							row.trigger,
+							row.effective_date,
+							row.kind,
+							row.value,
+							row.status,
+							row.status_reason,
+							userId,
+							row.applied_value,
+							JSON.stringify(row.origin),
+							row.notes,
+						]
+					)) as Row[];
+
+					if (row.status === 'applied') pactIds.push(String(inserted.id));
+					break;
+				}
+				case 'update_scheduled_change': {
+					const sets: string[] = [];
+					const params: unknown[] = [op.id, holdingId, contract.id];
+					const add = (column: string, value: unknown) => {
+						params.push(value);
+						sets.push(`${column} = $${params.length}`);
+					};
+
+					if (op.set.status !== undefined) {
+						add('status', op.set.status);
+						add('status_changed_by', userId);
+						if (op.set.status === 'applied') {
+							sets.push('applied_at = now()');
+							pactIds.push(op.id);
+						}
+					}
+					if (op.set.status_reason !== undefined) add('status_reason', op.set.status_reason);
+					if (op.set.applied_value !== undefined) add('applied_value', op.set.applied_value);
+					if (op.set.next_effective_date !== undefined) add('next_effective_date', op.set.next_effective_date);
+					if (sets.length)
+						await runner.query(
+							`UPDATE contract_scheduled_changes SET ${sets.join(', ')} WHERE id = $1 AND holding_id = $2 AND contract_id = $3`,
+							params
+						);
+					break;
+				}
+				case 'mark_events_reversed':
+					// Se escribe después del evento nuevo (`linkEvent`).
+					break;
+				case 'insert_pause': {
+					const pause = op.pause;
+					const [row] = (await runner.query(
+						`INSERT INTO contract_item_pauses (holding_id, contract_id, contract_item_id, pause_start, pause_end, extend_term, status, reason, created_by)
+						VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9) RETURNING id`,
+						[
+							holdingId,
+							contract.id,
+							resolveRef(pause.contract_item_id),
+							pause.pause_start,
+							pause.pause_end,
+							pause.extend_term,
+							pause.status,
+							pause.reason,
+							userId,
+						]
+					)) as Row[];
+
+					pauseIds.push(String(row.id));
+					break;
+				}
+				case 'update_pause':
+					await runner.query(
+						`UPDATE contract_item_pauses SET pause_end = $4::date, status = $5
+						WHERE id = $1 AND holding_id = $2 AND contract_id = $3 AND status <> 'cancelled'`,
+						[op.id, holdingId, contract.id, op.set.pause_end, op.set.status]
+					);
+					resumedPauseIds.push(op.id);
 					break;
 				case 'insert_item': {
 					const item = op.item;
@@ -480,13 +750,13 @@ export class ContractChangesService {
 							quantity, unit_price, annual_unit_price, price_entry_mode, discount_type, discount_value,
 							price, final_price, currency, billing_frequency, billing_method, start_date, end_date, term_months,
 							is_recurring, related_item_id, renews_item_id, booking_date, auto_renew, price_id, quote_item_id,
-							annual_price, monthly_price, billing_period_price
+							annual_price, monthly_price, billing_period_price, billing_anchor_day
 						) VALUES (
 							$1, $2, $3, $4, $5, $6, $7, $8,
 							$9, $10, $11, $12, $13, $14,
 							$15, $16, $17, $18, $19, $20, $21, $22,
 							$23, $24, $25, $26, $27, $28, $29,
-							$30, $31, $32
+							$30, $31, $32, $33
 						) RETURNING id`,
 						[
 							contract.id,
@@ -512,7 +782,8 @@ export class ContractChangesService {
 							item.end_date,
 							item.term_months,
 							item.is_recurring,
-							item.related_item_id,
+							// El ajuste de una renovación apunta a su RENEWAL, que nace en el mismo cambio (`new:N`).
+							resolveRef(item.related_item_id),
 							item.renews_item_id,
 							item.booking_date,
 							item.auto_renew,
@@ -521,6 +792,8 @@ export class ContractChangesService {
 							prices.annual_price,
 							prices.monthly_price,
 							prices.billing_period_price,
+							// §9.3.9: ciclo propio del ítem (NULL = el del contrato).
+							item.billing_anchor_day ?? null,
 						]
 					)) as Row[];
 					const id = String(row.id);
@@ -586,9 +859,53 @@ export class ContractChangesService {
 					if (op.set.churn_date !== undefined) add('churn_date', op.set.churn_date);
 					if (op.set.churn_monthly_amount !== undefined) add('churn_monthly_amount', op.set.churn_monthly_amount);
 					if (op.set.renewed_by_key !== undefined) add('renewed_by_item_id', resolveKey(op.set.renewed_by_key));
+					// §9.3.7: el ítem cortado termina el día antes del corte con su valor por los meses que quedan (mismo mensual).
+					if (op.set.end_date !== undefined) add('end_date', op.set.end_date);
+					if (op.set.term_months !== undefined) add('term_months', op.set.term_months);
+					if (op.set.price !== undefined) add('price', op.set.price);
+					if (op.set.final_price !== undefined) add('final_price', op.set.final_price);
+					// §9.3.5: `billing_conditions.auto_renew` sobre los ítems recurrentes vivos.
+					if (op.set.auto_renew !== undefined) add('auto_renew', op.set.auto_renew);
+					// §9.2 `item_update`: la cuenta y, al corregir un dato, glosa, tipo y valores (precios derivados calculados en el plan con `pricingFields`).
+					if (op.set.account !== undefined) add('account', op.set.account);
+					for (const column of [
+						'product_name',
+						'item_type',
+						'quantity',
+						'unit_price',
+						'annual_unit_price',
+						'annual_price',
+						'price_entry_mode',
+						'discount_type',
+						'discount_value',
+						'monthly_price',
+						'billing_period_price',
+					] as const)
+						if (op.set[column] !== undefined) add(column, op.set[column]);
 					if (sets.length) await runner.query(`UPDATE contract_items SET ${sets.join(', ')} WHERE id = $1 AND holding_id = $2`, params);
 					break;
 				}
+				case 'regenerate_descriptions': {
+					// Mismo constructor que el 360 (plantilla del contrato, ajuste al límite); salta protegidas, editadas a mano y bloqueadas.
+					const regenerated = await this.descriptions.regenerateLines(runner, contract.id, holdingId, op.line_ids);
+
+					plan.event.metadata = {
+						...plan.event.metadata,
+						descriptions_regenerated: regenerated.map((line) => ({
+							line_id: line.line_id,
+							invoice_id: line.invoice_id,
+							before: line.before,
+							after: line.after,
+						})),
+					};
+					break;
+				}
+				case 'insert_invoice_adjustment':
+					await runner.query(
+						`INSERT INTO invoice_adjustments (invoice_id, holding_id, type, amount_diff, notes, adjusted_by) VALUES ($1, $2, $3, $4, $5, $6)`,
+						[op.invoice_id, holdingId, op.type, op.amount_diff, op.notes, userId]
+					);
+					break;
 				case 'delete_line':
 					touched.add(op.invoice_id);
 					await runner.query(`DELETE FROM invoice_items WHERE id = $1 AND invoice_id = $2 AND holding_id = $3`, [
@@ -609,6 +926,8 @@ export class ContractChangesService {
 							subtotal_contract_currency = $7, subtotal_invoice_currency = $8, tax_amount_contract_currency = $9, tax_amount_invoice_currency = $10,
 							total_contract_currency = $11, total_invoice_currency = $12,
 							billing_period_end = COALESCE($13::date, billing_period_end),
+							-- Pausa (§9.3.3): la línea cuyo período empieza en la pausa queda desde el día siguiente a su fin.
+							billing_period_start = COALESCE($18::date, billing_period_start),
 							-- Una glosa escrita a mano (description_locked, spec facturas §3.6) no se toca.
 							description = CASE WHEN description_locked THEN description ELSE description || $14 END,
 							-- Línea con consumo registrado: el desglose del motor se reescribe con la cantidad registrada (las demás lo conservan).
@@ -632,6 +951,7 @@ export class ContractChangesService {
 							holdingId,
 							values.pricing_breakdown ? JSON.stringify(values.pricing_breakdown) : null,
 							values.quantity_source ?? null,
+							values.billing_period_start ?? null,
 						]
 					);
 					break;
@@ -681,12 +1001,14 @@ export class ContractChangesService {
 					break;
 				}
 				case 'credit_note':
-					creditNotes.push(await this.insertCreditNote(runner, op.mirrors, op.lines, op.note, holdingId, plan.preview.effective_date));
+					creditNotes.push(
+						await this.insertCreditNote(runner, op.mirrors, op.lines, op.note, holdingId, plan.preview.effective_date, userId)
+					);
 					break;
 				case 'update_invoices_fields': {
 					op.invoice_ids.forEach((id) => touched.add(id));
 					const columns = Object.keys(op.set);
-					const params: unknown[] = [op.invoice_ids, holdingId, ...columns.map((column) => op.set[column])];
+					const params: unknown[] = [op.invoice_ids, holdingId, ...columns.map((column) => resolveEntity(op.set[column]))];
 
 					await runner.query(
 						`UPDATE invoices SET ${columns.map((column, index) => `${column} = $${index + 3}`).join(', ')}
@@ -831,7 +1153,7 @@ export class ContractChangesService {
 					const [after] = (await runner.query(
 						`UPDATE contracts SET ${columns.map((column, index) => `${column} = $${index + 3}`).join(', ')} WHERE id = $1 AND holding_id = $2
 						RETURNING ${fxColumns}`,
-						[contract.id, holdingId, ...columns.map((column) => op.set[column])]
+						[contract.id, holdingId, ...columns.map((column) => resolveEntity(op.set[column]))]
 					)) as Row[];
 
 					// FX a la moneda del sistema del contrato (antes `auto_calculate_contract_fx`), con su misma condición; además, si cambió el
@@ -846,7 +1168,63 @@ export class ContractChangesService {
 		if (itemIds.size) await syncContractTerm(runner, contract.id, holdingId);
 		await refreshInvoiceSystemAmounts(runner, holdingId, [...touched]);
 
-		return { items: Object.fromEntries(itemIds), invoices, credit_notes: creditNotes };
+		return {
+			items: Object.fromEntries(itemIds),
+			invoices,
+			credit_notes: creditNotes,
+			entity_id: createdEntityId,
+			scheduled_changes: pactIds,
+			pauses: pauseIds,
+			resumed_pauses: resumedPauseIds,
+		};
+	}
+
+	/**
+	 * Después del evento: los pactos aplicados por el cambio quedan ligados a él (`applied_event_id`, §9.4 #1), los eventos de baja que
+	 * revierte `reactivate` reciben `metadata.reversed_by` (§9.3.2), las pausas su `pause_event_id` / `resume_event_id` (§9.3.3) y la
+	 * propuesta de renovación confirmada queda `confirmed` con `metadata.confirmed_by_event_id` (§9.3.5).
+	 */
+	private async linkEvent(
+		runner: QueryRunner,
+		plan: ChangePlan,
+		created: ChangeCreated,
+		eventId: string,
+		holdingId: string,
+		dto?: ContractChangeRequestDto
+	) {
+		if (created.pauses?.length)
+			await runner.query(`UPDATE contract_item_pauses SET pause_event_id = $3 WHERE id = ANY($1::uuid[]) AND holding_id = $2`, [
+				created.pauses,
+				holdingId,
+				eventId,
+			]);
+		if (created.resumed_pauses?.length)
+			await runner.query(`UPDATE contract_item_pauses SET resume_event_id = $3 WHERE id = ANY($1::uuid[]) AND holding_id = $2`, [
+				created.resumed_pauses,
+				holdingId,
+				eventId,
+			]);
+		if (dto?.origin?.type === 'renewal_proposal' && dto.origin.event_id)
+			await runner.query(
+				`UPDATE contract_lifecycle_events SET event_status = 'Completed', completed_at = now(),
+					metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('status', 'confirmed', 'confirmed_by_event_id', $3::text, 'confirmed_at', now())
+				WHERE id = $1 AND holding_id = $2 AND event_type = 'RENEWAL_PROPOSED'`,
+				[dto.origin.event_id, holdingId, eventId]
+			);
+		if (created.scheduled_changes?.length)
+			await runner.query(
+				`UPDATE contract_scheduled_changes SET applied_event_id = $3, applied_at = COALESCE(applied_at, now())
+				WHERE id = ANY($1::uuid[]) AND holding_id = $2`,
+				[created.scheduled_changes, holdingId, eventId]
+			);
+		for (const op of plan.ops) {
+			if (op.kind !== 'mark_events_reversed' || !op.event_ids.length) continue;
+			await runner.query(
+				`UPDATE contract_lifecycle_events SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('reversed_by', $3::text)
+				WHERE id = ANY($1::uuid[]) AND holding_id = $2`,
+				[op.event_ids, holdingId, eventId]
+			);
+		}
 	}
 
 	/** Encabezado = Σ líneas (las no tocadas no se reescriben); sin líneas → Cancelada. */
@@ -967,11 +1345,15 @@ export class ContractChangesService {
 		lines: Array<{ line: ChangeInvoiceLineRow; ratio: number; period_start: string }>,
 		note: string,
 		holdingId: string,
-		effectiveDate: string
+		effectiveDate: string,
+		userId: string | null = null
 	): Promise<string> {
+		const creditReason = note.includes('cancelación') ? 'churn' : 'downsell';
+
 		return await insertMirrorCreditNote(runner, mirrors, lines, note, holdingId, effectiveDate, {
-			credit_reason: note.includes('cancelación') ? 'churn' : 'downsell',
+			credit_reason: creditReason,
 			line_suffix: (periodStart) => ` (NC espejo por baja desde el ${periodStart})`,
+			reference: { kind: 'discount', reason: note, user_id: userId },
 		});
 	}
 
@@ -979,7 +1361,7 @@ export class ContractChangesService {
 		runner: QueryRunner,
 		ctx: ChangeContext,
 		plan: ChangePlan,
-		created: { items: Record<string, string>; invoices: string[]; credit_notes: string[] },
+		created: ChangeCreated,
 		holdingId: string,
 		userId: string,
 		idempotencyKey: string | null,
@@ -1003,6 +1385,7 @@ export class ContractChangesService {
 				plan.preview.effective_date,
 				event.amount_delta,
 				JSON.stringify(itemsAffected),
+				// §9.3.10: la razón social creada en el acto reemplaza su clave temporal.
 				JSON.stringify({
 					...event.metadata,
 					contract_number: ctx.contract.contract_number,
@@ -1013,27 +1396,69 @@ export class ContractChangesService {
 					created_items: created.items,
 					created_invoices: created.invoices,
 					created_credit_notes: created.credit_notes,
+					created_entity_id: created.entity_id ?? null,
+					scheduled_changes_applied: created.scheduled_changes ?? [],
+					created_pauses: created.pauses ?? [],
+					resumed_pauses: created.resumed_pauses ?? [],
 					invoices_updated: plan.preview.invoices.updated.map((invoice) => invoice.id),
 					invoices_cancelled: plan.preview.invoices.cancelled.map((invoice) => invoice.id),
 					rsm_from_month: event.rsm_from_month,
-				}),
+				})
+					.split(JSON.stringify(NEW_ENTITY_KEY))
+					.join(JSON.stringify(created.entity_id ?? null)),
 			]
 		)) as Row[];
 
 		return String(row.id);
 	}
 
-	/** Cotización de origen → etapa "Contrato creado" (mapa M1: solo al final). */
-	private async markQuoteContractCreated(runner: QueryRunner, quoteId: string, holdingId: string): Promise<boolean> {
-		const [stage] = (await runner.query(`SELECT id FROM quote_stages WHERE holding_id = $1 AND lower(name) = lower($2) LIMIT 1`, [
-			holdingId,
-			QUOTE_CONTRACT_CREATED_STAGE,
-		])) as Row[];
+	/**
+	 * Cotización de origen → etapa "Contrato creado" (mapa M1: solo al final) y evento `APPLIED_TO_CONTRACT` en su historial
+	 * (`quote_events`), en la misma transacción del cambio. La etapa se busca por `kind = contract_created` y, si el holding
+	 * no la tiene con kind, por nombre (igual que el alta desde cotización). Sin etapa, la cotización queda donde está, pero
+	 * el evento se registra igual (`metadata.stage_updated = false`).
+	 */
+	private async markQuoteContractCreated(
+		runner: QueryRunner,
+		quoteId: string,
+		holdingId: string,
+		link: { contractId: string; contractNumber: string | null; changeEventId: string; changeType: string; userId: string }
+	): Promise<boolean> {
+		const [from] = (await runner.query(
+			`SELECT q.quote_stage_id, qs.kind FROM quotes q LEFT JOIN quote_stages qs ON qs.id = q.quote_stage_id WHERE q.id = $1 AND q.holding_id = $2`,
+			[quoteId, holdingId]
+		)) as Row[];
+		const [stage] = (await runner.query(
+			`SELECT id, kind FROM quote_stages WHERE holding_id = $1 AND (kind = 'contract_created' OR lower(name) = lower($2))
+			ORDER BY (kind = 'contract_created') DESC NULLS LAST, position LIMIT 1`,
+			[holdingId, QUOTE_CONTRACT_CREATED_STAGE]
+		)) as Row[];
+		const toStageId = stage ? String(stage.id) : null;
 
-		if (!stage) return false;
-		await runner.query(`UPDATE quotes SET quote_stage_id = $3 WHERE id = $1 AND holding_id = $2`, [quoteId, holdingId, stage.id]);
+		if (toStageId) await runner.query(`UPDATE quotes SET quote_stage_id = $3 WHERE id = $1 AND holding_id = $2`, [quoteId, holdingId, toStageId]);
+		await runner.query(
+			`INSERT INTO quote_events (holding_id, quote_id, type, from_stage_id, to_stage_id, from_kind, to_kind, actor_id, metadata)
+			VALUES ($1, $2, 'APPLIED_TO_CONTRACT', $3, $4, $5, $6, $7, $8::jsonb)`,
+			[
+				holdingId,
+				quoteId,
+				toText(from?.quote_stage_id),
+				toStageId ?? toText(from?.quote_stage_id),
+				toText(from?.kind),
+				toStageId ? 'contract_created' : toText(from?.kind),
+				link.userId,
+				JSON.stringify({
+					source: 'api_v2',
+					contract_id: link.contractId,
+					contract_number: link.contractNumber,
+					change_event_id: link.changeEventId,
+					change_type: link.changeType,
+					stage_updated: Boolean(toStageId),
+				}),
+			]
+		);
 
-		return true;
+		return Boolean(toStageId);
 	}
 
 	// ---------------------------------------------------------------- lectura del contexto
@@ -1069,6 +1494,7 @@ export class ContractChangesService {
 			catalogPrices,
 			creditedRows,
 			consumptionRows,
+			extra,
 		] = await Promise.all([
 			db.query(
 				`SELECT c.id, c.contract_number, c.status, c.client_id, c.client_entity_id, c.company_id, c.quote_id,
@@ -1089,6 +1515,11 @@ export class ContractChangesService {
 							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
 						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates,
 					COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
+					(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+							'id', r.id, 'purpose', r.purpose, 'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
+							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
+						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id) AS fx_rates,
+					c.churn_date::text AS contract_churn_date,
 					public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date
 				FROM contracts c
 				LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
@@ -1103,7 +1534,7 @@ export class ContractChangesService {
 					ci.monthly_price, ci.billing_period_price, ci.price, ci.final_price, ci.term_months, ci.billing_frequency, ci.billing_method,
 					ci.is_recurring, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
 					ci.booking_date::text AS booking_date, ci.churn_date::text AS churn_date,
-					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency, ${PRICE_COLUMNS}
+					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS}
 				FROM contract_items ci
 				LEFT JOIN prices p ON p.id = ci.price_id
 				WHERE ci.contract_id = $1 AND ci.holding_id = $2
@@ -1114,7 +1545,7 @@ export class ContractChangesService {
 				`SELECT i.id, i.invoice_number, i.status, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, i.invoice_type, i.document_type, i.export_type,
 					i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.client_entity_id, i.contract_currency, i.invoice_currency,
 					i.fx_contract_to_invoice, i.tax_rate, i.amount_contract_currency, i.vat, i.amount_invoice_currency, i.total_invoice_currency,
-					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, ${voidedSql('i')} AS voided
+					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.related_invoice_id, ${voidedSql('i')} AS voided
 				FROM invoices i
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
 				ORDER BY i.issue_date, i.id`,
@@ -1127,7 +1558,7 @@ export class ContractChangesService {
 					ii.total_contract_currency, ii.total_invoice_currency,
 					ii.billing_period_start::text AS billing_period_start, ii.billing_period_end::text AS billing_period_end, ii.quantity_source,
 					ii.visible_line_id, ii.fx_rate_source, ii.contract_currency AS line_currency, ii.fx_contract_to_invoice AS line_fx,
-					ii.fx_rate_date::text AS fx_rate_date
+					ii.fx_rate_date::text AS fx_rate_date, ii.description_locked, ii.pricing_breakdown
 				FROM invoice_items ii
 				JOIN invoices i ON i.id = ii.invoice_id
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
@@ -1189,6 +1620,7 @@ export class ContractChangesService {
 				WHERE ci.contract_id = $1 AND e.holding_id = $2`,
 				[contractId, holdingId]
 			) as Promise<Row[]>,
+			this.loadExtraContext(db, contractId, holdingId, dto),
 		]);
 
 		if (!contractRow) throw new NotFoundException('Contrato no encontrado');
@@ -1236,6 +1668,12 @@ export class ContractChangesService {
 			fx_invoice_rates: (parseJson(contractRow.fx_invoice_rates) as FxPeriodRate[] | null) ?? [],
 			requires_multicurrency_billing: contractRow.requires_multicurrency_billing === true,
 			fx_item_rates: (parseJson(contractRow.fx_item_rates) as FxPeriodRate[] | null) ?? [],
+			fx_rates: ((parseJson(contractRow.fx_rates) as ContractFxRateRow[] | null) ?? []).map((rate) => ({
+				...rate,
+				period_start: String(rate.period_start).slice(0, 10),
+				period_end: String(rate.period_end).slice(0, 10),
+			})),
+			churn_date: toText(contractRow.contract_churn_date),
 			cutoff_date: toText(contractRow.cutoff_date),
 			invoice_description_template: parseStoredTemplate(contractRow.invoice_description_template),
 			description_max_chars: descriptionMaxCharsOfRow(contractRow),
@@ -1272,6 +1710,7 @@ export class ContractChangesService {
 			auto_renew: Boolean(row.auto_renew),
 			currency: toText(row.currency),
 			price_id: toText(row.price_id),
+			billing_anchor_day: toNullableNumber(row.billing_anchor_day),
 			raw: row,
 		}));
 		const linesByInvoice = new Map<string, ChangeInvoiceLineRow[]>();
@@ -1315,6 +1754,8 @@ export class ContractChangesService {
 				currency: toText(row.line_currency),
 				fx: toNullableNumber(row.line_fx),
 				fx_rate_date: toText(row.fx_rate_date),
+				description_locked: row.description_locked === true,
+				pricing_breakdown: Array.isArray(row.pricing_breakdown) ? (row.pricing_breakdown as PricedSubline[]) : null,
 				consumption:
 					consumptionByKey.get(`${toText(row.contract_item_id) ?? ''}|${toText(row.billing_period_start)?.slice(0, 10) ?? ''}`) ?? null,
 			};
@@ -1347,6 +1788,8 @@ export class ContractChangesService {
 			sent_to_odoo_at: row.sent_to_odoo_at instanceof Date ? row.sent_to_odoo_at.toISOString() : toText(row.sent_to_odoo_at),
 			voided: row.voided === true,
 			client_tax_id: toText(row.client_tax_id),
+			credit_reason: toText(row.credit_reason),
+			related_invoice_id: toText(row.related_invoice_id),
 		}));
 
 		assignPreviousCredits(invoices, creditedRows ?? []);
@@ -1389,12 +1832,229 @@ export class ContractChangesService {
 				: null,
 			billable_metrics: new Map(metricRows.map((row) => [String(row.id), toText(row.status) ?? ''])),
 			catalog_prices: catalogPrices,
+			...extra,
 			today,
+		};
+	}
+
+	/**
+	 * Contexto del bloque B2 (§9.3): pactos del contrato y series de sus índices, razón social por identificador tributario (`new_entity`),
+	 * ítems de la cotización de origen, eventos de baja y otros contratos del cliente (`reactivate`).
+	 */
+	private async loadExtraContext(
+		db: Queryable,
+		contractId: string,
+		holdingId: string,
+		dto: ContractChangeRequestDto
+	): Promise<
+		Pick<
+			ChangeContext,
+			| 'scheduled_changes'
+			| 'index_series'
+			| 'entity_lookup'
+			| 'quote_items'
+			| 'churn_events'
+			| 'client_contracts'
+			| 'pauses'
+			| 'renewal_proposal'
+		>
+	> {
+		const change = dto.change;
+		const pacts = await loadScheduledChanges(db, contractId, holdingId);
+		const indexCodes = [...new Set(pacts.filter((pact) => pact.kind === 'index' && pact.index_code).map((pact) => pact.index_code!))];
+		const quoteId = dto.origin?.type === 'quote' ? dto.origin.quote_id : null;
+		const proposalId = dto.origin?.type === 'renewal_proposal' ? (dto.origin.event_id ?? null) : null;
+		const [indexRows, entityRows, quoteRows, eventRows, clientRows, pauseRows, proposalRows] = await Promise.all([
+			indexCodes.length
+				? (db.query(`SELECT codigo, fecha::text AS fecha, valor FROM indicadores_economicos WHERE codigo = ANY($1::text[]) ORDER BY fecha`, [
+						indexCodes,
+					]) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+			change.type === 'change_entity' && change.new_entity?.tax_id
+				? (db.query(
+						`SELECT ce.id, ce.legal_name, ce.tax_id, ce.country,
+							(ce.client_id = c.client_id OR EXISTS (
+								SELECT 1 FROM client_entity_clients x WHERE x.client_entity_id = ce.id AND x.client_id = c.client_id AND x.holding_id = c.holding_id)) AS belongs
+						FROM client_entities ce CROSS JOIN contracts c
+						WHERE ce.holding_id = $1 AND c.id = $2
+							AND lower(regexp_replace(ce.tax_id, '[^0-9kK]', '', 'g')) = lower(regexp_replace($3, '[^0-9kK]', '', 'g'))
+						ORDER BY belongs DESC, ce.id LIMIT 1`,
+						[holdingId, contractId, change.new_entity.tax_id]
+					) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+			quoteId
+				? (db.query(
+						`SELECT qi.id, qi.quote_id, qi.product_id, qi.product_name, qi.account, qi.item_type, qi.unit_of_measure, qi.quantity,
+							qi.unit_price, qi.annual_unit_price, qi.price_entry_mode, qi.discount_value, qi.billing_frequency, qi.billing_method,
+							qi.start_date::text AS start_date, qi.is_recurring, COALESCE(qi.currency, q.currency) AS currency, ${PRICE_COLUMNS}
+						FROM quote_items qi JOIN quotes q ON q.id = qi.quote_id
+						LEFT JOIN prices p ON p.id = qi.price_id
+						WHERE qi.quote_id = $1 AND qi.holding_id = $2`,
+						[quoteId, holdingId]
+					) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+			change.type === 'reactivate'
+				? (db.query(
+						`SELECT id, event_type, items_affected, effective_date::text AS effective_date, (metadata ? 'reversed_by') AS reversed
+						FROM contract_lifecycle_events WHERE contract_id = $1 AND holding_id = $2 AND event_type IN ('CHURN', 'DOWNSELL')
+						ORDER BY created_at DESC`,
+						[contractId, holdingId]
+					) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+			change.type === 'reactivate'
+				? (db.query(
+						`SELECT o.status, o.churn_date::text AS churn_date,
+							COALESCE((SELECT array_agg(DISTINCT oi.product_id::text) FROM contract_items oi WHERE oi.contract_id = o.id), '{}') AS product_ids
+						FROM contracts c JOIN contracts o ON o.client_id = c.client_id AND o.holding_id = c.holding_id AND o.id <> c.id AND o.deleted_at IS NULL
+						WHERE c.id = $1 AND c.holding_id = $2`,
+						[contractId, holdingId]
+					) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+			// §9.3.3: pausas de los ítems (estado derivado, MRR, pausar y reanudar).
+			db.query(
+				`SELECT id, contract_item_id, pause_start::text AS pause_start, pause_end::text AS pause_end, extend_term, status, reason
+				FROM contract_item_pauses WHERE contract_id = $1 AND holding_id = $2 ORDER BY pause_start, id`,
+				[contractId, holdingId]
+			) as Promise<Row[]>,
+			// §9.3.5: propuesta de renovación que se confirma.
+			proposalId
+				? (db.query(
+						`SELECT id, COALESCE(metadata->>'status', 'open') AS status, metadata->'items' AS items
+						FROM contract_lifecycle_events WHERE id = $1 AND contract_id = $2 AND holding_id = $3 AND event_type = 'RENEWAL_PROPOSED'`,
+						[proposalId, contractId, holdingId]
+					) as Promise<Row[]>)
+				: Promise.resolve([] as Row[]),
+		]);
+		const series = new Map<string, Array<{ date: string; value: number }>>();
+
+		for (const row of indexRows ?? []) {
+			const code = String(row.codigo);
+
+			series.set(code, [...(series.get(code) ?? []), { date: String(row.fecha).slice(0, 10), value: toNumber(row.valor) }]);
+		}
+		const [entity] = entityRows ?? [];
+		const [proposal] = proposalRows ?? [];
+		const proposalItems = parseJson(proposal?.items);
+
+		return {
+			pauses: (pauseRows ?? []).map(
+				(row): ItemPauseRow => ({
+					id: String(row.id),
+					contract_item_id: String(row.contract_item_id),
+					pause_start: String(row.pause_start).slice(0, 10),
+					pause_end: toText(row.pause_end)?.slice(0, 10) ?? null,
+					extend_term: row.extend_term === true,
+					status: toText(row.status) ?? 'active',
+					reason: toText(row.reason),
+				})
+			),
+			renewal_proposal: proposal
+				? {
+						id: String(proposal.id),
+						status: toText(proposal.status) ?? 'open',
+						item_ids: Array.isArray(proposalItems) ? (proposalItems as Row[]).map((item) => String(item.item_id)) : [],
+					}
+				: null,
+			scheduled_changes: pacts,
+			index_series: series,
+			entity_lookup: entity
+				? {
+						id: String(entity.id),
+						legal_name: toText(entity.legal_name),
+						tax_id: toText(entity.tax_id),
+						country: toText(entity.country),
+						belongs_to_client: entity.belongs === true,
+					}
+				: null,
+			quote_items: new Map(
+				(quoteRows ?? []).map((row) => {
+					const annual = toText(row.price_entry_mode) === 'annual';
+
+					return [
+						String(row.id),
+						{
+							id: String(row.id),
+							quote_id: String(row.quote_id),
+							product_id: toText(row.product_id),
+							product_name: toText(row.product_name),
+							account: toText(row.account),
+							item_type: toText(row.item_type),
+							unit_of_measure: toText(row.unit_of_measure),
+							quantity: toNullableNumber(row.quantity),
+							unit_price: annual ? toNumber(row.annual_unit_price) / 12 : toNullableNumber(row.unit_price),
+							annual_unit_price: toNullableNumber(row.annual_unit_price),
+							price_entry_mode: toText(row.price_entry_mode),
+							discount_value: toNullableNumber(row.discount_value),
+							billing_frequency: toText(row.billing_frequency),
+							billing_method: toText(row.billing_method),
+							start_date: toText(row.start_date)?.slice(0, 10) ?? null,
+							is_recurring: row.is_recurring !== false,
+							currency: toText(row.currency)?.toUpperCase() ?? null,
+							price_spec: row.price_id ? priceSpecFromRow(row) : null,
+						},
+					];
+				})
+			),
+			churn_events: (eventRows ?? []).map((row) => {
+				const affected = parseJson(row.items_affected);
+
+				return {
+					id: String(row.id),
+					event_type: String(row.event_type),
+					items_affected: Array.isArray(affected) ? affected.map(String) : [],
+					effective_date: toText(row.effective_date),
+					reversed: row.reversed === true,
+				};
+			}),
+			client_contracts: (clientRows ?? []).map((row) => ({
+				status: toText(row.status),
+				churn_date: toText(row.churn_date)?.slice(0, 10) ?? null,
+				product_ids: Array.isArray(row.product_ids) ? (row.product_ids as unknown[]).map(String) : [],
+			})),
 		};
 	}
 }
 
 /** Ajustes de la NC espejo según quién la pide: motivo del catálogo (`credit_reason`) y sufijo de la glosa de cada línea. */
+/**
+ * Referencia de la NC a su factura (como la NC electrónica: tipo y folio del documento original, código SII del motivo: 1 = anula,
+ * 3 = corrige montos) y cierre de la original al anular (`Cancelada`, como la función legacy `cancel_invoice_with_credit_note`): sale
+ * de vencimientos y cobranza y queda neteada. Decisión de Domi 01-10.
+ */
+export const NC_REFERENCE_CODES = { cancellation: '1', discount: '3' } as const;
+const ORIGINAL_DOCUMENT_CODE_SQL = `SELECT COALESCE(t.code, CASE WHEN i.document_type = 'FACTURA_EXPORTACION' THEN '110' ELSE '33' END) AS code,
+		COALESCE(t.name, 'Factura electrónica') AS name
+	FROM invoices i LEFT JOIN contracts c ON c.id = i.contract_id LEFT JOIN tax_document_types t ON t.id = c.tax_document_type_id
+	WHERE i.id = $1 AND i.holding_id = $2`;
+
+export async function insertCreditNoteReference(
+	runner: QueryRunner,
+	creditNoteId: string,
+	original: { id: string; invoice_number: string | null; issue_date: string | null },
+	holdingId: string,
+	kind: keyof typeof NC_REFERENCE_CODES,
+	reason: string,
+	userId: string | null
+): Promise<void> {
+	const [doc] = (await runner.query(ORIGINAL_DOCUMENT_CODE_SQL, [original.id, holdingId])) as Row[];
+
+	await runner.query(
+		`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
+		[
+			creditNoteId,
+			holdingId,
+			original.invoice_number ?? original.id,
+			toText(doc?.code) ?? '33',
+			toText(doc?.name) ?? 'Factura electrónica',
+			NC_REFERENCE_CODES[kind],
+			reason,
+			original.issue_date,
+			userId,
+		]
+	);
+}
+
 export interface MirrorCreditNoteOptions {
 	/** `downsell` (default), `churn`, `issue_error` (reemisión por consumo corregido), etc.; CHECK `invoices_credit_reason_check`. */
 	credit_reason?: string;
@@ -1417,6 +2077,11 @@ export interface MirrorCreditNoteOptions {
 	 * acredita solo lo que queda de una línea ya descontada por NC previas). Sin valor = la forma de `line_shape`.
 	 */
 	partial_line_shape?: 'amount';
+	/**
+	 * Fila `invoice_references` a la factura acreditada (tipo y folio del original, código SII del motivo). Anular y la NC de descuento del
+	 * 360 la escriben ellos con su glosa; modificaciones y consumo la piden aquí.
+	 */
+	reference?: { kind: keyof typeof NC_REFERENCE_CODES; reason: string; user_id?: string | null };
 }
 
 /**
@@ -1441,7 +2106,7 @@ export function mirrorVisibleLineAmounts(
 /**
  * NC espejo exacto de la emitida (ROADMAP #10, mapa M2): misma moneda, FX, IVA, receptor y emisor; por cada línea, la parte
  * indicada por `ratio` (1 = completa) con montos negativos, conservando ítem y período (así `nc_discount_revenue_adjustment` la atribuye).
- * Nace `Por Emitir` (la emite Facturación) y **sin vencimiento** (`due_date` NULL: una NC no vence, se cierra con su factura; decisión de
+ * Nace siempre `Emitida` (`creditNoteStatusFor`: nunca Pagada/Vencida ni Por Emitir; emisión electrónica pendiente) y **sin vencimiento** (`due_date` NULL: una NC no vence, se cierra con su factura; decisión de
  * Domi 30-09). **Nunca toca la emitida**. La usan las modificaciones (baja/downsell prorrateados), el consumo (`on_issued = reissue`, spec
  * pricing §4.4) y el 360 (anular y reemitir, NC de descuento parcial; spec facturas §3.8). Factura por OC: la NC refleja TODAS sus líneas,
  * la visible del documento (cantidad 1, unitario = Σ acreditado en sus internas, `mirrorVisibleLineAmounts`) y las internas ligadas a ella
@@ -1458,12 +2123,14 @@ export async function insertMirrorCreditNote(
 ): Promise<string> {
 	const [original] = (await runner.query(
 		`SELECT company_id, client_id, client_entity_id, contract_id, contract_currency, invoice_currency, system_currency, fx_contract_to_invoice, fx_contract_to_system,
-			issuer_tax_id, issuer_legal_name, issuer_address, client_tax_id, payment_method, fiscal_regime, export_type, tax_rate, invoice_series
+			issuer_tax_id, issuer_legal_name, issuer_address, client_tax_id, payment_method, fiscal_regime, export_type, tax_rate, invoice_series,
+			status, invoice_number, issue_date::text AS issue_date
 		FROM invoices WHERE id = $1 AND holding_id = $2`,
 		[mirrors.id, holdingId]
 	)) as Row[];
 
 	if (!original) throw new NotFoundException(`La factura ${mirrors.id} ya no existe`);
+	const creditNoteStatus = creditNoteStatusFor();
 	const computed = mirrorCreditNoteAmounts(lines, mirrors.tax_rate, options.exact === true);
 	const amounts = computed.lines;
 	// Multimoneda (spec-multimoneda §4 "Notas de crédito"): cada línea de la NC reusa la moneda y la tasa de SU línea original (par, origen y
@@ -1525,7 +2192,7 @@ export async function insertMirrorCreditNote(
 			original.client_id,
 			original.client_entity_id,
 			effectiveDate,
-			CREDIT_NOTE_STATUS,
+			creditNoteStatus,
 			original.contract_currency,
 			original.invoice_currency,
 			original.system_currency,
@@ -1611,7 +2278,7 @@ export async function insertMirrorCreditNote(
 						: original.fx_contract_to_invoice
 					: original.fx_contract_to_invoice,
 				multicurrency ? (toText(source?.fx_rate_source) ?? null) : CHANGES_FX_RATE_SOURCE,
-				CREDIT_NOTE_STATUS,
+				creditNoteStatus,
 				effectiveDate,
 				period_start,
 				line.billing_period_end,
@@ -1637,6 +2304,16 @@ export async function insertMirrorCreditNote(
 	}
 	// Montos en moneda del sistema con la tasa de la original (ROADMAP #10: la NC replica la original, no la fecha de la NC).
 	await mirrorInvoiceSystemAmounts(runner, holdingId, creditNoteId, mirrors.id);
+	if (options.reference)
+		await insertCreditNoteReference(
+			runner,
+			creditNoteId,
+			{ id: mirrors.id, invoice_number: toText(original.invoice_number), issue_date: toText(original.issue_date)?.slice(0, 10) ?? null },
+			holdingId,
+			options.reference.kind,
+			options.reference.reason,
+			options.reference.user_id ?? null
+		);
 
 	return creditNoteId;
 }

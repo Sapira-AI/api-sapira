@@ -8,10 +8,13 @@ import { pricingFields } from '@/modules/contracts/api-written-fields';
 import { itemEndDate, round2 } from '@/modules/contracts/billing-engine';
 import { catalogPriceErrors, catalogPriceIds, loadCatalogPrices } from '@/modules/contracts/catalog-prices';
 import { cleanPaymentTerms, ContractDraftsService, parsePaymentTermsText, resolveUserId } from '@/modules/contracts/contract-drafts.service';
+import { derivedStatusLateral } from '@/modules/contracts/contract-status';
+import { NEXT_ITEM_END_LATERAL } from '@/modules/contracts/contracts.service';
 import type { CreateContractDto } from '@/modules/contracts/dtos/create-contract.dto';
 import { PRICE_COLUMNS, priceSpecFromRow, priceSummaryFromRow, samePriceSpec } from '@/modules/contracts/price-rows';
 import { DEFAULT_INVOICE_LINE_MODE, isMetered, priceLine, type PriceSpec, validatePriceSpec } from '@/modules/contracts/pricing-engine';
 
+import { type ContractTarget, contractTargetsOf } from './quote-contract-targets';
 import { itemsIncomplete, quoteTotals, type ResolvedQuoteItem, resolveQuoteItems, type StoredQuoteItem } from './quote-items';
 import { QUOTE_EVENTS_LATERAL, QUOTE_NOT_DELETED, type QuoteListRow, quoteListRow, QuoteListService } from './quote-list.service';
 import {
@@ -1536,5 +1539,87 @@ export class QuotesService {
 		if (status !== 'signed') throw conflict('quote_not_signed', 'Solo una cotización firmada genera un contrato: márcala firmada primero');
 
 		return await this.contractDrafts.create({ ...body, quote_id: quoteId }, holdingId, authId, now);
+	}
+
+	/**
+	 * `GET /quotes/:id/contract-targets`: contratos Activos (vigentes o Por renovar) del cliente de la cotización donde puede aplicarse con
+	 * `POST /contracts/:id/changes` (`origin { type: 'quote', quote_id }`), con la sugerencia por ítem cotizado (`item_change` si el producto
+	 * ya está vivo, `item_add` si es nuevo), bloqueos y avisos (`contractTargetsOf`).
+	 */
+	async contractTargets(quoteId: string, holdingId: string, now = new Date()): Promise<{ data: ContractTarget[] }> {
+		const today = todayIso(now);
+		const row = await this.loadRow(this.dataSource, quoteId, holdingId, today);
+		const status = deriveQuoteStatus(
+			{ kind: toText(row.kind), valid_until: toText(row.valid_until), has_contract: Boolean(row.contract_id || row.applied_contract_id) },
+			today
+		);
+		const clientId = toText(row.client_id);
+
+		if (!clientId) return { data: [] };
+		const [quoteItems, contracts] = await Promise.all([
+			this.loadItems(this.dataSource, quoteId, holdingId),
+			this.dataSource.query<Row[]>(
+				`SELECT c.id, c.contract_number, c.contract_currency, COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
+					ds.derived_status, nx.next_item_end_date::text AS next_item_end_date,
+					COALESCE((SELECT SUM(ci.monthly_price) FROM contract_items ci WHERE ci.contract_id = c.id AND ci.is_recurring = true
+						AND ci.churn_date IS NULL AND ci.renewed_by_item_id IS NULL AND ci.start_date <= $3::date
+						AND (ci.end_date IS NULL OR ci.end_date >= $3::date)), 0) AS mrr
+				FROM contracts c
+				${NEXT_ITEM_END_LATERAL.replace(/\$2::date/g, '$3::date')}
+				${derivedStatusLateral('$3')}
+				WHERE c.client_id = $1 AND c.holding_id = $2 AND c.deleted_at IS NULL AND c.status = 'Activo'
+				ORDER BY c.contract_number`,
+				[clientId, holdingId, today]
+			),
+		]);
+		const open = contracts.filter((contract) => ['active', 'pending_renewal'].includes(toText(contract.derived_status) ?? ''));
+		const items = open.length
+			? await this.dataSource.query<Row[]>(
+					`SELECT ci.contract_id, ci.id, ci.product_id, ci.product_name, ci.account, ci.quantity, ci.unit_price, ci.monthly_price, ci.currency
+					FROM contract_items ci
+					WHERE ci.contract_id = ANY($1::uuid[]) AND ci.holding_id = $2 AND ci.is_recurring = true AND ci.churn_date IS NULL
+						AND ci.renewed_by_item_id IS NULL AND ci.related_item_id IS NULL AND COALESCE(ci.categoria, '') NOT IN ('CHURN', 'DOWNSELL')
+						AND (ci.end_date IS NULL OR ci.end_date >= $3::date)
+					ORDER BY ci.start_date, ci.id`,
+					[open.map((contract) => String(contract.id)), holdingId, today]
+				)
+			: [];
+
+		return {
+			data: contractTargetsOf(
+				{ id: quoteId, status, quote_type: toText(row.quote_type), currency: toText(row.currency) },
+				quoteItems.map((item) => ({
+					id: String(item.id),
+					product_id: toText(item.product_id),
+					product_name: toText(item.product_name),
+					account: toText(item.account),
+					quantity: toNullableNumber(item.quantity),
+					unit_price:
+						toText(item.price_entry_mode) === 'annual' ? toNumber(item.annual_unit_price) / 12 : toNullableNumber(item.unit_price),
+					currency: toText(item.currency),
+					is_recurring: item.is_recurring !== false,
+				})),
+				open.map((contract) => ({
+					id: String(contract.id),
+					contract_number: toText(contract.contract_number),
+					derived_status: toText(contract.derived_status) ?? 'active',
+					contract_currency: toText(contract.contract_currency),
+					requires_multicurrency_billing: contract.requires_multicurrency_billing === true,
+					next_item_end_date: toText(contract.next_item_end_date),
+					mrr: toNumber(contract.mrr),
+				})),
+				items.map((item) => ({
+					contract_id: String(item.contract_id),
+					id: String(item.id),
+					product_id: toText(item.product_id),
+					product_name: toText(item.product_name),
+					account: toText(item.account),
+					quantity: toNullableNumber(item.quantity),
+					unit_price: toNullableNumber(item.unit_price),
+					monthly_price: toNullableNumber(item.monthly_price),
+					currency: toText(item.currency),
+				}))
+			),
+		};
 	}
 }

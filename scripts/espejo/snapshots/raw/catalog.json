@@ -12219,6 +12219,373 @@
 				}
 			]
 		},
+		"contract_item_pauses": {
+			"comment": "Pausas de servicio por ítem (spec modificaciones §9.3.3): devengo y MRR 0 en el tramo; pause_end NULL = hasta reanudar",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_item_id",
+					"attnum": 4,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "pause_start",
+					"attnum": 5,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "pause_end",
+					"attnum": 6,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "extend_term",
+					"attnum": 7,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Al reanudar, el fin del ítem se corre en los días pausados"
+				},
+				{
+					"column": "status",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'scheduled'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "reason",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "pause_event_id",
+					"attnum": 10,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "resume_event_id",
+					"attnum": 11,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 12,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 13,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 14,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "contract_item_pauses_contract_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_item_pauses_contract_item_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_item_pauses_dates_check",
+					"type": "c",
+					"def": "CHECK (((pause_end IS NULL) OR (pause_end >= pause_start)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_item_pauses_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_item_pauses_pause_event_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (pause_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_item_pauses_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_item_pauses_resume_event_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (resume_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_item_pauses_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['scheduled'::text, 'active'::text, 'ended'::text, 'cancelled'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "contract_item_pauses_pkey",
+					"def": "CREATE UNIQUE INDEX contract_item_pauses_pkey ON public.contract_item_pauses USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_contract_item_pauses_item_status",
+					"def": "CREATE INDEX idx_contract_item_pauses_item_status ON public.contract_item_pauses USING btree (contract_item_id, status)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [
+				{
+					"name": "trg_contract_item_pauses_updated_at",
+					"def": "CREATE TRIGGER trg_contract_item_pauses_updated_at BEFORE UPDATE ON public.contract_item_pauses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
+				}
+			],
+			"policies": [
+				{
+					"name": "tenant_isolation_delete_contract_item_pauses",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "DELETE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_insert_contract_item_pauses",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "INSERT",
+					"qual": null,
+					"with_check": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))"
+				},
+				{
+					"name": "tenant_isolation_select_contract_item_pauses",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "SELECT",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_update_contract_item_pauses",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "UPDATE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				}
+			]
+		},
 		"contract_items": {
 			"comment": null,
 			"rls": true,
@@ -12879,6 +13246,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo (unit_price mensual × cantidad × meses)"
+				},
+				{
+					"column": "billing_anchor_day",
+					"attnum": 42,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ciclo propio del ítem (1–31): sus períodos parten ese día, sin tramo prorrateado, y emite en su propia fecha. NULL = ciclo del contrato (contracts.billing_anchor_day)"
 				}
 			],
 			"constraints": [
@@ -12886,6 +13269,15 @@
 					"name": "chk_contract_items_price_entry_mode",
 					"type": "c",
 					"def": "CHECK ((price_entry_mode = ANY (ARRAY['monthly'::text, 'annual'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_items_billing_anchor_day_check",
+					"type": "c",
+					"def": "CHECK (((billing_anchor_day IS NULL) OR ((billing_anchor_day >= 1) AND (billing_anchor_day <= 31))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -13969,6 +14361,679 @@
 					],
 					"cmd": "SELECT",
 					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
+		"contract_scheduled_changes": {
+			"comment": "Ajustes pactados del contrato o de un ítem (renovación con precio, IPC/UF, escalamientos, plazo, frecuencia): disparo, valor y estado (spec modificaciones §9.3.6)",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "contract_item_id",
+					"attnum": 4,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ítem al que aplica; NULL = alcance contrato (todos los recurrentes vigentes al aplicar)"
+				},
+				{
+					"column": "group_key",
+					"attnum": 5,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "parent_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "every_n_months: cada aplicación es una fila hija applied; la madre sigue scheduled con next_effective_date"
+				},
+				{
+					"column": "trigger",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "effective_date",
+					"attnum": 8,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "anchor_date",
+					"attnum": 9,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "interval_months",
+					"attnum": 10,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "next_effective_date",
+					"attnum": 11,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "kind",
+					"attnum": 12,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "value",
+					"attnum": 13,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Según kind: % (percent_uplift; index = puntos sobre el índice), precio en moneda del ítem, cantidad o meses (term, billing_frequency)"
+				},
+				{
+					"column": "index_code",
+					"attnum": 14,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "index_base_date",
+					"attnum": 15,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "index_base_value",
+					"attnum": 16,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "index_lag_months",
+					"attnum": 17,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": false,
+					"default": "1",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "rounding",
+					"attnum": 18,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": "'unit_2'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "status",
+					"attnum": 19,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'scheduled'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "status_reason",
+					"attnum": 20,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "status_changed_by",
+					"attnum": 21,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "applied_event_id",
+					"attnum": 22,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Evento (contract_lifecycle_events) del cambio que materializó el pacto"
+				},
+				{
+					"column": "applied_at",
+					"attnum": 23,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "applied_value",
+					"attnum": 24,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric(18,6)",
+					"char_len": null,
+					"num_prec": 18,
+					"num_scale": 6,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Valor efectivamente usado (índice real o valor editado en el acto)"
+				},
+				{
+					"column": "origin",
+					"attnum": 25,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{\"type\": \"manual\"}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "notes",
+					"attnum": 26,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_by",
+					"attnum": 27,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 28,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 29,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "contract_scheduled_changes_applied_event_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (applied_event_id) REFERENCES contract_lifecycle_events(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_scheduled_changes_contract_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_scheduled_changes_contract_item_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (contract_item_id) REFERENCES contract_items(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_scheduled_changes_every_n_months_check",
+					"type": "c",
+					"def": "CHECK (((trigger <> 'every_n_months'::text) OR ((anchor_date IS NOT NULL) AND (interval_months IS NOT NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_scheduled_changes_index_check",
+					"type": "c",
+					"def": "CHECK (((kind <> 'index'::text) OR ((index_code IS NOT NULL) AND (index_base_value IS NOT NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_interval_months_check",
+					"type": "c",
+					"def": "CHECK (((interval_months IS NULL) OR (interval_months > 0)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_kind_check",
+					"type": "c",
+					"def": "CHECK ((kind = ANY (ARRAY['percent_uplift'::text, 'index'::text, 'new_unit_price'::text, 'quantity'::text, 'term'::text, 'billing_frequency'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_on_date_check",
+					"type": "c",
+					"def": "CHECK (((trigger <> 'on_date'::text) OR (effective_date IS NOT NULL)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_parent_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (parent_id) REFERENCES contract_scheduled_changes(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "contract_scheduled_changes_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_rounding_check",
+					"type": "c",
+					"def": "CHECK ((rounding = ANY (ARRAY['none'::text, 'unit_2'::text, 'unit_0'::text, 'monthly_0'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['scheduled'::text, 'applied'::text, 'skipped'::text, 'cancelled'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "contract_scheduled_changes_trigger_check",
+					"type": "c",
+					"def": "CHECK ((trigger = ANY (ARRAY['on_renewal'::text, 'on_date'::text, 'every_n_months'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "contract_scheduled_changes_pkey",
+					"def": "CREATE UNIQUE INDEX contract_scheduled_changes_pkey ON public.contract_scheduled_changes USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_contract_scheduled_changes_contract_status",
+					"def": "CREATE INDEX idx_contract_scheduled_changes_contract_status ON public.contract_scheduled_changes USING btree (contract_id, status)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_contract_scheduled_changes_holding_status_next",
+					"def": "CREATE INDEX idx_contract_scheduled_changes_holding_status_next ON public.contract_scheduled_changes USING btree (holding_id, status, next_effective_date)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_contract_scheduled_changes_item",
+					"def": "CREATE INDEX idx_contract_scheduled_changes_item ON public.contract_scheduled_changes USING btree (contract_item_id)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [
+				{
+					"name": "trg_contract_scheduled_changes_updated_at",
+					"def": "CREATE TRIGGER trg_contract_scheduled_changes_updated_at BEFORE UPDATE ON public.contract_scheduled_changes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
+				}
+			],
+			"policies": [
+				{
+					"name": "tenant_isolation_delete_contract_scheduled_changes",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "DELETE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_insert_contract_scheduled_changes",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "INSERT",
+					"qual": null,
+					"with_check": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))"
+				},
+				{
+					"name": "tenant_isolation_select_contract_scheduled_changes",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "SELECT",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
+					"with_check": null
+				},
+				{
+					"name": "tenant_isolation_update_contract_scheduled_changes",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "UPDATE",
+					"qual": "((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id\n   FROM contracts\n  WHERE (contracts.holding_id = get_current_user_holding_id()))))",
 					"with_check": null
 				}
 			]
@@ -15554,6 +16619,12 @@
 				}
 			],
 			"indexes": [
+				{
+					"name": "contracts_holding_number_unique",
+					"def": "CREATE UNIQUE INDEX contracts_holding_number_unique ON public.contracts USING btree (holding_id, contract_number) WHERE (deleted_at IS NULL)",
+					"unique": true,
+					"primary": false
+				},
 				{
 					"name": "contracts_pkey",
 					"def": "CREATE UNIQUE INDEX contracts_pkey ON public.contracts USING btree (id)",
@@ -18928,9 +19999,34 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Monedas utilizadas en el holding"
+				},
+				{
+					"column": "auto_renewal_notice_days",
+					"attnum": 9,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "30",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
 				}
 			],
 			"constraints": [
+				{
+					"name": "holding_settings_auto_renewal_notice_days_check",
+					"type": "c",
+					"def": "CHECK (((auto_renewal_notice_days >= 1) AND (auto_renewal_notice_days <= 180)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
 				{
 					"name": "holding_settings_fx_system_policy_check",
 					"type": "c",
@@ -35106,7 +36202,7 @@
 				{
 					"name": "revenue_schedule_monthly_momentum_check",
 					"type": "c",
-					"def": "CHECK ((momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])))",
+					"def": "CHECK ((momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text, 'PAUSE'::text, 'RESUME'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -51005,6 +52101,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"contract_item_pauses": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"contract_items": [
 			{
 				"grantee": "anon",
@@ -51234,6 +52444,120 @@
 			}
 		],
 		"contract_notifications": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"contract_scheduled_changes": [
 			{
 				"grantee": "anon",
 				"privilege": "DELETE"
@@ -62009,9 +63333,9 @@
 		},
 		{
 			"name": "apply_pending_renewal_tail",
-			"def": "CREATE OR REPLACE FUNCTION public.apply_pending_renewal_tail(p_contract_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_contract       RECORD;\n  v_item           RECORD;\n  v_monthly        numeric(15,2);\n  v_start_period   date;\n  v_end_period     date;\n  v_cur            date;\n  v_items_processed int := 0;\n  v_rows_upserted   int := 0;\nBEGIN\n  SELECT c.id, c.holding_id, c.company_id, c.contract_currency,\n         co.currency AS company_currency,\n         COALESCE(hs.system_currency, 'USD') AS system_currency\n    INTO v_contract\n    FROM public.contracts c\n    JOIN public.companies co ON co.id = c.company_id\n    LEFT JOIN public.holding_settings hs ON hs.holding_id = c.holding_id\n   WHERE c.id = p_contract_id;\n  IF NOT FOUND THEN RETURN jsonb_build_object('status', 'no_action', 'reason', 'contract_not_found'); END IF;\n  FOR v_item IN\n    SELECT ci.* FROM public.contract_items ci\n     WHERE ci.contract_id = p_contract_id\n       AND COALESCE(ci.is_recurring, false) = TRUE\n       AND ci.end_date IS NOT NULL\n       AND ci.end_date < DATE_TRUNC('month', CURRENT_DATE)::date\n       AND ci.renewed_by_item_id IS NULL\n       AND ci.churn_date IS NULL\n       AND COALESCE(ci.term_months, 0) > 0\n       AND COALESCE(ci.categoria, '') NOT IN ('DOWNSELL', 'CHURN')\n  LOOP\n    v_items_processed := v_items_processed + 1;\n    v_monthly := ROUND(COALESCE(v_item.monthly_price, v_item.final_price / NULLIF(v_item.term_months, 0), 0)::numeric, 2);\n    IF v_monthly IS NULL OR v_monthly = 0 THEN CONTINUE; END IF;\n    v_start_period := (DATE_TRUNC('month', v_item.end_date) + INTERVAL '1 month')::date;\n    v_end_period   := (DATE_TRUNC('month', v_item.end_date) + (v_item.term_months * INTERVAL '1 month'))::date;\n    v_cur := v_start_period;\n    WHILE v_cur <= v_end_period LOOP\n      INSERT INTO public.revenue_schedule_monthly(\n        id, holding_id, contract_id, contract_item_id, period_month,\n        company_id, company_currency, contract_currency, system_currency,\n        recognized_period_contract_ccy, recognized_cum_contract_ccy,\n        billed_period_contract_ccy, billed_cum_contract_ccy,\n        deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n        deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n        mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n        recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n        deferred_balance_period_ccy, unbilled_balance_period_ccy,\n        deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n        mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n        recognized_period_system_ccy, recognized_cum_system_ccy,\n        billed_period_system_ccy, billed_cum_system_ccy,\n        deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n        deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n        mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n        product_name, calc_version, is_total_row,\n        fx_contract_to_company, fx_contract_to_system,\n        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n        momentum\n      ) VALUES (\n        gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,\n        v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n        0, 0, 0, 0, 0, 0, 0, 0, v_monthly, v_monthly, v_monthly,\n        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n        v_item.product_name, 'v1.2-pending-renewal-exclude-contraction', false,\n        1, 1, NULL, NULL, NULL, NULL, 'PENDING_RENEWAL'\n      ) ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n      DO UPDATE SET\n        mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n        mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n        cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n        product_name                       = EXCLUDED.product_name,\n        calc_version                       = EXCLUDED.calc_version,\n        updated_at                         = now();\n      v_rows_upserted := v_rows_upserted + 1;\n      v_cur := (v_cur + INTERVAL '1 month')::date;\n    END LOOP;\n  END LOOP;\n  IF v_items_processed > 0 THEN\n    BEGIN PERFORM public.revenue_schedule_apply_fx_for_contract(p_contract_id, NULL);\n    EXCEPTION WHEN OTHERS THEN RAISE WARNING 'apply_pending_renewal_tail: FX apply falló para contract %: %', p_contract_id, SQLERRM; END;\n  END IF;\n  RETURN jsonb_build_object('status', CASE WHEN v_items_processed = 0 THEN 'no_action' ELSE 'applied' END,\n    'items_processed', v_items_processed, 'rows_upserted', v_rows_upserted);\nEND; $function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.apply_pending_renewal_tail(p_contract_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_contract       RECORD;\n  v_item           RECORD;\n  v_monthly        numeric(15,2);\n  v_start_period   date;\n  v_end_period     date;\n  v_cur            date;\n  v_month_end      date;\n  v_items_processed int := 0;\n  v_rows_upserted   int := 0;\nBEGIN\n  SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.status,\n         co.currency AS company_currency,\n         COALESCE(hs.system_currency, 'USD') AS system_currency\n    INTO v_contract\n    FROM public.contracts c\n    JOIN public.companies co ON co.id = c.company_id\n    LEFT JOIN public.holding_settings hs ON hs.holding_id = c.holding_id\n   WHERE c.id = p_contract_id;\n  IF NOT FOUND THEN RETURN jsonb_build_object('status', 'no_action', 'reason', 'contract_not_found'); END IF;\n  -- v1.3 (S2-10 / D19): un contrato Cancelado o nunca activado (Borrador, En revisión) no tiene \"pendiente de renovar\": sin cola y se\n  -- quitan las filas PENDING_RENEWAL que le hubieran quedado de antes.\n  IF v_contract.status IN ('Cancelado', 'Borrador', 'En revisión') THEN\n    DELETE FROM public.revenue_schedule_monthly WHERE contract_id = p_contract_id AND momentum = 'PENDING_RENEWAL';\n    RETURN jsonb_build_object('status', 'no_action', 'reason', 'contract_not_eligible', 'contract_status', v_contract.status);\n  END IF;\n  FOR v_item IN\n    SELECT ci.* FROM public.contract_items ci\n     WHERE ci.contract_id = p_contract_id\n       AND COALESCE(ci.is_recurring, false) = TRUE\n       AND ci.end_date IS NOT NULL\n       AND ci.end_date < DATE_TRUNC('month', CURRENT_DATE)::date\n       AND ci.renewed_by_item_id IS NULL\n       AND ci.churn_date IS NULL\n       AND COALESCE(ci.term_months, 0) > 0\n       AND COALESCE(ci.categoria, '') NOT IN ('DOWNSELL', 'CHURN')\n  LOOP\n    v_items_processed := v_items_processed + 1;\n    v_monthly := ROUND(COALESCE(v_item.monthly_price, v_item.final_price / NULLIF(v_item.term_months, 0), 0)::numeric, 2);\n    IF v_monthly IS NULL OR v_monthly = 0 THEN CONTINUE; END IF;\n    v_start_period := (DATE_TRUNC('month', v_item.end_date) + INTERVAL '1 month')::date;\n    v_end_period   := (DATE_TRUNC('month', v_item.end_date) + (v_item.term_months * INTERVAL '1 month'))::date;\n    v_cur := v_start_period;\n    WHILE v_cur <= v_end_period LOOP\n      v_month_end := (v_cur + INTERVAL '1 month' - INTERVAL '1 day')::date;\n      -- v1.3 (§9.3.3): un mes en pausa del ítem (programada o activa, abierta o que cubre el fin del mes) no suma cola: MRR 0 en la pausa.\n      IF EXISTS (\n        SELECT 1 FROM public.contract_item_pauses pz\n         WHERE pz.contract_item_id = v_item.id\n           AND pz.status IN ('active', 'scheduled')\n           AND pz.pause_start <= v_month_end\n           AND (pz.pause_end IS NULL OR pz.pause_end >= v_month_end)\n      ) THEN\n        DELETE FROM public.revenue_schedule_monthly\n         WHERE contract_id = p_contract_id AND contract_item_id = v_item.id AND period_month = v_cur AND momentum = 'PENDING_RENEWAL';\n        v_cur := (v_cur + INTERVAL '1 month')::date;\n        CONTINUE;\n      END IF;\n      INSERT INTO public.revenue_schedule_monthly(\n        id, holding_id, contract_id, contract_item_id, period_month,\n        company_id, company_currency, contract_currency, system_currency,\n        recognized_period_contract_ccy, recognized_cum_contract_ccy,\n        billed_period_contract_ccy, billed_cum_contract_ccy,\n        deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n        deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n        mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n        recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n        deferred_balance_period_ccy, unbilled_balance_period_ccy,\n        deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n        mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n        recognized_period_system_ccy, recognized_cum_system_ccy,\n        billed_period_system_ccy, billed_cum_system_ccy,\n        deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n        deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n        mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n        product_name, calc_version, is_total_row,\n        fx_contract_to_company, fx_contract_to_system,\n        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n        momentum\n      ) VALUES (\n        gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,\n        v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n        0, 0, 0, 0, 0, 0, 0, 0, v_monthly, v_monthly, v_monthly,\n        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n        v_item.product_name, 'v1.3-pending-renewal-eligible-unpaused', false,\n        1, 1, NULL, NULL, NULL, NULL, 'PENDING_RENEWAL'\n      ) ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n      DO UPDATE SET\n        mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n        mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n        cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n        product_name                       = EXCLUDED.product_name,\n        calc_version                       = EXCLUDED.calc_version,\n        updated_at                         = now();\n      v_rows_upserted := v_rows_upserted + 1;\n      v_cur := (v_cur + INTERVAL '1 month')::date;\n    END LOOP;\n  END LOOP;\n  IF v_items_processed > 0 THEN\n    BEGIN PERFORM public.revenue_schedule_apply_fx_for_contract(p_contract_id, NULL);\n    EXCEPTION WHEN OTHERS THEN RAISE WARNING 'apply_pending_renewal_tail: FX apply falló para contract %: %', p_contract_id, SQLERRM; END;\n  END IF;\n  RETURN jsonb_build_object('status', CASE WHEN v_items_processed = 0 THEN 'no_action' ELSE 'applied' END,\n    'items_processed', v_items_processed, 'rows_upserted', v_rows_upserted);\nEND; $function$\n",
 			"extension": null,
-			"comment": "Genera filas RSM con momentum=PENDING_RENEWAL para items del contrato en estado limbo (end_date vencido sin renewal ni churn). v1.2: excluye items categoria DOWNSELL/CHURN (son contracciones ya resueltas, no items en limbo). Idempotente. Proyecta desde end_date+1 hasta end_date+term_months. Ver docs/contratos/mrr-pending-renewal.md.",
+			"comment": "Genera filas RSM con momentum=PENDING_RENEWAL para items del contrato en estado limbo (end_date vencido sin renewal ni churn). v1.2: excluye items categoria DOWNSELL/CHURN (son contracciones ya resueltas, no items en limbo). v1.3 (S2-10): sin cola en contratos Cancelado/Borrador/En revisión (borra la que hubiera) ni en los meses con pausa activa o programada del ítem (abierta o que cubre el fin del mes). Idempotente. Proyecta desde end_date+1 hasta end_date+term_months. Ver docs/contratos/mrr-pending-renewal.md.",
 			"identity_args": "p_contract_id uuid"
 		},
 		{
@@ -63731,9 +65055,9 @@
 		},
 		{
 			"name": "revenue_schedule_apply_fx_for_contract",
-			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_info RECORD;\n  -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítems en otra moneda que la del contrato cuya moneda ES la de la compañía (o la del\n  -- sistema). Sus columnas *_ccy (o *_system_ccy) ya las escribió revenue_schedule_rebuild_contract_ccy con el monto del ítem (tasa 1);\n  -- aquí no se recalculan desde la moneda de contrato (eso sería ítem → contrato → compañía, con redondeo y tasas que no aplican).\n  v_company_direct_items uuid[];\n  v_system_direct_items uuid[];\nBEGIN\n  SELECT\n    c.id, c.holding_id, c.contract_currency,\n    co.currency AS company_currency,\n    COALESCE(hs.system_currency, 'USD') AS system_currency,\n    COALESCE(c.fx_company_policy, 'monthly_avg') AS fx_company_policy,\n    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy\n  INTO v_info\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Contract % not found', p_contract_id;\n  END IF;\n\n  SELECT\n    COALESCE(array_agg(ci.id) FILTER (WHERE UPPER(TRIM(ci.currency)) = UPPER(TRIM(v_info.company_currency))), '{}'::uuid[]),\n    COALESCE(array_agg(ci.id) FILTER (WHERE UPPER(TRIM(ci.currency)) = UPPER(TRIM(v_info.system_currency))), '{}'::uuid[])\n  INTO v_company_direct_items, v_system_direct_items\n  FROM contract_items ci\n  WHERE ci.contract_id = p_contract_id\n    AND ci.currency IS NOT NULL\n    AND UPPER(TRIM(ci.currency)) <> UPPER(TRIM(v_info.contract_currency));\n\n  WITH fx_company AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.company_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.company_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      -- Regla única (v2): \"1 [from] = rate [to]\". Directa (contrato → compañía) se multiplica; inversa = 1/rate.\n      COALESCE(\n        CASE WHEN cpr_direct.rate > 0 THEN cpr_direct.rate END,\n        CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN cpr_direct.rate IS NOT NULL THEN 'contract_fixed_period'\n        WHEN cpr_inverse.rate IS NOT NULL THEN 'contract_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN contract_fx_period_rates cpr_direct\n      ON cpr_direct.contract_id = v_info.id\n     AND cpr_direct.purpose = 'company'\n     AND cpr_direct.from_currency = v_info.contract_currency\n     AND cpr_direct.to_currency = v_info.company_currency\n     AND rsm.period_month >= cpr_direct.period_start\n     AND rsm.period_month <= cpr_direct.period_end\n    LEFT JOIN contract_fx_period_rates cpr_inverse\n      ON cpr_inverse.contract_id = v_info.id\n     AND cpr_inverse.purpose = 'company'\n     AND cpr_inverse.from_currency = v_info.company_currency\n     AND cpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= cpr_inverse.period_start\n     AND rsm.period_month <= cpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  ),\n\n  fx_system AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        ema_direct.avg_rate,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate IS NOT NULL THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate IS NOT NULL THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.system_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.system_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) ELSE 1.0 END,\n        CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate ELSE 1.0 END\n      ) AS rate,\n      CASE\n        WHEN hpr_direct.rate IS NOT NULL THEN 'holding_fixed_period'\n        WHEN hpr_inverse.rate IS NOT NULL THEN 'holding_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN holding_fx_period_rates hpr_direct\n      ON hpr_direct.holding_id = v_info.holding_id\n     AND hpr_direct.from_currency = v_info.contract_currency\n     AND hpr_direct.to_currency = v_info.system_currency\n     AND rsm.period_month >= hpr_direct.period_start\n     AND rsm.period_month <= hpr_direct.period_end\n    LEFT JOIN holding_fx_period_rates hpr_inverse\n      ON hpr_inverse.holding_id = v_info.holding_id\n     AND hpr_inverse.from_currency = v_info.system_currency\n     AND hpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= hpr_inverse.period_start\n     AND rsm.period_month <= hpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  )\n\n  UPDATE revenue_schedule_monthly r\n  SET\n    recognized_period_ccy           = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.recognized_period_ccy ELSE ROUND(r.recognized_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    recognized_cum_ccy              = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.recognized_cum_ccy ELSE ROUND(r.recognized_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    billed_period_ccy               = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.billed_period_ccy ELSE ROUND(r.billed_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    billed_cum_ccy                  = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.billed_cum_ccy ELSE ROUND(r.billed_cum_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    deferred_balance_period_ccy     = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.deferred_balance_period_ccy ELSE ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    unbilled_balance_period_ccy     = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.unbilled_balance_period_ccy ELSE ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    deferred_balance_eom_ccy        = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.deferred_balance_eom_ccy ELSE ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    unbilled_balance_eom_ccy        = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.unbilled_balance_eom_ccy ELSE ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    mrr_period_ccy                  = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.mrr_period_ccy ELSE ROUND(r.mrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    mrr_period_contracted_ccy       = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.mrr_period_contracted_ccy ELSE ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    cmrr_period_ccy                 = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.cmrr_period_ccy ELSE ROUND(r.cmrr_period_contract_ccy * COALESCE(fc.rate, 1.0), 2) END,\n    fx_contract_to_company          = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_contract_to_company ELSE COALESCE(fc.rate, 1.0) END,\n    fx_to_company_source            = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_source ELSE COALESCE(fc.src, 'no_conversion_needed') END,\n    fx_to_company_date              = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_date ELSE fc.dte END,\n    recognized_period_system_ccy        = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_period_system_ccy ELSE ROUND(r.recognized_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    recognized_cum_system_ccy           = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_cum_system_ccy ELSE ROUND(r.recognized_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    billed_period_system_ccy            = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.billed_period_system_ccy ELSE ROUND(r.billed_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    billed_cum_system_ccy               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.billed_cum_system_ccy ELSE ROUND(r.billed_cum_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    deferred_balance_period_system_ccy  = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.deferred_balance_period_system_ccy ELSE ROUND(r.deferred_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    unbilled_balance_period_system_ccy  = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.unbilled_balance_period_system_ccy ELSE ROUND(r.unbilled_balance_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    deferred_balance_eom_system_ccy     = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.deferred_balance_eom_system_ccy ELSE ROUND(r.deferred_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    unbilled_balance_eom_system_ccy     = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.unbilled_balance_eom_system_ccy ELSE ROUND(r.unbilled_balance_eom_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    mrr_period_system_ccy               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.mrr_period_system_ccy ELSE ROUND(r.mrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    mrr_period_contracted_system_ccy    = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.mrr_period_contracted_system_ccy ELSE ROUND(r.mrr_period_contracted_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    cmrr_period_system_ccy              = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.cmrr_period_system_ccy ELSE ROUND(r.cmrr_period_contract_ccy * COALESCE(fs.rate, 1.0), 2) END,\n    fx_contract_to_system               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_contract_to_system ELSE COALESCE(fs.rate, 1.0) END,\n    fx_to_system_source                 = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_to_system_source ELSE COALESCE(fs.src, 'no_conversion_needed') END,\n    fx_to_system_date                   = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_to_system_date ELSE fs.dte END,\n    -- La marca missing_fx_rate del rebuild (falta la tasa item → contrato) sobrevive a este paso.\n    calc_version                        = CASE WHEN r.calc_version = 'missing_fx_rate' THEN r.calc_version ELSE 'v4-fx-normalized' END\n  FROM fx_company fc\n  FULL JOIN fx_system fs ON fs.period_month = fc.period_month\n  WHERE r.contract_id = p_contract_id\n    AND r.period_month = COALESCE(fc.period_month, fs.period_month)\n    AND (p_from_month IS NULL OR r.period_month >= p_from_month)\n    AND COALESCE(r.is_total_row, false) = false;\n\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\n-- S5-10 (01-10, cobertura-contratos-v2 Huecos #11): sin tasa compañía/sistema la fila NO cae a 1,0: las columnas *_ccy / *_system_ccy\n-- y fx_contract_to_* quedan NULL, fx_to_*_source 'missing_fx_rate' y calc_version 'missing_fx_rate' (mismo trato que la tasa item del\n-- rebuild). Las columnas directas (item_currency_direct) no se tocan. Las tasas fijas del holding conservan su convención (directa\n-- 1/rate, inversa rate); la inversa ya no queda tapada por el 1,0 de la directa. Verificación tras aplicar en QA: contrato USD de una\n-- compañía CLP sin promedio del mes → filas del mes con recognized_period_ccy NULL y missing_fx_rate; al cargar la tasa y volver a\n-- llamar apply_fx (sin rebuild) la fila se completa y pasa a v4-fx-normalized.\nDECLARE\n  v_info RECORD;\n  -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítems en otra moneda que la del contrato cuya moneda ES la de la compañía (o la del\n  -- sistema). Sus columnas *_ccy (o *_system_ccy) ya las escribió revenue_schedule_rebuild_contract_ccy con el monto del ítem (tasa 1);\n  -- aquí no se recalculan desde la moneda de contrato (eso sería ítem → contrato → compañía, con redondeo y tasas que no aplican).\n  v_company_direct_items uuid[];\n  v_system_direct_items uuid[];\nBEGIN\n  SELECT\n    c.id, c.holding_id, c.contract_currency,\n    co.currency AS company_currency,\n    COALESCE(hs.system_currency, 'USD') AS system_currency,\n    COALESCE(c.fx_company_policy, 'monthly_avg') AS fx_company_policy,\n    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy\n  INTO v_info\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Contract % not found', p_contract_id;\n  END IF;\n\n  SELECT\n    COALESCE(array_agg(ci.id) FILTER (WHERE UPPER(TRIM(ci.currency)) = UPPER(TRIM(v_info.company_currency))), '{}'::uuid[]),\n    COALESCE(array_agg(ci.id) FILTER (WHERE UPPER(TRIM(ci.currency)) = UPPER(TRIM(v_info.system_currency))), '{}'::uuid[])\n  INTO v_company_direct_items, v_system_direct_items\n  FROM contract_items ci\n  WHERE ci.contract_id = p_contract_id\n    AND ci.currency IS NOT NULL\n    AND UPPER(TRIM(ci.currency)) <> UPPER(TRIM(v_info.contract_currency));\n\n  WITH fx_company AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN ema_direct.avg_rate > 0 THEN ema_direct.avg_rate END,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate > 0 THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate > 0 THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.company_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.company_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      -- Regla única (v2): \"1 [from] = rate [to]\". Directa (contrato → compañía) se multiplica; inversa = 1/rate.\n      COALESCE(\n        CASE WHEN cpr_direct.rate > 0 THEN cpr_direct.rate END,\n        CASE WHEN cpr_inverse.rate > 0 THEN ROUND(1.0 / cpr_inverse.rate, 10) END\n      ) AS rate,\n      CASE\n        WHEN cpr_direct.rate > 0 THEN 'contract_fixed_period'\n        WHEN cpr_inverse.rate > 0 THEN 'contract_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN contract_fx_period_rates cpr_direct\n      ON cpr_direct.contract_id = v_info.id\n     AND cpr_direct.purpose = 'company'\n     AND cpr_direct.from_currency = v_info.contract_currency\n     AND cpr_direct.to_currency = v_info.company_currency\n     AND rsm.period_month >= cpr_direct.period_start\n     AND rsm.period_month <= cpr_direct.period_end\n    LEFT JOIN contract_fx_period_rates cpr_inverse\n      ON cpr_inverse.contract_id = v_info.id\n     AND cpr_inverse.purpose = 'company'\n     AND cpr_inverse.from_currency = v_info.company_currency\n     AND cpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= cpr_inverse.period_start\n     AND rsm.period_month <= cpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_company_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.company_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  ),\n\n  fx_system AS (\n    SELECT rsm.period_month, 1.0::numeric AS rate, NULL::text AS src, NULL::date AS dte\n    FROM revenue_schedule_monthly rsm\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.contract_currency = v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN ema_direct.avg_rate > 0 THEN ema_direct.avg_rate END,\n        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) END\n      ) AS rate,\n      CASE\n        WHEN ema_direct.avg_rate > 0 THEN 'monthly_average'\n        WHEN ema_inverse.avg_rate > 0 THEN 'monthly_average_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN exchange_rates_monthly_avg ema_direct\n      ON ema_direct.from_currency = v_info.contract_currency\n     AND ema_direct.to_currency = v_info.system_currency\n     AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    LEFT JOIN exchange_rates_monthly_avg ema_inverse\n      ON ema_inverse.from_currency = v_info.system_currency\n     AND ema_inverse.to_currency = v_info.contract_currency\n     AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer\n     AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'monthly_avg'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n\n    UNION ALL\n\n    SELECT\n      rsm.period_month,\n      COALESCE(\n        CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) END,\n        CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate END\n      ) AS rate,\n      CASE\n        WHEN hpr_direct.rate > 0 THEN 'holding_fixed_period'\n        WHEN hpr_inverse.rate > 0 THEN 'holding_fixed_period_inverse'\n        ELSE 'missing_fx_rate'\n      END AS src,\n      rsm.period_month::date AS dte\n    FROM revenue_schedule_monthly rsm\n    LEFT JOIN holding_fx_period_rates hpr_direct\n      ON hpr_direct.holding_id = v_info.holding_id\n     AND hpr_direct.from_currency = v_info.contract_currency\n     AND hpr_direct.to_currency = v_info.system_currency\n     AND rsm.period_month >= hpr_direct.period_start\n     AND rsm.period_month <= hpr_direct.period_end\n    LEFT JOIN holding_fx_period_rates hpr_inverse\n      ON hpr_inverse.holding_id = v_info.holding_id\n     AND hpr_inverse.from_currency = v_info.system_currency\n     AND hpr_inverse.to_currency = v_info.contract_currency\n     AND rsm.period_month >= hpr_inverse.period_start\n     AND rsm.period_month <= hpr_inverse.period_end\n    WHERE rsm.contract_id = p_contract_id\n      AND v_info.fx_system_policy = 'fixed_period'\n      AND v_info.contract_currency <> v_info.system_currency\n      AND (p_from_month IS NULL OR rsm.period_month >= p_from_month)\n      AND COALESCE(rsm.is_total_row, false) = false\n  )\n\n  UPDATE revenue_schedule_monthly r\n  SET\n    recognized_period_ccy           = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.recognized_period_ccy ELSE ROUND(r.recognized_period_contract_ccy * fc.rate, 2) END,\n    recognized_cum_ccy              = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.recognized_cum_ccy ELSE ROUND(r.recognized_cum_contract_ccy * fc.rate, 2) END,\n    billed_period_ccy               = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.billed_period_ccy ELSE ROUND(r.billed_period_contract_ccy * fc.rate, 2) END,\n    billed_cum_ccy                  = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.billed_cum_ccy ELSE ROUND(r.billed_cum_contract_ccy * fc.rate, 2) END,\n    deferred_balance_period_ccy     = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.deferred_balance_period_ccy ELSE ROUND(r.deferred_balance_period_contract_ccy * fc.rate, 2) END,\n    unbilled_balance_period_ccy     = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.unbilled_balance_period_ccy ELSE ROUND(r.unbilled_balance_period_contract_ccy * fc.rate, 2) END,\n    deferred_balance_eom_ccy        = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.deferred_balance_eom_ccy ELSE ROUND(r.deferred_balance_eom_contract_ccy * fc.rate, 2) END,\n    unbilled_balance_eom_ccy        = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.unbilled_balance_eom_ccy ELSE ROUND(r.unbilled_balance_eom_contract_ccy * fc.rate, 2) END,\n    mrr_period_ccy                  = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.mrr_period_ccy ELSE ROUND(r.mrr_period_contract_ccy * fc.rate, 2) END,\n    mrr_period_contracted_ccy       = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.mrr_period_contracted_ccy ELSE ROUND(r.mrr_period_contracted_contract_ccy * fc.rate, 2) END,\n    cmrr_period_ccy                 = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.cmrr_period_ccy ELSE ROUND(r.cmrr_period_contract_ccy * fc.rate, 2) END,\n    fx_contract_to_company          = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_contract_to_company ELSE fc.rate END,\n    fx_to_company_source            = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_source ELSE CASE WHEN fc.rate IS NULL THEN 'missing_fx_rate' ELSE COALESCE(fc.src, 'no_conversion_needed') END END,\n    fx_to_company_date              = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_date ELSE fc.dte END,\n    recognized_period_system_ccy        = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_period_system_ccy ELSE ROUND(r.recognized_period_contract_ccy * fs.rate, 2) END,\n    recognized_cum_system_ccy           = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_cum_system_ccy ELSE ROUND(r.recognized_cum_contract_ccy * fs.rate, 2) END,\n    billed_period_system_ccy            = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.billed_period_system_ccy ELSE ROUND(r.billed_period_contract_ccy * fs.rate, 2) END,\n    billed_cum_system_ccy               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.billed_cum_system_ccy ELSE ROUND(r.billed_cum_contract_ccy * fs.rate, 2) END,\n    deferred_balance_period_system_ccy  = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.deferred_balance_period_system_ccy ELSE ROUND(r.deferred_balance_period_contract_ccy * fs.rate, 2) END,\n    unbilled_balance_period_system_ccy  = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.unbilled_balance_period_system_ccy ELSE ROUND(r.unbilled_balance_period_contract_ccy * fs.rate, 2) END,\n    deferred_balance_eom_system_ccy     = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.deferred_balance_eom_system_ccy ELSE ROUND(r.deferred_balance_eom_contract_ccy * fs.rate, 2) END,\n    unbilled_balance_eom_system_ccy     = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.unbilled_balance_eom_system_ccy ELSE ROUND(r.unbilled_balance_eom_contract_ccy * fs.rate, 2) END,\n    mrr_period_system_ccy               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.mrr_period_system_ccy ELSE ROUND(r.mrr_period_contract_ccy * fs.rate, 2) END,\n    mrr_period_contracted_system_ccy    = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.mrr_period_contracted_system_ccy ELSE ROUND(r.mrr_period_contracted_contract_ccy * fs.rate, 2) END,\n    cmrr_period_system_ccy              = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.cmrr_period_system_ccy ELSE ROUND(r.cmrr_period_contract_ccy * fs.rate, 2) END,\n    fx_contract_to_system               = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_contract_to_system ELSE fs.rate END,\n    fx_to_system_source                 = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_to_system_source ELSE CASE WHEN fs.rate IS NULL THEN 'missing_fx_rate' ELSE COALESCE(fs.src, 'no_conversion_needed') END END,\n    fx_to_system_date                   = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.fx_to_system_date ELSE fs.dte END,\n    -- La marca missing_fx_rate del rebuild (falta la tasa item → contrato: montos de contrato NULL) sobrevive a este paso; S5-10: falta la\n    -- tasa compañía/sistema de una columna que se convierte aquí (no directa) → también missing_fx_rate (se limpia al volver a llamar con tasa).\n    calc_version                        = CASE\n      WHEN r.calc_version = 'missing_fx_rate' AND r.recognized_cum_contract_ccy IS NULL THEN r.calc_version\n      WHEN fc.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(v_company_direct_items), false) THEN 'missing_fx_rate'\n      WHEN fs.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(v_system_direct_items), false) THEN 'missing_fx_rate'\n      ELSE 'v4-fx-normalized' END\n  FROM fx_company fc\n  FULL JOIN fx_system fs ON fs.period_month = fc.period_month\n  WHERE r.contract_id = p_contract_id\n    AND r.period_month = COALESCE(fc.period_month, fs.period_month)\n    AND (p_from_month IS NULL OR r.period_month >= p_from_month)\n    AND COALESCE(r.is_total_row, false) = false;\n\nEND;\n$function$\n",
 			"extension": null,
-			"comment": "Step 2: Apply FX conversion to revenue schedule records using holding FX policies.\nCORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).\nConvierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.\nEjemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD.\nfixed_period (contract_fx_period_rates, solo purpose = company): regla única \"1 [from] = rate [to]\"; la fila directa contrato → compañía se multiplica y la inversa es 1/rate (28-09-2026, igual que monthly_avg). Las tasas del holding (sistema) mantienen su convención.\nSin vueltas (multimoneda, 01-10): filas de ítems cuya moneda (≠ contrato) es la de la compañía o la del sistema conservan las columnas *_ccy / *_system_ccy que escribe el rebuild con el monto directo del ítem; calc_version missing_fx_rate se conserva.",
+			"comment": "Step 2: Apply FX conversion to revenue schedule records using holding FX policies.\nCORREGIDO: DIVIDE por fx_rate porque los rates están configurados como inversos (1 USD = X moneda).\nConvierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.\nEjemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD.\nfixed_period (contract_fx_period_rates, solo purpose = company): regla única \"1 [from] = rate [to]\"; la fila directa contrato → compañía se multiplica y la inversa es 1/rate (28-09-2026, igual que monthly_avg). Las tasas del holding (sistema) mantienen su convención.\nSin vueltas (multimoneda, 01-10): filas de ítems cuya moneda (≠ contrato) es la de la compañía o la del sistema conservan las columnas *_ccy / *_system_ccy que escribe el rebuild con el monto directo del ítem; calc_version missing_fx_rate se conserva.\nS5-10 (01-10): sin tasa compañía/sistema nunca 1,0: columnas convertidas y fx_contract_to_* NULL, fx_to_*_source y calc_version missing_fx_rate; las directas no se tocan.",
 			"identity_args": "p_contract_id uuid, p_from_month date"
 		},
 		{
@@ -63759,9 +65083,9 @@
 		},
 		{
 			"name": "revenue_schedule_rebuild_contract_ccy",
-			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_rebuild_contract_ccy(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_contract RECORD;\n  v_item RECORD;\n  v_first_period date;\n  v_last_period date;\n  v_cur date;\n  v_eom_of_cur date;\n  v_monthly_revenue NUMERIC(15,2);\n  v_recognized_period NUMERIC(15,2);\n  v_billed_period NUMERIC(15,2);\n  v_recognized_cum NUMERIC(15,2);\n  v_billed_cum NUMERIC(15,2);\n  v_billed_cum_initial NUMERIC(15,2);\n  v_deferred_balance_period NUMERIC(15,2);\n  v_unbilled_balance_period NUMERIC(15,2);\n  v_deferred_balance_eom NUMERIC(15,2);\n  v_unbilled_balance_eom NUMERIC(15,2) := 0;\n  v_is_recurring boolean;\n  v_contract_start_date date;\n  v_contract_end_date date;\n  v_mrr_contracted NUMERIC(15,2);\n  v_cmrr NUMERIC(15,2);\n  v_billing_day int;\n  v_is_first_active_period boolean;\n  v_days_in_month int;\n  v_proration_days int;\n  v_tail_period date;\n  v_monthly_price NUMERIC(15,2);\n  v_renewal_split_item_id uuid;\n  -- F2: ajuste de revenue por NC de descuento clasificadas\n  v_item_start_month date;\n  v_item_active_end_month date;\n  v_nc_rev_adj NUMERIC(15,2);\n  v_in_active boolean;\n  -- Multimoneda (spec-multimoneda-contrato §3 #5, §5): los montos del ítem están en SU moneda; la fila se escribe en moneda de contrato\n  -- con la tasa fija pactada `purpose = 'item'` (1 [moneda del ítem] = rate [moneda del contrato]; directa o 1/inversa) que cubre el mes.\n  -- Sin tasa la fila queda con montos NULL y calc_version 'missing_fx_rate' (nunca 1). Ítems en la moneda del contrato: tasa 1, sin cambio.\n  v_item_ccy text;\n  v_item_rate NUMERIC;\n  v_calc_version text;\n  -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítem en otra moneda que la del contrato pero IGUAL a la de la compañía (o a la del\n  -- sistema) → las columnas *_ccy (o *_system_ccy) llevan el monto del ítem tal cual (tasa 1), calculado aquí con los mismos montos en\n  -- moneda del ítem que alimentan las columnas de contrato (sin redondear a contrato y volver). Factor 1 = directo, 0 = lo completa\n  -- revenue_schedule_apply_fx_for_contract desde la moneda de contrato (que salta las columnas directas).\n  v_company_direct NUMERIC;\n  v_system_direct NUMERIC;\n  v_monthly_price_item NUMERIC(15,2);\nBEGIN\n  SELECT c.id, c.holding_id, c.company_id, c.contract_currency,\n    co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency\n  INTO v_contract\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN RAISE EXCEPTION 'Contract % not found', p_contract_id; END IF;\n\n  SELECT MIN(LEAST(COALESCE(booking_date, start_date), start_date)), MAX(end_date)\n  INTO v_contract_start_date, v_contract_end_date\n  FROM contract_items WHERE contract_id = p_contract_id;\n\n  IF v_contract_start_date IS NULL OR v_contract_end_date IS NULL THEN\n    RAISE NOTICE 'Contract % has no items with valid dates, skipping', p_contract_id; RETURN;\n  END IF;\n\n  -- FIX 1.2 (extensión): el WHILE no se topa con el MAX(end_date) de items.\n  -- Si hay facturas emitidas con issue_date posterior, el rebuild debe llegar\n  -- hasta ese mes para capturar su billing. Si se quiere cerrar el período\n  -- contractualmente, debe hacerse con CHURN o DOWNSELL, no truncando el WHILE.\n  v_contract_end_date := GREATEST(\n    v_contract_end_date,\n    COALESCE(\n      (SELECT MAX(DATE_TRUNC('month', i.issue_date)::date)\n       FROM invoices i\n       WHERE (i.contract_id = p_contract_id\n            OR EXISTS (SELECT 1 FROM invoice_items ii2\n                         JOIN contract_items ci2 ON ci2.id = ii2.contract_item_id\n                        WHERE ii2.invoice_id = i.id AND ci2.contract_id = p_contract_id))\n         AND i.is_active = true\n         AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')),\n      v_contract_end_date\n    )\n  );\n\n  SELECT EXTRACT(DAY FROM MIN(ci.start_date))::int INTO v_billing_day\n  FROM contract_items ci\n  WHERE ci.contract_id = p_contract_id\n    AND COALESCE(ci.categoria, '') NOT IN ('DOWNSELL', 'CHURN')\n    AND COALESCE(ci.is_recurring, false) = true;\n\n  -- FIX 1.4: removido guard COALESCE(is_total_row, false) = false del DELETE\n  IF p_from_month IS NULL THEN\n    DELETE FROM revenue_schedule_monthly\n    WHERE contract_id = p_contract_id\n      AND contract_item_id IS NOT NULL;\n  ELSE\n    DELETE FROM revenue_schedule_monthly\n    WHERE contract_id = p_contract_id\n      AND period_month >= p_from_month\n      AND contract_item_id IS NOT NULL;\n  END IF;\n\n  FOR v_item IN SELECT * FROM contract_items WHERE contract_id = p_contract_id ORDER BY start_date, id\n  LOOP\n    v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(p_from_month, v_contract_start_date), v_contract_start_date))::date;\n    v_last_period := DATE_TRUNC('month', v_contract_end_date)::date;\n    v_is_recurring := COALESCE(v_item.is_recurring, false);\n    v_item_ccy := UPPER(TRIM(COALESCE(v_item.currency, v_contract.contract_currency)));\n    v_company_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))\n      AND v_item_ccy = UPPER(TRIM(v_contract.company_currency)) THEN 1 ELSE 0 END;\n    v_system_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))\n      AND v_item_ccy = UPPER(TRIM(v_contract.system_currency)) THEN 1 ELSE 0 END;\n\n    IF COALESCE(v_item.term_months, 0) > 0 THEN\n      v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);\n    ELSE v_monthly_revenue := 0; END IF;\n\n    -- F2: ventana activa del ítem en meses (para el devengo de NC defer_forward)\n    v_item_start_month := DATE_TRUNC('month', v_item.start_date)::date;\n    IF COALESCE(v_item.term_months, 0) > 0 THEN\n      v_item_active_end_month := LEAST(\n        DATE_TRUNC('month', v_item.end_date)::date,\n        (v_item_start_month + ((v_item.term_months - 1) || ' months')::interval)::date\n      );\n    ELSE\n      v_item_active_end_month := DATE_TRUNC('month', v_item.end_date)::date;\n    END IF;\n\n    -- FIX 1.1: agregado 'Emitida' al filtro de status\n    SELECT COALESCE(SUM(ii.subtotal_contract_currency), 0) INTO v_billed_cum_initial\n    FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id\n    WHERE ii.contract_item_id = v_item.id\n      AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida') AND i.issue_date < v_first_period;\n\n    v_recognized_cum := 0; v_billed_cum := v_billed_cum_initial;\n    v_deferred_balance_eom := 0; v_unbilled_balance_eom := 0;\n\n    v_cur := v_first_period;\n    WHILE v_cur <= v_last_period LOOP\n      v_eom_of_cur := (v_cur + INTERVAL '1 month' - INTERVAL '1 day')::date;\n      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_cur, v_eom_of_cur);\n      v_calc_version := CASE\n        WHEN v_item_rate IS NULL THEN 'missing_fx_rate'\n        WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency)) THEN 'v3.3-multicurrency-item-fx'\n        ELSE 'v3.2-nc-discount-2026-07' END;\n\n      -- FIX 1.2 + FIX 1.1: SELECT de billing siempre se ejecuta (esté el item\n      -- activo o no en este mes). Solo se conecta por contract_item_id y se\n      -- asigna al mes de issue_date — sin filtro de rango [start, end] del\n      -- item. Eso captura billing pre-start y post-end-date.\n      -- FIX 1.1: 'Emitida' agregado al filtro de status.\n      -- Nota F2: las líneas de NC vinculadas (subtotal negativo, NC 'Emitida')\n      -- entran a este SUM y netean billed automáticamente.\n      SELECT COALESCE(SUM(ii.subtotal_contract_currency), 0) INTO v_billed_period\n      FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id\n      WHERE ii.contract_item_id = v_item.id\n        AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida') AND DATE_TRUNC('month', i.issue_date)::date = v_cur;\n\n      v_billed_cum := v_billed_cum + v_billed_period;\n\n      -- FIX 2.1: condición del IF activo cubre EXACTAMENTE term_months periodos\n      -- desde mes(start_date). Se conserva el guard del rango calendario como\n      -- salvaguarda contra term_months mal definidos.\n      --\n      -- Si end_date es mid-month, el mes calendario del end_date cae fuera del\n      -- rango [mes(start), mes(start) + term_months meses), por lo que la\n      -- iteración del WHILE para ese mes pasa al ELSE: la fila se sigue\n      -- insertando (porque el INSERT está en el WHILE, no en el IF), pero\n      -- con recognized_period=0 y recognized_cum heredado del mes anterior\n      -- (no se infla el devengo). Comportamiento idéntico al de cualquier\n      -- mes posterior al término del item.\n      IF v_cur >= DATE_TRUNC('month', v_item.start_date)::date\n         AND v_cur <= DATE_TRUNC('month', v_item.end_date)::date\n         AND v_cur < (DATE_TRUNC('month', v_item.start_date)\n                      + (COALESCE(v_item.term_months, 0) || ' months')::interval)::date THEN\n        v_in_active := true;\n        v_is_first_active_period := (v_cur = DATE_TRUNC('month', v_item.start_date)::date);\n        -- FIX 1.3: prorrateo solo aplica a UPSELL/CROSS-SELL/DOWNSELL.\n        -- Items NEW, RENEWAL, REACTIVATION, sin categoria nunca prorratean.\n        IF v_is_first_active_period AND v_billing_day IS NOT NULL AND EXTRACT(DAY FROM v_item.start_date)::int <> v_billing_day\n           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL') THEN\n          v_days_in_month := EXTRACT(DAY FROM (DATE_TRUNC('month', v_item.start_date) + INTERVAL '1 month' - INTERVAL '1 day'))::int;\n          v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;\n          v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);\n        ELSE v_recognized_period := v_monthly_revenue; END IF;\n      ELSE\n        -- Item no activo en este mes. v_billed_period puede ser > 0 (capturado arriba).\n        v_in_active := false;\n        v_recognized_period := 0;\n      END IF;\n\n      -- F2: ajuste de revenue por NC de descuento clasificadas (impact_month /\n      -- defer_forward). 0 para contratos sin NC clasificadas → cálculo idéntico\n      -- al anterior. Se aplica también en meses fuera de la ventana activa\n      -- (ej. NC emitida después del término del ítem con impact_month).\n      v_nc_rev_adj := public.nc_discount_revenue_adjustment(\n        p_contract_id, v_item.id, v_cur, v_item_start_month, v_item_active_end_month\n      );\n      v_recognized_period := v_recognized_period + v_nc_rev_adj;\n      v_recognized_cum := v_recognized_cum + v_recognized_period;\n\n      IF v_in_active THEN\n        v_deferred_balance_period := -LEAST(v_recognized_period, GREATEST(v_deferred_balance_eom, 0));\n        v_unbilled_balance_period := v_recognized_period + v_deferred_balance_period;\n      ELSE\n        -- recognized no se acumula (salvo ajuste NC). deferred/unbilled del período = 0.\n        v_deferred_balance_period := 0; v_unbilled_balance_period := 0;\n      END IF;\n      -- Los _eom se recalculan con los cum actualizados.\n      v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);\n      v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);\n\n      IF v_item.start_date <= v_eom_of_cur\n         AND v_item.end_date >= v_eom_of_cur\n         AND v_is_recurring THEN\n        v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      ELSE v_mrr_contracted := 0; END IF;\n\n      IF v_is_recurring\n         AND COALESCE(v_item.booking_date, v_item.start_date) <= v_eom_of_cur\n         AND v_item.end_date >= v_eom_of_cur\n      THEN\n        v_cmrr := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      ELSE v_cmrr := 0; END IF;\n\n      INSERT INTO revenue_schedule_monthly(\n        id, holding_id, contract_id, contract_item_id, period_month,\n        company_id, company_currency, contract_currency, system_currency,\n        recognized_period_contract_ccy, recognized_cum_contract_ccy,\n        billed_period_contract_ccy, billed_cum_contract_ccy,\n        deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n        deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n        mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n        recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n        deferred_balance_period_ccy, unbilled_balance_period_ccy,\n        deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n        mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n        recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n        deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n        deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n        mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n        product_name, calc_version, is_total_row,\n        fx_contract_to_company, fx_contract_to_system,\n        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date\n      ) VALUES (\n        gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,\n        v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n        ROUND(v_recognized_period * v_item_rate, 2), ROUND(v_recognized_cum * v_item_rate, 2),\n        ROUND(v_billed_period * v_item_rate, 2), ROUND(v_billed_cum * v_item_rate, 2),\n        ROUND(v_deferred_balance_period * v_item_rate, 2), ROUND(v_unbilled_balance_period * v_item_rate, 2),\n        ROUND(v_deferred_balance_eom * v_item_rate, 2), ROUND(v_unbilled_balance_eom * v_item_rate, 2),\n        ROUND(v_mrr_contracted * v_item_rate, 2),\n        ROUND(v_mrr_contracted * v_item_rate, 2), ROUND(v_cmrr * v_item_rate, 2),\n        -- Sin vueltas: monto del ítem directo si su moneda es la de la compañía / del sistema (si no, 0 y lo completa apply_fx).\n        v_recognized_period * v_company_direct, v_recognized_cum * v_company_direct,\n        v_billed_period * v_company_direct, v_billed_cum * v_company_direct,\n        v_deferred_balance_period * v_company_direct, v_unbilled_balance_period * v_company_direct,\n        v_deferred_balance_eom * v_company_direct, v_unbilled_balance_eom * v_company_direct,\n        v_mrr_contracted * v_company_direct, v_mrr_contracted * v_company_direct, v_cmrr * v_company_direct,\n        v_recognized_period * v_system_direct, v_recognized_cum * v_system_direct,\n        v_billed_period * v_system_direct, v_billed_cum * v_system_direct,\n        v_deferred_balance_period * v_system_direct, v_unbilled_balance_period * v_system_direct,\n        v_deferred_balance_eom * v_system_direct, v_unbilled_balance_eom * v_system_direct,\n        v_mrr_contracted * v_system_direct, v_mrr_contracted * v_system_direct, v_cmrr * v_system_direct,\n        v_item.product_name, v_calc_version, false,  -- F2 (+ multimoneda)\n        -- fx_contract_to_*: con directo, la tasa implícita contrato → compañía/sistema (1 / tasa item; NULL sin tasa item).\n        CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n        CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n        CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n        CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL\n      );\n      v_cur := (v_cur + INTERVAL '1 month')::date;\n    END LOOP;\n\n    IF v_item.churn_date IS NOT NULL\n       AND COALESCE(v_item.categoria, '') NOT IN ('CHURN', 'DOWNSELL')\n       AND v_item.end_date IS NOT NULL\n       AND v_is_recurring\n       AND DATE_TRUNC('month', v_item.churn_date)::date > DATE_TRUNC('month', v_item.end_date)::date\n    THEN\n      v_tail_period := DATE_TRUNC('month', v_item.churn_date)::date;\n      v_monthly_price_item := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_tail_period,\n        (v_tail_period + INTERVAL '1 month' - INTERVAL '1 day')::date);\n      v_monthly_price := ROUND(v_monthly_price_item * v_item_rate, 2);\n\n      IF p_from_month IS NULL OR v_tail_period >= p_from_month THEN\n        INSERT INTO revenue_schedule_monthly(\n          id, holding_id, contract_id, contract_item_id, period_month,\n          company_id, company_currency, contract_currency, system_currency,\n          recognized_period_contract_ccy, recognized_cum_contract_ccy,\n          billed_period_contract_ccy, billed_cum_contract_ccy,\n          deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n          deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n          mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n          recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n          deferred_balance_period_ccy, unbilled_balance_period_ccy,\n          deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n          mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n          recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n          deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n          deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n          mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n          product_name, calc_version, is_total_row,\n          fx_contract_to_company, fx_contract_to_system,\n          fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n          momentum\n        ) VALUES (\n          gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,\n          v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),\n          0, 0, 0, 0,\n          v_monthly_price, v_monthly_price, v_monthly_price,\n          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,\n          v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct,\n          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,\n          v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct,\n          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-tail' END, false,  -- FIX 1.5\n          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,\n          'BOP'\n        )\n        ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n        DO UPDATE SET\n          mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n          mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n          cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,\n          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,\n          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,\n          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,\n          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,\n          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,\n          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,\n          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,\n          fx_to_company_source               = EXCLUDED.fx_to_company_source,\n          fx_to_system_source                = EXCLUDED.fx_to_system_source,\n          product_name                       = EXCLUDED.product_name,\n          calc_version                       = EXCLUDED.calc_version;\n\n        INSERT INTO revenue_schedule_monthly(\n          id, holding_id, contract_id, contract_item_id, period_month,\n          company_id, company_currency, contract_currency, system_currency,\n          recognized_period_contract_ccy, recognized_cum_contract_ccy,\n          billed_period_contract_ccy, billed_cum_contract_ccy,\n          deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n          deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n          mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n          recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n          deferred_balance_period_ccy, unbilled_balance_period_ccy,\n          deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n          mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n          recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n          deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n          deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n          mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n          product_name, calc_version, is_total_row,\n          fx_contract_to_company, fx_contract_to_system,\n          fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n          momentum\n        ) VALUES (\n          gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,\n          v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),\n          0, 0, 0, 0,\n          -v_monthly_price, -v_monthly_price, -v_monthly_price,\n          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,\n          -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct,\n          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,\n          -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct,\n          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-churn' END, false,  -- FIX 1.5\n          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,\n          'CHURN'\n        )\n        ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n        DO UPDATE SET\n          mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n          mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n          cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,\n          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,\n          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,\n          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,\n          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,\n          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,\n          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,\n          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,\n          fx_to_company_source               = EXCLUDED.fx_to_company_source,\n          fx_to_system_source                = EXCLUDED.fx_to_system_source,\n          product_name                       = EXCLUDED.product_name,\n          calc_version                       = EXCLUDED.calc_version;\n      END IF;\n    END IF;\n  END LOOP;\n\n  FOR v_renewal_split_item_id IN\n    SELECT ci.id\n      FROM contract_items ci\n     WHERE ci.contract_id = p_contract_id\n       AND COALESCE(ci.categoria, '') = 'RENEWAL'\n       AND ci.renewal_base_unit_price IS NOT NULL\n       AND (p_from_month IS NULL OR DATE_TRUNC('month', ci.start_date)::date >= p_from_month)\n  LOOP\n    BEGIN\n      PERFORM apply_renewal_price_split(v_renewal_split_item_id);\n    EXCEPTION WHEN OTHERS THEN\n      RAISE WARNING 'apply_renewal_price_split falló para item %: %', v_renewal_split_item_id, SQLERRM;\n    END;\n  END LOOP;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_rebuild_contract_ccy(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n-- Fixes RSM 01-10 (cobertura-contratos-v2 U8, D7/S5-16, U5; decisiones de la dueña 01-10). Sin aplicar: entra con `postgres:assets`.\n--  U8     rebuild parcial (p_from_month): el devengo acumulado y los saldos al cierre del mes previo se cargan de la última fila RSM del\n--         ítem antes del mes de inicio (en moneda del ítem); antes partían en 0 e inflaban el diferido.\n--  S5-16  mensual = contract_items.monthly_price (neto: unitario × cantidad con el descuento; CHURN/DOWNSELL = final ÷ plazo = ΔMRR);\n--         final_price solo es TCV. final ÷ plazo queda solo de respaldo sin monthly_price (pago único / filas antiguas). Fracción del mes una vez.\n--  U5     CHURN y REACTIVATION prorratean el primer mes por días vivos igual que UPSELL / CROSS-SELL / DOWNSELL.\n-- Verificación tras aplicar en QA (un contrato por caso): 1) rebuild(c, NULL) y luego rebuild(c, mes) → mismas filas desde el mes\n-- (recognized_cum, deferred/unbilled_eom); 2) UPSELL a mitad de ciclo (Bosch): mes 1 = monthly_price × días/días_mes (180,46, no 169,95);\n-- 3) baja early a mitad de ciclo: fila CHURN del mes = −monthly_price × días restantes/días_mes; 4) contrato sin tasa compañía/sistema:\n-- *_ccy / *_system_ccy NULL y calc_version missing_fx_rate (revenue_schedule_apply_fx_for_contract).\nDECLARE\n  v_contract RECORD;\n  v_item RECORD;\n  v_first_period date;\n  v_last_period date;\n  v_cur date;\n  v_eom_of_cur date;\n  v_monthly_revenue NUMERIC(15,2);\n  v_recognized_period NUMERIC(15,2);\n  v_billed_period NUMERIC(15,2);\n  v_recognized_cum NUMERIC(15,2);\n  v_billed_cum NUMERIC(15,2);\n  v_billed_cum_initial NUMERIC(15,2);\n  v_deferred_balance_period NUMERIC(15,2);\n  v_unbilled_balance_period NUMERIC(15,2);\n  v_deferred_balance_eom NUMERIC(15,2);\n  v_unbilled_balance_eom NUMERIC(15,2) := 0;\n  v_is_recurring boolean;\n  v_contract_start_date date;\n  v_contract_end_date date;\n  v_mrr_contracted NUMERIC(15,2);\n  v_cmrr NUMERIC(15,2);\n  v_billing_day int;\n  -- B2-3 (spec modificaciones §9.3.9): día de ciclo del contrato; el de cada ítem = COALESCE(ítem, contrato, MIN(start_date)).\n  v_contract_billing_day int;\n  -- B2-5 (spec modificaciones §9.3.3): pausas del ítem (contract_item_pauses no canceladas; pause_end NULL = hasta reanudar).\n  v_paused_days int;\n  v_active_days int;\n  v_paused_eom boolean;\n  v_paused_open_eom boolean;\n  v_momentum text;\n  v_is_first_active_period boolean;\n  v_days_in_month int;\n  v_proration_days int;\n  v_tail_period date;\n  v_monthly_price NUMERIC(15,2);\n  v_renewal_split_item_id uuid;\n  -- F2: ajuste de revenue por NC de descuento clasificadas\n  v_item_start_month date;\n  v_item_active_end_month date;\n  v_nc_rev_adj NUMERIC(15,2);\n  v_in_active boolean;\n  -- Multimoneda (spec-multimoneda-contrato §3 #5, §5): los montos del ítem están en SU moneda; la fila se escribe en moneda de contrato\n  -- con la tasa fija pactada `purpose = 'item'` (1 [moneda del ítem] = rate [moneda del contrato]; directa o 1/inversa) que cubre el mes.\n  -- Sin tasa la fila queda con montos NULL y calc_version 'missing_fx_rate' (nunca 1). Ítems en la moneda del contrato: tasa 1, sin cambio.\n  v_item_ccy text;\n  v_item_rate NUMERIC;\n  v_calc_version text;\n  -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítem en otra moneda que la del contrato pero IGUAL a la de la compañía (o a la del\n  -- sistema) → las columnas *_ccy (o *_system_ccy) llevan el monto del ítem tal cual (tasa 1), calculado aquí con los mismos montos en\n  -- moneda del ítem que alimentan las columnas de contrato (sin redondear a contrato y volver). Factor 1 = directo, 0 = lo completa\n  -- revenue_schedule_apply_fx_for_contract desde la moneda de contrato (que salta las columnas directas).\n  v_company_direct NUMERIC;\n  v_system_direct NUMERIC;\n  v_monthly_price_item NUMERIC(15,2);\n  -- U8: mes de inicio normalizado al día 1 y última fila previa del ítem (rebuild parcial).\n  v_from_month date := DATE_TRUNC('month', p_from_month)::date;\n  v_prev RECORD;\nBEGIN\n  SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,\n    co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency\n  INTO v_contract\n  FROM contracts c\n  JOIN companies co ON co.id = c.company_id\n  LEFT JOIN holding_settings hs ON hs.holding_id = c.holding_id\n  WHERE c.id = p_contract_id;\n\n  IF NOT FOUND THEN RAISE EXCEPTION 'Contract % not found', p_contract_id; END IF;\n\n  SELECT MIN(LEAST(COALESCE(booking_date, start_date), start_date)), MAX(end_date)\n  INTO v_contract_start_date, v_contract_end_date\n  FROM contract_items WHERE contract_id = p_contract_id;\n\n  IF v_contract_start_date IS NULL OR v_contract_end_date IS NULL THEN\n    RAISE NOTICE 'Contract % has no items with valid dates, skipping', p_contract_id; RETURN;\n  END IF;\n\n  -- FIX 1.2 (extensión): el WHILE no se topa con el MAX(end_date) de items.\n  -- Si hay facturas emitidas con issue_date posterior, el rebuild debe llegar\n  -- hasta ese mes para capturar su billing. Si se quiere cerrar el período\n  -- contractualmente, debe hacerse con CHURN o DOWNSELL, no truncando el WHILE.\n  v_contract_end_date := GREATEST(\n    v_contract_end_date,\n    COALESCE(\n      (SELECT MAX(DATE_TRUNC('month', i.issue_date)::date)\n       FROM invoices i\n       WHERE (i.contract_id = p_contract_id\n            OR EXISTS (SELECT 1 FROM invoice_items ii2\n                         JOIN contract_items ci2 ON ci2.id = ii2.contract_item_id\n                        WHERE ii2.invoice_id = i.id AND ci2.contract_id = p_contract_id))\n         AND i.is_active = true\n         AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')),\n      v_contract_end_date\n    )\n  );\n\n  -- B2-3 (§9.3.9): el día guardado del contrato manda; sin él, el del primer recurrente de ciclo del contrato (los de ciclo propio no cuentan).\n  SELECT COALESCE(v_contract.billing_anchor_day, EXTRACT(DAY FROM MIN(ci.start_date))::int) INTO v_contract_billing_day\n  FROM contract_items ci\n  WHERE ci.contract_id = p_contract_id\n    AND COALESCE(ci.categoria, '') NOT IN ('DOWNSELL', 'CHURN')\n    AND COALESCE(ci.is_recurring, false) = true\n    AND ci.billing_anchor_day IS NULL;\n\n  -- FIX 1.4: removido guard COALESCE(is_total_row, false) = false del DELETE\n  IF p_from_month IS NULL THEN\n    DELETE FROM revenue_schedule_monthly\n    WHERE contract_id = p_contract_id\n      AND contract_item_id IS NOT NULL;\n  ELSE\n    DELETE FROM revenue_schedule_monthly\n    WHERE contract_id = p_contract_id\n      AND period_month >= v_from_month\n      AND contract_item_id IS NOT NULL;\n  END IF;\n\n  FOR v_item IN SELECT * FROM contract_items WHERE contract_id = p_contract_id ORDER BY start_date, id\n  LOOP\n    v_first_period := DATE_TRUNC('month', GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date))::date;\n    v_last_period := DATE_TRUNC('month', v_contract_end_date)::date;\n    v_is_recurring := COALESCE(v_item.is_recurring, false);\n    -- B2-3 (§9.3.9): día de ciclo del ítem = COALESCE(item.billing_anchor_day, contract.billing_anchor_day, MIN(start_date)).\n    v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);\n    v_item_ccy := UPPER(TRIM(COALESCE(v_item.currency, v_contract.contract_currency)));\n    v_company_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))\n      AND v_item_ccy = UPPER(TRIM(v_contract.company_currency)) THEN 1 ELSE 0 END;\n    v_system_direct := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency))\n      AND v_item_ccy = UPPER(TRIM(v_contract.system_currency)) THEN 1 ELSE 0 END;\n\n    -- S5-16 (D7): el mensual es monthly_price (neto: unitario × cantidad con el descuento; en CHURN/DOWNSELL = ΔMRR). final_price es\n    -- TCV: en un UPSELL/CROSS-SELL a mitad de ciclo ya viene por días, y final ÷ plazo × fracción del mes prorrateaba dos veces.\n    -- final ÷ plazo solo cuando no hay monthly_price (pago único: monthly_price NULL). Un monthly_price mal guardado en el legado\n    -- (p. ej. DOWNSELL con 0 en QA CTR-0022) es un error de datos y se corrige en el dato, no aquí (Domi 01-10).\n    IF COALESCE(v_item.term_months, 0) > 0 THEN\n      v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));\n    ELSE v_monthly_revenue := 0; END IF;\n\n    -- F2: ventana activa del ítem en meses (para el devengo de NC defer_forward)\n    v_item_start_month := DATE_TRUNC('month', v_item.start_date)::date;\n    IF COALESCE(v_item.term_months, 0) > 0 THEN\n      v_item_active_end_month := LEAST(\n        DATE_TRUNC('month', v_item.end_date)::date,\n        (v_item_start_month + ((v_item.term_months - 1) || ' months')::interval)::date\n      );\n    ELSE\n      v_item_active_end_month := DATE_TRUNC('month', v_item.end_date)::date;\n    END IF;\n\n    -- FIX 1.1: agregado 'Emitida' al filtro de status\n    SELECT COALESCE(SUM(ii.subtotal_contract_currency), 0) INTO v_billed_cum_initial\n    FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id\n    WHERE ii.contract_item_id = v_item.id\n      AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida') AND i.issue_date < v_first_period;\n\n    v_recognized_cum := 0; v_billed_cum := v_billed_cum_initial;\n    v_deferred_balance_eom := 0; v_unbilled_balance_eom := 0;\n\n    -- U8: rebuild parcial → el devengo acumulado sigue la serie: se carga de la última fila del ítem antes del primer mes, en moneda\n    -- del ítem (columna directa si la hay; misma moneda que el contrato tal cual; si no, contrato ÷ tasa item de ese mes). Los saldos\n    -- al cierre del mes previo salen de los acumulados (igual que cada _eom del loop). Rebuild completo: sin cambio (todo en 0).\n    IF v_from_month IS NOT NULL THEN\n      SELECT r.period_month, r.recognized_cum_contract_ccy, r.recognized_cum_ccy, r.recognized_cum_system_ccy\n        INTO v_prev\n        FROM revenue_schedule_monthly r\n       WHERE r.contract_id = p_contract_id\n         AND r.contract_item_id = v_item.id\n         AND r.period_month < v_first_period\n         AND COALESCE(r.is_total_row, false) = false\n         AND COALESCE(r.momentum, '') <> 'PENDING_RENEWAL'  -- cola de apply_pending_renewal_tail: acumulados en 0\n       -- En el mismo mes manda la fila del rebuild: con acumulado de contrato, y no la del delta de apply_renewal_price_split\n       -- (UPSELL/DOWNSELL sobre un RENEWAL, sin acumulados).\n       ORDER BY r.period_month DESC, (r.recognized_cum_contract_ccy IS NULL),\n         (COALESCE(r.momentum, '') IN ('UPSELL', 'DOWNSELL') AND COALESCE(v_item.categoria, '') = 'RENEWAL')\n       LIMIT 1;\n      IF FOUND THEN\n        v_recognized_cum := COALESCE(\n          CASE WHEN v_company_direct = 1 THEN v_prev.recognized_cum_ccy END,\n          CASE WHEN v_system_direct = 1 THEN v_prev.recognized_cum_system_ccy END,\n          CASE WHEN v_item_ccy = UPPER(TRIM(v_contract.contract_currency)) THEN v_prev.recognized_cum_contract_ccy END,\n          ROUND(v_prev.recognized_cum_contract_ccy / NULLIF(public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency,\n            v_prev.period_month, (v_prev.period_month + INTERVAL '1 month' - INTERVAL '1 day')::date), 0), 2),\n          0);\n      END IF;\n      v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);\n      v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);\n    END IF;\n\n    v_cur := v_first_period;\n    WHILE v_cur <= v_last_period LOOP\n      v_eom_of_cur := (v_cur + INTERVAL '1 month' - INTERVAL '1 day')::date;\n      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_cur, v_eom_of_cur);\n      v_calc_version := CASE\n        WHEN v_item_rate IS NULL THEN 'missing_fx_rate'\n        WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency)) THEN 'v3.3-multicurrency-item-fx'\n        ELSE 'v3.2-nc-discount-2026-07' END;\n\n      -- FIX 1.2 + FIX 1.1: SELECT de billing siempre se ejecuta (esté el item\n      -- activo o no en este mes). Solo se conecta por contract_item_id y se\n      -- asigna al mes de issue_date — sin filtro de rango [start, end] del\n      -- item. Eso captura billing pre-start y post-end-date.\n      -- FIX 1.1: 'Emitida' agregado al filtro de status.\n      -- Nota F2: las líneas de NC vinculadas (subtotal negativo, NC 'Emitida')\n      -- entran a este SUM y netean billed automáticamente.\n      SELECT COALESCE(SUM(ii.subtotal_contract_currency), 0) INTO v_billed_period\n      FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id\n      WHERE ii.contract_item_id = v_item.id\n        AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida') AND DATE_TRUNC('month', i.issue_date)::date = v_cur;\n\n      v_billed_cum := v_billed_cum + v_billed_period;\n\n      -- FIX 2.1: condición del IF activo cubre EXACTAMENTE term_months periodos\n      -- desde mes(start_date). Se conserva el guard del rango calendario como\n      -- salvaguarda contra term_months mal definidos.\n      --\n      -- Si end_date es mid-month, el mes calendario del end_date cae fuera del\n      -- rango [mes(start), mes(start) + term_months meses), por lo que la\n      -- iteración del WHILE para ese mes pasa al ELSE: la fila se sigue\n      -- insertando (porque el INSERT está en el WHILE, no en el IF), pero\n      -- con recognized_period=0 y recognized_cum heredado del mes anterior\n      -- (no se infla el devengo). Comportamiento idéntico al de cualquier\n      -- mes posterior al término del item.\n      IF v_cur >= DATE_TRUNC('month', v_item.start_date)::date\n         AND v_cur <= DATE_TRUNC('month', v_item.end_date)::date\n         AND v_cur < (DATE_TRUNC('month', v_item.start_date)\n                      + (COALESCE(v_item.term_months, 0) || ' months')::interval)::date THEN\n        v_in_active := true;\n        v_is_first_active_period := (v_cur = DATE_TRUNC('month', v_item.start_date)::date);\n        -- FIX 1.3: prorrateo solo aplica a UPSELL/CROSS-SELL/DOWNSELL; U5 (01-10): también CHURN y REACTIVATION (el espejo de una\n        -- baja a mitad de ciclo devenga solo los días vivos del mes, no el mes completo).\n        -- Items NEW, RENEWAL, sin categoria nunca prorratean; B2-3 (§9.3.9): un ítem de ciclo propio tampoco (como NEW).\n        IF v_is_first_active_period AND v_billing_day IS NOT NULL AND EXTRACT(DAY FROM v_item.start_date)::int <> v_billing_day\n           AND v_item.billing_anchor_day IS NULL\n           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN\n          v_days_in_month := EXTRACT(DAY FROM (DATE_TRUNC('month', v_item.start_date) + INTERVAL '1 month' - INTERVAL '1 day'))::int;\n          v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;\n          v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);\n        ELSE v_recognized_period := v_monthly_revenue; END IF;\n        -- B2-5 (§9.3.3): días pausados del mes (dentro del tramo activo del ítem) → devengo prorrateado por días; mes completo pausado → 0.\n        v_active_days := (LEAST(v_eom_of_cur, v_item.end_date) - GREATEST(v_cur, v_item.start_date)) + 1;\n        SELECT COALESCE(SUM(GREATEST(0, (LEAST(COALESCE(p.pause_end, v_item.end_date), v_eom_of_cur, v_item.end_date)\n                 - GREATEST(p.pause_start, v_cur, v_item.start_date)) + 1)), 0)::int\n          INTO v_paused_days\n          FROM contract_item_pauses p\n         WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled'\n           AND p.pause_start <= v_eom_of_cur AND COALESCE(p.pause_end, v_item.end_date) >= v_cur;\n        IF v_paused_days > 0 AND v_active_days > 0 THEN\n          v_recognized_period := ROUND(v_recognized_period * GREATEST(v_active_days - v_paused_days, 0)::numeric / v_active_days, 2);\n        END IF;\n      ELSE\n        -- Item no activo en este mes. v_billed_period puede ser > 0 (capturado arriba).\n        v_in_active := false;\n        v_recognized_period := 0;\n      END IF;\n\n      -- F2: ajuste de revenue por NC de descuento clasificadas (impact_month /\n      -- defer_forward). 0 para contratos sin NC clasificadas → cálculo idéntico\n      -- al anterior. Se aplica también en meses fuera de la ventana activa\n      -- (ej. NC emitida después del término del ítem con impact_month).\n      v_nc_rev_adj := public.nc_discount_revenue_adjustment(\n        p_contract_id, v_item.id, v_cur, v_item_start_month, v_item_active_end_month\n      );\n      v_recognized_period := v_recognized_period + v_nc_rev_adj;\n      v_recognized_cum := v_recognized_cum + v_recognized_period;\n\n      IF v_in_active THEN\n        v_deferred_balance_period := -LEAST(v_recognized_period, GREATEST(v_deferred_balance_eom, 0));\n        v_unbilled_balance_period := v_recognized_period + v_deferred_balance_period;\n      ELSE\n        -- recognized no se acumula (salvo ajuste NC). deferred/unbilled del período = 0.\n        v_deferred_balance_period := 0; v_unbilled_balance_period := 0;\n      END IF;\n      -- Los _eom se recalculan con los cum actualizados.\n      v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);\n      v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);\n\n      IF v_item.start_date <= v_eom_of_cur\n         AND v_item.end_date >= v_eom_of_cur\n         AND v_is_recurring THEN\n        v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      ELSE v_mrr_contracted := 0; END IF;\n\n      IF v_is_recurring\n         AND COALESCE(v_item.booking_date, v_item.start_date) <= v_eom_of_cur\n         AND v_item.end_date >= v_eom_of_cur\n      THEN\n        v_cmrr := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      ELSE v_cmrr := 0; END IF;\n\n      -- B2-5 (§9.3.3): pausado al fin de mes → MRR 0; CMRR se mantiene si la pausa tiene fin (compromiso conocido), 0 si es abierta.\n      -- Momentum PAUSE en el primer mes pausado (fin de mes en pausa) y RESUME en el mes del día siguiente al fin de la pausa; sin pausa,\n      -- NULL (lo asigna trg_assign_momentum como hasta hoy).\n      SELECT COALESCE(bool_or(true), false), COALESCE(bool_or(p.pause_end IS NULL), false)\n        INTO v_paused_eom, v_paused_open_eom\n        FROM contract_item_pauses p\n       WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled'\n         AND p.pause_start <= v_eom_of_cur AND (p.pause_end IS NULL OR p.pause_end >= v_eom_of_cur);\n      IF v_paused_eom AND v_is_recurring THEN\n        v_mrr_contracted := 0;\n        IF v_paused_open_eom THEN v_cmrr := 0; END IF;\n      END IF;\n      v_momentum := NULL;\n      IF v_is_recurring AND v_paused_eom AND EXISTS (\n           SELECT 1 FROM contract_item_pauses p\n            WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled' AND DATE_TRUNC('month', p.pause_start)::date = v_cur) THEN\n        v_momentum := 'PAUSE';\n      ELSIF v_is_recurring AND NOT v_paused_eom AND EXISTS (\n           SELECT 1 FROM contract_item_pauses p\n            WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled' AND p.pause_end IS NOT NULL\n              AND DATE_TRUNC('month', p.pause_end + 1)::date = v_cur\n              AND DATE_TRUNC('month', p.pause_start)::date < v_cur\n              AND p.pause_end < v_item.end_date) THEN\n        v_momentum := 'RESUME';\n      END IF;\n\n      -- Sin tasa ítem → contrato solo es excepción si el mes tiene algo que convertir (ítem activo o facturación): un mes previo al\n      -- inicio o posterior al fin, con montos 0, no se marca missing_fx_rate (01-10, caso BOP del mes anterior al inicio en multimoneda).\n      IF v_calc_version = 'missing_fx_rate' AND NOT v_in_active AND COALESCE(v_billed_period, 0) = 0 THEN\n        v_calc_version := CASE WHEN v_item_ccy IS DISTINCT FROM UPPER(TRIM(v_contract.contract_currency)) THEN 'v3.3-multicurrency-item-fx' ELSE 'v3.2-nc-discount-2026-07' END;\n      END IF;\n\n      INSERT INTO revenue_schedule_monthly(\n        id, holding_id, contract_id, contract_item_id, period_month,\n        company_id, company_currency, contract_currency, system_currency,\n        recognized_period_contract_ccy, recognized_cum_contract_ccy,\n        billed_period_contract_ccy, billed_cum_contract_ccy,\n        deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n        deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n        mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n        recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n        deferred_balance_period_ccy, unbilled_balance_period_ccy,\n        deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n        mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n        recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n        deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n        deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n        mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n        product_name, calc_version, is_total_row,\n        fx_contract_to_company, fx_contract_to_system,\n        fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n        momentum\n      ) VALUES (\n        gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_cur,\n        v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n        ROUND(v_recognized_period * v_item_rate, 2), ROUND(v_recognized_cum * v_item_rate, 2),\n        ROUND(v_billed_period * v_item_rate, 2), ROUND(v_billed_cum * v_item_rate, 2),\n        ROUND(v_deferred_balance_period * v_item_rate, 2), ROUND(v_unbilled_balance_period * v_item_rate, 2),\n        ROUND(v_deferred_balance_eom * v_item_rate, 2), ROUND(v_unbilled_balance_eom * v_item_rate, 2),\n        ROUND(v_mrr_contracted * v_item_rate, 2),\n        ROUND(v_mrr_contracted * v_item_rate, 2), ROUND(v_cmrr * v_item_rate, 2),\n        -- Sin vueltas: monto del ítem directo si su moneda es la de la compañía / del sistema (si no, 0 y lo completa apply_fx).\n        v_recognized_period * v_company_direct, v_recognized_cum * v_company_direct,\n        v_billed_period * v_company_direct, v_billed_cum * v_company_direct,\n        v_deferred_balance_period * v_company_direct, v_unbilled_balance_period * v_company_direct,\n        v_deferred_balance_eom * v_company_direct, v_unbilled_balance_eom * v_company_direct,\n        v_mrr_contracted * v_company_direct, v_mrr_contracted * v_company_direct, v_cmrr * v_company_direct,\n        v_recognized_period * v_system_direct, v_recognized_cum * v_system_direct,\n        v_billed_period * v_system_direct, v_billed_cum * v_system_direct,\n        v_deferred_balance_period * v_system_direct, v_unbilled_balance_period * v_system_direct,\n        v_deferred_balance_eom * v_system_direct, v_unbilled_balance_eom * v_system_direct,\n        v_mrr_contracted * v_system_direct, v_mrr_contracted * v_system_direct, v_cmrr * v_system_direct,\n        v_item.product_name, v_calc_version, false,  -- F2 (+ multimoneda)\n        -- fx_contract_to_*: con directo, la tasa implícita contrato → compañía/sistema (1 / tasa item; NULL sin tasa item).\n        CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n        CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n        CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n        CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,\n        v_momentum  -- B2-5: PAUSE / RESUME; NULL = trg_assign_momentum\n      );\n      v_cur := (v_cur + INTERVAL '1 month')::date;\n    END LOOP;\n\n    IF v_item.churn_date IS NOT NULL\n       AND COALESCE(v_item.categoria, '') NOT IN ('CHURN', 'DOWNSELL')\n       AND v_item.end_date IS NOT NULL\n       AND v_is_recurring\n       AND DATE_TRUNC('month', v_item.churn_date)::date > DATE_TRUNC('month', v_item.end_date)::date\n    THEN\n      v_tail_period := DATE_TRUNC('month', v_item.churn_date)::date;\n      v_monthly_price_item := COALESCE(v_item.monthly_price, v_monthly_revenue);\n      v_item_rate := public.contract_item_fx_rate(p_contract_id, v_item_ccy, v_contract.contract_currency, v_tail_period,\n        (v_tail_period + INTERVAL '1 month' - INTERVAL '1 day')::date);\n      v_monthly_price := ROUND(v_monthly_price_item * v_item_rate, 2);\n\n      IF v_from_month IS NULL OR v_tail_period >= v_from_month THEN\n        INSERT INTO revenue_schedule_monthly(\n          id, holding_id, contract_id, contract_item_id, period_month,\n          company_id, company_currency, contract_currency, system_currency,\n          recognized_period_contract_ccy, recognized_cum_contract_ccy,\n          billed_period_contract_ccy, billed_cum_contract_ccy,\n          deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n          deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n          mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n          recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n          deferred_balance_period_ccy, unbilled_balance_period_ccy,\n          deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n          mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n          recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n          deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n          deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n          mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n          product_name, calc_version, is_total_row,\n          fx_contract_to_company, fx_contract_to_system,\n          fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n          momentum\n        ) VALUES (\n          gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,\n          v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),\n          0, 0, 0, 0,\n          v_monthly_price, v_monthly_price, v_monthly_price,\n          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,\n          v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct, v_monthly_price_item * v_company_direct,\n          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,\n          v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct, v_monthly_price_item * v_system_direct,\n          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-tail' END, false,  -- FIX 1.5\n          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,\n          'BOP'\n        )\n        ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n        DO UPDATE SET\n          mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n          mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n          cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,\n          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,\n          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,\n          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,\n          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,\n          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,\n          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,\n          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,\n          fx_to_company_source               = EXCLUDED.fx_to_company_source,\n          fx_to_system_source                = EXCLUDED.fx_to_system_source,\n          product_name                       = EXCLUDED.product_name,\n          calc_version                       = EXCLUDED.calc_version;\n\n        INSERT INTO revenue_schedule_monthly(\n          id, holding_id, contract_id, contract_item_id, period_month,\n          company_id, company_currency, contract_currency, system_currency,\n          recognized_period_contract_ccy, recognized_cum_contract_ccy,\n          billed_period_contract_ccy, billed_cum_contract_ccy,\n          deferred_balance_period_contract_ccy, unbilled_balance_period_contract_ccy,\n          deferred_balance_eom_contract_ccy, unbilled_balance_eom_contract_ccy,\n          mrr_period_contract_ccy, mrr_period_contracted_contract_ccy, cmrr_period_contract_ccy,\n          recognized_period_ccy, recognized_cum_ccy, billed_period_ccy, billed_cum_ccy,\n          deferred_balance_period_ccy, unbilled_balance_period_ccy,\n          deferred_balance_eom_ccy, unbilled_balance_eom_ccy,\n          mrr_period_ccy, mrr_period_contracted_ccy, cmrr_period_ccy,\n          recognized_period_system_ccy, recognized_cum_system_ccy, billed_period_system_ccy, billed_cum_system_ccy,\n          deferred_balance_period_system_ccy, unbilled_balance_period_system_ccy,\n          deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy,\n          mrr_period_system_ccy, mrr_period_contracted_system_ccy, cmrr_period_system_ccy,\n          product_name, calc_version, is_total_row,\n          fx_contract_to_company, fx_contract_to_system,\n          fx_to_company_source, fx_to_company_date, fx_to_system_source, fx_to_system_date,\n          momentum\n        ) VALUES (\n          gen_random_uuid(), v_contract.holding_id, p_contract_id, v_item.id, v_tail_period,\n          v_contract.company_id, v_contract.company_currency, v_contract.contract_currency, v_contract.system_currency,\n          0, ROUND(v_recognized_cum * v_item_rate, 2), 0, ROUND(v_billed_cum * v_item_rate, 2),\n          0, 0, 0, 0,\n          -v_monthly_price, -v_monthly_price, -v_monthly_price,\n          0, v_recognized_cum * v_company_direct, 0, v_billed_cum * v_company_direct, 0, 0, 0, 0,\n          -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct, -v_monthly_price_item * v_company_direct,\n          0, v_recognized_cum * v_system_direct, 0, v_billed_cum * v_system_direct, 0, 0, 0, 0,\n          -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct, -v_monthly_price_item * v_system_direct,\n          v_item.product_name, CASE WHEN v_item_rate IS NULL THEN 'missing_fx_rate' ELSE 'v3.0-contraction-churn' END, false,  -- FIX 1.5\n          CASE WHEN v_company_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_system_direct = 1 THEN ROUND(1.0 / NULLIF(v_item_rate, 0), 10) ELSE 1 END,\n          CASE WHEN v_company_direct = 1 THEN 'item_currency_direct' END, NULL,\n          CASE WHEN v_system_direct = 1 THEN 'item_currency_direct' END, NULL,\n          'CHURN'\n        )\n        ON CONFLICT (contract_id, contract_item_id, period_month, momentum)\n        DO UPDATE SET\n          mrr_period_contract_ccy            = EXCLUDED.mrr_period_contract_ccy,\n          mrr_period_contracted_contract_ccy = EXCLUDED.mrr_period_contracted_contract_ccy,\n          cmrr_period_contract_ccy           = EXCLUDED.cmrr_period_contract_ccy,\n          mrr_period_ccy                     = EXCLUDED.mrr_period_ccy,\n          mrr_period_contracted_ccy          = EXCLUDED.mrr_period_contracted_ccy,\n          cmrr_period_ccy                    = EXCLUDED.cmrr_period_ccy,\n          mrr_period_system_ccy              = EXCLUDED.mrr_period_system_ccy,\n          mrr_period_contracted_system_ccy   = EXCLUDED.mrr_period_contracted_system_ccy,\n          cmrr_period_system_ccy             = EXCLUDED.cmrr_period_system_ccy,\n          fx_contract_to_company             = EXCLUDED.fx_contract_to_company,\n          fx_contract_to_system              = EXCLUDED.fx_contract_to_system,\n          fx_to_company_source               = EXCLUDED.fx_to_company_source,\n          fx_to_system_source                = EXCLUDED.fx_to_system_source,\n          product_name                       = EXCLUDED.product_name,\n          calc_version                       = EXCLUDED.calc_version;\n      END IF;\n    END IF;\n  END LOOP;\n\n  FOR v_renewal_split_item_id IN\n    SELECT ci.id\n      FROM contract_items ci\n     WHERE ci.contract_id = p_contract_id\n       AND COALESCE(ci.categoria, '') = 'RENEWAL'\n       AND ci.renewal_base_unit_price IS NOT NULL\n       AND (v_from_month IS NULL OR DATE_TRUNC('month', ci.start_date)::date >= v_from_month)\n  LOOP\n    BEGIN\n      PERFORM apply_renewal_price_split(v_renewal_split_item_id);\n    EXCEPTION WHEN OTHERS THEN\n      RAISE WARNING 'apply_renewal_price_split falló para item %: %', v_renewal_split_item_id, SQLERRM;\n    END;\n  END LOOP;\nEND;\n$function$\n",
 			"extension": null,
-			"comment": "Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item.",
+			"comment": "Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días.",
 			"identity_args": "p_contract_id uuid, p_from_month date"
 		},
 		{
@@ -65008,7 +66332,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 139,
+			"objetos": 141,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",
