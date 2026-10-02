@@ -90,6 +90,11 @@
   "file": "src/databases/postgresql/entities/contratos/contract.entity.ts",
   "import": "@/databases/postgresql/entities/contratos/contract.entity"
  },
+ "countries": {
+  "class": "Country",
+  "file": "src/databases/postgresql/entities/base-tenancy/country.entity.ts",
+  "import": "@/databases/postgresql/entities/base-tenancy/country.entity"
+ },
  "currencies": {
   "class": "Currency",
   "file": "src/databases/postgresql/entities/base-tenancy/currency.entity.ts",

@@ -279,6 +279,40 @@ Contexto: el self-service "editar la razón social → se vincula sola con Odoo"
      (sin Salesforce el staging está vacío y el aviso no aparece).
 - **Estado**: sin commit al 02-10; rama `domi`. Pruebas reales contra producción las hace Domi a mano.
 
+## 13. Huecos de seguridad de la API que afectan al front nuevo (02-10-2026)
+
+Revisión de solo lectura de los controladores sin `HoldingScopeGuard` (detalle con archivo:línea en
+[`revision-seguridad-api.md`](./revision-seguridad-api.md)). Solo se listan los que siguen vivos con el front nuevo (la API es la
+misma); lo que solo usa el front actual se elimina en el switch. Atacante realista: un usuario existente de un cliente (el registro
+libre está cerrado en Supabase) o, en las rutas `@Public`, cualquiera. Nada corregido todavía.
+
+**De integraciones (Leon):**
+
+| Ruta | Problema | Arreglo sugerido |
+|---|---|---|
+| `GET /odoo/connections` (sin header devuelve todas), `GET/PUT/DELETE /odoo/connections/:id` | Expone `api_key` de Odoo de todos los clientes; permite cambiar la URL de la conexión de otro | `HoldingScopeGuard`, quitar la rama "todas", nunca devolver `api_key` |
+| `GET /stripe/connections`, `GET /stripe/connections/:id` | Devuelve `secret_key` de Stripe del holding del header (sin validar) | Ídem, nunca devolver `secret_key` |
+| `POST /odoo/webhooks` (`@Public`, sin firma) | Sin sesión se marcan facturas como Pagadas/Enviadas y se cambian monto, IVA, número y fecha | Secreto por conexión + validar que la factura sea del holding de la conexión (requiere reconfigurar cada Odoo) |
+| `GET /odoo/webhooks` | Payloads e ids de facturas de todos los holdings | Eliminar o solo super admin |
+| `POST /invoices/scheduler/send` | Sin header y con `dryRun:false` emite las facturas vencidas de todos los holdings | Solo super admin, o holding validado |
+| `POST /odoo/invoices/create-draft` | Crea y publica facturas en el Odoo de otro holding | Eliminar la ruta (sin uso) |
+| `POST /bigquery/query`, `POST /salesforce/query` | Consulta libre (SQL/SOQL) contra el BigQuery o Salesforce del cliente | Eliminar (sin uso en el front nuevo) |
+| `/salesforce/mappings/*`, `/salesforce/staging/*` (`HoldingAccessGuard`), `/salesforce/*` (credenciales, sync) | Header sin validar: leer y escribir mapeos, credenciales y syncs de otro holding. El front nuevo usa mapeos y staging | `HoldingScopeGuard` en todos |
+| `/stripe/invoices|customers|subscriptions` (clave global), `/stripe/products*`, `/stripe/staging/*` | Datos de la cuenta Stripe de la plataforma; staging ajeno por id | Eliminar los de clave global; `HoldingScopeGuard` + dueño en el resto |
+| `/odoo/companies*`, `/odoo/products*`, partners, invoice-processing, `/bigquery/*` | Usar credenciales de otro cliente y escribir mapeos/staging | `HoldingScopeGuard` |
+
+**Comunes (los tomamos Domi y Claude dentro del bloque Configuración, aviso a Leon por si usa alguna):**
+
+| Ruta | Problema |
+|---|---|
+| `POST /holdings/assign-to-all-holdings/:userId` | Cualquier usuario con sesión se agrega a todos los holdings (la API escribe como `postgres`, RLS no aplica). Se deja solo para super admin |
+| `GET /users`, `/users/:id`, `/by-email`, `/by-auth-id`, `/holdings/user/:id` | Datos de todos los usuarios de la plataforma |
+| `POST /copilot/chat` y sesiones | Datos de cualquier holding vía el copiloto (`holding_id` en el body); la BFF de Next debe mandar `holdingHeaders()` |
+| `/agents/*` (run, approve, configs) | Enviar cobranza/proforma y cambiar configuración de agentes de otro holding |
+| `/emails/*` | Dominios y remitentes de otro holding por id |
+| `/database/*` (`@Public`), `/security/*`, `/audit/*`, `/devices/*` | Esquema completo sin sesión; bloquear la IP del front (caída total) |
+| `POST /invoices/bulk-update-currency`, `PATCH /invoices/:id/auto-invoice` | Cambiar facturas ajenas por id |
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

@@ -40,9 +40,11 @@ import { HoldingsModule } from './modules/holdings/holdings.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OdooModule } from './modules/odoo/odoo.module';
+import { ProductsModule } from './modules/products/products.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { SalesforceModule } from './modules/salesforce/salesforce.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { SiiModule } from './modules/sii/sii.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
@@ -103,6 +105,8 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		ContractsModule,
 		BillingModule,
 		BudgetsModule,
+		SettingsModule,
+		ProductsModule,
 		QuotesModule,
 		OdooModule,
 		SalesforceModule,
