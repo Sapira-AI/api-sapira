@@ -1,4 +1,6 @@
-import { InvoiceSchedulerService } from './invoice-scheduler.service';
+import { ConflictException } from '@nestjs/common';
+
+import { InvoiceSchedulerService, isNonSendableDocumentType } from './invoice-scheduler.service';
 
 jest.mock('uuid', () => ({
 	v4: jest.fn(() => 'test-uuid'),
@@ -335,6 +337,40 @@ describe('InvoiceSchedulerService', () => {
 		await expect(service.sendInvoiceById('invoice-1', false)).resolves.toMatchObject({ status: 'sent', odooInvoiceId: 77 });
 		expect(load).toHaveBeenCalledWith('invoice-1');
 		expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: 'invoice-1', items: [{ id: 'item-1' }] }), false, 'manual');
+	});
+
+	it('Huecos #1: sendInvoiceById rechaza NC/ND con 409 credit_note_send_pending sin llamar a Odoo', async () => {
+		const { service } = createService();
+
+		for (const documentType of ['NC', 'ND']) {
+			jest.spyOn(
+				service as unknown as { getInvoiceWithRelations: (id: string) => Promise<unknown> },
+				'getInvoiceWithRelations'
+			).mockResolvedValue({ id: 'nc-1', document_type: documentType, items: [] });
+			const send = jest.spyOn(service, 'sendInvoiceToOdoo');
+			const error = await service.sendInvoiceById('nc-1', false).catch((caught: unknown) => caught);
+
+			expect(error).toBeInstanceOf(ConflictException);
+			expect((error as ConflictException).getResponse()).toMatchObject({ code: 'credit_note_send_pending', document_type: documentType });
+			expect(send).not.toHaveBeenCalled();
+		}
+	});
+
+	it('Huecos #1: la consulta del envío (automático y lote manual) excluye NC y ND', async () => {
+		const { service, invoiceRepository } = createService();
+		const builder: Record<string, jest.Mock> = {};
+
+		for (const method of ['leftJoin', 'where', 'andWhere', 'orderBy', 'addOrderBy']) builder[method] = jest.fn(() => builder);
+		builder.getMany = jest.fn().mockResolvedValue([]);
+		(invoiceRepository as unknown as { createQueryBuilder: jest.Mock }).createQueryBuilder = jest.fn(() => builder);
+
+		await expect(service.getInvoicesToSend('holding-1')).resolves.toEqual([]);
+		expect(builder.andWhere).toHaveBeenCalledWith('(inv.document_type IS NULL OR inv.document_type NOT IN (:...nonSendableDocumentTypes))', {
+			nonSendableDocumentTypes: ['NC', 'ND'],
+		});
+		expect(isNonSendableDocumentType('nc')).toBe(true);
+		expect(isNonSendableDocumentType('FACTURA')).toBe(false);
+		expect(isNonSendableDocumentType(null)).toBe(false);
 	});
 
 	it('U12/B3: política fija del contrato con tasa en la factura no consulta Banco Central; fija sin tasa se detiene (nunca spot en silencio)', async () => {

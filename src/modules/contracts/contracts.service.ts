@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 
 import {
+	creditNotePendingEmission,
 	isVisibleLine,
 	noChargeSql,
 	partialBillingEventSql,
@@ -13,11 +14,13 @@ import {
 	voidedSql,
 } from './contract-360';
 import { buildItemGroups, deriveItemStatus, type ItemGroup, type PendingInvoiceLine, type PricedContractItem } from './contract-items';
+import { loadItemPauses, loadOpenRenewalProposals } from './contract-renewals';
 import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
 import { isUnifiedType, UNIFIED_READ_SQL, type UnifiedReadFields, unifiedReadFields } from './invoice-consolidation-read';
 import { referenceKind } from './invoice-description';
 import { oneOffOf, type OneOffSubline } from './one-off-discount';
 import { PRICE_COLUMNS, priceSummaryFromRow } from './price-rows';
+import { loadScheduledChanges } from './scheduled-change-rows';
 import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, documentTypeLabel, resolveDescriptionMaxChars } from './tax-document-types';
 
 import type { ContractInvoiceSortField, ContractInvoiceStatusFilter } from './dtos/query-contract-invoices.dto';
@@ -53,6 +56,24 @@ export const erpSyncStateOf = (row: { status?: unknown; odoo_invoice_id?: unknow
 
 	return row.status === 'Por Emitir' ? ('draft' as const) : ('sent' as const);
 };
+
+/**
+ * Emisión electrónica de una NC/ND: `electronic_emission_pending` = creada por la API sin folio ni vínculo con el ERP (la emisión de NC en
+ * Odoo es de Leon); la UI la muestra con `electronic_emission_label` y no como factura por enviar.
+ */
+export const electronicEmissionOf = (row: Record<string, unknown>) => {
+	const pending = creditNotePendingEmission({
+		document_type: toTextOrNull(row.document_type),
+		status: toTextOrNull(row.status),
+		invoice_number: toTextOrNull(row.invoice_number),
+		odoo_invoice_id: (row.odoo_invoice_id as number | string | null | undefined) ?? null,
+		sent_to_odoo_at: (row.sent_to_odoo_at as string | Date | null | undefined) ?? null,
+	});
+
+	return { electronic_emission_pending: pending, electronic_emission_label: pending ? 'Pendiente de emisión electrónica' : null };
+};
+
+const toTextOrNull = (value: unknown) => (value === null || value === undefined ? null : String(value));
 
 /** Tipos de `invoice_adjustments` que son un motivo de desvío contra el plan (el resto, p. ej. `reagenda`, no). */
 const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
@@ -603,7 +624,7 @@ export class ContractsService {
 	async detail(idOrNumber: string, holdingId: string, asOfDate = new Date()) {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
 		const today = isoDate(asOfDate);
-		const [[row], alerts] = await Promise.all([
+		const [[row], alerts, scheduledChanges, renewalProposals, pauses] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT c.id, c.contract_number, c.status, c.type,
 					cl.id AS client_id, cl.name_commercial AS client_name,
@@ -645,6 +666,12 @@ export class ContractsService {
 				[contract.id, holdingId, today]
 			),
 			this.alerts(contract.id, holdingId, today),
+			// Ajustes pactados (§9.3.6): todos los estados, para la tarjeta del Resumen y el historial.
+			loadScheduledChanges(this.dataSource, contract.id, holdingId),
+			// §9.3.5: propuestas de renovación abiertas (tarjeta del Resumen con Confirmar / Omitir).
+			loadOpenRenewalProposals(this.dataSource, holdingId, today, contract.id),
+			// §9.3.3: pausas de los ítems.
+			loadItemPauses(this.dataSource, contract.id, holdingId, today),
 		]);
 
 		if (!row) throw new NotFoundException('Contrato no encontrado');
@@ -724,6 +751,12 @@ export class ContractsService {
 			created_at: row.created_at instanceof Date ? row.created_at.toISOString() : toText(row.created_at),
 			mrr: { system: toNumber(row.mrr_system), contract: toNumber(row.mrr_contract) },
 			alerts,
+			/** Ajustes pactados (`contract_scheduled_changes`, spec modificaciones §9.3.6): programados, aplicados, omitidos y cancelados. */
+			scheduled_changes: scheduledChanges,
+			/** Propuestas de renovación abiertas del job `contracts-auto-renewal` (§9.3.5): confirmar = `renewal` con origin renewal_proposal. */
+			renewal_proposals: renewalProposals,
+			/** Pausas de los ítems (`contract_item_pauses`, §9.3.3), todas; `active_today` = cubre hoy. */
+			pauses,
 		};
 	}
 
@@ -870,14 +903,14 @@ export class ContractsService {
 	async items(idOrNumber: string, holdingId: string, asOfDate = new Date()): Promise<{ items: PricedContractItem[]; groups: ItemGroup[] }> {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
 		const today = isoDate(asOfDate);
-		const [rows, lines] = await Promise.all([
+		const [rows, lines, pauses] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT ci.id, ci.product_id, ci.product_name, ci.account, ci.item_type, ci.categoria, ci.unit_of_measure,
 					ci.quantity, ci.unit_price, ci.price_entry_mode, ci.annual_unit_price, ci.discount_type, ci.discount_value,
 					ci.monthly_price, ci.billing_period_price, ci.final_price, ci.term_months, ci.billing_frequency, ci.billing_method,
 					ci.is_recurring, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
 					ci.booking_date::text AS booking_date, ci.churn_date::text AS churn_date,
-					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency, ${PRICE_COLUMNS},
+					ci.related_item_id, ci.renews_item_id, ci.renewed_by_item_id, ci.auto_renew, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS},
 					bm.id AS metric_id, bm.code AS metric_code, bm.name AS metric_name, bm.unit AS metric_unit, bm.aggregation AS metric_aggregation,
 					lp.id AS catalog_price_id, lp.name AS catalog_price_name, lp.version AS catalog_price_version
 				FROM contract_items ci
@@ -897,6 +930,8 @@ export class ContractsService {
 					AND ii.contract_item_id IS NOT NULL`,
 				[contract.id, holdingId]
 			),
+			// §9.3.3: pausas por ítem.
+			loadItemPauses(this.dataSource, contract.id, holdingId, today),
 		]);
 
 		const items: PricedContractItem[] = rows.map((row) => {
@@ -930,6 +965,8 @@ export class ContractsService {
 				renewed_by_item_id: toText(row.renewed_by_item_id),
 				auto_renew: Boolean(row.auto_renew),
 				currency: toText(row.currency),
+				/** Ciclo propio del ítem (§9.3.9): día 1–31; null = el del contrato. */
+				billing_anchor_day: toNullableNumber(row.billing_anchor_day),
 			};
 			const price = priceSummaryFromRow(row);
 
@@ -950,6 +987,8 @@ export class ContractsService {
 					? { id: String(row.catalog_price_id), name: toText(row.catalog_price_name), version: Number(row.catalog_price_version ?? 1) || 1 }
 					: null,
 				uses_price_model: price !== null,
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars -- el ítem ya va en la fila
+				pauses: pauses.filter((pause) => pause.contract_item_id === item.id).map(({ contract_item_id: _item, ...pause }) => pause),
 			};
 		});
 		const pendingLines: PendingInvoiceLine[] = lines.map((line) => ({
@@ -1082,6 +1121,8 @@ export class ContractsService {
 				no_charge: row.no_charge === true,
 				erp_sync_state: erpSyncStateOf(row),
 				erp_reset_available: ContractsService.erpResetAvailable(row),
+				// NC/ND creada por la API sin emisión electrónica todavía (nace con el estado de su factura; Leon: emisión de NC en Odoo).
+				...electronicEmissionOf(row),
 				// Etapa 6 (spec facturas §3.7b–3.8): anulada con NC (derivado), documentos vinculados (NC y reemisión, ambos sentidos), facturación
 				// por OC (cubierta o saldo, desde su evento) y motivo de división (`reissue`, `partial_by_po`, `reorganize`).
 				voided: row.voided === true,
@@ -1289,6 +1330,7 @@ export class ContractsService {
 			fx_confirmed_at: iso(header.fx_confirmed_at),
 			issued_externally: header.issued_externally === true,
 			erp_sync_state: erpSyncStateOf(header),
+			...electronicEmissionOf(header),
 			// "Restablecer borrador del ERP" disponible (Por Emitir activa vinculada al ERP, no NC/unificada).
 			erp_reset_available: ContractsService.erpResetAvailable({ ...header, doc_type: header.document_type }),
 			// Sin cobro: Cancelada porque todas sus líneas quedaron en 0 (evento INVOICE_NO_CHARGE); se reactiva al recuperar cantidad.
@@ -1536,7 +1578,7 @@ export class ContractsService {
 		const [events, amendments] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT e.id, e.event_type, e.event_subtype, e.title, COALESCE(e.description, e.summary) AS description,
-					e.effective_date::text AS effective_date, e.amount_delta, e.items_affected, e.created_at,
+					e.effective_date::text AS effective_date, e.amount_delta, e.items_affected, e.metadata, e.created_at,
 					u.id AS user_id, COALESCE(u.name, u.email) AS user_name
 				FROM contract_lifecycle_events e
 				LEFT JOIN users u ON u.id = e.created_by
@@ -1559,6 +1601,16 @@ export class ContractsService {
 		]);
 		const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
 		const user = (row: Row) => (row.user_id ? { id: row.user_id as string, name: toText(row.user_name) } : null);
+		// `metadata` (jsonb) tal cual: el 360 lee de ahí razón social nueva, reterm, decisiones de facturas, etc.
+		const metadataOf = (value: unknown): Record<string, unknown> | null => {
+			if (value === null || value === undefined) return null;
+			if (typeof value !== 'string') return value as Record<string, unknown>;
+			try {
+				return JSON.parse(value) as Record<string, unknown>;
+			} catch {
+				return null;
+			}
+		};
 
 		const data = [
 			...events.map((row) => ({
@@ -1570,6 +1622,7 @@ export class ContractsService {
 				effective_date: toText(row.effective_date),
 				amount_delta: toNullableNumber(row.amount_delta),
 				items_affected: (row.items_affected as unknown) ?? null,
+				metadata: metadataOf(row.metadata),
 				created_at: iso(row.created_at),
 				created_by: user(row),
 			})),
@@ -1585,6 +1638,7 @@ export class ContractsService {
 					effective_date: toText(row.effective_date),
 					amount_delta: null,
 					items_affected: null,
+					metadata: null,
 					created_at: iso(row.created_at),
 					created_by: user(row),
 				};

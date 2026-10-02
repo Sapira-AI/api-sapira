@@ -121,6 +121,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			updated_at: false,
 			fx_system_policy: true,
 			currencies_in_use: true,
+			auto_renewal_notice_days: false,
 		},
 		primary: ['holding_id'],
 		foreignKeys: {
@@ -130,7 +131,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			},
 		},
 		uniques: {},
-		checks: ['holding_settings_fx_system_policy_check'],
+		checks: ['holding_settings_auto_renewal_notice_days_check', 'holding_settings_fx_system_policy_check'],
 		indexes: {},
 	},
 	custom_field_definitions: {

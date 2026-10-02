@@ -999,6 +999,11 @@
   "columns": {},
   "constraints": [
    {
+    "name": "holding_settings_auto_renewal_notice_days_check",
+    "type": "c",
+    "expr": "(auto_renewal_notice_days >= 1) AND (auto_renewal_notice_days <= 180)"
+   },
+   {
     "name": "holding_settings_fx_system_policy_check",
     "type": "c",
     "expr": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"

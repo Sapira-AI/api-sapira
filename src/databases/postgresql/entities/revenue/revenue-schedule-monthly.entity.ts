@@ -19,7 +19,7 @@ import { Subscription } from '../suscripciones/subscription.entity';
 @Unique('revenue_schedule_monthly_contract_item_period_momentum_key', ['contract_id', 'contract_item_id', 'period_month', 'momentum'])
 @Check(
 	'revenue_schedule_monthly_momentum_check',
-	"momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
+	"momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text, 'PAUSE'::text, 'RESUME'::text])"
 )
 @Check('rsm_contract_or_subscription_required', '(contract_id IS NOT NULL) OR (subscription_id IS NOT NULL)')
 @Index('idx_revenue_schedule_momentum', ['momentum', 'period_month'])

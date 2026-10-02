@@ -3,11 +3,13 @@ import * as path from 'path';
 
 import { API_WRITER_SQL, setApiWriter, withApiWriter } from './api-writer';
 import {
+	classifyClientItem,
 	contractFxNeedsRefresh,
 	directSystemPart,
 	frequencyMultiplier,
 	invoiceTermsSql,
 	itemCategoriaSql,
+	latestContractEnd,
 	mirrorInvoiceSystemAmounts,
 	pgRound,
 	pricingFields,
@@ -33,6 +35,29 @@ const db = (handler: (sql: string, params: unknown[]) => unknown = () => undefin
 	return { runner: { query } as unknown as QueryRunner, query };
 };
 const sqls = (query: jest.Mock) => query.mock.calls.map(([sql]) => sql as string);
+
+describe('latestContractEnd: una sola regla para contract_end_date (decisión de Domi 01-10)', () => {
+	it('mayor fin de los recurrentes vivos; indefinido → null; sin vivos → undefined (se conserva el guardado)', () => {
+		expect(
+			latestContractEnd([
+				{ is_recurring: true, end_date: '2026-12-31' },
+				{ is_recurring: true, end_date: '2027-06-30' },
+				// No cuentan: no recurrente, espejo de baja, con baja y renovado.
+				{ is_recurring: false, end_date: '2028-01-31' },
+				{ is_recurring: true, end_date: '2029-01-31', categoria: 'CHURN' },
+				{ is_recurring: true, end_date: '2029-01-31', churn_date: '2026-10-01' },
+				{ is_recurring: true, end_date: '2029-01-31', renewed_by_item_id: 'r-1' },
+			])
+		).toBe('2027-06-30');
+		expect(
+			latestContractEnd([
+				{ is_recurring: true, end_date: '2026-12-31' },
+				{ is_recurring: true, end_date: null },
+			])
+		).toBeNull();
+		expect(latestContractEnd([{ is_recurring: false, end_date: '2026-12-31' }])).toBeUndefined();
+	});
+});
 
 describe('api-writer', () => {
 	it('setApiWriter fija la marca local a la transacción', async () => {
@@ -113,6 +138,8 @@ describe('costura en todos los servicios v2 que escriben (texto de los servicios
 				'contract-invoice-reorganize.service.ts',
 				'contract-invoice-void.service.ts',
 				'contract-invoices.service.ts',
+				'contract-renewals.service.ts',
+				'contract-scheduled-changes.service.ts',
 				'prices.service.ts',
 				'quote-stages.service.ts',
 				'quotes.service.ts',
@@ -506,16 +533,48 @@ describe('otros campos que ya no rellena un trigger', () => {
 		expect(query.mock.calls[0][1]).toEqual(['c-1', 'h-1']);
 	});
 
-	it('itemCategoriaSql: NEW / UPSELL / CROSS-SELL por historial del cliente sin contar borradores borrados (antes trg_set_contract_item_categoria)', () => {
-		const sql = itemCategoriaSql(1, 3);
+	it('itemCategoriaSql: NEW / REACTIVATION / UPSELL / CROSS-SELL por historial del cliente, sin borradores ni borrados (decisión 01-10, §9.1 #9)', () => {
+		const sql = itemCategoriaSql(1, 3, 19);
 
 		expect(sql).toContain('WHEN $3::uuid IS NULL THEN NULL');
 		expect(sql).toContain("WHERE k.id = $1::uuid) THEN 'NEW'");
 		expect(sql).toContain("pi.product_id = $3::uuid) THEN 'UPSELL'");
 		expect(sql).toContain("ELSE 'CROSS-SELL' END");
-		// Contratos anteriores = mismo cliente, creados antes, otro id y no borrados (borrado lógico v2).
+		// Contratos anteriores = mismo cliente, creados antes, otro id, no borrados (borrado lógico v2) y activados (sin borradores).
 		expect(sql).toContain('p.client_id = k.client_id AND p.id <> k.id AND p.created_at < k.created_at');
 		expect(sql).toContain('p.deleted_at IS NULL');
+		expect(sql).toContain("p.status IS DISTINCT FROM 'En revisión' AND p.status IS DISTINCT FROM 'Borrador'");
+		// Todos los anteriores cancelados con el churn vigente al inicio del ítem → REACTIVATION.
+		expect(sql).toContain("AND NOT (p.status = 'Cancelado' AND (p.churn_date IS NULL OR p.churn_date <= $19::date))) THEN 'REACTIVATION'");
+	});
+
+	describe('classifyClientItem (espejo TS de itemCategoriaSql)', () => {
+		const contract = (status: string, churn: string | null, products: string[] = ['p-1']) => ({
+			status,
+			churn_date: churn,
+			product_ids: products,
+		});
+
+		it('los borradores nunca cuentan como contratos anteriores: un cliente con solo borradores es NEW', () => {
+			expect(classifyClientItem([contract('En revisión', null), contract('Borrador', null)], 'p-1', '2026-10-01')).toBe('NEW');
+			expect(classifyClientItem([], 'p-1', '2026-10-01')).toBe('NEW');
+			expect(classifyClientItem([contract('Activo', null)], null, '2026-10-01')).toBeNull();
+		});
+
+		it('todos los activados cancelados con el churn vigente → REACTIVATION (también rama c de reactivate)', () => {
+			expect(classifyClientItem([contract('Cancelado', '2026-03-01'), contract('En revisión', null)], 'p-9', '2026-10-01')).toBe(
+				'REACTIVATION'
+			);
+			// Churn todavía no vigente a la fecha: el cliente sigue activo → UPSELL / CROSS-SELL.
+			expect(classifyClientItem([contract('Cancelado', '2026-12-01')], 'p-1', '2026-10-01')).toBe('UPSELL');
+		});
+
+		it('mixto: con al menos un contrato vigente se mantiene UPSELL / CROSS-SELL por producto', () => {
+			const previous = [contract('Cancelado', '2026-03-01', ['p-1']), contract('Activo', null, ['p-2'])];
+
+			expect(classifyClientItem(previous, 'p-1', '2026-10-01')).toBe('UPSELL');
+			expect(classifyClientItem(previous, 'p-3', '2026-10-01')).toBe('CROSS-SELL');
+		});
 	});
 
 	it('invoiceTermsSql: condiciones propias o las del contrato (antes invoices_fill_terms_from_contract)', () => {

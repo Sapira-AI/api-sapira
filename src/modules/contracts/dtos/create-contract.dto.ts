@@ -35,6 +35,8 @@ import {
 	type PriceQuantityType,
 } from '../pricing-engine';
 
+import { CreateScheduledChangeDto } from './contract-scheduled-changes.dto';
+
 export const FX_INVOICE_POLICIES = ['spot', 'fixed'] as const;
 /**
  * Cómo devenga el contrato en la moneda de la compañía (solo si difiere de la del contrato): `company_default` copia la
@@ -48,6 +50,9 @@ export const FX_RATES_MAX = 120;
 export const UF_CURRENCY = 'CLF';
 export const UF_NOT_INVOICEABLE_MESSAGE = 'La UF no se factura: elige la moneda en que se emite (por ejemplo, CLP)';
 export const PRICE_ENTRY_MODES = ['monthly', 'annual'] as const;
+/** Día de ciclo del ítem (spec modificaciones §9.3.9): el del contrato o el propio (día de su inicio, `contract_items.billing_anchor_day`). */
+export const BILLING_CYCLES = ['contract', 'own'] as const;
+export type BillingCycle = (typeof BILLING_CYCLES)[number];
 
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CURRENCY = /^[A-Z]{2,4}$/;
@@ -383,6 +388,16 @@ export class CreateContractItemDto {
 	@Matches(ISO_DATE, { message: 'Fecha de cierre inválida' })
 	@IsOptional()
 	booking_date?: string;
+
+	@ApiPropertyOptional({
+		enum: BILLING_CYCLES,
+		default: 'contract',
+		description:
+			'§9.3.9: `own` = ciclo propio (billing_anchor_day = día de start_date): sus períodos parten ese día, sin tramo prorrateado, y emite en su propia fecha',
+	})
+	@IsIn(BILLING_CYCLES, { message: 'billing_cycle: contract u own' })
+	@IsOptional()
+	billing_cycle?: BillingCycle;
 }
 
 /** Body de `POST /contracts` y `POST /contracts/preview`. El holding sale de `HoldingScopeGuard`, nunca del body. */
@@ -596,6 +611,18 @@ export class CreateContractDto {
 	@ValidateNested({ each: true })
 	@Type(() => CreateContractItemDto)
 	items!: CreateContractItemDto[];
+
+	@ApiPropertyOptional({
+		type: [CreateScheduledChangeDto],
+		description:
+			'Ajustes pactados al crear (§9.3.6, mismo DTO que `POST /contracts/:id/scheduled-changes`, con `item_key` = `key` del ítem). En `PUT` reemplaza los pactos `scheduled` del borrador; ausente = no se tocan',
+	})
+	@IsArray({ message: 'scheduled_changes debe ser una lista' })
+	@ArrayMaxSize(200)
+	@ValidateNested({ each: true })
+	@Type(() => CreateScheduledChangeDto)
+	@IsOptional()
+	scheduled_changes?: CreateScheduledChangeDto[];
 }
 
 /** Ítem de `PUT /contracts/:id`: con `id` actualiza el ítem existente del borrador; sin `id` lo crea. */

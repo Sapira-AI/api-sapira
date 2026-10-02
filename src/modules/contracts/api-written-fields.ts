@@ -461,24 +461,94 @@ export function contractFxNeedsRefresh(before: Row | undefined, after: Row | und
 	return !same('total_value') || !same('contract_currency') || !same('booking_date');
 }
 
+/** Estados de un contrato que nunca se activó: no cuentan como contrato "anterior" del cliente (decisión 01-10, §9.1 #9). */
+export const NEVER_ACTIVATED_STATUSES = ['En revisión', 'Borrador'] as const;
+export const CANCELLED_STATUS = 'Cancelado';
+
 /**
- * `contract_items.categoria` de un ítem de borrador (antes `trg_set_contract_item_categoria` →
- * `calculate_contract_item_categoria`): NEW si el cliente no tiene contratos anteriores (creados antes que este), UPSELL si
- * el producto ya estaba en alguno, CROSS-SELL si no; NULL sin producto. Misma regla que la función, con una corrección v2:
- * **no cuenta los borradores borrados** (`deleted_at`, borrado lógico S2-9 que el front viejo no tenía: allí el borrado era
- * físico y el contrato desaparecía del historial). La clasificación a nivel cliente (REACTIVATION, borradores y cancelados
- * que hoy cuentan como "anteriores") es la decisión #9 abierta de `spec-modificaciones-contrato-v2.md` §8.
+ * `contract_items.categoria` de un ítem de borrador (antes `trg_set_contract_item_categoria` → `calculate_contract_item_categoria`),
+ * clasificación **a nivel cliente** (decisión de Domi 01-10, spec modificaciones §9.1 #9). Contratos "anteriores" = los del mismo cliente
+ * creados antes que este, no borrados y **activados alguna vez** (los borradores — `En revisión` / `Borrador` — nunca cuentan):
+ * - sin anteriores → `NEW`;
+ * - todos los anteriores cancelados con el churn ya vigente (`status = Cancelado` y `churn_date` ≤ inicio del ítem o nulo) → `REACTIVATION`;
+ * - si alguno sigue vigente → `UPSELL` si el producto estaba en alguno de los anteriores, `CROSS-SELL` si no.
+ * NULL sin producto. Sin override manual. Espejo TS: `classifyClientItem`.
  */
-export const itemCategoriaSql = (contractParam: number, productParam: number) => {
+export const itemCategoriaSql = (contractParam: number, productParam: number, startParam: number) => {
 	const previous = `FROM contracts k JOIN contracts p ON p.client_id = k.client_id AND p.id <> k.id AND p.created_at < k.created_at
-			AND p.deleted_at IS NULL`;
+			AND p.deleted_at IS NULL AND p.status IS DISTINCT FROM '${NEVER_ACTIVATED_STATUSES[0]}' AND p.status IS DISTINCT FROM '${NEVER_ACTIVATED_STATUSES[1]}'`;
 
 	return `CASE WHEN $${productParam}::uuid IS NULL THEN NULL
 		WHEN NOT EXISTS (SELECT 1 ${previous} WHERE k.id = $${contractParam}::uuid) THEN 'NEW'
+		WHEN NOT EXISTS (SELECT 1 ${previous} WHERE k.id = $${contractParam}::uuid
+			AND NOT (p.status = '${CANCELLED_STATUS}' AND (p.churn_date IS NULL OR p.churn_date <= $${startParam}::date))) THEN 'REACTIVATION'
 		WHEN EXISTS (SELECT 1 ${previous} JOIN contract_items pi ON pi.contract_id = p.id
 			WHERE k.id = $${contractParam}::uuid AND pi.product_id = $${productParam}::uuid) THEN 'UPSELL'
 		ELSE 'CROSS-SELL' END`;
 };
+
+/** Contrato del cliente para la clasificación a nivel cliente (`classifyClientItem`). */
+export interface ClientContractRef {
+	status: string | null;
+	churn_date: string | null;
+	product_ids: string[];
+}
+
+/**
+ * Espejo TS de `itemCategoriaSql` (la usa `reactivate` rama c, §9.3.2): `previous` = los otros contratos del cliente (sin borrar). Los
+ * borradores se ignoran; sin activados → `NEW`; todos cancelados con el churn vigente a `date` → `REACTIVATION`; si no, `UPSELL` /
+ * `CROSS-SELL` según si el producto estaba en alguno. null sin producto.
+ */
+export function classifyClientItem(previous: ClientContractRef[], productId: string | null, date: string): string | null {
+	if (!productId) return null;
+	const activated = previous.filter((contract) => !(NEVER_ACTIVATED_STATUSES as readonly string[]).includes(contract.status ?? ''));
+
+	if (!activated.length) return 'NEW';
+	const live = activated.filter((contract) => !(contract.status === CANCELLED_STATUS && (!contract.churn_date || contract.churn_date <= date)));
+
+	if (!live.length) return 'REACTIVATION';
+
+	return activated.some((contract) => contract.product_ids.includes(productId)) ? 'UPSELL' : 'CROSS-SELL';
+}
+
+/** Espejos de baja y rebajas (mismo criterio que `liveRecurring` de `contract-changes.ts`): no cuentan para el fin del contrato. */
+const REMOVAL_ITEM_CATEGORIES = new Set(['CHURN', 'DOWNSELL']);
+
+export interface ContractEndItem {
+	is_recurring?: boolean | null;
+	end_date?: string | null;
+	categoria?: string | null;
+	churn_date?: string | null;
+	renewed_by_item_id?: string | null;
+}
+
+/** Ítems recurrentes vivos para el fin del contrato: no son espejos de baja, no tienen baja (`churn_date`) ni fueron renovados. */
+export const liveEndItems = <T extends ContractEndItem>(items: T[]): T[] =>
+	items.filter(
+		(item) =>
+			item.is_recurring !== false &&
+			!REMOVAL_ITEM_CATEGORIES.has(String(item.categoria ?? '').toUpperCase()) &&
+			!item.churn_date &&
+			!item.renewed_by_item_id
+	);
+
+/**
+ * `contracts.contract_end_date`, **una sola regla** para alta, PUT, activación y toda modificación (decisión de Domi 01-10, cobertura D15 /
+ * Huecos #5): el **mayor** `end_date` de los ítems recurrentes vivos; si alguno vivo es indefinido (sin fin) → `null`. `undefined` cuando no
+ * queda ningún recurrente vivo (quien llama conserva el fin guardado, p. ej. `contract_cancel`). El "próximo vencimiento" de la lista es otro
+ * valor derivado (`next_item_end_date`) y no usa esta regla.
+ */
+export function latestContractEnd(items: ContractEndItem[]): string | null | undefined {
+	const live = liveEndItems(items);
+
+	if (!live.length) return undefined;
+	if (live.some((item) => !item.end_date)) return null;
+
+	return live
+		.map((item) => String(item.end_date).slice(0, 10))
+		.sort()
+		.reverse()[0];
+}
 
 /**
  * `contracts.term` (antes `update_contract_term`, AFTER INSERT/UPDATE/DELETE de `contract_items`): `MAX(term_months)` de los

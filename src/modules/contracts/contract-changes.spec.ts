@@ -3,10 +3,11 @@ import { BadRequestException } from '@nestjs/common';
 import { fieldErrorsOf } from '@/core/utils/validation-errors';
 
 import { CATALOG_PRICE_MESSAGES, type CatalogPrice } from './catalog-prices';
-import { type ChangePlan, monthsCeil, planChange, taxRateFor, unifiedDelta, wholeMonths } from './contract-changes';
+import { type ChangePlan, monthsCeil, planChange, taxRateFor, telescopicShares, unifiedDelta, wholeMonths } from './contract-changes';
 import {
 	context,
 	CONTRACT_ID,
+	contractRow,
 	ENTITY_NEW,
 	invoiceRow,
 	itemRow,
@@ -18,6 +19,9 @@ import {
 	soporteRow,
 } from './contract-changes.test-fixtures';
 import { taxRateForDocument } from './invoice-edit';
+
+import type { PreviewLine } from './billing-engine';
+import type { PricedSubline } from './pricing-engine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ops = (plan: ChangePlan, kind: string): any[] => plan.ops.filter((op) => op.kind === kind);
@@ -80,7 +84,8 @@ describe('item_remove (M2)', () => {
 			start_date: '2026-11-15',
 			end_date: '2026-12-31',
 			related_item_id: LICENCIA,
-			booking_date: '2026-11-15',
+			// D-CTR-4: la baja se registra hoy (booking) aunque rija desde la fecha efectiva (start_date): el CMRR la anticipa.
+			booking_date: '2026-09-28',
 		});
 		expect(ops(plan, 'update_item')).toEqual([
 			{ kind: 'update_item', item_id: LICENCIA, set: { churn_date: '2026-11-15', churn_monthly_amount: 1000 } },
@@ -152,7 +157,14 @@ describe('item_remove (M2)', () => {
 		expect(nc.lines).toEqual([expect.objectContaining({ period_start: '2026-09-15', ratio: 16 / 30 })]);
 		// 1.000 × 16/30 = 533,33 neto → 634,67 con IVA, misma moneda y FX que la original.
 		expect(plan.preview.invoices.credit_notes).toEqual([
-			{ mirrors_invoice_id: 'inv-09', mirrors_invoice_number: 'F-09', total: 634.66, currency: 'CLP', fx: 1 },
+			{
+				mirrors_invoice_id: 'inv-09',
+				mirrors_invoice_number: 'F-09',
+				total: 634.66,
+				currency: 'CLP',
+				fx: 1,
+				detail: expect.objectContaining({ document_type: 'NC' }),
+			},
 		]);
 		expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['unpaid_invoice_prorated']);
 		// Octubre a diciembre: línea quitada; nunca un UPDATE sobre la emitida.
@@ -197,6 +209,71 @@ describe('item_remove (M2)', () => {
 	});
 });
 
+describe('contract_end_date = mayor fin de los recurrentes vivos en toda modificación (decisión de Domi 01-10)', () => {
+	const longer = () =>
+		context({
+			contract: contractRow({ contract_end_date: '2027-06-30' }),
+			items: [itemRow({ end_date: '2027-06-30', term_months: 18 }), soporteRow()],
+		});
+	const endOf = (plan: ChangePlan) => ops(plan, 'update_contract')[0]?.set.contract_end_date;
+
+	it('item_remove del ítem que define el fin: pasa al siguiente mayor (31-12), nunca al más próximo por defecto', () => {
+		const plan = planChange(longer(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }, { effective_date: '2026-11-15' }));
+
+		expect(endOf(plan)).toBe('2026-12-31');
+		expect(ops(plan, 'update_contract')[0].bypass_end_date_guard).toBe(true);
+	});
+	it('item_remove de un ítem que no define el fin: el fin no se mueve (antes bajaba al más próximo)', () => {
+		const plan = planChange(longer(), request({ type: 'item_remove', items: [{ item_id: SOPORTE }] }, { effective_date: '2026-11-15' }));
+
+		expect(endOf(plan)).toBeUndefined();
+	});
+	it('item_add que co-termina con el mayor fin vivo no mueve el fin del contrato', () => {
+		const plan = planChange(
+			context({ items: [itemRow(), soporteRow()] }),
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 1, unit_price: 10, is_recurring: true, end_date: '2026-12-31' }] },
+				{ effective_date: '2026-11-01', reason: 'ok' }
+			)
+		);
+
+		expect(endOf(plan)).toBeUndefined();
+	});
+});
+
+describe('effective_date_suggestions en item_remove y pause (mismo formato que contract_cancel)', () => {
+	it('item_remove con fecha dentro de un período emitido: sugiere el día después del último período emitido del ítem (sin NC)', () => {
+		const plan = planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }, { effective_date: '2026-09-15' }));
+
+		expect(plan.preview.effective_date_suggestions).toEqual([
+			{
+				effective_date: '2026-10-01',
+				reason: 'last_issued_period',
+				message: 'Terminar el 2026-09-30 (fin del último período emitido): no hace falta nota de crédito',
+			},
+		]);
+		// Con la fecha sugerida ya elegida no se repite.
+		const chosen = planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }, { effective_date: '2026-10-01' }));
+
+		expect(chosen.preview.effective_date_suggestions).toEqual([]);
+	});
+	it('pause: last_issued_period y current_period con el texto de la pausa', () => {
+		const plan = planChange(
+			context({ today: '2026-10-10' }),
+			request({ type: 'pause', items: [{ item_id: LICENCIA }], pause_start: '2026-09-20', pause_end: '2026-10-31' })
+		);
+
+		expect(plan.preview.effective_date_suggestions).toEqual([
+			expect.objectContaining({ effective_date: '2026-10-01', reason: 'last_issued_period' }),
+			expect.objectContaining({
+				effective_date: '2026-11-01',
+				reason: 'current_period',
+				message: expect.stringContaining('Pausar desde el 2026-11-01'),
+			}),
+		]);
+	});
+});
+
 describe('contract_cancel (M2 total)', () => {
 	it('churnea todos los recurrentes, cancela las PE desde la fecha, pasa a Cancelado con motivo y deja CHURN', () => {
 		const plan = planChange(context(), request({ type: 'contract_cancel' }, { effective_date: '2026-12-01' }));
@@ -223,7 +300,7 @@ describe('contract_cancel (M2 total)', () => {
 	it('un contrato ya cancelado no se cancela de nuevo (not_active)', () => {
 		const plan = planChange(context({ contract: contractRowCancelled() }), request({ type: 'contract_cancel' }));
 
-		expect(plan.preview.blockers.map((blocker) => blocker.code)).toEqual(['not_active']);
+		expect(plan.preview.blockers.map((blocker) => blocker.code)).toContain('not_active');
 	});
 });
 
@@ -267,17 +344,58 @@ describe('renewal (M3, mismo precio)', () => {
 		expect(plan.preview.invoices.created[0]).toMatchObject({ issue_date: '2027-01-01', subtotal: 1200, due_date: '2027-01-31' });
 		expect(plan.preview.invoices.created[11]).toMatchObject({ issue_date: '2027-12-01', subtotal: 1000 });
 		expect(plan.preview.invoices.updated).toEqual([]);
-		// Fin del contrato = el más próximo de los vigentes no renovados (Soporte renovado hasta junio 2027).
+		// Fin del contrato = el MAYOR fin de los recurrentes vivos (decisión 01-10: misma regla que el alta): Licencia renovada a dic 2027.
 		expect(ops(plan, 'update_contract')[0]).toMatchObject({
-			set: { total_value: 14400 + 13200, contract_end_date: '2027-06-30' },
+			set: { total_value: 14400 + 13200, contract_end_date: '2027-12-31' },
 			bypass_end_date_guard: true,
 		});
-		expect(plan.preview.contract.after).toMatchObject({ end_date: '2027-06-30', status: 'active' });
+		expect(plan.preview.contract.after).toMatchObject({ end_date: '2027-12-31', status: 'active' });
 		expect(plan.event).toMatchObject({ type: 'RENEWAL', amount_delta: 0, items_affected: [LICENCIA, SOPORTE], rsm_from_month: '2027-01-01' });
 		expect(plan.preview.warnings).toEqual([]);
 	});
-	it('renovación parcial no mueve el fin si el otro ítem sigue sin renovar; retroactiva avisa; Vencido se admite', () => {
+	it('D3/MF-h: ajustes con fin distinto al del madre: el que termina después se absorbe y se corta al fin del madre; el que termina antes se avisa (adjustment_not_absorbed)', () => {
+		const adjustment = (id: string, quantity: number, end: string) =>
+			itemRow({
+				id,
+				categoria: 'UPSELL',
+				related_item_id: LICENCIA,
+				quantity,
+				monthly_price: quantity * 100,
+				billing_period_price: quantity * 100,
+				start_date: '2026-10-01',
+				end_date: end,
+				term_months: 6,
+			});
+		const plan = planChange(
+			context({ items: [itemRow(), soporteRow(), adjustment('up-short', 2, '2026-11-30'), adjustment('up-long', 5, '2027-03-31')] }),
+			request({ type: 'renewal', items: [{ item_id: LICENCIA }] }, { effective_date: '2026-12-15', reason: 'ok' })
+		);
+
+		// Absorbe Licencia (10) + el ajuste largo (5): 15 × 100.
+		expect(inserted(plan)[0]).toMatchObject({
+			categoria: 'RENEWAL',
+			renews_item_id: LICENCIA,
+			quantity: 15,
+			unit_price: 100,
+			start_date: '2027-01-01',
+		});
+		expect(ops(plan, 'update_item')).toEqual(
+			expect.arrayContaining([
+				{ kind: 'update_item', item_id: 'up-long', set: { end_date: '2026-12-31' } },
+				{ kind: 'update_item', item_id: 'up-long', set: { renewed_by_key: 'new:1' } },
+				{ kind: 'update_item', item_id: LICENCIA, set: { renewed_by_key: 'new:1' } },
+			])
+		);
+		expect(ops(plan, 'update_item').some((op) => op.item_id === 'up-short')).toBe(false);
+		expect(plan.event.metadata).toMatchObject({ renewals: [{ item_id: LICENCIA, absorbed: ['up-long'] }] });
+		const warning = plan.preview.warnings.find((entry) => entry.code === 'adjustment_not_absorbed');
+
+		expect(warning?.message).toContain('hasta el 2026-11-30');
+		expect(plan.preview.warnings.map((entry) => entry.code)).toContain('adjustments_absorbed');
+	});
+	it('renovación parcial: el fin del contrato pasa al mayor fin vivo (la renovación); retroactiva avisa; Vencido se admite', () => {
 		const expired = context({
+			contract: contractRow({ contract_end_date: '2026-06-30' }),
 			items: [
 				itemRow({ end_date: '2026-06-30', term_months: 6, final_price: 6000 }),
 				soporteRow({ end_date: '2026-06-30', term_months: 6, final_price: 1200 }),
@@ -293,17 +411,14 @@ describe('renewal (M3, mismo precio)', () => {
 		expect(plan.preview.blockers).toEqual([]);
 		expect(inserted(plan)[0]).toMatchObject({ start_date: '2026-07-01', end_date: '2026-12-31', term_months: 6 });
 		expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['retroactive_renewal']);
-		// Soporte venció y no se renovó: el fin más próximo es su 30-06 (el encabezado guardaba 31-12).
+		// Soporte venció sin renovar; el fin del contrato = el mayor fin vivo (la renovación de Licencia, 31-12), no el más próximo.
 		expect(ops(plan, 'update_contract')[0]).toMatchObject({
-			set: { total_value: 6000 + 1200 + 6000, contract_end_date: '2026-06-30' },
+			set: { total_value: 6000 + 1200 + 6000, contract_end_date: '2026-12-31' },
 			bypass_end_date_guard: true,
 		});
 		expect(plan.preview.contract.after.status).toBe('pending_renewal');
 	});
-	it('rechaza cambio de precio (S3-15 pendiente), catch-up en el mes actual, fin no entero y bloquea ítems churneados o ya renovados', () => {
-		expect(fields(() => planChange(context(), request({ type: 'renewal', items: [{ item_id: LICENCIA, unit_price: 120 }] })))).toEqual([
-			'change.items.0.unit_price',
-		]);
+	it('rechaza catch-up en el mes actual y fin no entero; bloquea ítems churneados o ya renovados (el precio nuevo se acepta, §9.3.4)', () => {
 		expect(fields(() => planChange(context(), request({ type: 'renewal', catch_up: 'current_month', items: [{ item_id: LICENCIA }] })))).toEqual([
 			'change.catch_up',
 		]);
@@ -341,6 +456,26 @@ describe('renewal (M3, mismo precio)', () => {
 });
 
 describe('item_add (M1 alta)', () => {
+	it('pago único: el preview marca is_recurring false en "Se agregan" y el ΔMRR queda en 0; los recurrentes van en true', () => {
+		const once = planChange(
+			context(),
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 1, unit_price: 500, is_recurring: false }] },
+				{ reason: 'Capacitación' }
+			)
+		);
+
+		expect(once.preview.items.added).toHaveLength(1);
+		expect(once.preview.items.added[0].is_recurring).toBe(false);
+		expect(once.preview.rsm.mrr_delta).toBe(0);
+		const recurring = planChange(
+			context(),
+			request({ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 2, unit_price: 300 }] }, { reason: 'Módulo' })
+		);
+
+		expect(recurring.preview.items.added[0].is_recurring).toBe(true);
+	});
+
 	it('cross-sell: producto nuevo hereda del contrato, co-termina (D-B), tramo inicial por días en la factura del ciclo y se suma a la PE del mes', () => {
 		const plan = planChange(
 			context(),
@@ -429,6 +564,51 @@ describe('item_add (M1 alta)', () => {
 		);
 
 		expect(pending.preview.blockers.map((blocker) => blocker.code)).toEqual(['not_active']);
+	});
+	it('D3/MF-h: el UPSELL de un producto existente termina con su ítem relacionado, no con el contrato (salvo end_date o term_months explícitos)', () => {
+		// Licencia (relacionado) termina el 30-06-2027; Soporte el 31-12-2026 (fin del contrato que rige).
+		const longer = context({ items: [itemRow({ end_date: '2027-06-30', term_months: 18 }), soporteRow()] });
+		const add = (item: Record<string, unknown>) =>
+			planChange(
+				longer,
+				request(
+					{ type: 'item_add', items: [{ product_id: PRODUCT_LICENCIA, quantity: 1, unit_price: 100, start_date: '2026-12-01', ...item }] },
+					{ effective_date: '2026-12-01', reason: 'ok' }
+				)
+			);
+		const follows = add({});
+
+		expect(inserted(follows)[0]).toMatchObject({ related_item_id: LICENCIA, end_date: '2027-06-30', term_months: 7 });
+		expect(follows.preview.warnings.map((warning) => warning.code)).not.toContain('term_exceeds_contract_capped');
+		// Explícitos: `end_date` y `term_months` mandan (acotados al fin del relacionado).
+		expect(inserted(add({ end_date: '2027-02-28' }))[0]).toMatchObject({ end_date: '2027-02-28', term_months: 3 });
+		expect(inserted(add({ term_months: 2 }))[0]).toMatchObject({ end_date: '2027-01-31', term_months: 2 });
+		const capped = add({ end_date: '2027-12-31' });
+
+		expect(inserted(capped)[0]).toMatchObject({ end_date: '2027-06-30' });
+		expect(capped.preview.warnings.map((warning) => warning.code)).toContain('term_exceeds_contract_capped');
+		expect(fields(() => add({ term_months: 0 }))).toEqual(['change.items.0.term_months']);
+
+		// Relacionado que termina ANTES que el contrato: el ajuste no lo sobrevive.
+		const shorter = planChange(
+			context({ items: [itemRow({ end_date: '2026-11-30', term_months: 11 }), soporteRow()] }),
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_LICENCIA, quantity: 1, unit_price: 100, start_date: '2026-11-01' }] },
+				{ effective_date: '2026-11-01', reason: 'ok' }
+			)
+		);
+
+		expect(inserted(shorter)[0]).toMatchObject({ related_item_id: LICENCIA, end_date: '2026-11-30', term_months: 1 });
+		// Cross-sell (sin relacionado): co-termina con el fin del contrato (el mayor fin vivo: Licencia 30-06-2027).
+		const cross = planChange(
+			longer,
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 1, unit_price: 10 }] },
+				{ effective_date: '2026-11-01', reason: 'ok' }
+			)
+		);
+
+		expect(inserted(cross)[0]).toMatchObject({ categoria: 'CROSS-SELL', related_item_id: null, end_date: '2027-06-30' });
 	});
 	it('Pricing v2: `price` inline se valida como al crear, tarifa las facturas del ítem y fija el unitario mensual equivalente; medido + Anticipado → 400', () => {
 		const price = {
@@ -696,21 +876,13 @@ describe('item_change (M1 precio/cantidad)', () => {
 		expect(plan.event).toMatchObject({ type: 'UPSELL', subtype: 'RENEGOTIATION', amount_delta: 51.2 });
 		expect(plan.preview.items.groups_after.find((group) => group.product_name === 'Licencia')).toMatchObject({ quantity: 140, mrr: 2240 });
 	});
-	it('bloquea si ya está facturado en firme después de la fecha (con fecha sugerida) y rechaza frecuencia, fin, sin cambio y 100 %', () => {
+	it('bloquea si ya está facturado en firme después de la fecha (con fecha sugerida) y rechaza fin, sin cambio y 100 % (la frecuencia es §9.3.7)', () => {
 		const blocked = planChange(
 			context(),
 			request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] }, { effective_date: '2026-09-15' })
 		);
 
 		expect(blocked.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-10-01') });
-		expect(
-			fields(() =>
-				planChange(
-					context(),
-					request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 10, unit_price: 100, billing_frequency: 'Anual' }] })
-				)
-			)
-		).toEqual(['change.items.0.billing_frequency', 'change.items.0.quantity']);
 		expect(
 			fields(() =>
 				planChange(
@@ -725,6 +897,149 @@ describe('item_change (M1 precio/cantidad)', () => {
 		);
 
 		expect(overrides.preview.warnings.map((warning) => warning.code)).toEqual(['quantity_overrides_present', 'generator']);
+	});
+
+	describe('MF-b / Huecos #4b: ítem con modelo de precio (tramos fijos)', () => {
+		// Licencia graduada: 1–5 a 100 y 6+ a 50 → 10 unidades = 500 + 250 = 750 al mes.
+		const tiers = [
+			{ from: 1, to: 5, per_unit_amount: 100, flat_amount: 0 },
+			{ from: 6, to: null, per_unit_amount: 50, flat_amount: 0 },
+		];
+		const tieredItem = (mode: 'per_tier' | 'single') =>
+			itemRow({
+				unit_price: 75,
+				monthly_price: 750,
+				billing_period_price: 750,
+				price_id: 'price-lic',
+				raw: {
+					price_id: 'price-lic',
+					price_model: 'graduated',
+					price_quantity_type: 'fixed',
+					price_tiers: tiers,
+					price_invoice_line_mode: mode,
+				},
+			});
+		// Por Emitir oct–dic con las dos filas por tramo de Licencia (5 × 100 y 5 × 50) más Soporte.
+		const tieredInvoices = () =>
+			context().invoices.map((invoice) => {
+				if (invoice.status !== 'Por Emitir') return invoice;
+				const [lic, sop] = invoice.lines;
+				const rows = [
+					{ ...lic, id: `${lic.id}-t1`, quantity: 5, unit_price: 100, subtotal: 500, tax_amount: 95, total: 595 },
+					{ ...lic, id: `${lic.id}-t2`, quantity: 5, unit_price: 50, subtotal: 250, tax_amount: 47.5, total: 297.5 },
+				];
+
+				return { ...invoice, subtotal: 950, lines: [...rows, sop] };
+			});
+		const change = (mode: 'per_tier' | 'single', quantity: number) =>
+			planChange(
+				context({ items: [tieredItem(mode), soporteRow()], invoices: tieredInvoices() }),
+				request(
+					{ type: 'item_change', items: [{ item_id: LICENCIA, quantity, unit_price: 75 }] },
+					{ effective_date: '2026-11-01', reason: 'ok' }
+				)
+			);
+
+		it('per_tier: 10 → 20 re-tarifa con el motor y conserva una fila por tramo con su desglose (no aplana a 1 × total)', () => {
+			const plan = change('per_tier', 20);
+
+			// Se quitan las dos filas viejas de nov y dic (oct no: el cambio rige el 01-11); Soporte intacto.
+			expect(ops(plan, 'delete_line').map((op) => op.line_id)).toEqual([
+				'line-11-lic-t1',
+				'line-11-lic-t2',
+				'line-12-lic-t1',
+				'line-12-lic-t2',
+			]);
+			expect(ops(plan, 'update_line')).toEqual([]);
+			const merges = ops(plan, 'create_invoices');
+
+			expect(merges.map((op) => op.merge_into)).toEqual([['inv-11'], ['inv-12']]);
+			const rows = merges[0].invoices[0].lines;
+
+			// 20 unidades: 5 × 100 + 15 × 50 = 1.250, dos filas con su sublínea de tramo.
+			expect(rows.map((line: PreviewLine) => [line.item_key, line.quantity, line.unit_price, line.subtotal])).toEqual([
+				[LICENCIA, 5, 100, 500],
+				[LICENCIA, 15, 50, 750],
+			]);
+			expect(rows[1].pricing?.breakdown).toEqual([expect.objectContaining({ kind: 'tier', quantity: 15, unit_amount: 50, amount: 750 })]);
+			expect(rows[0].line_part).toMatchObject({ index: 0, count: 2 });
+			// El delta (ΔMRR) sale del motor: 1.250 − 750 = +500; el unitario indicado (75) no se usa y se avisa.
+			expect(plan.event).toMatchObject({ type: 'UPSELL', amount_delta: 500 });
+			expect(plan.preview.warnings.map((warning) => warning.code)).toContain('priced_item_engine_price');
+			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({
+				subtotal_before: 950,
+				subtotal_after: 1450,
+			});
+		});
+
+		it('single: una fila con la cantidad nueva y el desglose del motor; downsell 10 → 4 deja solo el primer tramo', () => {
+			const up = change('single', 20);
+			const [row] = ops(up, 'create_invoices')[0].invoices[0].lines;
+
+			expect([row.quantity, row.subtotal]).toEqual([20, 1250]);
+			expect(row.pricing?.breakdown.map((sub: PricedSubline) => [sub.quantity, sub.amount])).toEqual([
+				[5, 500],
+				[15, 750],
+			]);
+			const down = change('per_tier', 4);
+			const [rows] = ops(down, 'create_invoices').map((op) => op.invoices[0].lines);
+
+			expect(rows.map((line: PreviewLine) => [line.quantity, line.unit_price, line.subtotal])).toEqual([[4, 100, 400]]);
+			expect(down.event).toMatchObject({ type: 'DOWNSELL', amount_delta: -350 });
+		});
+
+		it('per_tier con consumo registrado (Huecos F4-C): el período con consumo se re-tarifa por tramo con la cantidad registrada (no se aplana)', () => {
+			// Noviembre tiene consumo registrado de 12 (5 × 100 + 7 × 50 = 850) en dos filas por tramo.
+			const invoices = tieredInvoices().map((invoice) =>
+				invoice.id !== 'inv-11'
+					? invoice
+					: {
+							...invoice,
+							subtotal: 1050,
+							lines: invoice.lines.map((line) =>
+								line.contract_item_id !== LICENCIA
+									? line
+									: {
+											...line,
+											quantity: line.id.endsWith('t1') ? 5 : 7,
+											subtotal: line.id.endsWith('t1') ? 500 : 350,
+											quantity_source: 'consumption',
+											consumption: { quantity: 12, amount_override: null, apply_item_discount: true, is_estimated: false },
+										}
+							),
+						}
+			);
+			const plan = planChange(
+				context({ items: [tieredItem('per_tier'), soporteRow()], invoices }),
+				request(
+					{ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 20, unit_price: 75 }] },
+					{ effective_date: '2026-11-01', reason: 'ok' }
+				)
+			);
+			const merges = ops(plan, 'create_invoices');
+			const rowsOf = (index: number) =>
+				merges[index].invoices[0].lines.map((line: PreviewLine) => [line.quantity, line.unit_price, line.subtotal, line.quantity_source]);
+
+			expect(ops(plan, 'update_line')).toEqual([]);
+			expect(merges.map((op) => op.merge_into)).toEqual([['inv-11'], ['inv-12']]);
+			// Noviembre: la cantidad registrada (12) en dos filas por tramo, con origen consumo; diciembre: la base nueva (20).
+			expect(rowsOf(0)).toEqual([
+				[5, 100, 500, 'consumption'],
+				[7, 50, 350, 'consumption'],
+			]);
+			expect(rowsOf(1)).toEqual([
+				[5, 100, 500, 'fixed'],
+				[15, 50, 750, 'fixed'],
+			]);
+			expect(merges[0].invoices[0].lines[1].pricing?.breakdown).toEqual([
+				expect.objectContaining({ kind: 'tier', quantity: 7, amount: 350, line_index: 1, line_count: 2 }),
+			]);
+			expect(plan.preview.warnings.map((warning) => warning.code)).toContain('consumption_quantity_kept');
+			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({
+				subtotal_before: 1050,
+				subtotal_after: 1050,
+			});
+		});
 	});
 });
 
@@ -960,10 +1275,8 @@ describe('change_entity (M5)', () => {
 });
 
 describe('tipos diferidos y forma del pedido', () => {
-	it('reactivate, pause, resume y price_adjustment → 400 explicando qué falta decidir; items obligatorios en los tipos de ítems', () => {
-		for (const type of ['reactivate', 'pause', 'resume', 'price_adjustment'] as const) {
-			expect(fields(() => planChange(context(), request({ type })))).toEqual(['change.type']);
-		}
+	it('price_adjustment → 400 explicando el camino (pacto); items obligatorios en los tipos de ítems', () => {
+		expect(fields(() => planChange(context(), request({ type: 'price_adjustment' })))).toEqual(['change.type']);
 		expect(fields(() => planChange(context(), request({ type: 'item_remove' })))).toEqual(['change.items']);
 		expect(fields(() => planChange(context(), request({ type: 'item_add' }, { origin: { type: 'quote' } as never })))).toEqual([
 			'origin.quote_id',
@@ -1066,26 +1379,34 @@ describe('auditoría 01-10: facturas por OC, borrador en el ERP, anuladas, NC pr
 		expect(codes(plan)).toContain('consumption_line_kept');
 	});
 
-	it('contract_cancel: bloquea con manual_lines_pending si una Por Emitir desde la fecha tiene líneas a mano; la facturada por OC se omite', () => {
+	it('contract_cancel (§9.3.1): las líneas a mano ya no bloquean (entran a la decisión); la facturada por OC con cancel se cancela entera, con emit queda', () => {
 		const manual = planChange(
 			context({ invoices: withInvoice('inv-12', (invoice) => licenciaLine(invoice, { quantity_source: 'manual' })) }),
-			request({ type: 'contract_cancel' }, { effective_date: '2026-12-01' })
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'cancel' }] }, { effective_date: '2026-12-01' })
 		);
 
-		expect(manual.preview.blockers).toContainEqual({
-			code: 'manual_lines_pending',
-			message: expect.stringContaining('editadas a mano'),
-			next_step: 'Edita o cancela esas facturas primero',
+		expect(manual.preview.blockers.map((blocker) => blocker.code)).not.toContain('manual_lines_pending');
+		expect(manual.preview.can_apply).toBe(true);
+		expect(manual.preview.invoices.cancelled.map((invoice) => invoice.id)).toEqual(['inv-12']);
+		expect(manual.preview.invoice_decisions_required?.[0]).toMatchObject({
+			invoice_id: 'inv-12',
+			reason_hint: expect.stringContaining('a mano'),
 		});
-		expect(manual.preview.can_apply).toBe(false);
 		const po = planChange(
 			context({ invoices: withInvoice('inv-12', partial) }),
-			request({ type: 'contract_cancel' }, { effective_date: '2026-12-01' })
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'cancel' }] }, { effective_date: '2026-12-01' })
 		);
 
-		expect(po.preview.invoices.cancelled).toEqual([]);
+		expect(po.preview.invoices.cancelled.map((invoice) => invoice.id)).toEqual(['inv-12']);
+		expect(ops(po, 'cancel_invoice').map((op) => op.invoice_id)).toEqual(['inv-12']);
 		expect(ops(po, 'delete_line')).toEqual([]);
-		expect(codes(po)).toContain('partial_billing_skipped');
+		const kept = planChange(
+			context({ invoices: withInvoice('inv-12', partial) }),
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'emit' }] }, { effective_date: '2026-12-01' })
+		);
+
+		expect(kept.preview.invoices.cancelled).toEqual([]);
+		expect(codes(kept)).toContain('billed_beyond_effective_date');
 	});
 
 	it('item_change: la línea sumada no cae en una Por Emitir por OC (mergeTarget la salta y avisa)', () => {
@@ -1200,5 +1521,460 @@ describe('auditoría 01-10: facturas por OC, borrador en el ERP, anuladas, NC pr
 		const colombia = { ...contract, company: { ...contract.company, country: 'Colombia' } };
 
 		expect(taxRateFor('FACTURA', colombia)).toBe(taxRateForDocument('FACTURA', 'Colombia', contract.company.tax_rate));
+	});
+});
+
+describe('item_update (§9.2, corregir un dato: datos no comerciales)', () => {
+	const change = (items: Array<Record<string, unknown>>) => request({ type: 'item_update', items } as never);
+	const pendingLic = ['line-10-lic', 'line-11-lic', 'line-12-lic'];
+
+	it('cambia la cuenta (recortada), sin espejos, ΔMRR, RSM ni precios; regenera las glosas de las PE del ítem y lo avisa', () => {
+		const plan = planChange(context(), change([{ item_id: LICENCIA, account: '  Norte  ' }]));
+
+		expect(plan.ops).toEqual([
+			{ kind: 'update_item', item_id: LICENCIA, set: { account: 'Norte' } },
+			{ kind: 'regenerate_descriptions', line_ids: pendingLic },
+		]);
+		expect(plan.preview.items_after).toEqual([
+			{
+				item_id: LICENCIA,
+				product_name: 'Licencia',
+				account_before: null,
+				account: 'Norte',
+				changes: [{ field: 'account', before: null, after: 'Norte' }],
+			},
+		]);
+		expect(plan.preview.items).toMatchObject({ added: [], adjusted: [], ended: [] });
+		expect(plan.preview.rsm).toMatchObject({ mrr_delta: 0, first_month: null, momentum: null });
+		expect(plan.preview.contract.after).toEqual(plan.preview.contract.before);
+		expect(plan.preview.invoices).toEqual({ updated: [], created: [], cancelled: [], credit_notes: [] });
+		expect(plan.preview.warnings).toEqual([
+			expect.objectContaining({ code: 'pending_descriptions_updated', message: expect.stringContaining('3 líneas') }),
+		]);
+		expect(plan.preview.can_apply).toBe(true);
+		expect(plan.event).toMatchObject({
+			type: 'ITEM_CORRECTED',
+			subtype: 'data',
+			amount_delta: 0,
+			items_affected: [LICENCIA],
+			rsm_from_month: null,
+			metadata: expect.objectContaining({
+				items: [{ item_id: LICENCIA, product_name: 'Licencia', changes: [{ field: 'account', before: null, after: 'Norte' }] }],
+			}),
+		});
+		expect(plan.items_after.find((item) => item.id === LICENCIA)!.account).toBe('Norte');
+	});
+
+	it('vacío → NULL; no regenera glosas protegidas, editadas a mano ni de PE con borrador en el ERP; emitidas nunca', () => {
+		const invoices = context().invoices.map((invoice) => {
+			if (invoice.id === 'inv-10')
+				return { ...invoice, lines: invoice.lines.map((line) => (line.id === 'line-10-lic' ? { ...line, description_locked: true } : line)) };
+			if (invoice.id === 'inv-11')
+				return {
+					...invoice,
+					lines: invoice.lines.map((line) => (line.id === 'line-11-lic' ? { ...line, quantity_source: 'manual' } : line)),
+				};
+			if (invoice.id === 'inv-12') return { ...invoice, odoo_invoice_id: 77 };
+
+			return invoice;
+		});
+		const plan = planChange(
+			context({ items: [itemRow({ account: 'Norte' }), soporteRow()], invoices }),
+			change([{ item_id: LICENCIA, account: '   ' }])
+		);
+
+		expect(plan.ops).toEqual([{ kind: 'update_item', item_id: LICENCIA, set: { account: null } }]);
+		expect(plan.preview.warnings).toEqual([]);
+		expect(plan.event.metadata.items).toEqual([
+			{ item_id: LICENCIA, product_name: 'Licencia', changes: [{ field: 'account', before: 'Norte', after: null }] },
+		]);
+		expect(plan.event.description).toBe('"Licencia": cuenta Norte → sin cuenta');
+	});
+
+	it('mismo producto y cuenta con el mismo inicio → possible_duplicate', () => {
+		const twin = itemRow({ id: '33333333-3333-4333-8333-333333333333', account: 'Norte' });
+		const plan = planChange(context({ items: [itemRow(), soporteRow(), twin], invoices: [] }), change([{ item_id: LICENCIA, account: 'Norte' }]));
+
+		expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['possible_duplicate']);
+		expect(plan.preview.can_apply).toBe(true);
+	});
+
+	it('el producto completo (con su ajuste del mismo inicio) se mueve junto sin possible_duplicate', () => {
+		const adjustment = itemRow({ id: '44444444-4444-4444-8444-444444444444', categoria: 'UPSELL', related_item_id: LICENCIA, account: null });
+		const plan = planChange(
+			context({ items: [itemRow(), soporteRow(), adjustment], invoices: [] }),
+			change([
+				{ item_id: LICENCIA, account: 'Norte' },
+				{ item_id: adjustment.id, account: 'Norte' },
+			])
+		);
+
+		expect(plan.preview.warnings).toEqual([]);
+		expect(ops(plan, 'update_item').map((op) => op.item_id)).toEqual([LICENCIA, adjustment.id]);
+	});
+
+	it('se admite en Pausado y Vencido; no en En revisión ni Cancelado', () => {
+		const states = ['Pausado', 'En revisión', 'Cancelado'].map(
+			(status) => planChange(context({ contract: contractRow({ status }) }), change([{ item_id: LICENCIA, account: 'Norte' }])).preview
+		);
+
+		expect(states.map((preview) => preview.can_apply)).toEqual([true, false, false]);
+		expect(states[1].blockers[0].code).toBe('not_active');
+		const expired = planChange(
+			context({ items: [itemRow({ end_date: '2026-06-30' }), soporteRow({ end_date: '2026-06-30' })] }),
+			change([{ item_id: LICENCIA, account: 'Norte' }])
+		);
+
+		expect(expired.preview.contract.before.status).toBe('expired');
+		expect(expired.preview.can_apply).toBe(true);
+	});
+
+	it('ítem ajeno → bloqueo item_not_found; sin campos, misma cuenta, repetido o lista vacía → 400', () => {
+		const missing = planChange(context(), change([{ item_id: 'e0000000-0000-4000-8000-000000000099', account: 'Norte' }]));
+
+		expect(missing.preview.blockers.map((blocker) => blocker.code)).toEqual(['item_not_found']);
+		expect(missing.ops).toEqual([]);
+		expect(fields(() => planChange(context(), change([{ item_id: LICENCIA }])))).toEqual(['change.items.0']);
+		expect(fields(() => planChange(context(), change([{ item_id: LICENCIA, account: null }])))).toEqual(['change.items.0.account']);
+		expect(
+			fields(() =>
+				planChange(
+					context(),
+					change([
+						{ item_id: LICENCIA, account: 'A' },
+						{ item_id: LICENCIA, account: 'B' },
+					])
+				)
+			)
+		).toEqual(['change.items.1.item_id']);
+		expect(fields(() => planChange(context(), change([])))).toEqual(['change.items']);
+	});
+});
+
+describe('item_update · corregir un dato mal cargado (F4, decisión 01-10)', () => {
+	const correct = (items: Array<Record<string, unknown>>, overrides: Partial<Parameters<typeof context>[0]> = {}, effective = '2026-09-28') =>
+		planChange(context(overrides), request({ type: 'item_update', items } as never, { effective_date: effective }));
+
+	it('corrección en su lugar: sin espejo ni UPSELL, misma categoría y booking; precios con los helpers; TCV y devengo completo', () => {
+		const plan = correct([{ item_id: LICENCIA, quantity: 12 }]);
+
+		expect(inserted(plan)).toEqual([]);
+		expect(ops(plan, 'update_item')).toEqual([
+			{
+				kind: 'update_item',
+				item_id: LICENCIA,
+				set: {
+					quantity: 12,
+					unit_price: 100,
+					annual_unit_price: 1200,
+					annual_price: 14400,
+					price_entry_mode: 'monthly',
+					discount_type: null,
+					discount_value: 0,
+					price: 14400,
+					final_price: 14400,
+					monthly_price: 1200,
+					billing_period_price: 1200,
+				},
+			},
+		]);
+		const after = plan.items_after.find((item) => item.id === LICENCIA)!;
+
+		expect([after.categoria, after.booking_date]).toEqual(['NEW', '2026-01-01']);
+		expect(plan.preview.contract.after).toMatchObject({ total_value: 16800, mrr: 1400 });
+		expect(plan.preview.rsm).toMatchObject({ first_month: '2026-01-01', momentum: 'ITEM_CORRECTED' });
+		expect(plan.event).toMatchObject({
+			type: 'ITEM_CORRECTED',
+			subtype: 'value',
+			amount_delta: 0,
+			rsm_from_month: '2026-01-01',
+			description: '"Licencia": cantidad 10 → 12',
+			metadata: expect.objectContaining({
+				items: [{ item_id: LICENCIA, product_name: 'Licencia', changes: [{ field: 'quantity', before: 10, after: 12 }] }],
+			}),
+		});
+		expect(plan.preview.items.adjusted.map((item) => [item.item_id, item.quantity, item.monthly_price])).toEqual([[LICENCIA, 12, 1200]]);
+	});
+
+	it('emitidas intactas: la diferencia (9 × 200) se reparte en partes iguales entre las 3 Por Emitir con su motivo en invoice_adjustments', () => {
+		const plan = correct([{ item_id: LICENCIA, quantity: 12 }]);
+		const lines = ops(plan, 'update_line');
+
+		// Ninguna emitida (enero–septiembre) se toca; las PE de Licencia pasan a 12 × 100 = 1.200 + 600 de ajuste (unitario 150).
+		expect(lines.map((op) => [op.line_id, op.values.quantity, op.values.unit_price, op.values.subtotal, op.values.tax_amount])).toEqual([
+			['line-10-lic', 12, 150, 1800, 342],
+			['line-11-lic', 12, 150, 1800, 342],
+			['line-12-lic', 12, 150, 1800, 342],
+		]);
+		expect(ops(plan, 'insert_invoice_adjustment').map((op) => [op.invoice_id, op.type, op.amount_diff])).toEqual([
+			['inv-10', 'correction', 600],
+			['inv-11', 'correction', 600],
+			['inv-12', 'correction', 600],
+		]);
+		expect(plan.preview.issued_difference).toMatchObject({
+			item_id: LICENCIA,
+			currency: 'CLP',
+			amount: 1800,
+			distributed_over: [
+				{ invoice_id: 'inv-10', amount: 600 },
+				{ invoice_id: 'inv-11', amount: 600 },
+				{ invoice_id: 'inv-12', amount: 600 },
+			],
+		});
+		expect(plan.preview.issued_difference!.issued_invoices).toHaveLength(9);
+		expect(plan.preview.issued_difference!.issued_invoices[0]).toEqual({
+			invoice_id: 'inv-01',
+			invoice_number: 'F-01',
+			issue_date: '2026-01-01',
+			issued: 1000,
+			expected: 1200,
+			difference: 200,
+		});
+		expect(plan.preview.warnings.find((warning) => warning.code === 'issued_difference_distributed')?.message).toBe(
+			'Ya existen las facturas F-01, F-02, F-03 y 6 más emitidas por este ítem: la diferencia de CLP 1.800,00 se distribuye entre las 3 facturas por emitir. Si lo que quieres es cambiar el acuerdo desde una fecha, usa Cambió el precio o la cantidad'
+		);
+		expect(plan.preview.invoices.updated.map((entry) => [entry.id, entry.subtotal_before, entry.subtotal_after])).toEqual([
+			['inv-10', 1200, 2000],
+			['inv-11', 1200, 2000],
+			['inv-12', 1200, 2000],
+		]);
+		expect(plan.preview.invoices.credit_notes).toEqual([]);
+	});
+
+	it('reparto telescópico: suma exacta y redondeo en la parte del medio (100 / 3 = 33,33 + 33,34 + 33,33; también negativo)', () => {
+		expect(telescopicShares(100, 3)).toEqual([33.33, 33.34, 33.33]);
+		expect(telescopicShares(-100, 3)).toEqual([-33.33, -33.34, -33.33]);
+		expect(telescopicShares(10, 1)).toEqual([10]);
+		// Una emitida con diferencia de 100 (precio 100 → 110 en septiembre) repartida entre las 3 Por Emitir.
+		const invoices = context().invoices.filter((invoice) => invoice.id >= 'inv-09');
+		const plan = correct([{ item_id: LICENCIA, unit_price: 110 }], { invoices });
+
+		expect(plan.preview.issued_difference).toMatchObject({
+			amount: 100,
+			distributed_over: [{ amount: 33.33 }, { amount: 33.34 }, { amount: 33.33 }],
+		});
+		expect(ops(plan, 'update_line').map((op) => op.values.subtotal)).toEqual([1133.33, 1133.34, 1133.33]);
+		expect(plan.preview.warnings.find((warning) => warning.code === 'issued_difference_distributed')?.message).toMatch(
+			/^Ya existe la factura F-09 emitida por este ítem: la diferencia de CLP 100,00 se distribuye entre las 3 facturas por emitir/
+		);
+	});
+
+	it('guard: el mes de la fecha efectiva debe estar abierto (period_closed); sin Por Emitir donde repartir → no_pending_invoices_for_correction', () => {
+		const closed = correct([{ item_id: LICENCIA, quantity: 12 }], { contract: contractRow({ cutoff_date: '2026-09-30' }) });
+
+		expect(closed.preview.blockers.map((blocker) => blocker.code)).toEqual(['period_closed']);
+		// La cuenta (dato no comercial) no pide período abierto.
+		expect(correct([{ item_id: LICENCIA, account: 'Norte' }], { contract: contractRow({ cutoff_date: '2026-09-30' }) }).preview.can_apply).toBe(
+			true
+		);
+		const issuedOnly = context().invoices.filter((invoice) => invoice.status !== 'Por Emitir');
+		const none = correct([{ item_id: LICENCIA, quantity: 12 }], { invoices: issuedOnly });
+
+		expect(none.preview.blockers).toEqual([
+			{
+				code: 'no_pending_invoices_for_correction',
+				message: expect.stringContaining('CLP 1.800,00'),
+				next_step: 'Usa "Cambió el precio o la cantidad" para cambiar el acuerdo desde una fecha',
+			},
+		]);
+		// Sin emitidas del ítem no hay diferencia: se corrige sin bloqueo aunque no haya facturas.
+		expect(correct([{ item_id: LICENCIA, quantity: 12 }], { invoices: [] }).preview.can_apply).toBe(true);
+	});
+
+	it('respeta lo hecho a mano en las Por Emitir: línea editada, glosa escrita, descuento puntual, consumo y tasa por factura', () => {
+		const invoices = context()
+			.invoices.filter((invoice) => invoice.status === 'Por Emitir')
+			.map((invoice) => ({
+				...invoice,
+				lines: invoice.lines.map((line) => {
+					if (line.id === 'line-10-lic') return { ...line, quantity_source: 'manual' };
+					if (line.id === 'line-11-lic')
+						return {
+							...line,
+							description_locked: true,
+							discount_pct: 10,
+							subtotal: 900,
+							pricing_breakdown: [
+								{
+									kind: 'discount' as const,
+									one_off: true,
+									amount: -100,
+									label: 'Descuento puntual: cortesía',
+									quantity: 1,
+									one_off_type: 'amount',
+									one_off_value: 100,
+									base_discount_pct: 0,
+								},
+							],
+						};
+					if (line.id === 'line-12-lic')
+						return {
+							...line,
+							fx_rate_source: 'manual',
+							quantity: 7,
+							subtotal: 700,
+							quantity_source: 'consumption',
+							consumption: { quantity: 7, amount_override: null, apply_item_discount: true, is_estimated: false },
+						};
+
+					return line;
+				}),
+			}));
+		const plan = correct([{ item_id: LICENCIA, unit_price: 110 }], { invoices });
+		const lines = ops(plan, 'update_line');
+
+		// Octubre (editada a mano) no se toca; noviembre conserva su descuento puntual de 100 sobre 1.100; diciembre su consumo (7).
+		expect(lines.map((op) => [op.line_id, op.values.quantity, op.values.unit_price, op.values.discount_pct, op.values.subtotal])).toEqual([
+			['line-11-lic', 10, 110, 9.090909, 1000],
+			['line-12-lic', 7, 110, 0, 770],
+		]);
+		expect(lines[0].values.pricing_breakdown).toEqual([expect.objectContaining({ kind: 'discount', one_off: true, amount: -100 })]);
+		expect(lines[1].values.pricing_breakdown).toBeNull();
+		const preserved = plan.preview.warnings.find((warning) => warning.code === 'correction_overrides_preserved')!.message;
+
+		expect(preserved).toContain('la línea editada a mano de la factura del 2026-10-01');
+		expect(preserved).toContain('la glosa escrita a mano de la factura del 2026-11-01');
+		expect(preserved).toContain('el descuento puntual de la factura del 2026-11-01');
+		expect(preserved).toContain('la cantidad consumida registrada en la factura del 2026-12-01 (7)');
+		expect(preserved).toContain('el tipo de cambio fijado en la factura del 2026-12-01');
+		// La glosa se regenera solo en las líneas sin protección (ni la escrita a mano ni la editada).
+		expect(ops(plan, 'regenerate_descriptions')).toEqual([{ kind: 'regenerate_descriptions', line_ids: ['line-12-lic'] }]);
+		expect(plan.event.metadata.preserved).toHaveLength(5);
+	});
+
+	it('glosa, tipo, precio anual y descuento: cambios antes → después; un solo ítem con valor por cambio; sin modelo de precio ni espejos', () => {
+		const plan = correct(
+			[
+				{
+					item_id: LICENCIA,
+					product_name: ' Licencia Pro ',
+					item_type: 'Licencias',
+					price_entry_mode: 'annual',
+					unit_price: 1440,
+					discount_value: 10,
+				},
+			],
+			{
+				invoices: [],
+			}
+		);
+
+		expect(plan.preview.items_after![0].changes).toEqual([
+			{ field: 'product_name', before: 'Licencia', after: 'Licencia Pro' },
+			{ field: 'item_type', before: 'Recurrente', after: 'Licencias' },
+			{ field: 'price_entry_mode', before: 'monthly', after: 'annual' },
+			{ field: 'unit_price', before: 100, after: 1440 },
+			{ field: 'discount_value', before: 0, after: 10 },
+		]);
+		expect(ops(plan, 'update_item')[0].set).toMatchObject({
+			product_name: 'Licencia Pro',
+			item_type: 'Licencias',
+			unit_price: 120,
+			annual_unit_price: 1440,
+			price_entry_mode: 'annual',
+			discount_type: 'Porcentaje',
+			discount_value: 10,
+			final_price: 12960,
+			monthly_price: 1080,
+		});
+		expect(plan.event.description).toBe(
+			'"Licencia": glosa Licencia → Licencia Pro · tipo Recurrente → Licencias · precio ingresado mensual → anual · precio 100 → 1.440 · descuento 0 % → 10 %'
+		);
+		expect(
+			fields(() =>
+				correct([
+					{ item_id: LICENCIA, quantity: 2 },
+					{ item_id: SOPORTE, quantity: 2 },
+				])
+			)
+		).toEqual(['change.items']);
+		expect(fields(() => correct([{ item_id: LICENCIA, quantity: 0 }]))).toEqual(['change.items.0.quantity']);
+		expect(fields(() => correct([{ item_id: LICENCIA, product_name: '  ' }]))).toEqual(['change.items.0.product_name']);
+		expect(fields(() => correct([{ item_id: LICENCIA, quantity: 10 }]))).toEqual(['change.items.0']);
+		const priced = itemRow({
+			price_id: 'p',
+			raw: {
+				price_id: 'p',
+				price_model: 'graduated',
+				price_quantity_type: 'fixed',
+				price_tiers: [{ from: 1, to: null, per_unit_amount: 100, flat_amount: 0 }],
+			},
+		});
+
+		expect(fields(() => correct([{ item_id: LICENCIA, quantity: 12 }], { items: [priced, soporteRow()] }))).toEqual(['change.items.0']);
+		const mirror = itemRow({ id: '55555555-5555-4555-8555-555555555555', categoria: 'DOWNSELL', related_item_id: LICENCIA });
+
+		expect(fields(() => correct([{ item_id: mirror.id, quantity: 3 }], { items: [itemRow(), soporteRow(), mirror] }))).toEqual([
+			'change.items.0',
+		]);
+		// Glosa y tipo con cuenta de otro ítem en el mismo cambio: datos de varios ítems sí se corrigen juntos.
+		expect(
+			correct([
+				{ item_id: LICENCIA, item_type: 'X' },
+				{ item_id: SOPORTE, account: 'Sur' },
+			]).preview.can_apply
+		).toBe(true);
+	});
+});
+
+describe('preview por factura (`detail`): la factura real antes → después', () => {
+	it('baja: la PE prorrateada lleva sus líneas (cambiada / igual) y Neto, IVA y Total antes → después; la que pierde la línea la marca quitada', () => {
+		const plan = planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }));
+		const [november, december] = plan.preview.invoices.updated;
+
+		expect(november.detail).toMatchObject({
+			document_type: 'FACTURA',
+			issue_date: '2026-11-01',
+			billing_period_start: '2026-11-01',
+			tax_rate: 19,
+			before: { subtotal: 1200, tax: 228, total: 1428 },
+			after: { subtotal: 666.67, tax: 126.67, total: 793.34 },
+			invoice_currency_amounts: null,
+		});
+		expect(november.detail!.lines.map((line) => [line.product_name, line.status, line.before?.subtotal ?? null, line.subtotal])).toEqual([
+			['Licencia', 'changed', 1000, 466.67],
+			['Soporte', 'same', null, 200],
+		]);
+		expect(november.detail!.lines[0].billing_period_end).toBe('2026-11-14');
+		expect(december.detail!.lines.map((line) => [line.product_name, line.status])).toEqual([
+			['Licencia', 'removed'],
+			['Soporte', 'same'],
+		]);
+		expect(december.detail!.after).toEqual({ subtotal: 200, tax: 38, total: 238 });
+	});
+
+	it('anulada: todas sus líneas quitadas y sin "después"; NC espejo con sus líneas acreditadas y totales', () => {
+		const all = planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }, { item_id: SOPORTE }] }));
+		const [cancelled] = all.preview.invoices.cancelled;
+
+		expect(cancelled.detail).toMatchObject({ before: { subtotal: 1200, tax: 228, total: 1428 }, after: null });
+		expect(cancelled.detail!.lines.every((line) => line.status === 'removed')).toBe(true);
+
+		const credited = planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }, { effective_date: '2026-09-15' }));
+		const [note] = credited.preview.invoices.credit_notes;
+
+		expect(note.detail).toMatchObject({ document_type: 'NC', before: null, after: { subtotal: 533.33, tax: 101.33, total: 634.66 } });
+		expect(note.detail!.lines).toEqual([
+			expect.objectContaining({ product_name: 'Licencia', status: 'added', subtotal: 533.33, billing_period_start: '2026-09-15' }),
+		]);
+	});
+
+	it('alta que se funde con la PE del mes: las líneas del generador entran como agregadas', () => {
+		const plan = planChange(
+			context(),
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 2, unit_price: 300, end_date: '2027-06-30' }] },
+				{ reason: 'Nuevo módulo' }
+			)
+		);
+		const [december] = plan.preview.invoices.updated;
+
+		expect(december.detail!.lines.map((line) => [line.product_name, line.status, line.subtotal])).toEqual([
+			['Licencia', 'same', 1000],
+			['Soporte', 'same', 200],
+			['Analítica', 'added', 320],
+			['Analítica', 'added', 600],
+		]);
+		expect(december.detail!.after).toEqual({ subtotal: 2120, tax: 402.8, total: 2522.8 });
 	});
 });

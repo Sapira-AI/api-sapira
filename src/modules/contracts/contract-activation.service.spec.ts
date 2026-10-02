@@ -520,12 +520,15 @@ describe('ContractActivationService.activate', () => {
 
 		// Booking (hoy si es null) y company_currency = la de la compañía emisora (regla v2), con el contrato todavía en
 		// borrador; FX a sistema antes del estado.
-		const booking = runner.query.mock.calls.find(([sql]) => (sql as string).includes('booking_date = COALESCE(booking_date, CURRENT_DATE)'))!;
+		const booking = runner.query.mock.calls.find(([sql]) => (sql as string).includes('booking_date = COALESCE(booking_date, $4::date)'))!;
 
 		expect(booking[0]).toContain(
 			'company_currency = COALESCE((SELECT co.currency FROM companies co WHERE co.id = contracts.company_id), company_currency)'
 		);
-		expect(booking[1]).toEqual([A, 'h-1', 'En revisión']);
+		// "Hoy" del holding (America/Santiago), no CURRENT_DATE del servidor de base.
+		// Fin del contrato con la regla única (mayor fin de los recurrentes vivos), escrito en borrador.
+		expect(booking[0]).toContain('contract_end_date = $5::date');
+		expect(booking[1]).toEqual([A, 'h-1', 'En revisión', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.anything()]);
 		expect(index('booking_date = COALESCE')).toBeLessThan(index('UPDATE contracts SET status'));
 		expect(index('UPDATE contracts SET fx_rate_to_system')).toBeGreaterThan(index('booking_date = COALESCE'));
 		expect(index('UPDATE contracts SET fx_rate_to_system')).toBeLessThan(index('UPDATE contracts SET status'));
@@ -693,6 +696,8 @@ describe('ContractsController (acciones masivas y activación)', () => {
 		{} as ContractInvoiceDescriptionsService,
 
 		{} as ContractInvoiceEditService,
+		{} as never,
+		{} as never,
 		{} as never,
 		{} as never,
 		{} as never,

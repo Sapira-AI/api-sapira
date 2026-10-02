@@ -28,6 +28,8 @@ import { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo
 	"(categoria IS NULL) OR (categoria = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text]))"
 )
 @Check('contract_items_discount_type_check', "discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])")
+// Bloque Modificaciones B2 (migración 1790710000000-ContractModificationsBlock2, spec modificaciones §9.3.9): ciclo propio del ítem.
+@Check('contract_items_billing_anchor_day_check', '"billing_anchor_day" IS NULL OR ("billing_anchor_day" >= 1 AND "billing_anchor_day" <= 31)')
 @Index('idx_contract_items_auto_renew_end_date', ['auto_renew', 'end_date'], { where: 'auto_renew = true' })
 @Index('idx_contract_items_categoria', ['categoria'])
 @Index('idx_contract_items_churn_date', ['churn_date'], { where: 'churn_date IS NOT NULL' })
@@ -261,6 +263,18 @@ export class ContractItem {
 		nullable: true,
 	})
 	price_id?: string | null;
+
+	/**
+	 * Ciclo propio del ítem (spec modificaciones §9.3.9, migración `1790710000000-ContractModificationsBlock2`): sus períodos parten ese
+	 * día, sin tramo prorrateado, y emite en su propia fecha. NULL = ciclo del contrato (`contracts.billing_anchor_day`).
+	 */
+	@Column({
+		type: 'smallint',
+		comment:
+			'Ciclo propio del ítem (1–31): sus períodos parten ese día, sin tramo prorrateado, y emite en su propia fecha. NULL = ciclo del contrato (contracts.billing_anchor_day)',
+		nullable: true,
+	})
+	billing_anchor_day?: number | null;
 
 	@ManyToOne(() => Contract, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'contract_id', referencedColumnName: 'id', foreignKeyConstraintName: 'contract_items_contract_id_fkey' })

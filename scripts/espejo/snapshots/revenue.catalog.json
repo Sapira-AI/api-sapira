@@ -217,7 +217,7 @@
    {
     "name": "revenue_schedule_monthly_momentum_check",
     "type": "c",
-    "expr": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text])"
+    "expr": "momentum = ANY (ARRAY['NEW'::text, 'REACTIVATION'::text, 'UPSELL'::text, 'CROSS-SELL'::text, 'DOWNSELL'::text, 'CHURN'::text, 'RENEWAL'::text, 'BOP'::text, 'PENDING_RENEWAL'::text, 'PAUSE'::text, 'RESUME'::text])"
    },
    {
     "name": "revenue_schedule_monthly_pkey",
