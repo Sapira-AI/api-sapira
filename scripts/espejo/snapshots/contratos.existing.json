@@ -669,6 +669,14 @@
     "unique": false,
     "where": "(salesforce_opportunity_id IS NOT NULL)"
    },
+   "contracts_holding_number_unique": {
+    "columns": [
+     "holding_id",
+     "contract_number"
+    ],
+    "unique": true,
+    "where": "(deleted_at IS NULL)"
+   },
    "idx_contracts_holding_id": {
     "columns": [
      "holding_id"

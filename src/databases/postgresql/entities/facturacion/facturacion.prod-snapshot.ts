@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-01 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-02 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -233,6 +233,9 @@ export const FACTURACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			created_by: true,
 			created_at: false,
 			bank_movement_id: true,
+			original_amount: true,
+			fx_rate: true,
+			settlement_reason: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -246,7 +249,7 @@ export const FACTURACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			},
 		},
 		uniques: {},
-		checks: [],
+		checks: ['invoice_payments_original_check', 'invoice_payments_settlement_reason_check'],
 		indexes: {
 			idx_invoice_payments_bank_movement: {
 				columns: ['bank_movement_id'],

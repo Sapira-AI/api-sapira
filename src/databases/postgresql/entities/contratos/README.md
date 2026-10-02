@@ -1,7 +1,7 @@
-# Módulo 5 · Contratos — 24 tablas de prod (2026-10-01)
+# Módulo 5 · Contratos — 24 tablas de prod (2026-10-02)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-01 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/contratos.{pgmeta,catalog}.json`); metadata real de las entities existentes en `contratos.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-02 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/contratos.{pgmeta,catalog}.json`); metadata real de las entities existentes en `contratos.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (8) — no se tocaron ni se duplicaron
 
@@ -9,7 +9,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `contracts` (699) | `src/databases/postgresql/entities/contratos/contract.entity.ts` · `Contract` | ⚠️ difiere de prod | — | — | — | nombre de PK `contracts_pkey`<br>CHECK `contracts_billing_anchor_day_check`<br>CHECK `contracts_document_type_check`<br>CHECK `contracts_fx_company_policy_check`<br>CHECK `contracts_fx_invoice_policy_check`<br>CHECK `contracts_legacy_status_check`<br>CHECK `contracts_status_check`<br>índice `contracts_holding_number_unique` (UNIQUE, parcial)<br>índice con expresión `idx_contracts_custom_fields` |
+| `contracts` (699) | `src/databases/postgresql/entities/contratos/contract.entity.ts` · `Contract` | ⚠️ difiere de prod | — | — | — | nombre de PK `contracts_pkey`<br>CHECK `contracts_billing_anchor_day_check`<br>CHECK `contracts_document_type_check`<br>CHECK `contracts_fx_company_policy_check`<br>CHECK `contracts_fx_invoice_policy_check`<br>CHECK `contracts_legacy_status_check`<br>CHECK `contracts_status_check`<br>índice con expresión `idx_contracts_custom_fields` |
 | `tax_document_types` (17) | `src/databases/postgresql/entities/contratos/tax-document-type.entity.ts` · `TaxDocumentType` | ⚠️ difiere de prod | — | — | — | nombre de PK `tax_document_types_pkey`<br>CHECK `tax_document_types_kind_check` |
 | `billable_metrics` (1) | `src/databases/postgresql/entities/contratos/billable-metric.entity.ts` · `BillableMetric` | ⚠️ difiere de prod | — | — | — | nombre de PK `billable_metrics_pkey`<br>CHECK `billable_metrics_aggregation_check`<br>CHECK `billable_metrics_source_kind_check`<br>CHECK `billable_metrics_status_check` |
 | `prices` (1) | `src/databases/postgresql/entities/contratos/price.entity.ts` · `Price` | ⚠️ difiere de prod | — | — | — | nombre de PK `prices_pkey`<br>CHECK `prices_cap_minimum_check`<br>CHECK `prices_contract_owner_check`<br>CHECK `prices_invoice_line_mode_check`<br>CHECK `prices_metered_metric_check`<br>CHECK `prices_model_check`<br>CHECK `prices_owner_check`<br>CHECK `prices_quantity_type_check`<br>CHECK `prices_status_check` |

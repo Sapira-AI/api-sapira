@@ -3000,6 +3000,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "ignore_reason",
+					"attnum": 20,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
 				}
 			],
 			"constraints": [
@@ -3060,7 +3076,7 @@
 				{
 					"name": "bank_movements_status_check",
 					"type": "c",
-					"def": "CHECK ((status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])))",
+					"def": "CHECK ((status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text, 'Ignorado'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -3120,6 +3136,12 @@
 					"name": "idx_bank_movements_status",
 					"def": "CREATE INDEX idx_bank_movements_status ON public.bank_movements USING btree (status)",
 					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "uq_bank_movements_fingerprint",
+					"def": "CREATE UNIQUE INDEX uq_bank_movements_fingerprint ON public.bank_movements USING btree (holding_id, ((original_row_data ->> 'fingerprint'::text))) WHERE ((original_row_data ->> 'fingerprint'::text) IS NOT NULL)",
+					"unique": true,
 					"primary": false
 				}
 			],
@@ -21107,7 +21129,7 @@
 					"num_prec": null,
 					"num_scale": null,
 					"notnull": true,
-					"default": "true",
+					"default": "false",
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
@@ -23609,6 +23631,54 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "original_amount",
+					"attnum": 14,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "fx_rate",
+					"attnum": 15,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "settlement_reason",
+					"attnum": 16,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
 				}
 			],
 			"constraints": [
@@ -23631,9 +23701,27 @@
 					"onupdate": "a"
 				},
 				{
+					"name": "invoice_payments_original_check",
+					"type": "c",
+					"def": "CHECK ((((original_amount IS NULL) = (fx_rate IS NULL)) AND ((original_amount IS NULL) OR (bank_movement_id IS NOT NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
 					"name": "invoice_payments_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "invoice_payments_settlement_reason_check",
+					"type": "c",
+					"def": "CHECK (((settlement_reason IS NULL) OR (settlement_reason = ANY (ARRAY['bank_fee'::text, 'withholding'::text, 'fx_difference'::text, 'rounding'::text, 'other'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -63298,7 +63386,7 @@
 		},
 		{
 			"name": "after_invoice_payment_change",
-			"def": "CREATE OR REPLACE FUNCTION public.after_invoice_payment_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN\n    PERFORM public.recalc_invoice_status(NEW.invoice_id);\n  ELSIF TG_OP = 'DELETE' THEN\n    PERFORM public.recalc_invoice_status(OLD.invoice_id);\n  END IF;\n  RETURN NULL;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.after_invoice_payment_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  -- Costura sapira.writer: en una transacción de la API (v2, módulo billing) este trigger no hace nada; la API recalcula el estado por pagos\n  -- (Pagada solo con pagos en la moneda de la factura, nunca sobre Por Emitir, y hacia atrás al anular un pago). El front viejo nunca fija\n  -- la marca: para él el trigger sigue igual. Regla: docs/reglas-desarrollo/logica-en-api-triggers.md; spec-facturacion-v2 §8.\n  IF current_setting('sapira.writer', true) = 'api' THEN\n    RETURN NULL;  -- AFTER: el valor de retorno se ignora\n  END IF;\n\n  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN\n    PERFORM public.recalc_invoice_status(NEW.invoice_id);\n  ELSIF TG_OP = 'DELETE' THEN\n    PERFORM public.recalc_invoice_status(OLD.invoice_id);\n  END IF;\n  RETURN NULL;\nEND;\n$function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": ""
@@ -65069,9 +65157,9 @@
 		},
 		{
 			"name": "revenue_schedule_rebuild",
-			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_rebuild(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  -- Step 1: Calcular en moneda de contrato\n  PERFORM public.revenue_schedule_rebuild_contract_ccy(p_contract_id, p_from_month);\n  \n  -- Step 2: Aplicar FX\n  PERFORM public.revenue_schedule_apply_fx_for_contract(p_contract_id, p_from_month);\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.revenue_schedule_rebuild(p_contract_id uuid, p_from_month date DEFAULT NULL::date)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  -- Step 1: Calcular en moneda de contrato\n  PERFORM public.revenue_schedule_rebuild_contract_ccy(p_contract_id, p_from_month);\n\n  -- Step 2: Aplicar FX\n  PERFORM public.revenue_schedule_apply_fx_for_contract(p_contract_id, p_from_month);\n\n  -- Step 3 (01-10, D19): el rebuild borra las filas del contrato, incluida la cola PENDING_RENEWAL que escribe\n  -- apply_pending_renewal_tail; hasta hoy esa cola solo volvía con el cron de las 06:00 (refresh-pending-renewals) o con el trigger\n  -- de ítems, así que \"Por renovar\" quedaba en 0 el resto del día tras cualquier rebuild (v2 lo llama en cada cambio, consumo o\n  -- edición de factura). Se regenera aquí mismo: idempotente y ya aplica su propio FX.\n  PERFORM public.apply_pending_renewal_tail(p_contract_id);\nEND;\n$function$\n",
 			"extension": null,
-			"comment": "Wrapper: Rebuilds revenue schedule by calling contract_ccy calculation and FX application sequentially.\nCompatible with existing triggers (p_from_month defaults to NULL for full rebuild).",
+			"comment": "Wrapper: rebuild en moneda de contrato → FX → cola PENDING_RENEWAL (apply_pending_renewal_tail, 01-10: antes la cola solo volvía con el cron de las 06:00 y Por renovar quedaba en 0 tras cada rebuild). Compatible with existing triggers (p_from_month defaults to NULL for full rebuild).",
 			"identity_args": "p_contract_id uuid, p_from_month date"
 		},
 		{

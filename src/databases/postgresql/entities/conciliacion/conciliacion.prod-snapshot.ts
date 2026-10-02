@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-01 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-02 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -33,6 +33,7 @@ export const CONCILIACION_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			match_confidence: true,
 			match_score: true,
 			original_row_data: true,
+			ignore_reason: true,
 		},
 		primary: ['id'],
 		foreignKeys: {

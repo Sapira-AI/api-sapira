@@ -1,7 +1,7 @@
-# Módulo 10 · Integraciones — Stripe — 7 tablas de prod (2026-10-01)
+# Módulo 10 · Integraciones — Stripe — 7 tablas de prod (2026-10-02)
 
 > Convención y reglas: `../../README.md`. Rarezas verificadas: `../../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-01 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-stripe.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-stripe.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-02 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-stripe.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-stripe.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (7) — no se tocaron ni se duplicaron
 
@@ -15,7 +15,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `stripe_subscriptions_stg` (490) | `src/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity.ts` · `StripeSubscriptionsStg` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_subscriptions_stg_pkey` |
 | `stripe_product_mappings` (73) | `src/databases/postgresql/entities/integraciones/stripe/stripe-product-mapping.entity.ts` · `StripeProductMapping` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_product_mappings_pkey` |
 | `stripe_sync_jobs` (216) | `src/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity.ts` · `StripeSyncJob` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_sync_jobs_pkey`<br>índice con expresión `idx_stripe_sync_jobs_created_at` |
-| `stripe_customers_bigquery` (27671) | `src/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity.ts` · `StripeCustomerBigQuery` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_customers_bigquery_pkey` |
+| `stripe_customers_bigquery` (27673) | `src/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity.ts` · `StripeCustomerBigQuery` | ⚠️ difiere de prod | — | — | — | nombre de PK `stripe_customers_bigquery_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (0): 0 promovidas, 0 apagadas
 

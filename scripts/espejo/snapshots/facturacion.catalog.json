@@ -881,11 +881,21 @@
     "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
    },
    {
+    "name": "invoice_payments_original_check",
+    "type": "c",
+    "expr": "((original_amount IS NULL) = (fx_rate IS NULL)) AND ((original_amount IS NULL) OR (bank_movement_id IS NOT NULL))"
+   },
+   {
     "name": "invoice_payments_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "invoice_payments_settlement_reason_check",
+    "type": "c",
+    "expr": "(settlement_reason IS NULL) OR (settlement_reason = ANY (ARRAY['bank_fee'::text, 'withholding'::text, 'fx_difference'::text, 'rounding'::text, 'other'::text]))"
    }
   ],
   "indexes": [

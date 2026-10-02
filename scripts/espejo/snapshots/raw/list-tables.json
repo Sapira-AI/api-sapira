@@ -1144,7 +1144,7 @@
 		{
 			"name": "public.app_notifications",
 			"rls_enabled": true,
-			"rows": 2,
+			"rows": 16,
 			"columns": [
 				{
 					"name": "id",
@@ -1432,7 +1432,7 @@
 		{
 			"name": "public.bank_movements",
 			"rls_enabled": true,
-			"rows": 158,
+			"rows": 167,
 			"columns": [
 				{
 					"name": "id",
@@ -1621,6 +1621,16 @@
 					"data_type": "jsonb",
 					"format": "jsonb",
 					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "ignore_reason",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
 					"options": [
 						"nullable",
 						"updatable"
@@ -12912,7 +12922,7 @@
 					"options": [
 						"updatable"
 					],
-					"default_value": "true"
+					"default_value": "false"
 				},
 				{
 					"name": "email_from",
@@ -14288,6 +14298,36 @@
 						"nullable",
 						"updatable"
 					]
+				},
+				{
+					"name": "original_amount",
+					"data_type": "numeric",
+					"format": "numeric",
+					"type": "numeric",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "fx_rate",
+					"data_type": "numeric",
+					"format": "numeric",
+					"type": "numeric",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "settlement_reason",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
 				}
 			],
 			"primary_keys": [
@@ -14822,7 +14862,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9788,
+			"rows": 9863,
 			"columns": [
 				{
 					"name": "id",
@@ -20829,7 +20869,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21073,
+			"rows": 21091,
 			"columns": [
 				{
 					"name": "id",
@@ -21682,7 +21722,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 118,
+			"rows": 121,
 			"columns": [
 				{
 					"name": "id",
@@ -22233,7 +22273,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 175,
+			"rows": 179,
 			"columns": [
 				{
 					"name": "id",
@@ -22832,7 +22872,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 158,
+			"rows": 162,
 			"columns": [
 				{
 					"name": "id",
@@ -24098,7 +24138,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 26,
+			"rows": 28,
 			"columns": [
 				{
 					"name": "id",
@@ -24137,7 +24177,7 @@
 		{
 			"name": "public.sellers",
 			"rls_enabled": true,
-			"rows": 38,
+			"rows": 39,
 			"columns": [
 				{
 					"name": "id",
@@ -24761,7 +24801,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 27671,
+			"rows": 27673,
 			"columns": [
 				{
 					"name": "id",

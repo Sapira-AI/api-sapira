@@ -1701,7 +1701,7 @@
  "sellers": {
   "name": "public.sellers",
   "rls_enabled": true,
-  "rows": 38,
+  "rows": 39,
   "columns": [
    {
     "name": "id",
