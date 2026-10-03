@@ -123,7 +123,7 @@ export class NotificationEmailService {
 
 	/**
 	 * **Reserva** (sin enviar) el correo inmediato de una alerta para los destinatarios indicados (ya filtrados por membresía y compañía) que
-	 * lo quieren: una fila `pending` en `notification_email_log` por usuario. Lo envía `sendDueAlerts` (job cada 5 minutos) cuando la fila
+	 * lo quieren: una fila `pending` en `notification_email_log` por usuario. Lo envía `sendDueAlerts` (job cada 15 minutos) cuando la fila
 	 * cumple la ventana de espera y la alerta sigue abierta. Clave de dedup: `alert:<id>:<gravedad>:<escalón>`; las alertas que llegan a
 	 * varios holdings usan `metadata.email_group` (`alert-group:<grupo>`). Al **escalar**, la fila pendiente anterior del mismo usuario y
 	 * alerta se reemplaza (`failed`, "reemplazada por escalamiento") y la nueva hereda su `created_at`: sale una sola vez, a la hora original.
@@ -170,7 +170,7 @@ export class NotificationEmailService {
 	}
 
 	/**
-	 * Job de la alerta inmediata (cada 5 minutos, `NotificationJobsScheduler`): envía las filas `pending` de kind `alert` con `created_at`
+	 * Job de la alerta inmediata (cada 15 minutos, `NotificationJobsScheduler`): envía las filas `pending` de kind `alert` con `created_at`
 	 * anterior a `now - delayMinutes` cuya alerta siga `open`. Si se resolvió (o se borró) en la ventana, la fila queda `failed` con
 	 * `error = 'resuelta antes de enviar'` y no sale nada. El asunto dice "Sigue pendiente" si el usuario ya tenía otra fila de la misma
 	 * alerta (escaló). Toma cada fila marcando `sent_at` antes de enviar (`pending` + `sent_at` = en envío): dos réplicas no duplican.

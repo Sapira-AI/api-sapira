@@ -223,7 +223,7 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
   **Qué hacer** (+ Qué hacemos nosotros), compañía si la hay, botón **Ver alerta** → `${INVITE_LANDING_URL}/lab/notificaciones?alerta=<id>`.
   Todo texto variable va escapado.
 - **Ventana de espera** (`NOTIFICATION_EMAIL_DELAY_MINUTES`, default **15** minutos; 03-10): la reserva es una fila `pending` en
-  `notification_email_log` (sin enviar). Un job **cada 5 minutos** (`NotificationJobsScheduler.alertEmails` → `NotificationEmailService.sendDueAlerts`)
+  `notification_email_log` (sin enviar). Un job **cada 15 minutos** (`NotificationJobsScheduler.alertEmails` → `NotificationEmailService.sendDueAlerts`)
   envía las filas `pending` de kind `alert` con `created_at <= now() - ventana` cuya alerta siga `open`. Si la alerta se resolvió (o se borró)
   dentro de la ventana, la fila queda `failed` con `error = 'resuelta antes de enviar'` y no sale nada (sin estado nuevo: el CHECK de la
   tabla no cambia, **sin migración**). Usuario inactivo o sin correo al momento de enviar: `failed`, `error = 'usuario inactivo o sin correo'`.
@@ -237,7 +237,7 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
   misma alerta salvo escalamiento. Alertas "globales" (falla de tipos de cambio en todos los holdings) usan `metadata.email_group` como clave
   (`alert-group:<grupo>`): un solo correo por usuario aunque llegue a varios holdings.
 - Llave general `NOTIFICATION_EMAILS_ENABLED` (default **activo**; `false` apaga todos los correos de este módulo: ni reserva ni envía; las
-  filas ya reservadas esperan). El job de 5 minutos **no** depende de `NOTIFICATION_JOBS_ENABLED`. Si existe `INVITE_TEST_ALLOWLIST` (QA),
+  filas ya reservadas esperan). El job de 15 minutos **no** depende de `NOTIFICATION_JOBS_ENABLED`. Si existe `INVITE_TEST_ALLOWLIST` (QA),
   solo salen a correos de la lista. Un fallo de correo nunca rompe al productor.
 
 ### 8.4 Resumen semanal

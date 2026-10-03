@@ -107,7 +107,7 @@ describe('NotificationEmailService (correo inmediato, contrato §8.3)', () => {
 		expect(build(undefined, { NOTIFICATION_EMAIL_DELAY_MINUTES: '-5' }).service.delayMinutes).toBe(15);
 	});
 
-	describe('sendDueAlerts (job cada 5 minutos)', () => {
+	describe('sendDueAlerts (job cada 15 minutos)', () => {
 		const pending = [
 			{
 				id: 'log-open',

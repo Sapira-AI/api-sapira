@@ -70,13 +70,13 @@ suscribibles con productor, con etiqueta y módulo.
   `alert-group:<grupo>` con `metadata.email_group`). `NOTIFICATION_EMAILS_ENABLED=false` apaga; en QA respeta `INVITE_TEST_ALLOWLIST`.
   Nunca lanza.
 - **Ventana de espera de la alerta** (`NOTIFICATION_EMAIL_DELAY_MINUTES`, default 15): `queueAlert` solo reserva la fila `pending`;
-  `sendDueAlerts` (job cada 5 minutos) envía las que cumplieron la ventana con la alerta aún `open`. Resuelta en la ventana → `failed`
+  `sendDueAlerts` (job cada 15 minutos) envía las que cumplieron la ventana con la alerta aún `open`. Resuelta en la ventana → `failed`
   con `error = 'resuelta antes de enviar'` (sin correo). Escalada en la ventana → la reserva anterior queda `failed` ("reemplazada por
   escalamiento") y la nueva hereda su `created_at`: un solo correo, con asunto "Sigue pendiente". Cada fila se toma con `sent_at` antes de
   enviar (réplicas sin duplicados). Sin migración: usa los estados `pending|sent|failed` existentes.
 - **Jobs** (`src/modules/notification-jobs/`): job horario (`NOTIFICATION_JOBS_ENABLED`); en la zona de cada holding, 07:xx cierre de mes
   (`MonthCloseService`, una alerta por compañía) y lunes 08:xx resumen semanal (`NotificationDigestService`, idempotente por semana; con
-  varias compañías con datos agrega "Por compañía": tareas, alertas de la semana y MRR del mes). Aparte, cada 5 minutos, el envío de
+  varias compañías con datos agrega "Por compañía": tareas, alertas de la semana y MRR del mes). Aparte, cada 15 minutos, el envío de
   alertas por correo (no depende de `NOTIFICATION_JOBS_ENABLED`).
 - **Correos internos** (facturas y tipos de cambio) son alertas del catálogo; las variables `INVOICE_ADMIN_EMAILS` /
   `BANCO_CENTRAL_ADMIN_EMAILS` quedan solo como respaldo si no hay destinatarios. El reporte de éxito de tipos de cambio ya no se envía.

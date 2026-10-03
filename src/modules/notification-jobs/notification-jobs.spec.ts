@@ -308,7 +308,7 @@ describe('job horario de notificaciones', () => {
 		expect(monthClose.run).not.toHaveBeenCalled();
 	});
 
-	it('cada 5 minutos envía las alertas por correo que cumplieron la ventana (no depende de NOTIFICATION_JOBS_ENABLED)', async () => {
+	it('cada 15 minutos envía las alertas por correo que cumplieron la ventana (no depende de NOTIFICATION_JOBS_ENABLED)', async () => {
 		const { scheduler, emails } = build({ NOTIFICATION_JOBS_ENABLED: 'false' });
 		const now = new Date('2026-10-05T11:10:00Z');
 
