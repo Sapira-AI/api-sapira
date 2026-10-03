@@ -1,6 +1,7 @@
 # Contrato API · Configuración v2
 
-> **v4 · 03-10-2026 · ronda 4** (§9: zona horaria, escalera de recordatorios, numeración de cotizaciones
+> **v5 · 03-10-2026 · usuarios** (§10: invitar, reenviar, acceso, eliminar invitación y recuperar contraseña §10.6; migraciones M15 y M16).
+> v4 · 03-10-2026 · ronda 4 (§9: zona horaria, escalera de recordatorios, numeración de cotizaciones
 > y documento tributario solo con cambio de razón social; migración M14).
 > v3 · 03-10-2026 · ronda 3 (§8: tasa por documento tributario (lectura por compañía), campos personalizados con más tipos,
 > país ISO y listas del holding en clientes, comunicaciones, detalle de tipos de
@@ -628,6 +629,133 @@ receptora (o la emisora, que hoy no tiene camino de cambio en un contrato activo
   el contrato usa catálogo).
 - Borradores (`PUT /contracts/drafts/:id`) y el alta siguen eligiendo documento libremente (aún no hay facturas).
 
+## 10. Usuarios: invitar, reenviar, acceso, eliminar (03-10, diseño aprobado por Domi)
+
+Todo bajo `/settings/users*` con `HoldingScopeGuard` + `@RequirePermission(EDIT_CONFIGURACION)`. Quien actúa sale **siempre de la
+sesión** (`PermissionContext`); ningún body lleva id de invitador ni de holding. Cada acción queda en `user_access_events` (M15).
+Supabase Auth se usa solo desde la API con la clave de servicio (`SupabaseAdminService`: `generateLink`, `updateUserById`, `deleteUser`);
+el correo sale por Resend desde la API (`AuthMailer`). Ambos viven en `src/auth/accounts/` (módulo `AuthAccountsModule`), compartidos
+con recuperar contraseña (§10.6).
+
+**Variables de entorno**
+
+| Variable | Uso |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Admin de Auth. Sin ellas → 503 `La invitación de usuarios no está configurada` |
+| `RESEND_API_KEY` | Envío del correo. Sin ella el correo cuenta como `failed` (la invitación queda creada) |
+| `INVITE_FROM` | Remitente de invitación y recuperación; default `Sapira <noreply@aisapira.com>` |
+| `EMAIL_LOGO_URL` | Opcional: logo PNG del correo; default `https://aisapira.com/assets/branding/email-logo-dark.png` |
+| `INVITE_LANDING_URL` | Base del enlace (front nuevo). Sin ella → 503 `La invitación de usuarios no está configurada` |
+| `INVITE_TEST_ALLOWLIST` | Opcional, **solo QA**: lista separada por comas de dominios (`aisapira.com`) o correos completos. Si existe, cualquier destinatario fuera → 400 `En este ambiente solo se puede invitar a correos autorizados para pruebas` (`errors[{ field: "email" }]`). Si no existe, no limita |
+
+**Correo** (plantillas versionadas en `src/auth/accounts/email-templates/`: layout común con la marca —logo, violeta `#4917C6`, pie
+`Sapira · aisapira.com`, tablas, estilos en línea, 600 px, texto alternativo—, HTML + texto plano, todo valor interpolado escapado):
+asunto `{Invitador} te invita a {Holding} en Sapira`; botón `Aceptar invitación`; nota `El enlace vence en 24 horas.`. Invitador =
+`users.name` (o correo) de quien actúa, Holding = `company_holdings.name`: **leídos de la base**, nunca del body. Enlace:
+`${INVITE_LANDING_URL}/auth/confirm?token_hash=<hash>&type=invite|magiclink&next=/dashboard` (`invite` si la cuenta de Auth se creó
+ahora; `magiclink` si ya existía o en reenvíos). Header `Idempotency-Key` = `invite-<user_id>-<n.º de envío>`.
+
+### 10.1 `POST /settings/users/invitations` · EDIT · máx. 20 por minuto por quien invita (429)
+
+Body `{ "email": "ana@cliente.com", "name": "Ana Pérez", "role_id": "uuid" }` (email válido, `name` 1–120, `role_id` UUID;
+el email se guarda `trim().toLowerCase()`).
+
+→ **201**
+```json
+{ "user": { …mismo shape que GET /settings/users… },
+  "invitation": { "status": "sent" | "failed", "sent_at": "2026-10-03T…Z" | null } }
+```
+Con `status: "failed"` agrega `"message": "La invitación quedó creada pero el correo no salió: usa Reenviar"`.
+
+| Caso | Respuesta |
+|---|---|
+| Rol que no es del holding | 404 `Rol no encontrado` |
+| Correo fuera de `INVITE_TEST_ALLOWLIST` (si está definida) | 400 (ver arriba) |
+| Ya es miembro activo de este holding | 409 `Ya tiene acceso a este holding` |
+| Es miembro desactivado de este holding | 409 `Está desactivado: reactívalo` |
+| Es super admin | 409 `No se puede invitar a este correo` |
+| Usa Sapira en otro holding (y no en este) | 409 `Esta persona ya usa Sapira en otra empresa: escríbenos a soporte` |
+| Supabase Auth falla (se deshace todo lo creado) | 502 `No se pudo crear la cuenta de acceso: vuelve a intentarlo en unos minutos` |
+| Más de 20 en 1 minuto | 429 |
+
+Flujo: transacción `users` (status `Pendiente`, `role_id`, `name`) + `user_holdings` (`is_active = true`) → `generateLink` tipo `invite`
+(`data.full_name`, `redirectTo` = enlace); si Auth responde `email_exists` → tipo `magiclink` → guarda `users.auth_id` → correo →
+`last_invitation_sent_at` / `last_invitation_status` (`sent` | `failed`) / `last_invitation_email_id` (id de Resend).
+
+### 10.2 `POST /settings/users/:id/invitation/resend` · EDIT
+
+→ **200** `{ "status": "sent" | "failed", "sent_at": "…" | null }` (con `failed` agrega `message: "El correo no salió: vuelve a intentarlo"`).
+Genera un token nuevo (`magiclink`) y manda el mismo correo.
+
+| Caso | Respuesta |
+|---|---|
+| No es miembro del holding, o es super admin | 404 `Usuario no encontrado` |
+| Ya inició sesión alguna vez, o no está Pendiente | 409 `Ya activó su cuenta` |
+| Su acceso a este holding está desactivado | 409 `Está desactivado: reactívalo` |
+| Último envío hace < 60 s | 429 `Espera un minuto antes de reenviar la invitación` |
+| Ya van 5 envíos en 24 h (contados en `user_access_events`: `invited` + `invitation_resent`) | 429 `Ya se enviaron 5 invitaciones en 24 horas: vuelve a intentarlo mañana` |
+| Supabase Auth falla | 502 `No se pudo generar el enlace: vuelve a intentarlo en unos minutos` |
+
+### 10.3 `PATCH /settings/users/:id/access` · EDIT
+
+Body `{ "active": true | false }` → **200** el usuario (shape de GET).
+
+| Caso | Respuesta |
+|---|---|
+| No es miembro del holding (super admin no visible) | 404 `Usuario no encontrado` |
+| Es uno mismo | 409 `No puedes desactivarte` |
+| Es super admin | 409 `El acceso de un super admin no se cambia desde aquí` |
+| Desactivar dejaría al holding sin quien edite la configuración | 409 `El holding quedaría sin nadie que pueda editar la configuración` |
+| Ya está en el estado pedido | 200 sin cambios (idempotente, sin evento) |
+
+- **Desactivar**: `user_holdings.is_active = false, selected = false` en este holding. Si no le quedan holdings activos:
+  `users.status = 'Inactivo'` y bloqueo en Auth (`ban_duration = 876000h`), así tampoco entra al front actual.
+- **Reactivar**: `user_holdings.is_active = true`. Si estaba `Inactivo`: `status = 'Activo'` si alguna vez entró (`last_access`), si no
+  `Pendiente`; desbloqueo en Auth (`ban_duration = none`). Si Auth falla al bloquear/desbloquear → 502 y no se cambia nada en la base.
+
+### 10.4 `DELETE /settings/users/:id` · EDIT → 204
+
+Solo invitaciones que nunca se usaron: `status = 'Pendiente'`, `last_access IS NULL` y **sin referencias** (cada FK hacia `users`,
+leída de `pg_constraint` en el momento, salvo las propias de la persona que caen en cascada: `user_holdings`, `user_view_preferences`,
+`app_notification_recipients`, y `user_access_events` que queda con `user_id = NULL`).
+- Si pertenece a otros holdings: solo se quita la membresía de este (la cuenta sigue).
+- Si no: se borra `users` y después la cuenta de Auth (`deleteUser`; si esto último falla queda registrado en el log, la fila ya no existe).
+
+| Caso | Respuesta |
+|---|---|
+| No es miembro del holding (o es super admin y quien consulta no lo es) | 404 `Usuario no encontrado` |
+| Super admin, uno mismo, Activo, Inactivo, ya entró alguna vez o con referencias | 409 `Ya activó su cuenta: desactívala en vez de eliminarla` |
+
+### 10.5 `GET /settings/users` (agrega)
+
+Cada usuario agrega:
+```json
+{ "access_active": true, "ever_signed_in": false, "invitation_status": "sent" | "failed" | null }
+```
+`access_active` = `user_holdings.is_active` de **este** holding (ya existía; se documenta); `ever_signed_in` = `last_access` no nulo;
+`invitation_status` = `users.last_invitation_status` normalizado (`sent` | `failed`; otro valor heredado del front actual → `sent`
+si hay `last_invitation_sent_at`, si no `null`).
+
+### 10.6 `POST /auth/password-recovery` · **público** (sin sesión ni holding)
+
+Recuperar contraseña pasa a la API: el correo de Supabase no tiene formato. Body `{ "email": "ana@cliente.com" }` (email válido; si no
+→ 400 de validación).
+
+→ **200 siempre** con el mismo cuerpo, exista o no la cuenta:
+```json
+{ "message": "Si el correo tiene una cuenta en Sapira, te enviamos un enlace para crear una nueva contraseña." }
+```
+- **Rate limit**: la llamada llega desde la BFF de Next, así que la API limita por la **IP real**: primera IP de `X-Forwarded-For` (la BFF
+  debe enviarla; si no viene, la IP del socket) → **10 por minuto** (`@Throttle`, 429; la BFF ya aplica 3/min por IP real). El límite que de
+  verdad protege es **por correo**: 1 por minuto y 5 por día (se omite **en silencio**, siempre 200).
+- Solo cuentas con `users.auth_id` y `status` distinto de `Inactivo` (un desactivado está baneado en Auth). Sin cuenta: no hace nada.
+- La respuesta no espera el trabajo (mismo tiempo exista o no el correo). `generateLink({ type: 'recovery', email, options: { redirectTo } })`
+  y correo por `AuthMailer` con su plantilla: asunto `Restablece tu contraseña de Sapira`, título `Restablece tu contraseña`, botón
+  `Crear nueva contraseña`, nota `El enlace vence en 24 horas. Si no lo pediste, ignora este correo.`.
+- Enlace: `${INVITE_LANDING_URL}/auth/confirm?token_hash=<hash>&type=recovery&next=/bienvenida?modo=recuperar` (`next` va codificado
+  en la URL: `next=%2Fbienvenida%3Fmodo%3Drecuperar`).
+- Errores de Auth o Resend solo se registran en el log (la respuesta no cambia).
+
 ## 11. Migraciones y assets
 
 | # | Archivo | Estado | Endpoints que la necesitan |
@@ -646,6 +774,9 @@ receptora (o la emisora, que hoy no tiene camino de cambio en un contrato activo
 | M13 | `1790840000000-ClientsCountryCode` | **sin aplicar** | `clients.country_code` y `client_entities.country_code` (FK `countries`) con backfill desde el texto (§8.8) |
 | M14 | `1790850000000-HoldingSettingsPreferencesV4` | **sin aplicar** | `holding_settings`: `timezone`, `renewal_reminder_days`, `renewal_overdue_every_days`, `quote_numbering_mode`, `quote_number_prefix`, `quote_number_include_year`, `quote_number_width` (defaults = comportamiento actual) (§9) |
 | S6 | `seed/006-tax-document-types-tax-rate.sql` | **sin aplicar** (no-op donde corrió M11) | tasas del catálogo en entornos nuevos, donde el seed 003 corre después de M11 |
+| M15 | `1790860000000-UserAccessEvents` | **sin aplicar** | tabla `user_access_events` (auditoría + límite de reenvíos), RLS sin policies. **Antes de desplegar** las acciones de usuarios (§10) |
+| M16 | `1790870000000-UserHoldingsReadOnlyForClients` | **sin aplicar** | `user_holdings_policy_direct` pasa a solo SELECT + `REVOKE INSERT, UPDATE, DELETE` de `anon`/`authenticated` (el asset `rls/user_holdings_policy_direct.sql` queda igual al estado nuevo) |
+| G40 | `grants/040-user-holdings-read-only.sql` | **sin aplicar** | mismo REVOKE como asset (por si se re-aplica `grants/000`) |
 
-Orden pendiente (QA y después prod, cada paso con OK): `migration:run` (M10, M11, M12, M13, M14) → `postgres:assets --apply --only seed/005-finanzas-view-configuracion.sql`
-→ `--only functions/create_default_roles_for_holding.sql` → `schema:snapshot` en prod → desplegar la API.
+Orden pendiente (QA y después prod, cada paso con OK): `migration:run` (M10, M11, M12, M13, M14, M15, M16) → `postgres:assets --apply --only seed/005-finanzas-view-configuracion.sql`
+→ `--only functions/create_default_roles_for_holding.sql` → `schema:snapshot` en prod → `postgres:assets --apply --only rls/user_holdings_policy_direct.sql --only grants/040-user-holdings-read-only.sql` (registran el estado que ya dejó M16) → desplegar la API.

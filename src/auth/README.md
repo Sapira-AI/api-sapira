@@ -9,7 +9,42 @@ No requieren Bearer. Las claves secretas viven solo en `api-sapira`.
 | `GET` | `/auth/public-config` | `{ recaptcha: { enabled, siteKey } }` para login y forms públicos |
 | `POST` | `/auth/recaptcha/verify` | Body `{ token, action }`. Acciones: `LOGIN`, `public_lead` |
 
+| `POST` | `/auth/password-recovery` | Body `{ email }`. **Siempre 200** con el mismo mensaje (no revela si existe). 10/min por IP real (primera de `X-Forwarded-For`, la envía la BFF; si no, la del socket); por correo 1/min y 5/día en silencio. Enlace `recovery` generado con la clave de servicio y correo con la marca (contrato Configuración §10.6) |
+
 Variables: `GOOGLE_RECAPTCHA_API_KEY`, `GOOGLE_RECAPTCHA_PROJECT_ID`, `GOOGLE_RECAPTCHA_SITE_KEY`, `RECAPTCHA_MIN_SCORE` (default `0.5`), `RECAPTCHA_ENABLED` (si es `false`, o si faltan las tres claves, se omite la validación). Hostnames permitidos: `localhost`, `127.0.0.1`, `www.aisapira.com`, `app.aisapira.com`, `aisapira.com` y los hosts de `FRONT_BASE_URL`.
+
+## Cuentas administradas por la API (`accounts/`)
+
+`AuthAccountsModule`: `SupabaseAdminService` (clave de servicio: `generateLink` invite/magiclink/recovery, ban, `deleteUser`) y `AuthMailer`
+(Resend). Lo usan recuperar contraseña y las acciones de usuarios de Configuración (`src/modules/settings`).
+Variables: `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `INVITE_LANDING_URL`, `INVITE_FROM`, `EMAIL_LOGO_URL`, `INVITE_TEST_ALLOWLIST`.
+
+### Plantillas de correo (`accounts/email-templates/`, versión `EMAIL_TEMPLATE_VERSION`)
+
+Layout común (`layout.ts`) + `invitation.ts` + `recovery.ts`, con la marca real del Sapira Design System (a3b828e2): colores exactos de
+`tokens/colors.css` (violeta `#4917C6`, tinta `#030418`, lila `#E9B0FF`, `--gradient-hero-dark`), Plus Jakarta Sans por `<link>` de Google Fonts
+con Helvetica/Arial de respaldo (Outlook fuerza Arial), logo vectorial oficial exportado a PNG @2x y check Lucide.
+
+- **Invitación:** hero con titular "Únete a {holding} en Sapira", botón "Aceptar invitación", saludo con quién invita y a qué empresa,
+  bloque "Tu rol: {rol}" + "Esto es lo que puedes hacer con tu rol:" con lo que el rol permite (cada línea con el mismo check) (desde la base al invitar y al reenviar: `roles` + `role_permissions` →
+  `roleCapabilities()` de `src/modules/settings/permissions-catalog.ts`: "Ver X" / "Ver y editar X" por módulo, períodos contables,
+  sin internos ni heredados; `ALL_PERMISSIONS` o todos → "Acceso completo a todos los módulos"), línea "También puedes entrar con tu cuenta
+  de Google o Microsoft…" con "Ir al inicio de sesión" (`${INVITE_LANDING_URL}/login?email=<correo>`, `authLoginUrl`), enlace alternativo y vencimiento de 24 h.
+- **Recuperar contraseña:** mismo hero, más sobrio: botón "Crear nueva contraseña", "Si usas Google o Microsoft, entra directamente desde el
+  inicio de sesión." (mismo enlace), aviso de seguridad, enlace alternativo y vencimiento.
+- **Variantes:** `renderInvitationEmail(values, { variant })` / `renderRecoveryEmail(values, { variant })`. `a` (default): hero con grilla
+  sutil sobre degradado violeta profundo (piezas de marca, base `#140047`) como imagen de fondo, `bgcolor` sólido y VML para Outlook, botón lila `#FFA7FF`. `b`: banda clara con degradado suave
+  (imagen decorativa con el logo) y el titular en el cuerpo blanco.
+- **Compatibilidad:** tablas, estilos en línea, 600 px fluido, sin SVG ni hojas de estilo propias (único `<link>`: la fuente; único `<style>`:
+  respaldo Arial en el condicional de Outlook), preheader oculto, `alt` en toda imagen, contraste AA. Modo oscuro: nunca hay texto sobre una
+  imagen clara (Gmail invierte colores, no imágenes); hero A y pie son oscuros por diseño.
+- **Seguridad:** todo texto variable pasa por `escapeHtml` en el layout; el asunto pasa por `oneLine`. Siempre hay versión texto plano.
+- **Assets:** `front-sapira/public/assets/branding/email/` → `https://aisapira.com/assets/branding/email/` (`hero-oscuro.jpg` 1200×900,
+  `hero-claro.png` 1200×360, `logo-claro.png` 280×70, `check.png` 48×48, el check de cada capacidad del rol). `assetBaseUrl` cambia la base
+  (previews locales). `EMAIL_LOGO_URL` reemplaza el logo del hero A y del pie: debe ser una versión **clara** (van sobre fondo oscuro).
+- **Previews:** `SAPIRA_EMAIL_PREVIEW_DIR=<carpeta> SAPIRA_EMAIL_ASSET_BASE=file:///<ruta>/front-sapira/public/assets/branding/email npx jest src/auth/accounts/auth-mailer.spec.ts`
+  escribe `invitacion-{a,b}.html` (rol Finanzas), `invitacion-admin-{a,b}.html` y `recuperar-{a,b}.html`; con base `file://`, también
+  `*-panel.html` con las imágenes en base64.
 
 Esta implementación permite validar tokens JWT generados por Supabase en tu backend NestJS.
 

@@ -7,7 +7,7 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 
 | Documento | Qué es |
 |---|---|
-| [`estado-v2-y-plan-switch.md`](./estado-v2-y-plan-switch.md) | **Leer primero.** Estado por módulo del front nuevo, lo que falta construir, pendientes por decisión y pasos previos y posteriores al switch (actualizado 02-10) |
+| [`estado-v2-y-plan-switch.md`](./estado-v2-y-plan-switch.md) | **Leer primero.** Estado por módulo del front nuevo, lo que falta construir, pendientes por decisión y pasos previos y posteriores al switch (actualizado 03-10) |
 | [`matriz-scope-migracion-front.md`](./matriz-scope-migracion-front.md) | Los 18 módulos × (front viejo, rpc/endpoints, roadmap, web pública): trenes, limpieza en 2 capas, decisiones |
 | [`inventario-rpc-front-viejo.md`](./inventario-rpc-front-viejo.md) | Las 79 funciones rpc() del front viejo + los 272 endpoints de la API: mapa de brechas y lista de "no borrar" |
 | [`auditoria-contratos.md`](./auditoria-contratos.md) | Auditoría del dominio Contratos (23-09): las 27 rpc (retirar/fusionar/delegar/portar), triggers, lecturas directas, hallazgos de seguridad y propuesta del módulo `contracts` |
@@ -29,6 +29,9 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`flexibilidad-con-trazabilidad.md`](./flexibilidad-con-trazabilidad.md) | Principio de producto: facturar distinto a lo planificado, con todo registrado |
 | [`budgets-forecast-real.md`](./budgets-forecast-real.md) | Feature: presupuesto vs proyección vs real |
 | [`spec-preonboarding-prueba-guiada.md`](./spec-preonboarding-prueba-guiada.md) | Flujo comercial pre-onboarding: sandbox guiado, clickwrap, sizing declarado, calculadora web (propuesta en discusión) |
+| [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) | Configuración v2: holding, compañías, usuarios y roles, catálogos, preferencias; §14 B reglas de reconocimiento de ingresos (pendiente) |
+| [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) | Contrato de endpoints de Configuración entre la BFF y api-sapira |
+| [`revision-seguridad-api.md`](./revision-seguridad-api.md) | Revisión de seguridad de la API: hallazgos numerados y urgentes para el bloque de seguridad (Domi + Leon) |
 | [`glosario.md`](./glosario.md) | Vocabulario oficial del modelo |
 | [`documentacion-publicable-y-mcp.md`](./documentacion-publicable-y-mcp.md) | Convención de docu publicable por módulo (docs públicas, OpenAPI, MCP de una sola fuente) |
 

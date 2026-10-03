@@ -6,6 +6,7 @@
  * Cada estado derivado tiene su gemelo SQL en `billing-sql.ts` (mismo orden de reglas) para filtrar y paginar en la base.
  * Fechas `YYYY-MM-DD` (texto, `todayFor`): se comparan como string; nunca `toISOString()`.
  */
+import { escapeHtml } from '@/core/utils/escape-html';
 import { diffDays } from '@/modules/contracts/billing-engine';
 import { CANCELLED_STATUS, creditNotePendingEmission, isCreditNote, PENDING_STATUS } from '@/modules/contracts/contract-360';
 
@@ -941,8 +942,8 @@ export function unknownTemplateVariables(template: string): string[] {
 	return [...new Set(found.filter((name) => !(TEMPLATE_VARIABLES as readonly string[]).includes(name)))];
 }
 
-export const escapeHtml = (value: string): string =>
-	value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/** Centralizado en `@/core/utils/escape-html` (lo usa también la invitación de usuarios); se reexporta para no cambiar importaciones. */
+export { escapeHtml };
 
 /** Reemplaza `{{variable}}` (catálogo) por su valor; con `html` escapa los valores y convierte saltos de línea (B-F18: nada sin escapar). */
 export function renderTemplate(template: string, values: Partial<Record<(typeof TEMPLATE_VARIABLES)[number], string | null>>, html: boolean): string {

@@ -15,7 +15,9 @@ import {
 	UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
+import { INVITE_THROTTLE } from '@/auth/accounts/actor-throttle';
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
@@ -23,9 +25,10 @@ import { PERMISSION_CODES } from '@/guards/permission-codes';
 import type { PermissionContext } from '@/guards/permissions.service';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
-import { ChangeUserRoleDto, CreateRoleDto, DuplicateRoleDto, PutRoleAlertsDto, UpdateRoleDto } from './dtos/roles.dto';
+import { ChangeUserRoleDto, CreateRoleDto, DuplicateRoleDto, InviteUserDto, PutRoleAlertsDto, UpdateRoleDto, UserAccessDto } from './dtos/roles.dto';
 import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 import { SettingsRolesService } from './settings-roles.service';
+import { SettingsUserAccessService } from './settings-user-access.service';
 import { SettingsUsersService } from './settings-users.service';
 
 import type { SettingsRequest } from './settings-common';
@@ -36,7 +39,7 @@ const actorOf = (req: SettingsRequest): PermissionContext => {
 	return req.permissionContext;
 };
 
-/** Usuarios y permisos (contrato §4–§5). Leer = VIEW_CONFIGURACION; escribir = EDIT_CONFIGURACION. */
+/** Usuarios y permisos (contrato §4–§5; acciones de acceso §10). Leer = VIEW_CONFIGURACION; escribir = EDIT_CONFIGURACION. */
 @ApiTags('Settings · Usuarios y roles')
 @Controller('settings')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
@@ -47,7 +50,8 @@ const actorOf = (req: SettingsRequest): PermissionContext => {
 export class SettingsAccessController {
 	constructor(
 		private readonly users: SettingsUsersService,
-		private readonly roles: SettingsRolesService
+		private readonly roles: SettingsRolesService,
+		private readonly access: SettingsUserAccessService
 	) {}
 
 	@Get('users')
@@ -66,6 +70,37 @@ export class SettingsAccessController {
 		@Request() req: SettingsRequest
 	) {
 		return this.users.changeRole(holdingId, id, body.role_id, actorOf(req));
+	}
+
+	@Post('users/invitations')
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@Throttle(INVITE_THROTTLE)
+	@ApiOperation({ summary: 'Invitar a una persona al holding (crea la cuenta, asigna rol y manda el correo). Contrato §10.1' })
+	invite(@HoldingId() holdingId: string, @Body() body: InviteUserDto, @Request() req: SettingsRequest) {
+		return this.access.invite(holdingId, body, actorOf(req));
+	}
+
+	@Post('users/:id/invitation/resend')
+	@HttpCode(200)
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Reenviar la invitación (token nuevo); solo Pendiente que nunca entró. Contrato §10.2' })
+	resendInvitation(@HoldingId() holdingId: string, @Param('id', ParseUUIDPipe) id: string, @Request() req: SettingsRequest) {
+		return this.access.resend(holdingId, id, actorOf(req));
+	}
+
+	@Patch('users/:id/access')
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Desactivar o reactivar el acceso a este holding. Contrato §10.3' })
+	setAccess(@HoldingId() holdingId: string, @Param('id', ParseUUIDPipe) id: string, @Body() body: UserAccessDto, @Request() req: SettingsRequest) {
+		return this.access.setAccess(holdingId, id, body.active, actorOf(req));
+	}
+
+	@Delete('users/:id')
+	@HttpCode(204)
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Eliminar una invitación que nunca se usó. Contrato §10.4' })
+	async removeInvitation(@HoldingId() holdingId: string, @Param('id', ParseUUIDPipe) id: string, @Request() req: SettingsRequest): Promise<void> {
+		await this.access.removeInvitation(holdingId, id, actorOf(req));
 	}
 
 	@Get('permissions')

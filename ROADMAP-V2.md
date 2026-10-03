@@ -5,7 +5,7 @@
 > "00-plan-y-metodo" del 21-08 (historia en git) y reemplaza las copias que divergían en
 > `sapira-ai` y `front-sapira`. El backlog de fixes del producto vivo es **otra documentación**:
 > [`docs/ROADMAP-OPERATIVO.md`](docs/ROADMAP-OPERATIVO.md) (copia espejo; canónico en `sapira-ai/docs/ROADMAP-OPERATIVO.md`) (ver [convención](#-fixes-del-producto-vivo--convención)).
-> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-10-02**.
+> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-10-03**.
 > **Estado al día y plan del switch:** [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) (leer primero en una sesión nueva).
 
 ## 🎯 Estrategia
@@ -76,11 +76,14 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 
 ### Fase 1 — Replicar el front que funciona en `front-sapira`, consumiendo la API 🔄 EN CURSO · ambos
 
-> **Avance al 02-10:** Fases 1 y 2 se están haciendo juntas, módulo a módulo, en el laboratorio de `front-sapira`
+> **Avance al 03-10:** Fases 1 y 2 se están haciendo juntas, módulo a módulo, en el laboratorio de `front-sapira`
 > (`/lab/<modulo>`): cada módulo se construye una sola vez contra `api-sapira`, ya con el diseño nuevo. Construidos:
-> Clientes, Contratos, Cotizaciones, Facturación, Ingresos, Métricas y la primera versión de Precios. Faltan:
-> Configuración (usuarios, roles, permisos), Notificaciones, Automatizaciones, Integraciones, segunda vuelta de Precios,
-> onboarding/datos históricos y documentación de soporte. Detalle, pendientes por decisión y pasos previos al switch en
+> Clientes, Contratos, Cotizaciones, Facturación, Ingresos, Métricas, la primera versión de Precios y Configuración ✅
+> (en producción 03-10: holding, compañías, usuarios y roles con matriz de permisos). Sin commit todavía: gestión de
+> usuarios con correos propios (Resend) y el Centro de ayuda `/ayuda`, que reemplaza a `/documentacion` (meta: dar de
+> baja HelpKit y Notion). Siguen: configuración externa (Supabase Auth, variables) → Notificaciones → Integraciones →
+> Automatizaciones → segunda vuelta de Precios → reglas de reconocimiento de ingresos → onboarding/datos históricos →
+> switch. Detalle, pendientes por decisión y pasos previos al switch en
 > [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md).
 
 Los pasos 4–5 originales ("inventario y versión final de funciones/triggers") **reformulados**: la

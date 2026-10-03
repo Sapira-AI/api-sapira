@@ -5,8 +5,10 @@ import { RequestMethod } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { getStorageToken } from '@nestjs/throttler';
 import { DataSource } from 'typeorm';
 
+import { AuthAccountsModule } from '@/auth/accounts/auth-accounts.module';
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PermissionsService } from '@/guards/permissions.service';
@@ -25,6 +27,7 @@ import { SettingsCompaniesController } from './settings-companies.controller';
 import { SettingsCustomFieldsController } from './settings-custom-fields.controller';
 import { SettingsHoldingController } from './settings-holding.controller';
 import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
+import { SettingsUserAccessService } from './settings-user-access.service';
 import { SettingsModule } from './settings.module';
 
 /**
@@ -89,6 +92,8 @@ describe('Controladores de Configuración y Productos', () => {
 			providers: [
 				...(metadata(SettingsModule, MODULE_METADATA.PROVIDERS) as never[]),
 				...(metadata(ProductsModule, MODULE_METADATA.PROVIDERS) as never[]),
+				...(metadata(AuthAccountsModule, MODULE_METADATA.PROVIDERS) as never[]),
+				{ provide: getStorageToken(), useValue: { increment: jest.fn() } },
 				HoldingScopeGuard,
 				RequirePermissionGuard,
 				PermissionsService,
@@ -105,7 +110,8 @@ describe('Controladores de Configuración y Productos', () => {
 
 		expect(moduleRef.get(SettingsCompaniesController)).toBeDefined();
 		expect(moduleRef.get(ProductsController)).toBeDefined();
-		expect(Reflect.getMetadata(MODULE_METADATA.IMPORTS, SettingsModule)).toEqual(expect.arrayContaining([expect.anything()]));
+		expect(Reflect.getMetadata(MODULE_METADATA.IMPORTS, SettingsModule)).toEqual(expect.arrayContaining([AuthAccountsModule]));
+		expect(moduleRef.get(SettingsUserAccessService)).toBeDefined();
 		await moduleRef.close();
 	});
 });

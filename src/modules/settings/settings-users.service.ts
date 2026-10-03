@@ -6,7 +6,16 @@ import type { PermissionContext } from '@/guards/permissions.service';
 import { assertKeepsConfigAdmin } from './settings-admins';
 import { Row, toCount } from './settings-common';
 
-const userDto = (row: Row, actor: PermissionContext) => ({
+/** `last_invitation_status` normalizado: `sent` | `failed`; otro valor heredado del front actual → `sent` si hubo envío, si no `null`. */
+export function invitationStatus(row: Row): 'sent' | 'failed' | null {
+	const raw = (row.last_invitation_status as string | null) ?? null;
+
+	if (raw === 'sent' || raw === 'failed') return raw;
+
+	return row.last_invitation_sent_at ? 'sent' : null;
+}
+
+export const userDto = (row: Row, actor: PermissionContext) => ({
 	id: String(row.id),
 	name: (row.name as string | null) ?? null,
 	email: String(row.email),
@@ -14,6 +23,9 @@ const userDto = (row: Row, actor: PermissionContext) => ({
 	access_active: row.access_active === true,
 	last_access: row.last_access ?? null,
 	last_invitation_sent_at: row.last_invitation_sent_at ?? null,
+	/** Alguna vez inició sesión (`last_access`, lo marca `sync_user_on_login`). Reenviar y eliminar invitación solo si es `false`. */
+	ever_signed_in: row.last_access !== null && row.last_access !== undefined,
+	invitation_status: invitationStatus(row),
 	role: row.role_id ? { id: String(row.role_id), name: String(row.role_name) } : null,
 	is_super_admin: row.is_super_admin === true,
 	is_self: String(row.id) === actor.userId,
@@ -21,20 +33,23 @@ const userDto = (row: Row, actor: PermissionContext) => ({
 	holdings_count: toCount(row.holdings_count),
 });
 
+/** Miembro del holding con su rol (si es de este holding) y su acceso aquí. Se filtra con `WHERE uh.holding_id = $1 …`. */
+export const USER_SELECT = `SELECT u.id, u.name, u.email, u.status, u.last_access, u.last_invitation_sent_at, u.last_invitation_status,
+		u.auth_id, COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name,
+		(SELECT count(*) FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true) AS holdings_count
+		FROM user_holdings uh
+		JOIN users u ON u.id = uh.user_id
+		LEFT JOIN roles r ON r.id = u.role_id AND r.holding_id = uh.holding_id`;
+
 /**
  * Usuarios del holding activo (spec §1.4). Pertenencia por `user_holdings`; el rol es `users.role_id` (uno por usuario, D1) y solo se
- * muestra si es de este holding. Invitar, reenviar, desactivar y eliminar invitación van al final del bloque (D5/D6).
+ * muestra si es de este holding. Invitar, reenviar, acceso y eliminar invitación: `SettingsUserAccessService` (contrato §10).
  */
 @Injectable()
 export class SettingsUsersService {
 	constructor(private readonly dataSource: DataSource) {}
 
-	private readonly select = `SELECT u.id, u.name, u.email, u.status, u.last_access, u.last_invitation_sent_at,
-		COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name,
-		(SELECT count(*) FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true) AS holdings_count
-		FROM user_holdings uh
-		JOIN users u ON u.id = uh.user_id
-		LEFT JOIN roles r ON r.id = u.role_id AND r.holding_id = uh.holding_id`;
+	private readonly select = USER_SELECT;
 
 	async list(holdingId: string, actor: PermissionContext) {
 		const rows = (await this.dataSource.query(

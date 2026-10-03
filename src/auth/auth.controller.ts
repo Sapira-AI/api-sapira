@@ -1,17 +1,35 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 
 import { Public } from '@/decorators/public.decorator';
 
+import { PasswordRecoveryService } from './accounts/password-recovery.service';
+import { PasswordRecoveryDto } from './dto/password-recovery.dto';
 import { VerifyRecaptchaDto } from './dto/verify-recaptcha.dto';
 import { RecaptchaService } from './services/recaptcha.service';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-	constructor(private readonly recaptchaService: RecaptchaService) {}
+	constructor(
+		private readonly recaptchaService: RecaptchaService,
+		private readonly passwordRecovery: PasswordRecoveryService
+	) {}
+
+	@Post('password-recovery')
+	@Public()
+	@HttpCode(200)
+	@Throttle({ short: { limit: 3, ttl: 60000 } })
+	@ApiOperation({
+		summary: 'Recuperar contraseña: manda el enlace con la marca (contrato Configuración §10.6). Siempre 200, no revela si el correo existe',
+	})
+	@ApiResponse({ status: 200, description: 'Mismo mensaje exista o no la cuenta' })
+	@ApiResponse({ status: 429, description: 'Más de 10 por minuto desde la misma IP real (X-Forwarded-For)' })
+	requestPasswordRecovery(@Body() dto: PasswordRecoveryDto) {
+		return this.passwordRecovery.request(dto.email);
+	}
 
 	@Get('public-config')
 	@Public()

@@ -662,6 +662,28 @@
     ]
    },
    {
+    "name": "user_access_events_actor_user_id_fkey",
+    "source_table": "public.user_access_events",
+    "source_columns": [
+     "actor_user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_access_events_user_id_fkey",
+    "source_table": "public.user_access_events",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "user_view_preferences_user_id_fkey",
     "source_table": "public.user_view_preferences",
     "source_columns": [
@@ -2076,6 +2098,17 @@
    {
     "name": "subscriptions_holding_id_fkey",
     "source_table": "public.subscriptions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_access_events_holding_id_fkey",
+    "source_table": "public.user_access_events",
     "source_columns": [
      "holding_id"
     ],
