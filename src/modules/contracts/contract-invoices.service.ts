@@ -4,7 +4,9 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
+import { erpErrorSentence, type ErpErrorTranslation, translateErpError } from '@/modules/invoices/erp-error-translation';
 import { InvoiceSchedulerService } from '@/modules/invoices/invoice-scheduler.service';
+import type { LastSendAttempt } from '@/modules/invoices/last-send-attempt';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
@@ -33,6 +35,7 @@ import {
 	type ReschedulePlanItem,
 	type SendNowPlan,
 	type StoredFxPolicy,
+	UNMAPPED_PRODUCTS_SQL,
 } from './contract-invoices';
 import { ContractsService } from './contracts.service';
 
@@ -57,7 +60,11 @@ const toIso = (value: unknown) => (value instanceof Date ? value.toISOString() :
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
-const INVOICE_SELECT = `SELECT i.id, i.invoice_number, i.status, i.document_type, i.invoice_type, i.is_active, i.is_legacy,
+/**
+ * SELECT de una factura con lo que necesitan las operaciones (alias `i`); lo reutiliza la cola Por emitir de Facturación (`billing`), que
+ * agrupa por `contract_id` para cargar el contexto de cada contrato (sin esa columna, toda factura quedaba como "sin contrato").
+ */
+export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_number, i.status, i.document_type, i.invoice_type, i.is_active, i.is_legacy,
 		i.issue_date::text AS issue_date, i.original_issue_date::text AS original_issue_date, i.scheduled_at::text AS scheduled_at, i.due_date::text AS due_date,
 		i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat, i.total_invoice_currency,
 		i.fx_contract_to_invoice, i.tax_rate, l.fx_rate_source, COALESCE(l.fx_explicit, false) AS fx_explicit, i.nc_revenue_treatment,
@@ -70,7 +77,7 @@ const INVOICE_SELECT = `SELECT i.id, i.invoice_number, i.status, i.document_type
 		i.client_entity_id, i.company_id, ce.legal_name,
 		l.period_start::text AS period_start, l.period_end::text AS period_end,
 		COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product, COALESCE(l.priced_base, 0) AS priced_base,
-		COALESCE(l.internal_lines, 0) AS internal_lines,
+		COALESCE(l.internal_lines, 0) AS internal_lines, ${UNMAPPED_PRODUCTS_SQL('i')} AS unmapped_products,
 		(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 			+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
 	FROM invoices i
@@ -85,6 +92,82 @@ const INVOICE_SELECT = `SELECT i.id, i.invoice_number, i.status, i.document_type
 		FROM invoice_items ii WHERE ii.invoice_id = i.id
 	) l ON true`;
 
+/** Contrato, compañía y razón social que gobiernan sus facturas (alias `c`; se completa con el WHERE). Lo reutiliza `billing` por lote. */
+export const CONTRACT_CONTEXT_SELECT = `SELECT c.id, c.contract_number, c.status, c.fx_invoice_policy, c.requires_references_for_billing, c.auto_send_to_odoo, c.payment_terms,
+		c.client_entity_id, ce.odoo_partner_id, ce.payment_terms AS entity_payment_terms, co.country AS company_country, co.odoo_integration_id,
+		public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date
+	FROM contracts c
+	LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
+	LEFT JOIN client_entities ce ON ce.id = c.client_entity_id AND ce.holding_id = c.holding_id`;
+
+/** `ContractInvoiceContext` desde una fila de `CONTRACT_CONTEXT_SELECT`. */
+export function contractInvoiceContextOf(row: Row, today: string): ContractInvoiceContext {
+	return {
+		contract_id: String(row.id),
+		contract_number: toText(row.contract_number),
+		contract_status: toText(row.status),
+		contract_fx_invoice_policy: toText(row.fx_invoice_policy),
+		contract_requires_references: row.requires_references_for_billing === true,
+		auto_send_to_erp: row.auto_send_to_odoo !== false,
+		payment_terms: parseJson(row.payment_terms),
+		entity_payment_terms: parseJson(row.entity_payment_terms),
+		company_country: toText(row.company_country),
+		has_erp_integration: row.odoo_integration_id !== null && row.odoo_integration_id !== undefined,
+		has_erp_partner: row.odoo_partner_id !== null && row.odoo_partner_id !== undefined,
+		has_entity: !!row.client_entity_id,
+		cutoff_date: toText(row.cutoff_date),
+		today,
+	};
+}
+
+/** `ContractInvoiceRow` desde una fila de `CONTRACT_INVOICE_SELECT`. */
+export function contractInvoiceRowOf(row: Row): ContractInvoiceRow {
+	return {
+		id: String(row.id),
+		invoice_number: toText(row.invoice_number),
+		status: toText(row.status),
+		document_type: toText(row.document_type),
+		invoice_type: toText(row.invoice_type),
+		is_active: row.is_active !== false,
+		is_legacy: row.is_legacy === true,
+		issue_date: toText(row.issue_date),
+		original_issue_date: toText(row.original_issue_date),
+		scheduled_at: toText(row.scheduled_at),
+		due_date: toText(row.due_date),
+		contract_currency: toText(row.contract_currency),
+		invoice_currency: toText(row.invoice_currency),
+		amount_contract_currency: toNumber(row.amount_contract_currency),
+		amount_invoice_currency: toNullableNumber(row.amount_invoice_currency),
+		vat: toNullableNumber(row.vat),
+		total_invoice_currency: toNullableNumber(row.total_invoice_currency),
+		fx_contract_to_invoice: toNullableNumber(row.fx_contract_to_invoice),
+		tax_rate: toNullableNumber(row.tax_rate),
+		fx_rate_source: toText(row.fx_rate_source),
+		fx_confirmed_at: toIso(row.fx_confirmed_at),
+		issued_externally: row.issued_externally === true,
+		odoo_invoice_id: toNullableNumber(row.odoo_invoice_id),
+		sent_to_odoo_at: toIso(row.sent_to_odoo_at),
+		sent_at: toIso(row.sent_at),
+		no_charge: row.no_charge === true,
+		auto_invoice: row.auto_invoice === true,
+		requires_references: row.requires_references_for_billing === true,
+		consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
+		client_entity_id: toText(row.client_entity_id),
+		company_id: toText(row.company_id),
+		legal_name: toText(row.legal_name),
+		period_start: toText(row.period_start),
+		period_end: toText(row.period_end),
+		lines_count: toNumber(row.lines_count),
+		lines_without_product: toNumber(row.lines_without_product),
+		unmapped_products: Array.isArray(row.unmapped_products) ? row.unmapped_products.map(String) : [],
+		references_count: toNumber(row.references_count),
+		priced_base: toNumber(row.priced_base),
+		internal_lines: toNumber(row.internal_lines),
+		nc_revenue_treatment: toText(row.nc_revenue_treatment),
+		fx_explicit: row.fx_explicit === true,
+	};
+}
+
 export interface InvoiceOperationEvent {
 	type: InvoiceEventType;
 	title: string;
@@ -98,11 +181,14 @@ export interface SendNowResult {
 	sent: boolean;
 	status: 'sent' | 'error' | 'skipped';
 	odoo_invoice_id: number | null;
+	/** Enviada: confirmación. No enviada: la frase traducida (`translateErpError`: qué pasó + paso siguiente), nunca el texto técnico. */
 	message: string;
+	/** No enviada: categoría, mensaje, paso siguiente, acción y texto técnico (`raw`, "detalle técnico"). null si se envió. */
+	error: ErpErrorTranslation | null;
 	blockers: InvoiceBlocker[];
 	warnings: InvoiceWarning[];
 	event_id: string | null;
-	invoice: Awaited<ReturnType<ContractsService['invoiceDetail']>>;
+	invoice: Awaited<ReturnType<ContractsService['invoiceDetail']>> & { last_send_attempt: LastSendAttempt | null };
 }
 
 /**
@@ -196,19 +282,32 @@ export class ContractInvoicesService {
 		} else {
 			this.logger.warn(`Envío manual de la factura ${invoice.id} no realizado (${result.status}): ${result.error ?? ''}`);
 		}
+		const error = sent ? null : translateErpError([result.error, result.details].filter(Boolean).join('. ') || null, result.errorType);
 
 		return {
 			sent,
 			status: result.status,
 			odoo_invoice_id: result.odooInvoiceId ?? null,
-			message: sent
-				? `Factura enviada al ERP (borrador ${result.odooInvoiceId ?? ''})`.trim()
-				: [result.error, result.details].filter(Boolean).join('. ') || 'El ERP no recibió la factura',
+			message: sent ? `Factura enviada al ERP (borrador ${result.odooInvoiceId ?? ''})`.trim() : erpErrorSentence(error!),
+			error,
 			blockers: [],
 			warnings: plan.warnings,
 			event_id: eventId,
-			invoice: await this.contracts.invoiceDetail(contract.id, invoice.id, holdingId),
+			invoice: await this.invoiceDetail(contract.id, invoice.id, holdingId),
 		};
+	}
+
+	/**
+	 * Detalle de la factura (`ContractsService.invoiceDetail`) más `last_send_attempt`: el último intento de envío al ERP del log del
+	 * scheduler, traducido a palabras de la usuaria (`translateErpError`). Lo usan `GET …/invoices/:invoiceId` y "Enviar al ERP ahora".
+	 */
+	async invoiceDetail(idOrNumber: string, invoiceId: string, holdingId: string) {
+		const [detail, lastSendAttempt] = await Promise.all([
+			this.contracts.invoiceDetail(idOrNumber, invoiceId, holdingId),
+			this.scheduler.lastSendAttempt(invoiceId, holdingId),
+		]);
+
+		return { ...detail, last_send_attempt: lastSendAttempt };
 	}
 
 	private sendNowPreview(invoice: ContractInvoiceRow, plan: SendNowPlan) {
@@ -876,41 +975,20 @@ export class ContractInvoicesService {
 	// ---------------------------------------------------------------- carga
 
 	async loadContext(db: Queryable, contractId: string, holdingId: string, today: string): Promise<ContractInvoiceContext> {
-		const [row] = (await db.query(
-			`SELECT c.id, c.contract_number, c.status, c.fx_invoice_policy, c.requires_references_for_billing, c.auto_send_to_odoo, c.payment_terms,
-				c.client_entity_id, ce.odoo_partner_id, ce.payment_terms AS entity_payment_terms, co.country AS company_country, co.odoo_integration_id,
-				public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date
-			FROM contracts c
-			LEFT JOIN companies co ON co.id = c.company_id AND co.holding_id = c.holding_id
-			LEFT JOIN client_entities ce ON ce.id = c.client_entity_id AND ce.holding_id = c.holding_id
-			WHERE c.id = $1 AND c.holding_id = $2 AND c.deleted_at IS NULL`,
-			[contractId, holdingId]
-		)) as Row[];
+		const [row] = (await db.query(`${CONTRACT_CONTEXT_SELECT} WHERE c.id = $1 AND c.holding_id = $2 AND c.deleted_at IS NULL`, [
+			contractId,
+			holdingId,
+		])) as Row[];
 
 		if (!row) throw new NotFoundException('Contrato no encontrado');
 
-		return {
-			contract_id: String(row.id),
-			contract_number: toText(row.contract_number),
-			contract_status: toText(row.status),
-			contract_fx_invoice_policy: toText(row.fx_invoice_policy),
-			contract_requires_references: row.requires_references_for_billing === true,
-			auto_send_to_erp: row.auto_send_to_odoo !== false,
-			payment_terms: parseJson(row.payment_terms),
-			entity_payment_terms: parseJson(row.entity_payment_terms),
-			company_country: toText(row.company_country),
-			has_erp_integration: row.odoo_integration_id !== null && row.odoo_integration_id !== undefined,
-			has_erp_partner: row.odoo_partner_id !== null && row.odoo_partner_id !== undefined,
-			has_entity: !!row.client_entity_id,
-			cutoff_date: toText(row.cutoff_date),
-			today,
-		};
+		return contractInvoiceContextOf(row, today);
 	}
 
 	/** La factura del contrato (404 si no es de él o del holding); con `lock`, `FOR UPDATE OF i` dentro de la transacción. */
 	async loadInvoice(db: Queryable, contractId: string, invoiceId: string, holdingId: string, lock = false): Promise<ContractInvoiceRow> {
 		const [row] = (await db.query(
-			`${INVOICE_SELECT} WHERE i.id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3${lock ? ' FOR UPDATE OF i' : ''}`,
+			`${CONTRACT_INVOICE_SELECT} WHERE i.id = $1::uuid AND i.contract_id = $2 AND i.holding_id = $3${lock ? ' FOR UPDATE OF i' : ''}`,
 			[invoiceId, contractId, holdingId]
 		)) as Row[];
 
@@ -923,7 +1001,7 @@ export class ContractInvoicesService {
 	async loadInvoicesByIds(db: Queryable, contractId: string, holdingId: string, ids: string[], lock = false): Promise<ContractInvoiceRow[]> {
 		const unique = [...new Set(ids)];
 		const rows = (await db.query(
-			`${INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.id = ANY($3::uuid[])${lock ? ' FOR UPDATE OF i' : ''}`,
+			`${CONTRACT_INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.id = ANY($3::uuid[])${lock ? ' FOR UPDATE OF i' : ''}`,
 			[contractId, holdingId, unique]
 		)) as Row[];
 		const byId = new Map(rows.map((row) => [String(row.id), this.invoiceRow(row)]));
@@ -937,7 +1015,7 @@ export class ContractInvoicesService {
 	/** Por Emitir activas del contrato ordenadas por emisión (para "esta y las siguientes"). */
 	async loadPendingInvoices(db: Queryable, contractId: string, holdingId: string, lock = false): Promise<ContractInvoiceRow[]> {
 		const rows = (await db.query(
-			`${INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.status = '${PENDING_STATUS}' AND i.is_active = true
+			`${CONTRACT_INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.status = '${PENDING_STATUS}' AND i.is_active = true
 			ORDER BY i.issue_date NULLS LAST, i.created_at, i.id${lock ? ' FOR UPDATE OF i' : ''}`,
 			[contractId, holdingId]
 		)) as Row[];
@@ -974,48 +1052,6 @@ export class ContractInvoicesService {
 	}
 
 	private invoiceRow(row: Row): ContractInvoiceRow {
-		return {
-			id: String(row.id),
-			invoice_number: toText(row.invoice_number),
-			status: toText(row.status),
-			document_type: toText(row.document_type),
-			invoice_type: toText(row.invoice_type),
-			is_active: row.is_active !== false,
-			is_legacy: row.is_legacy === true,
-			issue_date: toText(row.issue_date),
-			original_issue_date: toText(row.original_issue_date),
-			scheduled_at: toText(row.scheduled_at),
-			due_date: toText(row.due_date),
-			contract_currency: toText(row.contract_currency),
-			invoice_currency: toText(row.invoice_currency),
-			amount_contract_currency: toNumber(row.amount_contract_currency),
-			amount_invoice_currency: toNullableNumber(row.amount_invoice_currency),
-			vat: toNullableNumber(row.vat),
-			total_invoice_currency: toNullableNumber(row.total_invoice_currency),
-			fx_contract_to_invoice: toNullableNumber(row.fx_contract_to_invoice),
-			tax_rate: toNullableNumber(row.tax_rate),
-			fx_rate_source: toText(row.fx_rate_source),
-			fx_confirmed_at: toIso(row.fx_confirmed_at),
-			issued_externally: row.issued_externally === true,
-			odoo_invoice_id: toNullableNumber(row.odoo_invoice_id),
-			sent_to_odoo_at: toIso(row.sent_to_odoo_at),
-			sent_at: toIso(row.sent_at),
-			no_charge: row.no_charge === true,
-			auto_invoice: row.auto_invoice === true,
-			requires_references: row.requires_references_for_billing === true,
-			consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
-			client_entity_id: toText(row.client_entity_id),
-			company_id: toText(row.company_id),
-			legal_name: toText(row.legal_name),
-			period_start: toText(row.period_start),
-			period_end: toText(row.period_end),
-			lines_count: toNumber(row.lines_count),
-			lines_without_product: toNumber(row.lines_without_product),
-			references_count: toNumber(row.references_count),
-			priced_base: toNumber(row.priced_base),
-			internal_lines: toNumber(row.internal_lines),
-			nc_revenue_treatment: toText(row.nc_revenue_treatment),
-			fx_explicit: row.fx_explicit === true,
-		};
+		return contractInvoiceRowOf(row);
 	}
 }

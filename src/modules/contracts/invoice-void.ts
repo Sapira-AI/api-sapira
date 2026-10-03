@@ -9,7 +9,6 @@ import {
 	type InvoiceBlocker,
 	invoiceDueDate,
 	type InvoiceWarning,
-	periodClosedBlocker,
 	UNIFY_STEP,
 } from './contract-invoices';
 import { type EditContext, type EditItem, type EditLineRow, type EditPlan, type InvoiceEditInput, planInvoiceEdit } from './invoice-edit';
@@ -58,7 +57,7 @@ export interface IssuedInvoiceRow extends ContractInvoiceRow {
 // ------------------------------------------------------------------ bloqueos comunes de una emitida
 
 /** Solo emitidas (Emitida/Enviada/Vencida/Pagada) activas del contrato, no NC/ND, no unificadas, no legacy, no anuladas. */
-export function issuedBlockers(invoice: IssuedInvoiceRow, context: ContractInvoiceContext, creditNoteDate: string): InvoiceBlocker[] {
+export function issuedBlockers(invoice: IssuedInvoiceRow): InvoiceBlocker[] {
 	const blockers: InvoiceBlocker[] = [];
 
 	if (isCreditNote(invoice.document_type) || invoice.document_type === 'ND') {
@@ -92,9 +91,6 @@ export function issuedBlockers(invoice: IssuedInvoiceRow, context: ContractInvoi
 			next_step: 'Revisa la NC y la reemisión en Documentos relacionados',
 		});
 	}
-	const closed = periodClosedBlocker(creditNoteDate, context, 'La fecha de la nota de crédito');
-
-	if (closed) blockers.push(closed);
 
 	return blockers;
 }
@@ -275,7 +271,7 @@ export function planVoid(
 	previous: PreviousDiscountLine[] = []
 ): VoidPlan {
 	const today = context.today;
-	const blockers = issuedBlockers(invoice, context, today);
+	const blockers = issuedBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 
 	if (invoice.paid || invoice.status === 'Pagada')
@@ -455,7 +451,7 @@ export function planDiscountCreditNote(
 ): DiscountPlan {
 	const today = context.today;
 	const errors: FieldError[] = [];
-	const blockers = issuedBlockers(invoice, context, today);
+	const blockers = issuedBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const fx = invoice.fx_contract_to_invoice;
 	const invoiceAmount = (row: Pick<EditLineRow, 'subtotal' | 'subtotal_invoice'>): number | null =>

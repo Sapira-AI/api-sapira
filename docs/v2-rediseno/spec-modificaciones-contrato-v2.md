@@ -665,7 +665,7 @@ Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moned
 
 - Cambiar el día de ciclo de un ítem vivo (período corto de transición) y del contrato.
 - Pausa `scope billing` (posponer cobro sin pausar servicio) y pausa masiva (varios contratos).
-- Cerrar la notificación de la propuesta al confirmarla; alertas crecientes al vencer sin decisión (S2-1/S5-4).
+- Cerrar la notificación de la propuesta al confirmarla. (Alertas crecientes al vencer sin decisión, S2-1/S5-4: **hechas 02-10**, job `contracts-renewal-reminders`, ver cobertura §3.)
 - Intercompañía / cambio de compañía emisora (M10) y cambio de cliente comercial (fuera por decisión).
 - Workflow de aprobación (fuera).
 - Preguntas abiertas de pactos (IPC acumulado vs. 12 meses, desfase, redondeo, CMRR pactado): se construyen con la propuesta como default por fila

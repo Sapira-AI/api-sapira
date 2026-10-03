@@ -14,15 +14,19 @@ import { BankUploadBatch } from './bank-upload-batch.entity';
  * Constraints, índices, triggers y policies verificados en vivo con `execute_sql` (pg_catalog).
  * Triggers: ninguno.
  * Policies (4): tenant_isolation_delete_bank_movements (DELETE, authenticated); tenant_isolation_insert_bank_movements (INSERT, authenticated); tenant_isolation_select_bank_movements (SELECT, authenticated); tenant_isolation_update_bank_movements (UPDATE, authenticated).
+ * Migración 1790740000000-BankReconciliationV2 (Conciliación v2, escrita y NO aplicada al 02-10-2026): estado `Ignorado`, columna
+ * `ignore_reason` e índice único parcial `uq_bank_movements_fingerprint` (asset en `special-index/`). Hasta aplicarla, el spec de deriva
+ * `conciliacion.entities.spec.ts` falla a propósito.
  */
 @Entity('bank_movements')
 @Check('bank_movements_match_confidence_check', "match_confidence = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text])")
-@Check('bank_movements_status_check', "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])")
+@Check('bank_movements_status_check', "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text, 'Ignorado'::text])")
 @Index('idx_bank_movements_batch_id', ['batch_id'])
 @Index('idx_bank_movements_holding_date', ['holding_id', 'movement_date'])
 @Index('idx_bank_movements_holding_id', ['holding_id'])
 @Index('idx_bank_movements_reconciled_invoice', ['reconciled_invoice_id'])
 @Index('idx_bank_movements_status', ['status'])
+@Index('uq_bank_movements_fingerprint', { synchronize: false })
 export class BankMovement {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'bank_movements_pkey' })
 	id: string;
@@ -80,6 +84,10 @@ export class BankMovement {
 
 	@Column({ type: 'jsonb', nullable: true })
 	original_row_data?: any;
+
+	/** Motivo de "Ignorar / No es una factura" (préstamo, aporte, traspaso, devolución, otro); quién/cuándo en `reconciled_by/reconciled_at`. */
+	@Column({ type: 'text', nullable: true })
+	ignore_reason?: string;
 
 	@ManyToOne(() => BankUploadBatch, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'batch_id', referencedColumnName: 'id', foreignKeyConstraintName: 'bank_movements_batch_id_fkey' })

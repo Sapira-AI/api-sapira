@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsObject, IsOptional, IsString, Matches, ValidateIf } from 'class-validator';
 
 export class UpdateClientDto {
 	@ApiPropertyOptional({
@@ -73,6 +73,16 @@ export class UpdateClientDto {
 	@IsString()
 	@IsOptional()
 	country?: string;
+
+	@ApiPropertyOptional({
+		description: 'País ISO 3166-1 alfa-2 (manda sobre `country`, que se escribe con el nombre en español)',
+		example: 'CL',
+		nullable: true,
+	})
+	@ValidateIf((_, value) => value !== null && value !== '')
+	@Matches(/^[A-Za-z]{2}$/, { message: 'El país debe ser un código ISO de 2 letras' })
+	@IsOptional()
+	country_code?: string | null;
 
 	@ApiPropertyOptional({
 		description: 'Número de cliente',

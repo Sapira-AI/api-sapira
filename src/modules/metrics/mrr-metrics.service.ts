@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { CATEGORY_INFO, FORMULAS, KEY_LABELS, MOVEMENT_CATEGORIES } from './metrics-categories';
-import { type CurrencyContext, MetricsDataService, PENDING, SqlParams } from './metrics-data.service';
+import { type CurrencyContext, MetricsDataService, SqlParams } from './metrics-data.service';
 import { addMonths, currentMonth, type Month, MONTH_RE, monthRange, monthStart, resolveRange } from './metrics-period';
 import {
 	buildCohorts,
@@ -18,6 +18,7 @@ import {
 	valueAt,
 	yoyRetention,
 } from './mrr-movements';
+import { NOT_PENDING_RENEWAL, PENDING } from './rsm-momentum';
 
 import type {
 	BookingsDto,
@@ -229,7 +230,7 @@ export class MrrMetricsService {
 					keys: [...g.keys],
 					amount: round2(g.amount),
 					items: g.items.size,
-					source: groupBy === 'item' ? l.source : null,
+					source: ['item', 'contract'].includes(groupBy) ? l.source : null,
 					client_id: ['item', 'contract', 'client'].includes(groupBy) ? l.clientId : null,
 					client_name: ['item', 'contract', 'client'].includes(groupBy) ? l.clientName : null,
 					segment: groupBy === 'segment' ? id : ['item', 'contract', 'client'].includes(groupBy) ? l.segment : null,
@@ -388,6 +389,8 @@ export class MrrMetricsService {
 				period: m.period,
 				category: m.category,
 				key: m.key,
+				/** Origen de la fila: en suscripciones `contract_id` trae el id de la suscripción (no enlazar a Contratos). */
+				source: m.line.source,
 				client_id: m.line.clientId,
 				client_name: m.line.clientName,
 				segment: m.line.segment,
@@ -470,7 +473,7 @@ export class MrrMetricsService {
 			)
 			SELECT i.*, (CURRENT_DATE - i.end_date) AS days,
 				(SELECT r.mrr_period_contracted${s} FROM revenue_schedule_monthly r
-					WHERE r.contract_item_id = i.item_id AND r.momentum IS DISTINCT FROM '${PENDING}' AND r.mrr_period_contracted${s} IS NOT NULL
+					WHERE r.contract_item_id = i.item_id AND ${NOT_PENDING_RENEWAL} AND r.mrr_period_contracted${s} IS NOT NULL
 						AND r.mrr_period_contracted${s} <> 0
 					ORDER BY r.period_month DESC LIMIT 1) AS mrr
 			FROM items i

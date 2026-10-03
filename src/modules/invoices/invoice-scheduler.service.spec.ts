@@ -201,6 +201,77 @@ describe('InvoiceSchedulerService', () => {
 		);
 	});
 
+	it('la notificación de fallo usa la frase traducida (título con folio y cliente, cuerpo = qué pasó + paso siguiente) y deja lo técnico en metadata', async () => {
+		const { service, notificationsService } = createService();
+
+		await (service as any).createOdooFailureNotification({
+			invoice: {
+				id: 'invoice-1',
+				holding_id: 'holding-1',
+				contract_id: 'contract-1',
+				invoice_number: 'FAC-001',
+				company: { country: 'Chile', legal_name: 'Sapira Chile' },
+				clientEntity: { legal_name: 'Cliente Demo' },
+			},
+			title: 'Error al crear la factura FAC-001 en Odoo',
+			message: 'Error creando factura en borrador en Odoo: No journal could be found',
+			stage: 'create_draft',
+			errorType: 'odoo_rejection',
+			errorMessage: 'Error creando factura en borrador en Odoo: No journal could be found',
+			schedulerSource: 'manual',
+		});
+
+		expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+			'holding-1',
+			expect.objectContaining({
+				title: 'No se pudo enviar la factura FAC-001 de Cliente Demo',
+				message:
+					'Falta el diario de ventas en Odoo para la compañía emisora. Configura el diario de ventas de la compañía en Odoo y vuelve a enviarla.',
+				metadata: expect.objectContaining({
+					technical_message: 'Error creando factura en borrador en Odoo: No journal could be found',
+					erp_error: expect.objectContaining({ category: 'journal_missing', action: 'integrations' }),
+				}),
+			})
+		);
+	});
+
+	it('lastSendAttempt: lee el último log de la factura y lo traduce; si el log falla devuelve null', async () => {
+		const { service } = createService();
+		const exec = jest.fn().mockResolvedValue({
+			operation: 'create_draft',
+			status: 'error',
+			error_message: 'connect ETIMEDOUT',
+			error_type: 'unexpected_exception',
+			createdAt: new Date('2026-10-02T12:00:00.000Z'),
+		});
+		const chain = { sort: jest.fn(() => chain), lean: jest.fn(() => chain), exec };
+		const findOne = jest.fn(() => chain);
+
+		(service as any).invoiceOdooSendLogModel = { findOne };
+		await expect(service.lastSendAttempt('invoice-1', 'holding-1')).resolves.toEqual({
+			at: '2026-10-02T12:00:00.000Z',
+			ok: false,
+			operation: 'create_draft',
+			category: 'connection',
+			message: 'No pudimos conectarnos con Odoo',
+			next_step: 'Vuelve a intentarlo en unos minutos; si sigue fallando, revisa la conexión en Integraciones › Odoo',
+			action: 'retry',
+			raw: 'connect ETIMEDOUT',
+		});
+		expect(findOne).toHaveBeenCalledWith({ invoice_id: 'invoice-1', holding_id: 'holding-1' });
+		expect(chain.sort).toHaveBeenCalledWith({ createdAt: -1 });
+
+		exec.mockResolvedValue({ operation: 'create_draft', status: 'success', createdAt: '2026-10-02T13:00:00.000Z' });
+		await expect(service.lastSendAttempt('invoice-1', 'holding-1')).resolves.toMatchObject({
+			ok: true,
+			message: 'Enviada al ERP como borrador',
+			category: null,
+		});
+
+		exec.mockRejectedValue(new Error('mongo caído'));
+		await expect(service.lastSendAttempt('invoice-1', 'holding-1')).resolves.toBeNull();
+	});
+
 	it('permite facturas de Uruguay aunque la referencia no tenga reference_date', () => {
 		const { service } = createService();
 
@@ -649,6 +720,125 @@ describe('InvoiceSchedulerService', () => {
 			expect(InvoiceSchedulerService.convertsByPair(single)).toBe(false);
 			expect(InvoiceSchedulerService.requiresPairValuation(ufInClp)).toBe(true);
 			expect(InvoiceSchedulerService.convertsByPair(ufInClp)).toBe(true);
+		});
+	});
+
+	describe('producto sin mapeo al ERP (product_without_erp_mapping): nunca viaja como producto 1', () => {
+		const withRepos = (mappings: Record<string, number>, products: Record<string, { name: string; odoo_product_id: number | null }>) => {
+			const ctx = createService();
+			const internals = ctx.service as unknown as Record<string, unknown>;
+			const createDraftInvoice = jest.fn();
+
+			internals.odooProductMappingRepository = {
+				findOne: jest.fn(async ({ where }: { where: { sapira_product_id: string; holding_id: string } }) =>
+					where.holding_id === 'holding-1' && mappings[where.sapira_product_id] !== undefined
+						? { odoo_product_id: mappings[where.sapira_product_id] }
+						: null
+				),
+			};
+			internals.productRepository = {
+				findOne: jest.fn(async ({ where }: { where: { id: string } }) =>
+					products[where.id] ? { id: where.id, ...products[where.id] } : null
+				),
+			};
+			internals.odooInvoicesService = { createDraftInvoice };
+			const sendLog = jest.spyOn(ctx.service as never, 'createOdooSendLog').mockResolvedValue(undefined as never);
+
+			return { ...ctx, createDraftInvoice, sendLog };
+		};
+		const invoiceWith = (items: unknown[]) =>
+			({
+				...buildInvoice('Uruguay', null, []),
+				contract_id: 'contract-1',
+				contract_currency: 'USD',
+				amount_invoice_currency: 100,
+				items,
+			}) as any;
+		const line = (id: string, product_id: string | null, extra: Record<string, unknown> = {}) => ({
+			id,
+			product_id,
+			description: id,
+			quantity: 1,
+			unit_price_invoice_currency: 10,
+			discount_pct: 0,
+			...extra,
+		});
+
+		it('rechaza la factura (skipped), registra el log, notifica por el camino de fallos de Odoo y no llama al ERP', async () => {
+			const { service, createDraftInvoice, sendLog, notificationsService } = withRepos(
+				{ 'p-ok': 77 },
+				{ 'p-ok': { name: 'Plan Pro', odoo_product_id: null }, 'p-x': { name: 'Soporte Premium', odoo_product_id: null } }
+			);
+
+			const result = await service.sendInvoiceToOdoo(invoiceWith([line('a', 'p-ok'), line('b', 'p-x')]), false, 'automatic');
+
+			expect(result.status).toBe('skipped');
+			expect(result.error).toBe('Productos sin mapeo a Odoo: Soporte Premium');
+			expect(createDraftInvoice).not.toHaveBeenCalled();
+			expect(sendLog).toHaveBeenCalledWith(
+				expect.objectContaining({
+					status: 'skipped',
+					errorType: 'product_without_erp_mapping',
+					errorDetails: { unmapped_products: ['Soporte Premium'] },
+				})
+			);
+			expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+				'holding-1',
+				expect.objectContaining({
+					type: 'invoice_odoo_failure',
+					resource_id: 'invoice-1',
+					title: 'No se pudo enviar la factura INV-001 de Cliente Demo',
+					message: 'Hay productos sin mapeo en Odoo: Soporte Premium. Mapea el producto en Integraciones › Odoo y vuelve a enviarla.',
+					recommendation: 'Mapea el producto en Integraciones › Odoo y vuelve a enviarla',
+					deduplication_key: 'invoice-odoo-failure:invoice-1:product_mapping:product_without_erp_mapping',
+				})
+			);
+		});
+
+		it('en dry run omite igual pero no notifica', async () => {
+			const { service, notificationsService } = withRepos({}, { 'p-x': { name: 'Soporte', odoo_product_id: null } });
+
+			await expect(service.sendInvoiceToOdoo(invoiceWith([line('a', 'p-x')]), true)).resolves.toMatchObject({
+				status: 'skipped',
+				error: 'Productos sin mapeo a Odoo: Soporte',
+			});
+			expect(notificationsService.createOrUpdate).not.toHaveBeenCalled();
+		});
+
+		it('resuelve por odoo_product_mappings del holding o por products.odoo_product_id; mira solo las líneas que viajan (no internas ni en cero)', async () => {
+			const { service } = withRepos(
+				{ 'p-map': 10 },
+				{
+					'p-map': { name: 'Mapeado', odoo_product_id: null },
+					'p-tab': { name: 'Por tabla', odoo_product_id: 20 },
+					'p-x': { name: 'Sin mapeo', odoo_product_id: null },
+				}
+			);
+			const invoice = invoiceWith([
+				line('a', 'p-map'),
+				line('b', 'p-tab'),
+				line('zero', 'p-x', { quantity: 0 }),
+				line('internal', 'p-x', { visible_line_id: 'a' }),
+			]);
+
+			await expect(service.findUnmappedProducts(invoice)).resolves.toEqual([]);
+			const payload = await service.mapInvoiceToOdooFormat(invoice);
+
+			expect(payload.invoice_line_ids.map((item) => item.product_id)).toEqual([10, 20]);
+		});
+
+		it('una línea visible sin producto también se rechaza (antes viajaba como producto 1)', async () => {
+			const { service } = withRepos({}, {});
+
+			await expect(service.findUnmappedProducts(invoiceWith([line('a', null, { description: 'Servicio X' })]))).resolves.toEqual([
+				'línea sin producto (Servicio X)',
+			]);
+		});
+
+		it('si se llama al mapeo directo con un producto sin mapeo, lanza en vez de usar el producto 1', async () => {
+			const { service } = withRepos({}, { 'p-x': { name: 'Sin mapeo', odoo_product_id: null } });
+
+			await expect(service.mapInvoiceToOdooFormat(invoiceWith([line('a', 'p-x')]))).rejects.toThrow('product_without_erp_mapping');
 		});
 	});
 });

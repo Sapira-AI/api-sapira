@@ -77,7 +77,15 @@ describe('ClientMetricsService', () => {
 			return [
 				{ id: 'i-1', due_date: '2026-10-01', days_overdue: '0', amount: '100', system_currency: 'USD', status: 'Emitida' },
 				{ id: 'i-2', due_date: '2026-09-01', days_overdue: '21', amount: '200', system_currency: 'USD', status: 'Vencida' },
-				{ id: 'i-3', due_date: '2026-05-01', days_overdue: '144', amount: '300', system_currency: 'USD', status: 'Vencida' },
+				{
+					id: 'i-3',
+					due_date: '2026-05-01',
+					days_overdue: '144',
+					amount: '300',
+					system_currency: 'USD',
+					status: 'Vencida',
+					contract_id: 'k-1',
+				},
 				{ id: 'i-4', due_date: null, days_overdue: '0', amount: '50', system_currency: 'USD', status: 'Enviada' },
 			];
 		});
@@ -87,6 +95,9 @@ describe('ClientMetricsService', () => {
 
 		expect(byKey).toEqual({ current: [150, 2], d1_30: [200, 1], d31_60: [0, 0], d61_90: [0, 0], d90_plus: [300, 1] });
 		expect(result.invoices).toHaveLength(4);
+		// Las vencidas abren la vista rápida de la factura, que vive en su contrato.
+		expect(result.invoices.find((invoice) => invoice.id === 'i-3')?.contract_id).toBe('k-1');
+		expect(result.invoices[0].contract_id).toBeNull();
 	});
 
 	describe('getInvoices', () => {
@@ -106,6 +117,7 @@ describe('ClientMetricsService', () => {
 					amount_invoice_currency: '5821937.18',
 					client_entity_id: 'e-1',
 					legal_name: 'DREAM TEC SA',
+					contract_id: 'k-73',
 					contract_number: 'CTR-73',
 					days_overdue: 45,
 				},
@@ -122,7 +134,14 @@ describe('ClientMetricsService', () => {
 			expect(listSql).toContain('i.invoice_number ILIKE $6');
 			expect(listParams).toEqual(['c-1', 'h-1', '2026-09-22', OPEN_INVOICE_STATUSES, 'e-1', '%FE34%']);
 			expect(page).toMatchObject({ items: 5, pages: 3, currentPage: 1, limit: 2, counts: { all: 40, open: 12, overdue: 5, paid: 28 } });
-			expect(page.data[0]).toMatchObject({ amount: 1883.7, legal_name: 'DREAM TEC SA', days_overdue: 45 });
+			expect(listSql).toContain('i.contract_id');
+			expect(page.data[0]).toMatchObject({
+				amount: 1883.7,
+				legal_name: 'DREAM TEC SA',
+				days_overdue: 45,
+				contract_id: 'k-73',
+				contract_number: 'CTR-73',
+			});
 		});
 
 		it('ordena solo por columnas de la lista blanca', async () => {

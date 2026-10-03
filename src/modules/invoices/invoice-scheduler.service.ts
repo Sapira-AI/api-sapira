@@ -25,8 +25,10 @@ import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
+import { erpErrorSentence, translateErpError } from './erp-error-translation';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
+import { type LastSendAttempt, lastSendAttemptOf } from './last-send-attempt';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
 import { ExecutionEnvironment, ExecutionSource, InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from './schemas/invoice-scheduler-job.schema';
 
@@ -45,6 +47,8 @@ interface InvoiceWithRelations extends Invoice {
 export const NON_SENDABLE_DOCUMENT_TYPES = ['NC', 'ND'] as const;
 
 export const CREDIT_NOTE_SEND_PENDING = 'credit_note_send_pending';
+/** Línea que viajaría al ERP sin producto de Odoo resoluble (mismo código que el bloqueo del 360 y de la cola de Facturación). */
+export const PRODUCT_WITHOUT_ERP_MAPPING = 'product_without_erp_mapping';
 
 export const isNonSendableDocumentType = (documentType: string | null | undefined): boolean =>
 	(NON_SENDABLE_DOCUMENT_TYPES as readonly string[]).includes((documentType ?? '').trim().toUpperCase());
@@ -303,6 +307,7 @@ export class InvoiceSchedulerService {
 				this.logger.warn(`⚠️ Factura ${invoice.id} omitida: ${validation.error}`);
 
 				// Registrar log de factura omitida
+				result.errorType = 'validation';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -316,6 +321,17 @@ export class InvoiceSchedulerService {
 					errorType: 'validation',
 					errorDetails: { validation_error: validation.error },
 				});
+				if (!dryRun) {
+					await this.createOdooFailureNotification({
+						invoice,
+						stage: 'create_draft',
+						title: `Factura ${invoice.invoice_number || 'SIN-NUMERO'} omitida por validación`,
+						message: validation.error,
+						errorType: 'validation',
+						errorMessage: validation.error,
+						schedulerSource,
+					});
+				}
 
 				return result;
 			}
@@ -336,6 +352,7 @@ export class InvoiceSchedulerService {
 					this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: ${error.message}`);
 
 					// Registrar log de error en tipo de cambio
+					result.errorType = 'exchange_rate';
 					await this.createOdooSendLog({
 						holdingId: invoice.holding_id,
 						operation: 'create_draft',
@@ -362,6 +379,7 @@ export class InvoiceSchedulerService {
 				this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: montos no calculados`);
 
 				// Registrar log de montos no calculados
+				result.errorType = 'amount_calculation';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -408,6 +426,48 @@ export class InvoiceSchedulerService {
 				this.logger.warn(`   ✗ company es NULL - no se puede asignar nombre`);
 			}
 
+			// Producto sin mapeo al ERP: antes viajaba en silencio como producto 1 de Odoo; ahora la factura se omite con error y aviso.
+			const unmappedProducts = await this.findUnmappedProducts(invoice);
+
+			if (unmappedProducts.length) {
+				const errorMessage = `Productos sin mapeo a Odoo: ${unmappedProducts.join(', ')}`;
+
+				result.status = 'skipped';
+				result.error = errorMessage;
+				result.details = 'La factura no se envía: mapea el producto en Integraciones › Odoo y vuelve a procesarla';
+				this.logger.warn(`⚠️ Factura ${invoice.invoice_number || invoice.id} omitida: ${errorMessage}`);
+
+				result.errorType = PRODUCT_WITHOUT_ERP_MAPPING;
+				await this.createOdooSendLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'skipped',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					invoiceCurrency: invoice.invoice_currency,
+					errorMessage,
+					errorType: PRODUCT_WITHOUT_ERP_MAPPING,
+					errorDetails: { unmapped_products: unmappedProducts },
+				});
+
+				if (!dryRun) {
+					await this.createOdooFailureNotification({
+						invoice,
+						stage: 'product_mapping',
+						title: `Factura ${invoice.invoice_number || 'SIN-NUMERO'} sin enviar: producto sin mapeo a Odoo`,
+						message: `${errorMessage}. La factura no se envió al ERP.`,
+						errorType: PRODUCT_WITHOUT_ERP_MAPPING,
+						errorMessage,
+						schedulerSource,
+						errorDetails: { unmapped_products: unmappedProducts },
+					});
+				}
+
+				return result;
+			}
+
 			const odooInvoiceData = await this.mapInvoiceToOdooFormat(invoice);
 
 			// 🔍 VALIDAR TAXES ANTES DE ENVIAR
@@ -442,6 +502,7 @@ export class InvoiceSchedulerService {
 						);
 
 						// Registrar log de error de taxes
+						result.errorType = 'tax_validation';
 						await this.createOdooSendLog({
 							holdingId: invoice.holding_id,
 							operation: 'create_draft',
@@ -460,6 +521,18 @@ export class InvoiceSchedulerService {
 								tax_validations: validation.tax_validations,
 							},
 						});
+
+						if (!dryRun) {
+							await this.createOdooFailureNotification({
+								invoice,
+								stage: 'create_draft',
+								title: `Taxes incompatibles en la factura ${invoice.invoice_number || 'SIN-NUMERO'}`,
+								message: `${result.error}: ${result.details}`,
+								errorType: 'tax_validation',
+								errorMessage: `${result.error}: ${result.details}`,
+								schedulerSource,
+							});
+						}
 
 						return result;
 					}
@@ -679,6 +752,7 @@ export class InvoiceSchedulerService {
 											result.error = customerSendErrorDetails.message;
 											result.details = `Factura emitida en Odoo (ID: ${odooResponse.invoice_id}) pero no se pudo enviar al cliente: ${customerSendErrorDetails.message}`;
 
+											result.errorType = 'customer_email_delivery';
 											await this.createOdooSendLog({
 												holdingId: invoice.holding_id,
 												operation: 'send_invoice_to_customer',
@@ -722,6 +796,7 @@ export class InvoiceSchedulerService {
 								result.details = `Factura publicada en Odoo (ID: ${odooResponse.invoice_id}) pero falló emisión electrónica: ${emitError.message}`;
 
 								// Registrar log de error en emisión electrónica
+								result.errorType = 'emit_electronic_exception';
 								await this.createOdooSendLog({
 									holdingId: invoice.holding_id,
 									operation: 'emit_electronic_invoice',
@@ -760,6 +835,7 @@ export class InvoiceSchedulerService {
 							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);
 
 							// Registrar log de error en emisión
+							result.errorType = 'odoo_post_failed';
 							await this.createOdooSendLog({
 								holdingId: invoice.holding_id,
 								operation: 'post_invoice',
@@ -796,6 +872,7 @@ export class InvoiceSchedulerService {
 						this.logger.error(`✗ Error al emitir factura ${invoice.invoice_number}:`, postError);
 
 						// Registrar log de excepción en emisión
+						result.errorType = 'odoo_post_exception';
 						await this.createOdooSendLog({
 							holdingId: invoice.holding_id,
 							operation: 'post_invoice',
@@ -836,6 +913,7 @@ export class InvoiceSchedulerService {
 				this.logger.error(`✗ Error al enviar factura ${invoice.invoice_number}: ${result.error}`);
 
 				// Registrar log de error al crear factura
+				result.errorType = 'odoo_rejection';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -851,6 +929,16 @@ export class InvoiceSchedulerService {
 					errorType: 'odoo_rejection',
 					durationMs,
 				});
+				await this.createOdooFailureNotification({
+					invoice,
+					stage: 'create_draft',
+					title: `Error al crear la factura ${invoice.invoice_number || 'SIN-NUMERO'} en Odoo`,
+					message: result.error,
+					errorType: 'odoo_rejection',
+					errorMessage: result.error,
+					schedulerSource,
+					responseData: odooResponse,
+				});
 			}
 		} catch (error) {
 			result.status = 'error';
@@ -858,6 +946,7 @@ export class InvoiceSchedulerService {
 			this.logger.error(`✗ Excepción al procesar factura ${invoice.invoice_number}:`, error);
 
 			// Registrar log de excepción general
+			result.errorType = 'unexpected_exception';
 			await this.createOdooSendLog({
 				holdingId: invoice.holding_id,
 				operation: 'create_draft',
@@ -874,6 +963,18 @@ export class InvoiceSchedulerService {
 					error_type: error.constructor.name,
 				},
 			});
+			if (!dryRun) {
+				await this.createOdooFailureNotification({
+					invoice,
+					stage: 'create_draft',
+					title: `Excepción al enviar la factura ${invoice.invoice_number || 'SIN-NUMERO'} a Odoo`,
+					message: result.error,
+					errorType: 'unexpected_exception',
+					errorMessage: result.error,
+					schedulerSource,
+					errorDetails: { stack: error.stack },
+				});
+			}
 		}
 
 		return result;
@@ -919,12 +1020,7 @@ export class InvoiceSchedulerService {
 		 * (`docs/v2-rediseno/cambios-integracion-para-leon.md`).
 		 */
 		const allItems = invoice.items || [];
-		const isZeroQuantity = (item: { quantity?: unknown }) => Number(item.quantity) === 0;
-		const isInternal = (item: { visible_line_id?: unknown }) => item.visible_line_id !== null && item.visible_line_id !== undefined;
-		const externalItems = allItems.filter((item) => !isInternal(item));
-		const itemsToSend = externalItems.some((item) => !isZeroQuantity(item))
-			? externalItems.filter((item) => !isZeroQuantity(item))
-			: externalItems;
+		const itemsToSend = InvoiceSchedulerService.itemsSentToErp(invoice);
 
 		if (itemsToSend.length < allItems.length) {
 			this.logger.log(
@@ -945,9 +1041,14 @@ export class InvoiceSchedulerService {
 					`   - client_fiscal_position_id: ${invoice.clientEntity?.odoo_fiscal_position_id || 'SIN POSICION FISCAL'}`
 			);
 
-			// Obtener mapeo del producto
+			// Obtener mapeo del producto. Sin mapeo NO se envía el producto 1 (Contratos v2, cambio puntual avisado a Leon):
+			// `sendInvoiceToOdoo` ya rechazó la factura con `product_without_erp_mapping`; esto es la defensa si se llama directo.
 			if (item.product_id) {
 				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
+
+				if (mappingInfo.odooProductId === null) {
+					throw new Error(`${PRODUCT_WITHOUT_ERP_MAPPING}: el producto ${item.product_id} no está mapeado a un producto de Odoo`);
+				}
 				odooProductId = mappingInfo.odooProductId;
 
 				this.logger.debug(
@@ -1660,8 +1761,8 @@ export class InvoiceSchedulerService {
 		sapiraProductId: string,
 		holdingId: string
 	): Promise<{
-		odooProductId: number;
-		source: 'mapping' | 'product_table' | 'default';
+		odooProductId: number | null;
+		source: 'mapping' | 'product_table' | 'missing';
 	}> {
 		try {
 			// 1. Buscar en odoo_product_mappings
@@ -1694,19 +1795,54 @@ export class InvoiceSchedulerService {
 				};
 			}
 
-			// 3. Sin mapeo: usar default
-			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo - usando default odoo_product_id=1`);
+			// 3. Sin mapeo: ya NO se usa el producto 1 por defecto (Contratos v2, cambio puntual avisado a Leon): quien llama rechaza la
+			// factura con `product_without_erp_mapping`.
+			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo a Odoo - la factura no se envía`);
 			return {
-				odooProductId: 1,
-				source: 'default',
+				odooProductId: null,
+				source: 'missing',
 			};
 		} catch (error) {
+			// Un error de lectura tampoco cae al producto 1: se propaga y la factura queda en error.
 			this.logger.error(`Error obteniendo mapeo de producto ${sapiraProductId}:`, error);
-			return {
-				odooProductId: 1,
-				source: 'default',
-			};
+			throw error;
 		}
+	}
+
+	/**
+	 * Líneas que viajan al ERP (mismo criterio de `mapInvoiceToOdooFormat`): las visibles (`visible_line_id` NULL) con cantidad ≠ 0; si
+	 * todas las visibles están en 0, todas las visibles. Lo replica `UNMAPPED_PRODUCTS_SQL` (`contracts/contract-360.ts`) para los bloqueos.
+	 */
+	static itemsSentToErp<T extends { quantity?: unknown; visible_line_id?: unknown }>(invoice: { items?: T[] }): T[] {
+		const isZeroQuantity = (item: T) => Number(item.quantity) === 0;
+		const isInternal = (item: T) => item.visible_line_id !== null && item.visible_line_id !== undefined;
+		const externalItems = (invoice.items || []).filter((item) => !isInternal(item));
+
+		return externalItems.some((item) => !isZeroQuantity(item)) ? externalItems.filter((item) => !isZeroQuantity(item)) : externalItems;
+	}
+
+	/**
+	 * Productos de las líneas que viajarían al ERP sin producto de Odoo resoluble (`odoo_product_mappings` del holding ∪
+	 * `products.odoo_product_id`) y líneas sin producto. Antes caían en silencio al producto 1 de Odoo; ahora la factura se rechaza.
+	 */
+	async findUnmappedProducts(invoice: InvoiceWithRelations): Promise<string[]> {
+		const missing = new Set<string>();
+
+		for (const item of InvoiceSchedulerService.itemsSentToErp(invoice)) {
+			if (!item.product_id) {
+				missing.add(`línea sin producto${item.description ? ` (${item.description})` : ''}`);
+				continue;
+			}
+			const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
+
+			if (mappingInfo.odooProductId === null) {
+				const product = await this.productRepository.findOne({ where: { id: item.product_id } });
+
+				missing.add(product?.name?.trim() || item.product_id);
+			}
+		}
+
+		return [...missing];
 	}
 
 	private mapTaxCodeToOdooIds(taxCode: string): number[] {
@@ -1949,9 +2085,14 @@ export class InvoiceSchedulerService {
 		return await log.save();
 	}
 
+	/**
+	 * Notificación de fallo del envío al ERP. El texto que ve la usuaria sale de `translateErpError` (Contratos v2, cambio puntual avisado
+	 * a Leon §9): título "No se pudo enviar la factura <folio> de <cliente>", cuerpo = qué pasó + paso siguiente; el detalle técnico
+	 * (`title`/`message`/`errorMessage` de quien llama) queda en `metadata` (`technical_title`, `technical_message`, `error_message`).
+	 */
 	private async createOdooFailureNotification(params: {
 		invoice: InvoiceWithRelations;
-		stage: 'post_invoice' | 'emit_electronic_invoice' | 'send_invoice_to_customer';
+		stage: 'create_draft' | 'post_invoice' | 'emit_electronic_invoice' | 'send_invoice_to_customer' | 'product_mapping';
 		title: string;
 		message: string;
 		errorType: string;
@@ -1967,6 +2108,9 @@ export class InvoiceSchedulerService {
 		}
 
 		try {
+			const translation = translateErpError(params.errorMessage, params.errorType);
+			const folio = params.invoice.invoice_number || 'sin folio';
+			const client = params.invoice.clientEntity?.legal_name?.trim() || 'cliente sin razón social';
 			const metadata = {
 				source: 'invoice_scheduler',
 				scheduler_source: params.schedulerSource,
@@ -1976,6 +2120,14 @@ export class InvoiceSchedulerService {
 				failure_stage: params.stage,
 				error_type: params.errorType,
 				error_message: params.errorMessage,
+				technical_title: params.title,
+				technical_message: params.message,
+				erp_error: {
+					category: translation.category,
+					message: translation.message,
+					next_step: translation.next_step,
+					action: translation.action,
+				},
 				country: params.invoice.company?.country || null,
 				client_name: params.invoice.clientEntity?.legal_name || null,
 				company_name: params.invoice.company?.legal_name || null,
@@ -1987,9 +2139,9 @@ export class InvoiceSchedulerService {
 				source: 'invoices',
 				type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE,
 				severity: 'error',
-				title: params.title,
-				message: params.message,
-				recommendation: 'Revisa la configuración tributaria de la factura y vuelve a procesarla.',
+				title: `No se pudo enviar la factura ${folio} de ${client}`,
+				message: erpErrorSentence(translation),
+				recommendation: translation.next_step,
 				action_type: 'open_contract',
 				action_payload: { contract_id: params.invoice.contract_id },
 				resource_type: 'invoice',
@@ -2002,6 +2154,25 @@ export class InvoiceSchedulerService {
 			});
 		} catch (error) {
 			this.logger.error(`❌ Error creando notificación para factura ${params.invoice.invoice_number || params.invoice.id}:`, error);
+		}
+	}
+
+	/**
+	 * Último intento de envío al ERP de una factura (el log `invoice_odoo_send_logs`, donde el scheduler ya guarda cada intento, manual o
+	 * automático), traducido con `translateErpError`. null si nunca se intentó o si el log no responde (no bloquea el detalle).
+	 */
+	async lastSendAttempt(invoiceId: string, holdingId: string): Promise<LastSendAttempt | null> {
+		try {
+			const log = (await this.invoiceOdooSendLogModel
+				.findOne({ invoice_id: invoiceId, holding_id: holdingId })
+				.sort({ createdAt: -1 })
+				.lean()
+				.exec()) as (InvoiceOdooSendLog & { createdAt?: Date }) | null;
+
+			return log ? lastSendAttemptOf(log) : null;
+		} catch (error) {
+			this.logger.warn(`No se pudo leer el último intento de envío de la factura ${invoiceId}: ${(error as Error).message}`);
+			return null;
 		}
 	}
 

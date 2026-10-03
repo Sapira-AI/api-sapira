@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
+
 import { setApiWriter } from './api-writer';
 import { todayFor } from './business-date';
 import { blockedPreview, type ChangePreview } from './contract-changes';
@@ -219,7 +221,7 @@ export class ContractScheduledChangesService {
 
 	private async application(contractId: string, changeId: string, dto: ApplyScheduledChangeDto, holdingId: string, today: Date) {
 		const pact = await this.loadScheduled(this.dataSource, contractId, changeId, holdingId);
-		const iso = todayFor(null, today);
+		const iso = todayFor(await holdingTimezone(this.dataSource, holdingId), today);
 		const probe = { effective_date: dto.effective_date ?? iso, change: { type: 'item_change' } } as ContractChangeRequestDto;
 		const ctx = await this.changes.loadContext(this.dataSource, contractId, holdingId, probe, iso);
 		const application = pactApplication(ctx, pact, dto);
@@ -326,7 +328,7 @@ export class ContractScheduledChangesService {
 				end_date: toText(row.end_date),
 				renewed_by_item_id: toText(row.renewed_by_item_id),
 			})),
-			todayFor()
+			todayFor(await holdingTimezone(this.dataSource, holdingId))
 		);
 
 		if (status === 'cancelled' || status === 'other')

@@ -142,6 +142,11 @@ export interface BillingEngineContract {
 	multicurrency?: boolean | null;
 	document_type?: string | null;
 	company: { country?: string | null; tax_rate?: number | string | null };
+	/**
+	 * Documento tributario del contrato (`contracts.tax_document_type_id` → `tax_document_types.kind/tax_rate`, Configuración v2 ronda 3):
+	 * si su `tax_rate` no es null, el IVA de las Por Emitir sale de ahí (exportación sigue 0; Colombia sigue 0). Ausente = tasa de la compañía.
+	 */
+	tax_document?: TaxDocumentRate | null;
 	entity_country?: string | null;
 	/** Plantilla de descripción del contrato (`contracts.invoice_description_template`, spec facturas §3.6); null = la glosa de hoy. */
 	description_template?: DescriptionTemplate | null;
@@ -448,6 +453,43 @@ export const normalizeTaxRate = (taxRate: number | string | null | undefined): n
 
 	return round2(value > 0 && value <= 1 ? value * 100 : value);
 };
+
+/** Documento tributario del contrato reducido a lo que decide el IVA: su familia (`kind`) y su tasa (`tax_rate`, %, null = la de la compañía). */
+export interface TaxDocumentRate {
+	kind?: string | null;
+	tax_rate?: number | string | null;
+}
+
+/** De dónde sale el IVA de una factura: exportación, Colombia (lo aplica el ERP), el documento tributario o la compañía. */
+export type TaxRule = 'export' | 'colombia_erp' | 'document' | 'company';
+
+/**
+ * Regla única del IVA de las Por Emitir (Configuración v2 ronda 3, decisión de Domi 03-10), en este orden:
+ * 1. exportación (`FACTURA_EXPORTACION`) → 0;
+ * 2. compañía de Colombia → 0 (el IVA lo aplica el ERP al emitir);
+ * 3. el documento tributario del contrato con `tax_rate` no nulo → esa tasa (solo si su familia es la de la factura: un documento de
+ *    exportación no fija la tasa de una factura nacional);
+ * 4. la tasa de la compañía (`null` si no tiene; el llamador decide el 0 y el aviso).
+ * La tasa del documento ya viene en porcentaje (CHECK 0–100): no pasa por `normalizeTaxRate`, que leería 1 % como fracción.
+ */
+export function resolveTaxRate(input: {
+	documentType: string | null | undefined;
+	companyCountry: string | null | undefined;
+	companyTaxRate: number | string | null | undefined;
+	document?: TaxDocumentRate | null;
+}): { rate: number | null; rule: TaxRule } {
+	if (input.documentType === 'FACTURA_EXPORTACION') return { rate: 0, rule: 'export' };
+	if (normalizeCountry(input.companyCountry) === 'CO') return { rate: 0, rule: 'colombia_erp' };
+	const documentRate = input.document?.tax_rate;
+	const family = input.document?.kind === 'export_invoice' ? 'FACTURA_EXPORTACION' : 'FACTURA';
+	const sameFamily = !input.documentType || !input.document?.kind || family === input.documentType;
+
+	if (sameFamily && documentRate !== null && documentRate !== undefined && documentRate !== '' && Number.isFinite(Number(documentRate))) {
+		return { rate: round2(Number(documentRate)), rule: 'document' };
+	}
+
+	return { rate: normalizeTaxRate(input.companyTaxRate), rule: 'company' };
+}
 
 // ------------------------------------------------------------------ vencimiento
 
@@ -1091,7 +1133,6 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 	});
 	// Sin término: horizonte de 12 períodos por ítem; la UI lo distingue por `indefinite_horizon` y la última fecha cubierta.
 	let indefiniteUntil: string | null = null;
-
 	for (const item of valid.filter(isIndefiniteItem)) {
 		const until = itemEffectiveEnd(item);
 
@@ -1110,15 +1151,16 @@ export function generateInvoices({ contract, items }: BillingEngineInput): Billi
 			? contract.document_type
 			: suggestDocumentType(contract.company.country, contract.entity_country);
 	const exportType: 0 | 1 = documentType === 'FACTURA_EXPORTACION' ? 1 : 0;
-	const companyTax = normalizeTaxRate(contract.company.tax_rate);
-	let taxRate = 0;
+	const tax = resolveTaxRate({
+		documentType,
+		companyCountry: contract.company.country,
+		companyTaxRate: contract.company.tax_rate,
+		document: contract.tax_document,
+	});
+	const taxRate = tax.rate ?? 0;
 
-	if (documentType === 'FACTURA_EXPORTACION') taxRate = 0;
-	else if (normalizeCountry(contract.company.country) === 'CO') {
-		taxRate = 0;
-		warn('Compañía de Colombia: el IVA no se calcula en Por Emitir; lo aplica el ERP al emitir');
-	} else if (companyTax === null) warn('La compañía no tiene tasa de IVA configurada: la vista previa va sin IVA');
-	else taxRate = companyTax;
+	if (tax.rule === 'colombia_erp') warn('Compañía de Colombia: el IVA no se calcula en Por Emitir; lo aplica el ERP al emitir');
+	else if (tax.rule === 'company' && tax.rate === null) warn('La compañía no tiene tasa de IVA configurada: la vista previa va sin IVA');
 
 	// Moneda
 	const contractCurrency = String(contract.contract_currency ?? '').toUpperCase();

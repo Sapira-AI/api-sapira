@@ -51,6 +51,8 @@ const parseJson = <T>(value: unknown): T | null => {
 /** Lo que el generador usa para el encabezado de una factura nueva (mismas fuentes que la activación), sin mirar otras facturas. */
 export const GENERATOR_SQL = `SELECT c.client_entity_id, c.document_type, c.invoice_currency, c.contract_currency, c.fx_invoice_policy,
 		co.country AS company_country, co.tax_rate AS company_tax_rate, ce.country AS entity_country, ce.legal_name AS entity_legal_name,
+		c.tax_document_type_id, (SELECT t.kind FROM tax_document_types t WHERE t.id = c.tax_document_type_id) AS tax_document_type_kind,
+		(SELECT t.tax_rate FROM tax_document_types t WHERE t.id = c.tax_document_type_id) AS tax_document_tax_rate,
 		(SELECT COALESCE(jsonb_agg(jsonb_build_object(
 				'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
 				'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
@@ -144,7 +146,7 @@ export class ContractInvoiceReorganizeService {
 				)
 			: new Map();
 		const items = new Map(data.items.map((row) => [String(row.id), this.edit.itemOf(row)]));
-		const invoices = scheduleBoard(pending, lines, items, context);
+		const invoices = scheduleBoard(pending, lines, items);
 
 		return {
 			contract_id: contract.id,
@@ -685,7 +687,14 @@ export class ContractInvoiceReorganizeService {
 			legal_name: toText(row.entity_legal_name),
 			document_type: documentType,
 			export_type: documentType === 'FACTURA_EXPORTACION' ? 1 : 0,
-			tax_rate: taxRateForDocument(documentType, toText(row.company_country), row.company_tax_rate as number | string | null),
+			tax_rate: taxRateForDocument(
+				documentType,
+				toText(row.company_country),
+				row.company_tax_rate as number | string | null,
+				row.tax_document_type_id
+					? { kind: toText(row.tax_document_type_kind), tax_rate: (row.tax_document_tax_rate as number | string | null) ?? null }
+					: null
+			),
 			contract_currency: contractCurrency,
 			invoice_currency: (toText(row.invoice_currency) || contractCurrency).toUpperCase(),
 			fx_invoice_policy: toText(row.fx_invoice_policy),

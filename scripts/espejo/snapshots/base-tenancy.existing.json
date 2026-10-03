@@ -243,6 +243,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "is_default": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
@@ -667,6 +678,17 @@
     "scale": null,
     "array": false
    },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "currency": {
     "type": "text",
     "nullable": true,
@@ -893,6 +915,13 @@
     ],
     "unique": false,
     "where": null
+   },
+   "idx_companies_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
    }
   },
   "checks": [
@@ -902,6 +931,13 @@
    }
   ],
   "foreignKeys": {
+   "companies_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "companies_holding_fk": {
     "columns": [
      "holding_id"

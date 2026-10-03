@@ -1,10 +1,12 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Country } from '@/databases/postgresql/entities/base-tenancy/country.entity';
 
 @Check('clients_status_check', `((status = ANY (ARRAY['Activo'::text, 'Inactivo'::text])))`)
 @Index('idx_clients_client_number', ['client_number'])
 @Index('idx_clients_holding_id', ['holding_id'])
+@Index('idx_clients_country_code', ['country_code'])
 @Index('idx_clients_salesforce_account_id', ['salesforce_account_id'], { where: `(salesforce_account_id IS NOT NULL)` })
 @Index('idx_clients_salesforce_account_unique', ['salesforce_account_id', 'holding_id'], {
 	unique: true,
@@ -49,6 +51,19 @@ export class Client {
 
 	@Column({ type: 'text', nullable: true })
 	country?: string;
+
+	/** Configuración v2 ronda 3 (migración `1790840000000-ClientsCountryCode`): país ISO; la API escribe también `country` en español. */
+	@Column({
+		type: 'character',
+		length: 2,
+		nullable: true,
+		comment: 'País ISO 3166-1 alfa-2 (FK countries). La API escribe también clients.country con el nombre en español',
+	})
+	country_code?: string | null;
+
+	@ManyToOne(() => Country, { onDelete: 'RESTRICT' })
+	@JoinColumn({ name: 'country_code', referencedColumnName: 'code', foreignKeyConstraintName: 'clients_country_code_fkey' })
+	countryRef?: Country;
 
 	@Column({ type: 'text', nullable: true, comment: 'ID de Cliente generado desde Salesforce (Account ID)' })
 	client_number?: string;

@@ -1161,28 +1161,48 @@ describe('billing_conditions (fase A)', () => {
 			{ invoice_id: 'inv-12', fx: null },
 		]);
 	});
-	it('documento del catálogo: cambia la familia, el IVA de las PE futuras y se rechaza si no corresponde a la compañía; sin cambios → 400', () => {
+	it('documento tributario solo (ronda 4, Domi 03-10): bloqueo tax_document_requires_party_change (409 al aplicar); no toca facturas', () => {
 		const plan = planChange(
 			context({ tax_document_type: { id: 'tdt-110', code: '110', name: 'Factura de exportación electrónica', kind: 'export_invoice' } }),
 			request({ type: 'billing_conditions', tax_document_type_id: 'tdt-110' }, { effective_date: '2026-11-01' })
 		);
 
-		expect(ops(plan, 'update_invoices_document')).toEqual([
-			{
-				kind: 'update_invoices_document',
-				invoice_ids: ['inv-11', 'inv-12'],
-				document_type: 'FACTURA_EXPORTACION',
-				export_type: 1,
-				tax_rate: 0,
-			},
+		expect(plan.preview.can_apply).toBe(false);
+		expect(plan.preview.blockers).toEqual([
+			expect.objectContaining({
+				code: 'tax_document_requires_party_change',
+				message: 'El documento tributario solo cambia junto con la razón social emisora o receptora',
+			}),
 		]);
-		expect(ops(plan, 'update_contract')[0]).toMatchObject({ set: { tax_document_type_id: 'tdt-110', document_type: 'FACTURA_EXPORTACION' } });
+		expect(ops(plan, 'update_invoices_document')).toEqual([]);
+		// Sin catálogo: la familia sola tampoco cambia.
+		const family = planChange(context(), request({ type: 'billing_conditions', document_type: 'FACTURA_EXPORTACION' }));
+
+		expect(family.preview.blockers.map((blocker) => blocker.code)).toEqual(['tax_document_requires_party_change']);
+		// Documento inexistente o de otro país → 400 (como antes); sin cambios → 400.
 		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', tax_document_type_id: 'tdt-x' })))).toEqual([
 			'change.tax_document_type_id',
 		]);
 		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', payment_terms: { kind: 'net', days: 30 } })))).toEqual([
 			'change',
 		]);
+	});
+	it('mismo documento que ya tiene no cuenta como cambio (no bloquea)', () => {
+		const base = context().contract;
+		const withDoc = {
+			...base,
+			document_type: 'FACTURA',
+			tax_document_type_id: 'tdt-33',
+			tax_document_type_kind: 'invoice',
+			tax_document_tax_rate: 19,
+		};
+		const plan = planChange(
+			context({ contract: withDoc, tax_document_type: { id: 'tdt-33', code: '33', name: 'Factura', kind: 'invoice', tax_rate: 19 } }),
+			request({ type: 'billing_conditions', tax_document_type_id: 'tdt-33', auto_send_to_odoo: true }, { effective_date: '2026-11-01' })
+		);
+
+		expect(plan.preview.blockers).toEqual([]);
+		expect(ops(plan, 'update_invoices_document')).toEqual([]);
 	});
 	it('se admite en borrador y no en cancelado', () => {
 		expect(
@@ -1245,6 +1265,65 @@ describe('change_entity (M5)', () => {
 
 		expect(catalog.preview.warnings.map((warning) => warning.code)).toEqual(['document_type_review']);
 		expect(ops(catalog, 'update_invoices_document')).toEqual([]);
+	});
+	it('ronda 4: documento tributario junto con la razón social: lo guarda y recalcula el IVA de las PE desde la fecha efectiva', () => {
+		const base = context().contract;
+		const withDoc = {
+			...base,
+			document_type: 'FACTURA',
+			tax_document_type_id: 'tdt-33',
+			tax_document_type_kind: 'invoice',
+			tax_document_tax_rate: 19,
+		};
+		const plan = planChange(
+			context({
+				new_entity: entity,
+				contract: withDoc,
+				tax_document_type: { id: 'tdt-34', code: '34', name: 'Factura exenta', kind: 'invoice', tax_rate: 0 },
+			}),
+			request({ type: 'change_entity', client_entity_id: ENTITY_NEW, tax_document_type_id: 'tdt-34' }, { effective_date: '2026-11-01' })
+		);
+
+		expect(plan.preview.blockers).toEqual([]);
+		expect(ops(plan, 'update_contract')[0]).toMatchObject({
+			set: { client_entity_id: ENTITY_NEW, tax_document_type_id: 'tdt-34', document_type: 'FACTURA' },
+		});
+		expect(ops(plan, 'update_invoices_fields')).toEqual([
+			{
+				kind: 'update_invoices_fields',
+				invoice_ids: ['inv-11', 'inv-12'],
+				set: { client_entity_id: ENTITY_NEW, client_tax_id: '78.888.888-8' },
+			},
+		]);
+		expect(ops(plan, 'update_invoices_document')).toEqual([
+			{ kind: 'update_invoices_document', invoice_ids: ['inv-11', 'inv-12'], document_type: 'FACTURA', export_type: 0, tax_rate: 0 },
+		]);
+		expect(plan.event.metadata).toMatchObject({
+			tax_document_before: { id: 'tdt-33' },
+			tax_document_after: { id: 'tdt-34', document_type: 'FACTURA', tax_rate: 0 },
+		});
+		expect(plan.preview.invoices.updated[0].change).toContain('documento 34 Factura exenta, IVA 0 %');
+		// Exportación con la razón social extranjera: familia FACTURA_EXPORTACION e IVA 0.
+		const exportPlan = planChange(
+			context({
+				new_entity: { ...entity, country: 'Perú' },
+				contract: withDoc,
+				tax_document_type: { id: 'tdt-110', code: '110', name: 'Factura de exportación electrónica', kind: 'export_invoice' },
+			}),
+			request({ type: 'change_entity', client_entity_id: ENTITY_NEW, tax_document_type_id: 'tdt-110' }, { effective_date: '2026-11-01' })
+		);
+
+		expect(ops(exportPlan, 'update_invoices_document')[0]).toMatchObject({ document_type: 'FACTURA_EXPORTACION', export_type: 1, tax_rate: 0 });
+		expect(exportPlan.preview.warnings.map((warning) => warning.code)).not.toContain('document_type_review');
+		// Documento que no es del país de la compañía → 400.
+		expect(
+			fields(() =>
+				planChange(
+					context({ new_entity: entity }),
+					request({ type: 'change_entity', client_entity_id: ENTITY_NEW, tax_document_type_id: 'tdt-x' })
+				)
+			)
+		).toEqual(['change.tax_document_type_id']);
 	});
 	it('400: cliente comercial (ABIERTO), razón social ajena al cliente, la misma; bloqueo por período cerrado (guard del contrato)', () => {
 		expect(
@@ -1521,6 +1600,15 @@ describe('auditoría 01-10: facturas por OC, borrador en el ERP, anuladas, NC pr
 		const colombia = { ...contract, company: { ...contract.company, country: 'Colombia' } };
 
 		expect(taxRateFor('FACTURA', colombia)).toBe(taxRateForDocument('FACTURA', 'Colombia', contract.company.tax_rate));
+		// Ronda 3: con documento del catálogo, los dos caminos usan su tasa (misma función `resolveTaxRate`).
+		const exenta = { ...contract, tax_document_type_id: 'tdt-34', tax_document_type_kind: 'invoice', tax_document_tax_rate: 0 };
+		const document = { kind: 'invoice', tax_rate: 0 };
+
+		expect(taxRateFor('FACTURA', exenta)).toBe(0);
+		expect(taxRateForDocument('FACTURA', contract.company.country, contract.company.tax_rate, document)).toBe(0);
+		// Un documento de exportación no fija la tasa de una factura nacional; exportación siempre 0.
+		expect(taxRateForDocument('FACTURA', 'Chile', 19, { kind: 'export_invoice', tax_rate: 0 })).toBe(19);
+		expect(taxRateForDocument('FACTURA_EXPORTACION', 'Chile', 19, { kind: 'invoice', tax_rate: 19 })).toBe(0);
 	});
 });
 

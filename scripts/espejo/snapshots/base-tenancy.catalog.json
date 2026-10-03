@@ -589,8 +589,19 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
+   {
+    "name": "companies_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
+   },
    {
     "name": "companies_fx_company_policy_check",
     "type": "c",
@@ -612,6 +623,14 @@
    }
   ],
   "indexes": [
+   {
+    "name": "idx_companies_country_code",
+    "cols": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    {
     "name": "idx_companies_odoo_integration_id",
     "cols": [
@@ -1021,6 +1040,36 @@
     "cols": [
      "holding_id"
     ]
+   },
+   {
+    "name": "holding_settings_quote_number_prefix_check",
+    "type": "c",
+    "expr": "quote_number_prefix ~ '^[A-Za-z0-9]{1,10}$'::text"
+   },
+   {
+    "name": "holding_settings_quote_number_width_check",
+    "type": "c",
+    "expr": "(quote_number_width >= 1) AND (quote_number_width <= 8)"
+   },
+   {
+    "name": "holding_settings_quote_numbering_mode_check",
+    "type": "c",
+    "expr": "quote_numbering_mode = ANY (ARRAY['prefixed'::text, 'sequential'::text, 'manual'::text])"
+   },
+   {
+    "name": "holding_settings_renewal_overdue_every_days_check",
+    "type": "c",
+    "expr": "(renewal_overdue_every_days >= 1) AND (renewal_overdue_every_days <= 90)"
+   },
+   {
+    "name": "holding_settings_renewal_reminder_days_check",
+    "type": "c",
+    "expr": "((cardinality(renewal_reminder_days) >= 1) AND (cardinality(renewal_reminder_days) <= 10)) AND (0 <= ALL (renewal_reminder_days)) AND (180 >= ALL (renewal_reminder_days))"
+   },
+   {
+    "name": "holding_settings_timezone_check",
+    "type": "c",
+    "expr": "(char_length(timezone) >= 1) AND (char_length(timezone) <= 64)"
    }
   ],
   "indexes": [],
@@ -1092,7 +1141,7 @@
    {
     "name": "custom_field_definitions_field_type_check",
     "type": "c",
-    "expr": "field_type = ANY (ARRAY['text'::text, 'number'::text])"
+    "expr": "field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])"
    },
    {
     "name": "custom_field_definitions_holding_id_fkey",
@@ -1100,6 +1149,11 @@
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "custom_field_definitions_options_check",
+    "type": "c",
+    "expr": "(field_type = 'select'::text) = ((options IS NOT NULL) AND (jsonb_typeof(options) = 'array'::text) AND (jsonb_array_length(options) > 0))"
    },
    {
     "name": "custom_field_definitions_pkey",

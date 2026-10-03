@@ -27,6 +27,39 @@
 - Reutiliza: `sellers`, `quotes`/`quote_stages` (ponderación por etapa = nuevo atributo `win_probability` en la etapa), facturas Por Emitir, RSM, AR/DSO, `companies`.
 - Las **métricas de budget** son candidatas naturales a **billable metric/consumo interno** para alertas (ver agentes).
 
+## Construido 02-10: esquema
+
+Decisión de Domi (02-10): el modelo genérico se crea **una sola vez** y el primer uso es el **presupuesto de ingresos a caja** de Cobranza
+(antes "meta anual de cobranza", que iba a un jsonb en `invoice_collection_settings`: esa migración, `1790750000000-CashInGoals`, se
+reemplazó **sin haberse aplicado en ningún ambiente**). Migración `1790750000000-Budgets` — **escrita, NO aplicada** (proceso de
+`GUIA-CAMBIOS-DE-ESQUEMA.md`: commit → QA con `schema:status` + `schema:log` → producción → `schema:snapshot`).
+
+| Objeto | Efecto exacto |
+|---|---|
+| Tabla `budgets` | `id uuid PK default gen_random_uuid()` · `holding_id uuid NOT NULL` → `company_holdings` ON DELETE CASCADE (`budgets_holding_id_fkey`) · `kind text NOT NULL` · `name text NOT NULL` · `scenario text NOT NULL DEFAULT 'base'` · `currency text NOT NULL` (moneda de sistema al guardar) · `period_granularity text NOT NULL DEFAULT 'month'` · `fiscal_year smallint NOT NULL` (= año calendario) · `status text NOT NULL DEFAULT 'active'` · `notes text` · `created_by uuid` · `created_at` / `updated_at timestamptz NOT NULL DEFAULT now()` |
+| CHECK de `budgets` | `budgets_kind_check` (cash_in, billing, bookings, mrr, new_mrr, expansion_mrr, contraction_mrr, churn_mrr) · `budgets_scenario_check` (base, optimistic, pessimistic) · `budgets_period_granularity_check` (month, quarter, year) · `budgets_status_check` (draft, active, archived) |
+| Índice único parcial | `uq_budgets_holding_kind_year_scenario (holding_id, kind, fiscal_year, scenario) WHERE status <> 'archived'` (un presupuesto vivo; archivar libera el lugar) |
+| Tabla `budget_lines` | `id uuid PK` · `holding_id uuid NOT NULL` → `company_holdings` CASCADE · `budget_id uuid NOT NULL` → `budgets` ON DELETE CASCADE (`budget_lines_budget_id_fkey`) · `period_start date NOT NULL` (primer día del mes, trimestre o año) · `dimension_type text NOT NULL DEFAULT 'total'` · `dimension_id uuid` · `dimension_key text` · `amount numeric(18,2) NOT NULL` · `created_at` / `updated_at` |
+| CHECK de `budget_lines` | `budget_lines_dimension_type_check` (total, company, seller, product, segment, market, client) · `budget_lines_dimension_check` (total sin id ni clave; company/seller/product/client con `dimension_id`; segment/market con `dimension_key`) · `budget_lines_amount_check` (`amount >= 0`) · `budget_lines_period_start_check` (día 1) |
+| Índices de `budget_lines` | `uq_budget_lines_cell` único de expresión `(budget_id, period_start, dimension_type, COALESCE(dimension_id, '0000…'::uuid), COALESCE(dimension_key, ''))` (también asset `special-index/uq_budget_lines_cell.sql`; la entity lo avisa con `synchronize: false`) · `idx_budget_lines_budget (budget_id)` · `idx_budget_lines_holding_period (holding_id, period_start)` |
+| RLS | `ENABLE ROW LEVEL SECURITY` en ambas (en la migración). Policies como assets: `rls/tenant_isolation_{select,insert,update,delete}_budgets.sql` (`holding_id = get_current_user_holding_id()`) y `rls/tenant_isolation_{select,insert,update,delete}_budget_lines.sql` (holding de la línea **y** `budget_id` de un presupuesto del holding, misma forma que `contract_item_pauses`) |
+| Triggers (assets) | `triggers/trg_budgets_updated_at.sql`, `triggers/trg_budget_lines_updated_at.sql` (`update_updated_at_column()`) |
+| `down` | Se niega si hay presupuestos o líneas; si no, `DROP TABLE budget_lines` y `DROP TABLE budgets` |
+| Entities e inventarios | `entities/revenue/budget.entity.ts` (`Budget`), `entities/revenue/budget-line.entity.ts` (`BudgetLine`); `espejo.existing.ts`, `scripts/espejo/existing-entities.json`, `scripts/espejo/module-map.json` (grupo `revenue`). No son espejos: hasta aplicar y refrescar el snapshot, el snapshot de prod no las tiene |
+
+**API** (`src/modules/budgets`, `HoldingScopeGuard`): `GET /budgets?kind&fiscal_year` · `GET /budgets/:id` (con líneas y total por mes) ·
+`PUT /budgets` (upsert por kind · año · escenario entre los no archivados; reemplaza **todas** las líneas en una transacción; valida montos
+≥ 0 con 2 decimales, períodos alineados a la granularidad y dentro del año, reglas de dimensión, entidades del holding y que cada dimensión
+sume el total del período) · `POST /budgets/:id/archive`. **Permisos**: por ahora todos los kinds usan los de Facturación
+(`VIEW_FACTURACION` / `EDIT_FACTURACION`); cuando Ventas y Métricas tengan permisos propios, bookings y MRR se separan.
+
+**Primer uso (Cobranza)**: `GET/PUT /billing/receivables/goal` lee y escribe el presupuesto `cash_in` del año (anual = una línea `year` o la
+suma de 12 mensuales; reparto opcional por compañía) y la proyección de cobros trae el presupuesto por período (mes = el del mes o anual ÷
+12; semana/día prorrateados por días) y por compañía. Ver `mapa-v2-facturacion.md`.
+
+**Pendiente** (no construido): escenarios optimista/pesimista en pantalla, presupuestos de facturación, bookings y MRR (el modelo ya los
+admite), carga por planilla y `forecast_snapshots`.
+
 ## Cómo se conecta con lo demás
 
 - **Agentes de alerta** (doc de agentes, F1): "vendedor X al 40 % de su cuota a mitad de mes", "facturación proyectada del mes 15 % bajo presupuesto", "caja proyectada no cubre el presupuesto de ingresos" — alertas accionables con recomendación.

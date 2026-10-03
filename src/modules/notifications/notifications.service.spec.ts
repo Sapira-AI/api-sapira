@@ -239,4 +239,37 @@ describe('NotificationsService', () => {
 			expect(notificationsGateway.emitNotificationUpdated).not.toHaveBeenCalled();
 		});
 	});
+
+	describe('alertas por rol (Configuración v2)', () => {
+		it('lista los tipos activos del rol', async () => {
+			const { service, roleSubscriptionRepository } = buildService();
+			roleSubscriptionRepository.find.mockResolvedValue([
+				{ notification_type: 'invoice_odoo_failure' },
+				{ notification_type: 'invoice_odoo_failure' },
+			]);
+
+			await expect(service.listRoleSubscriptionTypes('holding-1', 'role-1')).resolves.toEqual(['invoice_odoo_failure']);
+			expect(roleSubscriptionRepository.find).toHaveBeenCalledWith({
+				where: expect.objectContaining({ holding_id: 'holding-1', role_id: 'role-1', is_enabled: true }),
+			});
+		});
+
+		it('reemplaza solo las suscripciones de ese rol e ignora tipos no suscribibles', async () => {
+			const { service, dataSource, manager } = buildService();
+			dataSource.query.mockResolvedValue([{ id: 'role-1' }]);
+
+			await expect(
+				service.replaceRoleSubscriptionTypes('holding-1', 'role-1', ['salesforce_sync_failure', 'otro', 'salesforce_sync_failure'])
+			).resolves.toEqual(['salesforce_sync_failure']);
+			expect(manager.delete).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ holding_id: 'holding-1', role_id: 'role-1' }));
+			expect(manager.save).toHaveBeenCalledWith([expect.objectContaining({ role_id: 'role-1', notification_type: 'salesforce_sync_failure' })]);
+		});
+
+		it('rol de otro holding → 404', async () => {
+			const { service, dataSource } = buildService();
+			dataSource.query.mockResolvedValue([]);
+
+			await expect(service.replaceRoleSubscriptionTypes('holding-1', 'role-x', [])).rejects.toThrow('Uno o más roles no pertenecen al holding');
+		});
+	});
 });

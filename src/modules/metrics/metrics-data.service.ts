@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { type Month, monthStart } from './metrics-period';
+import { NOT_PENDING_RENEWAL, PENDING } from './rsm-momentum';
 
 import type { MetricCurrency, MetricsFiltersDto } from './dtos/query-metrics.dto';
 import type { LineMonth, MrrLine } from './mrr-movements';
@@ -9,8 +10,8 @@ import type { RevenueItemMonth } from './revenue-balances';
 
 type Row = Record<string, unknown>;
 
-/** `momentum` de las filas de "pendiente de renovar": no son MRR (§1.2, misma regla que Contratos L2). */
-export const PENDING = 'PENDING_RENEWAL';
+// Regla del "pendiente de renovar": una sola definición, compartida con Contratos (D-CTR-1).
+export { NOT_PENDING_RENEWAL, PENDING } from './rsm-momentum';
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 const str = (value: unknown) => (value === null || value === undefined || value === '' ? null : String(value));
@@ -250,10 +251,10 @@ export class MetricsDataService {
 				COALESCE(ci.product_name, MAX(r.product_name)) AS product, ci.categoria, ci.renews_item_id, ci.renewed_by_item_id,
 				ci.item_type, ci.unit_of_measure, cl.segment, cl.market, cl.industry, cl.country,
 				to_char(r.period_month, 'YYYY-MM') AS period,
-				SUM(${value}) FILTER (WHERE r.momentum IS DISTINCT FROM '${PENDING}') AS value,
-				BOOL_OR(${realGapSql(unconv)}) FILTER (WHERE r.momentum IS DISTINCT FROM '${PENDING}') AS unconverted,
+				SUM(${value}) FILTER (WHERE ${NOT_PENDING_RENEWAL}) AS value,
+				BOOL_OR(${realGapSql(unconv)}) FILTER (WHERE ${NOT_PENDING_RENEWAL}) AS unconverted,
 				BOOL_OR(r.calc_version = 'missing_fx_rate' AND NOT ${inactiveEmptyRowSql()}) AS item_fx_missing,
-				SUM(r.${basis === 'cmrr' ? 'cmrr_period' : 'mrr_period_contracted'}_contract_ccy) FILTER (WHERE r.momentum IS DISTINCT FROM '${PENDING}') AS value_contract,
+				SUM(r.${basis === 'cmrr' ? 'cmrr_period' : 'mrr_period_contracted'}_contract_ccy) FILTER (WHERE ${NOT_PENDING_RENEWAL}) AS value_contract,
 				COALESCE(SUM(${value}) FILTER (WHERE r.momentum = '${PENDING}' AND NOT ${unconv}), 0) AS pending,
 				MAX(r.momentum) FILTER (WHERE r.momentum NOT IN ('BOP', '${PENDING}')) AS momentum
 			FROM revenue_schedule_monthly r
@@ -465,7 +466,7 @@ export class MetricsDataService {
 		const where = [
 			`r.holding_id = ${params.add(holdingId)}`,
 			`COALESCE(r.is_total_row, false) = false`,
-			`r.momentum IS DISTINCT FROM '${PENDING}'`,
+			NOT_PENDING_RENEWAL,
 			`r.period_month <= ${params.add(monthStart(to))}::date`,
 			...(from ? [`r.period_month >= ${params.add(monthStart(from))}::date`] : []),
 			`c.deleted_at IS NULL`,
@@ -490,14 +491,15 @@ export class MetricsDataService {
 				(ARRAY_AGG(r.billed_cum${s} ORDER BY (r.momentum = 'CHURN')))[1] AS billed_cum,
 				BOOL_OR(${realGapSql(unconv)}) AS unconverted,
 				BOOL_OR(r.calc_version = 'missing_fx_rate' AND NOT ${inactiveEmptyRowSql()}) AS item_fx_missing,
-				cl.name_commercial AS client_name
+				cl.name_commercial AS client_name, cl.id::text AS client_id, cl.market, cl.industry, cl.segment,
+				MAX(COALESCE(ci.product_name, r.product_name)) AS product
 			FROM revenue_schedule_monthly r
 			LEFT JOIN contracts c ON c.id = r.contract_id
 			LEFT JOIN subscriptions s ON s.id = r.subscription_id
 			LEFT JOIN contract_items ci ON ci.id = r.contract_item_id
 			LEFT JOIN clients cl ON cl.id = COALESCE(c.client_id, s.client_id)
 			WHERE ${where.join(' AND ')}
-			GROUP BY 1, 2, 3, 4, 5, cl.name_commercial`,
+			GROUP BY 1, 2, 3, 4, 5, cl.name_commercial, cl.id, cl.market, cl.industry, cl.segment`,
 			params.values
 		);
 		const unconvertedItems = new Set<string>();
@@ -521,6 +523,16 @@ export class MetricsDataService {
 				billed: num(row.billed) ?? 0,
 				recognizedCum: num(row.recognized_cum) ?? 0,
 				billedCum: num(row.billed_cum) ?? 0,
+				// Dimensiones del ítem para abrir los asientos (mismas columnas de `clients` que Métricas "por dimensión").
+				attrs: {
+					contractNumber: str(row.contract_number),
+					clientId: str(row.client_id),
+					clientName: str(row.client_name),
+					product: str(row.product),
+					market: str(row.market),
+					industry: str(row.industry),
+					segment: str(row.segment),
+				},
 			});
 		}
 

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
+
 import { setApiWriter } from './api-writer';
 import { invoiceTermsSql, latestContractEnd, refreshContractSystemFx, refreshInvoiceSystemAmounts } from './api-written-fields';
 import {
@@ -15,7 +17,6 @@ import {
 	validAnchorDay,
 } from './billing-engine';
 import { todayFor } from './business-date';
-import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms, DRAFT_STATUS, METERED_ADVANCE_MESSAGE, resolveUserId } from './contract-drafts.service';
 import { UF_CURRENCY } from './dtos/create-contract.dto';
 import { parseStoredTemplate } from './invoice-description';
@@ -321,6 +322,7 @@ export class ContractActivationService {
 				c.document_type,
 				c.invoice_description_template,
 				c.tax_document_type_id, tdt.code AS tax_document_type_code, tdt.name AS tax_document_type_name,
+				tdt.kind AS tax_document_type_kind, tdt.tax_rate AS tax_document_tax_rate,
 				tdt.description_max_chars AS own_description_max_chars, ${DESCRIPTION_LIMITS_SQL} AS description_limits,
 				co.id AS company_found, co.legal_name AS company_legal_name, co.tax_id AS company_tax_id, co.legal_address AS company_address,
 				co.country AS company_country, co.currency AS company_currency, co.tax_rate AS company_tax_rate,
@@ -485,7 +487,11 @@ export class ContractActivationService {
 		}
 		if (!contract.client_entity_id || !contract.entity_found) block('no_client_entity', 'El contrato no tiene razón social asignada');
 		if (!contract.company_id || !contract.company_found) block('no_company', 'El contrato no tiene compañía emisora');
-		else if (normalizeTaxRate(contract.company_tax_rate as number | string | null) === null) {
+		else if (
+			normalizeTaxRate(contract.company_tax_rate as number | string | null) === null &&
+			// Ronda 3: un documento con tasa propia no necesita la de la compañía.
+			(contract.tax_document_tax_rate === null || contract.tax_document_tax_rate === undefined)
+		) {
 			block('no_tax_rate', 'La compañía no tiene tasa de IVA configurada: configúrala antes de activar');
 		}
 		if (!items.length) block('no_items', 'El contrato no tiene ítems');
@@ -558,6 +564,9 @@ export class ContractActivationService {
 						multicurrency,
 						document_type: toText(contract.document_type),
 						company: { country: toText(contract.company_country), tax_rate: contract.company_tax_rate as number | string | null },
+						tax_document: contract.tax_document_type_id
+							? { kind: toText(contract.tax_document_type_kind), tax_rate: contract.tax_document_tax_rate as number | string | null }
+							: null,
 						entity_country: toText(contract.entity_country),
 						// Glosa con la plantilla del contrato (spec facturas §3.6); sin plantilla, la de hoy.
 						description_template: parseStoredTemplate(contract.invoice_description_template),
@@ -572,18 +581,8 @@ export class ContractActivationService {
 		const warnings = [...(engine?.warnings ?? [])];
 
 		if (items.length && engine && engine.invoices.length === 0) block('no_invoices', 'El generador no produjo facturas para este contrato');
-		// Período cerrado: ninguna factura generada puede emitirse en un mes ya cerrado (misma regla que modificaciones y facturas).
-		const cutoff = toText(contract.cutoff_date)?.slice(0, 10) ?? null;
-		const closedInvoices = cutoff ? (engine?.invoices ?? []).filter((invoice) => invoice.issue_date <= cutoff) : [];
-
-		if (closedInvoices.length)
-			blockers.push({
-				code: 'period_closed',
-				message: `${closedInvoices.length === 1 ? 'La factura del' : `${closedInvoices.length} facturas desde el`} ${
-					closedInvoices[0].issue_date
-				} ${closedInvoices.length === 1 ? 'cae' : 'caen'} en un período cerrado (cierre al ${cutoff})`,
-				next_step: `${REOPEN_PERIOD_STEP}, o mueve el inicio de los ítems a un período abierto`,
-			});
+		// Sin `period_closed` por facturas (Domi 03-10): el cierre de períodos protege contratos e ítems, no facturas. Si la activación toca
+		// ítems en un mes cerrado, lo bloquean `contract-changes` y el trigger `trg_period_guard_contract_items`.
 
 		// Tipo de cambio fijo de facturación: el generador toma, por factura, la tasa `purpose = 'invoice'` que cubre el inicio
 		// de su período. La tasa es opcional al crear: una factura sin tasa nace sin FX y el scheduler no la emite (S6-2), así
@@ -689,6 +688,8 @@ export class ContractActivationService {
 	 */
 	async activate(ids: string[], holdingId: string, authId: string, now = new Date()) {
 		const userId = await resolveUserId(this.dataSource, authId);
+		// Zona horaria del holding (Configuración ronda 4), leída una vez para todo el lote.
+		const timezone = await holdingTimezone(this.dataSource, holdingId);
 		const activated: Array<{ id: string; contract_number: string | null; invoices_created: number; warning_codes: string[] }> = [];
 		const skipped: Array<{ id: string; contract_number: string | null; blockers: ActivationBlocker[] }> = [];
 		const failed: Array<{ id: string; contract_number: string | null; message: string }> = [];
@@ -714,7 +715,7 @@ export class ContractActivationService {
 					continue;
 				}
 
-				const invoicesCreated = await this.persist(runner, plan, holdingId, userId, todayFor(null, now));
+				const invoicesCreated = await this.persist(runner, plan, holdingId, userId, todayFor(timezone, now));
 
 				await runner.commitTransaction();
 				activated.push({ id, contract_number: contractNumber, invoices_created: invoicesCreated, warning_codes: plan.check.warning_codes });

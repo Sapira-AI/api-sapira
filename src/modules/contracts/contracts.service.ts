@@ -1,8 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { holdingTimezone, loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+// MRR del mes sin "pendiente de renovar" (S5-3): la regla vive en Métricas (D-CTR-1), una sola definición.
+import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
 
+import { todayFor } from './business-date';
 import {
 	creditNotePendingEmission,
 	isVisibleLine,
@@ -14,7 +18,7 @@ import {
 	voidedSql,
 } from './contract-360';
 import { buildItemGroups, deriveItemStatus, type ItemGroup, type PendingInvoiceLine, type PricedContractItem } from './contract-items';
-import { loadItemPauses, loadOpenRenewalProposals } from './contract-renewals';
+import { loadItemPauses, loadOpenRenewalProposals, loadRenewalReminder } from './contract-renewals';
 import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
 import { isUnifiedType, UNIFIED_READ_SQL, type UnifiedReadFields, unifiedReadFields } from './invoice-consolidation-read';
 import { referenceKind } from './invoice-description';
@@ -76,20 +80,13 @@ export const electronicEmissionOf = (row: Record<string, unknown>) => {
 const toTextOrNull = (value: unknown) => (value === null || value === undefined ? null : String(value));
 
 /** Tipos de `invoice_adjustments` que son un motivo de desvío contra el plan (el resto, p. ej. `reagenda`, no). */
-const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
+export const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'correction')`;
 
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 const money = (value: number, currency: string | null) =>
 	`${currency ? `${currency} ` : ''}${value.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-/**
- * MRR del mes **sin** "pendiente de renovar" (decisión S5-3): el RSM guarda filas `momentum = 'PENDING_RENEWAL'` para
- * ítems vencidos sin renovar ni churn (`apply_pending_renewal_tail`); ese MRR se muestra aparte, nunca sumado.
- */
-export const NOT_PENDING_RENEWAL = `r.momentum IS DISTINCT FROM 'PENDING_RENEWAL'`;
 
 /**
  * Borrado lógico de borradores (C5, columna `contracts.deleted_at` de la migración `1790358766159-AddContractBillingFields`):
@@ -274,7 +271,7 @@ export class ContractsService {
 			sortOrder = 'desc',
 		} = filters;
 		const statuses = parseStatusFilter(filters.status);
-		const params: unknown[] = [holdingId, isoDate(asOfDate)];
+		const params: unknown[] = [holdingId, todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate)];
 		// Los borradores eliminados (borrado lógico, C5) no existen para v2.
 		const where = [`c.holding_id = $1`, NOT_DELETED];
 		const list = (value?: string) =>
@@ -516,7 +513,7 @@ export class ContractsService {
 	 * `ending_30d` es el mismo filtro que `?endingWithinDays=30`.
 	 */
 	async summary(holdingId: string, asOfDate = new Date()) {
-		const asOf = isoDate(asOfDate);
+		const asOf = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [metrics, [pendingRow], [countRow]] = await Promise.all([
 			this.holdingMetrics.monthMetrics(holdingId, asOf),
 			this.dataSource.query<Row[]>(
@@ -623,8 +620,10 @@ export class ContractsService {
 
 	async detail(idOrNumber: string, holdingId: string, asOfDate = new Date()) {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
-		const [[row], alerts, scheduledChanges, renewalProposals, pauses] = await Promise.all([
+		// "Hoy" y escalera de recordatorios del holding (Configuración ronda 4: `timezone`, `renewal_reminder_days`, `renewal_overdue_every_days`).
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const today = todayFor(prefs.timezone, asOfDate);
+		const [[row], alerts, scheduledChanges, renewalProposals, pauses, renewalReminder] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT c.id, c.contract_number, c.status, c.type,
 					cl.id AS client_id, cl.name_commercial AS client_name,
@@ -672,6 +671,11 @@ export class ContractsService {
 			loadOpenRenewalProposals(this.dataSource, holdingId, today, contract.id),
 			// §9.3.3: pausas de los ítems.
 			loadItemPauses(this.dataSource, contract.id, holdingId, today),
+			// S2-1 / S5-4: última alerta creciente vigente (ítems que terminan sin decisión).
+			loadRenewalReminder(this.dataSource, contract.id, holdingId, today, prefs.auto_renewal_notice_days, {
+				steps: prefs.renewal_reminder_days,
+				overdue_every_days: prefs.renewal_overdue_every_days,
+			}),
 		]);
 
 		if (!row) throw new NotFoundException('Contrato no encontrado');
@@ -757,6 +761,11 @@ export class ContractsService {
 			renewal_proposals: renewalProposals,
 			/** Pausas de los ítems (`contract_item_pauses`, §9.3.3), todas; `active_today` = cubre hoy. */
 			pauses,
+			/**
+			 * Alerta creciente vigente (job `contracts-renewal-reminders`, S2-1 / S5-4): `{ end_date, days_to_end, threshold_days, tone, label,
+			 * items[] }` o null si no hay alerta o los ítems ya se renovaron o dieron de baja.
+			 */
+			renewal_reminder: renewalReminder,
 		};
 	}
 
@@ -902,7 +911,7 @@ export class ContractsService {
 
 	async items(idOrNumber: string, holdingId: string, asOfDate = new Date()): Promise<{ items: PricedContractItem[]; groups: ItemGroup[] }> {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [rows, lines, pauses] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT ci.id, ci.product_id, ci.product_name, ci.account, ci.item_type, ci.categoria, ci.unit_of_measure,
@@ -1651,41 +1660,6 @@ export class ContractsService {
 	// ---------------------------------------------------------------- devengo (RSM)
 
 	/** Resumen mensual del devengo del contrato. El MRR excluye el pendiente de renovar (S5-3). */
-	async revenue(idOrNumber: string, holdingId: string) {
-		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const rows = await this.dataSource.query<Row[]>(
-			`SELECT r.period_month::text AS period_month,
-				COALESCE(SUM(r.recognized_period_contract_ccy), 0) AS recognized,
-				COALESCE(SUM(r.billed_period_contract_ccy), 0) AS billed,
-				COALESCE(SUM(r.mrr_period_contract_ccy) FILTER (WHERE ${NOT_PENDING_RENEWAL}), 0) AS mrr,
-				COALESCE(SUM(r.deferred_balance_eom_contract_ccy), 0) AS deferred_eom,
-				COALESCE(SUM(r.unbilled_balance_eom_contract_ccy), 0) AS unbilled_eom,
-				COALESCE(SUM(r.recognized_period_system_ccy), 0) AS recognized_system,
-				COALESCE(SUM(r.mrr_period_system_ccy) FILTER (WHERE ${NOT_PENDING_RENEWAL}), 0) AS mrr_system,
-				MAX(r.system_currency) AS system_currency
-			FROM revenue_schedule_monthly r
-			WHERE r.contract_id = $1 AND r.holding_id = $2 AND r.is_total_row = false
-			GROUP BY r.period_month
-			ORDER BY r.period_month`,
-			[contract.id, holdingId]
-		);
-		const systemCurrency = contract.system_currency ?? toText(rows[0]?.system_currency) ?? (await this.holdingMetrics.systemCurrency(holdingId));
-
-		return {
-			currency_contract: contract.contract_currency,
-			currency_system: systemCurrency,
-			months: rows.map((row) => ({
-				period_month: String(row.period_month).slice(0, 10),
-				recognized: toNumber(row.recognized),
-				billed: toNumber(row.billed),
-				mrr: toNumber(row.mrr),
-				deferred_eom: toNumber(row.deferred_eom),
-				unbilled_eom: toNumber(row.unbilled_eom),
-				recognized_system: toNumber(row.recognized_system),
-				mrr_system: toNumber(row.mrr_system),
-			})),
-		};
-	}
 }
 
 /** Descuento puntual de una línea a partir de su desglose: tipo y valor ingresados, monto total (negativo) y etiqueta. */

@@ -27,6 +27,8 @@ const base = (sql: string) => {
 			ref_id: null,
 			amount: null,
 			currency: null,
+			occurred_on: '2026-09-24',
+			all_day: false,
 		},
 		{
 			type: 'invoice',
@@ -40,6 +42,9 @@ const base = (sql: string) => {
 			ref_id: 'i-1',
 			amount: '150',
 			currency: 'USD',
+			occurred_on: new Date(2026, 8, 1),
+			all_day: true,
+			ref_parent_id: 'k-1',
 		},
 	];
 };
@@ -48,14 +53,46 @@ describe('ClientActivityService', () => {
 	it('une solo las fuentes pedidas y marca como borrables solo las notas propias', async () => {
 		const { service, query } = build(base);
 		const page = await service.list('c-1', 'h-1', 'auth-1', { types: ['note', 'invoice'], limit: 30 });
-		const listSql = query.mock.calls.find(([sql]) => (sql as string).includes('ORDER BY occurred_at DESC'))![0] as string;
+		const listSql = query.mock.calls.find(([sql]) => (sql as string).includes('LIMIT'))![0] as string;
 
 		expect(listSql).toContain('FROM client_activity_notes');
 		expect(listSql).toContain('FROM invoices i');
 		expect(listSql).not.toContain('FROM quotes');
 		expect(page.items).toBe(2);
 		expect(page.data[0]).toMatchObject({ type: 'note', can_delete: true, actor: 'Domi' });
-		expect(page.data[1]).toMatchObject({ type: 'invoice', can_delete: false, amount: 150, ref: { kind: 'invoice', id: 'i-1' } });
+		expect(page.data[1]).toMatchObject({
+			type: 'invoice',
+			can_delete: false,
+			amount: 150,
+			ref: { kind: 'invoice', id: 'i-1', contract_id: 'k-1' },
+		});
+	});
+
+	it('orden cronológico estricto por día del negocio: las fuentes con solo fecha no se corren al día anterior', async () => {
+		const { service, query } = build(base);
+		const page = await service.list('c-1', 'h-1', 'auth-1', {});
+		const [listSql, listParams] = query.mock.calls.find(([sql]) => (sql as string).includes('LIMIT'))! as [string, unknown[]];
+
+		// Día (fecha propia o el de la hora en la zona del holding, $3) → con hora antes que solo fecha → hora → tipo → id (desempate estable).
+		expect(listSql).toContain(
+			'ORDER BY COALESCE(feed.occurred_day, (feed.occurred_at AT TIME ZONE $3::text)::date) DESC, (feed.occurred_day IS NOT NULL), occurred_at DESC, type, id'
+		);
+		// Sin zona guardada: America/Santiago (ronda 4 de Configuración).
+		expect(listParams).toEqual(['c-1', 'h-1', 'America/Santiago']);
+		// La emisión de la factura y la fecha de pago viajan como fecha, no como medianoche UTC.
+		expect(listSql).toContain('i.issue_date, i.contract_id::text');
+		expect(listSql).toContain('p.payment_date::date');
+		expect(page.data[0]).toMatchObject({ occurred_on: '2026-09-24', all_day: false });
+		expect(page.data[1]).toMatchObject({ occurred_on: '2026-09-01', all_day: true });
+	});
+
+	it('ronda 4: el día de cada evento usa la zona horaria del holding', async () => {
+		const { service, query } = build((sql) => (sql.includes('to_jsonb(hs)') ? [{ settings: { timezone: 'America/Lima' } }] : base(sql)));
+
+		await service.list('c-1', 'h-1', 'auth-1', {});
+		const [, params] = query.mock.calls.find(([sql]) => (sql as string).includes('LIMIT'))! as [string, unknown[]];
+
+		expect(params).toEqual(['c-1', 'h-1', 'America/Lima']);
 	});
 
 	it('solo el autor borra su nota', async () => {
@@ -74,7 +111,7 @@ describe('ClientActivityService', () => {
 		const { service, query } = build(base);
 
 		await service.list('c-1', 'h-1', 'auth-1', { types: ['document'] });
-		const listSql = query.mock.calls.find(([sql]) => (sql as string).includes('ORDER BY occurred_at DESC'))![0] as string;
+		const listSql = query.mock.calls.find(([sql]) => (sql as string).includes('LIMIT'))![0] as string;
 
 		expect(listSql.indexOf('NULL::text AS type')).toBeLessThan(listSql.indexOf('FROM client_documents'));
 		expect(listSql).not.toContain('FROM client_activity_notes');

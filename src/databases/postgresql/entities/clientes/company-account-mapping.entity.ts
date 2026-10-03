@@ -46,6 +46,24 @@ export class CompanyAccountMapping {
 	@Column({ type: 'text', nullable: true })
 	external_deferred_code?: string;
 
+	@Column({ type: 'text', nullable: true, comment: 'Código de la cuenta Cuentas por cobrar (asiento de facturación)' })
+	receivable_account_code?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Nombre de la cuenta Cuentas por cobrar' })
+	receivable_account_name?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Código de la cuenta Diferencia de cambio' })
+	fx_difference_account_code?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Nombre de la cuenta Diferencia de cambio' })
+	fx_difference_account_name?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Código de Cuentas por cobrar en el ERP' })
+	external_receivable_code?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Código de Diferencia de cambio en el ERP' })
+	external_fx_difference_code?: string | null;
+
 	@CreateDateColumn({ type: 'timestamp with time zone', nullable: true, default: () => 'now()' })
 	created_at?: Date;
 

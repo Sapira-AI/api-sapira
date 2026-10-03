@@ -29,6 +29,14 @@ export class Role {
 	@Column({ type: 'uuid', nullable: true })
 	holding_id?: string;
 
+	@Column({
+		type: 'boolean',
+		nullable: false,
+		default: false,
+		comment: 'Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)',
+	})
+	is_default: boolean;
+
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_roles_holding_id' })
 	holding?: CompanyHolding; // entity existente (no se duplica)

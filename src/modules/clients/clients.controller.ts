@@ -85,6 +85,16 @@ export class ClientsController {
 	}
 
 	// Debe declararse antes de `:id` para que Nest no lo capture como un id.
+	@Get('form-options')
+	@ApiOperation({
+		summary: 'Opciones del formulario de clientes',
+		description: 'Mercados, segmentos e industrias activos del holding (Configuración › Catálogos); la API valida contra estas listas',
+	})
+	async getFormOptions(@HoldingId() holdingId: string) {
+		return await this.clientsService.getFormOptions(holdingId);
+	}
+
+	// Debe declararse antes de `:id` para que Nest no lo capture como un id.
 	@Get('filter-options')
 	@ApiOperation({
 		summary: 'Opciones de filtro de clientes',
@@ -344,7 +354,7 @@ export class ClientsController {
 	async update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto, @HoldingId() holdingId: string): Promise<ClientResponseDto> {
 		await this.clientsService.findOne(id, holdingId);
 
-		return await this.clientsService.update(id, updateClientDto);
+		return await this.clientsService.update(id, updateClientDto, holdingId);
 	}
 
 	@Delete(':id')
@@ -373,10 +383,12 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente no encontrado',
 	})
-	async remove(@Param('id') id: string, @HoldingId() holdingId: string) {
-		await this.clientsService.findOne(id, holdingId);
-
-		return await this.clientsService.remove(id);
+	@ApiResponse({
+		status: HttpStatus.CONFLICT,
+		description: 'client_in_use (contratos, facturas, suscripciones o cotizaciones) o client_owns_entities',
+	})
+	async remove(@Param('id', new ParseUUIDPipe()) id: string, @HoldingId() holdingId: string) {
+		return await this.clientsService.remove(id, holdingId);
 	}
 
 	@Post(':id/entities')
@@ -442,10 +454,12 @@ export class ClientsController {
 		status: HttpStatus.NOT_FOUND,
 		description: 'Cliente, razón social o relación no encontrada',
 	})
+	@ApiResponse({
+		status: HttpStatus.CONFLICT,
+		description: 'entity_client_in_use: el cliente tiene contratos, facturas o suscripciones con esa razón social',
+	})
 	async unassignEntity(@Param('id') id: string, @Param('entityId') entityId: string, @HoldingId() holdingId: string) {
-		await this.clientsService.findOne(id, holdingId);
-
-		return await this.clientsService.unassignEntity(id, entityId);
+		return await this.clientsService.unassignEntity(id, entityId, holdingId);
 	}
 
 	@Put(':id/entities/:entityId/set-primary')

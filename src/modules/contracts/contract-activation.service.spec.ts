@@ -314,18 +314,11 @@ describe('ContractActivationService.evaluate (bloqueos)', () => {
 		expect(plan.check.warnings.join(' ')).not.toContain('día de ciclo');
 	});
 
-	it('period_closed: bloquea si alguna factura generada se emitiría en un período cerrado, con el paso para destrabar', () => {
+	it('facturas generadas en un mes cerrado NO bloquean la activación (Domi 03-10: el cierre protege contratos e ítems; esos los bloquea el trigger)', () => {
 		const closed = ContractActivationService.evaluate(A, draft(A, { cutoff_date: '2026-10-31' }), items(A));
 
-		expect(closed.check.can_activate).toBe(false);
-		expect(closed.check.blockers).toEqual([
-			{
-				code: 'period_closed',
-				message: expect.stringContaining('cierre al 2026-10-31'),
-				next_step: expect.stringContaining('Reabrir el período'),
-			},
-		]);
-		expect(ContractActivationService.evaluate(A, draft(A, { cutoff_date: '2026-09-30' }), items(A)).check.can_activate).toBe(true);
+		expect(closed.check.can_activate).toBe(true);
+		expect(closed.check.blockers).toEqual([]);
 	});
 
 	it('con documento tributario del catálogo, la vista previa muestra su nombre en vez de la familia', () => {

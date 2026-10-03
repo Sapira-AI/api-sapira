@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-01 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-03 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -92,12 +92,22 @@ export const CLIENTES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			file_url: true,
 			created_at: true,
 			holding_id: false,
+			storage_bucket: true,
+			storage_path: true,
+			file_name: true,
+			mime_type: true,
+			file_size: true,
+			uploaded_by: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
 			company_legal_documents_company_id_fkey: {
 				table: 'companies',
 				onDelete: 'CASCADE',
+			},
+			company_legal_documents_uploaded_by_fkey: {
+				table: 'users',
+				onDelete: 'SET NULL',
 			},
 		},
 		uniques: {},
@@ -162,6 +172,12 @@ export const CLIENTES_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			external_deferred_code: true,
 			created_at: true,
 			updated_at: true,
+			receivable_account_code: true,
+			receivable_account_name: true,
+			fx_difference_account_code: true,
+			fx_difference_account_name: true,
+			external_receivable_code: true,
+			external_fx_difference_code: true,
 		},
 		primary: ['id'],
 		foreignKeys: {

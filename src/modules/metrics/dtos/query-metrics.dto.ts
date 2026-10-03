@@ -36,13 +36,20 @@ export const SCHEDULE_SORT_FIELDS = [
 	'deferred_eom',
 	'unbilled_eom',
 	'mrr',
+	'deferred_opening',
+	'deferred_change',
+	'unbilled_opening',
+	'unbilled_change',
 ] as const;
+/** Apertura de los asientos dentro de la compañía (Domi 02-10). */
+export const JOURNAL_GROUPS = ['market', 'industry', 'segment', 'contract', 'client', 'product'] as const;
 
 export type MetricCurrency = (typeof METRIC_CURRENCIES)[number];
 export type MrrDimension = (typeof MRR_DIMENSIONS)[number];
 export type RevenueDimension = (typeof REVENUE_DIMENSIONS)[number];
 export type MovementGroup = (typeof MOVEMENT_GROUPS)[number];
 export type ScheduleSortField = (typeof SCHEDULE_SORT_FIELDS)[number];
+export type JournalGroupField = (typeof JOURNAL_GROUPS)[number];
 
 /**
  * Filtros comunes de `/metrics/*` (spec-revenue-y-metricas §3). Listas separadas por coma. El holding sale de `HoldingScopeGuard`,
@@ -251,6 +258,11 @@ export class RevenueScheduleDto extends PageDto {
 	search?: string;
 }
 
-export class RevenueJournalDto extends MetricsFiltersDto {}
+export class RevenueJournalDto extends MetricsFiltersDto {
+	@ApiPropertyOptional({ enum: JOURNAL_GROUPS, description: 'Abre las líneas por dimensión dentro de la compañía (default: sin apertura)' })
+	@IsIn(JOURNAL_GROUPS)
+	@IsOptional()
+	groupBy?: JournalGroupField;
+}
 
 export class ExceptionsDto extends PageDto {}

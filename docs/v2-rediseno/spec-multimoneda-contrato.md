@@ -228,7 +228,7 @@ consolidado ya enviado bloquea igual; (7) deshacer **no borra**: el consolidado 
   = preview + `applied, consolidated_invoice_id, event_ids, invoice` (409 `{ code: 'blocked', blockers, preview }`). Deshacer
   `{ consolidated, origins[], undone, consolidated_invoice_id, status: 'Cancelada', restored_invoice_ids, event_ids }`.
 - **Bloqueos**: `credit_note`, `not_pending`, `already_consolidated`, `legacy_invoice`, `no_contract`, `partial_billing_invoice`,
-  `open_consumption`, `sent_to_erp_draft` (`action: 'erp_reset'`), `period_closed`, `single_contract`, `company_mismatch`, `entity_mismatch`,
+  `open_consumption`, `sent_to_erp_draft` (`action: 'erp_reset'`), `single_contract` (sin `period_closed` desde 03-10), `company_mismatch`, `entity_mismatch`,
   `currency_mismatch`, `month_mismatch`, `document_type_mismatch`, `export_type_mismatch`, `series_mismatch`, `tax_rate_mismatch`
   (`multicurrency_spot_send_pending` se quitó con MM4: el consolidado spot con varios pares se valoriza por par al emitir). Deshacer: `not_consolidated`, `legacy_unified`, `not_pending`,
   `sent_to_erp_draft`, `no_origins`. Avisos: `auto_invoice_differs`, `auto_send_to_erp_differs`, `pair_rates_differ`, `spot_document`,

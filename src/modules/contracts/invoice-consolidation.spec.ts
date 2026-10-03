@@ -140,7 +140,7 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(codes(invoiceBlockers(invoice({ contract_id: null })))).toEqual(['no_contract']);
 			expect(codes(invoiceBlockers(invoice({ internal_lines: 2 })))).toEqual(['partial_billing_invoice']);
 			expect(codes(invoiceBlockers(invoice({ open_lines: 1 })))).toEqual(['open_consumption']);
-			expect(codes(invoiceBlockers(invoice({ cutoff_date: '2026-10-31' })))).toEqual(['period_closed']);
+			expect(codes(invoiceBlockers(invoice({ cutoff_date: '2026-10-31' })))).toEqual([]); // un mes cerrado no bloquea (Domi 03-10)
 		});
 
 		it('borrador en el ERP (id o solo la marca de envío) → sent_to_erp_draft con action erp_reset', () => {

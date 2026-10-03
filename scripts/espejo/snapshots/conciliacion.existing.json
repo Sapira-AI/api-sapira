@@ -210,10 +210,26 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "ignore_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {
+   "uq_bank_movements_fingerprint": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
    "idx_bank_movements_status": {
     "columns": [
      "status"
@@ -254,7 +270,7 @@
   "checks": [
    {
     "name": "bank_movements_status_check",
-    "expression": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])"
+    "expression": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text, 'Ignorado'::text])"
    },
    {
     "name": "bank_movements_match_confidence_check",

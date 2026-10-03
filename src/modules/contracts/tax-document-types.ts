@@ -18,6 +18,8 @@ export interface TaxDocumentTypeOption {
 	kind: TaxDocumentKind;
 	is_electronic: boolean;
 	sort: number;
+	/** Tasa de impuesto del documento en % (Configuración v2 ronda 3); null/ausente = la de la compañía. */
+	tax_rate?: number | null;
 }
 
 /** Solo los documentos que un contrato puede emitir (sin notas de crédito/débito ni boletas). */

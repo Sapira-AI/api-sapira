@@ -1,7 +1,7 @@
-# Módulo 2 · FX y datos económicos — 7 tablas de prod (2026-10-01)
+# Módulo 2 · FX y datos económicos — 7 tablas de prod (2026-10-03)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-01 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/fx.{pgmeta,catalog}.json`); metadata real de las entities existentes en `fx.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-03 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/fx.{pgmeta,catalog}.json`); metadata real de las entities existentes en `fx.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (4) — no se tocaron ni se duplicaron
 
@@ -10,7 +10,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
 | `exchange_rates` (8284) | `src/databases/postgresql/entities/fx/exchange-rate.entity.ts` · `ExchangeRateEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_pkey`<br>índice con expresión `idx_exchange_rates_lookup` |
-| `exchange_rates_monthly_avg` (730) | `src/databases/postgresql/entities/fx/exchange-rate-monthly-avg.entity.ts` · `ExchangeRateMonthlyAvgEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_monthly_avg_pkey` |
+| `exchange_rates_monthly_avg` (737) | `src/databases/postgresql/entities/fx/exchange-rate-monthly-avg.entity.ts` · `ExchangeRateMonthlyAvgEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_monthly_avg_pkey` |
 | `indicadores_economicos` (34) | `src/databases/postgresql/entities/fx/indicador-economico.entity.ts` · `IndicadorEconomicoEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `indicadores_economicos_pkey` |
 | `generic_export_vats` (8) | `src/databases/postgresql/entities/fx/generic-export-vat.entity.ts` · `GenericExportVat` | ⚠️ difiere de prod | — | — | — | nombre de PK `generic_export_vats_pkey` |
 

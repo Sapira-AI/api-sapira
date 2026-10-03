@@ -1,5 +1,10 @@
 # Spec · Facturas en el Contrato 360 (pestaña Facturas, v2)
 
+> **Cambio 03-10:** **El cierre de períodos protege contratos e ítems; pagos, facturas y consumos se pueden registrar o mover en meses cerrados** (decisión de Domi 03-10). Ninguna operación de factura de esta spec (marcar emitida, reprogramar, tipo de cambio,
+> restablecer borrador del ERP, editar, editar en masa, anular/NC, reorganizar, unificar, activación) genera ya `period_closed`; las menciones
+> de `period_closed` más abajo quedan como historia. Siguen bloqueando las modificaciones de contrato (`contract-changes.ts`) y los triggers
+> `trg_period_guard_contracts` / `trg_period_guard_contract_items`.
+
 > 29-09-2026 · para Domi y quienes implementen. Define **qué operaciones sobre facturas viven en el Contrato 360 › Facturas** del
 > front nuevo (`front-sapira/app/(protected)/lab/contratos`) y cuáles **esperan al módulo Facturación**. Mejora el front viejo
 > (`sapira-ai/src/components/contratos/detail/tabs/ContratoFacturasTab.tsx`), no lo copia, y cierra los bugs documentados.

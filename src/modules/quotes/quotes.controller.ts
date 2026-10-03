@@ -123,10 +123,10 @@ export class QuotesController {
 	@ApiOperation({
 		summary: 'Editar cotización',
 		description:
-			'Solo borrador/enviada sin contrato. Ítems: con id se actualizan (conservan el id), sin id se crean, ausentes se eliminan. Recalcula precios y total; evento UPDATED',
+			'Cualquier etapa salvo con contrato. En firmada/perdida exige `confirm_edit_after_signature: true`. Ítems: con id se actualizan (conservan el id), sin id se crean, ausentes se eliminan. Recalcula precios y total; evento UPDATED con el diff campo a campo (`metadata.changes`, `metadata.item_changes`)',
 	})
 	@ApiParam(QUOTE_PARAM)
-	@ApiResponse({ status: 409, description: '`code: quote_signed_locked | quote_has_contract | quote_not_editable | item_linked_to_contract`' })
+	@ApiResponse({ status: 409, description: '`code: quote_has_contract | edit_requires_confirmation | item_linked_to_contract`' })
 	async update(
 		@Param('id', new ParseUUIDPipe()) id: string,
 		@Body() body: UpdateQuoteDto,
@@ -141,7 +141,7 @@ export class QuotesController {
 	@ApiOperation({
 		summary: 'Cambiar de etapa',
 		description:
-			'`{ stage_id | kind, booking_date?, reason? }`. Transiciones válidas: draft ⇄ sent, draft|sent → signed (ítems completos + booking), draft|sent → lost (motivo), signed → sent|lost sin contrato, lost → draft. Nada entra ni sale de contract_created a mano',
+			'`{ stage_id | kind, booking_date?, reason? }`. Libre entre draft, sent, signed y lost en ambos sentidos (a signed: ítems completos + booking; a lost: motivo). booking_date se conserva al salir de firmada salvo que venga en el body. Nada entra ni sale de contract_created a mano; con contrato nada se mueve',
 	})
 	@ApiParam(QUOTE_PARAM)
 	@ApiResponse({

@@ -118,7 +118,7 @@ lleva IVA (P2); ampliar el horizonte indefinido queda para un bloque posterior (
   `consumption_entries` → 409 `item_has_consumption`. Precio con la misma forma pero otra moneda u otro producto → versión nueva.
   `DRAFT_UPDATED` guarda `fx_rates_diff { changed, before, after }` e `items_diff [{ item_id, before, after }]`.
 - Desde cotización: un recurrente sin plazo queda con `term_months = null` (sin término), no 12.
-- Activación: blocker `period_closed` (con `next_step`) si alguna factura generada se emitiría en un período cerrado. El evento `ACTIVATION`
+- Activación: ~~blocker `period_closed` si alguna factura generada se emitiría en un período cerrado~~ — quitado el 03-10 (**El cierre de períodos protege contratos e ítems; pagos, facturas y consumos se pueden registrar o mover en meses cerrados** (decisión de Domi 03-10)); si la activación toca ítems de un mes cerrado, lo bloquea el trigger de ítems. El evento `ACTIVATION`
   guarda `before`/`after` (`status`, `booking_date`, `company_currency`, `fx_rate_to_system`), `warning_codes`, `indefinite_until`,
   `created_invoice_ids` e `items_affected` (también en la columna).
 - `PATCH /contracts/:id/terms`, alta, PUT y `PATCH /contracts/bulk-settings`: `setApiWriter` dentro del `try` (si falla, rollback y release).

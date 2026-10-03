@@ -43,6 +43,8 @@ const AFTER = [
 	'trigger_rsm_on_contract_item_change',
 	'trigger_rsm_on_invoice_change',
 	'trigger_rsm_on_quantity_change',
+	// Facturación v2 (spec-facturacion-v2 §8): pagos registrados por la API no pasan por recalc_invoice_status.
+	'after_invoice_payment_change',
 ];
 /** Invariantes: corren igual para la API y el front viejo (no leen la marca). */
 const INVARIANTS = ['trg_period_guard_contracts', 'validate_contract_currency_consistency', 'validate_contract_item_currency_consistency'];

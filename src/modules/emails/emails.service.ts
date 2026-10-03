@@ -627,10 +627,27 @@ export class EmailsService {
 		}
 	}
 
-	async send(params: { to: string; subject: string; html: string; from: string; fromName?: string; replyTo?: string }): Promise<void> {
+	/**
+	 * Envío transaccional por SendGrid. `to` acepta uno o varios destinatarios; `bcc` (copia oculta, sin repetir los de `to`) y `attachments`
+	 * (base64) son opcionales: los usa la cobranza y la proforma de Facturación v2.
+	 */
+	async send(params: {
+		to: string | string[];
+		subject: string;
+		html: string;
+		from: string;
+		fromName?: string;
+		replyTo?: string;
+		bcc?: string[];
+		attachments?: Array<{ content: string; filename: string; type?: string }>;
+	}): Promise<void> {
 		if (!this.sendgridApiKey) {
 			throw new BadRequestException('Servicio de email no configurado. Contacte al administrador.');
 		}
+		const recipients = Array.isArray(params.to) ? params.to : [params.to];
+		const lower = new Set(recipients.map((email) => email.toLowerCase()));
+		// SendGrid rechaza un correo repetido entre `to` y `bcc`.
+		const bcc = [...new Set((params.bcc ?? []).filter((email) => !lower.has(email.toLowerCase())))];
 
 		try {
 			const response = await fetch(`${this.sendgridApiUrl}/mail/send`, {
@@ -642,7 +659,8 @@ export class EmailsService {
 				body: JSON.stringify({
 					personalizations: [
 						{
-							to: [{ email: params.to }],
+							to: recipients.map((email) => ({ email })),
+							...(bcc.length ? { bcc: bcc.map((email) => ({ email })) } : {}),
 						},
 					],
 					from: {
@@ -661,6 +679,16 @@ export class EmailsService {
 							value: params.html,
 						},
 					],
+					...(params.attachments?.length
+						? {
+								attachments: params.attachments.map((attachment) => ({
+									content: attachment.content,
+									filename: attachment.filename,
+									type: attachment.type ?? 'application/pdf',
+									disposition: 'attachment',
+								})),
+							}
+						: {}),
 				}),
 			});
 
@@ -670,7 +698,7 @@ export class EmailsService {
 				throw new BadRequestException(errorData.errors?.[0]?.message || 'Error al enviar email');
 			}
 
-			this.logger.log(`✓ Email enviado a ${params.to}`);
+			this.logger.log(`✓ Email enviado a ${recipients.join(', ')}`);
 		} catch (error) {
 			if (error instanceof BadRequestException) {
 				throw error;

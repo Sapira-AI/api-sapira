@@ -4220,6 +4220,17 @@
      "updatable"
     ],
     "comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
+   },
+   {
+    "name": "tax_rate",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tasa de impuesto del documento en porcentaje (19 = 19 %). NULL = usa la tasa de la compañía"
    }
   ],
   "primary_keys": [

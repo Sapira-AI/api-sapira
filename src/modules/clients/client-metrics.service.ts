@@ -34,6 +34,8 @@ export interface ClientReceivables {
 	invoices: Array<{
 		id: string;
 		invoice_number: string | null;
+		/** Contrato de la factura: la vista rápida de la factura vive en el Contrato 360 (sin contrato no se abre). */
+		contract_id: string | null;
 		legal_name: string | null;
 		issue_date: string | null;
 		due_date: string | null;
@@ -183,7 +185,7 @@ export class ClientMetricsService {
 		const asOf = isoDate(asOfDate);
 
 		const rows = await this.dataSource.query<Row[]>(
-			`SELECT i.id, i.invoice_number, ce.legal_name, i.issue_date::text AS issue_date, i.due_date::text AS due_date,
+			`SELECT i.id, i.invoice_number, i.contract_id, ce.legal_name, i.issue_date::text AS issue_date, i.due_date::text AS due_date,
 				GREATEST($3::date - i.due_date, 0) AS days_overdue, i.total_system_currency AS amount, i.system_currency,
 				i.invoice_currency, i.total_invoice_currency AS amount_invoice_currency, i.status
 			FROM invoices i
@@ -213,6 +215,7 @@ export class ClientMetricsService {
 			return {
 				id: row.id as string,
 				invoice_number: (row.invoice_number as string) ?? null,
+				contract_id: (row.contract_id as string) ?? null,
 				legal_name: (row.legal_name as string) ?? null,
 				issue_date: (row.issue_date as string) ?? null,
 				due_date: (row.due_date as string) ?? null,
@@ -314,7 +317,7 @@ export class ClientMetricsService {
 			this.dataSource.query<Row[]>(
 				`SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.status,
 					i.total_system_currency AS amount, i.invoice_currency, i.total_invoice_currency AS amount_invoice_currency,
-					ce.id AS client_entity_id, ce.legal_name, ct.contract_number,
+					ce.id AS client_entity_id, ce.legal_name, i.contract_id, ct.contract_number,
 					CASE WHEN i.status = ANY($4) AND i.due_date < $3::date THEN $3::date - i.due_date ELSE 0 END AS days_overdue
 				FROM invoices i
 				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
@@ -353,6 +356,7 @@ export class ClientMetricsService {
 				amount_invoice_currency: toNumber(row.amount_invoice_currency),
 				client_entity_id: (row.client_entity_id as string) ?? null,
 				legal_name: (row.legal_name as string) ?? null,
+				contract_id: (row.contract_id as string) ?? null,
 				contract_number: (row.contract_number as string) ?? null,
 				days_overdue: toNumber(row.days_overdue),
 			})),

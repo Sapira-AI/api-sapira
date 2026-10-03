@@ -759,6 +759,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "products_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['active'::text, 'archived'::text])"
    }
   ],
   "indexes": [

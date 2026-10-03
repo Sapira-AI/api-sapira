@@ -222,7 +222,10 @@ export class CreateQuoteDto {
 	@IsOptional()
 	payment_terms_text?: string;
 
-	@ApiPropertyOptional({ description: 'Número manual; si se omite, correlativo COT-{año}-{NNNN}' })
+	@ApiPropertyOptional({
+		description:
+			'Solo con numeración manual del holding (Configuración › Preferencias): obligatorio y único en el holding. En los modos automáticos (COT-{año}-{NNNN} por defecto, o solo correlativo) lo genera la API y enviarlo → 400',
+	})
 	@Transform(trim)
 	@IsString({ message: 'Número de cotización inválido' })
 	@MinLength(1, { message: 'Escribe el número' })
@@ -276,8 +279,19 @@ export class UpdateQuoteItemDto extends CreateQuoteItemDto {
 	id?: string;
 }
 
-/** Body de `PUT /quotes/:id` (solo `draft`/`sent` sin contrato): el formulario completo. `quote_number` no cambia al editar. */
+/**
+ * Body de `PUT /quotes/:id` (cualquier etapa salvo con contrato): el formulario completo. `quote_number` no cambia al editar. En
+ * `signed`/`lost` exige `confirm_edit_after_signature: true` (409 `edit_requires_confirmation`).
+ */
 export class UpdateQuoteDto extends CreateQuoteDto {
+	@ApiPropertyOptional({
+		default: false,
+		description: 'Obligatorio (true) al editar una cotización firmada o perdida: el cambio queda en el historial con el detalle',
+	})
+	@IsBoolean({ message: 'Valor inválido' })
+	@IsOptional()
+	confirm_edit_after_signature?: boolean;
+
 	@ApiProperty({ type: [UpdateQuoteItemDto] })
 	@IsArray({ message: 'Agrega al menos un ítem' })
 	@ArrayMinSize(1, { message: 'Agrega al menos un ítem' })
@@ -293,4 +307,13 @@ export class DuplicateQuoteDto {
 	@Matches(ISO_DATE, { message: 'Fecha de cotización inválida' })
 	@IsOptional()
 	quote_date?: string;
+
+	@ApiPropertyOptional({ description: 'Mismas reglas que en POST /quotes (obligatorio con numeración manual; prohibido en las automáticas)' })
+	@Transform(trim)
+	@IsString({ message: 'Número de cotización inválido' })
+	@MinLength(1, { message: 'Escribe el número' })
+	@MaxLength(40, { message: 'Número: máximo 40 caracteres' })
+	@Matches(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, { message: 'El número solo admite letras, números, punto, guion, barra y guion bajo' })
+	@IsOptional()
+	quote_number?: string;
 }

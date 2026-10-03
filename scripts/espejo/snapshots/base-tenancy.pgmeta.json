@@ -299,6 +299,17 @@
     ]
    },
    {
+    "name": "company_legal_documents_uploaded_by_fkey",
+    "source_table": "public.company_legal_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "consumption_entries_created_by_fkey",
     "source_table": "public.consumption_entries",
     "source_columns": [
@@ -688,7 +699,7 @@
  "roles": {
   "name": "public.roles",
   "rls_enabled": true,
-  "rows": 50,
+  "rows": 70,
   "columns": [
    {
     "name": "id",
@@ -739,6 +750,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)"
    }
   ],
   "primary_keys": [
@@ -794,7 +816,7 @@
  "permissions": {
   "name": "public.permissions",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 23,
   "columns": [
    {
     "name": "id",
@@ -1163,6 +1185,28 @@
    {
     "name": "billing_references_holding_id_fkey",
     "source_table": "public.billing_references",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budget_lines_holding_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budgets_holding_id_fkey",
+    "source_table": "public.budgets",
     "source_columns": [
      "holding_id"
     ],
@@ -2067,7 +2111,7 @@
  "companies": {
   "name": "public.companies",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 24,
   "columns": [
    {
     "name": "id",
@@ -2315,6 +2359,17 @@
     ],
     "default_value": "'monthly_avg'::text",
     "comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
+   },
+   {
+    "name": "country_code",
+    "data_type": "character",
+    "format": "bpchar",
+    "type": "character(2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español"
    }
   ],
   "primary_keys": [
@@ -2363,6 +2418,17 @@
     "target_table": "public.companies",
     "target_columns": [
      "id"
+    ]
+   },
+   {
+    "name": "companies_country_code_fkey",
+    "source_table": "public.companies",
+    "source_columns": [
+     "country_code"
+    ],
+    "target_table": "public.countries",
+    "target_columns": [
+     "code"
     ]
    },
    {
@@ -2914,6 +2980,80 @@
     ],
     "default_value": "30",
     "comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
+   },
+   {
+    "name": "timezone",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'America/Santiago'::text",
+    "comment": "Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago)"
+   },
+   {
+    "name": "renewal_reminder_days",
+    "data_type": "ARRAY",
+    "format": "_int2",
+    "type": "smallint[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{15,7,0}'::smallint[]",
+    "comment": "Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0)"
+   },
+   {
+    "name": "renewal_overdue_every_days",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "7",
+    "comment": "Vencido sin decisión: un recordatorio cada N días (default 7)"
+   },
+   {
+    "name": "quote_numbering_mode",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'prefixed'::text",
+    "comment": "Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual"
+   },
+   {
+    "name": "quote_number_prefix",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'COT'::text"
+   },
+   {
+    "name": "quote_number_include_year",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "quote_number_width",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "4"
    }
   ],
   "primary_keys": [
@@ -2994,7 +3134,7 @@
     "options": [
      "updatable"
     ],
-    "comment": "Tipo de dato: text o number"
+    "comment": "Tipo de dato: text, number, select, boolean o date"
    },
    {
     "name": "is_required",
@@ -3047,6 +3187,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "options",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Opciones de un campo select: [{ value, label }]. NULL en los otros tipos"
    }
   ],
   "primary_keys": [

@@ -2265,6 +2265,11 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "tax_document_types_tax_rate_check",
+    "type": "c",
+    "expr": "(tax_rate IS NULL) OR ((tax_rate >= (0)::numeric) AND (tax_rate <= (100)::numeric))"
    }
   ],
   "indexes": [

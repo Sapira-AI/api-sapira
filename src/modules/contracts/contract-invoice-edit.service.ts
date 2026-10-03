@@ -7,7 +7,7 @@ import { validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
-import { addDays, generateInvoices, round2 } from './billing-engine';
+import { addDays, generateInvoices, round2, type TaxDocumentRate } from './billing-engine';
 import { isCreditNote, PENDING_STATUS } from './contract-360';
 import { ContractActivationService } from './contract-activation.service';
 import { cleanPaymentTerms, resolveUserId } from './contract-drafts.service';
@@ -72,10 +72,17 @@ const parseJson = <T>(value: unknown): T | null => {
 	}
 };
 
+/** Documento tributario del contrato (familia y tasa) para la regla del IVA (`resolveTaxRate`, ronda 3 de Configuración). */
+const taxDocumentOf = (row: Record<string, unknown> | null | undefined): TaxDocumentRate | null =>
+	row?.tax_document_type_id
+		? { kind: toText(row.tax_document_type_kind), tax_rate: (row.tax_document_tax_rate as number | string | null) ?? null }
+		: null;
+
 const CONTRACT_SQL = `SELECT c.id, c.contract_number, c.client_id, c.document_type, c.billing_anchor_day, c.group_invoices_by_period, c.invoice_currency,
 		c.contract_currency, c.fx_invoice_policy, c.payment_terms, c.invoice_description_template, c.tax_document_type_id,
 		c.requires_multicurrency_billing,
 		tdt.description_max_chars AS own_description_max_chars, co.country AS company_country, co.tax_rate AS company_tax_rate,
+		tdt.kind AS tax_document_type_kind, tdt.tax_rate AS tax_document_tax_rate,
 		ce.country AS entity_country, ce.payment_terms AS entity_payment_terms, ce.legal_name AS entity_legal_name,
 		${DESCRIPTION_LIMITS_SQL} AS description_limits
 	FROM contracts c
@@ -706,6 +713,7 @@ export class ContractInvoiceEditService {
 					invoice: this.editInvoice(invoice, extraById.get(invoice.id)),
 					context,
 					company_tax_rate: (contractRow?.company_tax_rate as number | string | null) ?? null,
+					tax_document: taxDocumentOf(contractRow),
 					receiver,
 					lines: pairLines.get(invoice.id) ?? [],
 					multicurrency,
@@ -1113,6 +1121,7 @@ export class ContractInvoiceEditService {
 			invoice: this.editInvoice(invoice, extra),
 			context,
 			company_tax_rate: (contract.company_tax_rate as number | string | null) ?? null,
+			tax_document: taxDocumentOf(contract),
 			contract_number: toText(contract.contract_number),
 			client_name: invoice.legal_name ?? toText(contract.entity_legal_name),
 			template: parseStoredTemplate(contract.invoice_description_template),
@@ -1168,6 +1177,7 @@ export class ContractInvoiceEditService {
 					fixed_invoice_rates: [],
 					document_type: toText(contract.document_type),
 					company: { country: toText(contract.company_country), tax_rate: contract.company_tax_rate as number | string | null },
+					tax_document: taxDocumentOf(contract),
 					entity_country: toText(contract.entity_country),
 				},
 				items: data.items.map((row) => {
