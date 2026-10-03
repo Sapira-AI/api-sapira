@@ -1,3 +1,5 @@
+-- ⚠️ PENDIENTE DE OK DE DOMI (Notificaciones v2, 03-10): al final crea las suscripciones por defecto de notificaciones del holding
+-- nuevo (mismas filas que seed/007-notification-default-subscriptions.sql, espejo de defaultSubscriptions() del catálogo).
 -- ⚠️ PENDIENTE DE REVISIÓN DE DOMI (Configuración v2, 02-10): M4 agrega CLOSE_PERIODS a Administrador y Finanzas y M9
 -- marca is_default = true en los 10 roles. Aplicar DESPUÉS de la migración RolesIsDefault1790800000000 y del seed
 -- seed/004-close-periods-permission.sql. Sin esos dos, el INSERT falla (columna is_default) o no asigna CLOSE_PERIODS.
@@ -173,6 +175,25 @@ BEGIN
     'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',
     'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'
   );
+
+  -- Notificaciones v2 (N3): suscripciones por defecto por rol del holding nuevo (role_id NULL = super admins).
+  INSERT INTO notification_role_subscriptions (holding_id, role_id, notification_type)
+  SELECT NEW.id, d.role_id, d.notification_type
+  FROM (VALUES
+    (v_admin_role_id, 'invoice_odoo_failure'), (v_finanzas_role_id, 'invoice_odoo_failure'), (v_facturacion_role_id, 'invoice_odoo_failure'),
+    (v_admin_role_id, 'salesforce_staging_blocked'), (v_ventas_role_id, 'salesforce_staging_blocked'), (v_operaciones_role_id, 'salesforce_staging_blocked'),
+    (v_admin_role_id, 'salesforce_sync_failure'), (v_admin_tecnico_role_id, 'salesforce_sync_failure'), (NULL::uuid, 'salesforce_sync_failure'),
+    (v_admin_role_id, 'contract_renewal_proposed'), (v_finanzas_role_id, 'contract_renewal_proposed'),
+    (v_admin_role_id, 'contract_renewal_reminder'), (v_finanzas_role_id, 'contract_renewal_reminder'),
+    (v_admin_role_id, 'contract_scheduled_change_due'), (v_finanzas_role_id, 'contract_scheduled_change_due'),
+    (v_admin_role_id, 'bigquery_quantities_diff'), (v_finanzas_role_id, 'bigquery_quantities_diff'), (v_facturacion_role_id, 'bigquery_quantities_diff'),
+    (v_admin_role_id, 'bigquery_quantities_unmapped'), (v_finanzas_role_id, 'bigquery_quantities_unmapped'), (v_facturacion_role_id, 'bigquery_quantities_unmapped'),
+    (v_admin_role_id, 'bigquery_quantities_blocked'), (v_finanzas_role_id, 'bigquery_quantities_blocked'), (v_facturacion_role_id, 'bigquery_quantities_blocked'),
+    (v_admin_role_id, 'bigquery_quantities_currency_mismatch'), (v_finanzas_role_id, 'bigquery_quantities_currency_mismatch'),
+    (v_facturacion_role_id, 'bigquery_quantities_currency_mismatch'),
+    (v_admin_role_id, 'fx_sync_failure'), (v_admin_tecnico_role_id, 'fx_sync_failure'), (NULL::uuid, 'fx_sync_failure'),
+    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary')
+  ) AS d(role_id, notification_type);
 
   RETURN NEW;
 END;

@@ -199,16 +199,34 @@ describe('SettingsRolesService', () => {
 		expect(db.statements('INSERT INTO role_permissions')[0].params[1]).toEqual(['p-VIEW_CLIENTES']);
 	});
 
-	it('alertas: lista los 3 tipos con su estado y reemplaza solo las del rol', async () => {
+	it('alertas: lista todos los tipos suscribibles del catálogo (con etiqueta y módulo) y reemplaza solo las del rol', async () => {
 		const { service } = build([roleRow()]);
 		const alerts = await service.getAlerts(HOLDING, ROLE);
 
-		expect(alerts.alerts.map((alert) => [alert.type, alert.enabled])).toEqual([
-			['salesforce_staging_blocked', false],
-			['salesforce_sync_failure', false],
-			['invoice_odoo_failure', true],
+		expect(alerts.alerts.map((alert) => alert.type)).toEqual([
+			'invoice_odoo_failure',
+			'salesforce_staging_blocked',
+			'salesforce_sync_failure',
+			'contract_renewal_proposed',
+			'contract_renewal_reminder',
+			'contract_scheduled_change_due',
+			'bigquery_quantities_diff',
+			'bigquery_quantities_unmapped',
+			'bigquery_quantities_blocked',
+			'bigquery_quantities_currency_mismatch',
 		]);
+		expect(alerts.alerts.find((alert) => alert.type === 'invoice_odoo_failure')).toEqual({
+			type: 'invoice_odoo_failure',
+			label: 'No se pudo enviar una factura al ERP',
+			module: 'facturacion',
+			module_label: 'Facturación',
+			icon: 'receipt-text',
+			enabled: true,
+		});
+		// Los reservados de fase 2 (sin productor) y los no suscribibles no se ofrecen todavía.
+		expect(alerts.alerts.map((alert) => alert.type)).not.toEqual(expect.arrayContaining(['fx_sync_failure', 'system_update']));
 		await expect(service.putAlerts(HOLDING, ROLE, ['otra'])).rejects.toThrow('Tipo de alerta no válido: otra');
+		await expect(service.putAlerts(HOLDING, ROLE, ['system_update'])).rejects.toThrow('Tipo de alerta no válido: system_update');
 		await service.putAlerts(HOLDING, ROLE, ['salesforce_sync_failure']);
 		expect(notifications.replaceRoleSubscriptionTypes).toHaveBeenCalledWith(HOLDING, ROLE, ['salesforce_sync_failure']);
 	});

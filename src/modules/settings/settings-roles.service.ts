@@ -4,11 +4,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import { validationException } from '@/core/utils/validation-errors';
 import { ALL_PERMISSIONS } from '@/guards/permission-codes';
 import type { PermissionContext } from '@/guards/permissions.service';
-import {
-	NotificationsService,
-	ROLE_SUBSCRIPTION_NOTIFICATION_LABELS,
-	ROLE_SUBSCRIPTION_NOTIFICATION_TYPES,
-} from '@/modules/notifications/notifications.service';
+import { NOTIFICATION_MODULES, notificationCatalogEntry, OFFERED_ROLE_NOTIFICATION_TYPES } from '@/modules/notifications/notification-catalog';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { INTERNAL_PERMISSION_LABELS, isGrantable, PERMISSION_MODULES, SPECIAL_PERMISSIONS, visibleCodes } from './permissions-catalog';
 import { assertKeepsConfigAdmin } from './settings-admins';
@@ -243,17 +240,25 @@ export class SettingsRolesService {
 
 		return {
 			role_id: id,
-			alerts: ROLE_SUBSCRIPTION_NOTIFICATION_TYPES.map((type) => ({
-				type,
-				label: ROLE_SUBSCRIPTION_NOTIFICATION_LABELS[type] ?? type,
-				enabled: enabled.has(type),
-			})),
+			// Todos los tipos suscribibles del catálogo con productor (Notificaciones v2); los reservados de fase 2 se suman cuando existan.
+			alerts: OFFERED_ROLE_NOTIFICATION_TYPES.map((type) => {
+				const entry = notificationCatalogEntry(type)!;
+
+				return {
+					type,
+					label: entry.label,
+					module: entry.module,
+					module_label: NOTIFICATION_MODULES[entry.module],
+					icon: entry.icon,
+					enabled: enabled.has(type),
+				};
+			}),
 		};
 	}
 
 	async putAlerts(holdingId: string, id: string, types: string[]) {
 		await this.findRow(holdingId, id);
-		const invalid = types.filter((type) => !ROLE_SUBSCRIPTION_NOTIFICATION_TYPES.includes(type));
+		const invalid = types.filter((type) => !OFFERED_ROLE_NOTIFICATION_TYPES.includes(type));
 
 		if (invalid.length) throw validationException([{ field: 'types', message: `Tipo de alerta no válido: ${invalid.join(', ')}` }]);
 		await this.notifications.replaceRoleSubscriptionTypes(holdingId, id, types);

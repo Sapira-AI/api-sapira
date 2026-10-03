@@ -87,6 +87,7 @@ const build = (handler: Handler = () => undefined, pact: Row = pactRow()) => {
 		loadContext: jest.fn().mockResolvedValue(context({ scheduled_changes: [] })),
 		preview: jest.fn().mockResolvedValue({ can_apply: true }),
 		apply: jest.fn().mockResolvedValue({ applied: true }),
+		closeResolvedAlerts: jest.fn().mockResolvedValue(0),
 	};
 
 	return {
@@ -200,6 +201,9 @@ describe('ContractScheduledChangesService (pactos R1, §9.3.6)', () => {
 		await cancel.service.cancel(CONTRACT_ID, PACT_ID, { reason: 'Ya no aplica' }, HOLDING, 'auth-1');
 		expect(calls(cancel.runner.query, 'UPDATE contract_scheduled_changes SET status')[0][1][3]).toBe('cancelled');
 		expect(calls(cancel.runner.query, 'INSERT INTO contract_lifecycle_events')[0][1][2]).toBe('SCHEDULED_CHANGE_CANCELLED');
+		// Notificaciones v2: omitir o cancelar cierra la alerta "Ajuste pactado por aplicar" del contrato.
+		expect(once.changes.closeResolvedAlerts).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
+		expect(cancel.changes.closeResolvedAlerts).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
 	});
 
 	it('apply/preview y apply: delegan en el motor de modificaciones con el pedido del pacto y la marca (options.scheduled_change)', async () => {

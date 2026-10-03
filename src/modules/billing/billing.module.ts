@@ -37,5 +37,7 @@ import { BillingScheduler } from './billing.scheduler';
 		BillingScheduler,
 		BillingReconciliationService,
 	],
+	// Tareas (Notificaciones v2): la cola Por emitir con sus motivos es la misma que lee el centro y el Dashboard.
+	exports: [BillingReadService],
 })
 export class BillingModule {}

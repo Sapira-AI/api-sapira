@@ -977,7 +977,21 @@ export class InvoiceSchedulerService {
 			}
 		}
 
+		// Notificaciones v2: la factura llegó al ERP → se cierran sus avisos de falla abiertos (todas las etapas y errores).
+		if (!dryRun && result.status === 'sent') {
+			await this.resolveOdooFailureNotifications(invoice);
+		}
+
 		return result;
+	}
+
+	/** Cierre automático de `invoice_odoo_failure` de una factura enviada bien. Un fallo aquí no afecta el envío. */
+	private async resolveOdooFailureNotifications(invoice: InvoiceWithRelations): Promise<void> {
+		try {
+			await this.notificationsService.resolveOpen(invoice.holding_id, { type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, resourceId: invoice.id });
+		} catch (error) {
+			this.logger.warn(`No se pudieron cerrar los avisos de envío de la factura ${invoice.id}: ${(error as Error).message}`);
+		}
 	}
 
 	async mapInvoiceToOdooFormat(invoice: InvoiceWithRelations): Promise<CreateDraftInvoiceDTO> {

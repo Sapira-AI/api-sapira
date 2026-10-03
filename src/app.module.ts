@@ -48,6 +48,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { SiiModule } from './modules/sii/sii.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { CitiesModule } from './modules/utils/cities/cities.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
@@ -100,6 +101,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		HoldingsModule,
 		InvoicesModule,
 		NotificationsModule,
+		TasksModule,
 		UsersModule,
 		ClientsModule,
 		ContractsModule,

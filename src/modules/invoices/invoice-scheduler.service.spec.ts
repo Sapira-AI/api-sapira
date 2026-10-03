@@ -34,6 +34,7 @@ describe('InvoiceSchedulerService', () => {
 		};
 		const notificationsService = {
 			createOrUpdate: jest.fn(),
+			resolveOpen: jest.fn().mockResolvedValue(1),
 		};
 
 		const service = new InvoiceSchedulerService(
@@ -795,6 +796,23 @@ describe('InvoiceSchedulerService', () => {
 			);
 		});
 
+		it('Notificaciones v2: al enviar bien la factura se cierran sus avisos de falla (todas las etapas); un error al cerrar no rompe el envío', async () => {
+			const { service, notificationsService } = withRepos({}, {});
+			const invoice = invoiceWith([]);
+
+			await (service as unknown as { resolveOdooFailureNotifications: (value: unknown) => Promise<void> }).resolveOdooFailureNotifications(
+				invoice
+			);
+			expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { type: 'invoice_odoo_failure', resourceId: 'invoice-1' });
+
+			notificationsService.resolveOpen.mockRejectedValueOnce(new Error('sin base'));
+			await expect(
+				(service as unknown as { resolveOdooFailureNotifications: (value: unknown) => Promise<void> }).resolveOdooFailureNotifications(
+					invoice
+				)
+			).resolves.toBeUndefined();
+		});
+
 		it('en dry run omite igual pero no notifica', async () => {
 			const { service, notificationsService } = withRepos({}, { 'p-x': { name: 'Soporte', odoo_product_id: null } });
 
@@ -803,6 +821,7 @@ describe('InvoiceSchedulerService', () => {
 				error: 'Productos sin mapeo a Odoo: Soporte',
 			});
 			expect(notificationsService.createOrUpdate).not.toHaveBeenCalled();
+			expect(notificationsService.resolveOpen).not.toHaveBeenCalled();
 		});
 
 		it('resuelve por odoo_product_mappings del holding o por products.odoo_product_id; mira solo las líneas que viajan (no internas ni en cero)', async () => {

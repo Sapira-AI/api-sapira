@@ -1,48 +1,76 @@
-# Notificaciones generales
+# Notificaciones (v2, fase 1)
 
-El módulo expone `notifications` para eventos de aplicación persistentes y sus destinatarios. Requiere autenticación Supabase y el header `x-holding-id`, igual que los controladores de módulos existentes.
+Contrato completo (endpoints, catálogo, tareas, errores): `docs/v2-rediseno/contrato-api-notificaciones.md`. Spec y decisiones:
+`docs/v2-rediseno/spec-notificaciones-v2.md` (§5 y §6 mandan).
 
-## Endpoints
+Dos conceptos en un solo centro:
 
-No hay endpoint HTTP de creación: las notificaciones se crean desde el backend con `NotificationsService.create` / `createOrUpdate`. Los destinatarios (`recipients.user_ids`, `recipients.role_ids`, `recipients.include_super_admins` más las suscripciones activas del mismo `type`) se limitan a usuarios con estado `Activo` y membresía activa en el holding.
+- **Alertas** (`app_notifications` + `app_notification_recipients`): cosas que **pasaron**. Las crean los productores con
+  `NotificationsService.create` / `createOrUpdate` (no hay endpoint de creación) y se **cierran solas** cuando se resuelve la causa.
+- **Tareas** (`src/modules/tasks`): cosas que **hay que hacer hoy**, calculadas en vivo (no se guardan). `TasksService.forHolding` es la
+  única fuente para `GET /notifications/tasks` y para `GET /dashboard/home`.
 
-- `GET /notifications?page=1&limit=20`: devuelve las notificaciones del usuario autenticado, su paginación y `unread_count`.
-- `GET /notifications/:notificationId`: devuelve únicamente una notificación asignada al usuario autenticado.
-- `PATCH /notifications/:notificationId/read`: marca como leída únicamente la asignación del usuario autenticado.
-- `GET /notifications/subscriptions/salesforce-staging-blocked`: lista las suscripciones de rol de todos los tipos suscribibles (ver tabla), pese al nombre de la ruta.
-- `PUT /notifications/subscriptions/salesforce-staging-blocked`: reemplaza esas suscripciones, para los tres tipos, con `{ role_ids, include_super_admins }`.
+## Catálogo (`notification-catalog.ts`)
 
-La gestión de suscripciones requiere una membresía activa en el holding y puede ser realizada por Super Admin o por usuarios con rol `Administrador` en ese holding.
+Un solo archivo con cada tipo: etiqueta, módulo (Facturación, Contratos, Cotizaciones, Ingresos, Integraciones, Sistema), ícono lucide,
+gravedad por defecto, si se suscribe por rol, roles por defecto, acción y los textos "Qué pasó" / "Qué hacer" (+ "Qué hacemos nosotros").
+Tipos: los 10 de siempre, `system_update` (novedad del sistema, acción `open_help { slug }`, a todos los miembros activos; canal listo,
+sin productor), y reservados de fase 2 (`user_mention`, `fx_sync_failure`, `invoice_fx_fallback`, `invoice_fx_missing`,
+`scheduler_error_summary`). La semilla N3 y `create_default_roles_for_holding` son espejo de `defaultSubscriptions()` (un test lo compara).
 
-`include_super_admins` se representa con una suscripción cuyo `role_id` es `NULL`, coherente con el esquema de base de datos. Las notificaciones usan `deduplication_key` para impedir la creación de más de un evento abierto para la misma clave y holding.
+## Endpoints (todos con `SupabaseAuthGuard` + `HoldingScopeGuard`)
 
-## Tipos suscribibles por rol
+| Ruta | Qué hace |
+| --- | --- |
+| `GET /notifications` | Lista con filtros (`status`, `read`, `archived`, `type[]`, `module[]`, `severity[]`, `from`, `to`, `search`) y paginación `{ data, total, items, currentPage, pages, limit }` + `unread_count` y `pagination` (forma vieja, front actual) |
+| `GET /notifications/counts` | Sin leer: total, por módulo y por tipo (sin archivadas) |
+| `GET /notifications/catalog` | Catálogo para filtros y etiquetas |
+| `GET /notifications/tasks` | Tareas con algo por hacer (controlador en `TasksModule`) |
+| `GET/PUT /notifications/preferences` | Por usuario y holding: `in_app` y `email` por tipo, `weekly_digest` |
+| `POST /notifications/read-all` | Marca leídas las que cumplen los filtros del cuerpo |
+| `POST /notifications/archive` · `/unarchive` | `{ ids }`, por usuario |
+| `GET /notifications/:id` | Detalle con `texts { what_happened, what_to_do, what_we_do }` |
+| `PATCH /notifications/:id/read` · `/unread` | Lectura por usuario |
+| `GET/PUT /notifications/subscriptions/salesforce-staging-blocked` | Ruta vieja (front actual): solo los 3 tipos de siempre |
 
-Los endpoints de suscripción operan sobre todos los tipos de `ROLE_SUBSCRIPTION_NOTIFICATION_TYPES`, de modo que una sola configuración de destinatarios cubre los tres:
+`:id` solo acepta UUID (así `/notifications/tasks` y las rutas fijas nunca se confunden con un id). La lista solo trae lo del holding activo
+y solo si el usuario es miembro activo (cierra #21). Configuración › Roles (`GET/PUT /settings/roles/:id/alerts`) ofrece todos los tipos
+suscribibles con productor, con etiqueta y módulo.
 
-| Tipo | Origen | Acción asociada |
+## Reglas del servicio
+
+- **Destinatarios**: suscripciones del tipo (`notification_role_subscriptions`; `role_id NULL` = super admins) + explícitos (`user_ids`,
+  `role_ids`, `include_super_admins`, `all_members`); solo usuarios `Activo` con membresía activa; se excluye a quien apagó el tipo
+  (`in_app = false`). Sin la tabla de preferencias (N2 sin aplicar) no se silencia a nadie.
+- **`create` sin destinatarios no inserta**: `warn` en el log y `{ notification: null, recipient_count: 0 }`.
+- **`createOrUpdate`**: con la clave abierta actualiza el contenido y suma destinatarios nuevos; si sube la gravedad o cambia
+  `escalation_step` (guardado en `metadata.escalation_step`), vuelve a "sin leer" y desarchiva para todos.
+- **Cierre automático**: `resolveOpen(holding, { type?, resourceId?, deduplicationKeys?, ids? })` (sin criterios no cierra nada) y
+  `resolveByDeduplicationKey`. Productores:
+  - `invoice_odoo_failure`: `InvoiceSchedulerService.sendInvoiceToOdoo` al quedar `sent` (todas las etapas de esa factura).
+  - `salesforce_sync_failure`: la siguiente corrida diaria buena del holding.
+  - `contract_renewal_proposed`, `contract_renewal_reminder`, `contract_scheduled_change_due`: `contracts/contract-alerts.ts`
+    después de cada cambio del contrato (`ContractChangesService.apply`: confirmar renovación, renovar, dar de baja, terminar, aplicar
+    pacto) y al omitir o cancelar un pacto. Omitir una propuesta ya la cerraba.
+  - `bigquery_quantities_*` y `salesforce_staging_blocked`: como antes (por clave).
+
+## Tiempo real
+
+Namespace Socket.IO `/notifications`, sala `user:<users.id>`. El handshake rechaza al usuario sin ninguna membresía activa
+(`unauthorized`). Los eventos de actualización solo se emiten a quienes siguen siendo miembros activos del holding de la notificación.
+
+| Evento | Payload | Cuándo |
 | --- | --- | --- |
-| `salesforce_staging_blocked` | Una oportunidad Salesforce queda bloqueada en staging | `retry_salesforce_opportunity` |
-| `salesforce_sync_failure` | Falla la corrida diaria de sincronización de Salesforce para un holding | `review_salesforce_sync_log` |
-| `invoice_odoo_failure` | Falla la emisión de una factura en Odoo | — |
+| `connected` | `{ userId }` | handshake válido |
+| `unauthorized` | `{ message }` | token inválido, usuario inexistente o sin membresía activa |
+| `notification:created` | `{ holdingId, notification }` | alerta nueva o destinatario sumado a una abierta |
+| `notification:read` | `{ holdingId, notificationId, read_at }` | el usuario la marcó leída (otras pestañas) |
+| `notification:updated` | `{ holdingId, notificationId }` | cambió, escaló, se resolvió o se marcó no leída; `notificationId = '*'` = cambiaron varias (marcar todas, archivar): recargar |
 
-## Entrega en tiempo real
+Los fronts usan los eventos como señal para recargar por REST.
 
-`NotificationsGateway` expone el namespace Socket.IO `/notifications` en el mismo servidor HTTP. Lo consumen `front-sapira` (Next) y `front-sapira-vite`.
+## Base de datos
 
-- **Handshake**: token de Supabase en `auth.token` (o header `Authorization: Bearer`). El cliente queda en la sala `user:<users.id>`, de modo que recibe eventos de todos sus holdings y **debe filtrar por `holdingId`**.
-- **CORS**: mismos orígenes que HTTP (`src/core/config/cors-origins.ts`: `FRONT_BASE_URL` + previews `*.vercel.app`). En producción `FRONT_BASE_URL` debe incluir `https://app.aisapira.com` y `https://www.aisapira.com`.
-
-| Evento (servidor → cliente) | Payload | Cuándo |
-| --- | --- | --- |
-| `connected` | `{ userId }` (id de Supabase Auth) | handshake válido |
-| `unauthorized` | `{ message }` | token ausente, inválido o usuario inexistente; el servidor desconecta a continuación y el cliente debe reconectar con un token nuevo |
-| `notification:created` | `{ holdingId, notification }` (con `is_read: false`) | `create` inserta una notificación con destinatarios |
-| `notification:read` | `{ holdingId, notificationId, read_at }` | `PATCH /notifications/:id/read` marca una pendiente (solo a la sala del usuario, para sincronizar sus otras pestañas y el otro front) |
-| `notification:updated` | `{ holdingId, notificationId }` | `createOrUpdate` actualiza una notificación abierta por `deduplication_key`, o `resolveByDeduplicationKey` la resuelve |
-
-El gateway no escucha eventos del cliente. Los fronts usan los eventos como **señal para recargar** por REST (`GET /notifications`), que sigue siendo la fuente de verdad; así una reconexión no pierde cambios.
-
-## Dependencias de datos
-
-El módulo mapea las tablas `app_notifications`, `app_notification_recipients` y `notification_role_subscriptions`. La migración de estas tablas se mantiene fuera de este módulo y debe aplicarse antes de usar los endpoints.
+`app_notifications`, `app_notification_recipients` (N1: `archived_at`), `notification_role_subscriptions`,
+`user_notification_preferences` (N2; el resumen semanal es la fila `notification_type = 'weekly_digest'`). Migraciones N1/N2 y semilla N3
+escritas **sin aplicar**; orden: N1 → N2 → N3 → `create_default_roles_for_holding` (pendiente de OK de Domi) → desplegar la API.

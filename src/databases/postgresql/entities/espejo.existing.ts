@@ -16,6 +16,7 @@ export { EmailSenderAddress } from '@/databases/postgresql/entities/automatizaci
 export { HoldingEmailSenderSettings } from '@/databases/postgresql/entities/automatizaciones-ia/holding-email-sender-settings.entity';
 export { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
 export { RagDocument } from '@/databases/postgresql/entities/automatizaciones-ia/rag-document.entity';
+export { UserNotificationPreference } from '@/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity';
 export { ClaudeSkill } from '@/databases/postgresql/entities/base-tenancy/claude-skill.entity';
 export { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 export { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
