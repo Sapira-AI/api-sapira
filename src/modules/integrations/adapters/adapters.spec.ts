@@ -150,18 +150,30 @@ describe('CrmAdapter', () => {
 		await expect(adapter.sync(HOLDING)).rejects.toBeInstanceOf(ConflictException);
 	});
 
-	it('vendedores: sugiere el dueño por el correo técnico sf_<id>@salesforce.local', async () => {
+	it('vendedores por origen: una fila por dueño del CRM; sugiere el vendedor por el correo técnico sf_<id>@salesforce.local', async () => {
 		const query = jest.fn(async (sql: string) => {
+			if (sql.includes('count(*)::int AS n')) return [{ id: '005RO000005YZLRYA4', n: 7 }];
 			if (sql.includes("raw_data->>'OwnerId' AS id")) return [{ id: '005RO000005YZLRYA4', name: 'Rafael Salas', email: null }];
 			if (sql.includes('FROM sellers s'))
-				return [{ id: 's-1', name: 'Rafael Salas', email: 'sf_005ro000005yzlrya4@salesforce.local', crm_owner_id: null, quotes: 3 }];
+				return [
+					{ id: 's-1', name: 'Rafael Salas', email: 'sf_005ro000005yzlrya4@salesforce.local', crm_owner_id: null },
+					// Vendedor de Sapira sin dueño del CRM: no aparece ni cuenta como sin mapear.
+					{ id: 's-2', name: 'Vendedora interna', email: 'ana@acme.com', crm_owner_id: null },
+				];
 
 			return [];
 		});
 		const view = await make(query).getMapping(HOLDING, 'owners', {});
 
+		expect(view.anchor).toBe('external');
+		expect(view.counts).toEqual({ total: 1, mapped: 0, unmapped: 0, suggested: 1 });
 		expect(view.data[0]).toEqual(
-			expect.objectContaining({ status: 'suggested', suggestion: expect.objectContaining({ id: '005RO000005YZLRYA4' }), usage: { quotes: 3 } })
+			expect.objectContaining({
+				key: '005RO000005YZLRYA4',
+				status: 'suggested',
+				suggestion: expect.objectContaining({ id: 's-1' }),
+				usage: { opportunities: 7 },
+			})
 		);
 	});
 
@@ -201,7 +213,7 @@ describe('StripeAdapter (varias cuentas)', () => {
 			{} as never,
 			{ syncAll: jest.fn(async () => ({ batch_id: 'b-1' })) } as never,
 			{} as never,
-			{ findOne: jest.fn(() => lean(null)) } as never,
+			{ findOne: jest.fn(() => lean(null)), updateMany: jest.fn(() => ({ exec: async () => ({}) })) } as never,
 			config as never
 		);
 
@@ -243,6 +255,49 @@ describe('StripeAdapter (varias cuentas)', () => {
 		await expect(make().testConnection(HOLDING, 'a-1')).resolves.toEqual(
 			expect.objectContaining({ ok: true, details: { livemode: true, currencies: ['CLP'] } })
 		);
+	});
+
+	it('mapeo por origen: una fila por producto de Stripe usado o mapeado; los de Sapira sin contraparte no cuentan', async () => {
+		const query = jest.fn(async (sql: string) => {
+			if (sql.includes('WITH u AS'))
+				return [
+					{ id: 'prod_1', subscriptions: 4, invoices: 10, account_id: 'a-1' },
+					{ id: 'prod_9', subscriptions: 0, invoices: 2, account_id: 'a-2' },
+				];
+			if (sql.includes('FROM stripe_product_mappings')) return [{ sapira_product_id: 'p-1', stripe_product_id: 'prod_1' }];
+			if (sql.includes('FROM products p'))
+				return [
+					{ id: 'p-1', name: 'Plan', product_code: null },
+					{ id: 'p-2', name: 'Solo en Sapira', product_code: null },
+					{ id: 'p-3', name: 'Otro de Sapira', product_code: null },
+				];
+
+			return [];
+		});
+		const adapter = new StripeAdapter(
+			{ query } as never,
+			{ find: jest.fn(async () => accounts) } as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			config as never
+		);
+
+		jest.spyOn(adapter as unknown as { stripeClient: () => unknown }, 'stripeClient').mockImplementation(
+			() => ({ products: { list: jest.fn(async () => ({ data: [{ id: 'prod_1', name: 'Plan', description: null }] })) } }) as never
+		);
+		const view = await adapter.getMapping(HOLDING, 'products', {});
+
+		expect(view.anchor).toBe('external');
+		expect(view.counts).toEqual({ total: 2, mapped: 1, unmapped: 1, suggested: 0 });
+		expect(view.data.map((row) => [row.key, row.status, row.usage])).toEqual([
+			['prod_9', 'unmapped', { subscriptions: 0, invoices: 2 }],
+			['prod_1:p-1', 'mapped', { subscriptions: 4, invoices: 10 }],
+		]);
+		expect(view.data[0].external?.meta).toEqual({ account_id: 'a-2', account_name: 'México' });
+		await expect(adapter.pendingMapping(HOLDING)).resolves.toBe(1);
 	});
 
 	it('los registros traen la cuenta de origen', () => {

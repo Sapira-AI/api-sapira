@@ -249,7 +249,7 @@ export class StripeAdapter implements IntegrationAdapter {
 	}
 
 	/** Sincroniza una cuenta (`connection_id`); sin cuenta, solo si el holding tiene una sola activa. */
-	async sync(holdingId: string, _actor: Actor, options: SyncOptions & { connection_id?: string }): Promise<SyncStarted> {
+	async sync(holdingId: string, actor: Actor, options: SyncOptions & { connection_id?: string }): Promise<SyncStarted> {
 		const active = (await this.all(holdingId)).filter((row) => row.is_active !== false);
 		const connection = options.connection_id ? await this.byId(holdingId, options.connection_id) : active.length === 1 ? active[0] : null;
 
@@ -258,16 +258,23 @@ export class StripeAdapter implements IntegrationAdapter {
 			throw validationException([{ field: 'connection_id', message: 'Indica la cuenta de Stripe a sincronizar' }]);
 		}
 		if (connection.is_active === false) throw new BadRequestException('La cuenta está pausada');
-		await this.assertIdle(holdingId, connection.id);
 		const today = new Date();
+		const dateFrom = options.date_from ?? isoDay(new Date(today.getTime() - 2 * 86_400_000));
+		const dateTo = options.date_to ?? isoDay(today);
+
+		if (dateFrom > dateTo) throw validationException([{ field: 'date_from', message: 'La fecha inicial es posterior a la final' }]);
+		await this.assertIdle(holdingId, connection.id);
+		// `date_to` es inclusivo (contrato §0): la ingesta compara `created <= date_to` en segundos, así que va al final del día.
 		const result = await this.ingestion.syncAll(
-			{
-				connection_id: connection.id,
-				date_from: options.date_from ?? isoDay(new Date(today.getTime() - 2 * 86_400_000)),
-				date_to: options.date_to ?? isoDay(today),
-			},
+			{ connection_id: connection.id, date_from: `${dateFrom}T00:00:00.000Z`, date_to: `${dateTo}T23:59:59.999Z` },
 			holdingId
 		);
+
+		// La ingesta no guarda quién la pidió: sin `user_id` el historial la mostraría como automática.
+		await this.logs
+			.updateMany({ holding_id: holdingId, 'metadata.batch_id': result.batch_id }, { $set: { user_id: actor.authId } })
+			.exec()
+			.catch(() => undefined);
 
 		return {
 			run_id: `stripe-ingest:${result.batch_id}`,
@@ -328,8 +335,13 @@ export class StripeAdapter implements IntegrationAdapter {
 
 	private importRun(row: Row): IntegrationRun {
 		const stats = (row.stats ?? {}) as Record<string, Row>;
-		const errors = Array.isArray(row.errors) ? (row.errors as unknown[]).length : 0;
-		const ok = Object.values(stats).reduce((sum, entity) => sum + (Number(entity?.created) || 0) + (Number(entity?.updated) || 0), 0);
+		// `stats` trae también subscriptionItems/invoiceItems: se cuentan solo los tres objetos que se ven en la lista.
+		const entities = ['customers', 'subscriptions', 'invoices'].map((key) => stats[key] ?? {});
+		const sum = (field: string) => entities.reduce((total, entity) => total + (Number(entity[field]) || 0), 0);
+		const ok = sum('created') + sum('updated');
+		// Errores por registro (`stats.*.errors` + inválidos) y, si la corrida cayó entera, sus mensajes en `errors[]`.
+		const errors = Math.max(sum('errors') + sum('invalid'), Array.isArray(row.errors) ? (row.errors as unknown[]).length : 0);
+		const skipped = sum('skipped');
 
 		return {
 			id: `stripe-import:${row.id}`,
@@ -341,7 +353,7 @@ export class StripeAdapter implements IntegrationAdapter {
 			started_at: (row.created_at as Date) ?? null,
 			finished_at: (row.completed_at as Date) ?? null,
 			duration_ms: durationMs(row.created_at as Date, row.completed_at as Date),
-			totals: { total: ok + errors, ok, errors, skipped: 0 },
+			totals: { total: ok + errors + skipped, ok, errors, skipped },
 			error: (row.error_message as string) ?? null,
 			metrics: { progress: (row.progress as Row | null)?.overallProgress ?? null },
 		};
@@ -403,14 +415,41 @@ export class StripeAdapter implements IntegrationAdapter {
 			])) as Row[];
 
 			if (row) {
-				const records: RunRecord[] = ((Array.isArray(row.errors) ? row.errors : []) as Row[]).map((error) => ({
-					object: String(error.entity ?? error.type ?? 'registro'),
-					label: String(error.id ?? error.stripe_id ?? error.entity ?? 'Registro'),
-					sapira_id: null,
-					external_id: (error.stripe_id as string) ?? (error.id as string) ?? null,
-					status: 'error',
-					message: String(error.error ?? error.message ?? 'Error sin detalle'),
-				}));
+				// `errors` es `string[]` (mensajes de la corrida) en `StripeSyncService`; se aceptan también objetos por registro.
+				const records: RunRecord[] = ((Array.isArray(row.errors) ? row.errors : []) as Array<Row | string>).map((error) =>
+					typeof error === 'string'
+						? { object: 'registro', label: 'Importación', sapira_id: null, external_id: null, status: 'error', message: error }
+						: {
+								object: String(error.entity ?? error.type ?? 'registro'),
+								label: String(error.id ?? error.stripe_id ?? error.entity ?? 'Registro'),
+								sapira_id: null,
+								external_id: (error.stripe_id as string) ?? (error.id as string) ?? null,
+								status: 'error',
+								message: String(error.error ?? error.message ?? 'Error sin detalle'),
+							}
+				);
+				// Registros que quedaron con error o inválidos en esta corrida (la tabla intermedia guarda el motivo).
+				const failed = (await this.dataSource.query(
+					`SELECT 'customer' AS object, stripe_id, processing_status, COALESCE(error_message, integration_notes) AS message FROM stripe_customers_stg
+						WHERE holding_id = $1 AND processing_status IN ('error','invalid') AND GREATEST(last_integrated_at, updated_at) BETWEEN $2 AND COALESCE($3, now())
+					UNION ALL SELECT 'subscription', stripe_id, processing_status, COALESCE(error_message, integration_notes) FROM stripe_subscriptions_stg
+						WHERE holding_id = $1 AND processing_status IN ('error','invalid') AND GREATEST(last_integrated_at, updated_at) BETWEEN $2 AND COALESCE($3, now())
+					UNION ALL SELECT 'invoice', stripe_id, processing_status, COALESCE(error_message, integration_notes) FROM stripe_invoices_stg
+						WHERE holding_id = $1 AND processing_status IN ('error','invalid') AND GREATEST(last_integrated_at, updated_at) BETWEEN $2 AND COALESCE($3, now())
+					LIMIT 2000`,
+					[holdingId, row.created_at, row.completed_at ?? null]
+				)) as Row[];
+
+				records.push(
+					...failed.map((item) => ({
+						object: String(item.object),
+						label: String(item.stripe_id),
+						sapira_id: null,
+						external_id: String(item.stripe_id),
+						status: 'error' as const,
+						message: (item.message as string) ?? null,
+					}))
+				);
 
 				return { ...this.importRun(row), records, errors_summary: errorsSummary(records) };
 			}
@@ -487,60 +526,108 @@ export class StripeAdapter implements IntegrationAdapter {
 		};
 	}
 
+	/**
+	 * Productos de Stripe que usa el holding (en las suscripciones e invoices traídas a revisión), con cuántas suscripciones e
+	 * invoices los usan y la cuenta de origen.
+	 */
+	private async usedProducts(holdingId: string): Promise<Row[]> {
+		return (await this.dataSource.query(
+			`WITH u AS (
+				SELECT jsonb_array_elements(CASE WHEN jsonb_typeof(s.raw_data->'items'->'data') = 'array' THEN s.raw_data->'items'->'data' ELSE '[]'::jsonb END)
+					->'price'->>'product' AS product, 'subscription' AS kind, s.stripe_id, s.connection_id
+				FROM stripe_subscriptions_stg s WHERE s.holding_id = $1
+				UNION ALL
+				SELECT COALESCE(l->'pricing'->'price_details'->>'product', l->'price'->>'product'), 'invoice', i.stripe_id, i.connection_id
+				FROM stripe_invoices_stg i,
+					jsonb_array_elements(CASE WHEN jsonb_typeof(i.raw_data->'lines'->'data') = 'array' THEN i.raw_data->'lines'->'data' ELSE '[]'::jsonb END) l
+				WHERE i.holding_id = $1)
+			SELECT product AS id, count(DISTINCT stripe_id) FILTER (WHERE kind = 'subscription')::int AS subscriptions,
+				count(DISTINCT stripe_id) FILTER (WHERE kind = 'invoice')::int AS invoices, max(connection_id::text) AS account_id
+			FROM u WHERE product IS NOT NULL GROUP BY product`,
+			[holdingId]
+		)) as Row[];
+	}
+
+	/**
+	 * Mapeo por origen (ajuste de Domi): Stripe **importa** a Sapira, así que hay una fila por producto de Stripe que se usa (en las
+	 * suscripciones/invoices traídas) o que ya está mapeado → a qué producto de Sapira corresponde (el nombre sale de la lista en vivo
+	 * de cada cuenta; los activos sin uso se ofrecen en `options`). Los
+	 * productos de Sapira sin contraparte en Stripe no aparecen ni cuentan como sin mapear. N:N: un producto de Stripe mapeado a dos
+	 * de Sapira da dos filas. `usage` = cuánto lo usa Stripe.
+	 */
 	async getMapping(holdingId: string, object: string, query: { status?: MappingStatus; search?: string }): Promise<MappingView> {
 		if (object !== 'products') throw new NotFoundException('Mapeo no encontrado');
-		const [{ refs, error }, products, mappings] = await Promise.all([
+		const [{ refs, error }, products, mappings, used, accounts] = await Promise.all([
 			this.externalProducts(holdingId),
-			this.dataSource.query(
-				`SELECT p.id, p.name, p.product_code,
-					(SELECT count(DISTINCT ct.id) FROM contract_items ci JOIN contracts ct ON ct.id = ci.contract_id
-						WHERE ci.product_id = p.id AND ct.holding_id = $1 AND ct.status = 'Activo') AS contracts
-				FROM products p WHERE p.holding_id = $1 ORDER BY lower(p.name)`,
-				[holdingId]
-			) as Promise<Row[]>,
+			this.dataSource.query(`SELECT p.id, p.name, p.product_code FROM products p WHERE p.holding_id = $1 ORDER BY lower(p.name)`, [
+				holdingId,
+			]) as Promise<Row[]>,
 			this.dataSource.query(`SELECT sapira_product_id, stripe_product_id FROM stripe_product_mappings WHERE holding_id = $1`, [
 				holdingId,
 			]) as Promise<Row[]>,
+			this.usedProducts(holdingId),
+			this.accountNames(holdingId),
 		]);
-		const byId = new Map(refs.map((ref) => [ref.id, ref]));
-		const rows: MappingRow[] = products.flatMap((product): MappingRow[] => {
-			const sapira: Ref = { id: String(product.id), label: String(product.name ?? ''), meta: { code: product.product_code ?? null } };
-			const usage = { contracts: Number(product.contracts) || 0 };
-			const mapped = mappings.filter((mapping) => String(mapping.sapira_product_id) === sapira.id);
+		const sapira: Ref[] = products.map((product) => ({
+			id: String(product.id),
+			label: String(product.name ?? ''),
+			meta: { code: product.product_code ?? null },
+		}));
+		const sapiraById = new Map(sapira.map((ref) => [ref.id, ref]));
+		const live = new Map(refs.map((ref) => [ref.id, ref]));
+		const usage = new Map(used.map((row) => [String(row.id), row]));
+		const externalIds = [...new Set([...used.map((row) => String(row.id)), ...mappings.map((row) => String(row.stripe_product_id))])];
+		const rows: MappingRow[] = externalIds.flatMap((externalId): MappingRow[] => {
+			const use = usage.get(externalId);
+			const accountId = (use?.account_id as string) ?? null;
+			const external: Ref = live.get(externalId) ?? {
+				id: externalId,
+				label: externalId,
+				meta: { account_id: accountId, account_name: accountId ? (accounts.get(accountId) ?? null) : null },
+			};
+			const rowUsage = { subscriptions: Number(use?.subscriptions) || 0, invoices: Number(use?.invoices) || 0 };
+			const mapped = mappings.filter((mapping) => String(mapping.stripe_product_id) === externalId);
 
 			if (!mapped.length) {
-				const suggestion = suggestRef({ label: sapira.label, code: product.product_code }, refs);
+				const suggestion = live.has(externalId) ? suggestRef({ label: external.label }, sapira) : null;
 
 				return [
 					{
-						key: sapira.id,
-						sapira,
-						external: null,
+						key: externalId,
+						sapira: null,
+						external,
 						status: suggestion ? 'suggested' : 'unmapped',
 						suggestion,
-						usage,
+						usage: rowUsage,
 						meta: null,
-					} satisfies MappingRow,
+					},
 				];
 			}
 
 			return mapped.map((mapping) => {
-				const externalId = String(mapping.stripe_product_id);
+				const sapiraId = String(mapping.sapira_product_id);
 
 				return {
-					key: `${sapira.id}:${externalId}`,
-					sapira,
-					external: byId.get(externalId) ?? { id: externalId, label: externalId, meta: {} },
+					key: `${externalId}:${sapiraId}`,
+					sapira: sapiraById.get(sapiraId) ?? { id: sapiraId, label: sapiraId, meta: {} },
+					external,
 					status: 'mapped',
 					suggestion: null,
-					usage,
+					usage: rowUsage,
 					meta: null,
 				} satisfies MappingRow;
 			});
 		});
 
+		rows.sort(
+			(a, b) =>
+				Number(b.status !== 'mapped') - Number(a.status !== 'mapped') ||
+				(b.usage?.subscriptions ?? 0) + (b.usage?.invoices ?? 0) - ((a.usage?.subscriptions ?? 0) + (a.usage?.invoices ?? 0)) ||
+				(a.external?.label ?? '').localeCompare(b.external?.label ?? '')
+		);
+
 		return buildMappingView(
-			{ object, object_label: 'Productos', anchor: 'sapira', external_available: !error, external_error: error },
+			{ object, object_label: 'Productos', anchor: 'external', external_available: !error, external_error: error },
 			rows,
 			query
 		);
@@ -597,16 +684,18 @@ export class StripeAdapter implements IntegrationAdapter {
 		if (!deleted) throw new NotFoundException('Mapeo no encontrado');
 	}
 
+	/** Productos de Stripe usados en lo traído sin producto de Sapira (lo mismo que "Sin mapear" del mapeo, sin llamar a Stripe). */
 	async pendingMapping(holdingId: string): Promise<number> {
 		if (!(await this.all(holdingId)).length) return 0;
-		const [row] = (await this.dataSource.query(
-			`SELECT count(DISTINCT ci.product_id) AS n FROM contract_items ci JOIN contracts ct ON ct.id = ci.contract_id
-			WHERE ct.holding_id = $1 AND ct.status = 'Activo' AND ci.product_id IS NOT NULL
-				AND NOT EXISTS (SELECT 1 FROM stripe_product_mappings m WHERE m.holding_id = $1 AND m.sapira_product_id = ci.product_id)`,
-			[holdingId]
-		)) as Row[];
+		const [used, mappings] = await Promise.all([
+			this.usedProducts(holdingId),
+			this.dataSource.query(`SELECT DISTINCT stripe_product_id FROM stripe_product_mappings WHERE holding_id = $1`, [holdingId]) as Promise<
+				Row[]
+			>,
+		]);
+		const mapped = new Set(mappings.map((row) => String(row.stripe_product_id)));
 
-		return Number(row?.n) || 0;
+		return used.filter((row) => !mapped.has(String(row.id))).length;
 	}
 
 	schedule(): ScheduleInfo {

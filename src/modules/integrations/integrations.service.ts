@@ -129,6 +129,8 @@ export class IntegrationsService {
 		const adapter = this.adapters[tipo];
 		const info = TIPO_INFO[tipo];
 		const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+		/** Mismo período por defecto que la pestaña Estado del 360 ("Últimos 7 días", filtro `from` de `records`). */
+		const recordsFrom = sevenDaysAgo;
 		const safe = async <T>(work: () => Promise<T>, fallback: T): Promise<T> => {
 			try {
 				return await work();
@@ -143,8 +145,10 @@ export class IntegrationsService {
 			safe(() => adapter.listRuns(holdingId, { page: 1, limit: 1 }), null),
 			safe(() => adapter.listRuns(holdingId, { page: 1, limit: 100, from: sevenDaysAgo }), null),
 			safe(() => adapter.pendingMapping(holdingId), 0),
-			safe(() => this.records(holdingId, tipo, { page: 1, limit: 1 }), null),
+			safe(() => this.records(holdingId, tipo, { from: recordsFrom, page: 1, limit: 1 }), null),
 		]);
+		const kpis = records?.kpis ?? null;
+		const failedRuns = (recent?.data ?? []).filter((run) => run.status === 'failed' || run.status === 'partial');
 		const lastRun = last?.data[0] ?? null;
 		const lastError = recent?.data.find((run) => run.error || run.status === 'failed' || run.status === 'partial') ?? null;
 		const schedule = adapter.schedule();
@@ -169,8 +173,14 @@ export class IntegrationsService {
 					}
 				: null,
 			errors_7d: (recent?.data ?? []).reduce((sum, run) => sum + run.totals.errors, 0),
+			failed_runs_7d: failedRuns.length,
 			pending_mapping: pendingMapping,
-			pending_import: records?.kpis.ready ?? 0,
+			records_from: recordsFrom,
+			records_kpis: kpis
+				? { synced: kpis.synced, error: kpis.error, review: kpis.review, ready: kpis.ready }
+				: { synced: 0, error: 0, review: 0, ready: 0 },
+			records_with_error: kpis?.error ?? 0,
+			pending_import: kpis?.ready ?? 0,
 			next_scheduled_at: connection.connected && connection.active ? schedule.next_at : null,
 			href: integrationHref(tipo),
 			...(tipo === 'stripe'
@@ -520,9 +530,12 @@ export class IntegrationsService {
 		this.adapter(tipo);
 		const { sql, params, sources, rules } = await this.recordsCte(holdingId, tipo as FullTipo, query);
 		const statusParams = [...params];
-		let statusFilter = `g.status <> ALL($${statusParams.push(HIDDEN_STATUSES)}::text[])`;
+		// Un solo parámetro de estado: si quedara `$n` sin usar (ocultos + `status`), Postgres responde "could not determine data type
+		// of parameter" y el filtro por estado (tarjetas KPI) daba 500.
+		let statusFilter = query.status?.length
+			? `g.status = ANY($${statusParams.push(query.status)}::text[])`
+			: `g.status <> ALL($${statusParams.push(HIDDEN_STATUSES)}::text[])`;
 
-		if (query.status?.length) statusFilter = `g.status = ANY($${statusParams.push(query.status)}::text[])`;
 		if (query.rule) {
 			const rule = rules.find((item) => item.name === query.rule || item.id === query.rule);
 
@@ -570,8 +583,11 @@ export class IntegrationsService {
 			kpis: {
 				synced: count('imported') + count('synced'),
 				error: count('error'),
-				pending: count('pending') + count('ready'),
+				/** Por revisar: pendientes que todavía no están listos (filtro `status=pending`). */
+				review: count('pending'),
 				ready: count('ready'),
+				/** Compatibilidad: `pending + ready` (se solapa con `ready`; las tarjetas usan `review`). */
+				pending: count('pending') + count('ready'),
 				discarded: count('discarded'),
 				excluded_by_rule: count('excluded_by_rule'),
 			},

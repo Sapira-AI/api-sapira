@@ -294,14 +294,50 @@ export class ErpAdapter implements IntegrationAdapter {
 		};
 	}
 
+	/** Importación de facturas del ERP (`InvoiceProcessingService`, trabajo en memoria del proceso). */
+	private importJobToRun(jobId: string, job: Row): IntegrationRun {
+		const ok = Number(job.records_success ?? 0);
+		const errors = Number(job.records_failed ?? 0);
+
+		return {
+			id: `erp-import:${jobId}`,
+			tipo: 'erp',
+			kind: 'import_invoices',
+			kind_label: 'Importación de facturas del ERP',
+			trigger: 'manual',
+			status: runStatusOf({
+				running: job.status === 'running',
+				failed: job.status === 'failed',
+				cancelled: job.status === 'cancelled',
+				ok,
+				errors,
+			}),
+			started_at: (job.started_at as Date) ?? null,
+			finished_at: (job.completed_at as Date) ?? null,
+			duration_ms: durationMs(job.started_at as Date, job.completed_at as Date),
+			totals: { total: Number(job.records_processed ?? 0), ok, errors, skipped: 0 },
+			error: job.status === 'failed' && job.error_details ? errorText(job.error_details) : null,
+			metrics: { progress: job.progress_percentage ?? null },
+		};
+	}
+
+	private async importRuns(holdingId: string): Promise<IntegrationRun[]> {
+		const ids = [...this.importJobs.entries()].filter(([, holding]) => holding === holdingId).map(([id]) => id);
+		const jobs = await Promise.all(
+			ids.map(async (id) => [id, (await this.invoiceProcessing.getJobStatus(id)) as unknown as Row | null] as const)
+		);
+
+		return jobs.flatMap(([id, job]) => (job ? [this.importJobToRun(id, job)] : []));
+	}
+
 	async listRuns(holdingId: string, query: RunsQuery): Promise<Paginated<IntegrationRun>> {
-		const jobs = (await this.schedulerJobs
-			.find(this.jobsFilter(holdingId))
-			.sort({ startedAt: -1 })
-			.limit(RUNS_WINDOW)
-			.lean()
-			.exec()) as InvoiceSchedulerJob[];
-		const runs = jobs.map((job) => this.jobToRun(job, holdingId).run);
+		const [jobs, imports] = await Promise.all([
+			this.schedulerJobs.find(this.jobsFilter(holdingId)).sort({ startedAt: -1 }).limit(RUNS_WINDOW).lean().exec() as Promise<
+				InvoiceSchedulerJob[]
+			>,
+			this.importRuns(holdingId),
+		]);
+		const runs = [...jobs.map((job) => this.jobToRun(job, holdingId).run), ...imports];
 
 		return paginateArray(sortRunsDesc(filterRuns(runs, query)), query.page, query.limit);
 	}
@@ -327,33 +363,7 @@ export class ErpAdapter implements IntegrationAdapter {
 					? ((await this.invoiceProcessing.getJobStatus(parsed.raw)) as unknown as Row | null)
 					: null;
 
-			if (job) {
-				const ok = Number(job.records_success ?? 0);
-				const errors = Number(job.records_failed ?? 0);
-
-				return {
-					id,
-					tipo: 'erp',
-					kind: 'import_invoices',
-					kind_label: 'Importación de facturas del ERP',
-					trigger: 'manual',
-					status: runStatusOf({
-						running: job.status === 'running',
-						failed: job.status === 'failed',
-						cancelled: job.status === 'cancelled',
-						ok,
-						errors,
-					}),
-					started_at: (job.started_at as Date) ?? null,
-					finished_at: (job.completed_at as Date) ?? null,
-					duration_ms: durationMs(job.started_at as Date, job.completed_at as Date),
-					totals: { total: Number(job.records_processed ?? 0), ok, errors, skipped: 0 },
-					error: null,
-					metrics: { progress: job.progress_percentage ?? null },
-					records: [],
-					errors_summary: [],
-				};
-			}
+			if (job) return { ...this.importJobToRun(parsed.raw, job), records: [], errors_summary: [] };
 		}
 		throw new NotFoundException('Corrida no encontrada');
 	}
@@ -424,6 +434,9 @@ export class ErpAdapter implements IntegrationAdapter {
 		if (request.object === 'erp_invoice') {
 			if (request.ids?.length)
 				throw validationException([{ field: 'ids', message: 'Las facturas del ERP se importan todas juntas (usa all)' }]);
+			if ((await this.importRuns(holdingId)).some((run) => run.status === 'running')) {
+				throw new ConflictException('Ya hay una importación de facturas en curso');
+			}
 			const jobId = await this.invoiceProcessing.startAsyncProcessing(holdingId, 50);
 
 			this.importJobs.set(jobId, holdingId);
@@ -510,6 +523,11 @@ export class ErpAdapter implements IntegrationAdapter {
 		}
 	}
 
+	/**
+	 * Mapeo por origen (ajuste de Domi): Sapira **exporta** facturas al ERP, así que las filas son los elementos de Sapira que se usan
+	 * en lo que se envía (compañías que facturan o con contratos activos; productos en contratos activos o en facturas por emitir o ya
+	 * enviadas) más los ya mapeados. Lo de Sapira sin uso no aparece ni cuenta como sin mapear. `usage` = lo que depende del mapeo.
+	 */
 	async getMapping(holdingId: string, object: string, query: { status?: MappingStatus; search?: string }): Promise<MappingView> {
 		if (object === 'fields') return this.fields.erpView(holdingId, query);
 		if (object === 'companies') {
@@ -517,8 +535,13 @@ export class ErpAdapter implements IntegrationAdapter {
 				this.externalCompanies(holdingId),
 				this.dataSource.query(
 					`SELECT c.id, c.legal_name, c.country, c.odoo_integration_id, c.tax_rate,
-						(SELECT count(*) FROM invoices i WHERE ${PENDING_SEND_SQL} AND i.company_id = c.id) AS invoices_pending
-					FROM companies c WHERE c.holding_id = $1 ORDER BY lower(c.legal_name)`,
+						(SELECT count(*) FROM invoices i WHERE ${PENDING_SEND_SQL} AND i.company_id = c.id) AS invoices_pending,
+						(SELECT count(*) FROM invoices i WHERE i.holding_id = $1 AND i.company_id = c.id AND i.is_active = true AND i.status <> 'Cancelada') AS invoices
+					FROM companies c WHERE c.holding_id = $1
+						AND (c.odoo_integration_id IS NOT NULL
+							OR EXISTS (SELECT 1 FROM invoices i WHERE i.holding_id = $1 AND i.company_id = c.id AND i.is_active = true AND i.status <> 'Cancelada')
+							OR EXISTS (SELECT 1 FROM contracts ct WHERE ct.holding_id = $1 AND ct.company_id = c.id AND ct.status = 'Activo'))
+					ORDER BY lower(c.legal_name)`,
 					[holdingId]
 				) as Promise<Row[]>,
 			]);
@@ -535,7 +558,7 @@ export class ErpAdapter implements IntegrationAdapter {
 					external: externalId ? (byId.get(externalId) ?? { id: externalId, label: `Compañía ${externalId}`, meta: {} }) : null,
 					status: externalId ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
 					suggestion,
-					usage: { invoices_pending: Number(company.invoices_pending) || 0 },
+					usage: { invoices_pending: Number(company.invoices_pending) || 0, invoices: Number(company.invoices) || 0 },
 					meta: { tax_rate: company.tax_rate === null || company.tax_rate === undefined ? null : Number(company.tax_rate) },
 				};
 			});
@@ -558,7 +581,14 @@ export class ErpAdapter implements IntegrationAdapter {
 					FROM products p
 					LEFT JOIN LATERAL (SELECT odoo_product_id, metadata FROM odoo_product_mappings om
 						WHERE om.holding_id = $1 AND om.sapira_product_id = p.id ORDER BY om.updated_at DESC NULLS LAST LIMIT 1) m ON true
-					WHERE p.holding_id = $1 ORDER BY lower(p.name)`,
+					WHERE p.holding_id = $1
+						AND (m.odoo_product_id IS NOT NULL
+							OR EXISTS (SELECT 1 FROM contract_items ci JOIN contracts ct ON ct.id = ci.contract_id
+								WHERE ci.product_id = p.id AND ct.holding_id = $1 AND ct.status = 'Activo')
+							OR EXISTS (SELECT 1 FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+								WHERE ii.product_id = p.id AND i.holding_id = $1 AND i.is_active = true AND i.status <> 'Cancelada'
+									AND (i.status = 'Por Emitir' OR i.sent_to_odoo_at IS NOT NULL OR i.odoo_invoice_id IS NOT NULL)))
+					ORDER BY lower(p.name)`,
 					[holdingId]
 				) as Promise<Row[]>,
 			]);

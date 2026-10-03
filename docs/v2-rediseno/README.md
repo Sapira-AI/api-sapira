@@ -31,6 +31,7 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`spec-preonboarding-prueba-guiada.md`](./spec-preonboarding-prueba-guiada.md) | Flujo comercial pre-onboarding: sandbox guiado, clickwrap, sizing declarado, calculadora web (propuesta en discusión) |
 | [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) | Configuración v2: holding, compañías, usuarios y roles, catálogos, preferencias; §14 B reglas de reconocimiento de ingresos (pendiente) |
 | [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) | Contrato de endpoints de Configuración entre la BFF y api-sapira |
+| [`contrato-api-mi-perfil.md`](./contrato-api-mi-perfil.md) | Contrato de Mi perfil (`/me/*`): perfil, avatar (presets y foto por URL firmada), cerrar sesiones y cambiar contraseña |
 | [`revision-seguridad-api.md`](./revision-seguridad-api.md) | Revisión de seguridad de la API: hallazgos numerados y urgentes para el bloque de seguridad (Domi + Leon) |
 | [`glosario.md`](./glosario.md) | Vocabulario oficial del modelo |
 | [`documentacion-publicable-y-mcp.md`](./documentacion-publicable-y-mcp.md) | Convención de docu publicable por módulo (docs públicas, OpenAPI, MCP de una sola fuente) |

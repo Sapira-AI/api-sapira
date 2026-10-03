@@ -48,7 +48,17 @@ export class NotificationsGateway implements OnGatewayConnection {
 		});
 	}
 
+	/** Un error al conectar (p. ej. la base no responde) rechaza ese socket; nunca tumba el proceso. */
 	async handleConnection(client: Socket) {
+		try {
+			await this.connect(client);
+		} catch (error) {
+			this.logger.error(`No se pudo conectar el socket ${client.id}: ${error instanceof Error ? error.message : String(error)}`);
+			this.rejectConnection(client, 'No se pudo conectar a notificaciones');
+		}
+	}
+
+	private async connect(client: Socket) {
 		const token = this.getAccessToken(client);
 		if (!token) {
 			return this.rejectConnection(client, 'Token de acceso requerido');

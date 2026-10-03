@@ -674,15 +674,16 @@ export class CrmAdapter implements IntegrationAdapter {
 
 	private async externalProducts(holdingId: string): Promise<Ref[]> {
 		const rows = (await this.dataSource.query(
-			`SELECT id, max(name) AS name, max(code) AS code, max(family) AS family, sum(waiting)::int AS waiting FROM (
+			`SELECT id, max(name) AS name, max(code) AS code, max(family) AS family,
+				count(DISTINCT opportunity_id) FILTER (WHERE waiting = 1)::int AS waiting, count(DISTINCT opportunity_id)::int AS opportunities FROM (
 				SELECT li.salesforce_product_id AS id, li.raw_data->'Product2'->>'Name' AS name, li.raw_data->'Product2'->>'ProductCode' AS code,
-					li.raw_data->'Product2'->>'Family' AS family,
+					li.raw_data->'Product2'->>'Family' AS family, li.salesforce_opportunity_id AS opportunity_id,
 					CASE WHEN o.processing_status IS DISTINCT FROM 'processed' THEN 1 ELSE 0 END AS waiting
 				FROM salesforce_line_items_stg li
 				LEFT JOIN salesforce_opportunities_stg o ON o.holding_id = li.holding_id AND o.salesforce_id = li.salesforce_opportunity_id
 				WHERE li.holding_id = $1 AND li.salesforce_product_id IS NOT NULL
 				UNION ALL
-				SELECT salesforce_product_id, salesforce_product_name, salesforce_product_code, salesforce_family, 0
+				SELECT salesforce_product_id, salesforce_product_name, salesforce_product_code, salesforce_family, NULL, 0
 				FROM salesforce_product_mappings WHERE holding_id = $1
 			) t GROUP BY id ORDER BY lower(max(name))`,
 			[holdingId]
@@ -691,7 +692,12 @@ export class CrmAdapter implements IntegrationAdapter {
 		return rows.map((row) => ({
 			id: String(row.id),
 			label: String(row.name ?? row.id),
-			meta: { code: row.code ?? null, family: row.family ?? null, waiting: Number(row.waiting) || 0 },
+			meta: {
+				code: row.code ?? null,
+				family: row.family ?? null,
+				waiting: Number(row.waiting) || 0,
+				opportunities: Number(row.opportunities) || 0,
+			},
 		}));
 	}
 
@@ -739,7 +745,10 @@ export class CrmAdapter implements IntegrationAdapter {
 					external,
 					status: mapped ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
 					suggestion,
-					usage: { opportunities_waiting: mapped ? 0 : Number(external.meta.waiting) || 0 },
+					usage: {
+						opportunities: Number(external.meta.opportunities) || 0,
+						opportunities_waiting: mapped ? 0 : Number(external.meta.waiting) || 0,
+					},
 					meta: null,
 				};
 			});
@@ -790,39 +799,56 @@ export class CrmAdapter implements IntegrationAdapter {
 			);
 		}
 		if (object === 'owners') {
-			const [owners, sellers] = await Promise.all([
+			// Por origen (ajuste de Domi): el CRM origina el dueño → una fila por dueño de oportunidades del CRM (y los ya relacionados);
+			// los vendedores de Sapira sin dueño del CRM no aparecen ni cuentan como sin mapear.
+			const [owners, sellers, usage] = await Promise.all([
 				this.externalOwners(holdingId),
+				this.dataSource.query(`SELECT s.id, s.name, s.email, s.crm_owner_id FROM sellers s WHERE s.holding_id = $1 ORDER BY lower(s.name)`, [
+					holdingId,
+				]) as Promise<Row[]>,
 				this.dataSource.query(
-					`SELECT s.id, s.name, s.email, s.crm_owner_id, (SELECT count(*) FROM quotes q WHERE q.seller_id = s.id) AS quotes
-					FROM sellers s WHERE s.holding_id = $1 ORDER BY lower(s.name)`,
+					`SELECT raw_data->>'OwnerId' AS id, count(*)::int AS n FROM salesforce_opportunities_stg WHERE holding_id = $1 AND raw_data->>'OwnerId' IS NOT NULL GROUP BY 1`,
 					[holdingId]
 				) as Promise<Row[]>,
 			]);
-			const byId = new Map(owners.map((owner) => [owner.id, owner]));
-			const rows: MappingRow[] = sellers.map((seller) => {
-				const email = normalizeText(seller.email);
-				const ownerId = (seller.crm_owner_id as string | null) ?? null;
-				const suggestion = ownerId
+			const sellerRefs: Ref[] = sellers.map((seller) => ({
+				id: String(seller.id),
+				label: String(seller.name ?? ''),
+				meta: { email: seller.email ?? null, technical_email: String(seller.email ?? '').endsWith('@salesforce.local') },
+			}));
+			const opportunities = new Map(usage.map((row) => [String(row.id), Number(row.n) || 0]));
+			const byOwner = new Map(owners.map((owner) => [owner.id, owner]));
+			const ownerIds = [
+				...new Set([
+					...owners.map((owner) => owner.id),
+					...sellers.filter((seller) => seller.crm_owner_id).map((seller) => String(seller.crm_owner_id)),
+				]),
+			];
+			const rows: MappingRow[] = ownerIds.map((ownerId) => {
+				const external = byOwner.get(ownerId) ?? { id: ownerId, label: ownerId, meta: { email: null } };
+				const seller = sellers.find((item) => item.crm_owner_id === ownerId);
+				const email = normalizeText(external.meta.email);
+				const suggestion = seller
 					? null
-					: (owners.find(
-							(owner) =>
-								(owner.meta.email && normalizeText(owner.meta.email) === email) ||
-								email === normalizeText(`sf_${owner.id.toLowerCase()}@salesforce.local`)
+					: (sellerRefs.find(
+							(ref) =>
+								(email && normalizeText(ref.meta.email) === email) ||
+								normalizeText(ref.meta.email) === normalizeText(`sf_${ownerId.toLowerCase()}@salesforce.local`)
 						) ?? null);
 
 				return {
-					key: String(seller.id),
-					sapira: { id: String(seller.id), label: String(seller.name ?? ''), meta: { email: seller.email ?? null } },
-					external: ownerId ? (byId.get(ownerId) ?? { id: ownerId, label: ownerId, meta: {} }) : null,
-					status: ownerId ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
+					key: ownerId,
+					sapira: seller ? (sellerRefs.find((ref) => ref.id === String(seller.id)) ?? null) : null,
+					external,
+					status: seller ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
 					suggestion,
-					usage: { quotes: Number(seller.quotes) || 0 },
-					meta: { technical_email: String(seller.email ?? '').endsWith('@salesforce.local') },
+					usage: { opportunities: opportunities.get(ownerId) ?? 0 },
+					meta: null,
 				};
 			});
 
 			return buildMappingView(
-				{ object, object_label: 'Vendedores', anchor: 'sapira', external_available: true, external_error: null },
+				{ object, object_label: 'Vendedores', anchor: 'external', external_available: true, external_error: null },
 				rows,
 				query
 			);

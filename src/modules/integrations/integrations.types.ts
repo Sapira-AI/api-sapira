@@ -478,8 +478,18 @@ export interface SummaryRow {
 	last_sync_at: Date | string | null;
 	last_sync_status: RunStatus | null;
 	last_error: { message: string; at: Date | string | null } | null;
+	/** Obsoleto: registros con error dentro de las corridas de los últimos 7 días (no es el KPI "Con error"). */
 	errors_7d: number;
+	/** Corridas fallidas o parciales en los últimos 7 días ("N sincronizaciones con error" → Historial filtrado). */
+	failed_runs_7d: number;
 	pending_mapping: number;
+	/** Desde qué día (`YYYY-MM-DD`) se cuentan los KPIs de registros: el mismo `from` por defecto del 360 (7 días). */
+	records_from: string;
+	/** Los cuatro KPIs de `GET …/records?from=<records_from>` (mismas exclusiones: descartados y reglas). */
+	records_kpis: { synced: number; error: number; review: number; ready: number };
+	/** = `records_kpis.error`. */
+	records_with_error: number;
+	/** = `records_kpis.ready` ("Listos para importar" del 360). */
 	pending_import: number;
 	next_scheduled_at: string | null;
 	href: string | null;

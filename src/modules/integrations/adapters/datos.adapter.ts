@@ -52,6 +52,15 @@ const REASON_LABELS: Record<string, string> = {
 	changed_in_source: 'El almacén de datos lo cambió después de importarlo',
 };
 
+/** Estados que reprocesa `integrateSapiraQuantities({ retryFailed: true })`. */
+const IMPORTABLE_STATUSES = ['pending', 'unmapped', 'not_variable', 'currency_mismatch', 'blocked'];
+
+/** `YYYY-MM` → del primer día del mes `from` al último del mes `to`. */
+const monthRange = (from: string, to: string) => ({
+	from: `${from}-01`,
+	to: new Date(Date.UTC(Number(to.slice(0, 4)), Number(to.slice(5, 7)), 0)).toISOString().slice(0, 10),
+});
+
 export interface DatosConnectionInput {
 	name: string;
 	project_id: string;
@@ -246,6 +255,14 @@ export class DatosAdapter implements IntegrationAdapter {
 
 		if (!connection) throw new BadRequestException('La integración no está conectada');
 		if (connection.is_active === false) throw new BadRequestException('La integración está pausada');
+		if (Boolean(options.date_from) !== Boolean(options.date_to)) {
+			throw validationException([
+				{ field: options.date_from ? 'date_to' : 'date_from', message: 'Indica las dos fechas del rango (o ninguna)' },
+			]);
+		}
+		if (options.date_from && options.date_to && options.date_from > options.date_to) {
+			throw validationException([{ field: 'date_from', message: 'La fecha inicial es posterior a la final' }]);
+		}
 		this.assertIdle(holdingId);
 		const id = this.track(holdingId, 'datos_sync', async () => {
 			const result = await this.bigQuery.syncSapiraQuantities(holdingId, { from: options.date_from, to: options.date_to });
@@ -389,7 +406,7 @@ export class DatosAdapter implements IntegrationAdapter {
 				sql: `SELECT s.id::text AS record_key,
 						concat_ws(' · ', COALESCE(s.business_name, s.entity_name), s.product, to_char(s.period, 'YYYY-MM')) AS label,
 						s.quantity_id::text AS sapira_id, concat_ws(' · ', s.sf_id, s.product, s.billing_date::text) AS external_id,
-						${stagingStatusSql('s.integration_status')} AS status,
+						CASE WHEN s.integration_status = 'pending' THEN 'ready' ELSE ${stagingStatusSql('s.integration_status')} END AS status,
 						COALESCE(s.integration_reason, CASE s.integration_status ${reasons} END) AS message,
 						COALESCE(s.integrated_at, s.synced_at) AS last_sync_at, to_jsonb(s.*) AS rule_row
 					FROM sapira_quantity_imports s
@@ -402,17 +419,28 @@ export class DatosAdapter implements IntegrationAdapter {
 		if (request.object !== 'consumption') throw validationException([{ field: 'object', message: 'Este objeto no se importa' }]);
 		if (request.ids?.length) throw validationException([{ field: 'ids', message: 'Los consumos se importan por período (usa all y period)' }]);
 		this.assertIdle(holdingId);
-		const range = request.period
-			? {
-					from: `${request.period}-01`,
-					to: new Date(Date.UTC(Number(request.period.slice(0, 4)), Number(request.period.slice(5, 7)), 0)).toISOString().slice(0, 10),
-				}
-			: undefined;
+		const range = request.period ? monthRange(request.period, request.period) : await this.pendingRange(holdingId);
+
+		if (!range) throw new BadRequestException('No hay consumos para importar');
 		const id = this.track(holdingId, 'datos_import', async () => ({
 			integration: await this.bigQuery.integrateSapiraQuantities(holdingId, { retryFailed: true, range }),
 		}));
 
 		return { run_id: `datos-manual:${id}`, status: 'running', message: 'Importando los consumos a Sapira', accepted: 0 };
+	}
+
+	/**
+	 * Sin `period`, "Importar listos" abarca todos los períodos con consumos por importar (o reintentables): sin rango,
+	 * `integrateSapiraQuantities` solo toma el mes en curso y dejaría fuera lo pendiente de meses anteriores.
+	 */
+	private async pendingRange(holdingId: string): Promise<{ from: string; to: string } | null> {
+		const [row] = (await this.dataSource.query(
+			`SELECT to_char(min(period), 'YYYY-MM') AS min_period, to_char(max(period), 'YYYY-MM') AS max_period
+			FROM sapira_quantity_imports WHERE holding_id = $1 AND integration_status = ANY($2::text[])`,
+			[holdingId, IMPORTABLE_STATUSES]
+		)) as Row[];
+
+		return row?.min_period && row?.max_period ? monthRange(String(row.min_period), String(row.max_period)) : null;
 	}
 
 	// ── Mapeos (no tiene: los consumos se asocian por contrato) ─────────────────────────────────────────────────────────────

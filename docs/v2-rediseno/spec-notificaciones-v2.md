@@ -192,6 +192,11 @@ Novedades en `/ayuda`; banner de versión (si aplica).
 - **Tareas planificadas** (Domi, 03-10): vista de tareas por fecha (hoy, esta semana, próximas) con pestañas animadas;
   referencia visual https://ui.watermelon.sh/animated-components/category/tabs. Después de la fase 2.
 - Canales Slack y Teams.
+- **Resumen mensual del holding para administradores** (Domi, 03-10): correo el primer día hábil del mes con el cierre del
+  mes anterior, que incluya **lo procesado en Integraciones** (por integración: registros traídos e importados, con error,
+  descartados o excluidos por reglas, sincronizaciones fallidas, pendientes de mapeo), además de lo del resumen semanal
+  (MRR, tareas, alertas). Se arma con el mismo `notification-jobs` y los KPIs de `GET /integrations/:tipo/records` por
+  período. Después del switch.
 - Alertas inteligentes con los agentes (último bloque): renovación abierta en el CRM con contrato por vencer (caso
   improbable), cotización duplicada, presupuesto, umbrales de métricas, factura descuadrada, partner sin vincular.
 

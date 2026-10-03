@@ -147,12 +147,46 @@ describe('IntegrationsService', () => {
 		expect(dataQuery?.params).toEqual(
 			expect.arrayContaining([HOLDING, 'crm', ['raw_data', 'Owner', 'Name'], 'Tech touch', 'rule-1', ['discarded', 'excluded_by_rule']])
 		);
-		expect(result.kpis).toEqual({ synced: 5, error: 0, pending: 3, ready: 3, discarded: 1, excluded_by_rule: 2 });
+		expect(result.kpis).toEqual({ synced: 5, error: 0, review: 0, pending: 3, ready: 3, discarded: 1, excluded_by_rule: 2 });
 		expect(result.rules).toEqual([{ id: 'rule-1', name: 'Tech touch', count: 2 }]);
 		expect(result.data[0]).toEqual(
 			expect.objectContaining({ id: 'opportunity:006A', status: 'ready', status_label: 'Listo para importar', account: null })
 		);
 		expect(result).toEqual(expect.objectContaining({ total: 1, currentPage: 1, pages: 1, limit: 20 }));
+	});
+
+	it('records: cada consulta usa todos sus parámetros (con y sin status, regla, cuenta, fechas y búsqueda)', async () => {
+		settings = {
+			rules: [
+				{
+					id: 'rule-1',
+					name: 'Tech touch',
+					object: 'opportunity',
+					enabled: true,
+					conditions: [{ field: 'stage', operator: 'is', value: 'X' }],
+				},
+			],
+		};
+		const variants = [
+			{},
+			{ status: ['pending'] },
+			{ status: ['imported', 'synced'] },
+			{ status: ['excluded_by_rule'], rule: 'Tech touch' },
+			{ rule: 'Tech touch' },
+			{ object: 'opportunity', from: '2026-09-26', to: '2026-10-03', search: 'acme', status: ['ready'] },
+		];
+
+		for (const variant of variants) {
+			queries = [];
+			await service.records(HOLDING, 'crm', { ...variant, page: 1, limit: 20 });
+			await service.records(HOLDING, 'stripe', { ...variant, object: undefined, account_id: 'a-1', page: 2, limit: 20 });
+			for (const { sql, params } of queries) {
+				const used = new Set([...sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])));
+
+				// Postgres no puede tipar un `$n` que no aparece en la consulta ("could not determine data type of parameter").
+				expect({ variant, used: [...used].sort((a, b) => a - b) }).toEqual({ variant, used: params.map((_, index) => index + 1) });
+			}
+		}
 	});
 
 	it('records: objeto que no es del tipo → 400', async () => {

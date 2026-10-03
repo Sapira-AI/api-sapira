@@ -164,3 +164,12 @@ Prevalecen sobre §2 cuando chocan.
   pestaña Estado del 360, no a la lista. Pagos con 360 completo. "Descartar" lo que no se quiere importar (filtro
   Descartados y Restaurar) y reglas simples por integración (CRM: etapas; ERP: ocultar facturas nacidas en Sapira). CRM:
   al abrir se carga solo el último mes, no importadas arriba e importadas abajo; fechas e id solo para ir más atrás.
+- **A13 · Roadmap post-switch: traer campos nuevos del CRM en autoservicio** (Domi 03-10). Botón "Agregar campo" en
+  Mapeos › Campos: elegir un campo del objeto en el CRM (requiere un endpoint que liste los campos disponibles, hoy no
+  existe) y su destino en Sapira (campo estándar o campo personalizado de Configuración › Campos personalizados); desde
+  la siguiente sincronización llega solo. Requiere que la sincronización incluya ese campo en su consulta y lo guarde en
+  `custom_fields` para todos los objetos (hoy existe el mecanismo `custom_fields_bundle` en los ítems de oportunidad;
+  confirmar con Leon). Hoy ya es autoservicio cambiar qué campo del CRM alimenta un dato existente. Traer un **objeto
+  nuevo** del CRM sigue siendo desarrollo.
+- **A14 · Roadmap: lo procesado en Integraciones en el resumen mensual del holding** para administradores (detalle en
+  [`spec-notificaciones-v2.md`](./spec-notificaciones-v2.md) §7).

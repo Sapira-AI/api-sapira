@@ -69,7 +69,9 @@ Tabla de equivalencias por tabla intermedia en §4.
 
 ## 1. Resumen · `GET /integrations` (VIEW)
 
-Una fila por tipo, siempre las cuatro (conectadas o no). `stripe`: `connected` = hay al menos una cuenta; agrega
+Una fila por tipo, siempre las cuatro (conectadas o no). Los números de registros salen de la **misma consulta** que los KPIs
+de `records` (§3.4) con el período por defecto del 360 (`records_from` = hoy − 7 días) y las mismas exclusiones (descartados y reglas):
+la lista y el 360 cuadran. `stripe`: `connected` = hay al menos una cuenta; agrega
 `accounts: [{ id, name, active, mode }]`.
 
 ```jsonc
@@ -84,9 +86,13 @@ Una fila por tipo, siempre las cuatro (conectadas o no). `stripe`: `connected` =
       "last_sync_at": "2026-10-03T12:01:10Z",
       "last_sync_status": "partial",                        // estado de la última corrida o null
       "last_error": { "message": "El ERP rechazó la factura 1234: …", "at": "2026-10-03T12:01:09Z" },
-      "errors_7d": 3,                                       // registros con error en corridas de los últimos 7 días
+      "errors_7d": 3,                                       // obsoleto: registros con error dentro de corridas de 7 días (no es el KPI)
+      "failed_runs_7d": 2,                                  // corridas failed/partial en 7 días → "N sincronizaciones con error" (Historial)
       "pending_mapping": 4,                                 // ver tabla
-      "pending_import": 12,                                 // registros `ready` en tablas intermedias
+      "records_from": "2026-09-26",                         // = `from` por defecto del 360 ("Últimos 7 días")
+      "records_kpis": { "synced": 20, "error": 0, "review": 0, "ready": 6 }, // = kpis de records?from=records_from
+      "records_with_error": 0,                              // = records_kpis.error
+      "pending_import": 6,                                  // = records_kpis.ready ("Listos para importar" del 360)
       "next_scheduled_at": "2026-10-04T12:00:00Z",          // null si el programado está apagado
       "href": "/lab/integraciones/erp"
     }
@@ -98,7 +104,7 @@ Una fila por tipo, siempre las cuatro (conectadas o no). `stripe`: `connected` =
 |---|---|---|---|
 | `erp` | `both` (exporta facturas; importa clientes y facturas a revisión) | productos de Sapira sin mapeo usados en contratos activos + compañías con facturas sin compañía del ERP | envío diario de facturas (`INVOICE_SCHEDULER_HOUR`, hora del servidor) |
 | `crm` | `import` | productos del CRM vistos en oportunidades sin producto de Sapira + tipos de oportunidad sin tipo de cotización + dueños del CRM sin vendedor | 08:30 America/Santiago |
-| `stripe` | `import` | productos de Sapira usados en contratos activos sin producto de Stripe (si hay cuentas) | `STRIPE_SYNC_HOUR` |
+| `stripe` | `import` | productos de Stripe usados en lo traído sin producto de Sapira (= "Sin mapear" de §5) | `STRIPE_SYNC_HOUR` |
 
 | `datos` | `import` | consumos sin producto (`unmapped`) | `BIGQUERY_SYNC_HOUR` |
 
@@ -190,7 +196,8 @@ Sin impacto o con `confirm=true` → `204`. Los mapeos **se conservan** (son del
 
 ### 3.1 `POST /integrations/:tipo/sync` (EDIT) · Sincronizar ahora (D9)
 
-Body opcional `{ date_from?: 'YYYY-MM-DD', date_to?: 'YYYY-MM-DD' }` (solo `stripe` y `datos`; por defecto los últimos 2 días / el mes en curso).
+Body opcional `{ date_from?: 'YYYY-MM-DD', date_to?: 'YYYY-MM-DD' }` (solo `stripe` y `datos`; por defecto los últimos 2 días / el mes en curso;
+ambas fechas inclusivas; en `datos` van las dos o ninguna, si no 400).
 → `202 { run_id, status: 'running', message }`.
 
 | Tipo | Qué corre | Lock (409 "Ya hay una sincronización en curso") |
@@ -215,7 +222,7 @@ Query: `page`, `limit`, `status` (running\|completed\|partial\|failed\|cancelled
 | Tipo | `kind` | Fuente (sin tabla nueva) |
 |---|---|---|
 | `erp` | `export_invoices` "Envío de facturas al ERP" (lee Mongo directo; sirve con la versión actual y con la de la rama de Leon, que crea un job por holding) | `invoice_scheduler_jobs` (Mongo): corridas del holding + corridas globales `all` **filtradas a las facturas del holding**; sin simulaciones. Es el reporte de `/invoices/scheduler/report` simplificado (A7): totales, errores distintos y factura por factura (folio, cliente, compañía, id en el ERP, error) |
-| `erp` | `import_invoices` "Importación de facturas del ERP" | trabajo en memoria de `InvoiceProcessingService` (solo mientras vive el proceso) |
+| `erp` | `import_invoices` "Importación de facturas del ERP" | trabajo en memoria de `InvoiceProcessingService` (solo mientras vive el proceso; sale en la lista y en `/runs/:id`; 409 si hay otra en curso) |
 | `crm` | `crm_daily` "Sincronización diaria" | `salesforce_scheduler_jobs` (Mongo) con el resultado del holding + `salesforce_sync_logs` (eventos `opportunity` con error) |
 | `crm` | `crm_manual` "Sincronización manual" | igual, corrida creada por `POST /sync` (`jobId = salesforce-holding-sync:<entorno>:<holding>:<uuid>`) |
 | `crm` | `crm_staging` / `crm_import` / `crm_retry` | `salesforce_sync_runs` + `salesforce_sync_run_items` (error por oportunidad) |
@@ -235,12 +242,17 @@ las facturas del ERP que nacieron en Sapira (`odoo_id` = `invoices.odoo_invoice_
 
 ```jsonc
 {
-  "kpis": { "synced": 120, "error": 3, "pending": 15, "ready": 12, "discarded": 4, "excluded_by_rule": 9 }, // synced = imported + synced; pending = pending + ready; descartados y excluidos no suman en los demás
+  "kpis": { "synced": 120, "error": 3, "review": 3, "ready": 12, "pending": 15, "discarded": 4, "excluded_by_rule": 9 },
   "rules": [{ "id": "…", "name": "Suscripciones automáticas de Stripe", "count": 9 }],
   "objects": [{ "key": "customer", "label": "Cliente", "direction": "import", "count": 40 }],
   "data": [ Record ], "total": 138, "currentPage": 1, "pages": 7, "limit": 20
 }
 ```
+
+Cuatro grupos **disjuntos** (tarjetas del 360) y el `status` que filtra exactamente lo que cuenta cada uno (también con `object`,
+`account_id`, `from`/`to` y `search`): `synced` = `imported,synced` · `error` = `error` · `review` "Por revisar" = `pending` ·
+`ready` "Listos para importar" = `ready`. `synced + error + review + ready = total` sin `status`. `kpis.pending` (= `pending + ready`)
+queda por compatibilidad; no usarlo en tarjetas. Descartados y excluidos no suman en los demás.
 
 | Tipo | `object` | Tabla | `sapira_id` / `external_id` |
 |---|---|---|---|
@@ -250,7 +262,7 @@ las facturas del ERP que nacieron en Sapira (`odoo_id` = `invoices.odoo_invoice_
 | `crm` | `opportunity` "Oportunidad" | `salesforce_opportunities_stg` | cotización creada (`quotes.salesforce_opportunity_id`) / id del CRM |
 | `crm` | `account` "Cuenta" | `salesforce_accounts_stg` | — / id del CRM |
 | `stripe` | `customer` · `subscription` · `invoice` | `stripe_{customers,subscriptions,invoices}_stg` | — / id de Stripe (+ `account`) |
-| `datos` | `consumption` "Consumo" | `sapira_quantity_imports` (sin `no_quantity_data` ni `not_variable`) | `quantity_id` / `sf_id · product · billing_date` |
+| `datos` | `consumption` "Consumo" | `sapira_quantity_imports` (sin `no_quantity_data` ni `not_variable`; `pending` = `ready`, lo importa la integración) | `quantity_id` / `sf_id · product · billing_date` |
 
 ### 3.5 `POST /integrations/:tipo/records/import` (EDIT) · Importar a Sapira (A4)
 
@@ -264,7 +276,7 @@ Body `{ object: string, ids?: string[] (1–500, los `external_id`), all?: boole
 | `crm · opportunity` | ejecución `process_final` (`SalesforceSyncRunService.createRun`); con `all` toma las elegibles `create`/`update` | sí |
 | `crm · account` | `processAccountsStaging` | sí |
 | `stripe · *` | `StripeSyncService.syncAll` (clientes → suscripciones → facturas) | no (`all`) |
-| `datos · consumption` | `integrateSapiraQuantities({ retryFailed: true, range: period })` | no (`all` + `period` opcional) |
+| `datos · consumption` | `integrateSapiraQuantities({ retryFailed: true, range })`: `range` = el mes de `period`, o sin `period` todos los meses con consumos por importar o reintentables | no (`all` + `period` opcional) |
 
 Errores: 400 objeto inválido / `ids` no soportado / nada que importar; 409 corrida en curso.
 
@@ -297,12 +309,24 @@ el almacén de datos la modificó. Las filas que llegan idénticas no actualizan
 | `pending`, `NULL`, otro | `pending` |
 | registro en `integration_record_discards` (manda sobre todo) | `discarded` |
 | cumple una regla de exclusión activa (§6.5; manda sobre lo de la tabla, no sobre el descarte) | `excluded_by_rule` |
-| datos: `integrated` = integrado, `pending` = pendiente, `unmapped` = sin producto (error con mensaje), resto de errores = error | — |
+| datos: `integrated` = integrado, `pending` = listo para importar (`ready`), `unmapped` = sin producto (error con mensaje), resto de errores = error | — |
 | ERP `invoice` con `odoo_invoice_id` o `sent_to_odoo_at` | `synced`; con alerta `invoice_odoo_failure` abierta → `error`; si no → `pending` |
 
 ## 5. Mapeos (A2)
 
 Forma común. `anchor` dice qué lado lista las filas (el otro puede venir `null`).
+
+### 5.0 Filas por origen (ajuste de Domi 03-10)
+
+Las filas de un mapeo salen del lado que **origina** el dato:
+
+- **Importa a Sapira** (`stripe · products`, `crm · products`, `crm · quote_types`, `crm · owners`): `anchor: 'external'`, una fila por
+  elemento del sistema que se usa (o ya mapeado) → a qué corresponde en Sapira. Lo de Sapira sin contraparte no aparece ni cuenta como
+  sin mapear. `usage` = cuánto lo usa el sistema (suscripciones/invoices de Stripe, oportunidades del CRM).
+- **Exporta desde Sapira** (`erp · companies`, `erp · products`): `anchor: 'sapira'`, una fila por elemento de Sapira **que se usa en lo
+  que se envía** (compañías con facturas no canceladas o contratos activos; productos en contratos activos o en facturas por emitir o ya
+  enviadas) o ya mapeado. Lo que no se usa queda fuera de la vista. `usage` = facturas/contratos que dependen del mapeo.
+- `fields`: sin cambio.
 
 ### 5.1 `GET /integrations/:tipo/mappings/:objeto` (VIEW)
 
@@ -329,12 +353,12 @@ Query: `status` (`mapped` \| `unmapped` \| `suggested`), `search`.
 
 | Tipo · objeto | `anchor` | Lado Sapira | Lado sistema (opciones) | `usage` | `meta` del mapeo |
 |---|---|---|---|---|---|
-| `erp · companies` | sapira | `companies` del holding | compañías del ERP (en vivo) | `{ invoices_pending }` | `{ tax_rate }` |
-| `erp · products` | sapira | `products` del holding | productos del ERP (en vivo, activos) | `{ contracts, invoices_pending }` (contratos activos y facturas por enviar que lo usan: se bloquean sin mapeo) | `{ tax_ids: number[] }` |
-| `crm · products` | external | `products` del holding | productos del CRM vistos en oportunidades (`salesforce_line_items_stg`) + los ya mapeados | `{ opportunities_waiting }` | — |
+| `erp · companies` | sapira | `companies` del holding que facturan (o mapeadas) | compañías del ERP (en vivo) | `{ invoices_pending, invoices }` | `{ tax_rate }` |
+| `erp · products` | sapira | `products` del holding en uso (o mapeados) | productos del ERP (en vivo, activos) | `{ contracts, invoices_pending }` (contratos activos y facturas por enviar que lo usan: se bloquean sin mapeo) | `{ tax_ids: number[] }` |
+| `crm · products` | external | `products` del holding | productos del CRM vistos en oportunidades (`salesforce_line_items_stg`) + los ya mapeados | `{ opportunities, opportunities_waiting }` | — |
 | `crm · quote_types` | external | tipos de cotización de Sapira (`new_business`, `upsell`, …) | tipos de oportunidad vistos en el CRM + los ya mapeados | `{ opportunities }` | — |
-| `crm · owners` | sapira | `sellers` del holding | dueños de oportunidades del CRM (`salesforce_opportunities_stg`) | `{ quotes }` | — |
-| `stripe · products` | sapira (una fila por par; N:N) | `products` del holding | productos de cada cuenta de Stripe activa (en vivo; `meta.account_id`, `meta.account_name`) | `{ contracts }` | — |
+| `crm · owners` | external (key = id del dueño) | `sellers` del holding | dueños de oportunidades del CRM (`salesforce_opportunities_stg`) + los ya relacionados | `{ opportunities }` | — |
+| `stripe · products` | external (N:N: una fila por par, key `<stripe_id>:<sapira_id>`; sin mapear key = `stripe_id`) | `products` del holding | productos de Stripe usados en las suscripciones/invoices traídas + los mapeados (nombre en vivo de cada cuenta activa; si no responde, el id; `meta.account_id`, `meta.account_name`) | `{ subscriptions, invoices }` | — |
 | `erp · fields` | sapira | campo destino de cada mapeo activo de `field_mappings` (`id` = `<mapeo>:<sección>:<campo>`, `meta: { source_model, target_table, section }`) | campo del ERP (texto) | — | `{ transformation }` |
 | `crm · fields` | sapira | campo de Sapira por objeto de `salesforce_field_mappings` (`id` = `<object_type>.<campo>`, `meta: { object_type, mapping_id, is_required, is_active }`) | campo del CRM (texto) | — | `{ transformation_key }` |
 
