@@ -13,7 +13,8 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  */
 @Entity({
 	name: 'user_access_events',
-	comment: 'Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación). Solo la API',
+	comment:
+		'Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación) y de la cuenta (cambio de contraseña, cierre de sesiones; holding_id NULL). Solo la API',
 })
 @Check(
 	'user_access_events_action_check',
