@@ -34,7 +34,12 @@ export class UserNotificationPreference {
 	email!: boolean;
 
 	/** Solo en la fila reservada `notification_type = 'my_companies'` (N5): compañías que ve el usuario. NULL o vacío = todas. */
-	@Column({ type: 'uuid', array: true, nullable: true })
+	@Column({
+		type: 'uuid',
+		array: true,
+		nullable: true,
+		comment: 'Solo en la fila my_companies: compañías que ve el usuario (NULL o vacío = todas)',
+	})
 	company_ids?: string[] | null;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })

@@ -63,7 +63,7 @@ export class AppNotification {
 	resource_id?: string | null;
 
 	/** Compañía de la alerta (factura, contrato; N4 `1790900000000-NotificationsPhase2`). NULL = sin compañía: la ve todo destinatario. */
-	@Column({ type: 'uuid', nullable: true })
+	@Column({ type: 'uuid', nullable: true, comment: 'Compañía de la alerta (factura, contrato). NULL = sin compañía: la ve todo destinatario' })
 	company_id?: string | null;
 
 	@Column({ type: 'text', default: 'open' })

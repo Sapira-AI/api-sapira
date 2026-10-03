@@ -24,7 +24,7 @@ export class AppNotificationRecipient {
 	read_at?: Date | null;
 
 	/** Archivada por este usuario (Notificaciones v2, N1 `1790880000000-NotificationRecipientsArchivedAt`): no cambia la alerta para los demás. */
-	@Column({ type: 'timestamp with time zone', nullable: true })
+	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'Archivada por este usuario (no cambia la alerta para los demás)' })
 	archived_at?: Date | null;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })

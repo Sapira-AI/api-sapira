@@ -35,11 +35,11 @@ export class ClientActivityNote {
 	created_by?: string | null;
 
 	/** users.id mencionados con `@[user:<id>]` en el texto (N7, los deriva la API). */
-	@Column({ type: 'uuid', array: true, default: () => "'{}'" })
+	@Column({ type: 'uuid', array: true, default: () => "'{}'", comment: 'users.id mencionados con @[user:<id>] en el texto (los deriva la API)' })
 	mentioned_user_ids: string[];
 
 	/** Elementos del cliente referenciados con `#[<tipo>:<id>]`: `[{ type, id }]` (N7, los deriva la API). */
-	@Column({ type: 'jsonb', default: [] })
+	@Column({ type: 'jsonb', default: [], comment: 'Elementos del cliente referenciados con #[<tipo>:<id>]: [{ type, id }] (los deriva la API)' })
 	references: Array<{ type: string; id: string }>;
 
 	@Column({ type: 'timestamp with time zone', default: () => 'now()' })
