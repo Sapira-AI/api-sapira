@@ -45,7 +45,7 @@ export class HoldingIntegrationSettings {
 
 	@Column({
 		type: 'jsonb',
-		default: () => `'{}'::jsonb`,
+		default: {},
 		comment: 'Reglas de la integración para el holding (claves según el contrato de Integraciones v2 §6.1 y §6.5). {} = valores por defecto',
 	})
 	settings: Record<string, unknown>;
