@@ -36,8 +36,13 @@ export interface TaskInputs {
 	currency: string;
 	queue: {
 		ready: Bucket;
-		late: Bucket;
-		blocked: Bucket & { reasons: Array<{ code: string; label: string; count: number }> };
+		/** `first_month`: primer mes (`YYYY-MM`) de las facturas de la tarea; arma el enlace `desde=…&hasta=<mes en curso>`. */
+		late: Bucket & { first_month?: string | null };
+		/** Sin el motivo `no_contract` (facturas sin contrato: datos a sanear, no una tarea). */
+		blocked: Bucket & {
+			first_month?: string | null;
+			reasons: Array<{ code: string; label: string; count: number; first_month?: string | null }>;
+		};
 		past_months: Bucket & { first_month: string | null };
 	};
 	overdue: Bucket;
@@ -56,6 +61,12 @@ export interface TaskInputs {
 	/** Compañías aplicadas ("Mis compañías"): se agregan al enlace de Facturación. */
 	company_ids?: string[];
 }
+
+/**
+ * Tareas cuyas fuentes **no distinguen compañía** (cotizaciones del CRM y excepciones de Ingresos): se cuentan a nivel holding y no entran
+ * en conteos por compañía (resumen semanal, "Por compañía"), donde se repetirían en cada una.
+ */
+export const HOLDING_WIDE_TASK_KEYS: readonly string[] = ['quotes_waiting_mapping', 'quotes_unprocessed_this_month', 'revenue_exceptions'];
 
 const SEVERITY_ORDER: Record<TaskSeverity, number> = { error: 0, warning: 1, info: 2 };
 const PENDING = 'Por+Emitir';
@@ -123,9 +134,16 @@ export const monthQueueHref = (month: string, companyIds: string[] = []) =>
 const contractHref = (bucket: Bucket, listHref: string, tab?: string) =>
 	bucket.count > 0 && bucket.contract_ids?.length === 1 ? `/lab/contratos/${bucket.contract_ids[0]}${tab ? `?tab=${tab}` : ''}` : listHref;
 
+/**
+ * Rango de la cola Por emitir de una tarea: la tarea cuenta hasta hoy, así que el enlace abre desde el primer mes de sus facturas hasta el
+ * mes en curso (`periodo=todo` abriría también las futuras). Sin fecha conocida, toda la cola.
+ */
+export const queueRange = (firstMonth: string | null | undefined, currentMonth: string) =>
+	firstMonth ? `desde=${firstMonth}&hasta=${firstMonth > currentMonth ? firstMonth : currentMonth}` : 'periodo=todo';
+
 /** Todas las tareas (también las en cero), en orden por gravedad. El centro muestra solo las con conteo. */
 export function buildTasks(input: TaskInputs): Task[] {
-	const { first, last, previousMonth } = monthBounds(input.today);
+	const { first, last, month, previousMonth } = monthBounds(input.today);
 	const task = (
 		key: string,
 		module: NotificationModule,
@@ -145,7 +163,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 		severity,
 		href,
 	});
-	const blockedHref = `/lab/facturacion?estado=${PENDING}&grupo=blocked&periodo=todo`;
+	const blockedBase = `/lab/facturacion?estado=${PENDING}&grupo=blocked`;
 	const tasks: Task[] = [
 		task(
 			'invoices_to_issue_today',
@@ -157,12 +175,20 @@ export function buildTasks(input: TaskInputs): Task[] {
 			true
 		),
 		{
-			...task('invoices_blocked', 'facturacion', 'Facturas por emitir bloqueadas', input.queue.blocked, 'error', blockedHref, true),
+			...task(
+				'invoices_blocked',
+				'facturacion',
+				'Facturas por emitir bloqueadas',
+				input.queue.blocked,
+				'error',
+				`${blockedBase}&${queueRange(input.queue.blocked.first_month, month)}`,
+				true
+			),
 			breakdown: input.queue.blocked.reasons.map((reason) => ({
 				key: reason.code,
 				label: reason.label,
 				count: reason.count,
-				href: `${blockedHref}&motivo=${encodeURIComponent(reason.code)}`,
+				href: `${blockedBase}&${queueRange(reason.first_month, month)}&motivo=${encodeURIComponent(reason.code)}`,
 			})),
 		},
 		task(
@@ -171,7 +197,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Facturas por emitir atrasadas',
 			input.queue.late,
 			'warning',
-			`/lab/facturacion?estado=${PENDING}&grupo=late&periodo=todo`,
+			`/lab/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.first_month, month)}`,
 			true
 		),
 		task(

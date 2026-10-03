@@ -174,7 +174,8 @@ export class NotificationsService {
 		const visible = await this.visibleTo(holdingId, companyId, result.recipientUserIds);
 
 		this.notificationsGateway.emitNotificationCreated(holdingId, visible, result.notification);
-		await this.emails.sendAlert(result.notification, visible);
+		// Correo inmediato: se reserva y sale tras la ventana de espera si la alerta sigue abierta (`sendDueAlerts`).
+		await this.emails.queueAlert(result.notification, visible);
 		return { notification: result.notification, recipient_count: result.recipient_count };
 	}
 
@@ -231,12 +232,13 @@ export class NotificationsService {
 
 				if (visibleNew.length) this.notificationsGateway.emitNotificationCreated(holdingId, visibleNew, notification);
 				await this.emitUpdated(holdingId, currentIds, existing.id, companyId);
-				// Correo: a los nuevos siempre; a todos solo si escaló (la clave de dedup lleva gravedad y escalón).
+				// Correo (reservado, sale tras la ventana): a los nuevos siempre; a todos solo si escaló (la clave de dedup lleva gravedad y
+				// escalón; la reserva pendiente anterior se reemplaza y sale una sola vez).
 				const mailTo = escalated
 					? [...visibleNew, ...(await this.visibleTo(holdingId, companyId, await this.activeMembers(holdingId, currentIds)))]
 					: visibleNew;
 
-				await this.emails.sendAlert(notification, mailTo, { escalated });
+				await this.emails.queueAlert(notification, mailTo, { escalated });
 				return { notification, recipient_count: currentIds.length + newIds.length };
 			}
 		}

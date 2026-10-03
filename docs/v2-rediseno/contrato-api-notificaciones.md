@@ -76,8 +76,8 @@ Detalle (`GET /notifications/:id`) agrega `texts: { what_happened, what_to_do, w
   "key": "invoices_blocked", "module": "facturacion", "module_label": "Facturación",
   "title": "Facturas por emitir bloqueadas", "count": 12, "amount": 45210.5, "currency": "USD", // amount null si no aplica
   "severity": "error", // error | warning | info
-  "href": "/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo",
-  "breakdown": [{ "key": "fx_rate_missing", "label": "Falta el tipo de cambio", "count": 7, "href": "/lab/facturacion?…&motivo=fx_rate_missing" }] // opcional
+  "href": "/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10",
+  "breakdown": [{ "key": "fx_rate_missing", "label": "Falta el tipo de cambio", "count": 7, "href": "/lab/facturacion?…&desde=2026-09&hasta=2026-10&motivo=fx_rate_missing" }] // opcional
 }
 ```
 
@@ -111,8 +111,8 @@ sin leer. **Resolver** no es manual: las alertas se cierran solas (§5).
 | `key` | Módulo | Título | Monto | Gravedad | Enlace |
 |---|---|---|---|---|---|
 | `invoices_to_issue_today` | facturacion | Facturas por emitir hoy | sí | info | `/lab/facturacion?estado=Por+Emitir&grupo=ready` |
-| `invoices_blocked` | facturacion | Facturas por emitir bloqueadas (+ `breakdown` por motivo) | sí | error | `/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo` (+ `&motivo=<código>`) |
-| `invoices_late` | facturacion | Facturas por emitir atrasadas | sí | warning | `/lab/facturacion?estado=Por+Emitir&grupo=late&periodo=todo` |
+| `invoices_blocked` | facturacion | Facturas por emitir bloqueadas (+ `breakdown` por motivo; **sin** `no_contract`) | sí | error | `/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=<primer mes>&hasta=<mes en curso>` (+ `&motivo=<código>`, con el primer mes de ese motivo) |
+| `invoices_late` | facturacion | Facturas por emitir atrasadas | sí | warning | `/lab/facturacion?estado=Por+Emitir&grupo=late&desde=<primer mes>&hasta=<mes en curso>` |
 | `invoices_past_months` | facturacion | Por emitir de meses pasados | sí | warning | `/lab/facturacion?estado=Por+Emitir&desde=<mes más antiguo>&hasta=<mes anterior>` |
 | `invoices_overdue` | facturacion | Facturas vencidas | sí (saldo) | warning | `/lab/facturacion?pago=overdue&periodo=todo` |
 | `credit_notes_to_issue` | facturacion | Notas de crédito por emitir | no | warning | `/lab/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo` |
@@ -129,6 +129,14 @@ sin leer. **Resolver** no es manual: las alertas se cierran solas (§5).
 Montos en moneda del sistema del holding (`currency`). Fuentes: cola Por emitir de Facturación (`BillingReadService.queue`,
 mismos motivos que la pantalla), `invoicesCte` (vencidas y NC), consumos por informar (`ConsumptionService.pending`),
 excepciones (`RevenueMetricsService.exceptions`) y SQL agregadas para el resto.
+
+**Cola Por emitir (03-10):** las tareas cuentan la cola **hasta hoy** (`until: today`), así que sus enlaces abren
+`desde=<primer mes YYYY-MM de las facturas de esa tarea>&hasta=<mes en curso>` (para el desglose, el primer mes de ese motivo) en vez de
+`periodo=todo`, que mostraba también las futuras; sin fecha conocida, `periodo=todo`. Fecha de la factura: `COALESCE(issue_date, scheduled_at)`.
+**`no_contract` no es tarea:** las facturas sin contrato (solo lectura: restos del modelo viejo de suscripciones) son **datos a sanear antes
+del switch**, no una tarea del usuario. La tarea `invoices_blocked` excluye ese motivo del conteo, el monto y el desglose; una factura cuyo
+único motivo es `no_contract` no cuenta como bloqueada (con otro motivo, cuenta por ese otro). La cola de Facturación y el conteo
+`invoices_to_emit` del Dashboard no cambian.
 
 ## 5. Cierre automático, escalamiento y destinatarios
 
@@ -209,16 +217,28 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
 
 ### 8.3 Correo inmediato (alerta)
 
-- Al **crear** una alerta (a los destinatarios nuevos) o al **escalarla** (sube la gravedad o cambia el escalón: a todos), se envía un correo
-  (Resend, `AuthMailer`, plantilla de marca "alerta") solo a quien tiene `email = true` para el tipo (efectivo: preferencia o default),
-  ve la compañía de la alerta y sigue activo. Asunto `[<Bloquea|Atención|Informativo>] <título>`; cuerpo: gravedad, **Qué pasó**,
+- Al **crear** una alerta (a los destinatarios nuevos) o al **escalarla** (sube la gravedad o cambia el escalón: a todos), se **reserva** un
+  correo (Resend, `AuthMailer`, plantilla de marca "alerta") solo para quien tiene `email = true` para el tipo (efectivo: preferencia o
+  default), ve la compañía de la alerta y sigue activo. Asunto `[<Bloquea|Atención|Informativo>] <título>`; cuerpo: gravedad, **Qué pasó**,
   **Qué hacer** (+ Qué hacemos nosotros), compañía si la hay, botón **Ver alerta** → `${INVITE_LANDING_URL}/lab/notificaciones?alerta=<id>`.
   Todo texto variable va escapado.
+- **Ventana de espera** (`NOTIFICATION_EMAIL_DELAY_MINUTES`, default **15** minutos; 03-10): la reserva es una fila `pending` en
+  `notification_email_log` (sin enviar). Un job **cada 5 minutos** (`NotificationJobsScheduler.alertEmails` → `NotificationEmailService.sendDueAlerts`)
+  envía las filas `pending` de kind `alert` con `created_at <= now() - ventana` cuya alerta siga `open`. Si la alerta se resolvió (o se borró)
+  dentro de la ventana, la fila queda `failed` con `error = 'resuelta antes de enviar'` y no sale nada (sin estado nuevo: el CHECK de la
+  tabla no cambia, **sin migración**). Usuario inactivo o sin correo al momento de enviar: `failed`, `error = 'usuario inactivo o sin correo'`.
+- **Escalamiento dentro de la ventana:** se reserva la nueva clave con el `created_at` de la reserva pendiente, y esta queda `failed` con
+  `error = 'reemplazada por escalamiento'`: sale **un solo correo**, a la hora original, con el asunto de escalamiento
+  (`[<gravedad>] Sigue pendiente: <título>`). El asunto de escalamiento se usa cuando el usuario ya tenía otra fila de la misma alerta.
+- **Varias réplicas:** antes de enviar, cada fila se toma con `UPDATE … SET sent_at = now() WHERE status = 'pending' AND sent_at IS NULL`
+  (`pending` + `sent_at` = en envío); al terminar queda `sent` (con `sent_at`) o `failed` (sin `sent_at`). Una fila tomada que no termina
+  (caída a mitad de envío) no se reintenta: se prefiere perder un correo a duplicarlo.
 - **Deduplicación** (`notification_email_log`, UNIQUE `(user_id, dedup_key)`): clave `alert:<id>:<gravedad>:<escalón>`; no se reenvía por la
   misma alerta salvo escalamiento. Alertas "globales" (falla de tipos de cambio en todos los holdings) usan `metadata.email_group` como clave
   (`alert-group:<grupo>`): un solo correo por usuario aunque llegue a varios holdings.
-- Llave general `NOTIFICATION_EMAILS_ENABLED` (default **activo**; `false` apaga todos los correos de este módulo). Si existe
-  `INVITE_TEST_ALLOWLIST` (QA), solo salen a correos de la lista. Un fallo de correo nunca rompe al productor.
+- Llave general `NOTIFICATION_EMAILS_ENABLED` (default **activo**; `false` apaga todos los correos de este módulo: ni reserva ni envía; las
+  filas ya reservadas esperan). El job de 5 minutos **no** depende de `NOTIFICATION_JOBS_ENABLED`. Si existe `INVITE_TEST_ALLOWLIST` (QA),
+  solo salen a correos de la lista. Un fallo de correo nunca rompe al productor.
 
 ### 8.4 Resumen semanal
 
@@ -229,8 +249,14 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
   alertas abiertas creadas en los últimos 7 días (hasta 8, más el total), MRR del mes vs el anterior (`MrrMetricsService.overview`) con los
   3 mayores aumentos y las 3 mayores pérdidas por cliente (`MrrMetricsService.movementDetail`, `groupBy=client`) y renovaciones ejecutadas en
   los 7 días (eventos `RENEWAL` completados). Secciones vacías se omiten.
+- **Por compañía** (03-10): si el usuario ve más de una compañía (Mis compañías vacío = todas las del holding, o varias elegidas), una
+  sección compacta con, por compañía: **tareas abiertas** (suma de conteos de `TasksService.pending(holding, hoy, [compañía])`, sin las
+  tareas que no distinguen compañía: `quotes_waiting_mapping`, `quotes_unprocessed_this_month`, `revenue_exceptions`), **alertas abiertas
+  de la semana** del usuario (`app_notifications.company_id`; las de todo el holding no se atribuyen) y el **MRR del mes**
+  (`MrrMetricsService.byDimension`, `dimension=company`: la misma fuente del MRR del correo, sin recalcular; si falla, se omite). Solo
+  compañías con datos; con menos de dos, la sección no aparece. Las tareas se calculan una compañía a la vez.
 - `POST /notifications/digest/preview` (**solo super admin**, `@SuperAdminOnlyRoute`): `{ html, subject, text }` del resumen del holding
-  activo para el usuario que llama (no envía nada ni registra).
+  activo para el usuario que llama (no envía nada ni registra). Incluye "Por compañía" con la misma regla.
 
 ### 8.5 Correos internos al catálogo
 
@@ -313,7 +339,8 @@ Orden: N4–N7 (una migración) → N8 → función → desplegar la API (la API
 | Variable | Default | Efecto |
 |---|---|---|
 | `NOTIFICATION_EMAILS_ENABLED` | activo | `false` apaga todos los correos de Notificaciones (inmediatos, resumen, respaldo) |
-| `NOTIFICATION_JOBS_ENABLED` | activo | `false` apaga el job horario (cierre de mes y resumen semanal) |
+| `NOTIFICATION_EMAIL_DELAY_MINUTES` | `15` | ventana de espera de la alerta inmediata por correo (minutos, `>= 0`; inválido → 15) |
+| `NOTIFICATION_JOBS_ENABLED` | activo | `false` apaga el job horario (cierre de mes y resumen semanal); no el envío de alertas por correo |
 | `INVITE_LANDING_URL` | `https://www.aisapira.com` si falta | base de los enlaces de los correos |
 | `INVITE_TEST_ALLOWLIST` | — | en QA, solo salen correos a la lista (también los de Notificaciones) |
 | `INVOICE_ADMIN_EMAILS` / `BANCO_CENTRAL_ADMIN_EMAILS` | — | **solo respaldo**: si la alerta interna no tiene destinatarios |
@@ -323,7 +350,7 @@ Orden: N4–N7 (una migración) → N8 → función → desplegar la API (la API
 
 - **Configuración › Roles** (`GET/PUT /settings/roles/:id/alerts`): ofrece 12 tipos (suma `fx_sync_failure` y `month_close_pending`; los
   internos de Sapira no).
-- **Métricas**: exporta `MrrMetricsService` (el resumen reusa `overview` y `movementDetail`, sin recalcular).
+- **Métricas**: exporta `MrrMetricsService` (el resumen reusa `overview`, `movementDetail` y `byDimension` por compañía, sin recalcular).
 - **Facturación / Banco Central**: `InvoiceNotificationService` y `ExchangeRatesNotificationService` ya no usan SendGrid; `InvoiceSchedulerService`
   llama al resumen también sin errores (para cerrar la alerta) y cierra `invoice_fx_missing` al enviar bien la factura.
 - **Clientes**: notas con menciones y referencias, `GET /clients/:id/references`, textos de la Actividad en español (§8.7).

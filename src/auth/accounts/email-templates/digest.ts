@@ -21,6 +21,11 @@ export interface DigestEmailValues {
 		decreases: Array<{ label: string; value: string }>;
 	} | null;
 	renewals: { count: number; items: Array<{ label: string; url: string | null }> };
+	/**
+	 * "Por compañía": solo si el usuario ve más de una compañía y más de una tiene datos (si no, vacío y la sección no aparece). Tareas
+	 * abiertas (suma de conteos de las tareas por compañía), alertas abiertas de la semana y MRR del mes (si está disponible).
+	 */
+	companies?: Array<{ name: string; tasks: number; alerts: number; mrr: string | null }>;
 	/** Compañías aplicadas ("Mis compañías"), si el usuario filtró. */
 	companiesNote?: string | null;
 	logoUrl?: string;
@@ -45,6 +50,21 @@ export function renderDigestEmail(values: DigestEmailValues, options: EmailOptio
 		sections.push({
 			title: `Alertas abiertas de la semana (${values.alerts.total})`,
 			rows: values.alerts.items.map((alert) => ({ label: alert.title, value: alert.severity, url: alert.url ?? undefined })),
+		});
+	}
+	if ((values.companies?.length ?? 0) > 1) {
+		const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+		sections.push({
+			title: 'Por compañía',
+			rows: values.companies!.map((company) => ({
+				label: company.name,
+				value: [
+					plural(company.tasks, 'tarea', 'tareas'),
+					plural(company.alerts, 'alerta', 'alertas'),
+					...(company.mrr ? [`MRR ${company.mrr}`] : []),
+				].join(' · '),
+			})),
 		});
 	}
 	if (values.mrr) {

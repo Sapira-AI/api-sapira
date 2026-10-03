@@ -5,12 +5,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
 import { DEFAULT_TIMEZONE } from '@/core/utils/holding-preferences';
+import { NotificationEmailService } from '@/modules/notifications/notification-email.service';
 
 import { localParts } from './local-time';
 import { MonthCloseService } from './month-close.service';
 import { NotificationDigestService } from './notification-digest.service';
 
 export const NOTIFICATION_JOBS = 'notification-jobs';
+/** Job de la alerta inmediata por correo (cada 5 minutos): envía las reservas que cumplieron la ventana de espera. */
+export const ALERT_EMAILS_JOB = 'notification-alert-emails';
 /** Hora local del holding del aviso de cierre de mes y del resumen semanal (lunes). */
 export const MONTH_CLOSE_HOUR = 7;
 export const DIGEST_HOUR = 8;
@@ -22,17 +25,20 @@ type Row = Record<string, unknown>;
  * (`holding_settings.timezone`): a las 07:xx corre el aviso de cierre de mes (tareas + alertas; fuera de la ventana solo cierra las abiertas)
  * y los **lunes a las 08:xx** envía el resumen semanal. Llave `NOTIFICATION_JOBS_ENABLED` (default activo; `false` apaga). Un holding que
  * falla no detiene a los demás. Varias réplicas: el resumen es idempotente por semana (`notification_email_log`) y la alerta se deduplica.
+ * Aparte, cada 5 minutos, envía las alertas inmediatas por correo que cumplieron su ventana de espera (`alertEmails`).
  */
 @Injectable()
 export class NotificationJobsScheduler {
 	private readonly logger = new Logger(NotificationJobsScheduler.name);
 	private running = false;
+	private sendingAlerts = false;
 
 	constructor(
 		@InjectDataSource() private readonly dataSource: DataSource,
 		private readonly config: ConfigService,
 		private readonly digest: NotificationDigestService,
-		private readonly monthClose: MonthCloseService
+		private readonly monthClose: MonthCloseService,
+		private readonly emails: NotificationEmailService
 	) {}
 
 	get enabled(): boolean {
@@ -71,6 +77,22 @@ export class NotificationJobsScheduler {
 			return results;
 		} finally {
 			this.running = false;
+		}
+	}
+
+	/**
+	 * Cada 5 minutos: alertas inmediatas por correo que cumplieron la ventana de espera (`NOTIFICATION_EMAIL_DELAY_MINUTES`, default 15) y
+	 * siguen abiertas (contrato §8.3). Su llave es `NOTIFICATION_EMAILS_ENABLED` (en el servicio), **no** `NOTIFICATION_JOBS_ENABLED`: apagar
+	 * el resumen y el cierre de mes no debe dejar las alertas sin correo. Varias réplicas: cada fila se toma con un UPDATE condicional.
+	 */
+	@Cron('*/5 * * * *', { name: ALERT_EMAILS_JOB })
+	async alertEmails(now = new Date()): Promise<{ sent: number; failed: number; discarded: number; skipped: number } | null> {
+		if (this.sendingAlerts) return null;
+		this.sendingAlerts = true;
+		try {
+			return await this.emails.sendDueAlerts(now);
+		} finally {
+			this.sendingAlerts = false;
 		}
 	}
 }

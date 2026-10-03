@@ -112,6 +112,13 @@ describe('resumen semanal (contrato §8.4)', () => {
 					{ client_name: null, amount: 50 },
 				],
 			}),
+			byDimension: jest.fn().mockResolvedValue({
+				currency: 'USD',
+				rows: [
+					{ key: 'co-1', total: 7000 },
+					{ key: 'co-2', total: 3000 },
+				],
+			}),
 		};
 		const notifications = { myCompanies: jest.fn().mockResolvedValue([]) };
 		const emails = {
@@ -173,6 +180,84 @@ describe('resumen semanal (contrato §8.4)', () => {
 		expect(email.text).toContain('Incluye solo tus compañías: Acme SpA.');
 	});
 
+	it('"Por compañía": con varias compañías con datos, tareas (sin las de todo el holding), alertas de la semana y MRR por compañía', async () => {
+		const { service, tasks, mrr } = build((sql) => {
+			if (sql.includes('id::text AS id, legal_name FROM companies'))
+				return [
+					{ id: 'co-1', legal_name: 'Acme <SpA>' },
+					{ id: 'co-2', legal_name: 'Beta Ltda' },
+					{ id: 'co-3', legal_name: 'Vacía SA' },
+				];
+			if (sql.includes('FROM app_notification_recipients r'))
+				return [
+					{ id: 'n-1', title: 'Falló el envío', severity: 'error', company_id: 'co-1' },
+					{ id: 'n-2', title: 'Tipo de cambio', severity: 'warning', company_id: null },
+				];
+			return undefined;
+		});
+
+		tasks.pending.mockImplementation(async (_holding: string, _today: string, companies: string[]) => ({
+			tasks:
+				companies[0] === 'co-1'
+					? [
+							{ key: 'invoices_blocked', module_label: 'Facturación', title: 'Bloqueadas', count: 2, href: '/lab/facturacion' },
+							{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/lab/facturacion' },
+							// No distingue compañía: no se suma.
+							{ key: 'revenue_exceptions', module_label: 'Ingresos', title: 'Excepciones', count: 9, href: '/lab/revenue' },
+						]
+					: companies[0] === 'co-2'
+						? [{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/lab/facturacion' }]
+						: [],
+		}));
+		mrr.byDimension.mockResolvedValue({
+			currency: 'USD',
+			rows: [
+				{ key: 'co-1', total: 7000 },
+				{ key: 'co-2', total: 3000 },
+			],
+		});
+		const email = await service.build(
+			'h-1',
+			{ id: 'u-1', email: 'a@x.cl', name: 'Ana', role_name: 'Administrador' },
+			new Date('2026-10-05T11:30:00Z')
+		);
+
+		expect(mrr.byDimension).toHaveBeenCalledWith(
+			'h-1',
+			expect.objectContaining({ dimension: 'company', from: '2026-10', to: '2026-10', companyId: 'co-1,co-2,co-3' })
+		);
+		expect(tasks.pending).toHaveBeenCalledWith('h-1', '2026-10-05', ['co-2']);
+		expect(email.html).toContain('Por compañía');
+		expect(email.html).toContain('Acme &lt;SpA&gt;');
+		expect(email.html).not.toContain('Acme <SpA>');
+		expect(email.text).toContain('- Acme <SpA>: 3 tareas · 1 alerta · MRR USD 7.000');
+		expect(email.text).toContain('- Beta Ltda: 1 tarea · 0 alertas · MRR USD 3.000');
+		expect(email.text).not.toContain('Vacía SA');
+	});
+
+	it('"Por compañía" no aparece si solo una compañía tiene datos', async () => {
+		const { service, tasks, mrr } = build((sql) =>
+			sql.includes('id::text AS id, legal_name FROM companies')
+				? [
+						{ id: 'co-1', legal_name: 'Acme SpA' },
+						{ id: 'co-2', legal_name: 'Beta Ltda' },
+					]
+				: undefined
+		);
+
+		tasks.pending.mockImplementation(async (_holding: string, _today: string, companies: string[]) => ({
+			tasks: companies[0] === 'co-2' ? [] : [{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/x' }],
+		}));
+		mrr.byDimension.mockResolvedValue({ currency: 'USD', rows: [{ key: 'co-1', total: 7000 }] });
+		const email = await service.build(
+			'h-1',
+			{ id: 'u-1', email: 'a@x.cl', name: 'Ana', role_name: 'Administrador' },
+			new Date('2026-10-05T11:30:00Z')
+		);
+
+		expect(email.html).not.toContain('Por compañía');
+	});
+
 	it('envío idempotente por semana: clave digest:<holding>:<lunes>', async () => {
 		const { service, emails } = build((sql) =>
 			sql.includes('FROM user_holdings uh') ? [{ id: 'u-1', email: 'a@x.cl', name: 'Ana', role_name: 'Finanzas', digest: null }] : undefined
@@ -192,9 +277,10 @@ describe('job horario de notificaciones', () => {
 		const digest = { run: jest.fn().mockResolvedValue({ sent: 1, skipped: 0, failed: 0 }) };
 		const monthClose = { run: jest.fn().mockResolvedValue({ month: null, alerts: 0, resolved: 0 }) };
 		const config = { get: jest.fn((key: string) => env[key]) };
-		const scheduler = new NotificationJobsScheduler({ query } as never, config as never, digest as never, monthClose as never);
+		const emails = { sendDueAlerts: jest.fn().mockResolvedValue({ sent: 2, failed: 0, discarded: 1, skipped: 0 }) };
+		const scheduler = new NotificationJobsScheduler({ query } as never, config as never, digest as never, monthClose as never, emails as never);
 
-		return { scheduler, digest, monthClose };
+		return { scheduler, digest, monthClose, emails };
 	};
 
 	it('a las 07 locales corre el cierre de mes; los lunes a las 08 locales, el resumen (cada holding en su zona)', async () => {
@@ -220,5 +306,13 @@ describe('job horario de notificaciones', () => {
 		await expect(scheduler.hourly(new Date('2026-10-05T11:05:00Z'))).resolves.toBeNull();
 		expect(digest.run).not.toHaveBeenCalled();
 		expect(monthClose.run).not.toHaveBeenCalled();
+	});
+
+	it('cada 5 minutos envía las alertas por correo que cumplieron la ventana (no depende de NOTIFICATION_JOBS_ENABLED)', async () => {
+		const { scheduler, emails } = build({ NOTIFICATION_JOBS_ENABLED: 'false' });
+		const now = new Date('2026-10-05T11:10:00Z');
+
+		await expect(scheduler.alertEmails(now)).resolves.toEqual({ sent: 2, failed: 0, discarded: 1, skipped: 0 });
+		expect(emails.sendDueAlerts).toHaveBeenCalledWith(now);
 	});
 });

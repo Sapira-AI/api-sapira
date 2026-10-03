@@ -9,6 +9,7 @@ import { MrrMetricsService } from '@/modules/metrics/mrr-metrics.service';
 import { defaultWeeklyDigestFor, SEVERITY_LABELS, SEVERITY_RANK, WEEKLY_DIGEST_PREFERENCE } from '@/modules/notifications/notification-catalog';
 import { NotificationEmailService } from '@/modules/notifications/notification-email.service';
 import { MY_COMPANIES_SQL, NotificationsService } from '@/modules/notifications/notifications.service';
+import { HOLDING_WIDE_TASK_KEYS } from '@/modules/tasks/tasks';
 import { TasksService } from '@/modules/tasks/tasks.service';
 
 import { localParts, mondayOf, money, monthName, signedMoney, weekLabel } from './local-time';
@@ -32,7 +33,8 @@ const addMonth = (month: string, delta: number) => {
 /**
  * Resumen semanal por correo (Notificaciones v2 fase 2, contrato §8.4). Contenido por usuario y respetando sus "Mis compañías": tareas
  * abiertas por módulo (`TasksService`, la misma fuente del centro y el Dashboard), alertas abiertas de los últimos 7 días, MRR del mes vs el
- * anterior con mayores aumentos y pérdidas por cliente (`MrrMetricsService`, sin recalcular) y renovaciones ejecutadas en la semana.
+ * anterior con mayores aumentos y pérdidas por cliente (`MrrMetricsService`, sin recalcular), renovaciones ejecutadas en la semana y, si ve
+ * más de una compañía con datos, "Por compañía" (tareas, alertas de la semana y MRR del mes).
  * Idempotente por semana (`notification_email_log`, clave `digest:<holding>:<lunes>`).
  */
 @Injectable()
@@ -132,6 +134,7 @@ export class NotificationDigestService {
 			this.mrrSection(holdingId, today.slice(0, 7), companies),
 			this.renewals(holdingId, companies),
 		]);
+		const byCompany = await this.byCompany(holdingId, today, companies, alerts.byCompany);
 		const holdingName = String(holding?.name ?? 'tu holding');
 		const companyNames = companies.length
 			? (
@@ -152,19 +155,95 @@ export class NotificationDigestService {
 				count: task.count,
 				url: this.emails.appUrl(task.href),
 			})),
-			alerts,
+			alerts: { total: alerts.total, items: alerts.items },
 			mrr,
 			renewals,
+			companies: byCompany,
 			companiesNote: companyNames.length ? `Incluye solo tus compañías: ${companyNames.join(', ')}.` : null,
 			logoUrl: this.emails.logoUrl(),
 		});
 	}
 
-	/** Alertas abiertas del usuario creadas en los últimos 7 días (sin archivadas, con "Mis compañías"): total + las 8 más graves. */
-	private async alerts(holdingId: string, userId: string) {
-		if (!userId) return { total: 0, items: [] };
+	/**
+	 * "Por compañía" (§8.4): si el usuario ve más de una compañía ("Mis compañías" vacío = todas las del holding, o varias elegidas), por
+	 * compañía: tareas abiertas (suma de conteos de `TasksService` filtrado a esa compañía, sin las tareas que no distinguen compañía),
+	 * alertas abiertas de la semana (`app_notifications.company_id`) y el MRR del mes (`MrrMetricsService.byDimension` por compañía, la misma
+	 * fuente del MRR del correo, sin recalcular; sin él, se omite). Solo las compañías con datos; con menos de dos, la sección no aparece.
+	 */
+	private async byCompany(
+		holdingId: string,
+		today: string,
+		companies: string[],
+		alertsByCompany: Map<string, number>
+	): Promise<Array<{ name: string; tasks: number; alerts: number; mrr: string | null }>> {
 		const rows = (await this.dataSource.query(
-			`SELECT n.id, n.title, n.severity, n.created_at
+			`SELECT id::text AS id, legal_name FROM companies
+			WHERE holding_id = $1 AND (cardinality($2::uuid[]) = 0 OR id = ANY($2::uuid[]))
+			ORDER BY legal_name`,
+			[holdingId, companies]
+		)) as Row[];
+
+		if ((rows ?? []).length < 2) return [];
+		const mrr = await this.mrrByCompany(
+			holdingId,
+			today.slice(0, 7),
+			rows.map((row) => String(row.id))
+		);
+		const items: Array<{ name: string; tasks: number; alerts: number; mrr: string | null; mrrValue: number }> = [];
+
+		// Una compañía a la vez: cada cálculo de tareas abre varias consultas (no satura el pool).
+		for (const row of rows) {
+			const id = String(row.id);
+			let tasks = 0;
+
+			try {
+				const pending = await this.tasks.pending(holdingId, today, [id]);
+
+				tasks = pending.tasks.filter((task) => !HOLDING_WIDE_TASK_KEYS.includes(task.key)).reduce((sum, task) => sum + task.count, 0);
+			} catch (error) {
+				this.logger.warn(`Resumen semanal: tareas de la compañía ${id}: ${error instanceof Error ? error.message : String(error)}`);
+			}
+			const value = mrr?.values.get(id) ?? 0;
+
+			items.push({
+				name: String(row.legal_name ?? 'Compañía'),
+				tasks,
+				alerts: alertsByCompany.get(id) ?? 0,
+				mrr: mrr ? money(value, mrr.currency) : null,
+				mrrValue: value,
+			});
+		}
+		const withData = items.filter((item) => item.tasks > 0 || item.alerts > 0 || item.mrrValue !== 0);
+
+		return withData.length > 1 ? withData.map((item) => ({ name: item.name, tasks: item.tasks, alerts: item.alerts, mrr: item.mrr })) : [];
+	}
+
+	/** MRR del mes por compañía (`byDimension` por compañía, misma fuente que el MRR del correo). null si no está disponible. */
+	private async mrrByCompany(holdingId: string, month: string, companyIds: string[]) {
+		try {
+			const result = await this.mrr.byDimension(holdingId, {
+				dimension: 'company',
+				from: month,
+				to: month,
+				top: 100,
+				companyId: companyIds.join(','),
+			});
+
+			return { currency: result.currency, values: new Map(result.rows.map((row) => [row.key, Number(row.total ?? 0)])) };
+		} catch (error) {
+			this.logger.warn(`Resumen semanal: MRR por compañía del holding ${holdingId}: ${error instanceof Error ? error.message : String(error)}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Alertas abiertas del usuario creadas en los últimos 7 días (sin archivadas, con "Mis compañías"): total + las 8 más graves, y el conteo
+	 * por compañía (`company_id`; las de todo el holding no se atribuyen).
+	 */
+	private async alerts(holdingId: string, userId: string) {
+		if (!userId) return { total: 0, items: [], byCompany: new Map<string, number>() };
+		const rows = (await this.dataSource.query(
+			`SELECT n.id, n.title, n.severity, n.created_at, n.company_id
 			FROM app_notification_recipients r JOIN app_notifications n ON n.id = r.notification_id
 			WHERE r.user_id = $1 AND n.holding_id = $2 AND n.status = 'open' AND r.archived_at IS NULL
 				AND n.created_at >= now() - interval '7 days' AND ${MY_COMPANIES_SQL}
@@ -173,8 +252,15 @@ export class NotificationDigestService {
 		)) as Row[];
 		const sorted = [...(rows ?? [])].sort((a, b) => (SEVERITY_RANK[b.severity as 'error'] ?? 0) - (SEVERITY_RANK[a.severity as 'error'] ?? 0));
 
+		const byCompany = new Map<string, number>();
+
+		for (const row of sorted) {
+			if (row.company_id) byCompany.set(String(row.company_id), (byCompany.get(String(row.company_id)) ?? 0) + 1);
+		}
+
 		return {
 			total: sorted.length,
+			byCompany,
 			items: sorted.slice(0, 8).map((row) => ({
 				title: String(row.title),
 				severity: SEVERITY_LABELS[row.severity as 'error'] ?? String(row.severity),

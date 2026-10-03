@@ -203,6 +203,58 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			for (const [, params] of query.mock.calls as Array<[string, unknown[]]>) expect(params[0]).toBe('holding-1');
 		});
 
+		it('enlaces de la cola Por emitir: desde el primer mes de las facturas de la tarea hasta el mes en curso (no periodo=todo)', async () => {
+			const { service } = build();
+			const result = await service.forHolding('holding-1');
+			const byKey = Object.fromEntries(result.tasks.map((task) => [task.key, task]));
+
+			expect(byKey.invoices_blocked.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10');
+			expect(byKey.invoices_blocked.breakdown![0].href).toBe(
+				'/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10&motivo=needs_reference'
+			);
+			expect(byKey.invoices_late.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=late&desde=2026-10&hasta=2026-10');
+		});
+
+		it('bloqueadas: excluye el motivo no_contract (facturas sin contrato, datos a sanear) del conteo, monto y desglose', async () => {
+			const { service } = build({
+				queue: {
+					entries: [
+						{ id: 'i-ready', group: 'ready', blocked_reasons: [] },
+						// Solo sin contrato: no cuenta.
+						{
+							id: 'i-late',
+							group: 'blocked',
+							blocked_reasons: [{ code: 'no_contract', message: 'La factura no pertenece a un contrato' }],
+						},
+						// Sin contrato y otro motivo: cuenta, con el otro motivo.
+						{
+							id: 'i-blocked',
+							group: 'blocked',
+							blocked_reasons: [
+								{ code: 'no_contract', message: 'La factura no pertenece a un contrato' },
+								{ code: 'fx_rate_missing', message: 'Falta el tipo de cambio' },
+							],
+						},
+					],
+					truncated: false,
+				},
+			});
+			const result = await service.forHolding('holding-1');
+			const blocked = result.tasks.find((task) => task.key === 'invoices_blocked')!;
+
+			expect(blocked).toMatchObject({ count: 1, amount: 50 });
+			expect(blocked.breakdown).toEqual([expect.objectContaining({ key: 'fx_rate_missing', count: 1 })]);
+			expect(blocked.href).toContain('desde=2026-08&hasta=2026-10');
+			// La cola completa (Dashboard) no cambia.
+			expect(result.dashboard.invoices_to_emit).toBe(3);
+		});
+
+		it('sin bloqueadas con fecha, el enlace queda en toda la cola (periodo=todo)', () => {
+			const tasks = buildTasks(inputs({ queue: { ...inputs().queue, blocked: { count: 1, amount: 5, first_month: null, reasons: [] } } }));
+
+			expect(tasks.find((task) => task.key === 'invoices_blocked')!.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo');
+		});
+
 		it('filtra por compañías: cola y vencidas por company_id, contratos por $3, consumos una consulta por compañía', async () => {
 			const { service, billing, query, consumption } = build();
 			const result = await service.forHolding('holding-1', '2026-10-03', ['co-1', 'co-2']);

@@ -65,11 +65,19 @@ suscribibles con productor, con etiqueta y módulo.
   `metadata.contract_item_id`) y la fila `my_companies` de `user_notification_preferences` (`company_ids`, vacío = todas). `MY_COMPANIES_SQL`
   filtra lista, conteos y marcar todas; `visibleTo` filtra socket y correo. Las alertas sin compañía las ve todo destinatario.
 - **Correo** (`notification-email.service.ts`): un solo canal (Resend por `AuthMailer`, plantillas `auth/accounts/email-templates/alert.ts` y
-  `digest.ts`). `create` envía a los destinatarios nuevos; `createOrUpdate` a los nuevos y, si escala, a todos. Solo a quien quiere correo
-  para el tipo (preferencia o default). Dedup en `notification_email_log` (`alert:<id>:<gravedad>:<escalón>`, o `alert-group:<grupo>` con
-  `metadata.email_group`). `NOTIFICATION_EMAILS_ENABLED=false` apaga; en QA respeta `INVITE_TEST_ALLOWLIST`. Nunca lanza.
+  `digest.ts`). `create` reserva para los destinatarios nuevos; `createOrUpdate` para los nuevos y, si escala, para todos. Solo a quien
+  quiere correo para el tipo (preferencia o default). Dedup en `notification_email_log` (`alert:<id>:<gravedad>:<escalón>`, o
+  `alert-group:<grupo>` con `metadata.email_group`). `NOTIFICATION_EMAILS_ENABLED=false` apaga; en QA respeta `INVITE_TEST_ALLOWLIST`.
+  Nunca lanza.
+- **Ventana de espera de la alerta** (`NOTIFICATION_EMAIL_DELAY_MINUTES`, default 15): `queueAlert` solo reserva la fila `pending`;
+  `sendDueAlerts` (job cada 5 minutos) envía las que cumplieron la ventana con la alerta aún `open`. Resuelta en la ventana → `failed`
+  con `error = 'resuelta antes de enviar'` (sin correo). Escalada en la ventana → la reserva anterior queda `failed` ("reemplazada por
+  escalamiento") y la nueva hereda su `created_at`: un solo correo, con asunto "Sigue pendiente". Cada fila se toma con `sent_at` antes de
+  enviar (réplicas sin duplicados). Sin migración: usa los estados `pending|sent|failed` existentes.
 - **Jobs** (`src/modules/notification-jobs/`): job horario (`NOTIFICATION_JOBS_ENABLED`); en la zona de cada holding, 07:xx cierre de mes
-  (`MonthCloseService`, una alerta por compañía) y lunes 08:xx resumen semanal (`NotificationDigestService`, idempotente por semana).
+  (`MonthCloseService`, una alerta por compañía) y lunes 08:xx resumen semanal (`NotificationDigestService`, idempotente por semana; con
+  varias compañías con datos agrega "Por compañía": tareas, alertas de la semana y MRR del mes). Aparte, cada 5 minutos, el envío de
+  alertas por correo (no depende de `NOTIFICATION_JOBS_ENABLED`).
 - **Correos internos** (facturas y tipos de cambio) son alertas del catálogo; las variables `INVOICE_ADMIN_EMAILS` /
   `BANCO_CENTRAL_ADMIN_EMAILS` quedan solo como respaldo si no hay destinatarios. El reporte de éxito de tipos de cambio ya no se envía.
 - **Menciones**: `ClientActivityService.addNote` crea `user_mention` (`client-note-mention:<nota>`) con el fragmento legible.

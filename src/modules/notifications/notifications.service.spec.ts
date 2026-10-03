@@ -60,7 +60,7 @@ describe('NotificationsService', () => {
 			emitNotificationRead: jest.fn(),
 			emitNotificationUpdated: jest.fn(),
 		};
-		const emails = { sendAlert: jest.fn(async () => 0) };
+		const emails = { queueAlert: jest.fn(async () => 0) };
 		const service = new NotificationsService(
 			notificationRepository as any,
 			recipientRepository as any,
@@ -147,7 +147,7 @@ describe('NotificationsService', () => {
 
 			expect(manager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ company_id: 'company-1' }));
 			expect(notificationsGateway.emitNotificationCreated).toHaveBeenCalledWith('holding-1', ['user-1'], expect.anything());
-			expect(emails.sendAlert).toHaveBeenCalledWith(expect.objectContaining({ company_id: 'company-1' }), ['user-1']);
+			expect(emails.queueAlert).toHaveBeenCalledWith(expect.objectContaining({ company_id: 'company-1' }), ['user-1']);
 
 			const explicit = buildService();
 			await explicit.service.create('holding-1', { ...staging, company_id: 'company-9', recipients: { user_ids: ['user-1'] } });
@@ -156,7 +156,7 @@ describe('NotificationsService', () => {
 			const none = buildService();
 			await none.service.create('holding-1', { ...staging, recipients: { user_ids: ['user-1'] } });
 			expect(none.manager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ company_id: null }));
-			expect(none.emails.sendAlert).toHaveBeenCalledWith(expect.anything(), ['user-1']);
+			expect(none.emails.queueAlert).toHaveBeenCalledWith(expect.anything(), ['user-1']);
 		});
 
 		it('rechaza una clave de deduplicación abierta', async () => {
@@ -270,7 +270,7 @@ describe('NotificationsService', () => {
 				escalation_step: 30,
 				deduplication_key: 'k',
 			});
-			expect(quiet.emails.sendAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-3'], { escalated: false });
+			expect(quiet.emails.queueAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-3'], { escalated: false });
 
 			const loud = buildService();
 			loud.notificationRepository.findOne.mockResolvedValue(existing());
@@ -284,7 +284,7 @@ describe('NotificationsService', () => {
 				escalation_step: 15,
 				deduplication_key: 'k',
 			});
-			expect(loud.emails.sendAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-1', 'user-2'], { escalated: true });
+			expect(loud.emails.queueAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-1', 'user-2'], { escalated: true });
 		});
 
 		it('si sube la gravedad también vuelve a "sin leer"; si baja, no', async () => {

@@ -14,6 +14,8 @@ type Row = Record<string, unknown>;
 const num = (value: unknown) => Number(value ?? 0) || 0;
 const ids = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
 const empty = (): Bucket => ({ count: 0, amount: null });
+/** Motivo de la cola que la tarea de bloqueadas no cuenta: factura sin contrato (solo lectura, datos a sanear antes del switch). */
+export const NO_CONTRACT = 'no_contract';
 /** Filtro de Facturación por compañías (`company_id` acepta `a,b`). */
 const companyFilter = (companies: string[]) => (companies.length ? { company_id: companies.join(',') } : {});
 
@@ -54,8 +56,8 @@ export class TasksService {
 			this.billing.systemCurrency(holdingId),
 			this.safe('cola Por emitir', () => this.queueBuckets(holdingId, today, companies), {
 				ready: empty(),
-				late: empty(),
-				blocked: { ...empty(), reasons: [] },
+				late: { ...empty(), first_month: null },
+				blocked: { ...empty(), first_month: null, reasons: [] },
 				past_months: { ...empty(), first_month: null },
 				total: 0,
 			}),
@@ -130,7 +132,12 @@ export class TasksService {
 		}
 	}
 
-	/** Cola Por emitir hasta hoy (la misma de Facturación: grupos y motivos de bloqueo) + montos en moneda del sistema. */
+	/**
+	 * Cola Por emitir hasta hoy (la misma de Facturación: grupos y motivos de bloqueo) + montos en moneda del sistema. La tarea de bloqueadas
+	 * **no cuenta** el motivo `no_contract` (facturas sin contrato, solo lectura: restos del modelo viejo de suscripciones, datos a sanear
+	 * antes del switch, no una tarea del usuario): una factura cuyo único motivo es ese no cuenta como bloqueada. `first_month` (`YYYY-MM`) es
+	 * el primer mes de las facturas de cada tarea y de cada motivo: arma el enlace `desde=…&hasta=<mes en curso>`.
+	 */
 	private async queueBuckets(holdingId: string, today: string, companies: string[] = []) {
 		const { entries } = await this.billing.queue(holdingId, companyFilter(companies), today, { until: today });
 		const amounts = new Map<string, { amount: number; date: string | null }>();
@@ -146,18 +153,30 @@ export class TasksService {
 				amounts.set(String(row.id), { amount: num(row.amount_system_currency), date: row.date ? String(row.date).slice(0, 10) : null });
 		}
 		const { first } = monthBounds(today);
+		const monthOf = (id: string) => amounts.get(id)?.date?.slice(0, 7) ?? null;
+		const firstMonth = (list: Array<{ id: string }>) =>
+			list
+				.map((entry) => monthOf(entry.id))
+				.filter((month): month is string => !!month)
+				.sort()[0] ?? null;
 		const bucket = (list: typeof entries): Bucket => ({
 			count: list.length,
 			amount: Math.round(list.reduce((sum, entry) => sum + (amounts.get(entry.id)?.amount ?? 0), 0) * 100) / 100,
 		});
-		const blocked = entries.filter((entry) => entry.group === 'blocked');
-		const reasons = new Map<string, { code: string; label: string; count: number }>();
+		const blocked = entries
+			.filter((entry) => entry.group === 'blocked')
+			.map((entry) => ({ ...entry, blocked_reasons: entry.blocked_reasons.filter((reason) => reason.code !== NO_CONTRACT) }))
+			.filter((entry) => entry.blocked_reasons.length > 0);
+		const reasons = new Map<string, { code: string; label: string; count: number; first_month: string | null }>();
 
 		for (const entry of blocked) {
+			const month = monthOf(entry.id);
+
 			for (const reason of entry.blocked_reasons) {
-				const current = reasons.get(reason.code) ?? { code: reason.code, label: reason.message, count: 0 };
+				const current = reasons.get(reason.code) ?? { code: reason.code, label: reason.message, count: 0, first_month: null };
 
 				current.count += 1;
+				if (month && (!current.first_month || month < current.first_month)) current.first_month = month;
 				reasons.set(reason.code, current);
 			}
 		}
@@ -166,13 +185,13 @@ export class TasksService {
 
 			return Boolean(date && date < first);
 		});
-		const pastMonths = past.map((entry) => amounts.get(entry.id)!.date!.slice(0, 7)).sort();
+		const late = entries.filter((entry) => entry.group === 'late');
 
 		return {
 			ready: bucket(entries.filter((entry) => entry.group === 'ready')),
-			late: bucket(entries.filter((entry) => entry.group === 'late')),
-			blocked: { ...bucket(blocked), reasons: [...reasons.values()].sort((a, b) => b.count - a.count) },
-			past_months: { ...bucket(past), first_month: pastMonths[0] ?? null },
+			late: { ...bucket(late), first_month: firstMonth(late) },
+			blocked: { ...bucket(blocked), first_month: firstMonth(blocked), reasons: [...reasons.values()].sort((a, b) => b.count - a.count) },
+			past_months: { ...bucket(past), first_month: firstMonth(past) },
 			total: entries.length,
 		};
 	}
