@@ -589,8 +589,19 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
+   {
+    "name": "companies_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
+   },
    {
     "name": "companies_fx_company_policy_check",
     "type": "c",
@@ -612,6 +623,14 @@
    }
   ],
   "indexes": [
+   {
+    "name": "idx_companies_country_code",
+    "cols": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    {
     "name": "idx_companies_odoo_integration_id",
     "cols": [

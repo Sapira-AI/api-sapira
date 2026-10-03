@@ -12,7 +12,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_status_check` |
 | `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `user_holdings_pkey` |
 | `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `company_holdings_pkey` |
-| `companies` (22) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |
+| `companies` (24) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |
 | `master_data` (244) | `src/databases/postgresql/entities/base-tenancy/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>CHECK `master_data_category_check` |
 | `currencies` (10) | `src/databases/postgresql/entities/base-tenancy/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | — | nombre de PK `currencies_pkey` |
 
@@ -20,8 +20,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `roles` (50, RLS on) | `role.entity.ts` · `Role` | 5 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
-| `permissions` (22, RLS on) | `permission.entity.ts` · `Permission` | 3 | `permissions_pkey` (id) | `permissions_code_key` | — | — | — | — | 3 |
+| `roles` (70, RLS on) | `role.entity.ts` · `Role` | 6 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
+| `permissions` (23, RLS on) | `permission.entity.ts` · `Permission` | 3 | `permissions_pkey` (id) | `permissions_code_key` | — | — | — | — | 3 |
 | `role_permissions` (637, RLS on) | `role-permission.entity.ts` · `RolePermission` | 3 | `role_permissions_pkey` (role_id, permission_id) | — | — | `fk_role_permissions_holding_id` → company_holdings (CASCADE)<br>`role_permissions_permission_id_fkey` → permissions<br>`role_permissions_role_id_fkey` → roles | `idx_role_permissions_holding_id`, `idx_role_permissions_permission_id`, `idx_role_permissions_role_id` | — | 5 |
 | `financial_settings` (4, RLS on) | `financial-settings.entity.ts` · `FinancialSettings` | 8 | `financial_settings_pkey` (id) | `financial_settings_holding_id_key` | — | — | — | trg_financial_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
 | `holding_settings` (5, RLS on) | `holding-settings.entity.ts` · `HoldingSettings` | 7 | `holding_settings_pkey` (holding_id) | — | `holding_settings_auto_renewal_notice_days_check`, `holding_settings_fx_system_policy_check` | `holding_settings_holding_id_fkey` → company_holdings (CASCADE) | — | trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
@@ -35,7 +35,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 
 ## C · Columnas exactas de cada espejo (8 tablas)
 
-<details><summary><code>roles</code> → <code>role.entity.ts</code> · 5 columnas</summary>
+<details><summary><code>roles</code> → <code>role.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -44,6 +44,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `description` | text | sí | — |  |
 | `created_at` | timestamp without time zone | sí | now() |  |
 | `holding_id` | uuid | sí | — |  |
+| `is_default` | boolean | no | false | Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7) |
 
 </details>
 <details><summary><code>permissions</code> → <code>permission.entity.ts</code> · 3 columnas</summary>

@@ -685,6 +685,13 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "company_legal_documents_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL"
    }
   ],
   "indexes": [],

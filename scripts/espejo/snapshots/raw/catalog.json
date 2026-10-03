@@ -8078,9 +8078,34 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
+				},
+				{
+					"column": "country_code",
+					"attnum": 25,
+					"data_type": "character",
+					"udt": "bpchar",
+					"type": "character(2)",
+					"char_len": 2,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español"
 				}
 			],
 			"constraints": [
+				{
+					"name": "companies_country_code_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "r",
+					"onupdate": "a"
+				},
 				{
 					"name": "companies_fx_company_policy_check",
 					"type": "c",
@@ -8115,6 +8140,12 @@
 					"def": "CREATE UNIQUE INDEX companies_pkey ON public.companies USING btree (id)",
 					"unique": true,
 					"primary": true
+				},
+				{
+					"name": "idx_companies_country_code",
+					"def": "CREATE INDEX idx_companies_country_code ON public.companies USING btree (country_code)",
+					"unique": false,
+					"primary": false
 				},
 				{
 					"name": "idx_companies_odoo_integration_id",
@@ -8430,6 +8461,102 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "receivable_account_code",
+					"attnum": 14,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Código de la cuenta Cuentas por cobrar (asiento de facturación)"
+				},
+				{
+					"column": "receivable_account_name",
+					"attnum": 15,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Nombre de la cuenta Cuentas por cobrar"
+				},
+				{
+					"column": "fx_difference_account_code",
+					"attnum": 16,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Código de la cuenta Diferencia de cambio"
+				},
+				{
+					"column": "fx_difference_account_name",
+					"attnum": 17,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Nombre de la cuenta Diferencia de cambio"
+				},
+				{
+					"column": "external_receivable_code",
+					"attnum": 18,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Código de Cuentas por cobrar en el ERP"
+				},
+				{
+					"column": "external_fx_difference_code",
+					"attnum": 19,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Código de Diferencia de cambio en el ERP"
 				}
 			],
 			"constraints": [
@@ -9069,6 +9196,102 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "storage_bucket",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Bucket de Storage (privado) del archivo; NULL en documentos antiguos con file_url"
+				},
+				{
+					"column": "storage_path",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ruta del objeto: <holding_id>/<company_id>/legal/<id>/<archivo>"
+				},
+				{
+					"column": "file_name",
+					"attnum": 11,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "mime_type",
+					"attnum": 12,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "file_size",
+					"attnum": 13,
+					"data_type": "bigint",
+					"udt": "int8",
+					"type": "bigint",
+					"char_len": null,
+					"num_prec": 64,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "uploaded_by",
+					"attnum": 14,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "users.id de quien lo subió"
 				}
 			],
 			"constraints": [
@@ -9089,6 +9312,15 @@
 					"deferred": false,
 					"ondelete": " ",
 					"onupdate": " "
+				},
+				{
+					"name": "company_legal_documents_uploaded_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
 				}
 			],
 			"indexes": [
@@ -17491,6 +17723,107 @@
 					"with_check": null
 				}
 			]
+		},
+		"countries": {
+			"comment": "Países ISO 3166-1 alfa-2 (catálogo global; nombre en español e inglés). Lo lee la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "code",
+					"attnum": 1,
+					"data_type": "character",
+					"udt": "bpchar",
+					"type": "character(2)",
+					"char_len": 2,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "name_es",
+					"attnum": 2,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "name_en",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 4,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "countries_code_check",
+					"type": "c",
+					"def": "CHECK ((code ~ '^[A-Z]{2}$'::text))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "countries_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (code)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "countries_pkey",
+					"def": "CREATE UNIQUE INDEX countries_pkey ON public.countries USING btree (code)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": []
 		},
 		"currencies": {
 			"comment": null,
@@ -32618,6 +32951,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "ID del producto en Stripe para mapeo (ej: \"prod_ABC123\")"
+				},
+				{
+					"column": "status",
+					"attnum": 13,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'active'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "active | archived. Archivado = no se ofrece en altas nuevas; se conserva su historial"
 				}
 			],
 			"constraints": [
@@ -32634,6 +32983,15 @@
 					"name": "products_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "products_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -37361,6 +37719,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "is_default",
+					"attnum": 6,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)"
 				}
 			],
 			"constraints": [
@@ -53968,6 +54342,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"countries": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"currencies": [
 			{
 				"grantee": "anon",
@@ -67287,7 +67775,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 143,
+			"objetos": 144,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

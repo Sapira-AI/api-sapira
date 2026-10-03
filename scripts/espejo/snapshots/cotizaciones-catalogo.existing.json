@@ -1478,6 +1478,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "active",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -1518,7 +1529,12 @@
     "where": "(odoo_product_id IS NOT NULL)"
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "products_status_check",
+    "expression": "status = ANY (ARRAY['active'::text, 'archived'::text])"
+   }
+  ],
   "foreignKeys": {
    "products_holding_id_fkey": {
     "columns": [

@@ -4312,7 +4312,7 @@
 		{
 			"name": "public.companies",
 			"rls_enabled": true,
-			"rows": 22,
+			"rows": 24,
 			"columns": [
 				{
 					"name": "id",
@@ -4560,6 +4560,17 @@
 					],
 					"default_value": "'monthly_avg'::text",
 					"comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
+				},
+				{
+					"name": "country_code",
+					"data_type": "character",
+					"format": "bpchar",
+					"type": "character(2)",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español"
 				}
 			],
 			"primary_keys": [
@@ -4608,6 +4619,17 @@
 					"target_table": "public.companies",
 					"target_columns": [
 						"id"
+					]
+				},
+				{
+					"name": "companies_country_code_fkey",
+					"source_table": "public.companies",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
 					]
 				},
 				{
@@ -4923,6 +4945,72 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "receivable_account_code",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Código de la cuenta Cuentas por cobrar (asiento de facturación)"
+				},
+				{
+					"name": "receivable_account_name",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Nombre de la cuenta Cuentas por cobrar"
+				},
+				{
+					"name": "fx_difference_account_code",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Código de la cuenta Diferencia de cambio"
+				},
+				{
+					"name": "fx_difference_account_name",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Nombre de la cuenta Diferencia de cambio"
+				},
+				{
+					"name": "external_receivable_code",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Código de Cuentas por cobrar en el ERP"
+				},
+				{
+					"name": "external_fx_difference_code",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Código de Diferencia de cambio en el ERP"
 				}
 			],
 			"primary_keys": [
@@ -6225,6 +6313,69 @@
 					"options": [
 						"updatable"
 					]
+				},
+				{
+					"name": "storage_bucket",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Bucket de Storage (privado) del archivo; NULL en documentos antiguos con file_url"
+				},
+				{
+					"name": "storage_path",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Ruta del objeto: <holding_id>/<company_id>/legal/<id>/<archivo>"
+				},
+				{
+					"name": "file_name",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "mime_type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "file_size",
+					"data_type": "bigint",
+					"format": "int8",
+					"type": "bigint",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "uploaded_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "users.id de quien lo subió"
 				}
 			],
 			"primary_keys": [
@@ -6238,6 +6389,17 @@
 						"company_id"
 					],
 					"target_table": "public.companies",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "company_legal_documents_uploaded_by_fkey",
+					"source_table": "public.company_legal_documents",
+					"source_columns": [
+						"uploaded_by"
+					],
+					"target_table": "public.users",
 					"target_columns": [
 						"id"
 					]
@@ -11157,6 +11319,66 @@
 					"target_table": "public.contracts",
 					"target_columns": [
 						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.countries",
+			"rls_enabled": true,
+			"rows": 249,
+			"columns": [
+				{
+					"name": "code",
+					"data_type": "character",
+					"format": "bpchar",
+					"type": "character(2)",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "name_es",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "name_en",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"code"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "companies_country_code_fkey",
+					"source_table": "public.companies",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
 					]
 				}
 			]
@@ -18584,7 +18806,7 @@
 		{
 			"name": "public.permissions",
 			"rls_enabled": true,
-			"rows": 22,
+			"rows": 23,
 			"columns": [
 				{
 					"name": "id",
@@ -19235,6 +19457,17 @@
 						"updatable"
 					],
 					"comment": "ID del producto en Stripe para mapeo (ej: \"prod_ABC123\")"
+				},
+				{
+					"name": "status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'active'::text",
+					"comment": "active | archived. Archivado = no se ofrece en altas nuevas; se conserva su historial"
 				}
 			],
 			"primary_keys": [
@@ -21931,7 +22164,7 @@
 		{
 			"name": "public.roles",
 			"rls_enabled": true,
-			"rows": 50,
+			"rows": 70,
 			"columns": [
 				{
 					"name": "id",
@@ -21982,6 +22215,17 @@
 						"nullable",
 						"updatable"
 					]
+				},
+				{
+					"name": "is_default",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "false",
+					"comment": "Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)"
 				}
 			],
 			"primary_keys": [
@@ -24453,7 +24697,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 29,
+			"rows": 34,
 			"columns": [
 				{
 					"name": "id",
@@ -27295,6 +27539,17 @@
 					"source_table": "public.client_entity_clients",
 					"source_columns": [
 						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "company_legal_documents_uploaded_by_fkey",
+					"source_table": "public.company_legal_documents",
+					"source_columns": [
+						"uploaded_by"
 					],
 					"target_table": "public.users",
 					"target_columns": [

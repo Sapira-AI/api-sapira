@@ -19,6 +19,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			description: true,
 			created_at: true,
 			holding_id: true,
+			is_default: false,
 		},
 		primary: ['id'],
 		foreignKeys: {

@@ -299,6 +299,17 @@
     ]
    },
    {
+    "name": "company_legal_documents_uploaded_by_fkey",
+    "source_table": "public.company_legal_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "consumption_entries_created_by_fkey",
     "source_table": "public.consumption_entries",
     "source_columns": [
@@ -688,7 +699,7 @@
  "roles": {
   "name": "public.roles",
   "rls_enabled": true,
-  "rows": 50,
+  "rows": 70,
   "columns": [
    {
     "name": "id",
@@ -739,6 +750,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)"
    }
   ],
   "primary_keys": [
@@ -794,7 +816,7 @@
  "permissions": {
   "name": "public.permissions",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 23,
   "columns": [
    {
     "name": "id",
@@ -2089,7 +2111,7 @@
  "companies": {
   "name": "public.companies",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 24,
   "columns": [
    {
     "name": "id",
@@ -2337,6 +2359,17 @@
     ],
     "default_value": "'monthly_avg'::text",
     "comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
+   },
+   {
+    "name": "country_code",
+    "data_type": "character",
+    "format": "bpchar",
+    "type": "character(2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español"
    }
   ],
   "primary_keys": [
@@ -2385,6 +2418,17 @@
     "target_table": "public.companies",
     "target_columns": [
      "id"
+    ]
+   },
+   {
+    "name": "companies_country_code_fkey",
+    "source_table": "public.companies",
+    "source_columns": [
+     "country_code"
+    ],
+    "target_table": "public.countries",
+    "target_columns": [
+     "code"
     ]
    },
    {
