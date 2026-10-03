@@ -63,11 +63,17 @@ Módulos: `facturacion` (Facturación) · `contratos` (Contratos) · `cotizacion
   "action": { "type": "open_contract", "label": "Ver contrato", "payload": { "contract_id": "uuid" } }, // null sin acción
   "resource_type": "invoice", "resource_id": "uuid", "metadata": {}, "deduplication_key": "…",
   "created_at": "…", "updated_at": "…", "resolved_at": null,
-  "is_read": false, "read_at": null, "is_archived": false, "archived_at": null
+  "is_read": false, "read_at": null, "is_archived": false, "archived_at": null,
+  "actor": { "id": "uuid", "name": "Domi", "avatar": { "kind": "preset", "preset_id": "preset-04" } } // null si no hay actor
 }
 ```
 
 Detalle (`GET /notifications/:id`) agrega `texts: { what_happened, what_to_do, what_we_do | null }`.
+
+`actor` (03-10, lista y detalle): quien provocó la alerta, con nombre (`name`, o el correo si no tiene) y `avatar` (forma de Mi perfil §3:
+`initials` | `preset` | `upload`). Sale de `metadata.actor_user_id`; las `user_mention` creadas antes guardaron al autor en
+`metadata.author_id` y también se resuelven. Una sola consulta de usuarios por página. `null` si la alerta no tiene actor o la persona ya no
+existe.
 
 ### `Task`
 
@@ -301,9 +307,11 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
 - `GET /clients/:id/references?search=&type=&limit=` (`type` uno de los 6; `limit` ≤ 50, default 20): `{ data: [{ type, id, label, sublabel,
   href }] }`. Etiquetas: "Factura FAC-123 · USD 1.200 · Pagada", "Nota de crédito NC-12 · …", "Contrato CTR-2026-226", "Cotización
   COT-2026-0012", "Razón social Acme SpA", "Documento contrato.pdf". `href` al front nuevo (`/lab/...`).
-- `GET /notifications/mentionable-users?search=&limit=` (≤ 50): miembros activos del holding `{ data: [{ id, name, email }] }`.
+- `GET /notifications/mentionable-users?search=&limit=` (≤ 50): miembros activos del holding `{ data: [{ id, name, email, avatar }] }`
+  (`avatar` con la forma de Mi perfil §3).
 - `GET /clients/:id/activity`: cada nota trae `body` (texto con tokens, para editar o pintar enlaces), `detail` **legible** (`@Nombre`,
-  `#Etiqueta`), `mentions: [{ id, name, exists }]` y `references: [{ type, id, label, sublabel, href, exists }]` (etiqueta actual;
+  `#Etiqueta`), `author_avatar` (avatar del autor; `initials` si no tiene o la nota no tiene autor), `mentions: [{ id, name, avatar,
+  exists }]` y `references: [{ type, id, label, sublabel, href, exists }]` (etiqueta actual;
   `exists: false` y "<Tipo> ya no disponible" si se borró o ya no es del cliente).
 - **Textos de la Actividad en español de negocio** (corrección autorizada 03-10, `src/modules/clients/activity-labels.ts`, diccionario único):
   los cambios del contrato dicen campo y antes → después ("Estado: Borrador → Activo · Valor total: USD 100 → USD 120 · Fecha de término:
@@ -312,7 +320,8 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
   más se limpian ("NC cancellation" → "NC de anulación", "9999.9999999999999996" → "10.000"); NC y ND emitidas se titulan como tales.
 - Al guardar: alerta `user_mention` a los mencionados (sin el autor), título "{Autor} te mencionó en {Cliente}", mensaje = fragmento de la nota
   (tokens convertidos a texto: `@Nombre`, `#Etiqueta`; ≤ 280 caracteres), acción `open_client_activity { client_id, note_id }`
-  ("Ver comentario"), dedup `client-note-mention:<nota>`, sin compañía.
+  ("Ver comentario"), dedup `client-note-mention:<nota>`, sin compañía. `metadata: { client_id, note_id, author_id, actor_user_id }`
+  (`actor_user_id` = autor, 03-10): la bandeja lo devuelve como `actor` con nombre y avatar (§2).
 
 ### 8.8 Novedades del sistema
 

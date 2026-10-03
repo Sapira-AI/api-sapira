@@ -54,10 +54,12 @@ class PageDto {
 }
 
 export class RunsQueryDto extends PageDto {
-	@ApiPropertyOptional({ enum: RUN_STATUSES })
+	@ApiPropertyOptional({ type: [String], enum: RUN_STATUSES, description: 'a,b o repetido (p. ej. failed,partial)' })
 	@IsOptional()
-	@IsIn(RUN_STATUSES, { message: 'Estado de corrida inválido' })
-	status?: (typeof RUN_STATUSES)[number];
+	@Transform(toList)
+	@IsArray()
+	@IsIn(RUN_STATUSES, { each: true, message: 'Estado de corrida inválido' })
+	status?: Array<(typeof RUN_STATUSES)[number]>;
 
 	@ApiPropertyOptional()
 	@IsOptional()

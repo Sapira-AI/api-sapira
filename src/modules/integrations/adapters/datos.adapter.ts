@@ -32,6 +32,7 @@ import {
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
+	runTotals,
 	ScheduleInfo,
 	sortRunsDesc,
 	stagingStatusSql,
@@ -280,6 +281,7 @@ export class DatosAdapter implements IntegrationAdapter {
 			(sum, status) => sum + Number(integration[status === 'currency_mismatch' ? 'currencyMismatch' : status] ?? 0),
 			0
 		);
+		const totals = runTotals({ total: Number(integration.totalProcessed ?? 0), ok, errors });
 
 		return {
 			id: `datos-manual:${id}`,
@@ -287,11 +289,11 @@ export class DatosAdapter implements IntegrationAdapter {
 			kind: run.kind,
 			kind_label: run.kind === 'datos_sync' ? 'Sincronización manual' : 'Importación de consumos',
 			trigger: 'manual',
-			status: runStatusOf({ running: run.status === 'running', failed: run.status === 'failed', ok, errors }),
+			status: runStatusOf({ running: run.status === 'running', failed: run.status === 'failed', ok, unchanged: totals.unchanged, errors }),
 			started_at: run.startedAt,
 			finished_at: run.finishedAt,
 			duration_ms: durationMs(run.startedAt, run.finishedAt),
-			totals: { total: Number(integration.totalProcessed ?? 0), ok, errors, skipped: 0 },
+			totals,
 			error: run.error,
 			metrics: run.result ?? {},
 		};
@@ -301,6 +303,8 @@ export class DatosAdapter implements IntegrationAdapter {
 		const rows = Number(row.rows) || 0;
 		const errors = Number(row.errors) || 0;
 		const ok = Number(row.integrated) || 0;
+		// Filas cargadas que siguen pendientes o sin cantidad = sin cambios (no error).
+		const totals = runTotals({ total: rows, ok, errors });
 		const bucket = new Date(row.bucket as string | Date).toISOString();
 		const manual = [...this.manualRuns.values()].some((run) => run.startedAt.toISOString().slice(0, 13) === bucket.slice(0, 13));
 
@@ -310,11 +314,11 @@ export class DatosAdapter implements IntegrationAdapter {
 			kind: 'datos_load',
 			kind_label: 'Carga de consumos',
 			trigger: manual ? 'manual' : 'automatic',
-			status: runStatusOf({ ok, errors }),
+			status: runStatusOf({ ok, unchanged: totals.unchanged, errors }),
 			started_at: (row.started as Date) ?? null,
 			finished_at: (row.finished as Date) ?? null,
 			duration_ms: durationMs(row.started as Date, row.finished as Date),
-			totals: { total: rows, ok, errors, skipped: Math.max(0, rows - ok - errors) },
+			totals,
 			error: null,
 			metrics: {
 				periods: (row.periods as string[]) ?? [],

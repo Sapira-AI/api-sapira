@@ -45,6 +45,7 @@ import {
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
+	runTotals,
 	ScheduleInfo,
 	secretInfo,
 	sortRunsDesc,
@@ -258,14 +259,15 @@ export class ErpAdapter implements IntegrationAdapter {
 		}));
 		const scoped = job.holdingId === 'all';
 		const progress = job.progress ?? { total: 0, sent: 0, errors: 0, skipped: 0 };
+		// Omitidas (ya enviadas, nada que enviar) = sin cambios: cuentan como correctas.
 		const totals = scoped
-			? {
+			? runTotals({
 					total: records.length,
 					ok: records.filter((r) => r.status === 'ok').length,
 					errors: records.filter((r) => r.status === 'error').length,
-					skipped: records.filter((r) => r.status === 'skipped').length,
-				}
-			: { total: progress.total ?? 0, ok: progress.sent ?? 0, errors: progress.errors ?? 0, skipped: progress.skipped ?? 0 };
+					unchanged: records.filter((r) => r.status === 'skipped').length,
+				})
+			: runTotals({ total: progress.total ?? 0, ok: progress.sent ?? 0, errors: progress.errors ?? 0, unchanged: progress.skipped ?? 0 });
 		const running = job.status === 'pending' || job.status === 'running';
 
 		return {
@@ -275,7 +277,7 @@ export class ErpAdapter implements IntegrationAdapter {
 				kind: 'export_invoices',
 				kind_label: 'Envío de facturas al ERP',
 				trigger: job.executionSource === 'automatic' ? 'automatic' : 'manual',
-				status: runStatusOf({ running, failed: job.status === 'failed' && totals.ok === 0, ok: totals.ok, errors: totals.errors }),
+				status: runStatusOf({ running, failed: job.status === 'failed', ok: totals.ok, unchanged: totals.unchanged, errors: totals.errors }),
 				started_at: job.startedAt ?? null,
 				finished_at: job.completedAt ?? null,
 				duration_ms: durationMs(job.startedAt, job.completedAt),
@@ -315,7 +317,7 @@ export class ErpAdapter implements IntegrationAdapter {
 			started_at: (job.started_at as Date) ?? null,
 			finished_at: (job.completed_at as Date) ?? null,
 			duration_ms: durationMs(job.started_at as Date, job.completed_at as Date),
-			totals: { total: Number(job.records_processed ?? 0), ok, errors, skipped: 0 },
+			totals: runTotals({ ok, errors, unchanged: 0, total: Number(job.records_processed ?? 0) }),
 			error: job.status === 'failed' && job.error_details ? errorText(job.error_details) : null,
 			metrics: { progress: job.progress_percentage ?? null },
 		};

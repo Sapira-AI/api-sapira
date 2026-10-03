@@ -18,6 +18,7 @@ import { validationException } from '@/core/utils/validation-errors';
 import { SettingsStorageService } from '@/modules/settings/settings-storage.service';
 
 import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES, AVATAR_PRESET_IDS, USER_AVATARS_BUCKET } from './me.constants';
+import { userAvatar, type UserAvatar } from './user-avatar';
 
 import type { AvatarConfirmDto, AvatarUploadDto, ChangePasswordDto, UpdateMyProfileDto } from './dtos/me.dto';
 import type { User as AuthUser } from '@supabase/supabase-js';
@@ -32,7 +33,8 @@ export interface MeCaller {
 	authUser: Partial<AuthUser> | null;
 }
 
-export type MyAvatar = { kind: 'initials' } | { kind: 'preset'; preset_id: string } | { kind: 'upload'; url: string };
+/** Mismo avatar que el resto de la API (`user-avatar.ts`). */
+export type MyAvatar = UserAvatar;
 export type LoginProvider = 'password' | 'google' | 'azure';
 export type AccountEvent = 'password_changed' | 'sessions_revoked';
 
@@ -263,18 +265,7 @@ export class MeService {
 	}
 
 	private avatarOf(user: Row): MyAvatar {
-		if (user.avatar_path) return { kind: 'upload', url: this.avatarUrl(String(user.avatar_path)) };
-		if (user.avatar_preset && AVATAR_PRESET_IDS.includes(String(user.avatar_preset))) {
-			return { kind: 'preset', preset_id: String(user.avatar_preset) };
-		}
-
-		return { kind: 'initials' };
-	}
-
-	private avatarUrl(path: string): string {
-		const base = String(this.config.get<string>('SUPABASE_URL') ?? '').replace(/\/+$/, '');
-
-		return `${base}/storage/v1/object/public/${USER_AVATARS_BUCKET}/${path}`;
+		return userAvatar(user, this.config.get<string>('SUPABASE_URL'));
 	}
 
 	/** Traduce fallas de Supabase Auth: límite → 429; contraseña rechazada (al cambiarla) → 400; el resto → 502. */

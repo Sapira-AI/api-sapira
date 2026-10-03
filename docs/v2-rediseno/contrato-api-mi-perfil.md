@@ -1,7 +1,7 @@
 # Contrato API · Mi perfil
 
 > v1 · 03-10-2026 · rama `domi`, sin commit. Endpoints del usuario de la sesión para la página **Mi perfil** del front nuevo
-> (`front-sapira`). Código: `src/modules/me/` (README). Migración **sin aplicar**: `1791050000000-UserProfileAvatarAndAccountEvents` (§6).
+> (`front-sapira`). Código: `src/modules/me/` (README). Migración **aplicada en QA y producción el 03-10 (v0.0.97–0.0.99)**: `1791050000000-UserProfileAvatarAndAccountEvents` (§6).
 
 ## 0. Reglas comunes
 
@@ -87,6 +87,21 @@ objeto exista (si no → 409 `La foto no terminó de subirse: vuelve a intentarl
     el objeto (la URL vieja deja de servir), solo PNG/JPG/WEBP (sin SVG: un SVG público puede llevar scripts), 2 MB en el bucket.
 -   Se guarda la **ruta** (`avatar_path`), no la URL: si mañana el bucket pasa a privado, solo cambia cómo se arma `avatar.url`.
 
+### 3.4 El mismo `avatar` en el resto de la API (03-10)
+
+Un solo armado: `userAvatar(row)` en `src/modules/me/user-avatar.ts` (tipo `UserAvatar`; foto > preset de la lista > iniciales; URL pública
+con `SUPABASE_URL`). Quien lista personas trae `avatar_path` y `avatar_preset` en la **misma** consulta (sin N+1). Lo devuelven:
+
+| Endpoint | Campo |
+|---|---|
+| `GET /users/me/context` (y `GET /users/me`, `/users/by-*`) | `user.avatar` |
+| `GET /notifications/mentionable-users` | `data[].avatar` |
+| `GET /notifications`, `GET /notifications/:id` | `actor: { id, name, avatar } \| null` (quien mencionó en `user_mention`) |
+| `GET /clients/:id/activity` | notas: `author_avatar`; `mentions[].avatar` |
+| `GET /settings/users` (y el usuario que devuelven invitar/reenviar/acceso/rol) | `avatar` |
+
+Detalle en `contrato-api-notificaciones.md` (§2 y §8.7) y `contrato-api-configuracion.md` (§4).
+
 ## 4. Presets
 
 `preset-01` … `preset-12` (constante `AVATAR_PRESET_IDS` en `src/modules/me/me.constants.ts`, también en `avatar_presets` de §1). La API
@@ -132,7 +147,7 @@ Body `{ "current_password": "…", "new_password": "…", "sign_out_other_sessio
 enlace de un solo uso ya prueba la identidad. Recomendación de configuración (Domi/QA): activar "Secure password change" en Supabase
 Auth para que un `updateUser` directo con la anon key también pida reautenticación.
 
-## 6. Base de datos (migración `1791050000000-UserProfileAvatarAndAccountEvents`, **NO APLICADA**)
+## 6. Base de datos (migración `1791050000000-UserProfileAvatarAndAccountEvents`, **aplicada en QA y producción el 03-10**)
 
 -   `users.avatar_preset text NULL` (id de §4) y `users.avatar_path text NULL` (ruta en `user-avatars`), con
     `CHECK users_avatar_one_kind_check (avatar_preset IS NULL OR avatar_path IS NULL)`. No existía ninguna columna de avatar ni de
@@ -147,7 +162,7 @@ Auth para que un `updateUser` directo con la anon key también pida reautenticac
 ## 7. Estado y verificación (03-10)
 
 -   Código, tests y build verdes: `src/modules/me/*.spec.ts` (servicio, HTTP con el `ValidationPipe` real, cableado de Nest, migración) y
-    `src/auth/accounts/supabase-admin.service.spec.ts`. Sin commit; migración sin aplicar.
+    `src/auth/accounts/supabase-admin.service.spec.ts`. Commit v0.0.97; migración aplicada en QA y producción.
 -   Observación (QA, solo lectura 03-10): en QA no existe el bucket `company-logos` (sí `company-files` y `client-files`); el de avatares
     lo crea la migración en cada entorno.
 -   Límite de Supabase al verificar la contraseña: `signInWithPassword` sale desde la IP de la API, así que cuenta para el límite de

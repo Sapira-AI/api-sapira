@@ -43,7 +43,7 @@
   "trigger": "automatic",              // automatic | manual
   "status": "completed",               // running | completed | partial | failed | cancelled
   "started_at": "2026-10-03T12:00:04.120Z", "finished_at": "2026-10-03T12:01:10.002Z", "duration_ms": 65882,
-  "totals": { "total": 14, "ok": 12, "errors": 2, "skipped": 0 },
+  "totals": { "total": 34, "ok": 0, "unchanged": 33, "errors": 1, "skipped": 33 }, // skipped = unchanged (nombre anterior)
   "error": null,                       // mensaje de la corrida si falló completa
   "metrics": { }                       // propio de cada adaptador (p. ej. datos: periodos, filas nuevas/cambiadas)
 }
@@ -211,7 +211,17 @@ Errores: `400 { message: 'La integración no está conectada' }` / `'La integrac
 
 ### 3.2 `GET /integrations/:tipo/runs` (VIEW) · Historial (D8, A7)
 
-Query: `page`, `limit`, `status` (running\|completed\|partial\|failed\|cancelled), `kind`, `trigger`, `from`, `to`.
+Query: `page`, `limit`, `status` (lista `a,b` o repetido: running\|completed\|partial\|failed\|cancelled; p. ej. `status=failed,partial`),
+`kind`, `trigger`, `from`, `to`.
+
+**Estado y conteos (ajuste de Domi 03-10, todos los tipos)**: `totals.ok` = se creó o actualizó algo; `totals.unchanged` = procesado
+bien sin nada que hacer (omitido, ya existía, sin cambios; `skipped` = mismo valor, por compatibilidad); `totals.errors` = falló.
+Lo sin cambios cuenta como correcto. `completed` "Correcta" = sin errores (aunque todo sea sin cambios) · `partial` "Con errores" =
+al menos un error y algo bien o sin cambios (o la corrida se cortó después de procesar registros) · `failed` "Falló" = la corrida no
+pudo ejecutarse o terminó por una excepción sin procesar registros, o **todos** los procesados fallaron. Ej.: 0 bien · 1 con error ·
+33 sin cambios → `partial`. Por tipo: CRM diaria/manual `unchanged` = oportunidades revisadas − cotizaciones creadas/actualizadas −
+errores (`success: false` de la corrida = corte); ejecuciones del CRM = ítems − completados − con error; ERP envío = facturas omitidas;
+Stripe importación = `stats.*.skipped`; datos = filas sin integrar ni error.
 → `{ data: Run[], total, currentPage, pages, limit }`, más nueva primero.
 
 ### 3.3 `GET /integrations/:tipo/runs/:id` (VIEW)

@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
-import { NotificationsService, SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE } from './notifications.service';
+import { actorIdOf, NotificationsService, SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE } from './notifications.service';
 
 type Route = (sql: string, params: unknown[]) => unknown;
 
@@ -401,6 +401,74 @@ describe('NotificationsService', () => {
 			expect(result.data[0]).not.toHaveProperty('total_count');
 		});
 
+		it('user_mention: devuelve actor (quien mencionó) con nombre y avatar, en una sola consulta por página', async () => {
+			const AUTHOR = '1dedf14a-ba51-4b93-9c74-7f869e17d4dc';
+			const OLD_AUTHOR = '8629d9cd-9384-4088-b81e-1ed43c3f4737';
+			const mention = { ...row, type: 'user_mention', metadata: { actor_user_id: AUTHOR, author_id: AUTHOR } };
+			const legacy = { ...row, id: 'notification-2', type: 'user_mention', metadata: { author_id: OLD_AUTHOR } };
+			const { service, dataSource } = buildService((sql) =>
+				sql.includes('total_count')
+					? [mention, legacy, row]
+					: sql.includes('AS unread')
+						? [{ unread: '0' }]
+						: sql.includes('avatar_path')
+							? [
+									{ id: AUTHOR, name: 'Domi', avatar_path: null, avatar_preset: 'preset-04' },
+									{ id: OLD_AUTHOR, name: 'León', avatar_path: null, avatar_preset: null },
+								]
+							: undefined
+			);
+
+			const result = await service.listForAuthenticatedUser('holding-1', 'auth-1', {});
+			const actorQueries = sqlCalls(dataSource, 'avatar_path');
+
+			expect(actorQueries).toHaveLength(1);
+			expect(actorQueries[0][1]).toEqual([[AUTHOR, OLD_AUTHOR]]);
+			expect(result.data[0].actor).toEqual({ id: AUTHOR, name: 'Domi', avatar: { kind: 'preset', preset_id: 'preset-04' } });
+			expect(result.data[1].actor).toEqual({ id: OLD_AUTHOR, name: 'León', avatar: { kind: 'initials' } });
+			expect(result.data[2].actor).toBeNull();
+		});
+
+		it('sin actores en la página no consulta usuarios', async () => {
+			const { service, dataSource } = buildService((sql) =>
+				sql.includes('total_count') ? [row] : sql.includes('AS unread') ? [{ unread: '0' }] : undefined
+			);
+
+			const result = await service.listForAuthenticatedUser('holding-1', 'auth-1', {});
+
+			expect(sqlCalls(dataSource, 'avatar_path')).toHaveLength(0);
+			expect(result.data[0].actor).toBeNull();
+		});
+
+		it('actorIdOf: actor_user_id, author_id solo en menciones, y descarta lo que no es UUID', () => {
+			const id = '1DEDF14A-BA51-4B93-9C74-7F869E17D4DC';
+
+			expect(actorIdOf({ type: 'x', metadata: { actor_user_id: id } })).toBe(id.toLowerCase());
+			expect(actorIdOf({ type: 'user_mention', metadata: { author_id: id } })).toBe(id.toLowerCase());
+			expect(actorIdOf({ type: 'invoice_odoo_failure', metadata: { author_id: id } })).toBeNull();
+			expect(actorIdOf({ type: 'user_mention', metadata: { actor_user_id: 'nope' } })).toBeNull();
+			expect(actorIdOf({ type: 'user_mention', metadata: null })).toBeNull();
+		});
+
+		it('mentionable-users devuelve el avatar de cada persona', async () => {
+			const { service, dataSource } = buildService((sql) =>
+				sql.includes('u.avatar_path')
+					? [
+							{ id: 'u-1', name: 'Domi', email: 'd@x.cl', avatar_path: null, avatar_preset: 'preset-01' },
+							{ id: 'u-2', name: null, email: 'l@x.cl', avatar_path: null, avatar_preset: null },
+						]
+					: undefined
+			);
+
+			const result = await service.mentionableUsers('holding-1', 'do');
+
+			expect(sqlCalls(dataSource, 'u.avatar_path')).toHaveLength(1);
+			expect(result.data).toEqual([
+				{ id: 'u-1', name: 'Domi', email: 'd@x.cl', avatar: { kind: 'preset', preset_id: 'preset-01' } },
+				{ id: 'u-2', name: 'l@x.cl', email: 'l@x.cl', avatar: { kind: 'initials' } },
+			]);
+		});
+
 		it('archived = true muestra solo las archivadas', async () => {
 			const { service, dataSource } = buildService();
 
@@ -425,6 +493,7 @@ describe('NotificationsService', () => {
 					'Corrige el dato que indica el mensaje en el contrato o en la factura y vuelve a enviarla. Si falta relacionar un producto, hazlo en Integraciones › ERP › Mapeos.',
 				what_we_do: 'Reintentamos en la próxima corrida automática y cerramos este aviso cuando la factura se envía bien.',
 			});
+			expect(detail.actor).toBeNull();
 			recipientQueryBuilder.getOne.mockResolvedValueOnce(null);
 			await expect(service.getForAuthenticatedUser('holding-1', 'auth-1', 'otra')).rejects.toBeInstanceOf(NotFoundException);
 		});

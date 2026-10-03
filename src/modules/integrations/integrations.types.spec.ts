@@ -10,6 +10,7 @@ import {
 	parseRunId,
 	ruleConditionSql,
 	runStatusOf,
+	runTotals,
 	secretInfo,
 	stagingStatus,
 	suggestRef,
@@ -124,5 +125,40 @@ describe('Integraciones · helpers puros', () => {
 
 		expect(next.toISOString()).toBe('2026-10-04T11:30:00.000Z');
 		expect(lastMonthRange(new Date('2026-10-03T12:00:00Z'))).toEqual({ from: '2026-09-03', to: '2026-10-03' });
+	});
+});
+
+describe('estado de corridas (ajuste de Domi 03-10)', () => {
+	it('lo sin cambios cuenta como correcto: 0 bien · 1 error · 33 sin cambios = Con errores, no Falló', () => {
+		const totals = runTotals({ total: 34, ok: 0, errors: 1 });
+
+		expect(totals).toEqual({ total: 34, ok: 0, unchanged: 33, errors: 1, skipped: 33 });
+		expect(runStatusOf({ ok: 0, unchanged: 33, errors: 1 })).toBe('partial');
+	});
+
+	it('todo sin cambios y sin errores = Correcta', () => {
+		expect(runStatusOf({ ok: 0, unchanged: 12, errors: 0 })).toBe('completed');
+		expect(runStatusOf({ ok: 0, errors: 0 })).toBe('completed');
+	});
+
+	it('Falló solo si la corrida no pudo ejecutarse sin procesar nada, o si todos los procesados fallaron', () => {
+		expect(runStatusOf({ failed: true, ok: 0, unchanged: 0, errors: 0 })).toBe('failed');
+		expect(runStatusOf({ ok: 0, unchanged: 0, errors: 5 })).toBe('failed');
+		// La corrida se cortó después de procesar registros: Con errores.
+		expect(runStatusOf({ failed: true, ok: 3, unchanged: 0, errors: 0 })).toBe('partial');
+		expect(runStatusOf({ failed: true, ok: 0, unchanged: 4, errors: 1 })).toBe('partial');
+	});
+
+	it('en curso y cancelada mandan sobre los conteos', () => {
+		expect(runStatusOf({ running: true, ok: 0, errors: 3 })).toBe('running');
+		expect(runStatusOf({ cancelled: true, ok: 0, errors: 3 })).toBe('cancelled');
+	});
+
+	it('filtro de corridas con varios estados (failed,partial)', () => {
+		const run = (id: string, status: IntegrationRun['status']) => ({ id, status, started_at: '2026-10-01T00:00:00Z' }) as IntegrationRun;
+		const runs = [run('a', 'failed'), run('b', 'partial'), run('c', 'completed')];
+
+		expect(filterRuns(runs, { status: ['failed', 'partial'] }).map((item) => item.id)).toEqual(['a', 'b']);
+		expect(filterRuns(runs, { status: 'completed' }).map((item) => item.id)).toEqual(['c']);
 	});
 });

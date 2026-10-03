@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { DEFAULT_TIMEZONE, holdingTimezone } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { documentKindSql } from '@/modules/billing/billing-sql';
+import { userAvatar, type UserAvatar } from '@/modules/me/user-avatar';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import {
@@ -76,7 +77,8 @@ const SOURCES: Record<ClientActivityType, string[]> = {
 	note: [
 		`SELECT 'note' AS type, n.id::text AS id, n.created_at AS occurred_at, 'Nota' AS title, n.body AS detail,
 			u.name AS actor, n.created_by::text AS actor_id, NULL::text AS ref_kind, NULL::text AS ref_id, NULL::numeric AS amount, NULL::text AS currency, NULL::date, NULL,
-			jsonb_build_object('mentions', to_jsonb(n.mentioned_user_ids), 'references', n."references")
+			jsonb_build_object('mentions', to_jsonb(n.mentioned_user_ids), 'references', n."references",
+				'author_avatar_path', u.avatar_path, 'author_avatar_preset', u.avatar_preset)
 		FROM client_activity_notes n LEFT JOIN users u ON u.id = n.created_by
 		WHERE n.client_id = $1 AND n.holding_id = $2 AND n.deleted_at IS NULL`,
 	],
@@ -292,7 +294,7 @@ export class ClientActivityService {
 					currency: text(row.currency),
 					/** Solo el autor puede borrar su nota. */
 					can_delete: row.type === 'note' && Boolean(currentUserId) && row.actor_id === currentUserId,
-					...(note ? { body: note.body, mentions: note.mentions, references: note.references } : {}),
+					...(note ? { body: note.body, author_avatar: note.author_avatar, mentions: note.mentions, references: note.references } : {}),
 				};
 			}),
 			items: total,
@@ -439,7 +441,9 @@ export class ClientActivityService {
 			{
 				body: string;
 				text: string;
-				mentions: Array<{ id: string; name: string; exists: boolean }>;
+				/** Avatar del autor (viene en `meta` de la misma consulta del feed). */
+				author_avatar: UserAvatar;
+				mentions: Array<{ id: string; name: string; avatar: UserAvatar; exists: boolean }>;
 				references: Array<ResolvedReference & { exists: boolean }>;
 			}
 		>();
@@ -459,9 +463,10 @@ export class ClientActivityService {
 		const allMentions = [...new Set(parsed.flatMap((item) => item.mentions))];
 		const [names, members, resolved] = await Promise.all([
 			allMentions.length
-				? this.dataSource.query<Row[]>(`SELECT id, COALESCE(NULLIF(name, ''), email) AS name FROM users WHERE id = ANY($1::uuid[])`, [
-						allMentions,
-					])
+				? this.dataSource.query<Row[]>(
+						`SELECT id, COALESCE(NULLIF(name, ''), email) AS name, avatar_path, avatar_preset FROM users WHERE id = ANY($1::uuid[])`,
+						[allMentions]
+					)
 				: Promise.resolve([] as Row[]),
 			this.activeMembers(holdingId, allMentions),
 			this.resolveReferences(
@@ -471,15 +476,23 @@ export class ClientActivityService {
 			),
 		]);
 		const nameById = new Map(names.map((row) => [String(row.id).toLowerCase(), String(row.name ?? 'usuario')]));
+		const avatarById = new Map(names.map((row) => [String(row.id).toLowerCase(), userAvatar(row)]));
 		const labels = new Map([...resolved].map(([key, value]) => [key, value.label]));
 
 		for (const { row, mentions, references } of parsed) {
 			const body = String(row.detail ?? '');
+			const meta = (row.meta ?? {}) as Row;
 
 			result.set(String(row.id), {
 				body,
 				text: renderNoteText(body, nameById, labels),
-				mentions: mentions.map((id) => ({ id, name: nameById.get(id) ?? 'usuario', exists: members.has(id) })),
+				author_avatar: userAvatar({ avatar_path: meta.author_avatar_path, avatar_preset: meta.author_avatar_preset }),
+				mentions: mentions.map((id) => ({
+					id,
+					name: nameById.get(id) ?? 'usuario',
+					avatar: avatarById.get(id) ?? { kind: 'initials' },
+					exists: members.has(id),
+				})),
 				references: references.map((reference) => {
 					const key = `${reference.type}:${String(reference.id).toLowerCase()}`;
 					const found = resolved.get(key);
@@ -528,7 +541,8 @@ export class ClientActivityService {
 				action_payload: { client_id: input.clientId, note_id: input.noteId },
 				resource_type: 'client',
 				resource_id: input.clientId,
-				metadata: { client_id: input.clientId, note_id: input.noteId, author_id: input.authorId },
+				// `actor_user_id`: quien mencionó (la alerta lo devuelve como `actor` con nombre y avatar). `author_id` queda por compatibilidad.
+				metadata: { client_id: input.clientId, note_id: input.noteId, author_id: input.authorId, actor_user_id: input.authorId },
 				deduplication_key: `client-note-mention:${input.noteId}`,
 				recipients: { user_ids: input.mentions },
 			});

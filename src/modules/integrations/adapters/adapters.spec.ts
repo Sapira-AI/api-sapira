@@ -101,7 +101,7 @@ describe('ErpAdapter', () => {
 				id: 'erp-send:j-all',
 				trigger: 'automatic',
 				status: 'partial',
-				totals: { total: 2, ok: 1, errors: 1, skipped: 0 },
+				totals: { total: 2, ok: 1, unchanged: 0, errors: 1, skipped: 0 },
 			})
 		);
 		const detail = await adapter.getRun(HOLDING, 'erp-send:j-all');
@@ -190,6 +190,34 @@ describe('CrmAdapter', () => {
 		await expect(adapter.putMapping(HOLDING, 'quote_types', [{ sapira_id: 'Upselling', external_id: 'Upselling' }])).rejects.toMatchObject({
 			status: 400,
 		});
+	});
+
+	it('historial: 34 oportunidades, 0 cotizaciones nuevas, 1 error = Con errores con 33 sin cambios (no Falló)', async () => {
+		const job = {
+			jobId: 'salesforce-daily-sync:production:2026-10-03',
+			status: 'completed',
+			startedAt: new Date('2026-10-03T11:30:00Z'),
+			completedAt: new Date('2026-10-03T11:31:00Z'),
+			holdingResults: [{ holding_id: HOLDING, success: true, opportunities: 34, quotesCreated: 0, quotesUpdated: 0 }],
+		};
+		const adapter = new CrmAdapter(
+			{ query: jest.fn(async () => []) } as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{ find: jest.fn(() => chain([job])) } as never,
+			{ aggregate: jest.fn(() => ({ exec: async () => [{ _id: job.jobId, count: 1 }] })) } as never,
+			config as never
+		);
+		const [run] = (await adapter.listRuns(HOLDING, { page: 1, limit: 20 })).data;
+
+		expect(run).toEqual(expect.objectContaining({ status: 'partial', totals: { total: 34, ok: 0, unchanged: 33, errors: 1, skipped: 33 } }));
+		expect((await adapter.listRuns(HOLDING, { page: 1, limit: 20, status: ['failed', 'partial'] })).total).toBe(1);
+		expect((await adapter.listRuns(HOLDING, { page: 1, limit: 20, status: ['failed'] })).total).toBe(0);
 	});
 
 	it('la conexión no devuelve secretos ni la contraseña cifrada', async () => {

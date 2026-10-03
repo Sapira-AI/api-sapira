@@ -161,7 +161,7 @@ export interface IntegrationRun {
 	started_at: Date | string | null;
 	finished_at: Date | string | null;
 	duration_ms: number | null;
-	totals: { total: number; ok: number; errors: number; skipped: number };
+	totals: RunTotals;
 	error: string | null;
 	metrics: Record<string, unknown>;
 }
@@ -183,19 +183,57 @@ export interface IntegrationRunDetail extends IntegrationRun {
 export interface RunsQuery {
 	page: number;
 	limit: number;
-	status?: RunStatus;
+	/** Uno o varios (`failed,partial`). */
+	status?: RunStatus | RunStatus[];
 	kind?: string;
 	trigger?: RunTrigger;
 	from?: string;
 	to?: string;
 }
 
-/** Estado de una corrida a partir de sus conteos. */
-export function runStatusOf(input: { running?: boolean; failed?: boolean; cancelled?: boolean; ok: number; errors: number }): RunStatus {
+/**
+ * Conteos de una corrida (ajuste de Domi 03-10): `ok` = se creó o actualizó algo, `unchanged` = procesado bien sin nada que hacer
+ * (omitido, ya existía, sin cambios), `errors` = falló. `skipped` = `unchanged` (nombre anterior, se mantiene por compatibilidad).
+ */
+export interface RunTotals {
+	total: number;
+	ok: number;
+	unchanged: number;
+	errors: number;
+	skipped: number;
+}
+
+export const runTotals = (input: { ok: number; errors: number; unchanged?: number; total?: number }): RunTotals => {
+	const ok = Math.max(0, input.ok || 0);
+	const errors = Math.max(0, input.errors || 0);
+	const unchanged = Math.max(0, input.unchanged ?? (input.total !== undefined ? input.total - ok - errors : 0));
+
+	return { total: Math.max(input.total ?? 0, ok + errors + unchanged), ok, unchanged, errors, skipped: unchanged };
+};
+
+/**
+ * Estado de una corrida (ajuste de Domi 03-10). Lo sin cambios cuenta como correcto:
+ * - `completed` ("Correcta"): sin errores, aunque todo sea sin cambios.
+ * - `partial` ("Con errores"): al menos un error y algo bien o sin cambios; también una corrida que se cortó (`aborted`) después de
+ *   procesar registros.
+ * - `failed` ("Falló"): la corrida no pudo ejecutarse o terminó por una excepción sin registros procesados (`aborted`), o todos los
+ *   registros procesados fallaron (ninguno bien ni sin cambios).
+ */
+export function runStatusOf(input: {
+	running?: boolean;
+	/** La corrida misma falló (excepción, conexión, timeout), no un registro. */
+	failed?: boolean;
+	cancelled?: boolean;
+	ok: number;
+	unchanged?: number;
+	errors: number;
+}): RunStatus {
+	const fine = input.ok + (input.unchanged ?? 0);
+
 	if (input.running) return 'running';
 	if (input.cancelled) return 'cancelled';
-	if (input.failed) return 'failed';
-	if (input.errors > 0) return input.ok > 0 ? 'partial' : 'failed';
+	if (input.failed) return fine > 0 ? 'partial' : 'failed';
+	if (input.errors > 0) return fine > 0 ? 'partial' : 'failed';
 
 	return 'completed';
 }
@@ -221,12 +259,13 @@ export function errorsSummary(records: Array<{ status: string; message: string |
 export function filterRuns(runs: IntegrationRun[], query: Pick<RunsQuery, 'status' | 'kind' | 'trigger' | 'from' | 'to'>): IntegrationRun[] {
 	const fromTime = query.from ? new Date(`${query.from}T00:00:00.000Z`).getTime() : null;
 	const toTime = query.to ? new Date(`${query.to}T00:00:00.000Z`).getTime() + 86_400_000 : null;
+	const statuses = query.status === undefined ? [] : Array.isArray(query.status) ? query.status : [query.status];
 
 	return runs.filter((run) => {
 		const started = run.started_at ? new Date(run.started_at).getTime() : 0;
 
 		return (
-			(!query.status || run.status === query.status) &&
+			(!statuses.length || statuses.includes(run.status)) &&
 			(!query.kind || run.kind === query.kind) &&
 			(!query.trigger || run.trigger === query.trigger) &&
 			(fromTime === null || started >= fromTime) &&

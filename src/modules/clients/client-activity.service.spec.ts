@@ -61,7 +61,9 @@ describe('ClientActivityService', () => {
 		expect(listSql).toContain('FROM invoices i');
 		expect(listSql).not.toContain('FROM quotes');
 		expect(page.items).toBe(2);
-		expect(page.data[0]).toMatchObject({ type: 'note', can_delete: true, actor: 'Domi' });
+		expect(page.data[0]).toMatchObject({ type: 'note', can_delete: true, actor: 'Domi', author_avatar: { kind: 'initials' } });
+		// El avatar del autor viaja en `meta` de la misma consulta del feed (sin consulta extra por nota).
+		expect(listSql).toContain("'author_avatar_path', u.avatar_path");
 		expect(page.data[1]).toMatchObject({
 			type: 'invoice',
 			can_delete: false,
@@ -161,6 +163,7 @@ describe('ClientActivityService', () => {
 					action_payload: { client_id: 'c-1', note_id: 'note-1' },
 					recipients: { user_ids: [USER] },
 					deduplication_key: 'client-note-mention:note-1',
+					metadata: expect.objectContaining({ actor_user_id: 'u-1', author_id: 'u-1' }),
 				})
 			);
 		});
@@ -195,7 +198,7 @@ describe('ClientActivityService', () => {
 			const { service } = build(
 				route((sql) => {
 					if (sql.includes('COUNT(*) AS total')) return [{ total: '1' }];
-					if (sql.includes('FROM users WHERE id = ANY')) return [{ id: USER, name: 'Leon' }];
+					if (sql.includes('FROM users WHERE id = ANY')) return [{ id: USER, name: 'Leon', avatar_path: null, avatar_preset: 'preset-07' }];
 					if (sql.includes('LIMIT 30'))
 						return [
 							{
@@ -210,6 +213,8 @@ describe('ClientActivityService', () => {
 								all_day: false,
 								meta: {
 									mentions: [USER],
+									author_avatar_path: 'users/u-1/foto.png',
+									author_avatar_preset: null,
 									references: [
 										{ type: 'invoice', id: INVOICE },
 										{ type: 'quote', id: OTHER },
@@ -241,13 +246,15 @@ describe('ClientActivityService', () => {
 
 			expect(page.data[0]).toMatchObject({
 				detail: '@Leon ver #Factura F-12 y #elemento ya no disponible',
-				mentions: [{ id: USER, name: 'Leon', exists: true }],
+				author_avatar: { kind: 'upload', url: expect.stringMatching(/\/storage\/v1\/object\/public\/user-avatars\/users\/u-1\/foto\.png$/) },
+				mentions: [{ id: USER, name: 'Leon', avatar: { kind: 'preset', preset_id: 'preset-07' }, exists: true }],
 				references: [
 					{ type: 'invoice', id: INVOICE, label: 'Factura F-12', exists: true },
 					{ type: 'quote', id: OTHER, label: 'Cotización ya no disponible', exists: false },
 				],
 			});
 			expect(page.data[0].body).toContain('@[user:');
+			expect(page.data[1]).not.toHaveProperty('author_avatar');
 			expect(page.data[1]).toMatchObject({ title: 'Contrato modificado · CTR-2026-226', detail: 'Estado: Borrador → Activo' });
 		});
 	});

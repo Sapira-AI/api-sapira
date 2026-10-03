@@ -54,6 +54,7 @@ import {
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
+	runTotals,
 	ScheduleInfo,
 	secretInfo,
 	sortRunsDesc,
@@ -346,6 +347,8 @@ export class CrmAdapter implements IntegrationAdapter {
 		const result = (job.holdingResults ?? []).find((item) => item.holding_id === holdingId);
 		const manual = job.jobId.startsWith('salesforce-holding-sync:') || job.jobId.includes(':manual:');
 		const ok = (result?.quotesCreated ?? 0) + (result?.quotesUpdated ?? 0);
+		// Oportunidades revisadas sin cotización nueva ni cambio (ya existía, nada que hacer) = sin cambios, no fallo.
+		const totals = runTotals({ total: result?.opportunities ?? 0, ok, errors });
 
 		return {
 			id: `crm-job:${job.jobId}`,
@@ -353,11 +356,18 @@ export class CrmAdapter implements IntegrationAdapter {
 			kind: manual ? 'crm_manual' : 'crm_daily',
 			kind_label: manual ? 'Sincronización manual' : 'Sincronización diaria',
 			trigger: manual ? 'manual' : 'automatic',
-			status: runStatusOf({ running: job.status === 'running', failed: job.status === 'failed' || result?.success === false, ok, errors }),
+			// `success: false` = falló la selección o algún lote (error de la corrida): "Falló" solo si no se procesó nada.
+			status: runStatusOf({
+				running: job.status === 'running',
+				failed: job.status === 'failed' || result?.success === false,
+				ok,
+				unchanged: totals.unchanged,
+				errors,
+			}),
 			started_at: job.startedAt ?? null,
 			finished_at: job.completedAt ?? null,
 			duration_ms: durationMs(job.startedAt, job.completedAt),
-			totals: { total: result?.opportunities ?? 0, ok, errors, skipped: Math.max(0, (result?.opportunities ?? 0) - ok - errors) },
+			totals,
 			error: result?.error ?? job.error ?? null,
 			metrics: {
 				clients_created: result?.clientsCreated ?? 0,
@@ -374,6 +384,7 @@ export class CrmAdapter implements IntegrationAdapter {
 		const status = String(row.status);
 		const ok = Number(row.completed_items) || 0;
 		const errors = Number(row.failed_items) || 0;
+		const totals = runTotals({ total: Number(row.total_items) || 0, ok, errors });
 
 		return {
 			id: `crm-run:${row.id}`,
@@ -386,12 +397,13 @@ export class CrmAdapter implements IntegrationAdapter {
 				cancelled: status === 'cancelled',
 				failed: status === 'failed',
 				ok,
+				unchanged: totals.unchanged,
 				errors,
 			}),
 			started_at: (row.started_at as Date) ?? (row.created_at as Date) ?? null,
 			finished_at: (row.finished_at as Date) ?? null,
 			duration_ms: durationMs((row.started_at as Date) ?? (row.created_at as Date), row.finished_at as Date),
-			totals: { total: Number(row.total_items) || 0, ok, errors, skipped: Math.max(0, (Number(row.total_items) || 0) - ok - errors) },
+			totals,
 			error: (row.error_message as string) ?? null,
 			metrics: { date_from: row.date_from ?? null, date_to: row.date_to ?? null },
 		};

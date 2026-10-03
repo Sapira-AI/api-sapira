@@ -270,6 +270,21 @@ describe('SettingsUsersService', () => {
 		expect(db.calls[0].sql).toContain('FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true');
 	});
 
+	it('la lista trae el avatar de cada usuario (misma consulta, sin N+1)', async () => {
+		const { db, service } = build([
+			[
+				'FROM user_holdings uh JOIN users u',
+				() => [member({ avatar_preset: 'preset-02' }), member({ id: 'otro', avatar_path: null, avatar_preset: null })],
+			],
+		]);
+		const [withPreset, withInitials] = await service.list(HOLDING, admin);
+
+		expect(withPreset.avatar).toEqual({ kind: 'preset', preset_id: 'preset-02' });
+		expect(withInitials.avatar).toEqual({ kind: 'initials' });
+		expect(db.calls).toHaveLength(1);
+		expect(db.calls[0].sql).toContain('u.avatar_path, u.avatar_preset');
+	});
+
 	it('cambiar rol: usuario o rol de otro holding → 404; super admin → 409; varios holdings → 409', async () => {
 		await expect(build([]).service.changeRole(HOLDING, USER, ROLE, admin)).rejects.toThrow('Usuario no encontrado');
 		await expect(
