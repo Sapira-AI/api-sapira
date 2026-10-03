@@ -1391,6 +1391,17 @@
     "scale": null,
     "array": false
    },
+   "archived_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamp with time zone",
     "nullable": false,
@@ -1410,6 +1421,14 @@
    ]
   },
   "indices": {
+   "app_notification_recipients_user_archived_idx": {
+    "columns": [
+     "user_id",
+     "archived_at"
+    ],
+    "unique": false,
+    "where": null
+   },
    "app_notification_recipients_user_unread_idx": {
     "columns": [],
     "unique": false,

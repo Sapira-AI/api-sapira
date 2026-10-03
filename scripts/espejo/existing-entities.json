@@ -330,15 +330,15 @@
   "file": "src/databases/postgresql/entities/base-tenancy/user-access-event.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/user-access-event.entity"
  },
- "user_notification_preferences": {
-  "class": "UserNotificationPreference",
-  "file": "src/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity.ts",
-  "import": "@/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity"
- },
  "user_holdings": {
   "class": "UserHolding",
   "file": "src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/user-holding.entity"
+ },
+ "user_notification_preferences": {
+  "class": "UserNotificationPreference",
+  "file": "src/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity.ts",
+  "import": "@/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity"
  },
  "users": {
   "class": "User",

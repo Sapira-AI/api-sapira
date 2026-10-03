@@ -832,6 +832,15 @@
   ],
   "indexes": [
    {
+    "name": "app_notification_recipients_user_archived_idx",
+    "cols": [
+     "user_id",
+     "archived_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
     "name": "app_notification_recipients_user_unread_idx",
     "cols": null,
     "unique": false,

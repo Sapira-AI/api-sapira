@@ -684,6 +684,17 @@
     ]
    },
    {
+    "name": "user_notification_preferences_user_id_fkey",
+    "source_table": "public.user_notification_preferences",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "user_view_preferences_user_id_fkey",
     "source_table": "public.user_view_preferences",
     "source_columns": [
@@ -2120,6 +2131,17 @@
    {
     "name": "user_holdings_holding_id_fkey",
     "source_table": "public.user_holdings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_notification_preferences_holding_id_fkey",
+    "source_table": "public.user_notification_preferences",
     "source_columns": [
      "holding_id"
     ],

@@ -1188,7 +1188,7 @@
  "app_notification_recipients": {
   "name": "public.app_notification_recipients",
   "rls_enabled": true,
-  "rows": 104,
+  "rows": 126,
   "columns": [
    {
     "name": "id",
@@ -1247,6 +1247,17 @@
      "updatable"
     ],
     "default_value": "now()"
+   },
+   {
+    "name": "archived_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Archivada por este usuario (no cambia la alerta para los demás)"
    }
   ],
   "primary_keys": [
@@ -1280,7 +1291,7 @@
  "notification_role_subscriptions": {
   "name": "public.notification_role_subscriptions",
   "rls_enabled": true,
-  "rows": 18,
+  "rows": 246,
   "columns": [
    {
     "name": "id",

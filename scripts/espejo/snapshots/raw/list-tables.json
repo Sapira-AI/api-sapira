@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 104,
+			"rows": 126,
 			"columns": [
 				{
 					"name": "id",
@@ -1111,6 +1111,17 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "archived_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Archivada por este usuario (no cambia la alerta para los demás)"
 				}
 			],
 			"primary_keys": [
@@ -6266,6 +6277,17 @@
 				{
 					"name": "user_holdings_holding_id_fkey",
 					"source_table": "public.user_holdings",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_notification_preferences_holding_id_fkey",
+					"source_table": "public.user_notification_preferences",
 					"source_columns": [
 						"holding_id"
 					],
@@ -17665,7 +17687,7 @@
 		{
 			"name": "public.notification_role_subscriptions",
 			"rls_enabled": true,
-			"rows": 18,
+			"rows": 246,
 			"columns": [
 				{
 					"name": "id",
@@ -24859,7 +24881,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 41,
+			"rows": 43,
 			"columns": [
 				{
 					"name": "id",
@@ -27420,6 +27442,117 @@
 			]
 		},
 		{
+			"name": "public.user_notification_preferences",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "user_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "notification_type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "in_app",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "true"
+				},
+				{
+					"name": "email",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "false"
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "updated_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "user_notification_preferences_holding_id_fkey",
+					"source_table": "public.user_notification_preferences",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_notification_preferences_user_id_fkey",
+					"source_table": "public.user_notification_preferences",
+					"source_columns": [
+						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.user_view_preferences",
 			"rls_enabled": true,
 			"rows": 9,
@@ -28208,6 +28341,17 @@
 				{
 					"name": "user_access_events_user_id_fkey",
 					"source_table": "public.user_access_events",
+					"source_columns": [
+						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_notification_preferences_user_id_fkey",
+					"source_table": "public.user_notification_preferences",
 					"source_columns": [
 						"user_id"
 					],
