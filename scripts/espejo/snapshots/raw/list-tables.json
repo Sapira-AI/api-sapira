@@ -6253,6 +6253,17 @@
 					]
 				},
 				{
+					"name": "user_access_events_holding_id_fkey",
+					"source_table": "public.user_access_events",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "user_holdings_holding_id_fkey",
 					"source_table": "public.user_holdings",
 					"source_columns": [
@@ -24848,7 +24859,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 39,
+			"rows": 41,
 			"columns": [
 				{
 					"name": "id",
@@ -27210,6 +27221,119 @@
 			]
 		},
 		{
+			"name": "public.user_access_events",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "user_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "actor_user_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "action",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "details",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::jsonb"
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "user_access_events_actor_user_id_fkey",
+					"source_table": "public.user_access_events",
+					"source_columns": [
+						"actor_user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_access_events_holding_id_fkey",
+					"source_table": "public.user_access_events",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_access_events_user_id_fkey",
+					"source_table": "public.user_access_events",
+					"source_columns": [
+						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.user_holdings",
 			"rls_enabled": true,
 			"rows": 38,
@@ -28062,6 +28186,28 @@
 				{
 					"name": "salesforce_connections_user_id_fkey",
 					"source_table": "public.salesforce_connections",
+					"source_columns": [
+						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_access_events_actor_user_id_fkey",
+					"source_table": "public.user_access_events",
+					"source_columns": [
+						"actor_user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "user_access_events_user_id_fkey",
+					"source_table": "public.user_access_events",
 					"source_columns": [
 						"user_id"
 					],

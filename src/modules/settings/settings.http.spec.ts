@@ -29,6 +29,7 @@ import { SettingsHoldingService } from './settings-holding.service';
 import { SettingsRolesService } from './settings-roles.service';
 import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
 import { SettingsTaxDocumentsService } from './settings-tax-documents.service';
+import { SettingsUserAccessService } from './settings-user-access.service';
 import { SettingsUsersService } from './settings-users.service';
 
 /**
@@ -75,6 +76,7 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 		documents: autoMock(),
 		periods: autoMock(),
 		users: autoMock(),
+		access: autoMock(),
 		roles: autoMock(),
 		products: autoMock(),
 		taxDocuments: autoMock(),
@@ -129,6 +131,7 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 				{ provide: CompanyLegalDocumentsService, useValue: services.documents },
 				{ provide: AccountingPeriodsService, useValue: services.periods },
 				{ provide: SettingsUsersService, useValue: services.users },
+				{ provide: SettingsUserAccessService, useValue: services.access },
 				{ provide: SettingsRolesService, useValue: services.roles },
 				{ provide: ProductsService, useValue: services.products },
 				{ provide: SettingsTaxDocumentsService, useValue: services.taxDocuments },
@@ -319,6 +322,34 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 			await send('post', `/settings/roles/${ID}/duplicate`, {}).expect(201);
 			await send('put', `/settings/roles/${ID}/alerts`, { types: ['invoice_odoo_failure'] }).expect(200);
 			await send('delete', `/settings/roles/${ID}`).expect(204);
+		});
+
+		it('acciones de acceso de usuarios (§10): EDIT_CONFIGURACION, holding del header y actor de la sesión', async () => {
+			const actor = expect.objectContaining({ userId: 'user-editor' });
+
+			await send('post', '/settings/users/invitations', { email: ' Ana@Cliente.CL ', name: ' Ana ', role_id: ID }).expect(201);
+			expect(services.access.invite).toHaveBeenCalledWith(HOLDING, { email: 'ana@cliente.cl', name: 'Ana', role_id: ID }, actor);
+			await send('post', `/settings/users/${ID}/invitation/resend`).expect(200);
+			expect(services.access.resend).toHaveBeenCalledWith(HOLDING, ID, actor);
+			await send('patch', `/settings/users/${ID}/access`, { active: false }).expect(200);
+			expect(services.access.setAccess).toHaveBeenCalledWith(HOLDING, ID, false, actor);
+			await send('delete', `/settings/users/${ID}`).expect(204);
+			expect(services.access.removeInvitation).toHaveBeenCalledWith(HOLDING, ID, actor);
+		});
+
+		it('acciones de acceso: solo VIEW → 403; holding o invitador en el body → 400/403; validación', async () => {
+			services.access.invite.mockClear();
+			await send('post', '/settings/users/invitations', { email: 'a@b.cl', name: 'A', role_id: ID }, 'reader').expect(403);
+			await send('patch', `/settings/users/${ID}/access`, { active: true }, 'reader').expect(403);
+			await send('delete', `/settings/users/${ID}`, {}, 'reader').expect(403);
+			await send('post', `/settings/users/${ID}/invitation/resend`, {}, 'reader').expect(403);
+			await send('post', '/settings/users/invitations', { email: 'a@b.cl', name: 'A', role_id: ID, holding_id: OTHER_HOLDING }).expect(403);
+			await send('post', '/settings/users/invitations', { email: 'a@b.cl', name: 'A', role_id: ID, invited_by: ID }).expect(400);
+			await send('post', '/settings/users/invitations', { email: 'no-es-correo', name: 'A', role_id: ID }).expect(400);
+			await send('post', '/settings/users/invitations', { email: 'a@b.cl', name: '', role_id: ID }).expect(400);
+			await send('patch', `/settings/users/${ID}/access`, { active: 'no' }).expect(400);
+			await send('delete', '/settings/users/no-uuid').expect(400);
+			expect(services.access.invite).not.toHaveBeenCalled();
 		});
 	});
 

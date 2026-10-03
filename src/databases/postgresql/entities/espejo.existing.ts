@@ -28,6 +28,7 @@ export { MasterData } from '@/databases/postgresql/entities/base-tenancy/master-
 export { Permission } from '@/databases/postgresql/entities/base-tenancy/permission.entity';
 export { RolePermission } from '@/databases/postgresql/entities/base-tenancy/role-permission.entity';
 export { Role } from '@/databases/postgresql/entities/base-tenancy/role.entity';
+export { UserAccessEvent } from '@/databases/postgresql/entities/base-tenancy/user-access-event.entity';
 export { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
 export { UserViewPreference } from '@/databases/postgresql/entities/base-tenancy/user-view-preference.entity';
 export { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';

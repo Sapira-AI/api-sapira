@@ -325,6 +325,11 @@
   "file": "src/databases/postgresql/entities/contratos/tax-document-type.entity.ts",
   "import": "@/databases/postgresql/entities/contratos/tax-document-type.entity"
  },
+ "user_access_events": {
+  "class": "UserAccessEvent",
+  "file": "src/databases/postgresql/entities/base-tenancy/user-access-event.entity.ts",
+  "import": "@/databases/postgresql/entities/base-tenancy/user-access-event.entity"
+ },
  "user_holdings": {
   "class": "UserHolding",
   "file": "src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts",

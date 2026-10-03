@@ -14,7 +14,10 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 @Entity({ name: 'custom_field_definitions', comment: 'Definiciones de campos personalizados creados por usuarios a nivel de holding' })
 @Unique('unique_field_per_entity', ['holding_id', 'entity_type', 'field_name'])
 // Configuración v2 ronda 3 (migración 1790830000000-CustomFieldTypes): tipos select/boolean/date y opciones de lista.
-@Check('custom_field_definitions_field_type_check', "field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])")
+@Check(
+	'custom_field_definitions_field_type_check',
+	"field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])"
+)
 @Check(
 	'custom_field_definitions_options_check',
 	"(field_type = 'select') = (options IS NOT NULL AND jsonb_typeof(options) = 'array' AND jsonb_array_length(options) > 0)"

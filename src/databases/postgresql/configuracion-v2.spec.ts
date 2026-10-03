@@ -13,6 +13,8 @@ import { TaxDocumentTypesTaxRate1790820000000 } from './migrations/1790820000000
 import { CustomFieldTypes1790830000000 } from './migrations/1790830000000-CustomFieldTypes';
 import { ClientsCountryCode1790840000000 } from './migrations/1790840000000-ClientsCountryCode';
 import { HoldingSettingsPreferencesV41790850000000 } from './migrations/1790850000000-HoldingSettingsPreferencesV4';
+import { UserAccessEvents1790860000000 } from './migrations/1790860000000-UserAccessEvents';
+import { UserHoldingsReadOnlyForClients1790870000000 } from './migrations/1790870000000-UserHoldingsReadOnlyForClients';
 
 /**
  * Migraciones y assets de Configuración v2 (M2, M3, M4, M7, M8, M9), escritos a mano y **sin aplicar**: se verifica el SQL que emiten
@@ -243,5 +245,45 @@ describe('Configuración v2 · ronda 4 (M14)', () => {
 		for (const column of ['timezone', 'renewal_reminder_days', 'quote_numbering_mode', 'quote_number_width']) {
 			expect(down).toContain(`DROP COLUMN IF EXISTS "${column}"`);
 		}
+	});
+
+	it('M15: user_access_events con CHECK de acciones, FKs SET NULL a users, CASCADE al holding y RLS sin policies', async () => {
+		const sql = (await run(new UserAccessEvents1790860000000())).map((call) => call.sql).join('\n');
+
+		expect(sql).toContain('CREATE TABLE "user_access_events"');
+		expect(sql).toContain(
+			`CHECK ("action" = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text]))`
+		);
+		expect(sql).toContain('FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL');
+		expect(sql).toContain('FOREIGN KEY ("actor_user_id") REFERENCES "users"("id") ON DELETE SET NULL');
+		expect(sql).toContain('FOREIGN KEY ("holding_id") REFERENCES "company_holdings"("id") ON DELETE CASCADE');
+		expect(sql).toContain('ALTER TABLE "user_access_events" ENABLE ROW LEVEL SECURITY');
+		expect(sql).not.toContain('CREATE POLICY');
+		expect((await run(new UserAccessEvents1790860000000(), 'down')).map((call) => call.sql)).toEqual([
+			'DROP TABLE IF EXISTS "user_access_events"',
+		]);
+	});
+
+	it('M16: user_holdings_policy_direct pasa a solo SELECT y se revocan las escrituras de anon/authenticated; down restaura', async () => {
+		const up = (await run(new UserHoldingsReadOnlyForClients1790870000000())).map((call) => call.sql);
+
+		expect(up).toEqual([
+			'DROP POLICY IF EXISTS "user_holdings_policy_direct" ON "public"."user_holdings"',
+			'CREATE POLICY "user_holdings_policy_direct" ON "public"."user_holdings" AS PERMISSIVE FOR SELECT TO public USING ((user_id = get_current_user_id()))',
+			'REVOKE INSERT, UPDATE, DELETE ON TABLE "public"."user_holdings" FROM anon, authenticated',
+		]);
+		const down = (await run(new UserHoldingsReadOnlyForClients1790870000000(), 'down')).map((call) => call.sql).join('\n');
+
+		expect(down).toContain('FOR ALL TO public USING ((user_id = get_current_user_id()))');
+		expect(down).toContain('GRANT INSERT, UPDATE, DELETE');
+		// El asset describe el mismo estado (re-aplicarlo converge) y el grant 040 cierra lo que reabriría grants/000.
+		expect(read('rls/user_holdings_policy_direct.sql')).toMatch(/FOR SELECT\s+TO public\s+USING \(\(user_id = get_current_user_id\(\)\)\);/);
+		expect(read('grants/040-user-holdings-read-only.sql')).toContain(
+			'REVOKE INSERT, UPDATE, DELETE ON TABLE public.user_holdings FROM anon, authenticated;'
+		);
+	});
+
+	it('sync_user_on_login queda intacta (decisión de Domi 03-10: se elimina al switch)', () => {
+		expect(read('functions/sync_user_on_login.sql')).toContain(`status = 'Activo',  -- Cambiar de 'Pendiente' a 'Activo'`);
 	});
 });

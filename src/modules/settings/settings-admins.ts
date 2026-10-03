@@ -9,13 +9,15 @@ export interface AdminOverride {
 	user?: { userId: string; roleId: string };
 	/** El rol pasaría a tener estos códigos. */
 	role?: { roleId: string; codes: string[] };
+	/** El usuario dejaría de ser miembro activo del holding (desactivar acceso). */
+	leavingUserId?: string;
 }
 
 const ADMIN_CODES = [PERMISSION_CODES.editSettings, ALL_PERMISSIONS];
 
 /**
  * Cuántos miembros activos del holding (sin contar super admins) pueden editar la configuración, opcionalmente simulando un cambio de
- * rol de un usuario o de permisos de un rol. Lo usan Usuarios y Roles para no dejar al holding sin administradores.
+ * rol de un usuario, de permisos de un rol o la salida de un miembro (desactivar acceso). Lo usan Usuarios y Roles para no dejar al holding sin administradores.
  */
 export async function countConfigAdmins(db: Queryable, holdingId: string, override: AdminOverride = {}): Promise<number> {
 	const members = (await db.query(
@@ -34,6 +36,7 @@ export async function countConfigAdmins(db: Queryable, holdingId: string, overri
 	if (override.role) codesByRole.set(override.role.roleId, new Set(override.role.codes));
 
 	return members.filter((member) => {
+		if (override.leavingUserId && override.leavingUserId === String(member.id)) return false;
 		const roleId = override.user && override.user.userId === String(member.id) ? override.user.roleId : (member.role_id as string | null);
 		const codes = roleId ? codesByRole.get(String(roleId)) : undefined;
 

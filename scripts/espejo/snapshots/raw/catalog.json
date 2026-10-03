@@ -47100,6 +47100,194 @@
 				}
 			]
 		},
+		"user_access_events": {
+			"comment": "Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación). Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "user_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "actor_user_id",
+					"attnum": 4,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "action",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "details",
+					"attnum": 6,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 7,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "user_access_events_action_check",
+					"type": "c",
+					"def": "CHECK ((action = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "user_access_events_actor_user_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "user_access_events_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "user_access_events_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "user_access_events_user_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "user_access_events_holding_idx",
+					"def": "CREATE INDEX user_access_events_holding_idx ON public.user_access_events USING btree (holding_id, created_at)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "user_access_events_pkey",
+					"def": "CREATE UNIQUE INDEX user_access_events_pkey ON public.user_access_events USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "user_access_events_user_idx",
+					"def": "CREATE INDEX user_access_events_user_idx ON public.user_access_events USING btree (user_id, action, created_at)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": []
+		},
 		"user_holdings": {
 			"comment": null,
 			"rls": true,
@@ -47265,7 +47453,7 @@
 					"roles": [
 						"public"
 					],
-					"cmd": "ALL",
+					"cmd": "SELECT",
 					"qual": "(user_id = get_current_user_id())",
 					"with_check": null
 				}
@@ -64424,17 +64612,123 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"user_access_events": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"user_holdings": [
 			{
 				"grantee": "anon",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "INSERT"
-			},
-			{
-				"grantee": "anon",
 				"privilege": "REFERENCES"
 			},
 			{
@@ -64448,18 +64742,6 @@
 			{
 				"grantee": "anon",
 				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "anon",
-				"privilege": "UPDATE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "DELETE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "INSERT"
 			},
 			{
 				"grantee": "authenticated",
@@ -64476,10 +64758,6 @@
 			{
 				"grantee": "authenticated",
 				"privilege": "TRUNCATE"
-			},
-			{
-				"grantee": "authenticated",
-				"privilege": "UPDATE"
 			},
 			{
 				"grantee": "postgres",
@@ -68060,6 +68338,14 @@
 				"agent_logs",
 				"agents",
 				"ai_agent_configs"
+			]
+		},
+		{
+			"tipo": "tabla",
+			"firma": "anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
+			"objetos": 1,
+			"ejemplos": [
+				"user_holdings"
 			]
 		}
 	],

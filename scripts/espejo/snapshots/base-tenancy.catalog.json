@@ -513,7 +513,7 @@
   "triggers": [],
   "policies": [
    "user_holdings_access (SELECT, public)",
-   "user_holdings_policy_direct (ALL, public)"
+   "user_holdings_policy_direct (SELECT, public)"
   ],
   "policies_detail": [
    {
@@ -532,7 +532,7 @@
     "roles": [
      "public"
     ],
-    "cmd": "ALL",
+    "cmd": "SELECT",
     "qual": "(user_id = get_current_user_id())",
     "with_check": null
    }

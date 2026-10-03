@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuthAccountsModule } from '@/auth/accounts/auth-accounts.module';
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
 import { EmailsModule } from '@/modules/emails/emails.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
@@ -22,6 +23,7 @@ import { SettingsRolesService } from './settings-roles.service';
 import { SettingsStorageService } from './settings-storage.service';
 import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
 import { SettingsTaxDocumentsService } from './settings-tax-documents.service';
+import { SettingsUserAccessService } from './settings-user-access.service';
 import { SettingsUsersService } from './settings-users.service';
 
 /**
@@ -31,7 +33,7 @@ import { SettingsUsersService } from './settings-users.service';
  * `GuardsModule` (global); `NotificationsModule` aporta las suscripciones de alertas por rol.
  */
 @Module({
-	imports: [PostgreSQLDatabaseModule, NotificationsModule, EmailsModule],
+	imports: [PostgreSQLDatabaseModule, NotificationsModule, EmailsModule, AuthAccountsModule],
 	controllers: [
 		SettingsHoldingController,
 		SettingsCatalogsController,
@@ -51,6 +53,7 @@ import { SettingsUsersService } from './settings-users.service';
 		CompanyLegalDocumentsService,
 		AccountingPeriodsService,
 		SettingsUsersService,
+		SettingsUserAccessService,
 		SettingsRolesService,
 		SettingsTaxDocumentsService,
 		SettingsCommunicationsService,
