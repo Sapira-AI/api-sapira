@@ -5,10 +5,12 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { roleCapabilities } from '@/modules/settings/permissions-catalog';
+
 import { actorTracker, forwardedIpTracker, jwtSubject, RECOVERY_THROTTLE } from './actor-throttle';
-import { authConfirmUrl, AuthMailer, DEFAULT_AUTH_FROM, isAllowedRecipient } from './auth-mailer';
+import { authConfirmUrl, authLoginUrl, AuthMailer, DEFAULT_AUTH_FROM, isAllowedRecipient } from './auth-mailer';
 import { renderInvitationEmail } from './email-templates/invitation';
-import { DEFAULT_LOGO_URL } from './email-templates/layout';
+import { BRAND_FONT_URL, DEFAULT_ASSET_BASE_URL, DEFAULT_LOGO_URL } from './email-templates/layout';
 import { renderRecoveryEmail } from './email-templates/recovery';
 import { PasswordRecoveryService, RECOVERY_MESSAGE } from './password-recovery.service';
 import { SupabaseAdminService } from './supabase-admin.service';
@@ -23,6 +25,20 @@ const invitation = {
 	inviteeName: 'Ana',
 	link: 'https://x.cl/auth/confirm?token_hash=a&type=invite',
 };
+/** Rol de ejemplo con permisos reales del catálogo (incluye uno heredado, que se omite). */
+const FINANZAS = [
+	'VIEW_DASHBOARD',
+	'VIEW_CLIENTES',
+	'VIEW_CONTRATOS',
+	'EDIT_CONTRATOS',
+	'VIEW_FACTURACION',
+	'EDIT_FACTURACION',
+	'VIEW_REVENUE',
+	'EDIT_REVENUE',
+	'VIEW_CONFIGURACION',
+	'CLOSE_PERIODS',
+	'MANAGE_INVOICES',
+];
 
 describe('Plantillas de correo', () => {
 	it('invitación: asunto, botón, vencimiento, layout de la marca y todo valor escapado', () => {
@@ -59,22 +75,182 @@ describe('Plantillas de correo', () => {
 		expect(email.html).toContain('Ana &lt;b&gt;');
 	});
 
-	it('genera los HTML de ejemplo para revisar en el navegador (SAPIRA_EMAIL_PREVIEW_DIR)', () => {
+	it('variantes A (default, hero oscuro con VML para Outlook) y B (banda clara); assets desde la base configurable', () => {
+		const a = renderInvitationEmail(invitation);
+		const b = renderInvitationEmail(invitation, { variant: 'b' });
+		const local = renderRecoveryEmail({ name: null, link: 'https://x' }, { variant: 'b', assetBaseUrl: 'file:///tmp/email/' });
+
+		expect(renderInvitationEmail(invitation, { variant: 'a' }).html).toBe(a.html);
+		expect(a.html).toContain(`${DEFAULT_ASSET_BASE_URL}/hero-oscuro.jpg`);
+		expect(a.html).toContain('bgcolor="#140047"'); // respaldo sólido del hero (Outlook / sin imágenes) = tono base
+		expect(a.html).toContain('bgcolor="#FFA7FF"'); // botón lila de las piezas con texto #140047 (AA)
+		expect(a.html).toContain('<v:fill type="frame"');
+		expect(b.html).toContain(`src="${DEFAULT_ASSET_BASE_URL}/hero-claro.png"`);
+		expect(b.html).not.toContain('hero-oscuro');
+		expect(local.html).toContain('src="file:///tmp/email/hero-claro.png"');
+		expect(local.html).not.toContain(DEFAULT_ASSET_BASE_URL);
+	});
+
+	it('invitación con rol: "Tu rol: …", bajada, capacidades reales con el mismo check, cierre y sin la tarjeta "Quién te invitó"', () => {
+		const { html } = renderInvitationEmail({ ...invitation, roleName: 'Finanzas', capabilities: roleCapabilities(FINANZAS) });
+
+		expect(html).not.toContain('Quién te invitó');
+		expect(html).not.toContain('Qué puedes hacer en Sapira');
+		expect(html).toContain('Domi &lt;script&gt; te invitó a trabajar en Hanka &amp; &quot;Co&quot; en Sapira.');
+		expect(html).toContain('Tu rol: Finanzas');
+		expect(html).toContain('Ver y editar Contratos');
+		expect(html).toContain('Ver Clientes');
+		expect(html).toContain('Cerrar y reabrir períodos contables');
+		expect(html).toContain('Esto es lo que puedes hacer con tu rol:');
+		expect(html.match(new RegExp(`src="${DEFAULT_ASSET_BASE_URL}/check.png"`, 'g'))).toHaveLength(7); // mismo check en cada capacidad
+		expect(html).not.toContain('icono-');
+		expect(html).toContain('¿Necesitas ver o hacer algo más? Pide a tu administrador en Sapira que actualice tu rol.');
+		expect(html).toContain('¿El botón no funciona? Copia este enlace en tu navegador:');
+		expect(html).toContain('Si no esperabas este correo, ignóralo.');
+		expect(html.match(/<img [^>]*>/g)?.every((img) => / alt="[^"]*"/.test(img))).toBe(true);
+	});
+
+	it('rol con todos los permisos (o ALL_PERMISSIONS): una sola línea de acceso completo; sin rol, sin bloque', () => {
+		const admin = renderInvitationEmail({ ...invitation, roleName: 'Administrador', capabilities: roleCapabilities(['ALL_PERMISSIONS']) });
+
+		expect(admin.html).toContain('Tu rol: Administrador');
+		expect(admin.html.match(/Acceso completo a todos los módulos/g)).toHaveLength(1);
+		expect(admin.html).not.toContain('Ver y editar');
+		expect(admin.text).toContain(
+			'Tu rol: Administrador\nEsto es lo que puedes hacer con tu rol:\n- Acceso completo a todos los módulos\n¿Necesitas ver o hacer algo más?'
+		);
+		expect(renderInvitationEmail(invitation).html).not.toContain('Tu rol:');
+		expect(renderInvitationEmail({ ...invitation, roleName: 'Vacío', capabilities: [] }).html).not.toContain('Tu rol:');
+	});
+
+	it('acceso alternativo: línea con Google/Microsoft y "Ir al inicio de sesión" (escapado, también en texto plano); sin URL, sin línea', () => {
+		const loginUrl = authLoginUrl('https://aisapira.com/', 'ana+qa"x"@cliente.cl') as string;
+		const invite = renderInvitationEmail({ ...invitation, loginUrl });
+		const recovery = renderRecoveryEmail({ name: 'Ana', link: 'https://x', loginUrl: 'https://x.cl/login?email=a&b="c"' });
+
+		expect(loginUrl).toBe('https://aisapira.com/login?email=ana%2Bqa%22x%22%40cliente.cl');
+		expect(authLoginUrl(undefined, 'a@x.cl')).toBeNull();
+		expect(invite.html).toContain('También puedes entrar con tu cuenta de Google o Microsoft si es la de este correo.');
+		expect(invite.html).toContain(`<a href="${loginUrl}" target="_blank"`);
+		expect(invite.html).toContain('Ir al inicio de sesión</a>');
+		expect(invite.text).toContain(`Ir al inicio de sesión: ${loginUrl}`);
+		expect(recovery.html).toContain('Si usas Google o Microsoft, entra directamente desde el inicio de sesión.');
+		expect(recovery.html).toContain('href="https://x.cl/login?email=a&amp;b=&quot;c&quot;"');
+		expect(recovery.text).toContain('Ir al inicio de sesión: https://x.cl/login?email=a&b="c"');
+		expect(renderInvitationEmail(invitation).html).not.toContain('Ir al inicio de sesión');
+		expect(renderRecoveryEmail({ name: null, link: 'https://x' }).text).not.toContain('Ir al inicio de sesión');
+	});
+
+	it('compatible con clientes de correo: sin SVG ni CSS externo propio (solo la fuente de marca), preheader oculto, 600 px', () => {
+		for (const variant of ['a', 'b'] as const) {
+			for (const { html } of [
+				renderInvitationEmail(invitation, { variant }),
+				renderRecoveryEmail({ name: 'Ana', link: 'https://x' }, { variant }),
+			]) {
+				expect(html).not.toMatch(/<svg/i);
+				// único <style>: respaldo Arial dentro del condicional de Outlook; único <link>: Plus Jakarta Sans de Google Fonts
+				expect(html.replace(/<!--\[if mso\]><style>[^<]*<\/style><!\[endif\]-->/, '')).not.toMatch(/<style/i);
+				expect(html.match(/<link [^>]*>/gi)).toEqual([`<link href="${BRAND_FONT_URL}" rel="stylesheet">`]);
+				expect(BRAND_FONT_URL.startsWith('https://fonts.googleapis.com/')).toBe(true);
+				expect(html).not.toMatch(/<script/i);
+				expect(html).not.toMatch(/@import|@font-face/);
+				expect(html).toContain('display:none;max-height:0');
+				expect(html).toContain('width="600"');
+				expect(html).toContain("font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif");
+			}
+		}
+	});
+
+	it('escapa todo valor variable en cada bloque (hero, saludo, rol, capacidades, enlace); el texto plano lo lleva tal cual', () => {
+		const evil = {
+			inviterName: '<img src=x onerror=alert(1)>',
+			holdingName: "O'Brien <b>",
+			inviteeName: '"><script>x</script>',
+			link: 'https://x.cl/?a=1&b="2"',
+			roleName: '<i>Jefa</i> & "Co"',
+			capabilities: [{ text: 'Ver <u>todo</u>' }],
+		};
+
+		for (const variant of ['a', 'b'] as const) {
+			const { html, text } = renderInvitationEmail(evil, { variant });
+
+			expect(html).not.toContain('<img src=x');
+			expect(html).not.toContain('<script>');
+			expect(html).not.toContain('<b>');
+			expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+			expect(html).toContain('O&#39;Brien &lt;b&gt;');
+			expect(html).not.toContain('<i>');
+			expect(html).not.toContain('<u>');
+			expect(html).toContain('Tu rol: &lt;i&gt;Jefa&lt;/i&gt; &amp; &quot;Co&quot;');
+			expect(html).toContain('Ver &lt;u&gt;todo&lt;/u&gt;');
+			expect(html).toContain('href="https://x.cl/?a=1&amp;b=&quot;2&quot;"');
+			expect(text).toContain("<img src=x onerror=alert(1)> te invitó a trabajar en O'Brien <b> en Sapira.");
+			expect(text).toContain('Tu rol: <i>Jefa</i> & "Co"\nEsto es lo que puedes hacer con tu rol:\n- Ver <u>todo</u>');
+			expect(text).toContain('Aceptar invitación: https://x.cl/?a=1&b="2"');
+		}
+	});
+
+	it('texto plano alternativo: titular, botón con URL, bloques y pie, sin etiquetas HTML', () => {
+		const invite = renderInvitationEmail({
+			...invitation,
+			inviterName: 'Domi',
+			holdingName: 'Hanka',
+			roleName: 'Finanzas',
+			capabilities: roleCapabilities(['VIEW_CONTRATOS', 'EDIT_FACTURACION']),
+		}).text;
+		const recovery = renderRecoveryEmail({ name: 'Ana', link: 'https://x.cl/r' }).text;
+
+		expect(invite).toContain('Únete a Hanka en Sapira');
+		expect(invite).toContain('Domi te invitó a trabajar en Hanka en Sapira.');
+		expect(invite).toContain(
+			'Tu rol: Finanzas\nEsto es lo que puedes hacer con tu rol:\n- Ver Contratos\n- Ver y editar Facturación\n¿Necesitas ver o hacer algo más?'
+		);
+		expect(invite).toContain('El enlace vence en 24 horas.');
+		expect(invite).not.toMatch(/<[a-z]/i);
+		expect(recovery).toContain('Crear nueva contraseña: https://x.cl/r');
+		expect(recovery).toContain('Hola, Ana:');
+		expect(recovery).toContain('Si no esperabas este correo, ignóralo.');
+		expect(recovery).not.toMatch(/<[a-z]/i);
+	});
+
+	it('genera los HTML de ejemplo (SAPIRA_EMAIL_PREVIEW_DIR; assets con SAPIRA_EMAIL_ASSET_BASE; si es file://, también -panel.html en base64)', () => {
 		const dir = process.env.SAPIRA_EMAIL_PREVIEW_DIR;
 
 		if (!dir) return;
 		fs.mkdirSync(dir, { recursive: true });
+		const assetBaseUrl = process.env.SAPIRA_EMAIL_ASSET_BASE || undefined;
 		const link = 'https://aisapira.com/auth/confirm?token_hash=ejemplo&type=invite&next=%2Fdashboard';
+		const loginUrl = authLoginUrl('https://aisapira.com', 'ana.perez@hanka.cl') as string;
+		const base = { inviterName: 'Domi Zamora', holdingName: 'Hanka', inviteeName: 'Ana Pérez', link, loginUrl };
+		/** Versión con las imágenes incrustadas (data URI) para verla en el panel lateral, que no carga archivos locales. */
+		const inline = (html: string) =>
+			html.replace(/file:\/\/[^"')\s]+\.(png|jpg)/g, (url, ext: string) => {
+				const data = fs.readFileSync(decodeURIComponent(url.replace('file://', ''))).toString('base64');
 
-		fs.writeFileSync(
-			path.join(dir, 'invitacion.html'),
-			renderInvitationEmail({ inviterName: 'Domi Zamora', holdingName: 'Hanka', inviteeName: 'Ana Pérez', link }).html
-		);
-		fs.writeFileSync(
-			path.join(dir, 'recuperar-contrasena.html'),
-			renderRecoveryEmail({ name: 'Ana Pérez', link: link.replace('type=invite', 'type=recovery') }).html
-		);
-		expect(fs.existsSync(path.join(dir, 'invitacion.html'))).toBe(true);
+				return `data:image/${ext === 'jpg' ? 'jpeg' : 'png'};base64,${data}`;
+			});
+		const write = (name: string, html: string) => {
+			fs.writeFileSync(path.join(dir, `${name}.html`), html);
+			if (assetBaseUrl?.startsWith('file://')) fs.writeFileSync(path.join(dir, `${name}-panel.html`), inline(html));
+		};
+
+		for (const variant of ['a', 'b'] as const) {
+			const options = { variant, assetBaseUrl };
+
+			write(
+				`invitacion-${variant}`,
+				renderInvitationEmail({ ...base, roleName: 'Finanzas', capabilities: roleCapabilities(FINANZAS) }, options).html
+			);
+			write(
+				`invitacion-admin-${variant}`,
+				renderInvitationEmail({ ...base, roleName: 'Administrador', capabilities: roleCapabilities(['ALL_PERMISSIONS']) }, options).html
+			);
+			write(
+				`recuperar-${variant}`,
+				renderRecoveryEmail({ name: 'Ana Pérez', link: link.replace('type=invite', 'type=recovery'), loginUrl }, options).html
+			);
+		}
+		expect(fs.existsSync(path.join(dir, 'invitacion-a.html'))).toBe(true);
 	});
 });
 
@@ -100,6 +276,15 @@ describe('AuthMailer', () => {
 
 		expect(body).toMatchObject({ from: DEFAULT_AUTH_FROM, to: ['ana@x.cl'] });
 		expect(body.text).toBeTruthy();
+		expect(body.html).not.toContain('Ir al inicio de sesión'); // sin INVITE_LANDING_URL
+		await new AuthMailer(config({ RESEND_API_KEY: 'k', INVITE_LANDING_URL: 'https://aisapira.com' })).sendRecovery(
+			'ana@x.cl',
+			{ name: null, link: 'https://x' },
+			'k2'
+		);
+		expect(JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)).text).toContain(
+			'Ir al inicio de sesión: https://aisapira.com/login?email=ana%40x.cl'
+		);
 	});
 
 	it('INVITE_FROM y EMAIL_LOGO_URL mandan sobre los defaults', async () => {

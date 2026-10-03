@@ -15,6 +15,7 @@ import { authConfirmUrl, AuthMailer, MailResult } from '@/auth/accounts/auth-mai
 import { AuthAdminError, GeneratedLink, InviteLinkType, SupabaseAdminService } from '@/auth/accounts/supabase-admin.service';
 import type { PermissionContext } from '@/guards/permissions.service';
 
+import { roleCapabilities } from './permissions-catalog';
 import { assertKeepsConfigAdmin } from './settings-admins';
 import { Queryable, Row, toCount, withUniqueMessage } from './settings-common';
 import { USER_SELECT, userDto } from './settings-users.service';
@@ -356,7 +357,7 @@ export class SettingsUserAccessService {
 		return url;
 	}
 
-	/** Datos del correo desde la base (nunca del body): nombre del holding y de quien invita. */
+	/** Datos del correo desde la base (nunca del body): holding, quien invita, rol del invitado y lo que ese rol permite. */
 	private async sendMail(
 		holdingId: string,
 		userId: string,
@@ -369,6 +370,15 @@ export class SettingsUserAccessService {
 		const [holding] = (await this.dataSource.query(`SELECT name FROM company_holdings WHERE id = $1`, [holdingId])) as Row[];
 		const [inviter] = (await this.dataSource.query(`SELECT name, email FROM users WHERE id = $1`, [actor.userId])) as Row[];
 		const inviterName = String((inviter?.name as string | null)?.trim() || inviter?.email || actor.name || actor.email);
+		// Rol del invitado y sus permisos reales (rol del mismo holding). Sin rol visible, el correo omite el bloque.
+		const [role] = (await this.dataSource.query(
+			`SELECT r.name AS role_name, COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL), '{}') AS codes
+			FROM users u JOIN roles r ON r.id = u.role_id AND r.holding_id = $2
+			LEFT JOIN role_permissions rp ON rp.role_id = r.id LEFT JOIN permissions p ON p.id = rp.permission_id
+			WHERE u.id = $1 GROUP BY r.id, r.name`,
+			[userId, holdingId]
+		)) as Row[];
+		const roleName = (role?.role_name as string | null)?.trim() || null;
 
 		return this.mailer.sendInvitation(
 			email,
@@ -376,6 +386,8 @@ export class SettingsUserAccessService {
 				inviterName,
 				holdingName: String(holding?.name ?? 'Sapira'),
 				inviteeName,
+				roleName,
+				capabilities: roleName ? roleCapabilities((role?.codes as string[] | null) ?? []) : [],
 				link: this.confirmUrl(link.type, link.hashedToken),
 			},
 			`invite-${userId}-${sendNumber}`

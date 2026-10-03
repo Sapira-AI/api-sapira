@@ -43,3 +43,37 @@ export function visibleCodes(catalog: ReadonlySet<string>): string[] {
 
 	return codes.filter((code) => catalog.has(code));
 }
+
+/** Línea de capacidad del correo de invitación. */
+export interface RoleCapability {
+	text: string;
+}
+
+export const FULL_ACCESS_CAPABILITY = 'Acceso completo a todos los módulos';
+
+/**
+ * Qué puede hacer un rol, en lenguaje de usuario, a partir de sus códigos reales (`role_permissions`): por módulo de la matriz
+ * VIEW → "Ver {módulo}", EDIT → "Ver y editar {módulo}"; `CLOSE_PERIODS` con su etiqueta. Omite internos, comodines y heredados.
+ * `ALL_PERMISSIONS` o todos los códigos de la matriz y especiales → una sola línea de acceso completo.
+ */
+export function roleCapabilities(codes: Iterable<string>): RoleCapability[] {
+	const owned = new Set(codes);
+	const all = [
+		...PERMISSION_MODULES.flatMap((module) => [module.view, module.edit]).filter((code): code is string => !!code),
+		...SPECIAL_PERMISSIONS.map((permission) => permission.code),
+	];
+
+	if (owned.has('ALL_PERMISSIONS') || all.every((code) => owned.has(code))) return [{ text: FULL_ACCESS_CAPABILITY }];
+	const capabilities: RoleCapability[] = [];
+
+	for (const module of PERMISSION_MODULES) {
+		const canEdit = !!module.edit && owned.has(module.edit);
+		const canView = !!module.view && owned.has(module.view);
+
+		if (!canEdit && !canView) continue;
+		capabilities.push({ text: `${canEdit ? 'Ver y editar' : 'Ver'} ${module.label}` });
+	}
+	for (const special of SPECIAL_PERMISSIONS) if (owned.has(special.code)) capabilities.push({ text: special.label });
+
+	return capabilities;
+}

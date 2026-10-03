@@ -7,6 +7,7 @@ import { AuthAdminError, SupabaseAdminService } from '@/auth/accounts/supabase-a
 import type { PermissionContext } from '@/guards/permissions.service';
 
 import { fakeDb, Handler } from './fake-db.testing-spec';
+import { FULL_ACCESS_CAPABILITY, PERMISSION_MODULES, roleCapabilities } from './permissions-catalog';
 import { hasReferences, OWNED_USER_TABLES, SettingsUserAccessService } from './settings-user-access.service';
 
 /**
@@ -72,6 +73,10 @@ function build(handlers: Handler[], config = env()) {
 const roleOk: Handler = ['SELECT id FROM roles WHERE id = $1 AND holding_id = $2', () => [{ id: ROLE }]];
 const holdingName: Handler = ['SELECT name FROM company_holdings', () => [{ name: 'Hanka <Demo>' }]];
 const inviterRow: Handler = ['SELECT name, email FROM users WHERE id = $1', () => [{ name: 'Domi', email: 'domi@x.cl' }]];
+const inviteeRole: Handler = [
+	'FROM users u JOIN roles r ON r.id = u.role_id AND r.holding_id = $2',
+	() => [{ role_name: 'Finanzas', codes: ['VIEW_CONTRATOS', 'EDIT_FACTURACION', 'VIEW_LAB', 'MANAGE_INVOICES'] }],
+];
 const memberRow = (row: Record<string, unknown> | null): Handler => ['WHERE uh.holding_id = $1 AND u.id = $2', () => (row ? [row] : [])];
 const admins = (count: number): Handler[] => [
 	[
@@ -89,6 +94,7 @@ describe('SettingsUserAccessService · invitar', () => {
 		['INSERT INTO users', () => [{ id: NEW_ID }]],
 		holdingName,
 		inviterRow,
+		inviteeRole,
 		memberRow(member({ id: NEW_ID, email: 'ana@cliente.cl', last_invitation_sent_at: '2026-10-03T12:00:00Z', last_invitation_status: 'sent' })),
 	];
 
@@ -110,7 +116,14 @@ describe('SettingsUserAccessService · invitar', () => {
 		const [to, values, key] = mailer.sendInvitation.mock.calls[0] as unknown as [string, Record<string, string>, string];
 
 		expect(to).toBe('ana@cliente.cl');
-		expect(values).toMatchObject({ inviterName: 'Domi', holdingName: 'Hanka <Demo>', inviteeName: 'Ana' });
+		expect(values).toMatchObject({
+			inviterName: 'Domi',
+			holdingName: 'Hanka <Demo>',
+			inviteeName: 'Ana',
+			roleName: 'Finanzas',
+			capabilities: [{ text: 'Ver Contratos' }, { text: 'Ver y editar Facturación' }],
+		});
+		expect(db.statements('FROM users u JOIN roles r')[0].params).toEqual([NEW_ID, HOLDING]);
 		expect(values.link).toBe('https://aisapira.com/auth/confirm?token_hash=hash%3C1%3E&type=invite&next=%2Fdashboard');
 		expect(key).toBe(`invite-${NEW_ID}-1`);
 		expect(db.statements('UPDATE users SET last_invitation_status')[0].params).toEqual([NEW_ID, 'sent', 're_1']);
@@ -207,6 +220,7 @@ describe('SettingsUserAccessService · reenviar', () => {
 			history(false, 2, 3),
 			holdingName,
 			inviterRow,
+			inviteeRole,
 			['SELECT last_invitation_sent_at FROM users', () => [{ last_invitation_sent_at: '2026-10-03T13:00:00Z' }]],
 		]);
 		const result = await service.resend(HOLDING, TARGET, actor);
@@ -215,6 +229,10 @@ describe('SettingsUserAccessService · reenviar', () => {
 		expect(db.statements('UPDATE users SET auth_id')).toHaveLength(0);
 		expect(mailer.sendInvitation.mock.calls[0][2]).toBe(`invite-${TARGET}-4`);
 		expect((mailer.sendInvitation.mock.calls[0][1] as { link: string }).link).toContain('type=magiclink');
+		expect(mailer.sendInvitation.mock.calls[0][1]).toMatchObject({
+			roleName: 'Finanzas',
+			capabilities: [{ text: 'Ver Contratos' }, { text: 'Ver y editar Facturación' }],
+		});
 		expect(db.statements('INSERT INTO user_access_events')[0].params[3]).toBe('invitation_resent');
 		expect(result).toEqual({ status: 'sent', sent_at: '2026-10-03T13:00:00Z' });
 	});
@@ -395,5 +413,24 @@ describe('SettingsUserAccessService · eliminar invitación', () => {
 		expect(db.calls[1].sql).toBe(
 			'SELECT (EXISTS (SELECT 1 FROM contract_change_log WHERE changed_by = $1) OR EXISTS (SELECT 1 FROM quote_events WHERE actor_id = $1)) AS referenced'
 		);
+	});
+});
+
+describe('roleCapabilities (correo de invitación)', () => {
+	it('pocos permisos: Ver / Ver y editar por módulo con nombre del catálogo, especiales, sin internos ni heredados', () => {
+		expect(
+			roleCapabilities(['VIEW_CLIENTES', 'EDIT_REVENUE', 'CLOSE_PERIODS', 'VIEW_LAB', 'ADMIN_FULL_ACCESS', 'MANAGE_USERS', 'VIEW_REPORTS'])
+		).toEqual([{ text: 'Ver Clientes' }, { text: 'Ver y editar Ingresos y Métricas' }, { text: 'Cerrar y reabrir períodos contables' }]);
+		expect(roleCapabilities([])).toEqual([]);
+	});
+
+	it('ALL_PERMISSIONS o todos los códigos visibles → una sola línea de acceso completo', () => {
+		const every = PERMISSION_MODULES.flatMap((m) => [m.view, m.edit])
+			.filter((c): c is string => !!c)
+			.concat('CLOSE_PERIODS');
+
+		expect(roleCapabilities(['ALL_PERMISSIONS'])).toEqual([{ text: FULL_ACCESS_CAPABILITY }]);
+		expect(roleCapabilities(every)).toEqual([{ text: 'Acceso completo a todos los módulos' }]);
+		expect(roleCapabilities(every.filter((c) => c !== 'CLOSE_PERIODS'))).toHaveLength(10);
 	});
 });

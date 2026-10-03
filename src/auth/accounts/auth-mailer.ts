@@ -34,12 +34,17 @@ export class AuthMailer {
 		}
 	}
 
-	sendInvitation(to: string, values: Omit<InvitationEmailValues, 'logoUrl'>, idempotencyKey: string): Promise<MailResult> {
-		return this.send(to, renderInvitationEmail({ ...values, logoUrl: this.logoUrl() }), idempotencyKey);
+	sendInvitation(to: string, values: Omit<InvitationEmailValues, 'logoUrl' | 'loginUrl'>, idempotencyKey: string): Promise<MailResult> {
+		return this.send(to, renderInvitationEmail({ ...values, loginUrl: this.loginUrl(to), logoUrl: this.logoUrl() }), idempotencyKey);
 	}
 
-	sendRecovery(to: string, values: Omit<RecoveryEmailValues, 'logoUrl'>, idempotencyKey: string): Promise<MailResult> {
-		return this.send(to, renderRecoveryEmail({ ...values, logoUrl: this.logoUrl() }), idempotencyKey);
+	sendRecovery(to: string, values: Omit<RecoveryEmailValues, 'logoUrl' | 'loginUrl'>, idempotencyKey: string): Promise<MailResult> {
+		return this.send(to, renderRecoveryEmail({ ...values, loginUrl: this.loginUrl(to), logoUrl: this.logoUrl() }), idempotencyKey);
+	}
+
+	/** Login del front con el correo precargado (Google/Microsoft o contraseña). Sin `INVITE_LANDING_URL`, el correo omite la línea. */
+	private loginUrl(to: string): string | undefined {
+		return authLoginUrl(this.config.get<string>('INVITE_LANDING_URL'), to) ?? undefined;
 	}
 
 	private logoUrl(): string | undefined {
@@ -105,4 +110,15 @@ export function authConfirmUrl(landing: string | undefined, type: string, next: 
 	params.set('next', next);
 
 	return `${base}/auth/confirm?${params.toString()}`;
+}
+
+/** `${INVITE_LANDING_URL}/login?email=<correo>` (el login del front precarga el correo). `null` si falta la variable. */
+export function authLoginUrl(landing: string | undefined, email: string): string | null {
+	const base = String(landing ?? '')
+		.trim()
+		.replace(/\/+$/, '');
+
+	if (!base) return null;
+
+	return `${base}/login?${new URLSearchParams({ email: email.trim() }).toString()}`;
 }
