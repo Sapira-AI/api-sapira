@@ -5967,6 +5967,17 @@
 					]
 				},
 				{
+					"name": "integration_record_discards_holding_id_fkey",
+					"source_table": "public.integration_record_discards",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "invoice_items_holding_id_fkey",
 					"source_table": "public.invoice_items",
 					"source_columns": [
@@ -13043,6 +13054,28 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "settings",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::jsonb",
+					"comment": "Reglas de la integración para el holding (claves según el contrato de Integraciones v2 §6.1 y §6.5). {} = valores por defecto"
+				},
+				{
+					"name": "updated_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Usuario (public.users.id) que cambió los ajustes por última vez"
 				}
 			],
 			"primary_keys": [
@@ -13432,6 +13465,110 @@
 						"company_id"
 					],
 					"target_table": "public.companies",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.integration_record_discards",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "tipo",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Tipo de integración: erp, crm, stripe o datos"
+				},
+				{
+					"name": "object",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Objeto del registro según la API (customer, opportunity, consumption…)"
+				},
+				{
+					"name": "record_key",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Identificador externo del registro (external_id en la API de Integraciones)"
+				},
+				{
+					"name": "reason",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Motivo opcional del descarte"
+				},
+				{
+					"name": "discarded_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Usuario (public.users.id) que lo descartó"
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "integration_record_discards_holding_id_fkey",
+					"source_table": "public.integration_record_discards",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
 					"target_columns": [
 						"id"
 					]
@@ -25109,7 +25246,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 44,
+			"rows": 45,
 			"columns": [
 				{
 					"name": "id",
@@ -25216,6 +25353,17 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "crm_owner_id",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Id del dueño (usuario) en el CRM que corresponde a este vendedor. Único por holding"
 				}
 			],
 			"primary_keys": [

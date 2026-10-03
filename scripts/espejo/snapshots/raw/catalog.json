@@ -20935,7 +20935,7 @@
 			]
 		},
 		"holding_integration_settings": {
-			"comment": "Habilitación de la integración automática (cron) de cada servicio, por holding. Fila ausente = habilitado.",
+			"comment": "Ajustes de cada integración por holding: habilitación de la corrida automática (cron; fila ausente = habilitado) y reglas (settings).",
 			"rls": true,
 			"rls_forced": false,
 			"columns": [
@@ -21018,6 +21018,38 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "settings",
+					"attnum": 6,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Reglas de la integración para el holding (claves según el contrato de Integraciones v2 §6.1 y §6.5). {} = valores por defecto"
+				},
+				{
+					"column": "updated_by",
+					"attnum": 7,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario (public.users.id) que cambió los ajustes por última vez"
 				}
 			],
 			"constraints": [
@@ -21033,7 +21065,7 @@
 				{
 					"name": "holding_integration_settings_integration_check",
 					"type": "c",
-					"def": "CHECK ((integration = ANY (ARRAY['odoo'::text, 'salesforce'::text, 'bigquery'::text])))",
+					"def": "CHECK ((integration = ANY (ARRAY['odoo'::text, 'salesforce'::text, 'bigquery'::text, 'stripe'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -21873,6 +21905,195 @@
 					"with_check": null
 				}
 			]
+		},
+		"integration_record_discards": {
+			"comment": "Registros de tablas intermedias de integraciones descartados por el usuario (no se importan). Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "tipo",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tipo de integración: erp, crm, stripe o datos"
+				},
+				{
+					"column": "object",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Objeto del registro según la API (customer, opportunity, consumption…)"
+				},
+				{
+					"column": "record_key",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Identificador externo del registro (external_id en la API de Integraciones)"
+				},
+				{
+					"column": "reason",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo opcional del descarte"
+				},
+				{
+					"column": "discarded_by",
+					"attnum": 7,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario (public.users.id) que lo descartó"
+				},
+				{
+					"column": "created_at",
+					"attnum": 8,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "integration_record_discards_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "integration_record_discards_key",
+					"type": "u",
+					"def": "UNIQUE (holding_id, tipo, object, record_key)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "integration_record_discards_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "integration_record_discards_tipo_check",
+					"type": "c",
+					"def": "CHECK ((tipo = ANY (ARRAY['erp'::text, 'crm'::text, 'stripe'::text, 'datos'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "integration_record_discards_key",
+					"def": "CREATE UNIQUE INDEX integration_record_discards_key ON public.integration_record_discards USING btree (holding_id, tipo, object, record_key)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "integration_record_discards_pkey",
+					"def": "CREATE UNIQUE INDEX integration_record_discards_pkey ON public.integration_record_discards USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": []
 		},
 		"invoice_adjustments": {
 			"comment": null,
@@ -43244,6 +43465,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "crm_owner_id",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Id del dueño (usuario) en el CRM que corresponde a este vendedor. Único por holding"
 				}
 			],
 			"constraints": [
@@ -43267,6 +43504,12 @@
 				}
 			],
 			"indexes": [
+				{
+					"name": "sellers_holding_crm_owner_key",
+					"def": "CREATE UNIQUE INDEX sellers_holding_crm_owner_key ON public.sellers USING btree (holding_id, crm_owner_id) WHERE (crm_owner_id IS NOT NULL)",
+					"unique": true,
+					"primary": false
+				},
 				{
 					"name": "sellers_pkey",
 					"def": "CREATE UNIQUE INDEX sellers_pkey ON public.sellers USING btree (id)",
@@ -57192,6 +57435,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"integration_record_discards": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"invoice_adjustments": [
 			{
 				"grantee": "anon",
@@ -69119,7 +69476,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 146,
+			"objetos": 147,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",
