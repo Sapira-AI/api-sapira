@@ -529,3 +529,79 @@ antes de M14 no rompe nada (todo cae a los defaults); solo `PATCH /settings/hold
 - **Correlativo y formato de proforma** por holding.
 - **Vigencia por defecto de cotizaciones** (hoy 30 días fijo en `quotes.service.ts` y en el formulario del front).
 
+
+## 16. Usuarios: invitar, reenviar, acceso, eliminar y recuperar contraseña (03-10, API, sin commit, sin aplicar nada)
+
+Contrato: [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) §10 (10.1–10.6). Diseño aprobado por Domi el 03-10; cambios
+del mismo día: `sync_user_on_login` **no se toca** y recuperar contraseña pasa a la API.
+
+### 16.1 Diseño
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| `SupabaseAdminService` | `src/auth/accounts/supabase-admin.service.ts` | Clave de servicio (patrón de `settings-storage.service.ts`, 503 si falta): `generateLink` (`invite`; si `email_exists` → `magiclink`; `recovery`), `setBanned` (`ban_duration` `876000h` / `none`), `deleteUser`. `generateLink` no manda correo |
+| `AuthMailer` | `src/auth/accounts/auth-mailer.ts` | Resend por HTTP (`RESEND_API_KEY`), remitente `INVITE_FROM` (default `Sapira <noreply@aisapira.com>`), `Idempotency-Key`, **nunca lanza** (`sent` / `failed`). `INVITE_TEST_ALLOWLIST` (solo QA) limita a quién se invita |
+| Plantillas | `src/auth/accounts/email-templates/` (`layout.ts`, `invitation.ts`, `recovery.ts`) | Layout común de la marca (logo PNG con `alt`, violeta `#4917C6`, pie `Sapira · aisapira.com`, tablas, estilos en línea, 600 px, preheader) + texto plano. Todo valor pasa por `escapeHtml` (centralizado en `src/core/utils/escape-html.ts`; Facturación lo reexporta). Ejemplos: `SAPIRA_EMAIL_PREVIEW_DIR=<carpeta> npx jest src/auth/accounts/auth-mailer.spec.ts` |
+| `SettingsUserAccessService` | `src/modules/settings/settings-user-access.service.ts` | Invitar, reenviar, acceso y eliminar invitación; audita cada acción en `user_access_events` |
+| `PasswordRecoveryService` | `src/auth/accounts/password-recovery.service.ts` + `POST /auth/password-recovery` | Público, siempre 200 con el mismo mensaje, no espera el trabajo |
+| Rate limit | `src/auth/accounts/actor-throttle.ts` | Invitar 20/min **por actor**: el `ThrottlerGuard` global corre antes de la sesión, así que el tracker usa el `sub` del JWT sin verificar (seguro: un `sub` inventado lo rechaza `SupabaseAuthGuard`). Recuperar: 10/min por IP real (`forwardedIpTracker`: primera IP de `X-Forwarded-For` que manda la BFF, si no la del socket; la BFF ya limita 3/min) + 1/min y 5/día por correo en el storage del throttler, en silencio |
+
+### 16.2 Decisiones
+
+- **Actor y holding nunca del body**: actor = `PermissionContext` de la sesión; holding = `HoldingScopeGuard`. Nombre del holding e invitador
+  para el correo se leen de la base. `forbidNonWhitelisted` rechaza `invited_by` y similares (400); `holding_id` distinto → 403.
+- **Invitar** crea `users` (Pendiente, rol, nombre) + `user_holdings` (activo, `selected = false` como `invite_user_safe`) en una transacción;
+  después Auth. Si Auth falla se borra la fila (cascada a la membresía) y, si la cuenta de Auth la creó esta invitación, también la
+  cuenta → 502. Si el correo falla, la invitación queda (201 `failed`, "usa Reenviar"). Correo existente: activo aquí / desactivado aquí /
+  super admin / en otra empresa → 409 con mensaje propio (no se suma a una persona de otro holding desde aquí: soporte).
+- **Reenviar** solo Pendiente que nunca entró y con acceso activo aquí; token nuevo `magiclink`; 60 s entre envíos y 5 en 24 h por persona
+  (en cualquier holding), contados en `user_access_events` (cuenta intentos, también los fallidos).
+- **Desactivar** (`assertKeepsConfigAdmin` con `leavingUserId`, nuevo override de `settings-admins.ts`): Auth primero (ban si era su última
+  membresía activa; si falla, 502 sin tocar la base), luego `user_holdings.is_active = false, selected = false` y `status = 'Inactivo'`;
+  si la base falla, se deshace el ban. **El bloqueo real es el ban de Auth**: un baneado no inicia sesión, así que `t_sync_user_on_login`
+  no corre y no lo vuelve a `Activo` (por eso la función queda intacta, decisión de Domi 03-10). Con otros holdings activos solo se
+  desactiva la membresía (la API ya exige membresía activa en `HoldingScopeGuard`). **Reactivar**: inverso; `status` vuelve a `Activo` si
+  alguna vez entró, si no a `Pendiente`. Uno mismo → 409; super admin → 409; ya en el estado pedido → 200 sin evento.
+- **Eliminar invitación** solo Pendiente sin `last_access` ni referencias. Las FK hacia `users` se leen de `pg_constraint` **en el momento**
+  (40 FKs en prod el 03-10) salvo las propias de la persona (`user_holdings`, `user_view_preferences`, `app_notification_recipients`,
+  `user_access_events`); un `EXISTS` por FK en una sola consulta. Ojo: `invoice_items_legacy_match.created_by` es `ON DELETE CASCADE` y no
+  está en la lista propia, así que una referencia ahí bloquea (no se borra historia por cascada). En varios holdings solo se quita la
+  membresía; si no, se borra `users` y después la cuenta de Auth (si Auth falla solo se registra).
+- **`GET /settings/users`** agrega `ever_signed_in` e `invitation_status` (`access_active` ya existía).
+- **Recuperar contraseña** (10.6): solo cuentas con `auth_id` y `status` distinto de `Inactivo`; enlace
+  `${INVITE_LANDING_URL}/auth/confirm?token_hash=…&type=recovery&next=/bienvenida?modo=recuperar`. No se audita en `user_access_events`
+  (no hay holding): queda en el log.
+- **Migraciones** (sin aplicar): **M15** `1790860000000-UserAccessEvents` (tabla + entity `base-tenancy/user-access-event.entity.ts`, RLS sin
+  policies; `actor_user_id` nullable con FK `SET NULL` para no bloquear el borrado de quien invitó) y **M16**
+  `1790870000000-UserHoldingsReadOnlyForClients` (policy `user_holdings_policy_direct` a solo SELECT + REVOKE de escrituras; asset `rls/`
+  actualizado y `grants/040-user-holdings-read-only.sql`). Orden: M15 antes de desplegar la API; M16 cuando Domi dé el OK (no depende del
+  código). Detalle en el contrato §11.
+
+### 16.3 Verificación de M16 (03-10, solo lectura)
+
+- `sapira-ai/src`: `user_holdings` solo se **lee** (`UsuariosList.tsx:134`, `contratos/hooks/useUsers.ts:41`, `revenue/RevenueRulesTab.tsx:94`).
+- Edge functions: `send-collection` y `send-proforma` leen; `send-invitation` lee (embed); `delete-user` usa el cliente admin (service role).
+- Escriben `user_holdings` en prod solo funciones **SECURITY DEFINER** (corren como su dueño, no las afecta): `invite_user_safe`,
+  `create_user_holding_association_safe`, `create_user_holding_safe`, `delete_user_complete`, `sync_user_on_login`. Ninguna función
+  SECURITY INVOKER la escribe.
+- **`users` no se toca en M16.** Escrituras directas del front actual sobre `users` (con la anon key y RLS `users_*_v2`):
+  `configuracion/UserFormModal.tsx:114` (UPDATE `name`, `role_id` al editar), `hooks/useRolesAndPermissions.ts:192` (UPDATE `role_id`,
+  `status = 'Activo'` por `auth_id` al asignar admin), `hooks/useConfiguracionInicial.ts:112` (INSERT del usuario en la configuración
+  inicial); edge `send-invitation` actualiza `auth_id` y `last_invitation_*` (service role). Anotado en `revision-seguridad-api.md` #22.
+
+### 16.4 Al switch (anotado, no hecho)
+
+- Mover a la API "Pendiente → Activo + `last_access` en el primer ingreso" y **eliminar el trigger `t_sync_user_on_login`** (incluida la rama
+  "Empresa de X" que crea un holding a quien entra sin invitación; hoy el registro libre está apagado en Supabase).
+- Revocar `EXECUTE` de `invite_user_safe`, `update_user_role_safe`, `delete_current_user` (la llama `sapira-ai/src/pages/Auth.tsx:28`) y
+  `delete_user_complete`; borrar las edge functions `send-invitation` y `delete-user`. **`send-proforma` y `send-collection` también usan el
+  secreto de Resend** (`RESEND_API_KEY` en los secretos de Supabase): no rotarlo ni borrarlo hasta migrar esos envíos.
+- `users_update_v2` y `delete_current_user` quedan como pendientes de revisión en `revision-seguridad-api.md` (#22, #23).
+
+### 16.5 Pendientes de configuración (Domi / QA)
+
+- **Vencimiento del enlace**: los correos dicen "El enlace vence en 24 horas"; en Supabase Auth el vencimiento del OTP por correo debe
+  quedar en 86400 s (el default es 3600). Verificar en el dashboard de QA y prod antes de activar.
+- Variables nuevas en la API: `INVITE_LANDING_URL` (obligatoria), `INVITE_FROM`, `EMAIL_LOGO_URL` (opcionales) e `INVITE_TEST_ALLOWLIST` (solo QA).
+  `SUPABASE_SERVICE_ROLE_KEY` y `RESEND_API_KEY` ya existen. El dominio del remitente (`aisapira.com`) debe estar verificado en Resend.
+- El front nuevo necesita `/auth/confirm` (verifica `token_hash` con `verifyOtp` y lleva a `next`) y `/bienvenida?modo=recuperar`.

@@ -17,7 +17,8 @@ Productos (pestaña de Precios) vive en `src/modules/products` con el mismo patr
 | `company-legal-documents.service.ts`                                                      | Documentos legales con subida por URL firmada (bucket privado `company-files`)                                                                                                                                                                                    |
 | `accounting-periods.service.ts`                                                           | Cerrar/reabrir períodos en transacción propia (replica `close_period_until`/`reopen_period_from` con el usuario de la sesión)                                                                                                                                     |
 | `settings-users.service.ts`, `settings-roles.service.ts`, `settings-access.controller.ts` | Usuarios del holding, cambio de rol, catálogo de permisos, roles (D7) y alertas por rol                                                                                                                                                                           |
-| `settings-admins.ts`                                                                      | Regla "el holding no queda sin nadie que edite la configuración"                                                                                                                                                                                                  |
+| `settings-user-access.service.ts`                                                         | Acciones de acceso (contrato §10): invitar, reenviar invitación, desactivar/reactivar y eliminar invitación; auditoría en `user_access_events`. Usa `src/auth/accounts/` (`SupabaseAdminService`, `AuthMailer`) |
+| `settings-admins.ts`                                                                      | Regla "el holding no queda sin nadie que edite la configuración" (simula cambio de rol, de permisos o la salida de un miembro)                                                                                                                                                                                                  |
 | `permissions-catalog.ts`                                                                  | Matriz módulo × Ver/Editar, permisos especiales e internos                                                                                                                                                                                                        |
 | `settings-storage.service.ts`                                                             | Storage con clave de servicio: logos (público `company-logos`) y archivos (privado `company-files`)                                                                                                                                                               |
 | `countries.controller.ts`                                                                 | `GET /catalog/countries` (global, solo sesión)                                                                                                                                                                                                                    |
@@ -62,13 +63,24 @@ Lectura única para todos los módulos en `src/core/utils/holding-preferences.ts
 (sin aplicar) todo cae a los defaults de antes; solo el PATCH de preferencias necesita M14. La entity `holding-settings.entity.ts` se
 actualiza con `schema:snapshot` después de aplicar en producción (como M12).
 
+## Usuarios: acceso (03-10)
+
+Contrato §10 y spec §16. `POST /settings/users/invitations`, `POST /settings/users/:id/invitation/resend`, `PATCH /settings/users/:id/access`,
+`DELETE /settings/users/:id`, todo con `EDIT_CONFIGURACION`; el actor siempre de la sesión. Supabase Auth admin y el correo viven en
+`src/auth/accounts/` (`AuthAccountsModule`, compartido con `POST /auth/password-recovery`): `SupabaseAdminService` (`generateLink`, ban,
+`deleteUser`) y `AuthMailer` (Resend con plantillas de la marca en `email-templates/`). Invitar: 20/min por actor (`INVITE_THROTTLE`,
+tracker por `sub` del JWT). Reenviar: 60 s entre envíos y 5 en 24 h contados en `user_access_events`. Variables: `SUPABASE_SERVICE_ROLE_KEY`,
+`RESEND_API_KEY`, `INVITE_LANDING_URL` (obligatoria), `INVITE_FROM`, `EMAIL_LOGO_URL`, `INVITE_TEST_ALLOWLIST` (solo QA). Requiere la
+migración **M15** aplicada antes de desplegar; **M16** cierra la escritura de `user_holdings` desde el navegador.
+
 ## Despliegue
 
 M2, M3, M7, M8, M9 y el seed 004 están **aplicados en QA y producción el 02-10**. Pendientes (sin aplicar, con OK de Domi): migración
 `1790810000000-CompanyLogosBucketLimits`, seed `005-finanzas-view-configuracion.sql` y la función `create_default_roles_for_holding`
-(is_default, CLOSE_PERIODS, VIEW_CONFIGURACION para Finanzas, sin ADMIN_FULL_ACCESS). Detalle en el contrato §11.
+(is_default, CLOSE_PERIODS, VIEW_CONFIGURACION para Finanzas, sin ADMIN_FULL_ACCESS); usuarios: M15 `1790860000000-UserAccessEvents`,
+M16 `1790870000000-UserHoldingsReadOnlyForClients` y el grant `grants/040-user-holdings-read-only.sql`. Detalle en el contrato §11.
 
 ## Tests
 
-`npx jest src/modules/settings src/modules/products src/guards src/core/utils/holding-preferences.spec.ts src/databases/postgresql/configuracion-v2.spec.ts` (ronda 3: `settings-ronda3.spec.ts`; ronda 4: `settings-holding.service.spec.ts`, `settings.http.spec.ts`, `holding-preferences.spec.ts`) — HTTP con guards reales (`settings.http.spec.ts`), guarda estática de
+`npx jest src/modules/settings src/modules/products src/guards src/auth/accounts src/core/utils/holding-preferences.spec.ts src/databases/postgresql/configuracion-v2.spec.ts` (ronda 3: `settings-ronda3.spec.ts`; ronda 4: `settings-holding.service.spec.ts`, `settings.http.spec.ts`, `holding-preferences.spec.ts`; usuarios: `settings-user-access.service.spec.ts`, `src/auth/accounts/auth-mailer.spec.ts` con Auth y Resend mockeados) — HTTP con guards reales (`settings.http.spec.ts`), guarda estática de
 permisos por ruta y DI (`settings-controllers.spec.ts`) y un spec por servicio.

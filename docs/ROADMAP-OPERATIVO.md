@@ -7,7 +7,7 @@
 
 # 🗺️ Roadmap de desarrollo Sapira — backlog unificado
 
-> **Actualizado:** 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
+> **Actualizado:** 2026-10-03 ("Resuelto en v2" suma Configuración y usuarios) · 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
 > Estructura: **✅ Desplegado y probado** · **🟡 Terminado, en validación de producción** · **🔴 Pendientes** ordenados de rápido a complejo (⚡ tandas rápidas → 🔨 medios → 🏗️ complejos) + **carril León (api-sapira)** · **🟣 Estratégico** (se trabaja en la versión nueva del sistema, no aquí).
 > Convención: al cerrar un ítem, moverlo a "Desplegado" con commit/migración. Este doc es la fuente de verdad del orden; el detalle técnico vive en los docs/memorias referenciados.
 > Todo ítem de esta versión fue **verificado contra el estado real** (código del repo, api-sapira y funciones vivas en Supabase prod) el 24-08 — no es solo consolidación de memorias.
@@ -50,7 +50,7 @@
 > resuelto en la versión nueva llega a las usuarias con el switch. Después del switch, tras un tiempo prudente de
 > pruebas, se hace el drop y la limpieza de los triggers y funciones que ya no se usan. Estado completo del avance y
 > plan del switch: `api-sapira/docs/v2-rediseno/estado-v2-y-plan-switch.md`.
-> Marcado el 02-10 con lo construido en el laboratorio de `front-sapira`. **Resuelto** = construido y revisado por Domi
+> Marcado el 02-10 (y el 03-10 con Configuración) con lo construido en el laboratorio de `front-sapira`. **Resuelto** = construido y revisado por Domi
 > en el lab; **Parcial** = cubierto en parte o por confirmar al revisar el módulo. Los ítems que no aparecen aquí no se
 > evaluaron: siguen como están abajo.
 
@@ -78,7 +78,15 @@
 | Complejos #4 · Matriz fiscal / tipo de documento | 🟡 Parcial | Documento tributario en el alta del contrato; la matriz por país sigue pendiente |
 | Mensajes ilegibles (CFDI, import) | 🟡 Parcial | Errores del envío al ERP traducidos a lenguaje claro con la solución; los de importación siguen en el carril León |
 | Estratégico #20 · Modelos de precio por tramos | 🟡 Parcial | Precios v2, primera versión; falta la segunda vuelta |
-| Medios #9 Panel de vendedores · #6 Productos · Complejos #10 Notificaciones | ⏳ Módulos por construir en v2 | Integraciones, Configuración y Notificaciones |
+| Tanda 2 · Tax rate de compañías (pantalla Razones Sociales: decimal vs entero, "1900%") | ✅ Resuelto en v2 | Configuración: el impuesto vive en el documento tributario de cada compañía y la facturación lo toma de ahí. Quedan 2 compañías de Lenosoft con 0.19 por revisar en la auditoría de datos |
+| Gestión de usuarios · invitación sin validar | ✅ Resuelto en v2 (sin commit al 03-10) | Configuración › Usuarios: invitar y reenviar desde la API, con validación y `/auth/confirm` + `/bienvenida` |
+| Gestión de usuarios · desactivar usuarios (no existía) | ✅ Resuelto en v2 (sin commit al 03-10) | Desactivar/reactivar por holding (bloquea la cuenta en Auth si no le quedan holdings); eliminar solo invitaciones que nunca entraron |
+| Correos de Supabase sin formato (invitación, recuperar contraseña) | ✅ Resuelto en v2 (sin commit al 03-10) | Correos propios por Resend desde `noreply@aisapira.com`, plantillas versionadas en api-sapira. Falta configurar Supabase Auth y variables de la API |
+| Cierre de períodos que bloqueaba pagos | ✅ Resuelto en v2 | Compañía 360: el cierre solo bloquea contratos e ítems; pagos y cobranza siguen operando |
+| Redirección abierta en el callback de auth | ✅ Resuelto en v2 (sin commit al 03-10) | `front-sapira` `app/auth/callback` solo acepta destinos internos |
+| Medios #6 · Productos: recurrencia y gestión | 🟡 Parcial | Pestaña Productos en Precios (archivar en vez de eliminar); falta mostrar archivados en los selectores de Contratos, Cotizaciones y Precios |
+| Documentación interna / Help Center | 🟡 Parcial (sin commit al 03-10) | Centro de ayuda `/ayuda` reemplaza `/documentacion`; al switch se abre a todos y se dan de baja HelpKit y Notion |
+| Medios #9 Panel de vendedores · Complejos #10 Notificaciones | ⏳ Módulos por construir en v2 | Integraciones y Notificaciones (vendedores ya se administran en Configuración) |
 
 ---
 

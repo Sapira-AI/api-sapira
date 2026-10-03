@@ -54,6 +54,9 @@ describe('countConfigAdmins', () => {
 		await expect(countConfigAdmins(db, HOLDING)).resolves.toBe(1);
 		await expect(countConfigAdmins(db, HOLDING, { user: { userId: 'u1', roleId: OTHER_ROLE } })).resolves.toBe(0);
 		await expect(countConfigAdmins(db, HOLDING, { role: { roleId: OTHER_ROLE, codes: ['EDIT_CONFIGURACION'] } })).resolves.toBe(2);
+		// Desactivar acceso (contrato §10.3): el miembro sale del conteo.
+		await expect(countConfigAdmins(db, HOLDING, { leavingUserId: 'u1' })).resolves.toBe(0);
+		await expect(countConfigAdmins(db, HOLDING, { leavingUserId: 'u2' })).resolves.toBe(1);
 	});
 });
 

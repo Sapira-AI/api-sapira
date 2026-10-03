@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 
 import { emptyToNull, trim } from './holding.dto';
 
@@ -76,4 +76,31 @@ export class ChangeUserRoleDto {
 	@ApiProperty()
 	@IsUUID(undefined, { message: 'El rol no es válido' })
 	role_id!: string;
+}
+
+/** Contrato §10.1. El email se normaliza (`trim().toLowerCase()`) aquí y otra vez en el servicio. */
+export class InviteUserDto {
+	@ApiProperty({ example: 'ana@cliente.com' })
+	@Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+	@IsEmail({}, { message: 'El correo no es válido' })
+	@MaxLength(254, { message: 'El correo no puede superar 254 caracteres' })
+	email!: string;
+
+	@ApiProperty({ example: 'Ana Pérez' })
+	@Transform(trim)
+	@IsString({ message: 'El nombre debe ser texto' })
+	@MinLength(1, { message: 'El nombre es obligatorio' })
+	@MaxLength(120, { message: 'El nombre no puede superar 120 caracteres' })
+	name!: string;
+
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'El rol no es válido' })
+	role_id!: string;
+}
+
+/** Contrato §10.3. */
+export class UserAccessDto {
+	@ApiProperty({ description: 'true = reactivar, false = desactivar en este holding' })
+	@IsBoolean({ message: 'Indica si el acceso queda activo (true o false)' })
+	active!: boolean;
 }

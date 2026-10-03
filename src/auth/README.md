@@ -9,7 +9,17 @@ No requieren Bearer. Las claves secretas viven solo en `api-sapira`.
 | `GET` | `/auth/public-config` | `{ recaptcha: { enabled, siteKey } }` para login y forms públicos |
 | `POST` | `/auth/recaptcha/verify` | Body `{ token, action }`. Acciones: `LOGIN`, `public_lead` |
 
+| `POST` | `/auth/password-recovery` | Body `{ email }`. **Siempre 200** con el mismo mensaje (no revela si existe). 10/min por IP real (primera de `X-Forwarded-For`, la envía la BFF; si no, la del socket); por correo 1/min y 5/día en silencio. Enlace `recovery` generado con la clave de servicio y correo con la marca (contrato Configuración §10.6) |
+
 Variables: `GOOGLE_RECAPTCHA_API_KEY`, `GOOGLE_RECAPTCHA_PROJECT_ID`, `GOOGLE_RECAPTCHA_SITE_KEY`, `RECAPTCHA_MIN_SCORE` (default `0.5`), `RECAPTCHA_ENABLED` (si es `false`, o si faltan las tres claves, se omite la validación). Hostnames permitidos: `localhost`, `127.0.0.1`, `www.aisapira.com`, `app.aisapira.com`, `aisapira.com` y los hosts de `FRONT_BASE_URL`.
+
+## Cuentas administradas por la API (`accounts/`)
+
+`AuthAccountsModule`: `SupabaseAdminService` (clave de servicio: `generateLink` invite/magiclink/recovery, ban, `deleteUser`) y `AuthMailer`
+(Resend; plantillas en `accounts/email-templates/` con un layout común de la marca: logo PNG, violeta `#4917C6`, pie `Sapira · aisapira.com`,
+tablas, estilos en línea, 600 px). Lo usan recuperar contraseña y las acciones de usuarios de Configuración (`src/modules/settings`).
+Variables: `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `INVITE_LANDING_URL`, `INVITE_FROM`, `EMAIL_LOGO_URL`, `INVITE_TEST_ALLOWLIST`.
+Ejemplos HTML para revisar en el navegador: `SAPIRA_EMAIL_PREVIEW_DIR=<carpeta> npx jest src/auth/accounts/auth-mailer.spec.ts`.
 
 Esta implementación permite validar tokens JWT generados por Supabase en tu backend NestJS.
 
