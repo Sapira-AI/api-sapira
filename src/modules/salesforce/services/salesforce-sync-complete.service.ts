@@ -739,7 +739,7 @@ export class SalesforceSyncCompleteService {
 						? 'La sincronización automática de hoy no pudo leer las oportunidades del CRM: las ganadas no llegaron a Sapira.'
 						: 'Una parte de la sincronización automática de hoy falló: algunas oportunidades ganadas no llegaron a Sapira.',
 				recommendation:
-					'Revisa la conexión con el CRM y la bitácora de sincronización en Integraciones. Si sigue fallando, avísanos: la próxima corrida lo reintenta.',
+					'Revisa la conexión y el historial en Integraciones › CRM › Historial. Si sigue fallando, avísanos: la próxima corrida lo reintenta.',
 				action_type: 'review_salesforce_sync_log',
 				action_payload: {
 					job_id: metadata.job_id,

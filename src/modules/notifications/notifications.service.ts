@@ -18,6 +18,7 @@ import {
 	UpdateNotificationPreferencesDto,
 } from './dtos/notifications.dto';
 import {
+	actionHref,
 	defaultEmailFor,
 	defaultWeeklyDigestFor,
 	isCatalogType,
@@ -87,7 +88,15 @@ export function toView(row: NotificationForRecipient) {
 		module_label: NOTIFICATION_MODULES[module],
 		icon: catalog?.icon ?? 'bell',
 		severity_label: SEVERITY_LABELS[row.severity] ?? row.severity,
-		action: actionType ? { type: actionType, label: NOTIFICATION_ACTION_LABELS[actionType] ?? 'Abrir', payload: row.action_payload ?? {} } : null,
+		action: actionType
+			? {
+					type: actionType,
+					label: NOTIFICATION_ACTION_LABELS[actionType] ?? 'Abrir',
+					payload: row.action_payload ?? {},
+					href: actionHref(actionType, row.action_payload as Record<string, unknown> | null),
+				}
+			: null,
+		integration_href: catalog?.integration_href ?? null,
 		is_read: Boolean(row.is_read),
 		read_at: row.read_at ?? null,
 		is_archived: Boolean(row.archived_at),
@@ -509,6 +518,7 @@ export class NotificationsService {
 				subscribable: item.subscribable,
 				reserved: item.reserved,
 				action_label: item.action_type ? (NOTIFICATION_ACTION_LABELS[item.action_type] ?? null) : null,
+				integration_href: item.integration_href ?? null,
 			})),
 		};
 	}

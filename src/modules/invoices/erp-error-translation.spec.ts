@@ -55,7 +55,7 @@ describe('translateErpError (errores del envío al ERP en palabras de la usuaria
 
 		expect(translation.message).toBe('Hay productos sin mapeo en Odoo: Plan Pro, Soporte');
 		expect(erpErrorSentence(translation)).toBe(
-			'Hay productos sin mapeo en Odoo: Plan Pro, Soporte. Mapea el producto en Integraciones › Odoo y vuelve a enviarla.'
+			'Hay productos sin mapeo en Odoo: Plan Pro, Soporte. Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla.'
 		);
 	});
 

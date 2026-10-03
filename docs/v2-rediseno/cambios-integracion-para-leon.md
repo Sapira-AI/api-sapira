@@ -322,6 +322,43 @@ miembros del holding. Reutilizan la lógica de SendGrid de `EmailsService` (regi
 siguen abiertas** porque el front actual (`app.aisapira.com`) las usa hasta el switch; se cierran en el bloque de seguridad. Si alguna
 integración tuya llama `/emails/*` o `/email/*`, avísanos para moverla a las nuevas antes de cerrarlas.
 
+## 14. Integraciones v2: lo que es lógica de integración (03-10-2026)
+
+Módulo nuevo `src/modules/integrations/` con rutas `/integrations/*` (contrato:
+[`contrato-api-integraciones.md`](./contrato-api-integraciones.md); spec: [`spec-integraciones-v2.md`](./spec-integraciones-v2.md)).
+**No cambia la lógica de ninguna integración**: cada adaptador inyecta los servicios existentes (Odoo, Salesforce, Stripe, BigQuery,
+envío de facturas). Esto es lo que queda de tu lado:
+
+**Cómo se complementa con tu Fase 2 de tenancy (rama `leon`).** Las rutas nuevas nacen seguras (`SupabaseAuthGuard` +
+`HoldingScopeGuard` + `@HoldingId()` + `RequirePermission(VIEW/EDIT_INTEGRACIONES)`, DTOs sin `holding_id`, 404 por id, los 3 tests de
+guard) y **nunca devuelven claves**. Las viejas (`/odoo/*`, `/salesforce/*`, `/stripe/*`, `/bigquery/*`) no se tocaron: las usa la app
+actual hasta el switch y su cierre es tu Fase 2 (`inventario-tenancy-fase-2.md`). Cuando el front nuevo esté en producción, las viejas que
+solo usaba la app actual se pueden borrar en vez de proteger. Para no chocar con tu rama: no se editó `invoice-scheduler.service.ts`,
+su controlador, `dtos/scheduler-report.dto.ts` ni `notifications.controller.ts`; el historial del ERP lee `invoice_scheduler_jobs`
+directo y sirve con las dos versiones (jobs `all` filtrados al holding y jobs por holding). **`holding_integration_settings` es la tabla
+única de ajustes por integración**: `domi` trae tu entity y tu migración tal cual y la migración `1791000000000-IntegrationsV2` le agrega
+`settings jsonb` (etapas del CRM, filtro del ERP, reglas de exclusión) y `updated_by`, y suma `stripe` a su CHECK (mismo nombre de
+constraint). Tipo → `integration`: erp → odoo, crm → salesforce, stripe → stripe, datos → bigquery. El switch "Sincronización automática"
+(`auto_sync` en `/integrations/:tipo/settings`) escribe `auto_enabled` en la misma fila (TypeORM con la entity).
+
+| # | Pedido | Por qué |
+|---|---|---|
+| L1 | **Traer del ERP solo las facturas que no nacieron en Sapira** (sueltas o legacy) y **notas de crédito** (A9) | Hoy la importación trae todo; la API solo filtra al leer (regla `exclude_sapira_invoices` en `records`, por `invoices.odoo_invoice_id`) |
+| L2 | **Estados de pago desde el ERP**, sincronización continua (A9) | Todo queda pendiente de pago y no se concilia; una actualización masiva sirve una vez |
+| L3 | **Integración Kame** (TiMining) con el mismo esquema de adaptador (A9) | Declarar sus objetos (registros y mapeos) en un adaptador nuevo |
+| L4 | **Sync del CRM por `sellers.crm_owner_id`** (D7) | Hoy busca por email/nombre e inventa `sf_<ownerid>@salesforce.local` (en minúsculas: el id del CRM distingue mayúsculas). Con la columna nueva, buscar primero por `crm_owner_id` y guardarlo al crear. Sin esto, fusionar vendedores (`POST /settings/sellers/merge`) puede volver a crear duplicados |
+| L5 | **Etapas del CRM configurables en la corrida diaria y en la importación a revisión** | `holding_integration_settings.settings.opportunity_stages` hoy solo lo usa "Traer oportunidades" (vista previa). `syncOpportunitiesToStaging` y la corrida diaria siguen con `SALESFORCE_WON_STAGES`: una oportunidad de otra etapa se ve en la vista previa pero no entra a revisión |
+| L6 | **Respetar descartes y reglas de exclusión en los procesos que no aceptan ids** | `integration_record_discards` y las reglas (`holding_integration_settings.settings.rules`) se aplican al leer y al importar por ids (clientes del ERP, oportunidades y cuentas del CRM). `InvoiceProcessingService.startAsyncProcessing`, `StripeSyncService.syncAll` e `integrateSapiraQuantities` procesan todo lo listo |
+| L7 | **Respetar `holding_integration_settings.auto_enabled` en los crons de Salesforce, BigQuery y Stripe** (tu plan, paso 3) | El switch ya se escribe desde Integraciones (también para `stripe`, que entra al CHECK con la migración I2); hoy solo el envío a Odoo lo mira |
+| L8 | **`StripeService.getProducts` toma una sola cuenta activa** | Integraciones lista productos por cada cuenta con su clave (lectura); el mapeo (`stripe_product_mappings`) no guarda la cuenta |
+| L9 | **Locks con varias réplicas** | "Sincronizar ahora": ERP y CRM usan Mongo (jobs `running` < 3 h); Stripe, logs `running` < 2 h y `stripe_sync_jobs`; almacén de datos, lock en memoria de la réplica (igual que su cron) |
+| L10 | **Consulta del almacén de datos sin filtro de holding** | `ingestSapiraQuantities` lee `finance.sapira_base` por fecha sin acotar al holding: con dos holdings con conexión, ambos ingieren las mismas filas |
+| L11 | **Cifrado de claves** | Las nuevas rutas no devuelven claves, pero en la base siguen en texto plano (salvo la contraseña del CRM) |
+
+Copys de `translateErpError` (`erp-error-translation.ts`): los pasos que mandaban a "Integraciones › Odoo" ahora mandan a
+"Integraciones › ERP › Mapeos" (producto, impuestos, compañía) o "› Configuración" (conexión). El resto del mensaje sigue igual.
+`MAP_PRODUCT_STEP` de Contratos (módulo cerrado) sigue diciendo "Integraciones › Odoo" hasta el OK de Domi; el front lo pasa por `sinMarcas`.
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

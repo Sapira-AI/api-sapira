@@ -421,7 +421,8 @@ describe('NotificationsService', () => {
 
 			expect(detail.texts).toEqual({
 				what_happened: 'El ERP la rechazó',
-				what_to_do: 'Corrige el dato que indica el mensaje en el contrato o en la factura y vuelve a enviarla.',
+				what_to_do:
+					'Corrige el dato que indica el mensaje en el contrato o en la factura y vuelve a enviarla. Si falta relacionar un producto, hazlo en Integraciones › ERP › Mapeos.',
 				what_we_do: 'Reintentamos en la próxima corrida automática y cerramos este aviso cuando la factura se envía bien.',
 			});
 			recipientQueryBuilder.getOne.mockResolvedValueOnce(null);

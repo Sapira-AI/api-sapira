@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import {
+	ArrayMaxSize,
+	ArrayMinSize,
+	IsArray,
+	IsBoolean,
+	IsEmail,
+	IsOptional,
+	IsString,
+	IsUUID,
+	MaxLength,
+	MinLength,
+	ValidateIf,
+} from 'class-validator';
 
 import { emptyToNull, trim } from './holding.dto';
 
@@ -60,6 +72,20 @@ export class UpdateSellerDto {
 	@IsBoolean({ message: 'Activo debe ser sí o no' })
 	@IsOptional()
 	is_active?: boolean;
+}
+
+/** Fusionar vendedores duplicados (Integraciones v2, D7): el destino se queda con las referencias de los origen. */
+export class MergeSellersDto {
+	@ApiProperty()
+	@IsUUID('all', { message: 'El vendedor destino no es válido' })
+	target_id!: string;
+
+	@ApiProperty({ type: [String] })
+	@IsArray()
+	@ArrayMinSize(1, { message: 'Indica al menos un vendedor a fusionar' })
+	@ArrayMaxSize(50, { message: 'Hasta 50 vendedores por vez' })
+	@IsUUID('all', { each: true, message: 'Vendedor no válido' })
+	source_ids!: string[];
 }
 
 export class CreateNamedDto {

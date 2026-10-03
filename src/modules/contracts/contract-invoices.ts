@@ -72,7 +72,7 @@ export interface InvoiceBlocker {
 	next_step: string | null;
 	/**
 	 * Acción que la UI puede ofrecer para destrabar: `erp_reset` en `sent_to_erp_draft` → "Restablecer borrador y editar"; `map_product` en
-	 * `product_without_erp_mapping` → mapear el producto en Integraciones › Odoo.
+	 * `product_without_erp_mapping` → mapear el producto en Integraciones › ERP.
 	 */
 	action?: 'erp_reset' | 'map_product';
 }
@@ -189,7 +189,7 @@ export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a in
 // ---------------------------------------------------------------- producto sin mapeo al ERP
 
 export { PRODUCT_WITHOUT_ERP_MAPPING_CODE, UNMAPPED_PRODUCTS_SQL, unmappedProductsMessage };
-export const MAP_PRODUCT_STEP = 'Mapea el producto en Integraciones › Odoo';
+export const MAP_PRODUCT_STEP = 'Mapea el producto en Integraciones › ERP';
 
 /** Bloqueo `product_without_erp_mapping` si alguna línea que viajaría al ERP no resuelve a un producto de Odoo; null si todo resuelve. */
 export function productMappingBlocker(products: string[] | undefined): InvoiceBlocker | null {

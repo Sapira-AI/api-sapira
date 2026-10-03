@@ -240,7 +240,7 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 
 			expect(plan.can_apply).toBe(false);
 			expect(blocker.message).toContain('«Soporte Premium»');
-			expect(blocker.next_step).toBe('Mapea el producto en Integraciones › Odoo');
+			expect(blocker.next_step).toBe('Mapea el producto en Integraciones › ERP');
 			expect(blocker.action).toBe('map_product');
 		});
 

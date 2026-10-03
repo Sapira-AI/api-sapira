@@ -93,7 +93,7 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		return build(
 			'product_without_mapping',
 			names ? `Hay productos sin mapeo en Odoo: ${names}` : 'Un producto de la factura no está mapeado a un producto de Odoo',
-			'Mapea el producto en Integraciones › Odoo y vuelve a enviarla',
+			'Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla',
 			'map_product',
 			raw
 		);
@@ -156,7 +156,7 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		return build(
 			'tax_not_found',
 			'Un impuesto de la factura no existe en Odoo o no corresponde a la compañía emisora',
-			'Revisa los impuestos del producto y de la compañía en Integraciones › Odoo',
+			'Revisa los impuestos del producto y de la compañía en Integraciones › ERP › Mapeos',
 			'integrations',
 			raw
 		);
@@ -169,7 +169,7 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		return build(
 			'connection',
 			'No pudimos conectarnos con Odoo',
-			'Vuelve a intentarlo en unos minutos; si sigue fallando, revisa la conexión en Integraciones › Odoo',
+			'Vuelve a intentarlo en unos minutos; si sigue fallando, revisa la conexión en Integraciones › ERP › Configuración',
 			'retry',
 			raw
 		);
@@ -178,7 +178,7 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		return build(
 			'validation',
 			'La compañía emisora no tiene integración con Odoo',
-			'Configura la integración en Integraciones › Odoo',
+			'Relaciona la compañía en Integraciones › ERP › Mapeos',
 			'integrations',
 			raw
 		);

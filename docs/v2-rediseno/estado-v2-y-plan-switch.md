@@ -59,7 +59,8 @@ En el orden conversado con Domi (actualizado 03-10):
 4. **Integraciones** (interfaz): mapeos de producto (ya existe el formulario compartido
    `front-sapira/app/(protected)/lab/integraciones/_shared/ProductMappingForm.tsx`), conexiones, panel de
    vendedores, presupuestos (las tablas `budgets` / `budget_lines` ya existen). Lo toman Domi y Claude con foco en
-   la interfaz; la integración misma se revisa al final con Leon.
+   la interfaz; la integración misma se revisa al final con Leon. Spec: [`spec-integraciones-v2.md`](./spec-integraciones-v2.md);
+   API (03-10, migración sin aplicar): [`contrato-api-integraciones.md`](./contrato-api-integraciones.md).
 5. **Automatizaciones** (agentes, Leon): catálogo de acciones y configuración por cliente y en lote
    ([`spec-agentes-ia.md`](./spec-agentes-ia.md)). Hoy los agentes del lab son demostración de diseño.
 6. **Precios**: segunda vuelta.
@@ -156,5 +157,5 @@ con el switch y lo heredado se elimina después. El backlog del producto vivo ma
   inexistente da 404. El modo watch a veces compila sin reiniciar; en ese caso se reinicia `yarn start:dev`.
 - Front: tests y chequeo de tipos. Lo que no se ve en el navegador se declara como no verificado.
 - Datos: cuadrar con consultas de solo lectura en producción y reportar hallazgos sin corregirlos.
-- Fallas de tests conocidas y ajenas: `database.module.spec` en la API (`holding_integration_settings` sin
-  entity) y `lib/api/factura-proxy.test.ts` en el front.
+- Fallas de tests conocidas y ajenas: `lib/api/factura-proxy.test.ts` en el front (`database.module.spec` de la API pasa desde que
+  `domi` trae la entity de `holding_integration_settings`, 03-10).

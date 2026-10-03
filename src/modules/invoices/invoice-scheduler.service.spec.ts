@@ -255,7 +255,7 @@ describe('InvoiceSchedulerService', () => {
 			operation: 'create_draft',
 			category: 'connection',
 			message: 'No pudimos conectarnos con Odoo',
-			next_step: 'Vuelve a intentarlo en unos minutos; si sigue fallando, revisa la conexión en Integraciones › Odoo',
+			next_step: 'Vuelve a intentarlo en unos minutos; si sigue fallando, revisa la conexión en Integraciones › ERP › Configuración',
 			action: 'retry',
 			raw: 'connect ETIMEDOUT',
 		});
@@ -789,8 +789,9 @@ describe('InvoiceSchedulerService', () => {
 					type: 'invoice_odoo_failure',
 					resource_id: 'invoice-1',
 					title: 'No se pudo enviar la factura INV-001 de Cliente Demo',
-					message: 'Hay productos sin mapeo en Odoo: Soporte Premium. Mapea el producto en Integraciones › Odoo y vuelve a enviarla.',
-					recommendation: 'Mapea el producto en Integraciones › Odoo y vuelve a enviarla',
+					message:
+						'Hay productos sin mapeo en Odoo: Soporte Premium. Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla.',
+					recommendation: 'Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla',
 					deduplication_key: 'invoice-odoo-failure:invoice-1:product_mapping:product_without_erp_mapping',
 				})
 			);
