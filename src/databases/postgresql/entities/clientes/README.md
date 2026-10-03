@@ -13,7 +13,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `client_entities` (1553) | `src/databases/postgresql/entities/clientes/client-entity.entity.ts` · `ClientEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entities_pkey` |
 | `client_entity_clients` (1512) | `src/databases/postgresql/entities/clientes/client-entity-client.entity.ts` · `ClientEntityClient` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entity_clients_pkey` |
 | `client_contacts` (262) | `src/databases/postgresql/entities/clientes/client-contact.entity.ts` · `ClientContact` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_contacts_pkey` |
-| `client_activity_notes` (0) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check` |
+| `client_activity_notes` (0) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check`<br>índice con expresión `client_activity_notes_mentions_idx` |
 | `sellers` (39) | `src/databases/postgresql/entities/clientes/seller.entity.ts` · `Seller` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `sellers_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (6): 6 promovidas, 0 apagadas

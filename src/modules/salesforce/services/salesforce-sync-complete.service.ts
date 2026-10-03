@@ -108,6 +108,16 @@ export interface ResolvedSalesforceClientEntityPreview {
 	}>;
 }
 
+/** "Qué pasó" de una cotización del CRM detenida, por motivo (Notificaciones v2: sin códigos ni marcas). */
+const OPPORTUNITY_BLOCK_MESSAGES: Record<string, string> = {
+	unmapped_products: 'La oportunidad ganada trae productos que no están relacionados con productos de Sapira.',
+	missing_account_id: 'La oportunidad ganada no tiene una cuenta (cliente) asociada en el CRM.',
+	missing_staged_account: 'No pudimos traer desde el CRM la cuenta (cliente) de la oportunidad ganada.',
+	errored_staged_account: 'La cuenta (cliente) de la oportunidad ganada tiene datos incompletos o sin relacionar.',
+	account_final_processing: 'No pudimos crear el cliente, la razón social o el contacto de la oportunidad ganada.',
+	opportunity_final_processing: 'No pudimos crear la cotización con los datos de la oportunidad ganada.',
+};
+
 @Injectable()
 export class SalesforceSyncCompleteService {
 	private readonly logger = new Logger(SalesforceSyncCompleteService.name);
@@ -540,6 +550,7 @@ export class SalesforceSyncCompleteService {
 		});
 
 		if (!opportunityIds.length) {
+			await this.resolveDailySyncFailure(holdingId);
 			return {
 				holding_id: holdingId,
 				success: true,
@@ -619,6 +630,8 @@ export class SalesforceSyncCompleteService {
 		}
 
 		const success = chunkErrors.length === 0;
+		// Notificaciones v2: la corrida buena del holding cierra el aviso de falla de sincronización.
+		if (success) await this.resolveDailySyncFailure(holdingId);
 		await log({
 			stage: 'holding',
 			level: success ? 'info' : 'error',
@@ -720,20 +733,32 @@ export class SalesforceSyncCompleteService {
 				source: 'salesforce',
 				type: SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
 				severity: 'error',
-				title: 'Falló la sincronización automática de Salesforce',
-				message: errorMessage,
+				title: 'Falló la sincronización con el CRM',
+				message:
+					metadata.stage === 'selection'
+						? 'La sincronización automática de hoy no pudo leer las oportunidades del CRM: las ganadas no llegaron a Sapira.'
+						: 'Una parte de la sincronización automática de hoy falló: algunas oportunidades ganadas no llegaron a Sapira.',
 				recommendation:
-					'Revisa la bitácora de la corrida en Salesforce → Bitácora de sincronización. Si el error persiste, valida la conexión con Salesforce y vuelve a integrar las oportunidades afectadas.',
+					'Revisa la conexión con el CRM y la bitácora de sincronización en Integraciones. Si sigue fallando, avísanos: la próxima corrida lo reintenta.',
 				action_type: 'review_salesforce_sync_log',
 				action_payload: {
 					job_id: metadata.job_id,
 					execution_environment: metadata.execution_environment,
 				},
-				metadata,
+				metadata: { ...metadata, error_message: errorMessage },
 				deduplication_key: `salesforce:daily-sync:${holdingId}:${metadata.stage}`,
 			});
 		} catch (error: any) {
 			this.logger.error(`No se pudo notificar el fallo de sincronización del holding ${holdingId}: ${error.message}`);
+		}
+	}
+
+	/** Cierra los avisos `salesforce_sync_failure` abiertos del holding (todas las etapas). Un fallo aquí no afecta la corrida. */
+	private async resolveDailySyncFailure(holdingId: string): Promise<void> {
+		try {
+			await this.notificationsService.resolveOpen(holdingId, { type: SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE });
+		} catch (error: any) {
+			this.logger.warn(`No se pudo cerrar el aviso de sincronización del holding ${holdingId}: ${error.message}`);
 		}
 	}
 
@@ -1129,7 +1154,7 @@ export class SalesforceSyncCompleteService {
 							opportunity,
 							'account_final_processing',
 							error.message,
-							'Corrige el mapping o los datos requeridos del Account, cliente, entidad legal o contacto y vuelve a integrar la cotización.',
+							'Revisa los datos de la cuenta, la razón social o el contacto en el CRM y reintenta la importación.',
 							{ account_staging_id: record.id, account_name: record.salesforce_name }
 						)
 					)
@@ -1157,8 +1182,9 @@ export class SalesforceSyncCompleteService {
 			source: 'salesforce',
 			type: SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
 			severity: 'error',
-			title: `Cotización bloqueada: ${record.salesforce_name || record.salesforce_id}`,
-			message: errorMessage,
+			title: `Cotización del CRM detenida: ${record.salesforce_name || record.salesforce_id}`,
+			// Mensaje de negocio; el detalle técnico queda en `metadata.error_message`.
+			message: OPPORTUNITY_BLOCK_MESSAGES[reason],
 			recommendation,
 			action_type: 'retry_salesforce_opportunity',
 			action_payload: {
@@ -1218,7 +1244,7 @@ export class SalesforceSyncCompleteService {
 					record,
 					'missing_account_id',
 					errorMessage,
-					'Asocia un Account a la oportunidad en Salesforce y vuelve a integrar la cotización.'
+					'Asocia una cuenta a la oportunidad en el CRM y reintenta la importación.'
 				);
 				continue;
 			}
@@ -1239,7 +1265,7 @@ export class SalesforceSyncCompleteService {
 					record,
 					'missing_staged_account',
 					errorMessage,
-					'Vuelve a integrar la cotización para recuperar y validar su Account relacionado.'
+					'Reintenta la importación para volver a traer la cuenta de la oportunidad.'
 				);
 				continue;
 			}
@@ -1256,7 +1282,7 @@ export class SalesforceSyncCompleteService {
 					record,
 					'errored_staged_account',
 					errorMessage,
-					'Corrige el error de datos o mapping del Account y vuelve a integrar la cotización.',
+					'Corrige los datos de la cuenta en el CRM y reintenta la importación.',
 					{ account_staging_id: stagedAccount.id, account_name: stagedAccount.salesforce_name }
 				);
 				continue;
@@ -1276,7 +1302,7 @@ export class SalesforceSyncCompleteService {
 					record,
 					'unmapped_products',
 					errorMessage,
-					'Configura o activa el mapeo de los productos indicados y presiona “Volver a integrar”.',
+					'Relaciona los productos indicados con productos de Sapira y reintenta la importación.',
 					{ unmapped_products: unmappedProducts }
 				);
 				continue;
@@ -1374,7 +1400,7 @@ export class SalesforceSyncCompleteService {
 					record,
 					'opportunity_final_processing',
 					error.message,
-					'Corrige el mapping o la validación indicada y vuelve a integrar la cotización.'
+					'Revisa los datos que indica el detalle y reintenta la importación.'
 				);
 			}
 		}

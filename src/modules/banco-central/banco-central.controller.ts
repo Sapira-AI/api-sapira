@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { SuperAdminOnlyRoute } from '@/guards/super-admin-only.guard';
 
 import { BancoCentralService } from './banco-central.service';
 import { CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto } from './dtos/calculate-monthly-avg.dto';
@@ -401,57 +402,30 @@ export class BancoCentralController {
 	}
 
 	@Post('exchange-rates/test-notification-error')
+	@SuperAdminOnlyRoute()
 	@ApiOperation({
-		summary: 'Probar email de notificación de error',
-		description: 'Envía un email de prueba simulando un error en la sincronización. Útil para verificar la configuración de emails.',
+		summary: 'Probar el correo de falla de sincronización (solo super admin)',
+		description: 'Envía a quien llama el correo de marca del aviso de falla de tipos de cambio. No crea alertas.',
 	})
-	@ApiResponse({
-		status: HttpStatus.OK,
-		description: 'Email de prueba enviado exitosamente',
-	})
+	@ApiResponse({ status: HttpStatus.OK, description: 'Correo de prueba enviado' })
 	@HttpCode(HttpStatus.OK)
-	async testErrorNotification(): Promise<{ message: string }> {
-		const testError = new Error('Este es un error de prueba para verificar las notificaciones');
-		testError.stack = 'Error: Este es un error de prueba\n    at testErrorNotification (test:1:1)';
+	async testErrorNotification(@Request() request: { user?: { email?: string } }): Promise<{ message: string }> {
+		const to = String(request.user?.email ?? '').trim();
 
-		await this.notificationService.sendSyncFailureAlert(testError, 'Prueba manual desde endpoint de testing');
+		if (!to) return { message: 'Tu sesión no tiene correo: no se envió la prueba.' };
+		const sent = await this.notificationService.sendTestFailureEmail(to);
 
-		return {
-			message: 'Email de prueba de error enviado exitosamente. Revisa tu bandeja de entrada.',
-		};
+		return { message: sent ? `Correo de prueba enviado a ${to}.` : 'No se pudo enviar el correo de prueba. Revisa la configuración de correo.' };
 	}
 
 	@Post('exchange-rates/test-notification-success')
+	@SuperAdminOnlyRoute()
 	@ApiOperation({
-		summary: 'Probar email de notificación de éxito',
-		description: 'Envía un email de prueba simulando una sincronización exitosa. Útil para verificar la configuración de emails.',
-	})
-	@ApiResponse({
-		status: HttpStatus.OK,
-		description: 'Email de prueba enviado exitosamente',
+		summary: 'Reporte de éxito de la sincronización (solo super admin)',
+		description: 'El reporte diario de éxito ya no se envía por correo: se ve en Configuración › Monedas.',
 	})
 	@HttpCode(HttpStatus.OK)
-	async testSuccessNotification(): Promise<{ message: string }> {
-		const mockResult = {
-			success: true,
-			message: 'Sincronización de prueba completada exitosamente',
-			stats: {
-				totalProcessed: 150,
-				inserted: 120,
-				updated: 30,
-				errors: 0,
-				indirectConversions: 15,
-			},
-			monthlyAveragesCalculated: {
-				periods: 12,
-				currencyPairs: 8,
-			},
-		};
-
-		await this.notificationService.sendSyncSuccessReport(mockResult, 45000);
-
-		return {
-			message: 'Email de prueba de éxito enviado exitosamente. Revisa tu bandeja de entrada.',
-		};
+	testSuccessNotification(): { message: string } {
+		return { message: 'El reporte diario de sincronización ya no se envía por correo: revísalo en Configuración › Monedas.' };
 	}
 }

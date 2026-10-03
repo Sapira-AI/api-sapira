@@ -42,6 +42,34 @@ export class AuthMailer {
 		return this.send(to, renderRecoveryEmail({ ...values, loginUrl: this.loginUrl(to), logoUrl: this.logoUrl() }), idempotencyKey);
 	}
 
+	/**
+	 * Correo ya renderizado con la marca (Notificaciones v2 fase 2: alerta inmediata y resumen semanal). Mismo proveedor, remitente y
+	 * contrato que las invitaciones: nunca lanza. Con `INVITE_TEST_ALLOWLIST` definida (QA) solo sale a correos de la lista.
+	 */
+	sendRendered(to: string, email: RenderedEmail, idempotencyKey: string): Promise<MailResult> {
+		const raw = this.config.get<string>('INVITE_TEST_ALLOWLIST');
+
+		if (raw && raw.trim() && !isAllowedRecipient(to, raw)) {
+			return Promise.resolve({ status: 'failed', error: 'Correo fuera de INVITE_TEST_ALLOWLIST (ambiente de pruebas)' });
+		}
+
+		return this.send(to, email, idempotencyKey);
+	}
+
+	/** URL del front nuevo (`INVITE_LANDING_URL` + ruta). `null` si falta la variable. */
+	appUrl(path: string): string | null {
+		const base = String(this.config.get<string>('INVITE_LANDING_URL') ?? '')
+			.trim()
+			.replace(/\/+$/, '');
+
+		return base ? `${base}${path.startsWith('/') ? path : `/${path}`}` : null;
+	}
+
+	/** Logo claro de los correos (`EMAIL_LOGO_URL`, opcional). */
+	brandLogoUrl(): string | undefined {
+		return this.logoUrl();
+	}
+
 	/** Login del front con el correo precargado (Google/Microsoft o contraseña). Sin `INVITE_LANDING_URL`, el correo omite la línea. */
 	private loginUrl(to: string): string | undefined {
 		return authLoginUrl(this.config.get<string>('INVITE_LANDING_URL'), to) ?? undefined;

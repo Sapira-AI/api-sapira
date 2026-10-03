@@ -21,8 +21,10 @@ const trendOf = (current: number, previous: number) => (previous > 0 ? ((current
  *   del estado calculado del cliente (`client-lifecycle.ts`), que mide si tiene contrato o suscripción vigente.
  * - **Moneda** = `holding_settings.system_currency` (USD si el holding no tiene configuración).
  *
- * ⚠️ El MRR legacy del mes se suma aunque el cliente ya tenga contrato (doble conteo, U14 de
- * `docs/v2-rediseno/auditoria-contratos.md`): al corregirse aquí, se corrige en ambas vistas.
+ * **Corte U14 del MRR legacy** (`docs/v2-rediseno/auditoria-contratos.md`, misma regla que Métricas v2 `loadLegacyRows`): por defecto
+ * una fila legacy migrada (`migrated_to_contract_id`) deja de sumar desde el primer mes con MRR de su contrato, y solo cuenta el legacy
+ * recurrente. Sin el corte (`{ legacyCut: false }`, solo si se pide explícitamente) se suma todo el legacy del mes, con doble conteo (en
+ * SimpliRoute 2.860 USD en oct-2026 y 16.269 USD en ago-2026). Dashboard, Clientes y Contratos usan el corte (OK de Domi 03-10).
  */
 @Injectable()
 export class HoldingMetricsService {
@@ -35,7 +37,7 @@ export class HoldingMetricsService {
 	}
 
 	/** MRR por cliente en el mes de `asOf` y el anterior (base de las dos métricas). */
-	private mrrByClientSql = `
+	private mrrByClientSql = (legacyCut: boolean) => `
 		WITH months AS (SELECT date_trunc('month', $2::date) AS cur, date_trunc('month', $2::date) - interval '1 month' AS prev),
 		mrr AS (
 			SELECT COALESCE(c.client_id, s.client_id) AS client_id, r.period_month, r.mrr_period_system_ccy AS value
@@ -46,7 +48,20 @@ export class HoldingMetricsService {
 			UNION ALL
 			SELECT m.client_id, m.period_month, m.mrr_legacy_system_currency
 			FROM mrr_legacy m
-			WHERE m.holding_id = $1 AND m.period_month IN ((SELECT cur FROM months), (SELECT prev FROM months))
+			${
+				legacyCut
+					? `LEFT JOIN LATERAL (
+				SELECT MIN(r.period_month) AS first_month FROM revenue_schedule_monthly r
+				WHERE r.holding_id = $1 AND r.contract_id = m.migrated_to_contract_id AND r.mrr_period_contracted_contract_ccy > 0
+			) f ON m.migrated_to_contract_id IS NOT NULL`
+					: ''
+			}
+			WHERE m.holding_id = $1 AND m.period_month IN ((SELECT cur FROM months), (SELECT prev FROM months))${
+				legacyCut
+					? `
+				AND COALESCE(m.is_recurring, false) = true AND NOT (f.first_month IS NOT NULL AND m.period_month >= f.first_month)`
+					: ''
+			}
 		),
 		by_client AS (
 			SELECT client_id,
@@ -55,10 +70,14 @@ export class HoldingMetricsService {
 			FROM mrr GROUP BY client_id
 		)`;
 
-	async monthMetrics(holdingId: string, asOf: string): Promise<{ currency: string; mrr: MonthMetric; activeClients: MonthMetric }> {
+	async monthMetrics(
+		holdingId: string,
+		asOf: string,
+		options: { legacyCut?: boolean } = {}
+	): Promise<{ currency: string; mrr: MonthMetric; activeClients: MonthMetric }> {
 		const [[row], currency] = await Promise.all([
 			this.dataSource.query<Row[]>(
-				`${this.mrrByClientSql}
+				`${this.mrrByClientSql(options.legacyCut !== false)}
 				SELECT COALESCE(SUM(cur), 0) AS mrr_cur, COALESCE(SUM(prev), 0) AS mrr_prev,
 					COUNT(*) FILTER (WHERE cur > 0 AND client_id IS NOT NULL) AS clients_cur,
 					COUNT(*) FILTER (WHERE prev > 0 AND client_id IS NOT NULL) AS clients_prev

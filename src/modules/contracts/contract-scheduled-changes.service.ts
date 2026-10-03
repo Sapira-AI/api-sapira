@@ -5,6 +5,7 @@ import { holdingTimezone } from '@/core/utils/holding-preferences';
 
 import { setApiWriter } from './api-writer';
 import { todayFor } from './business-date';
+import { PACT_KIND_LABELS } from './contract-alerts';
 import { blockedPreview, type ChangePreview } from './contract-changes';
 import { type ChangeApplyResult, ContractChangesService } from './contract-changes.service';
 import { resolveUserId } from './contract-drafts.service';
@@ -36,14 +37,7 @@ type Row = Record<string, unknown>;
 
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KIND_LABELS: Record<string, string> = {
-	percent_uplift: 'reajuste %',
-	index: 'reajuste por índice',
-	new_unit_price: 'precio nuevo',
-	quantity: 'cantidad nueva',
-	term: 'plazo nuevo',
-	billing_frequency: 'frecuencia nueva',
-};
+const KIND_LABELS = PACT_KIND_LABELS;
 
 /**
  * Ajustes pactados (R1, spec modificaciones §9.3.6): `GET/POST /contracts/:id/scheduled-changes`, `PATCH …/:changeId` (solo
@@ -239,6 +233,23 @@ export class ContractScheduledChangesService {
 	): Promise<ScheduledChangeView> {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
 		const userId = await resolveUserId(this.dataSource, authId);
+		const view = await this.closeInTransaction(contract.id, changeId, reason, holdingId, userId, status);
+
+		// Notificaciones v2: omitir o cancelar el pacto cierra su alerta "Ajuste pactado por aplicar".
+		await this.changes.closeResolvedAlerts(contract.id, holdingId);
+
+		return view;
+	}
+
+	private async closeInTransaction(
+		contractId: string,
+		changeId: string,
+		reason: string,
+		holdingId: string,
+		userId: string,
+		status: 'skipped' | 'cancelled'
+	): Promise<ScheduledChangeView> {
+		const contract = { id: contractId };
 
 		return await this.transaction(async (runner) => {
 			await runner.query(`SELECT id FROM contract_scheduled_changes WHERE id = $1 AND holding_id = $2 FOR UPDATE`, [changeId, holdingId]);

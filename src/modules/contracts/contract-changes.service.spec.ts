@@ -1276,6 +1276,53 @@ describe('ContractChangesService · B2-4 / B2-5 (spec modificaciones §9.3.3, §
 		expect(JSON.parse((event[1] as unknown[])[10] as string).origin).toEqual({ type: 'renewal_proposal', event_id: PROPOSAL });
 	});
 
+	it('Notificaciones v2: tras confirmar, cierra la alerta "Renovación por confirmar" y los vencimientos ya decididos del contrato', async () => {
+		const { service } = build((sql) => {
+			// Después del commit la propuesta ya no está abierta y no quedan ítems sin decisión con ese fin.
+			if (sql.includes("event_status = 'Pending'") || sql.includes('SELECT DISTINCT ci.end_date::text')) return [];
+			return sql.includes("event_type = 'RENEWAL_PROPOSED'") && sql.includes('metadata->>')
+				? [{ id: PROPOSAL, status: 'open', items: [{ item_id: LICENCIA }] }]
+				: undefined;
+		});
+		const notifications = {
+			listOpen: jest.fn(async (_holding: string, type: string) =>
+				type === 'contract_renewal_proposed'
+					? [{ id: 'n-proposal', action_payload: { event_id: PROPOSAL }, deduplication_key: `contracts:renewal-proposal:${PROPOSAL}` }]
+					: type === 'contract_renewal_reminder'
+						? [{ id: 'n-reminder', action_payload: {}, deduplication_key: `contracts:renewal-reminder:${CONTRACT_ID}:2026-12-14` }]
+						: []
+			),
+			resolveOpen: jest.fn().mockResolvedValue(2),
+		};
+
+		(service as unknown as { notifications: unknown }).notifications = notifications;
+		await service.apply(
+			CONTRACT_ID,
+			request(
+				{ type: 'renewal', items: [{ item_id: LICENCIA }] },
+				{ effective_date: '2026-12-15', origin: { type: 'renewal_proposal', event_id: PROPOSAL } }
+			),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+
+		expect(notifications.listOpen).toHaveBeenCalledWith(HOLDING, 'contract_renewal_proposed', CONTRACT_ID);
+		expect(notifications.resolveOpen).toHaveBeenCalledWith(HOLDING, { ids: ['n-reminder', 'n-proposal'] });
+	});
+
+	it('sin NotificationsService (o si falla) el cambio igual se aplica: el cierre de alertas nunca lanza', async () => {
+		const { service } = build();
+
+		await expect(service.closeResolvedAlerts(CONTRACT_ID, HOLDING)).resolves.toBe(0);
+		(service as unknown as { notifications: unknown }).notifications = {
+			listOpen: jest.fn().mockRejectedValue(new Error('sin base')),
+			resolveOpen: jest.fn(),
+		};
+		await expect(service.closeResolvedAlerts(CONTRACT_ID, HOLDING)).resolves.toBe(0);
+	});
+
 	it('confirmar una propuesta ya omitida → 409 blocked renewal_proposal_not_open', async () => {
 		const { service } = build((sql) =>
 			sql.includes("event_type = 'RENEWAL_PROPOSED'") && sql.includes('metadata->>')

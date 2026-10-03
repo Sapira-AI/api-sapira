@@ -726,6 +726,13 @@
   "columns": {},
   "constraints": [
    {
+    "name": "app_notifications_company_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL"
+   },
+   {
     "name": "app_notifications_holding_id_fkey",
     "type": "f",
     "ondelete": "c",
@@ -751,6 +758,15 @@
    }
   ],
   "indexes": [
+   {
+    "name": "app_notifications_holding_company_idx",
+    "cols": [
+     "holding_id",
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
    {
     "name": "app_notifications_holding_resource_created_idx",
     "cols": null,
@@ -831,6 +847,15 @@
    }
   ],
   "indexes": [
+   {
+    "name": "app_notification_recipients_user_archived_idx",
+    "cols": [
+     "user_id",
+     "archived_at"
+    ],
+    "unique": false,
+    "where": null
+   },
    {
     "name": "app_notification_recipients_user_unread_idx",
     "cols": null,

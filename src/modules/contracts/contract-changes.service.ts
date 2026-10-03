@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'crypto';
 
-import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, HttpException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { insertClientEntity } from '@/modules/clients/client-entity-writer';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { setApiWriter } from './api-writer';
 import {
@@ -23,6 +24,7 @@ import { catalogPriceIds, loadCatalogPrices } from './catalog-prices';
 import { headerAmounts } from './consumption';
 import { creditNoteStatusFor, PENDING_STATUS, voidedSql } from './contract-360';
 import { insertEngineInvoices, insertEngineLines, type InvoiceIssuer, type InvoiceLineUnits } from './contract-activation.service';
+import { reconcileContractAlerts } from './contract-alerts';
 import {
 	type ChangeContext,
 	type ChangeContractRow,
@@ -170,7 +172,8 @@ export class ContractChangesService {
 		private readonly dataSource: DataSource,
 		private readonly contracts: ContractsService,
 		private readonly invoiceEdit: ContractInvoiceEditService,
-		private readonly descriptions: ContractInvoiceDescriptionsService
+		private readonly descriptions: ContractInvoiceDescriptionsService,
+		@Optional() private readonly notifications?: NotificationsService
 	) {}
 
 	// ---------------------------------------------------------------- vista previa
@@ -388,6 +391,8 @@ export class ContractChangesService {
 			active = false;
 			if (quoteStageUpdated === false)
 				this.logger.warn(`El holding ${holdingId} no tiene la etapa "${QUOTE_CONTRACT_CREATED_STAGE}": la cotización queda en su etapa`);
+			// Notificaciones v2: renovar, dar de baja, terminar o aplicar un pacto cierra las alertas del contrato que ya no aplican.
+			await this.closeResolvedAlerts(ctx.contract.id, holdingId);
 
 			return {
 				...plan.preview,
@@ -408,6 +413,11 @@ export class ContractChangesService {
 		} finally {
 			await runner.release();
 		}
+	}
+
+	/** Cierre automático de alertas del contrato (`contract-alerts.ts`); nunca lanza. También lo usa Pactos al omitir o cancelar. */
+	async closeResolvedAlerts(contractId: string, holdingId: string): Promise<number> {
+		return await reconcileContractAlerts(this.dataSource, this.notifications, holdingId, contractId, (message) => this.logger.warn(message));
 	}
 
 	// ---------------------------------------------------------------- job: horizonte de los ítems sin término

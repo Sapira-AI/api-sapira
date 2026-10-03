@@ -125,8 +125,9 @@ describe('job contracts-auto-renewal (§9.3.5)', () => {
 			type: 'contract_renewal_proposed',
 			resource_id: CONTRACT,
 			deduplication_key: 'contracts:renewal-proposal:event-1',
-			recipients: { include_super_admins: true },
 		});
+		// Destinatarios = suscripciones del tipo (semilla N3: Administrador y Finanzas), ya no solo super admins.
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1].recipients).toBeUndefined();
 	});
 
 	it('idempotente: con la clave ítem:fin ya propuesta (lectura o con el lock) no inserta ni notifica', async () => {
@@ -385,8 +386,12 @@ describe('alertas crecientes antes del vencimiento (S2-1 / S5-4, 7b)', () => {
 			severity: 'warning',
 			title: 'CTR-2026-001: vence en 3 días · sin decisión',
 			deduplication_key: `contracts:renewal-reminder:${CONTRACT}:2026-10-01`,
-			recipients: { include_super_admins: true },
+			// Cada escalón vuelve a dejarla sin leer; el texto dice el efecto en el devengo.
+			escalation_step: 7,
+			recommendation: 'Renuévalo o registra la baja desde el contrato.',
 		});
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1].message).toContain('pendiente de renovar');
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1].recipients).toBeUndefined();
 	});
 
 	it('ronda 4: escalera y frecuencia vencido del holding (preferencias); escalones mayores que el aviso no cuentan', () => {

@@ -4,6 +4,7 @@ import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, 
 
 import { CLIENT_ACTIVITY_TYPES, type ClientActivityType } from '../client-activity.service';
 import { CLIENT_DOCUMENT_MAX_BYTES, CLIENT_DOCUMENT_MIME_TYPES } from '../client-documents.service';
+import { NOTE_REFERENCE_TYPES, type NoteReferenceType } from '../client-note-tokens';
 
 /** `GET /clients/:id/activity`: `types` separados por coma (p. ej. `note,invoice`). */
 export class QueryClientActivityDto {
@@ -38,8 +39,33 @@ export class QueryClientActivityDto {
 	limit?: number;
 }
 
+/** `GET /clients/:id/references`: elementos del cliente para referenciar con `#` en una nota. */
+export class QueryClientReferencesDto {
+	@ApiPropertyOptional({ description: 'Busca por número, nombre o RUT' })
+	@IsOptional()
+	@IsString()
+	@MaxLength(120, { message: 'La búsqueda admite hasta 120 caracteres' })
+	search?: string;
+
+	@ApiPropertyOptional({ enum: NOTE_REFERENCE_TYPES })
+	@IsOptional()
+	@IsIn(NOTE_REFERENCE_TYPES, { message: `Tipo inválido: ${NOTE_REFERENCE_TYPES.join(', ')}` })
+	type?: NoteReferenceType;
+
+	@ApiPropertyOptional({ default: 20, maximum: 50 })
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(50, { message: 'El límite máximo es 50' })
+	@IsOptional()
+	limit?: number;
+}
+
 export class CreateActivityNoteDto {
-	@ApiProperty({ description: 'Texto de la nota (1–5.000 caracteres)' })
+	@ApiProperty({
+		description:
+			'Texto de la nota (1–5.000 caracteres). Menciones `@[user:<id>]` y referencias `#[<tipo>:<id>]` (contrato, factura, NC, cotización, razón social, documento del cliente)',
+	})
 	@IsString()
 	@Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
 	@MinLength(1)

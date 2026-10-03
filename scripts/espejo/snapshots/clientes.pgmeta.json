@@ -1041,6 +1041,28 @@
      "updatable"
     ],
     "comment": "Borrado lógico: la nota deja de mostrarse pero se conserva"
+   },
+   {
+    "name": "mentioned_user_ids",
+    "data_type": "ARRAY",
+    "format": "_uuid",
+    "type": "uuid[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::uuid[]",
+    "comment": "users.id mencionados con @[user:<id>] en el texto (los deriva la API)"
+   },
+   {
+    "name": "references",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'[]'::jsonb",
+    "comment": "Elementos del cliente referenciados con #[<tipo>:<id>]: [{ type, id }] (los deriva la API)"
    }
   ],
   "primary_keys": [

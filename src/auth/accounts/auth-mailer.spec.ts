@@ -300,6 +300,22 @@ describe('AuthMailer', () => {
 		expect(body.html).toContain('src="https://qa.x/logo.png"');
 	});
 
+	it('sendRendered (Notificaciones): respeta INVITE_TEST_ALLOWLIST y appUrl arma la URL del front', async () => {
+		const fetchMock = jest.fn(async () => ({ ok: true, json: async () => ({ id: 're_3' }) }));
+
+		global.fetch = fetchMock as unknown as typeof fetch;
+		const mailer = new AuthMailer(
+			config({ RESEND_API_KEY: 'k', INVITE_TEST_ALLOWLIST: 'aisapira.com', INVITE_LANDING_URL: 'https://qa.aisapira.com/' })
+		);
+		const email = { subject: 'Hola', html: '<p>x</p>', text: 'x' };
+
+		expect(await mailer.sendRendered('cliente@otra.cl', email, 'k1')).toMatchObject({ status: 'failed' });
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(await mailer.sendRendered('domi@aisapira.com', email, 'k2')).toEqual({ status: 'sent', id: 're_3' });
+		expect(mailer.appUrl('/lab/notificaciones')).toBe('https://qa.aisapira.com/lab/notificaciones');
+		expect(new AuthMailer(config({})).appUrl('/x')).toBeNull();
+	});
+
 	it('nunca lanza: sin clave, con error HTTP o de red → failed', async () => {
 		expect(await new AuthMailer(config({})).sendInvitation('a@x.cl', invitation, 'k')).toMatchObject({ status: 'failed' });
 		global.fetch = jest.fn(async () => ({ ok: false, status: 422, json: async () => ({ message: 'invalid' }) })) as unknown as typeof fetch;

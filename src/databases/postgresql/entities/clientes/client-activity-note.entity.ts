@@ -16,6 +16,7 @@ import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 	comment: 'Notas de la línea de tiempo del cliente comercial (pestaña Actividad del front nuevo). Distintas de clients.notes (nota fija).',
 })
 @Index('client_activity_notes_client_idx', ['client_id', 'created_at'])
+@Index('client_activity_notes_mentions_idx', { synchronize: false })
 @Check('client_activity_notes_body_check', `char_length(btrim(body)) BETWEEN 1 AND 5000`)
 export class ClientActivityNote {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'client_activity_notes_pkey' })
@@ -32,6 +33,14 @@ export class ClientActivityNote {
 
 	@Column({ type: 'uuid', nullable: true, comment: 'users.id de quien escribió la nota' })
 	created_by?: string | null;
+
+	/** users.id mencionados con `@[user:<id>]` en el texto (N7, los deriva la API). */
+	@Column({ type: 'uuid', array: true, default: () => "'{}'", comment: 'users.id mencionados con @[user:<id>] en el texto (los deriva la API)' })
+	mentioned_user_ids: string[];
+
+	/** Elementos del cliente referenciados con `#[<tipo>:<id>]`: `[{ type, id }]` (N7, los deriva la API). */
+	@Column({ type: 'jsonb', default: [], comment: 'Elementos del cliente referenciados con #[<tipo>:<id>]: [{ type, id }] (los deriva la API)' })
+	references: Array<{ type: string; id: string }>;
 
 	@Column({ type: 'timestamp with time zone', default: () => 'now()' })
 	created_at: Date;

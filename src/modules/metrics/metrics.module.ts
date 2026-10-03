@@ -16,6 +16,6 @@ import { RevenueMetricsService } from './revenue-metrics.service';
 	imports: [PostgreSQLDatabaseModule],
 	controllers: [MetricsController],
 	providers: [HoldingMetricsService, MetricsDataService, MrrMetricsService, RevenueMetricsService],
-	exports: [HoldingMetricsService],
+	exports: [HoldingMetricsService, RevenueMetricsService, MrrMetricsService],
 })
 export class MetricsModule {}

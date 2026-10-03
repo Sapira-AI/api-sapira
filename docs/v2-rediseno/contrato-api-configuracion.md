@@ -315,10 +315,12 @@ Ocultos: `MANAGE_*`, `VIEW_REPORTS`, `*_FINANCIAL_DATA`. `internal` (`VIEW_LAB`,
 - `GET` (VIEW) →
   ```json
   { "role_id": "uuid", "alerts": [
-    { "type": "salesforce_staging_blocked", "label": "Importación de Salesforce bloqueada", "enabled": true },
-    { "type": "salesforce_sync_failure", "label": "Falla de sincronización de Salesforce", "enabled": false },
-    { "type": "invoice_odoo_failure", "label": "Falla de envío de factura al ERP", "enabled": true } ] }
+    { "type": "invoice_odoo_failure", "label": "No se pudo enviar una factura al ERP", "module": "facturacion",
+      "module_label": "Facturación", "icon": "receipt-text", "enabled": true },
+    … ] }
   ```
+  Desde Notificaciones v2 (03-10) ofrece **todos los tipos suscribibles con productor del catálogo** (10, en el orden del catálogo; ver
+  `contrato-api-notificaciones.md` §1); los reservados de fase 2 se suman cuando tengan productor.
 - `PUT` (EDIT) `{ "types": ["salesforce_staging_blocked", …] }` → respuesta GET. Reemplaza solo las suscripciones de **ese rol**
   (`notification_role_subscriptions`); las de otros roles y la de super admins (`role_id NULL`) no se tocan. Vale también para roles por
   defecto (las alertas son configuración del holding, no del rol). 400 `Tipo de alerta no válido: x`.
