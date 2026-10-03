@@ -144,6 +144,28 @@
         "precision": null,
         "scale": null,
         "array": false
+      },
+      "avatar_preset": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "avatar_path": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
       }
     },
     "uniques": {
@@ -171,6 +193,10 @@
       }
     },
     "checks": [
+      {
+        "name": "users_avatar_one_kind_check",
+        "expression": "avatar_preset IS NULL OR avatar_path IS NULL"
+      },
       {
         "name": "users_status_check",
         "expression": "((status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])))"
@@ -487,6 +513,207 @@
     "indices": {},
     "checks": [],
     "foreignKeys": {}
+  },
+  "products": {
+    "class": "Product",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "product_code": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_recurring": {
+        "type": "boolean",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "default_currency": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "default_price": {
+        "type": "numeric",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_product_id": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "odoo_product_id": {
+        "type": "integer",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "odoo_tax_ids": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "stripe_product_id": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "status": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "active",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_products_stripe_product_id": {
+        "columns": [
+          "stripe_product_id"
+        ],
+        "unique": false,
+        "where": "(stripe_product_id IS NOT NULL)"
+      },
+      "idx_products_salesforce_product_id": {
+        "columns": [
+          "salesforce_product_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_products_product_code": {
+        "columns": [
+          "product_code"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_products_odoo_tax_ids": {
+        "columns": [
+          "odoo_tax_ids"
+        ],
+        "unique": false,
+        "where": "(odoo_tax_ids IS NOT NULL)"
+      },
+      "idx_products_odoo_product_id": {
+        "columns": [
+          "odoo_product_id"
+        ],
+        "unique": false,
+        "where": "(odoo_product_id IS NOT NULL)"
+      }
+    },
+    "checks": [
+      {
+        "name": "products_status_check",
+        "expression": "status = ANY (ARRAY['active'::text, 'archived'::text])"
+      }
+    ],
+    "foreignKeys": {
+      "products_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "NO ACTION"
+      }
+    }
   },
   "countries": {
     "class": "Country",
@@ -1997,207 +2224,6 @@
       }
     }
   },
-  "products": {
-    "class": "Product",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "product_code": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "name": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_recurring": {
-        "type": "boolean",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "default_currency": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "default_price": {
-        "type": "numeric",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_product_id": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "odoo_product_id": {
-        "type": "integer",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "odoo_tax_ids": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "stripe_product_id": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "status": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "active",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_products_stripe_product_id": {
-        "columns": [
-          "stripe_product_id"
-        ],
-        "unique": false,
-        "where": "(stripe_product_id IS NOT NULL)"
-      },
-      "idx_products_salesforce_product_id": {
-        "columns": [
-          "salesforce_product_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_products_product_code": {
-        "columns": [
-          "product_code"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_products_odoo_tax_ids": {
-        "columns": [
-          "odoo_tax_ids"
-        ],
-        "unique": false,
-        "where": "(odoo_tax_ids IS NOT NULL)"
-      },
-      "idx_products_odoo_product_id": {
-        "columns": [
-          "odoo_product_id"
-        ],
-        "unique": false,
-        "where": "(odoo_product_id IS NOT NULL)"
-      }
-    },
-    "checks": [
-      {
-        "name": "products_status_check",
-        "expression": "status = ANY (ARRAY['active'::text, 'archived'::text])"
-      }
-    ],
-    "foreignKeys": {
-      "products_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "NO ACTION"
-      }
-    }
-  },
   "subscription_items": {
     "class": "SubscriptionItem",
     "columns": {
@@ -2575,6 +2601,94 @@
         ],
         "table": "subscriptions",
         "onDelete": "CASCADE"
+      }
+    }
+  },
+  "revenue_rules": {
+    "class": "RevenueRule",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "company_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "target_type": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "target_name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "method": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {},
+    "checks": [
+      {
+        "name": "revenue_rules_target_type_check",
+        "expression": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
+      }
+    ],
+    "foreignKeys": {
+      "revenue_rules_company_id_fkey": {
+        "columns": [
+          "company_id"
+        ],
+        "table": "companies",
+        "onDelete": "NO ACTION"
       }
     }
   },
@@ -7588,94 +7702,6 @@
       }
     }
   },
-  "revenue_rules": {
-    "class": "RevenueRule",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "company_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "target_type": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "target_name": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "method": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp without time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {},
-    "checks": [
-      {
-        "name": "revenue_rules_target_type_check",
-        "expression": "target_type = ANY (ARRAY['Producto'::text, 'Contrato'::text])"
-      }
-    ],
-    "foreignKeys": {
-      "revenue_rules_company_id_fkey": {
-        "columns": [
-          "company_id"
-        ],
-        "table": "companies",
-        "onDelete": "NO ACTION"
-      }
-    }
-  },
   "mrr_adjustments": {
     "class": "MrrAdjustment",
     "columns": {
@@ -11867,149 +11893,6 @@
     "checks": [],
     "foreignKeys": {}
   },
-  "exchange_rates_monthly_avg": {
-    "class": "ExchangeRateMonthlyAvgEntity",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "from_currency": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "to_currency": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "year": {
-        "type": "integer",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "month": {
-        "type": "integer",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "avg_rate": {
-        "type": "numeric",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "min_rate": {
-        "type": "numeric",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "max_rate": {
-        "type": "numeric",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "data_points": {
-        "type": "integer",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "calculated_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key": [
-        "from_currency",
-        "to_currency",
-        "year",
-        "month"
-      ]
-    },
-    "indices": {
-      "idx_exchange_rates_monthly_avg_period": {
-        "columns": [
-          "year",
-          "month"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_exchange_rates_monthly_avg_currencies": {
-        "columns": [
-          "from_currency",
-          "to_currency"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {}
-  },
   "contract_fx_period_rates": {
     "class": "ContractFxPeriodRate",
     "columns": {
@@ -12229,6 +12112,149 @@
         "onDelete": "CASCADE"
       }
     }
+  },
+  "exchange_rates_monthly_avg": {
+    "class": "ExchangeRateMonthlyAvgEntity",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "from_currency": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "to_currency": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "year": {
+        "type": "integer",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "month": {
+        "type": "integer",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "avg_rate": {
+        "type": "numeric",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "min_rate": {
+        "type": "numeric",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "max_rate": {
+        "type": "numeric",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "data_points": {
+        "type": "integer",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "calculated_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "exchange_rates_monthly_avg_from_currency_to_currency_year_m_key": [
+        "from_currency",
+        "to_currency",
+        "year",
+        "month"
+      ]
+    },
+    "indices": {
+      "idx_exchange_rates_monthly_avg_period": {
+        "columns": [
+          "year",
+          "month"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_exchange_rates_monthly_avg_currencies": {
+        "columns": [
+          "from_currency",
+          "to_currency"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {}
   },
   "quantities": {
     "class": "Quantity",
@@ -13492,144 +13518,6 @@
         ],
         "table": "contracts",
         "onDelete": "NO ACTION"
-      }
-    }
-  },
-  "invoice_reschedules": {
-    "class": "InvoiceReschedule",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "invoice_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "old_date": {
-        "type": "date",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "new_date": {
-        "type": "date",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "reason": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "changed_by": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "changed_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_invoice_reschedules_invoice_id": {
-        "columns": [
-          "invoice_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "invoice_reschedules_changed_by_fkey": {
-        "columns": [
-          "changed_by"
-        ],
-        "table": "users",
-        "onDelete": "NO ACTION"
-      },
-      "invoice_reschedules_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "invoice_reschedules_invoice_id_fkey": {
-        "columns": [
-          "invoice_id"
-        ],
-        "table": "invoices",
-        "onDelete": "CASCADE"
       }
     }
   },
@@ -15571,6 +15459,144 @@
         ],
         "table": "subscription_items",
         "onDelete": "NO ACTION"
+      }
+    }
+  },
+  "invoice_reschedules": {
+    "class": "InvoiceReschedule",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "invoice_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "old_date": {
+        "type": "date",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "new_date": {
+        "type": "date",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "reason": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "changed_by": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "changed_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_invoice_reschedules_invoice_id": {
+        "columns": [
+          "invoice_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "invoice_reschedules_changed_by_fkey": {
+        "columns": [
+          "changed_by"
+        ],
+        "table": "users",
+        "onDelete": "NO ACTION"
+      },
+      "invoice_reschedules_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "invoice_reschedules_invoice_id_fkey": {
+        "columns": [
+          "invoice_id"
+        ],
+        "table": "invoices",
+        "onDelete": "CASCADE"
       }
     }
   },
@@ -18891,190 +18917,6 @@
       }
     }
   },
-  "contract_billing_splits": {
-    "class": "ContractBillingSplit",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "contract_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "billing_company_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "billing_currency": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "percent_allocation": {
-        "type": "numeric",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "effective_from": {
-        "type": "date",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "effective_to": {
-        "type": "date",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "notes": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_billing_splits_dates": {
-        "columns": [
-          "effective_from",
-          "effective_to"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_billing_splits_contract": {
-        "columns": [
-          "contract_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_billing_splits_company": {
-        "columns": [
-          "billing_company_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [
-      {
-        "name": "valid_date_range",
-        "expression": "(effective_to IS NULL) OR (effective_to >= effective_from)"
-      },
-      {
-        "name": "contract_billing_splits_percent_allocation_check",
-        "expression": "(percent_allocation >= (0)::numeric) AND (percent_allocation <= (100)::numeric)"
-      }
-    ],
-    "foreignKeys": {
-      "contract_billing_splits_billing_company_id_fkey": {
-        "columns": [
-          "billing_company_id"
-        ],
-        "table": "companies",
-        "onDelete": "NO ACTION"
-      },
-      "contract_billing_splits_contract_id_fkey": {
-        "columns": [
-          "contract_id"
-        ],
-        "table": "contracts",
-        "onDelete": "CASCADE"
-      },
-      "contract_billing_splits_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "NO ACTION"
-      }
-    }
-  },
   "contract_change_log": {
     "class": "ContractChangeLog",
     "columns": {
@@ -19450,6 +19292,400 @@
       }
     }
   },
+  "contract_billing_splits": {
+    "class": "ContractBillingSplit",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "contract_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "billing_company_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "billing_currency": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "percent_allocation": {
+        "type": "numeric",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "effective_from": {
+        "type": "date",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "effective_to": {
+        "type": "date",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "notes": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_billing_splits_dates": {
+        "columns": [
+          "effective_from",
+          "effective_to"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_billing_splits_contract": {
+        "columns": [
+          "contract_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_billing_splits_company": {
+        "columns": [
+          "billing_company_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [
+      {
+        "name": "valid_date_range",
+        "expression": "(effective_to IS NULL) OR (effective_to >= effective_from)"
+      },
+      {
+        "name": "contract_billing_splits_percent_allocation_check",
+        "expression": "(percent_allocation >= (0)::numeric) AND (percent_allocation <= (100)::numeric)"
+      }
+    ],
+    "foreignKeys": {
+      "contract_billing_splits_billing_company_id_fkey": {
+        "columns": [
+          "billing_company_id"
+        ],
+        "table": "companies",
+        "onDelete": "NO ACTION"
+      },
+      "contract_billing_splits_contract_id_fkey": {
+        "columns": [
+          "contract_id"
+        ],
+        "table": "contracts",
+        "onDelete": "CASCADE"
+      },
+      "contract_billing_splits_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "NO ACTION"
+      }
+    }
+  },
+  "contract_amendment_items": {
+    "class": "ContractAmendmentItem",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "amendment_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "original_item_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "new_item_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "scope": {
+        "type": "enum",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "quantity_delta": {
+        "type": "numeric",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "price_delta": {
+        "type": "numeric",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "start_date_override": {
+        "type": "date",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "end_date_override": {
+        "type": "date",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "notes": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "item_metadata": {
+        "type": "jsonb",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "{}",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_amendment_items_original": {
+        "columns": [
+          "original_item_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_amendment_items_new": {
+        "columns": [
+          "new_item_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_amendment_items_holding": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_amendment_items_amendment": {
+        "columns": [
+          "amendment_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "contract_amendment_items_amendment_id_fkey": {
+        "columns": [
+          "amendment_id"
+        ],
+        "table": "contract_amendments",
+        "onDelete": "CASCADE"
+      },
+      "contract_amendment_items_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "RESTRICT"
+      },
+      "contract_amendment_items_new_item_id_fkey": {
+        "columns": [
+          "new_item_id"
+        ],
+        "table": "contract_items",
+        "onDelete": "NO ACTION"
+      },
+      "contract_amendment_items_original_item_id_fkey": {
+        "columns": [
+          "original_item_id"
+        ],
+        "table": "contract_items",
+        "onDelete": "NO ACTION"
+      }
+    }
+  },
   "consumption_entries": {
     "class": "ConsumptionEntry",
     "columns": {
@@ -19782,216 +20018,6 @@
       }
     }
   },
-  "contract_amendment_items": {
-    "class": "ContractAmendmentItem",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "amendment_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "original_item_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "new_item_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "scope": {
-        "type": "enum",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "quantity_delta": {
-        "type": "numeric",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "price_delta": {
-        "type": "numeric",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "start_date_override": {
-        "type": "date",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "end_date_override": {
-        "type": "date",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "notes": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "item_metadata": {
-        "type": "jsonb",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "{}",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_amendment_items_original": {
-        "columns": [
-          "original_item_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_amendment_items_new": {
-        "columns": [
-          "new_item_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_amendment_items_holding": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_amendment_items_amendment": {
-        "columns": [
-          "amendment_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "contract_amendment_items_amendment_id_fkey": {
-        "columns": [
-          "amendment_id"
-        ],
-        "table": "contract_amendments",
-        "onDelete": "CASCADE"
-      },
-      "contract_amendment_items_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "RESTRICT"
-      },
-      "contract_amendment_items_new_item_id_fkey": {
-        "columns": [
-          "new_item_id"
-        ],
-        "table": "contract_items",
-        "onDelete": "NO ACTION"
-      },
-      "contract_amendment_items_original_item_id_fkey": {
-        "columns": [
-          "original_item_id"
-        ],
-        "table": "contract_items",
-        "onDelete": "NO ACTION"
-      }
-    }
-  },
   "consumption_entry_revisions": {
     "class": "ConsumptionEntryRevision",
     "columns": {
@@ -20243,118 +20269,6 @@
     "checks": [],
     "foreignKeys": {}
   },
-  "contact_preferences": {
-    "class": "ContactPreference",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "client_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "contact_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "allow_billing_emails": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "allow_proforma": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "contact_preferences_holding_id_client_id_contact_id_key": [
-        "holding_id",
-        "client_id",
-        "contact_id"
-      ]
-    },
-    "indices": {
-      "contact_preferences_holding_idx": {
-        "columns": [
-          "holding_id",
-          "client_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {}
-  },
   "company_legal_documents": {
     "class": "CompanyLegalDocument",
     "columns": {
@@ -20532,6 +20446,118 @@
         "onDelete": "CASCADE"
       }
     }
+  },
+  "contact_preferences": {
+    "class": "ContactPreference",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "client_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "contact_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "allow_billing_emails": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "allow_proforma": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "contact_preferences_holding_id_client_id_contact_id_key": [
+        "holding_id",
+        "client_id",
+        "contact_id"
+      ]
+    },
+    "indices": {
+      "contact_preferences_holding_idx": {
+        "columns": [
+          "holding_id",
+          "client_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {}
   },
   "company_account_mappings": {
     "class": "CompanyAccountMapping",
@@ -20768,6 +20794,195 @@
         ],
         "table": "companies",
         "onDelete": "CASCADE"
+      }
+    }
+  },
+  "client_documents": {
+    "class": "ClientDocument",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "client_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "document_name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "file_url": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "uploaded_at": {
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "gen_random_uuid()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "storage_bucket": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "storage_path": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "file_size": {
+        "type": "bigint",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "mime_type": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "uploaded_by": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "client_entity_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "deleted_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_client_documents_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "client_documents_client_id_fkey": {
+        "columns": [
+          "client_id"
+        ],
+        "table": "clients",
+        "onDelete": "CASCADE"
+      },
+      "fk_client_documents_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "client_documents_uploaded_by_fkey": {
+        "columns": [
+          "uploaded_by"
+        ],
+        "table": "users",
+        "onDelete": "SET NULL"
+      },
+      "client_documents_client_entity_id_fkey": {
+        "columns": [
+          "client_entity_id"
+        ],
+        "table": "client_entities",
+        "onDelete": "SET NULL"
       }
     }
   },
@@ -21033,8 +21248,8 @@
       }
     }
   },
-  "client_documents": {
-    "class": "ClientDocument",
+  "user_view_preferences": {
+    "class": "UserViewPreference",
     "columns": {
       "id": {
         "type": "uuid",
@@ -21047,9 +21262,9 @@
         "scale": null,
         "array": false
       },
-      "client_id": {
+      "user_id": {
         "type": "uuid",
-        "nullable": true,
+        "nullable": false,
         "primary": false,
         "generated": null,
         "default": null,
@@ -21058,9 +21273,9 @@
         "scale": null,
         "array": false
       },
-      "document_name": {
+      "entity_type": {
         "type": "text",
-        "nullable": true,
+        "nullable": false,
         "primary": false,
         "generated": null,
         "default": null,
@@ -21069,9 +21284,20 @@
         "scale": null,
         "array": false
       },
-      "file_url": {
+      "view_name": {
         "type": "text",
-        "nullable": true,
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "Mi Vista",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "column_config": {
+        "type": "jsonb",
+        "nullable": false,
         "primary": false,
         "generated": null,
         "default": null,
@@ -21080,9 +21306,31 @@
         "scale": null,
         "array": false
       },
-      "uploaded_at": {
-        "type": "timestamp without time zone",
-        "nullable": true,
+      "filter_config": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "{}",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_default": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": false,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
         "primary": false,
         "generated": null,
         "default": "now()",
@@ -21091,134 +21339,51 @@
         "scale": null,
         "array": false
       },
-      "holding_id": {
-        "type": "uuid",
+      "updated_at": {
+        "type": "timestamp with time zone",
         "nullable": false,
         "primary": false,
         "generated": null,
-        "default": "gen_random_uuid()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "storage_bucket": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "storage_path": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "file_size": {
-        "type": "bigint",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "mime_type": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "uploaded_by": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "client_entity_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "deleted_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
+        "default": "now()",
         "length": null,
         "precision": null,
         "scale": null,
         "array": false
       }
     },
-    "uniques": {},
+    "uniques": {
+      "user_view_preferences_user_id_entity_type_view_name_key": [
+        "user_id",
+        "entity_type",
+        "view_name"
+      ]
+    },
     "indices": {
-      "idx_client_documents_holding_id": {
+      "idx_user_view_prefs_user_entity": {
         "columns": [
-          "holding_id"
+          "user_id",
+          "entity_type"
         ],
         "unique": false,
         "where": null
+      },
+      "idx_user_view_prefs_one_default_per_entity": {
+        "columns": [
+          "user_id",
+          "entity_type"
+        ],
+        "unique": true,
+        "where": "is_default = true"
       }
     },
     "checks": [],
     "foreignKeys": {
-      "client_documents_client_id_fkey": {
+      "user_view_preferences_user_id_fkey": {
         "columns": [
-          "client_id"
-        ],
-        "table": "clients",
-        "onDelete": "CASCADE"
-      },
-      "fk_client_documents_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "client_documents_uploaded_by_fkey": {
-        "columns": [
-          "uploaded_by"
+          "user_id"
         ],
         "table": "users",
-        "onDelete": "SET NULL"
-      },
-      "client_documents_client_entity_id_fkey": {
-        "columns": [
-          "client_entity_id"
-        ],
-        "table": "client_entities",
-        "onDelete": "SET NULL"
+        "onDelete": "CASCADE"
       }
     }
   },
@@ -21382,145 +21547,6 @@
       }
     }
   },
-  "user_view_preferences": {
-    "class": "UserViewPreference",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "user_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "entity_type": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "view_name": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "Mi Vista",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "column_config": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "filter_config": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "{}",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_default": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": false,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "user_view_preferences_user_id_entity_type_view_name_key": [
-        "user_id",
-        "entity_type",
-        "view_name"
-      ]
-    },
-    "indices": {
-      "idx_user_view_prefs_user_entity": {
-        "columns": [
-          "user_id",
-          "entity_type"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_user_view_prefs_one_default_per_entity": {
-        "columns": [
-          "user_id",
-          "entity_type"
-        ],
-        "unique": true,
-        "where": "is_default = true"
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "user_view_preferences_user_id_fkey": {
-        "columns": [
-          "user_id"
-        ],
-        "table": "users",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
   "user_access_events": {
     "class": "UserAccessEvent",
     "columns": {
@@ -21537,7 +21563,7 @@
       },
       "holding_id": {
         "type": "uuid",
-        "nullable": false,
+        "nullable": true,
         "primary": false,
         "generated": null,
         "default": null,
@@ -21625,7 +21651,7 @@
     "checks": [
       {
         "name": "user_access_events_action_check",
-        "expression": "\"action\" = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text])"
+        "expression": "\"action\" = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text, 'password_changed'::text, 'sessions_revoked'::text])"
       }
     ],
     "foreignKeys": {
@@ -21781,6 +21807,105 @@
         ],
         "table": "roles",
         "onDelete": "NO ACTION"
+      }
+    }
+  },
+  "holding_integration_settings": {
+    "class": "HoldingIntegrationSettings",
+    "columns": {
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "integration": {
+        "type": "text",
+        "nullable": false,
+        "primary": true,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "auto_enabled": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "settings": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": {},
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_by": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {},
+    "checks": [
+      {
+        "name": "holding_integration_settings_integration_check",
+        "expression": "integration IN ('odoo', 'salesforce', 'bigquery', 'stripe')"
+      }
+    ],
+    "foreignKeys": {
+      "holding_integration_settings_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
       }
     }
   },
@@ -22110,13 +22235,24 @@
       }
     }
   },
-  "holding_integration_settings": {
-    "class": "HoldingIntegrationSettings",
+  "financial_settings": {
+    "class": "FinancialSettings",
     "columns": {
-      "holding_id": {
+      "id": {
         "type": "uuid",
         "nullable": false,
         "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
         "generated": null,
         "default": null,
         "length": null,
@@ -22124,45 +22260,34 @@
         "scale": null,
         "array": false
       },
-      "integration": {
+      "recognition_granularity": {
         "type": "text",
         "nullable": false,
-        "primary": true,
+        "primary": false,
         "generated": null,
-        "default": null,
+        "default": "monthly",
         "length": null,
         "precision": null,
         "scale": null,
         "array": false
       },
-      "auto_enabled": {
+      "discount_policy": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "from_application_date",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "discounts_require_approval": {
         "type": "boolean",
         "nullable": false,
         "primary": false,
         "generated": null,
         "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "settings": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": {},
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_by": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
         "length": null,
         "precision": null,
         "scale": null,
@@ -22189,25 +22314,27 @@
         "precision": null,
         "scale": null,
         "array": false
+      },
+      "revenue_schedule_monthly_enabled": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": false,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
       }
     },
-    "uniques": {},
+    "uniques": {
+      "financial_settings_holding_id_key": [
+        "holding_id"
+      ]
+    },
     "indices": {},
-    "checks": [
-      {
-        "name": "holding_integration_settings_integration_check",
-        "expression": "integration IN ('odoo', 'salesforce', 'bigquery', 'stripe')"
-      }
-    ],
-    "foreignKeys": {
-      "holding_integration_settings_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      }
-    }
+    "checks": [],
+    "foreignKeys": {}
   },
   "custom_field_definitions": {
     "class": "CustomFieldDefinition",
@@ -22546,239 +22673,6 @@
     "checks": [],
     "foreignKeys": {}
   },
-  "claude_skills": {
-    "class": "ClaudeSkill",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "name": {
-        "type": "varchar",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": "255",
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "description": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "input_schema": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_active": {
-        "type": "boolean",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "claude_skills_name_holding_id_key": [
-        "name",
-        "holding_id"
-      ]
-    },
-    "indices": {
-      "idx_claude_skills_name": {
-        "columns": [
-          "name"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_claude_skills_is_active": {
-        "columns": [
-          "is_active"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_claude_skills_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "claude_skills_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
-  "financial_settings": {
-    "class": "FinancialSettings",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "recognition_granularity": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "monthly",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "discount_policy": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "from_application_date",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "discounts_require_approval": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "revenue_schedule_monthly_enabled": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": false,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "financial_settings_holding_id_key": [
-        "holding_id"
-      ]
-    },
-    "indices": {},
-    "checks": [],
-    "foreignKeys": {}
-  },
   "user_notification_preferences": {
     "class": "UserNotificationPreference",
     "columns": {
@@ -23050,8 +22944,260 @@
       }
     }
   },
-  "notification_role_subscriptions": {
-    "class": "NotificationRoleSubscription",
+  "claude_skills": {
+    "class": "ClaudeSkill",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "name": {
+        "type": "varchar",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": "255",
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "description": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "input_schema": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_active": {
+        "type": "boolean",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "claude_skills_name_holding_id_key": [
+        "name",
+        "holding_id"
+      ]
+    },
+    "indices": {
+      "idx_claude_skills_name": {
+        "columns": [
+          "name"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_claude_skills_is_active": {
+        "columns": [
+          "is_active"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_claude_skills_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "claude_skills_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "app_notification_recipients": {
+    "class": "AppNotificationRecipient",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "notification_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "user_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_read": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": false,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "read_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "archived_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "app_notification_recipients_notification_id_user_id_key": [
+        "notification_id",
+        "user_id"
+      ]
+    },
+    "indices": {
+      "app_notification_recipients_user_archived_idx": {
+        "columns": [
+          "user_id",
+          "archived_at"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "app_notification_recipients_user_unread_idx": {
+        "columns": [],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "app_notification_recipients_notification_id_fkey": {
+        "columns": [
+          "notification_id"
+        ],
+        "table": "app_notifications",
+        "onDelete": "CASCADE"
+      },
+      "app_notification_recipients_user_id_fkey": {
+        "columns": [
+          "user_id"
+        ],
+        "table": "users",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "app_notifications": {
+    "class": "AppNotification",
     "columns": {
       "id": {
         "type": "uuid",
@@ -23075,18 +23221,7 @@
         "scale": null,
         "array": false
       },
-      "role_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "notification_type": {
+      "source": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -23097,12 +23232,336 @@
         "scale": null,
         "array": false
       },
-      "is_enabled": {
-        "type": "boolean",
+      "type": {
+        "type": "text",
         "nullable": false,
         "primary": false,
         "generated": null,
-        "default": true,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "severity": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "error",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "title": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "message": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "recommendation": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "action_type": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "action_payload": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": {},
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "metadata": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": {},
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "deduplication_key": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "resource_type": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "resource_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "company_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "status": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "open",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "resolved_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "app_notifications_holding_company_idx": {
+        "columns": [
+          "holding_id",
+          "company_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "app_notifications_holding_status_created_idx": {
+        "columns": [],
+        "unique": false,
+        "where": null
+      },
+      "app_notifications_holding_resource_created_idx": {
+        "columns": [],
+        "unique": false,
+        "where": null
+      },
+      "app_notifications_open_deduplication_key_idx": {
+        "columns": [
+          "holding_id",
+          "deduplication_key"
+        ],
+        "unique": true,
+        "where": "((status = 'open'::text) AND (deduplication_key IS NOT NULL))"
+      }
+    },
+    "checks": [
+      {
+        "name": "app_notifications_status_check",
+        "expression": "((status = ANY (ARRAY['open'::text, 'resolved'::text])))"
+      },
+      {
+        "name": "app_notifications_severity_check",
+        "expression": "((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text])))"
+      }
+    ],
+    "foreignKeys": {
+      "app_notifications_company_id_fkey": {
+        "columns": [
+          "company_id"
+        ],
+        "table": "companies",
+        "onDelete": "SET NULL"
+      },
+      "app_notifications_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "notification_email_log": {
+    "class": "NotificationEmailLog",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "user_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "kind": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "dedup_key": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "notification_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "status": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "pending",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "provider_id": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "error": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
         "length": null,
         "precision": null,
         "scale": null,
@@ -23119,12 +23578,12 @@
         "scale": null,
         "array": false
       },
-      "updated_at": {
+      "sent_at": {
         "type": "timestamp with time zone",
-        "nullable": false,
+        "nullable": true,
         "primary": false,
         "generated": null,
-        "default": "now()",
+        "default": null,
         "length": null,
         "precision": null,
         "scale": null,
@@ -23132,37 +23591,43 @@
       }
     },
     "uniques": {
-      "notification_role_subscriptio_holding_id_role_id_notificati_key": [
-        "holding_id",
-        "role_id",
-        "notification_type"
+      "notification_email_log_user_dedup_key": [
+        "user_id",
+        "dedup_key"
       ]
     },
-    "indices": {
-      "notification_role_subscriptions_holding_type_idx": {
-        "columns": [
-          "holding_id",
-          "notification_type"
-        ],
-        "unique": false,
-        "where": "is_enabled"
+    "indices": {},
+    "checks": [
+      {
+        "name": "notification_email_log_status_check",
+        "expression": "(status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text]))"
+      },
+      {
+        "name": "notification_email_log_kind_check",
+        "expression": "(kind = ANY (ARRAY['alert'::text, 'digest'::text]))"
       }
-    },
-    "checks": [],
+    ],
     "foreignKeys": {
-      "notification_role_subscriptions_holding_id_fkey": {
+      "notification_email_log_holding_id_fkey": {
         "columns": [
           "holding_id"
         ],
         "table": "company_holdings",
         "onDelete": "CASCADE"
       },
-      "notification_role_subscriptions_role_id_fkey": {
+      "notification_email_log_user_id_fkey": {
         "columns": [
-          "role_id"
+          "user_id"
         ],
-        "table": "roles",
+        "table": "users",
         "onDelete": "CASCADE"
+      },
+      "notification_email_log_notification_id_fkey": {
+        "columns": [
+          "notification_id"
+        ],
+        "table": "app_notifications",
+        "onDelete": "SET NULL"
       }
     }
   },
@@ -23726,395 +24191,6 @@
       }
     }
   },
-  "app_notification_recipients": {
-    "class": "AppNotificationRecipient",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "notification_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "user_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_read": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": false,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "read_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "archived_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "app_notification_recipients_notification_id_user_id_key": [
-        "notification_id",
-        "user_id"
-      ]
-    },
-    "indices": {
-      "app_notification_recipients_user_archived_idx": {
-        "columns": [
-          "user_id",
-          "archived_at"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "app_notification_recipients_user_unread_idx": {
-        "columns": [],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "app_notification_recipients_notification_id_fkey": {
-        "columns": [
-          "notification_id"
-        ],
-        "table": "app_notifications",
-        "onDelete": "CASCADE"
-      },
-      "app_notification_recipients_user_id_fkey": {
-        "columns": [
-          "user_id"
-        ],
-        "table": "users",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
-  "app_notifications": {
-    "class": "AppNotification",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "source": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "type": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "severity": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "error",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "title": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "message": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "recommendation": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "action_type": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "action_payload": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": {},
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "metadata": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": {},
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "deduplication_key": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "resource_type": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "resource_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "company_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "status": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "open",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "resolved_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamptz",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "app_notifications_holding_company_idx": {
-        "columns": [
-          "holding_id",
-          "company_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "app_notifications_holding_status_created_idx": {
-        "columns": [],
-        "unique": false,
-        "where": null
-      },
-      "app_notifications_holding_resource_created_idx": {
-        "columns": [],
-        "unique": false,
-        "where": null
-      },
-      "app_notifications_open_deduplication_key_idx": {
-        "columns": [
-          "holding_id",
-          "deduplication_key"
-        ],
-        "unique": true,
-        "where": "((status = 'open'::text) AND (deduplication_key IS NOT NULL))"
-      }
-    },
-    "checks": [
-      {
-        "name": "app_notifications_status_check",
-        "expression": "((status = ANY (ARRAY['open'::text, 'resolved'::text])))"
-      },
-      {
-        "name": "app_notifications_severity_check",
-        "expression": "((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text])))"
-      }
-    ],
-    "foreignKeys": {
-      "app_notifications_company_id_fkey": {
-        "columns": [
-          "company_id"
-        ],
-        "table": "companies",
-        "onDelete": "SET NULL"
-      },
-      "app_notifications_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
   "ai_agents": {
     "class": "AiAgent",
     "columns": {
@@ -24540,8 +24616,8 @@
       }
     }
   },
-  "notification_email_log": {
-    "class": "NotificationEmailLog",
+  "ai_agent_configs": {
+    "class": "AiAgentConfig",
     "columns": {
       "id": {
         "type": "uuid",
@@ -24554,7 +24630,7 @@
         "scale": null,
         "array": false
       },
-      "holding_id": {
+      "agent_id": {
         "type": "uuid",
         "nullable": false,
         "primary": false,
@@ -24565,18 +24641,7 @@
         "scale": null,
         "array": false
       },
-      "user_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "kind": {
+      "key": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -24587,53 +24652,9 @@
         "scale": null,
         "array": false
       },
-      "dedup_key": {
-        "type": "text",
+      "value_json": {
+        "type": "jsonb",
         "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "notification_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "status": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "pending",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "provider_id": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "error": {
-        "type": "text",
-        "nullable": true,
         "primary": false,
         "generated": null,
         "default": null,
@@ -24653,12 +24674,12 @@
         "scale": null,
         "array": false
       },
-      "sent_at": {
+      "updated_at": {
         "type": "timestamp with time zone",
-        "nullable": true,
+        "nullable": false,
         "primary": false,
         "generated": null,
-        "default": null,
+        "default": "now()",
         "length": null,
         "precision": null,
         "scale": null,
@@ -24666,43 +24687,28 @@
       }
     },
     "uniques": {
-      "notification_email_log_user_dedup_key": [
-        "user_id",
-        "dedup_key"
+      "ai_agent_configs_agent_id_key_key": [
+        "agent_id",
+        "key"
       ]
     },
-    "indices": {},
-    "checks": [
-      {
-        "name": "notification_email_log_status_check",
-        "expression": "(status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text]))"
-      },
-      {
-        "name": "notification_email_log_kind_check",
-        "expression": "(kind = ANY (ARRAY['alert'::text, 'digest'::text]))"
+    "indices": {
+      "ai_agent_configs_agent_idx": {
+        "columns": [
+          "agent_id"
+        ],
+        "unique": false,
+        "where": null
       }
-    ],
+    },
+    "checks": [],
     "foreignKeys": {
-      "notification_email_log_holding_id_fkey": {
+      "ai_agent_configs_agent_id_fkey": {
         "columns": [
-          "holding_id"
+          "agent_id"
         ],
-        "table": "company_holdings",
+        "table": "ai_agents",
         "onDelete": "CASCADE"
-      },
-      "notification_email_log_user_id_fkey": {
-        "columns": [
-          "user_id"
-        ],
-        "table": "users",
-        "onDelete": "CASCADE"
-      },
-      "notification_email_log_notification_id_fkey": {
-        "columns": [
-          "notification_id"
-        ],
-        "table": "app_notifications",
-        "onDelete": "SET NULL"
       }
     }
   },
@@ -24848,102 +24854,6 @@
       }
     }
   },
-  "ai_agent_configs": {
-    "class": "AiAgentConfig",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "agent_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "key": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "value_json": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "ai_agent_configs_agent_id_key_key": [
-        "agent_id",
-        "key"
-      ]
-    },
-    "indices": {
-      "ai_agent_configs_agent_idx": {
-        "columns": [
-          "agent_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "ai_agent_configs_agent_id_fkey": {
-        "columns": [
-          "agent_id"
-        ],
-        "table": "ai_agents",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
   "agent_logs": {
     "class": "AgentLog",
     "columns": {
@@ -25045,6 +24955,122 @@
           "holding_id"
         ],
         "table": "company_holdings",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "notification_role_subscriptions": {
+    "class": "NotificationRoleSubscription",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "role_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "notification_type": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_enabled": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "notification_role_subscriptio_holding_id_role_id_notificati_key": [
+        "holding_id",
+        "role_id",
+        "notification_type"
+      ]
+    },
+    "indices": {
+      "notification_role_subscriptions_holding_type_idx": {
+        "columns": [
+          "holding_id",
+          "notification_type"
+        ],
+        "unique": false,
+        "where": "is_enabled"
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "notification_role_subscriptions_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "notification_role_subscriptions_role_id_fkey": {
+        "columns": [
+          "role_id"
+        ],
+        "table": "roles",
         "onDelete": "CASCADE"
       }
     }
@@ -25381,6 +25407,154 @@
     "checks": [],
     "foreignKeys": {}
   },
+  "stripe_product_mappings": {
+    "class": "StripeProductMapping",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_product_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "stripe_product_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_by": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "metadata": {
+        "type": "jsonb",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": {},
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "unique_stripe_mapping": [
+        "holding_id",
+        "sapira_product_id",
+        "stripe_product_id"
+      ]
+    },
+    "indices": {
+      "idx_stripe_mappings_stripe_product": {
+        "columns": [
+          "stripe_product_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_mappings_sapira_product": {
+        "columns": [
+          "sapira_product_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_mappings_holding_stripe": {
+        "columns": [
+          "holding_id",
+          "stripe_product_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_mappings_holding": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "stripe_product_mappings_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "stripe_product_mappings_sapira_product_id_fkey": {
+        "columns": [
+          "sapira_product_id"
+        ],
+        "table": "products",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
   "stripe_invoices_stg": {
     "class": "StripeInvoicesStg",
     "columns": {
@@ -25564,199 +25738,6 @@
         "where": null
       },
       "idx_stripe_invoices_stg_connection_id": {
-        "columns": [
-          "connection_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {}
-  },
-  "stripe_customers_stg": {
-    "class": "StripeCustomersStg",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "stripe_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "raw_data": {
-        "type": "jsonb",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sync_batch_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "processing_status": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "pending",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "integration_batch_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "last_integrated_at": {
-        "type": "timestamp with time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "integration_notes": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "error_message": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "connection_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "unique_stripe_customer_per_holding": [
-        "holding_id",
-        "stripe_id"
-      ]
-    },
-    "indices": {
-      "idx_stripe_customers_stg_sync_batch_id": {
-        "columns": [
-          "sync_batch_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_customers_stg_stripe_id": {
-        "columns": [
-          "stripe_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_customers_stg_processing_status": {
-        "columns": [
-          "processing_status"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_customers_stg_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_customers_stg_connection_id": {
         "columns": [
           "connection_id"
         ],
@@ -26108,154 +26089,6 @@
     ],
     "foreignKeys": {}
   },
-  "stripe_product_mappings": {
-    "class": "StripeProductMapping",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_product_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "stripe_product_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_by": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "metadata": {
-        "type": "jsonb",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": {},
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "unique_stripe_mapping": [
-        "holding_id",
-        "sapira_product_id",
-        "stripe_product_id"
-      ]
-    },
-    "indices": {
-      "idx_stripe_mappings_stripe_product": {
-        "columns": [
-          "stripe_product_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_mappings_sapira_product": {
-        "columns": [
-          "sapira_product_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_mappings_holding_stripe": {
-        "columns": [
-          "holding_id",
-          "stripe_product_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_stripe_mappings_holding": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "stripe_product_mappings_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "stripe_product_mappings_sapira_product_id_fkey": {
-        "columns": [
-          "sapira_product_id"
-        ],
-        "table": "products",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
   "salesforce_sync_logs": {
     "class": "SalesforceSyncLog",
     "columns": {
@@ -26390,6 +26223,345 @@
       }
     }
   },
+  "salesforce_sync_run_items": {
+    "class": "SalesforceSyncRunItem",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "run_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_opportunity_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "status": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "pending",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "attempts": {
+        "type": "integer",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": 0,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "claimed_at": {
+        "type": "timestamp",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "error_message": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "processed_at": {
+        "type": "timestamp",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "salesforce_sync_run_items_run_opportunity_unique": [
+        "run_id",
+        "salesforce_opportunity_id"
+      ]
+    },
+    "indices": {
+      "idx_salesforce_sync_run_items_run_status": {
+        "columns": [
+          "run_id",
+          "status"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [
+      {
+        "name": "salesforce_sync_run_items_status_check",
+        "expression": "((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'error'::text, 'cancelled'::text])))"
+      }
+    ],
+    "foreignKeys": {
+      "salesforce_sync_run_items_run_id_fkey": {
+        "columns": [
+          "run_id"
+        ],
+        "table": "salesforce_sync_runs",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "stripe_customers_stg": {
+    "class": "StripeCustomersStg",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "stripe_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "raw_data": {
+        "type": "jsonb",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sync_batch_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "processing_status": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "pending",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "integration_batch_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "last_integrated_at": {
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "integration_notes": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "error_message": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "connection_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "unique_stripe_customer_per_holding": [
+        "holding_id",
+        "stripe_id"
+      ]
+    },
+    "indices": {
+      "idx_stripe_customers_stg_sync_batch_id": {
+        "columns": [
+          "sync_batch_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_customers_stg_stripe_id": {
+        "columns": [
+          "stripe_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_customers_stg_processing_status": {
+        "columns": [
+          "processing_status"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_customers_stg_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_stripe_customers_stg_connection_id": {
+        "columns": [
+          "connection_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {}
+  },
   "salesforce_quote_type_mappings": {
     "class": "SalesforceQuoteTypeMapping",
     "columns": {
@@ -26502,6 +26674,194 @@
         ],
         "table": "company_holdings",
         "onDelete": "CASCADE"
+      }
+    }
+  },
+  "salesforce_product_mappings": {
+    "class": "SalesforceProductMapping",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_product_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_product_name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_family": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_product_code": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_product_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_product_code": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_product_name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_active": {
+        "type": "boolean",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamp",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_sf_product_map_unique": {
+        "columns": [
+          "holding_id",
+          "salesforce_product_id"
+        ],
+        "unique": true,
+        "where": null
+      },
+      "idx_sf_product_map_sapira_product": {
+        "columns": [
+          "sapira_product_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_sf_product_map_family": {
+        "columns": [
+          "holding_id",
+          "salesforce_family"
+        ],
+        "unique": false,
+        "where": "(salesforce_family IS NOT NULL)"
+      },
+      "idx_sf_product_map_active": {
+        "columns": [
+          "holding_id",
+          "is_active"
+        ],
+        "unique": false,
+        "where": "(is_active = true)"
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "salesforce_product_mappings_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "salesforce_product_mappings_sapira_product_id_fkey": {
+        "columns": [
+          "sapira_product_id"
+        ],
+        "table": "products",
+        "onDelete": "RESTRICT"
       }
     }
   },
@@ -26841,6 +27201,154 @@
       }
     }
   },
+  "salesforce_object_mappings": {
+    "class": "SalesforceObjectMapping",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_object_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_object_type": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_table_name": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "sapira_record_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "last_synced_at": {
+        "type": "timestamptz",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": "CURRENT_TIMESTAMP",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "unique_salesforce_object_per_holding": [
+        "holding_id",
+        "salesforce_object_type",
+        "salesforce_object_id"
+      ]
+    },
+    "indices": {
+      "idx_salesforce_mappings_sapira_lookup": {
+        "columns": [
+          "holding_id",
+          "sapira_table_name",
+          "sapira_record_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_mappings_salesforce_lookup": {
+        "columns": [
+          "holding_id",
+          "salesforce_object_type",
+          "salesforce_object_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_mappings_holding": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [],
+    "foreignKeys": {
+      "salesforce_object_mappings_holding_id_fkey": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
   "salesforce_opportunities_stg": {
     "class": "SalesforceOpportunitiesStg",
     "columns": {
@@ -27052,488 +27560,6 @@
       }
     ],
     "foreignKeys": {}
-  },
-  "salesforce_sync_run_items": {
-    "class": "SalesforceSyncRunItem",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "run_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_opportunity_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "status": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "pending",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "attempts": {
-        "type": "integer",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": 0,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "claimed_at": {
-        "type": "timestamp",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "error_message": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "processed_at": {
-        "type": "timestamp",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "salesforce_sync_run_items_run_opportunity_unique": [
-        "run_id",
-        "salesforce_opportunity_id"
-      ]
-    },
-    "indices": {
-      "idx_salesforce_sync_run_items_run_status": {
-        "columns": [
-          "run_id",
-          "status"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [
-      {
-        "name": "salesforce_sync_run_items_status_check",
-        "expression": "((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'error'::text, 'cancelled'::text])))"
-      }
-    ],
-    "foreignKeys": {
-      "salesforce_sync_run_items_run_id_fkey": {
-        "columns": [
-          "run_id"
-        ],
-        "table": "salesforce_sync_runs",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
-  "salesforce_product_mappings": {
-    "class": "SalesforceProductMapping",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_product_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_product_name": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_family": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_product_code": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_product_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_product_code": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_product_name": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_active": {
-        "type": "boolean",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamp",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_sf_product_map_unique": {
-        "columns": [
-          "holding_id",
-          "salesforce_product_id"
-        ],
-        "unique": true,
-        "where": null
-      },
-      "idx_sf_product_map_sapira_product": {
-        "columns": [
-          "sapira_product_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_sf_product_map_family": {
-        "columns": [
-          "holding_id",
-          "salesforce_family"
-        ],
-        "unique": false,
-        "where": "(salesforce_family IS NOT NULL)"
-      },
-      "idx_sf_product_map_active": {
-        "columns": [
-          "holding_id",
-          "is_active"
-        ],
-        "unique": false,
-        "where": "(is_active = true)"
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "salesforce_product_mappings_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "salesforce_product_mappings_sapira_product_id_fkey": {
-        "columns": [
-          "sapira_product_id"
-        ],
-        "table": "products",
-        "onDelete": "RESTRICT"
-      }
-    }
-  },
-  "salesforce_object_mappings": {
-    "class": "SalesforceObjectMapping",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_object_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_object_type": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_table_name": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "sapira_record_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamptz",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "last_synced_at": {
-        "type": "timestamptz",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": "CURRENT_TIMESTAMP",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "unique_salesforce_object_per_holding": [
-        "holding_id",
-        "salesforce_object_type",
-        "salesforce_object_id"
-      ]
-    },
-    "indices": {
-      "idx_salesforce_mappings_sapira_lookup": {
-        "columns": [
-          "holding_id",
-          "sapira_table_name",
-          "sapira_record_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_salesforce_mappings_salesforce_lookup": {
-        "columns": [
-          "holding_id",
-          "salesforce_object_type",
-          "salesforce_object_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_salesforce_mappings_holding": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [],
-    "foreignKeys": {
-      "salesforce_object_mappings_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      }
-    }
   },
   "salesforce_line_items_stg": {
     "class": "SalesforceLineItemsStg",
@@ -27785,8 +27811,8 @@
       }
     }
   },
-  "integration_record_discards": {
-    "class": "IntegrationRecordDiscard",
+  "salesforce_field_mappings": {
+    "class": "SalesforceFieldMapping",
     "columns": {
       "id": {
         "type": "uuid",
@@ -27810,7 +27836,7 @@
         "scale": null,
         "array": false
       },
-      "tipo": {
+      "object_type": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -27821,7 +27847,7 @@
         "scale": null,
         "array": false
       },
-      "object": {
+      "sapira_field": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -27832,7 +27858,7 @@
         "scale": null,
         "array": false
       },
-      "record_key": {
+      "salesforce_field": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -27843,7 +27869,29 @@
         "scale": null,
         "array": false
       },
-      "reason": {
+      "is_required": {
+        "type": "boolean",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": false,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_active": {
+        "type": "boolean",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "data_type": {
         "type": "text",
         "nullable": true,
         "primary": false,
@@ -27854,8 +27902,30 @@
         "scale": null,
         "array": false
       },
-      "discarded_by": {
-        "type": "uuid",
+      "default_value": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "transformation_key": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "transformation_config": {
+        "type": "jsonb",
         "nullable": true,
         "primary": false,
         "generated": null,
@@ -27866,8 +27936,19 @@
         "array": false
       },
       "created_at": {
-        "type": "timestamp with time zone",
-        "nullable": false,
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": true,
         "primary": false,
         "generated": null,
         "default": "now()",
@@ -27878,26 +27959,317 @@
       }
     },
     "uniques": {
-      "integration_record_discards_key": [
+      "salesforce_field_mappings_holding_id_object_type_sapira_fie_key": [
         "holding_id",
-        "tipo",
-        "object",
-        "record_key"
+        "object_type",
+        "sapira_field"
       ]
     },
-    "indices": {},
+    "indices": {
+      "idx_salesforce_field_mappings_object_type": {
+        "columns": [
+          "object_type"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_field_mappings_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
     "checks": [
       {
-        "name": "integration_record_discards_tipo_check",
-        "expression": "tipo = ANY (ARRAY['erp'::text, 'crm'::text, 'stripe'::text, 'datos'::text])"
+        "name": "salesforce_field_mappings_object_type_check",
+        "expression": "((object_type = ANY (ARRAY['client'::text, 'client_entity'::text, 'opportunity'::text, 'line_item'::text, 'product'::text, 'contact'::text])))"
+      }
+    ],
+    "foreignKeys": {}
+  },
+  "salesforce_connections": {
+    "class": "SalesforceConnection",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "user_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "username": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "password": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "client_id": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "client_secret": {
+        "type": "text",
+        "nullable": false,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "security_token": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "login_url": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "https://login.salesforce.com",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "access_token": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "refresh_token": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "instance_url": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "salesforce_user_id": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "token_issued_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "token_expires_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "auth_type": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "client_credentials",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "is_active": {
+        "type": "boolean",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": true,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "last_sync_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "updated_at": {
+        "type": "timestamptz",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {
+      "UQ_0e0e720c8fa768831648e34ffb0": [
+        "holding_id"
+      ],
+      "salesforce_connections_holding_id_key": [
+        "holding_id"
+      ]
+    },
+    "indices": {
+      "idx_salesforce_connections_user_id": {
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_connections_is_active": {
+        "columns": [
+          "is_active"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_connections_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "unique": false,
+        "where": null
+      },
+      "idx_salesforce_connections_auth_type": {
+        "columns": [
+          "auth_type"
+        ],
+        "unique": false,
+        "where": null
+      }
+    },
+    "checks": [
+      {
+        "name": "salesforce_connections_auth_type_check",
+        "expression": "((auth_type = ANY (ARRAY['password'::text, 'client_credentials'::text])))"
       }
     ],
     "foreignKeys": {
-      "integration_record_discards_holding_id_fkey": {
+      "salesforce_connections_holding_id_fkey": {
         "columns": [
           "holding_id"
         ],
         "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "salesforce_connections_user_id_fkey": {
+        "columns": [
+          "user_id"
+        ],
+        "table": "users",
         "onDelete": "CASCADE"
       }
     }
@@ -28095,8 +28467,8 @@
     ],
     "foreignKeys": {}
   },
-  "salesforce_field_mappings": {
-    "class": "SalesforceFieldMapping",
+  "integration_record_discards": {
+    "class": "IntegrationRecordDiscard",
     "columns": {
       "id": {
         "type": "uuid",
@@ -28120,7 +28492,7 @@
         "scale": null,
         "array": false
       },
-      "object_type": {
+      "tipo": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -28131,7 +28503,7 @@
         "scale": null,
         "array": false
       },
-      "sapira_field": {
+      "object": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -28142,7 +28514,7 @@
         "scale": null,
         "array": false
       },
-      "salesforce_field": {
+      "record_key": {
         "type": "text",
         "nullable": false,
         "primary": false,
@@ -28153,29 +28525,7 @@
         "scale": null,
         "array": false
       },
-      "is_required": {
-        "type": "boolean",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": false,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_active": {
-        "type": "boolean",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "data_type": {
+      "reason": {
         "type": "text",
         "nullable": true,
         "primary": false,
@@ -28186,30 +28536,8 @@
         "scale": null,
         "array": false
       },
-      "default_value": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "transformation_key": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "transformation_config": {
-        "type": "jsonb",
+      "discarded_by": {
+        "type": "uuid",
         "nullable": true,
         "primary": false,
         "generated": null,
@@ -28220,19 +28548,8 @@
         "array": false
       },
       "created_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": true,
+        "type": "timestamp with time zone",
+        "nullable": false,
         "primary": false,
         "generated": null,
         "default": "now()",
@@ -28243,21 +28560,114 @@
       }
     },
     "uniques": {
-      "salesforce_field_mappings_holding_id_object_type_sapira_fie_key": [
+      "integration_record_discards_key": [
         "holding_id",
-        "object_type",
-        "sapira_field"
+        "tipo",
+        "object",
+        "record_key"
       ]
     },
-    "indices": {
-      "idx_salesforce_field_mappings_object_type": {
+    "indices": {},
+    "checks": [
+      {
+        "name": "integration_record_discards_tipo_check",
+        "expression": "tipo = ANY (ARRAY['erp'::text, 'crm'::text, 'stripe'::text, 'datos'::text])"
+      }
+    ],
+    "foreignKeys": {
+      "integration_record_discards_holding_id_fkey": {
         "columns": [
-          "object_type"
+          "holding_id"
         ],
-        "unique": false,
-        "where": null
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      }
+    }
+  },
+  "integration_configs": {
+    "class": "IntegrationConfig",
+    "columns": {
+      "id": {
+        "type": "uuid",
+        "nullable": false,
+        "primary": true,
+        "generated": "uuid",
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
       },
-      "idx_salesforce_field_mappings_holding_id": {
+      "company_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "service_name": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "status": {
+        "type": "text",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "Disconnected",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "last_sync_at": {
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "created_at": {
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": "now()",
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      },
+      "holding_id": {
+        "type": "uuid",
+        "nullable": true,
+        "primary": false,
+        "generated": null,
+        "default": null,
+        "length": null,
+        "precision": null,
+        "scale": null,
+        "array": false
+      }
+    },
+    "uniques": {},
+    "indices": {
+      "idx_integration_configs_holding_id": {
         "columns": [
           "holding_id"
         ],
@@ -28267,11 +28677,26 @@
     },
     "checks": [
       {
-        "name": "salesforce_field_mappings_object_type_check",
-        "expression": "((object_type = ANY (ARRAY['client'::text, 'client_entity'::text, 'opportunity'::text, 'line_item'::text, 'product'::text, 'contact'::text])))"
+        "name": "integration_configs_status_check",
+        "expression": "status = ANY (ARRAY['Connected'::text, 'Disconnected'::text, 'Error'::text])"
       }
     ],
-    "foreignKeys": {}
+    "foreignKeys": {
+      "fk_integration_configs_holding_id": {
+        "columns": [
+          "holding_id"
+        ],
+        "table": "company_holdings",
+        "onDelete": "CASCADE"
+      },
+      "integration_configs_company_id_fkey": {
+        "columns": [
+          "company_id"
+        ],
+        "table": "companies",
+        "onDelete": "NO ACTION"
+      }
+    }
   },
   "field_mappings": {
     "class": "FieldMapping",
@@ -28522,120 +28947,6 @@
           "created_by"
         ],
         "table": "users",
-        "onDelete": "NO ACTION"
-      }
-    }
-  },
-  "integration_configs": {
-    "class": "IntegrationConfig",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "company_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "service_name": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "status": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "Disconnected",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "last_sync_at": {
-        "type": "timestamp without time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamp without time zone",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {},
-    "indices": {
-      "idx_integration_configs_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [
-      {
-        "name": "integration_configs_status_check",
-        "expression": "status = ANY (ARRAY['Connected'::text, 'Disconnected'::text, 'Error'::text])"
-      }
-    ],
-    "foreignKeys": {
-      "fk_integration_configs_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "integration_configs_company_id_fkey": {
-        "columns": [
-          "company_id"
-        ],
-        "table": "companies",
         "onDelete": "NO ACTION"
       }
     }
@@ -29323,291 +29634,6 @@
           "holding_id"
         ],
         "table": "company_holdings",
-        "onDelete": "CASCADE"
-      }
-    }
-  },
-  "salesforce_connections": {
-    "class": "SalesforceConnection",
-    "columns": {
-      "id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": true,
-        "generated": "uuid",
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "user_id": {
-        "type": "uuid",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "holding_id": {
-        "type": "uuid",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "username": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "password": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "client_id": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "client_secret": {
-        "type": "text",
-        "nullable": false,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "security_token": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "login_url": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "https://login.salesforce.com",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "access_token": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "refresh_token": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "instance_url": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "salesforce_user_id": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "token_issued_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "token_expires_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "auth_type": {
-        "type": "text",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "client_credentials",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "is_active": {
-        "type": "boolean",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": true,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "last_sync_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": null,
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "created_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      },
-      "updated_at": {
-        "type": "timestamptz",
-        "nullable": true,
-        "primary": false,
-        "generated": null,
-        "default": "now()",
-        "length": null,
-        "precision": null,
-        "scale": null,
-        "array": false
-      }
-    },
-    "uniques": {
-      "UQ_0e0e720c8fa768831648e34ffb0": [
-        "holding_id"
-      ],
-      "salesforce_connections_holding_id_key": [
-        "holding_id"
-      ]
-    },
-    "indices": {
-      "idx_salesforce_connections_user_id": {
-        "columns": [
-          "user_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_salesforce_connections_is_active": {
-        "columns": [
-          "is_active"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_salesforce_connections_holding_id": {
-        "columns": [
-          "holding_id"
-        ],
-        "unique": false,
-        "where": null
-      },
-      "idx_salesforce_connections_auth_type": {
-        "columns": [
-          "auth_type"
-        ],
-        "unique": false,
-        "where": null
-      }
-    },
-    "checks": [
-      {
-        "name": "salesforce_connections_auth_type_check",
-        "expression": "((auth_type = ANY (ARRAY['password'::text, 'client_credentials'::text])))"
-      }
-    ],
-    "foreignKeys": {
-      "salesforce_connections_holding_id_fkey": {
-        "columns": [
-          "holding_id"
-        ],
-        "table": "company_holdings",
-        "onDelete": "CASCADE"
-      },
-      "salesforce_connections_user_id_fkey": {
-        "columns": [
-          "user_id"
-        ],
-        "table": "users",
         "onDelete": "CASCADE"
       }
     }

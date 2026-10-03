@@ -47699,7 +47699,7 @@
 			]
 		},
 		"user_access_events": {
-			"comment": "Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación). Solo la API",
+			"comment": "Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación) y de la cuenta (cambio de contraseña, cierre de sesiones; holding_id NULL). Solo la API",
 			"rls": true,
 			"rls_forced": false,
 			"columns": [
@@ -47728,7 +47728,7 @@
 					"char_len": null,
 					"num_prec": null,
 					"num_scale": null,
-					"notnull": true,
+					"notnull": false,
 					"default": null,
 					"identity": "NO",
 					"generated": "NEVER",
@@ -47820,7 +47820,7 @@
 				{
 					"name": "user_access_events_action_check",
 					"type": "c",
-					"def": "CHECK ((action = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text])))",
+					"def": "CHECK ((action = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text, 'password_changed'::text, 'sessions_revoked'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -48728,9 +48728,50 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "sent | failed (según respuesta de Resend)"
+				},
+				{
+					"column": "avatar_preset",
+					"attnum": 14,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Avatar elegido de la lista fija de Mi perfil (preset-01…preset-12); NULL = iniciales o foto"
+				},
+				{
+					"column": "avatar_path",
+					"attnum": 15,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ruta de la foto de perfil en el bucket user-avatars (users/<id>/<uuid>.<ext>)"
 				}
 			],
 			"constraints": [
+				{
+					"name": "users_avatar_one_kind_check",
+					"type": "c",
+					"def": "CHECK (((avatar_preset IS NULL) OR (avatar_path IS NULL)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
 				{
 					"name": "users_email_key",
 					"type": "u",
