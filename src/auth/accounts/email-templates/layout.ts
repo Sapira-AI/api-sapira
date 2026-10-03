@@ -71,11 +71,30 @@ export interface EmailLayout {
 	role?: { title: string; intro: string; items: { text: string }[]; footnote: string };
 	/** Línea corta con acceso alternativo (Google/Microsoft) y enlace al inicio de sesión. */
 	altLogin?: { text: string; label: string; url: string };
+	/**
+	 * Bloques con título y filas "etiqueta · valor" (Notificaciones: Qué pasó / Qué hacer de una alerta, secciones del resumen semanal).
+	 * `url` vuelve la etiqueta un enlace; `tone` colorea el valor (aumento / pérdida).
+	 */
+	sections?: EmailSection[];
 	/** Aviso destacado (p. ej. de seguridad). */
 	callout?: string;
 	/** Notas pequeñas (vencimiento, etc.). */
 	notes: string[];
 	logoUrl?: string;
+}
+
+export interface EmailSectionRow {
+	label: string;
+	value?: string;
+	url?: string;
+	tone?: 'up' | 'down';
+}
+
+export interface EmailSection {
+	title: string;
+	/** Texto corrido bajo el título (párrafo). */
+	text?: string;
+	rows?: EmailSectionRow[];
 }
 
 export interface RenderedEmail {
@@ -185,6 +204,30 @@ function altLoginBlock(alt: NonNullable<EmailLayout['altLogin']>): string {
 	return `<tr><td style="padding:0 0 24px 0;${font(14, 21, BRAND.muted)}">${e(alt.text)} <a href="${e(alt.url)}" target="_blank" style="color:${BRAND.violet};font-weight:700;text-decoration:underline;">${e(alt.label)}</a></td></tr>`;
 }
 
+const TONE_COLOR = { up: '#0F7A3E', down: '#B42318' } as const;
+
+function sectionBlock(section: EmailSection): string {
+	const rows = (section.rows ?? [])
+		.map((row) => {
+			const label = row.url
+				? `<a href="${e(row.url)}" target="_blank" style="color:${BRAND.violet};text-decoration:underline;">${e(row.label)}</a>`
+				: e(row.label);
+			const color = row.tone ? TONE_COLOR[row.tone] : BRAND.ink;
+
+			return `<tr>
+<td valign="top" style="padding:7px 0;border-bottom:1px solid ${BRAND.border};${font(14, 20, BRAND.body)}">${label}</td>
+<td valign="top" align="right" style="padding:7px 0 7px 12px;border-bottom:1px solid ${BRAND.border};white-space:nowrap;${font(14, 20, color, 'font-weight:700;')}">${row.value ? e(row.value) : ''}</td>
+</tr>`;
+		})
+		.join('\n');
+
+	return `<tr><td style="padding:4px 0 22px 0;">
+<div style="padding:0 0 6px 0;${font(13, 18, BRAND.violet, 'font-weight:800;letter-spacing:0.6px;text-transform:uppercase;')}">${e(section.title)}</div>
+${section.text ? `<div style="padding:0 0 6px 0;${font(15, 23, BRAND.body)}">${e(section.text)}</div>` : ''}
+${rows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">\n${rows}\n</table>` : ''}
+</td></tr>`;
+}
+
 function calloutBlock(text: string): string {
 	return `<tr><td style="padding:4px 0 24px 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -239,6 +282,7 @@ ${hero}
 <tr><td bgcolor="${BRAND.white}" style="background-color:${BRAND.white};padding:${bodyTop} 40px 32px 40px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 ${paragraphs}
+${(layout.sections ?? []).map(sectionBlock).join('\n')}
 ${layout.role ? roleBlock(layout.role, base) : ''}
 ${layout.altLogin ? altLoginBlock(layout.altLogin) : ''}
 ${layout.callout ? calloutBlock(layout.callout) : ''}
@@ -262,6 +306,11 @@ export function renderLayoutText(layout: EmailLayout): string {
 	const lines: string[] = [layout.heading, '', layout.lead, '', `${layout.button.label}: ${layout.button.url}`, ''];
 
 	lines.push(...layout.paragraphs.flatMap((p) => [p, '']));
+	for (const section of layout.sections ?? []) {
+		lines.push(section.title.toUpperCase());
+		if (section.text) lines.push(section.text);
+		lines.push(...(section.rows ?? []).map((row) => `- ${row.label}${row.value ? `: ${row.value}` : ''}${row.url ? ` (${row.url})` : ''}`), '');
+	}
 	if (layout.role) lines.push(layout.role.title, layout.role.intro, ...layout.role.items.map((item) => `- ${item.text}`), layout.role.footnote, '');
 	if (layout.altLogin) lines.push(`${layout.altLogin.text} ${layout.altLogin.label}: ${layout.altLogin.url}`, '');
 	if (layout.callout) lines.push(layout.callout, '');

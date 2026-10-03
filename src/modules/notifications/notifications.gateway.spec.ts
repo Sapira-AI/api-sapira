@@ -33,6 +33,30 @@ describe('NotificationsGateway', () => {
 	});
 
 	describe('handleConnection', () => {
+		it('rechaza al usuario sin ninguna membresía activa (#21) y acepta al que tiene una', async () => {
+			const { gateway, userRepository } = buildGateway();
+			const query = jest
+				.fn()
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([{ '?column?': 1 }]);
+			(userRepository as Record<string, unknown>).manager = { query };
+			getUser.mockResolvedValue({ data: { user: { id: 'auth-user-1' } }, error: null });
+			userRepository.findOne.mockResolvedValue({ id: 'user-1' });
+			const outsider = buildClient({ auth: { token: 'token-1' } });
+
+			await gateway.handleConnection(outsider as any);
+
+			expect(query).toHaveBeenCalledWith(expect.stringContaining('FROM user_holdings'), ['user-1']);
+			expect(outsider.emit).toHaveBeenCalledWith(NOTIFICATION_EVENTS.unauthorized, { message: 'No tienes acceso a ningún holding activo' });
+			expect(outsider.disconnect).toHaveBeenCalledWith(true);
+			expect(outsider.join).not.toHaveBeenCalled();
+
+			const member = buildClient({ auth: { token: 'token-1' } });
+
+			await gateway.handleConnection(member as any);
+			expect(member.join).toHaveBeenCalledWith('user:user-1');
+		});
+
 		it('une al cliente a la sala del usuario interno y confirma la conexión', async () => {
 			const { gateway, userRepository } = buildGateway();
 			getUser.mockResolvedValue({ data: { user: { id: 'auth-user-1' } }, error: null });

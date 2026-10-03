@@ -1160,15 +1160,15 @@ export class BigQueryService {
 			source: 'bigquery',
 			type: QUANTITIES_DIFF_NOTIFICATION_TYPE,
 			severity: 'warning',
-			title: `Diferencias en cantidad variable (${importRow.business_name || importRow.sf_id})`,
+			title: `Consumo distinto en el almacén de datos (${importRow.business_name || importRow.product || 'cliente'})`,
 			message: current
-				? `La cantidad variable de ${importRow.product} para el período ${importRow.period} difiere entre el DWH y el ` +
-					'override ya registrado en Sapira. No se sobrescribió automáticamente.'
-				: `El DWH modificó ${importRow.product} (${importRow.period}) después de haberse integrado. ` +
-					`${afectaIntegracion ? 'El cambio afecta valores ya propagados a Sapira.' : 'El cambio no afecta los valores propagados a Sapira.'}`,
+				? `El consumo de ${importRow.product} del período ${importRow.period} en el almacén de datos es distinto del que ya está ` +
+					'registrado en Sapira. No lo sobrescribimos.'
+				: `El almacén de datos cambió el consumo de ${importRow.product} (${importRow.period}) después de integrarlo. ` +
+					`${afectaIntegracion ? 'El cambio afecta valores que ya están en Sapira.' : 'El cambio no afecta los valores que ya están en Sapira.'}`,
 			recommendation: afectaIntegracion
-				? 'Revisa las diferencias y usa "Reemplazar con datos de BigQuery" si el valor del DWH es el correcto.'
-				: 'Revisa las diferencias. Si el cambio del DWH es esperado, reemplaza para dejar constancia y cerrar el aviso.',
+				? 'Compara los valores y usa "Reemplazar cantidades" si el dato del almacén de datos es el correcto.'
+				: 'Compara los valores. Si el cambio es esperado, reemplaza para dejar constancia y cerrar el aviso.',
 			action_type: REPLACE_QUANTITY_RECORD_ACTION,
 			action_payload: {
 				quantity_id: importRow.quantity_id,
@@ -1212,37 +1212,35 @@ export class BigQueryService {
 	 * `resolveByDeduplicationKey` sobre la alerta vigente del mes en curso y la cerraría en silencio.
 	 */
 	private async notifyQuantitiesAggregates(holdingId: string, result: QuantitiesIntegrationResult, range: QuantitiesDateRange): Promise<void> {
-		const ventana = `${range.from} a ${range.to}`;
+		const ventana = `el ${range.from} y el ${range.to}`;
 
 		const aggregates: Array<{ type: string; count: number; title: string; message: string; recommendation: string }> = [
 			{
 				type: QUANTITIES_UNMAPPED_NOTIFICATION_TYPE,
 				count: result.unmapped,
-				title: `Cantidades variables sin mapeo (${result.unmapped})`,
+				title: `Consumos sin producto asociado (${result.unmapped})`,
 				message:
-					`${result.unmapped} fila(s) del DWH del rango ${ventana} no se pudieron asociar a un ítem de contrato ` +
-					'porque no traen IDs Sapira ni IDs de Salesforce válidos.',
+					`${result.unmapped} consumo(s) del almacén de datos entre ${ventana} no se pudieron asociar a un producto de un contrato: ` +
+					'no traen una referencia válida al contrato ni a la cotización.',
 				recommendation:
-					'Revisa el listado en la auditoría del canal automático. Suele resolverse poblando contract_items.quote_item_number ' +
-					'desde la cotización; después puedes reprocesar sin volver a consultar BigQuery.',
+					'Revisa el listado de consumos importados. Suele resolverse completando en el contrato el número de ítem de la cotización; ' +
+					'después puedes volver a procesar sin volver a consultar el almacén de datos.',
 			},
 			{
 				type: QUANTITIES_BLOCKED_NOTIFICATION_TYPE,
 				count: result.blocked,
-				title: `Cantidades variables bloqueadas por estado de factura (${result.blocked})`,
-				message:
-					`${result.blocked} fila(s) del rango ${ventana} no se integraron porque la factura activa del período ` +
-					'no está en estado "Por Emitir".',
-				recommendation: 'Anula las facturas involucradas para que vuelvan a "Por Emitir" y reprocesa la integración.',
+				title: `Consumos que no entraron a la factura (${result.blocked})`,
+				message: `${result.blocked} consumo(s) entre ${ventana} no se integraron porque la factura del período ya no está por emitir.`,
+				recommendation: 'Anula las facturas involucradas para que vuelvan a estar por emitir y vuelve a procesar.',
 			},
 			{
 				type: QUANTITIES_CURRENCY_MISMATCH_NOTIFICATION_TYPE,
 				count: result.currencyMismatch,
-				title: `Cantidades variables con moneda distinta a la del contrato (${result.currencyMismatch})`,
+				title: `Consumos en otra moneda (${result.currencyMismatch})`,
 				message:
-					`${result.currencyMismatch} fila(s) del rango ${ventana} informan una moneda distinta a la del contrato. ` +
-					'No se integraron para evitar montos erróneos: quantities no tiene columna de moneda.',
-				recommendation: 'Verifica la moneda en el DWH o en el contrato antes de reprocesar.',
+					`${result.currencyMismatch} consumo(s) entre ${ventana} vienen en una moneda distinta a la del contrato. ` +
+					'No los integramos para no facturar montos errados.',
+				recommendation: 'Revisa la moneda en el almacén de datos o en el contrato y vuelve a procesar.',
 			},
 		];
 

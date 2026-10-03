@@ -6,6 +6,7 @@ import { NotificationsService } from '@/modules/notifications/notifications.serv
 
 import { setApiWriter } from './api-writer';
 import { todayFor } from './business-date';
+import { PACT_KIND_LABELS } from './contract-alerts';
 import { indexVariation } from './contract-changes';
 import { ContractChangesService } from './contract-changes.service';
 import { resolveUserId } from './contract-drafts.service';
@@ -375,7 +376,10 @@ export class ContractRenewalsService {
 				type: RENEWAL_REMINDER_NOTIFICATION_TYPE,
 				severity: tone === 'danger' ? 'error' : tone,
 				title: `${reminder.contract_number ?? 'Contrato'}: ${label.toLowerCase()}`,
-				message: `${names} ${reminder.days_to_end < 0 ? 'venció' : 'vence'} el ${reminder.end_date} y nadie decidió qué hacer. Renuévalo o registra la baja desde el contrato.`,
+				message: `${names} ${reminder.days_to_end < 0 ? 'venció' : 'vence'} el ${reminder.end_date} y nadie decidió qué hacer. Mientras no se decida, el ingreso sigue reconociéndose como pendiente de renovar.`,
+				recommendation: 'Renuévalo o registra la baja desde el contrato.',
+				// Cada escalón (días al vencimiento) vuelve a dejar la alerta "sin leer" para todos.
+				escalation_step: reminder.threshold_days,
 				action_type: 'open_contract',
 				action_payload: { contract_id: reminder.contract_id, event_id: eventId, threshold_days: reminder.threshold_days },
 				resource_id: reminder.contract_id,
@@ -502,9 +506,10 @@ export class ContractRenewalsService {
 			await this.notify(holdingId, {
 				type: SCHEDULED_CHANGE_DUE_NOTIFICATION_TYPE,
 				title: `Ajuste pactado por aplicar: ${pact.contract_number ?? 'contrato'}`,
-				message: `El pacto ${pact.kind} (${pact.value})${pact.product_name ? ` de "${pact.product_name}"` : ''} rige el ${pact.due_date}. No se aplica solo: revísalo y aplícalo desde el contrato.${
-					index?.value_missing ? ' Falta el valor publicado del índice.' : ''
+				message: `El ${PACT_KIND_LABELS[pact.kind] ?? 'ajuste'} pactado (${pact.value})${pact.product_name ? ` de "${pact.product_name}"` : ''} rige el ${pact.due_date}. No se aplica solo.${
+					index?.value_missing ? ' Todavía no se publica el valor del índice.' : ''
 				}`,
+				recommendation: 'Revísalo en el contrato y aplícalo, omítelo esta vez o cancélalo.',
 				action_type: 'review_scheduled_change',
 				action_payload: { contract_id: pact.contract_id, scheduled_change_id: pact.id, event_id: eventId },
 				resource_id: pact.contract_id,
@@ -598,6 +603,8 @@ export class ContractRenewalsService {
 			severity?: 'info' | 'warning' | 'error';
 			title: string;
 			message: string;
+			recommendation?: string;
+			escalation_step?: number;
 			action_type: string;
 			action_payload: Record<string, unknown>;
 			resource_id: string;
@@ -608,10 +615,10 @@ export class ContractRenewalsService {
 			await this.notifications.createOrUpdate(holdingId, {
 				source: 'contracts',
 				severity: 'info',
-				recommendation: 'Abre el contrato y revisa la tarjeta en el Resumen',
+				recommendation: 'Abre el contrato y revisa la tarjeta en el Resumen.',
 				resource_type: 'contract',
 				metadata: { ...input.action_payload },
-				recipients: { include_super_admins: true },
+				// Destinatarios: las suscripciones del tipo (semilla N3: Administrador y Finanzas), ya no solo super admins.
 				...input,
 			});
 		} catch (error) {

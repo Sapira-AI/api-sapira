@@ -58,6 +58,6 @@ import { ContractDocumentsStorageService } from './storage/contract-documents-st
 		BillableMetricsService,
 		PricesService,
 	],
-	exports: [ContractsService, ContractDraftsService, ContractInvoicesService],
+	exports: [ContractsService, ContractDraftsService, ContractInvoicesService, ConsumptionService],
 })
 export class ContractsModule {}

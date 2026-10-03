@@ -7,6 +7,7 @@ import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-en
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryModule } from '@/modules/bigquery/bigquery.module';
 import { MetricsModule } from '@/modules/metrics/metrics.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { OdooModule } from '@/modules/odoo/odoo.module';
 
 import { ClientActivityService } from './client-activity.service';
@@ -31,6 +32,7 @@ import { StripeClientsService } from './stripe-clients.service';
 		TypeOrmModule.forFeature([Client, ClientEntity, ClientEntityClient]),
 		BigQueryModule,
 		MetricsModule,
+		NotificationsModule,
 		OdooModule,
 	],
 	controllers: [ClientsController, ClientEntitiesController, ClientContactsController, StripeClientsController, ClientDocumentsController],

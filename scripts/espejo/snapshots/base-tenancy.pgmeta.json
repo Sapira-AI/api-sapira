@@ -574,6 +574,17 @@
     ]
    },
    {
+    "name": "notification_email_log_user_id_fkey",
+    "source_table": "public.notification_email_log",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "odoo_connections_user_id_fkey",
     "source_table": "public.odoo_connections",
     "source_columns": [
@@ -675,6 +686,17 @@
    {
     "name": "user_access_events_user_id_fkey",
     "source_table": "public.user_access_events",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_notification_preferences_user_id_fkey",
+    "source_table": "public.user_notification_preferences",
     "source_columns": [
      "user_id"
     ],
@@ -1832,6 +1854,17 @@
     ]
    },
    {
+    "name": "notification_email_log_holding_id_fkey",
+    "source_table": "public.notification_email_log",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "notification_role_subscriptions_holding_id_fkey",
     "source_table": "public.notification_role_subscriptions",
     "source_columns": [
@@ -2120,6 +2153,17 @@
    {
     "name": "user_holdings_holding_id_fkey",
     "source_table": "public.user_holdings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_notification_preferences_holding_id_fkey",
+    "source_table": "public.user_notification_preferences",
     "source_columns": [
      "holding_id"
     ],
@@ -2434,6 +2478,17 @@
    {
     "name": "agents_company_id_fkey",
     "source_table": "public.agents",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "app_notifications_company_id_fkey",
+    "source_table": "public.app_notifications",
     "source_columns": [
      "company_id"
     ],

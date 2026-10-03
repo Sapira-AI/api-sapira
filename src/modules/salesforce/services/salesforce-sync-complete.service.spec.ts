@@ -82,6 +82,7 @@ describe('SalesforceSyncCompleteService', () => {
 		const notificationsService = {
 			createOrUpdate: jest.fn(),
 			resolveByDeduplicationKey: jest.fn(),
+			resolveOpen: jest.fn().mockResolvedValue(0),
 		};
 		const syncLogService = {
 			record: jest.fn(),
@@ -151,7 +152,7 @@ describe('SalesforceSyncCompleteService', () => {
 	};
 
 	it('en la sincronización diaria consulta treinta días de CloseDate y procesa solo staging create', async () => {
-		const { service, opportunitiesStgRepository } = buildService();
+		const { service, opportunitiesStgRepository, notificationsService } = buildService();
 		opportunitiesStgRepository.find.mockResolvedValue([]);
 		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1']);
 		const { processAccounts, classifyOpportunities, processOpportunities } = stubDailyRun(service);
@@ -166,7 +167,8 @@ describe('SalesforceSyncCompleteService', () => {
 		expect(processOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1', expect.any(Object), {
 			processingStatuses: ['create'],
 			insertOnly: true,
-		});
+		}); // Notificaciones v2: la corrida buena cierra el aviso de falla de sincronización del holding.
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { type: 'salesforce_sync_failure' });
 	});
 
 	it('consulta CloseDate y las etapas ganadoras sin usar LastModifiedDate', async () => {
@@ -222,10 +224,15 @@ describe('SalesforceSyncCompleteService', () => {
 			expect.objectContaining({
 				type: 'salesforce_sync_failure',
 				severity: 'error',
-				message: 'Salesforce request timeout',
+				title: 'Falló la sincronización con el CRM',
+				// Mensaje de negocio; el error técnico queda en metadata.
+				message: 'Una parte de la sincronización automática de hoy falló: algunas oportunidades ganadas no llegaron a Sapira.',
+				metadata: expect.objectContaining({ error_message: 'Salesforce request timeout' }),
 				deduplication_key: 'salesforce:daily-sync:holding-1:staging',
 			})
 		);
+		// Con un lote fallido la corrida no es buena: el aviso no se cierra.
+		expect(notificationsService.resolveOpen).not.toHaveBeenCalled();
 	});
 
 	it('registra en la bitácora el detalle de cada oportunidad del lote, incluido el motivo del bloqueo', async () => {

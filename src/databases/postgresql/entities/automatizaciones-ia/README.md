@@ -10,8 +10,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
 | `app_notifications` (16) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification.entity.ts` · `AppNotification` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notifications_pkey`<br>CHECK `app_notifications_severity_check`<br>CHECK `app_notifications_status_check`<br>índice con expresión `app_notifications_holding_resource_created_idx`<br>índice con expresión `app_notifications_holding_status_created_idx` |
-| `app_notification_recipients` (104) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity.ts` · `AppNotificationRecipient` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notification_recipients_pkey`<br>índice con expresión `app_notification_recipients_user_unread_idx` |
-| `notification_role_subscriptions` (18) | `src/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity.ts` · `NotificationRoleSubscription` | ⚠️ difiere de prod | — | — | — | nombre de PK `notification_role_subscriptions_pkey` |
+| `app_notification_recipients` (126) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity.ts` · `AppNotificationRecipient` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notification_recipients_pkey`<br>índice con expresión `app_notification_recipients_user_unread_idx` |
+| `notification_role_subscriptions` (246) | `src/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity.ts` · `NotificationRoleSubscription` | ⚠️ difiere de prod | — | — | — | nombre de PK `notification_role_subscriptions_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (10): 10 promovidas, 0 apagadas
 
