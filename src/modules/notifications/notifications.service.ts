@@ -22,8 +22,8 @@ export const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [
 ];
 /** Nombre visible de cada alerta suscribible (Configuración › Roles y permisos). */
 export const ROLE_SUBSCRIPTION_NOTIFICATION_LABELS: Record<string, string> = {
-	[SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE]: 'Importación de Salesforce bloqueada',
-	[SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE]: 'Falla de sincronización de Salesforce',
+	[SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE]: 'Importación del CRM bloqueada',
+	[SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE]: 'Falla de sincronización del CRM',
 	[INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE]: 'Falla de envío de factura al ERP',
 };
 type NotificationForRecipient = AppNotification & { is_read: boolean; read_at?: Date | null };

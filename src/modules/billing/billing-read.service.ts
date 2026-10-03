@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { todayFor } from '@/modules/contracts/business-date';
 import { relatedDocumentsOf } from '@/modules/contracts/contract-360';
-import { erpDraftBlocker, periodClosedBlocker, planSendNow } from '@/modules/contracts/contract-invoices';
+import { erpDraftBlocker, planSendNow } from '@/modules/contracts/contract-invoices';
 import {
 	CONTRACT_CONTEXT_SELECT,
 	CONTRACT_INVOICE_SELECT,
@@ -126,8 +127,9 @@ const paginated = <T>(data: T[], total: number, page: number, limit: number) => 
 export class BillingReadService {
 	constructor(private readonly dataSource: DataSource) {}
 
-	today(now = new Date()): string {
-		return todayFor(null, now);
+	/** "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4 de Configuración; default America/Santiago). */
+	async today(now = new Date(), holdingId?: string | null): Promise<string> {
+		return todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 	}
 
 	async systemCurrency(holdingId: string): Promise<string> {
@@ -141,7 +143,7 @@ export class BillingReadService {
 	// ---------------------------------------------------------------- lista
 
 	async invoices(holdingId: string, query: BillingInvoicesQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
 		const blockedIds = query.blocked !== undefined ? await this.blockedIds(holdingId, query, today) : null;
@@ -197,7 +199,7 @@ export class BillingReadService {
 	// ---------------------------------------------------------------- KPIs
 
 	async summary(holdingId: string, query: BillingFiltersDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const from = query.from ?? query.to ?? today.slice(0, 7);
 		const to = query.to ?? query.from ?? today.slice(0, 7);
 		const params = new SqlParams();
@@ -423,12 +425,9 @@ export class BillingReadService {
 				}
 				const plan = planSendNow(invoice, context);
 				const issuePath: IssuePath = context.auto_send_to_erp && context.has_erp_integration ? 'erp' : 'external';
+				// Sin `period_closed`: el cierre de períodos protege contratos e ítems, no facturas (Domi 03-10).
 				const blockers = queueBlockers(
-					[
-						...plan.blockers,
-						erpDraftBlocker(invoice),
-						periodClosedBlocker(invoice.issue_date ?? invoice.scheduled_at, context, 'La fecha de emisión'),
-					].filter((blocker): blocker is NonNullable<typeof blocker> => !!blocker),
+					[...plan.blockers, erpDraftBlocker(invoice)].filter((blocker): blocker is NonNullable<typeof blocker> => !!blocker),
 					issuePath
 				);
 
@@ -450,7 +449,7 @@ export class BillingReadService {
 	}
 
 	async toIssue(holdingId: string, query: BillingToIssueQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const until = query.until ?? monthEndOf(today);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
@@ -495,7 +494,7 @@ export class BillingReadService {
 	// ---------------------------------------------------------------- notas de crédito
 
 	async creditNotes(holdingId: string, query: BillingCreditNotesQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
 		const params = new SqlParams();
@@ -542,7 +541,7 @@ export class BillingReadService {
 	 * inactivas: el pago existió). `kind` separa pagos monetarios (Cobrado) de ajustes no monetarios (`settlement_reason`). `totals` por moneda.
 	 */
 	async paymentsList(holdingId: string, query: BillingPaymentsListQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
 		const params = new SqlParams();
@@ -636,7 +635,7 @@ export class BillingReadService {
 	 * `counts` por estado sobre todo el filtro.
 	 */
 	async subscriptionInvoices(holdingId: string, query: BillingSubscriptionInvoicesQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
 		const params = new SqlParams();
@@ -782,7 +781,7 @@ export class BillingReadService {
 	 * facturación: van en `review` (conteo por compañía), nunca como tramo. `group=company` agrega `by_company`.
 	 */
 	async aging(holdingId: string, query: BillingAgingQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const asOf = query.as_of ?? today;
 		const [{ rows, paidWithoutFullPayments }, systemCurrency, [dso], dataChecks] = await Promise.all([
 			this.agingRows(holdingId, query, asOf),
@@ -844,7 +843,7 @@ export class BillingReadService {
 	 * meses (default 12, máximo 24), en moneda de sistema, con los filtros de la antigüedad.
 	 */
 	async dsoTrend(holdingId: string, query: ReceivableFilters & { as_of?: string; months?: number }, now = new Date()) {
-		const asOf = query.as_of ?? this.today(now);
+		const asOf = query.as_of ?? (await this.today(now, holdingId));
 		const months = Math.min(Math.max(query.months ?? 12, 1), DSO_TREND_MAX_MONTHS);
 		const [points, systemCurrency] = await Promise.all([
 			this.dsoAt(holdingId, receivableFiltersOf(query), dsoTrendCuts(asOf, months)),
@@ -917,7 +916,7 @@ export class BillingReadService {
 	 * comportamiento de pago (`avg_days_to_pay`, `avg_days_late`). Las facturas CLF/UF no entran (`review_invoices`).
 	 */
 	async forecast(holdingId: string, query: BillingForecastQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const asOf = query.as_of ?? today;
 		const granularity = query.granularity ?? 'month';
 		let periods: ReturnType<typeof calendarPeriods>;
@@ -986,7 +985,7 @@ export class BillingReadService {
 
 	/** Meta vs cobrado vs proyectado de un año (la meta la lee `BillingCollectionsService`). */
 	async goalProgress(holdingId: string, query: BillingGoalQueryDto, budgetByMonth: Record<string, number> | null, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const year = query.year ?? Number(today.slice(0, 4));
 		const [{ rows }, collected, systemCurrency] = await Promise.all([
 			this.agingRows(holdingId, { company_id: query.company_id, source: query.source }, today),
@@ -1009,7 +1008,7 @@ export class BillingReadService {
 	 * (estado = grupo de la cola, las atrasadas anteriores al rango en la columna `before`). Agrega en la API, sin el tope de 200 de la lista.
 	 */
 	async calendar(holdingId: string, query: BillingCalendarQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const granularity = query.granularity ?? 'month';
 		const scope: CalendarScope = query.scope ?? 'invoices';
 		const groupBy = query.group_by ?? 'client';
@@ -1114,7 +1113,7 @@ export class BillingReadService {
 	// ---------------------------------------------------------------- una factura: pagos y correos
 
 	async invoiceSnapshot(holdingId: string, invoiceId: string, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const [row] = await this.rowsByIds(holdingId, [invoiceId], today);
 
 		if (!row) throw new NotFoundException('Factura no encontrada');
@@ -1128,7 +1127,7 @@ export class BillingReadService {
 	 * del holding. Incluye Canceladas e inactivas.
 	 */
 	async invoice(holdingId: string, invoiceId: string, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const rows = await this.rowsByIds(holdingId, [invoiceId], today);
 
 		if (!rows.length) throw new NotFoundException('Factura no encontrada');
@@ -1309,7 +1308,7 @@ export class BillingReadService {
 		onBatch: (rows: ReturnType<typeof mapInvoiceRow>[]) => Promise<void>,
 		now = new Date()
 	): Promise<number> {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const blockedIds = query.blocked !== undefined ? await this.blockedIds(holdingId, query, today) : null;
 		let offset = 0;
 		let total = 0;

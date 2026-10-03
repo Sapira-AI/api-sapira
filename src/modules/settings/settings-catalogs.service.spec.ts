@@ -76,13 +76,32 @@ describe('SettingsCatalogsService', () => {
 	});
 
 	describe('datos maestros', () => {
-		it('solo payment_terms, item_types y units_of_measure', async () => {
+		it('condiciones de pago salió de Configuración (Domi 03-10); otra lista → 400', async () => {
 			const { service } = catalogs();
 
-			await expect(service.listMasterData(HOLDING, 'markets')).rejects.toBeInstanceOf(BadRequestException);
+			await expect(service.listMasterData(HOLDING, 'quote_types')).rejects.toBeInstanceOf(BadRequestException);
+			await expect(service.listMasterData(HOLDING, 'payment_terms')).rejects.toThrow(
+				'Lista no válida: tipos de ítem, unidades de medida, mercados, segmentos o industrias'
+			);
 		});
 
-		it('el uso de unidades suma las cuatro tablas por texto exacto dentro del holding', async () => {
+		it('mercados, segmentos e industrias (ronda 3): uso = clientes del holding con ese texto exacto', async () => {
+			const { db, service } = catalogs([
+				[
+					'FROM master_data WHERE holding_id = $1 AND category = $2',
+					() => [{ id: ID, category: 'industries', value: 'Retail', is_active: true }],
+				],
+				['FROM clients WHERE holding_id = $1 AND industry', () => [{ value: 'Retail', n: '4' }]],
+			]);
+			const [row] = await service.listMasterData(HOLDING, 'industries');
+
+			expect(row).toMatchObject({ in_use: 4, usage: { clients: 4, contracts: 0 } });
+			expect(db.statements('FROM clients WHERE holding_id = $1 AND industry = ANY')).toHaveLength(1);
+			await expect(service.listMasterData(HOLDING, 'markets')).resolves.toBeDefined();
+			await expect(service.listMasterData(HOLDING, 'segments')).resolves.toBeDefined();
+		});
+
+		it('el uso de unidades suma las seis tablas por texto exacto dentro del holding, con desglose', async () => {
 			const { db, service } = catalogs([
 				[
 					'FROM master_data WHERE holding_id = $1 AND category = $2',
@@ -90,29 +109,54 @@ describe('SettingsCatalogsService', () => {
 				],
 				['FROM contract_items WHERE holding_id = $1 AND unit_of_measure', () => [{ value: 'Usuarios', n: '3' }]],
 				['FROM quantities WHERE holding_id = $1 AND unit_of_measure', () => [{ value: 'Usuarios', n: '2' }]],
+				['FROM invoice_items_legacy WHERE holding_id = $1 AND unit_of_measure', () => [{ value: 'Usuarios', n: '4' }]],
+				['FROM sapira_quantity_imports WHERE holding_id = $1 AND unit_of_measure', () => [{ value: 'Usuarios', n: '1' }]],
 			]);
 			const [row] = await service.listMasterData(HOLDING, 'units_of_measure');
 
-			expect(row.in_use).toBe(5);
-			expect(db.statements('unit_of_measure = ANY($2::text[])')).toHaveLength(4);
+			expect(row.in_use).toBe(10);
+			expect(row.usage).toEqual({ contracts: 3, quotes: 0, subscriptions: 0, invoices: 4, quantities: 3, clients: 0 });
+			expect(db.statements('unit_of_measure = ANY($2::text[])').map((call) => call.sql.match(/FROM (\w+)/)?.[1])).toEqual([
+				'contract_items',
+				'quote_items',
+				'invoice_items',
+				'invoice_items_legacy',
+				'quantities',
+				'sapira_quantity_imports',
+			]);
+		});
+
+		it('el uso de tipos de ítem cuenta contratos, cotizaciones, suscripciones y facturas antiguas', async () => {
+			const { db, service } = catalogs([
+				[
+					'FROM master_data WHERE holding_id = $1 AND category = $2',
+					() => [{ id: ID, category: 'item_types', value: 'Licencia', is_active: true }],
+				],
+				['FROM subscription_items WHERE holding_id = $1 AND item_type', () => [{ value: 'Licencia', n: '2' }]],
+				['FROM invoice_items_legacy WHERE holding_id = $1 AND item_type', () => [{ value: 'Licencia', n: '5' }]],
+			]);
+			const [row] = await service.listMasterData(HOLDING, 'item_types');
+
+			expect(row).toMatchObject({ in_use: 7, usage: { subscriptions: 2, invoices: 5, contracts: 0, quotes: 0, quantities: 0 } });
+			expect(db.statements('item_type = ANY($2::text[])')).toHaveLength(4);
 		});
 
 		it('renombrar o borrar un valor en uso → 409; desactivarlo sí', async () => {
 			const handlers: Handler[] = [
 				[
 					'WHERE id = $1 AND holding_id = $2 AND category = $3',
-					() => [{ id: ID, category: 'payment_terms', value: '30 días', is_active: true }],
+					() => [{ id: ID, category: 'units_of_measure', value: 'Horas', is_active: true }],
 				],
-				['FROM quotes WHERE holding_id = $1 AND payment_terms', () => [{ value: '30 días', n: 12 }]],
+				['FROM contract_items WHERE holding_id = $1 AND unit_of_measure', () => [{ value: 'Horas', n: 12 }]],
 			];
 			const { db, service } = catalogs(handlers);
 
-			await expect(service.updateMasterData(HOLDING, 'payment_terms', ID, { value: '30 dias' })).rejects.toThrow(
+			await expect(service.updateMasterData(HOLDING, 'units_of_measure', ID, { value: 'Hora' })).rejects.toThrow(
 				'Este valor está en uso (12 registros): no se puede renombrar; desactívalo y crea uno nuevo'
 			);
-			await expect(service.deleteMasterData(HOLDING, 'payment_terms', ID)).rejects.toThrow('desactívalo en vez de eliminarlo');
-			await service.updateMasterData(HOLDING, 'payment_terms', ID, { is_active: false });
-			expect(db.statements('UPDATE master_data')[0].params).toEqual([ID, HOLDING, '30 días', false]);
+			await expect(service.deleteMasterData(HOLDING, 'units_of_measure', ID)).rejects.toThrow('desactívalo en vez de eliminarlo');
+			await service.updateMasterData(HOLDING, 'units_of_measure', ID, { is_active: false });
+			expect(db.statements('UPDATE master_data')[0].params).toEqual([ID, HOLDING, 'Horas', false]);
 		});
 	});
 });
@@ -139,6 +183,31 @@ describe('SettingsCustomFieldsService', () => {
 
 		await expect(service.valuesCount(HOLDING, 'contract_item', 'fecha_de_corte')).resolves.toBe(102);
 		expect(db.calls[0].params).toEqual([HOLDING, 'fecha_de_corte']);
+	});
+
+	it('la lista cuenta agrupado: una consulta por entidad (no una por campo); quote no consulta', async () => {
+		const { db, service } = build([
+			[
+				'FROM custom_field_definitions WHERE holding_id = $1',
+				() => [
+					field,
+					{ ...field, id: 'f2', field_name: 'centro_costo' },
+					{ ...field, id: 'f3', entity_type: 'quote', field_name: 'probabilidad' },
+				],
+			],
+			['JOIN contract_items t', () => [{ name: 'fecha_de_corte', n: '7' }]],
+		]);
+		const fields = await service.list(HOLDING);
+
+		expect(fields.map((item) => [item.field_name, item.values_count])).toEqual([
+			['fecha_de_corte', 7],
+			['centro_costo', 0],
+			['probabilidad', 0],
+		]);
+		const grouped = db.statements('FROM unnest($2::text[]) AS f(name)');
+
+		expect(grouped).toHaveLength(1);
+		expect(grouped[0].params).toEqual([HOLDING, ['fecha_de_corte', 'centro_costo']]);
 	});
 
 	it('quote no tiene columna custom_fields: 0 sin consultar', async () => {

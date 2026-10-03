@@ -1,9 +1,9 @@
 /**
  * "Hoy" del negocio para Contratos v2 (cobertura D16 / Huecos #10): una sola regla para cambios, consumo, alta, activación, 360 y jobs.
  * La fecha es la del calendario del holding, no la UTC del servidor (después de ~21:00 en Chile la fecha UTC ya es mañana) ni la local
- * del proceso. Los holdings no guardan zona horaria (`company_holdings` / `holding_settings` no tienen columna): todos usan
- * `America/Santiago`, la misma zona del scheduler de facturas y de los crons de contratos. Si algún día se agrega la columna, basta con
- * pasarla como `holdingTimezone`.
+ * del proceso. Desde la ronda 4 de Configuración cada holding tiene su zona (`holding_settings.timezone`, migración M14, default
+ * `America/Santiago`): los módulos la leen con `holdingTimezone(db, holdingId)` (`src/core/utils/holding-preferences.ts`) y la pasan aquí
+ * como `holdingTimezone`. Sin zona (o inválida) rige `America/Santiago`.
  */
 export const DEFAULT_HOLDING_TIMEZONE = 'America/Santiago';
 

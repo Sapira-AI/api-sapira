@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { DataSource, EntityManager } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
-import { ALL_PERMISSIONS, INTERNAL_PERMISSION_CODES } from '@/guards/permission-codes';
+import { ALL_PERMISSIONS } from '@/guards/permission-codes';
 import type { PermissionContext } from '@/guards/permissions.service';
 import {
 	NotificationsService,
@@ -17,6 +17,16 @@ import { plural, Row, toCount, withUniqueMessage } from './settings-common';
 import type { CreateRoleDto, DuplicateRoleDto, UpdateRoleDto } from './dtos/roles.dto';
 
 const DUPLICATE_NAME = 'Ya existe un rol con ese nombre';
+
+/** Editar incluye Ver (decisión de Domi 03-10): cada `EDIT_X` agrega `VIEW_X` si existe en el catálogo. */
+export function withImpliedViews(codes: string[], catalog: ReadonlyMap<string, string> | ReadonlySet<string>): string[] {
+	const implied = codes
+		.filter((code) => code.startsWith('EDIT_'))
+		.map((code) => `VIEW_${code.slice('EDIT_'.length)}`)
+		.filter((code) => catalog.has(code));
+
+	return [...new Set([...codes, ...implied])];
+}
 
 const roleDto = (row: Row) => ({
 	id: String(row.id),
@@ -104,7 +114,7 @@ export class SettingsRolesService {
 		if (invalid.length) throw validationException([{ field: 'permissions', message: `Permiso no válido: ${invalid.join(', ')}` }]);
 		const hidden = existing.filter((code) => !isGrantable(code, actor.isSuperAdmin));
 
-		return [...new Set([...unique, ...hidden])];
+		return [...new Set([...withImpliedViews(unique, catalog), ...hidden])];
 	}
 
 	private async writePermissions(manager: EntityManager, holdingId: string, roleId: string, codes: string[], catalog: Map<string, string>) {
@@ -187,12 +197,15 @@ export class SettingsRolesService {
 		const catalog = await this.catalog();
 		let codes = ((source.permissions as string[]) ?? []).filter(Boolean);
 
-		if (!actor.isSuperAdmin) {
-			// El comodín se expande a los códigos visibles: así la copia es editable en la matriz. Los internos no se copian.
-			if (codes.includes(ALL_PERMISSIONS))
-				codes = [...codes.filter((code) => code !== ALL_PERMISSIONS), ...visibleCodes(new Set(catalog.keys()))];
-			codes = codes.filter((code) => !INTERNAL_PERMISSION_CODES.includes(code));
+		if (!actor.isSuperAdmin && codes.includes(ALL_PERMISSIONS)) {
+			// El comodín se expande a los códigos visibles: así la copia es editable en la matriz.
+			codes = [...codes.filter((code) => code !== ALL_PERMISSIONS), ...visibleCodes(new Set(catalog.keys()))];
 		}
+		// Solo se copia lo que quien duplica puede otorgar y existe en el catálogo (sin internos ni heredados como MANAGE_*).
+		codes = withImpliedViews(
+			codes.filter((code) => catalog.has(code) && isGrantable(code, actor.isSuperAdmin)),
+			catalog
+		);
 		const name = dto.name ?? (await this.freeCopyName(holdingId, String(source.name)));
 		const newId = await withUniqueMessage(
 			() =>

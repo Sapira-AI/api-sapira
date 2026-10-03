@@ -37,13 +37,13 @@ import {
 	itemPricing,
 	monthsBetween,
 	nextPeriodStart,
-	normalizeCountry,
-	normalizeTaxRate,
 	type PreviewInvoice,
 	type PreviewLine,
 	pricedMonthlyEquivalent,
+	resolveTaxRate,
 	round2,
 	suggestDocumentType,
+	type TaxDocumentRate,
 	validAnchorDay,
 } from './billing-engine';
 import { type CatalogPrice, catalogPriceErrors } from './catalog-prices';
@@ -112,6 +112,8 @@ export interface ChangeContractRow {
 	document_type: string | null;
 	tax_document_type_id: string | null;
 	tax_document_type_kind: string | null;
+	/** Tasa del documento tributario del contrato (`tax_document_types.tax_rate`, %; null = la de la compañía). Ronda 3 de Configuración. */
+	tax_document_tax_rate?: number | string | null;
 	invoice_terms_and_conditions: string | null;
 	total_value: number | null;
 	contract_end_date: string | null;
@@ -341,7 +343,8 @@ export interface ChangeContext {
 	/** `item_add`: nombre de los productos pedidos que existen en el holding. */
 	products: Map<string, string>;
 	/** `billing_conditions`: documento tributario pedido si existe y corresponde a la compañía emisora. */
-	tax_document_type: { id: string; code: string; name: string; kind: string } | null;
+	/** Documento elegido en `billing_conditions` (del país de la compañía o genérico). `tax_rate` = su tasa (ronda 3 de Configuración). */
+	tax_document_type: { id: string; code: string; name: string; kind: string; tax_rate?: number | null } | null;
 	/** Origen cotización: la cotización si existe en el holding (multimoneda: su moneda, que hereda el ítem nuevo). */
 	quote: { id: string; quote_type: string | null; already_applied: boolean; currency?: string | null } | null;
 	/** `item_add` con precios medidos: métricas facturables del holding referenciadas (id → estado). */
@@ -1000,6 +1003,7 @@ export const engineContract = (contract: ChangeContractRow, overrides: Partial<B
 	multicurrency: contract.requires_multicurrency_billing === true,
 	document_type: contract.document_type,
 	company: { country: contract.company.country, tax_rate: contract.company.tax_rate },
+	tax_document: contract.tax_document_type_id ? { kind: contract.tax_document_type_kind, tax_rate: contract.tax_document_tax_rate ?? null } : null,
 	entity_country: contract.entity.country,
 	description_template: contract.invoice_description_template ?? null,
 	description_context: { contract_number: contract.contract_number, client_name: contract.entity.legal_name },
@@ -4497,12 +4501,39 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 	});
 }
 
-/** IVA de las Por Emitir según la familia del documento (exportación 0; Colombia 0; si no, la tasa de la compañía). */
-export const taxRateFor = (documentType: string, contract: ChangeContractRow): number => {
-	if (documentType === 'FACTURA_EXPORTACION') return 0;
-	if (normalizeCountry(contract.company.country) === 'CO') return 0;
+/**
+ * IVA de las Por Emitir según la familia del documento (`resolveTaxRate`: exportación 0; Colombia 0; la tasa del documento tributario si
+ * la tiene y es de esa familia; si no, la de la compañía). `document` permite evaluar el documento NUEVO de un cambio de condiciones.
+ */
+export const taxRateFor = (
+	documentType: string,
+	contract: ChangeContractRow,
+	document: TaxDocumentRate | null = contract.tax_document_type_id
+		? { kind: contract.tax_document_type_kind, tax_rate: contract.tax_document_tax_rate ?? null }
+		: null
+): number =>
+	resolveTaxRate({ documentType, companyCountry: contract.company.country, companyTaxRate: contract.company.tax_rate, document }).rate ?? 0;
 
-	return normalizeTaxRate(contract.company.tax_rate) ?? 0;
+/** Bloqueo del documento tributario cambiado por sí solo (ronda 4): aplicar responde 409 con este mensaje. */
+export const TAX_DOCUMENT_REQUIRES_PARTY_CHANGE = 'tax_document_requires_party_change';
+export const TAX_DOCUMENT_REQUIRES_PARTY_CHANGE_MESSAGE = 'El documento tributario solo cambia junto con la razón social emisora o receptora';
+const blockDocumentAlone = (p: Planner) =>
+	p.block(
+		TAX_DOCUMENT_REQUIRES_PARTY_CHANGE,
+		TAX_DOCUMENT_REQUIRES_PARTY_CHANGE_MESSAGE,
+		'Si cambia la razón social receptora, elige el documento nuevo en "Cambiar razón social"'
+	);
+
+/** Documento y IVA nuevos en las Por Emitir desde la fecha efectiva (cambio de documento junto con la razón social). */
+const retaxPending = (p: Planner, pending: ChangeInvoiceRow[], documentType: string, taxRate: number) => {
+	if (!pending.length) return;
+	p.ops.push({
+		kind: 'update_invoices_document',
+		invoice_ids: pending.map((invoice) => invoice.id),
+		document_type: documentType,
+		export_type: documentType === 'FACTURA_EXPORTACION' ? 1 : 0,
+		tax_rate: taxRate,
+	});
 };
 
 export function planBillingConditions(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
@@ -4555,47 +4586,16 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 	}
 	if (change.apply_to_pending === true && !('invoice_terms_and_conditions' in after))
 		p.error('apply_to_pending', 'apply_to_pending requiere un cambio en las condiciones de factura (invoice_terms_and_conditions)');
-	// Tipo de documento: del catálogo (deriva la familia) o la familia directa si el holding no tiene catálogo.
-	let familyAfter: string | null = null;
-
+	// Decisión de Domi (03-10, ronda 4 de Configuración): el documento tributario no cambia solo; solo junto con la razón social emisora o
+	// receptora (`change_entity` con `tax_document_type_id`). Mandar el mismo documento no cuenta como cambio.
 	if (has('tax_document_type_id')) {
 		if (!ctx.tax_document_type)
 			p.error('change.tax_document_type_id', 'El documento tributario no existe o no corresponde al país de la compañía emisora');
-		else if (ctx.tax_document_type.id !== contract.tax_document_type_id) {
-			track('tax_document_type_id', contract.tax_document_type_id, ctx.tax_document_type.id);
-			familyAfter = ctx.tax_document_type.kind === 'export_invoice' ? 'FACTURA_EXPORTACION' : 'FACTURA';
-		}
+		else if (ctx.tax_document_type.id !== contract.tax_document_type_id) blockDocumentAlone(p);
 	} else if (has('document_type') && change.document_type !== contract.document_type) {
 		if (contract.tax_document_type_id) p.error('change.document_type', 'El contrato usa el catálogo de documentos: indica tax_document_type_id');
-		else familyAfter = change.document_type!;
+		else blockDocumentAlone(p);
 	}
-	const familyBefore = contract.document_type ?? suggestDocumentType(contract.company.country, contract.entity.country);
-
-	if (familyAfter && familyAfter !== familyBefore) {
-		track('document_type', contract.document_type, familyAfter);
-		const taxRate = taxRateFor(familyAfter, contract);
-
-		if (pendingIds.length) {
-			p.ops.push({
-				kind: 'update_invoices_document',
-				invoice_ids: pendingIds,
-				document_type: familyAfter,
-				export_type: familyAfter === 'FACTURA_EXPORTACION' ? 1 : 0,
-				tax_rate: taxRate,
-			});
-			for (const invoice of pending) {
-				p.updatedInvoices.push({
-					id: invoice.id,
-					invoice_number: invoice.invoice_number,
-					issue_date: invoice.issue_date,
-					lines_changed: invoice.lines.length,
-					subtotal_before: invoice.subtotal,
-					subtotal_after: invoice.subtotal,
-					change: `documento ${familyAfter}, IVA ${taxRate} %`,
-				});
-			}
-		}
-	} else if (familyAfter && has('tax_document_type_id')) after.document_type = familyAfter;
 
 	// Envío al ERP y emisión automática (S6-10) y referencias: contrato + Por Emitir desde la fecha efectiva.
 	const sendAfter = has('auto_send_to_odoo') ? change.auto_send_to_odoo! : contract.auto_send_to_odoo;
@@ -4808,7 +4808,10 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 		after.auto_renew = change.auto_renew;
 		after.auto_renew_items = autoRenewItems.map((item) => item.id);
 	}
-	if (!p.errors.length && !Object.keys(p.contractSet).length && !newRates.length && !autoRenewItems.length) {
+	// Un documento cambiado solo ya quedó bloqueado (`tax_document_requires_party_change`): se informa el bloqueo, no "sin diferencias".
+	const documentBlocked = p.blockers.some((blocker) => blocker.code === TAX_DOCUMENT_REQUIRES_PARTY_CHANGE);
+
+	if (!p.errors.length && !documentBlocked && !Object.keys(p.contractSet).length && !newRates.length && !autoRenewItems.length) {
 		p.error('change', 'Indica qué condición cambiar: no hay diferencias con las condiciones actuales');
 	}
 	const changed = Object.keys(before);
@@ -4915,6 +4918,22 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 			REOPEN_PERIOD_STEP
 		);
 	}
+	// Ronda 4 de Configuración (Domi 03-10): el documento tributario solo cambia junto con la razón social; este es su camino. Con catálogo:
+	// `tax_document_type_id` del país de la compañía emisora; sin catálogo: `document_type` (familia) en vez de la derivada por país.
+	let newDocument: { id: string; label: string; family: string; rate: TaxDocumentRate } | null = null;
+
+	if (change.tax_document_type_id) {
+		if (!ctx.tax_document_type)
+			p.error('change.tax_document_type_id', 'El documento tributario no existe o no corresponde al país de la compañía emisora');
+		else if (ctx.tax_document_type.id !== contract.tax_document_type_id)
+			newDocument = {
+				id: ctx.tax_document_type.id,
+				label: `${ctx.tax_document_type.code} ${ctx.tax_document_type.name}`,
+				family: ctx.tax_document_type.kind === 'export_invoice' ? 'FACTURA_EXPORTACION' : 'FACTURA',
+				rate: { kind: ctx.tax_document_type.kind, tax_rate: ctx.tax_document_type.tax_rate ?? null },
+			};
+	} else if (change.document_type && contract.tax_document_type_id)
+		p.error('change.document_type', 'El contrato usa el catálogo de documentos: indica tax_document_type_id');
 	if (!entity || p.errors.length)
 		return p.finish({
 			type: 'ENTITY_CHANGED',
@@ -4934,11 +4953,25 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 	).filter((invoice) => !p.skipPartial(invoice));
 	// Tipo de documento: sin catálogo, se re-deriva por país emisor vs receptor (S1-7); con catálogo, se avisa si el país cambia.
 	const familyBefore = contract.document_type ?? suggestDocumentType(contract.company.country, contract.entity.country);
-	const familyAfter = suggestDocumentType(contract.company.country, entity.country);
+	const familyAfter =
+		!contract.tax_document_type_id && change.document_type ? change.document_type : suggestDocumentType(contract.company.country, entity.country);
 	const documentChanges = familyAfter !== familyBefore && !contract.tax_document_type_id;
 	const retaxed = new Set<string>();
+	const newDocumentRate = newDocument ? taxRateFor(newDocument.family, contract, newDocument.rate) : null;
 
-	if (pending.length && documentChanges) {
+	if (newDocument) {
+		// Documento nuevo: el IVA de las Por Emitir desde la fecha efectiva se recalcula con el resolver único (`resolveTaxRate`).
+		p.contractSet.tax_document_type_id = newDocument.id;
+		p.contractSet.document_type = newDocument.family;
+		if (pending.length) {
+			p.ops.push({
+				kind: 'update_invoices_fields',
+				invoice_ids: pending.map((invoice) => invoice.id),
+				set: { client_entity_id: entity.id, client_tax_id: entity.tax_id },
+			});
+			retaxPending(p, pending, newDocument.family, newDocumentRate!);
+		}
+	} else if (pending.length && documentChanges) {
 		p.ops.push({
 			kind: 'update_invoices_fields',
 			invoice_ids: pending.map((invoice) => invoice.id),
@@ -4987,7 +5020,8 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 	}
 	let docChange = '';
 
-	if (familyAfter !== familyBefore) {
+	if (newDocument) docChange = `, documento ${newDocument.label}, IVA ${newDocumentRate} %`;
+	else if (familyAfter !== familyBefore) {
 		if (contract.tax_document_type_id) {
 			p.warn(
 				'document_type_review',
@@ -5025,7 +5059,7 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 		type: 'ENTITY_CHANGED',
 		subtype: null,
 		title: 'Cambio de razón social',
-		description: `La razón social receptora pasa de ${contract.entity.legal_name ?? contract.client_entity_id ?? '—'} a ${entity.legal_name ?? entity.id} desde el ${p.effective}; ${pending.length} factura(s) por emitir reasignadas`,
+		description: `La razón social receptora pasa de ${contract.entity.legal_name ?? contract.client_entity_id ?? '—'} a ${entity.legal_name ?? entity.id} desde el ${p.effective}${newDocument ? ` con documento ${newDocument.label}` : ''}; ${pending.length} factura(s) por emitir reasignadas`,
 		amount_delta: 0,
 		items_affected: [],
 		metadata: {
@@ -5034,6 +5068,13 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 			// §9.3.10: la razón social se creó en el mismo acto (`client_entities` + `client_entity_clients` is_primary = false).
 			entity_created: entityCreated,
 			pending_invoices_updated: pending.length,
+			// Ronda 4: documento tributario cambiado en el mismo acto (antes y después) y el IVA con que quedan las Por Emitir.
+			...(newDocument
+				? {
+						tax_document_before: { id: contract.tax_document_type_id, document_type: contract.document_type },
+						tax_document_after: { id: newDocument.id, document_type: newDocument.family, tax_rate: newDocumentRate },
+					}
+				: {}),
 			// Antes de cada Por Emitir reasignada (para revertir o auditar): receptor y su identificador tributario.
 			invoices_before: pending.map((invoice) => ({
 				id: invoice.id,
@@ -6326,7 +6367,10 @@ function correctItemInvoices(
 	return difference;
 }
 
-/** Job diario `contracts-extend-horizon`: períodos por delante que siempre tienen factura los ítems sin término (B2, decisión 01-10). */
+/**
+ * Job diario `contracts-extend-horizon`: períodos por delante que siempre tienen factura los ítems sin término (B2, decisión 01-10).
+ * **Fijo por sistema** (calendario rodante tipo ERP; Domi 03-10: no es configurable por holding).
+ */
 export const HORIZON_PERIODS_AHEAD = 12;
 export const HORIZON_EXTENDED = 'HORIZON_EXTENDED';
 
@@ -6355,8 +6399,8 @@ export function horizonEndOf(item: ChangeItemRow, contractAnchor: number, today:
 /**
  * `contracts-extend-horizon` (job diario, decisión de Domi 01-10): el generador factura los ítems sin término solo `HORIZON_PERIODS_AHEAD`
  * períodos desde su inicio; cada día, por contrato Activo, los recurrentes sin término vivos (sin churn, sin renovar, no espejos de baja, sin
- * pausa abierta) reciben las Por Emitir que faltan para tener siempre 12 períodos desde hoy. Solo extiende **hacia adelante** desde el último
- * día facturado (nunca rellena huecos: una factura cancelada a propósito no vuelve), con el mismo generador que la reactivación
+ * pausa abierta) reciben las Por Emitir que faltan para tener siempre `HORIZON_PERIODS_AHEAD` (12, fijo) períodos desde hoy. Solo
+ * extiende **hacia adelante** desde el último día facturado (nunca rellena huecos: una factura cancelada a propósito no vuelve), con el mismo generador que la reactivación
  * (`restoreItemBilling`) y la fusión con la Por Emitir del mes (`mergeTarget`). Idempotente: con el horizonte completo devuelve null. Sin
  * cambios de ítems ni devengo. Evento `HORIZON_EXTENDED` (uno por contrato y corrida, solo si creó algo).
  */

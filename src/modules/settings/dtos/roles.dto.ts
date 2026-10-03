@@ -23,8 +23,8 @@ export class CreateRoleDto {
 	description?: string | null;
 
 	@ApiProperty({ type: [String], example: ['VIEW_CLIENTES', 'EDIT_CLIENTES'] })
-	@IsArray({ message: 'permissions debe ser una lista de códigos' })
-	@ArrayMaxSize(100)
+	@IsArray({ message: 'Los permisos deben ser una lista de códigos' })
+	@ArrayMaxSize(100, { message: 'Demasiados permisos' })
 	@Matches(CODE, { each: true, message: 'Código de permiso no válido' })
 	permissions!: string[];
 }
@@ -47,8 +47,8 @@ export class UpdateRoleDto {
 	description?: string | null;
 
 	@ApiPropertyOptional({ type: [String] })
-	@IsArray({ message: 'permissions debe ser una lista de códigos' })
-	@ArrayMaxSize(100)
+	@IsArray({ message: 'Los permisos deben ser una lista de códigos' })
+	@ArrayMaxSize(100, { message: 'Demasiados permisos' })
 	@Matches(CODE, { each: true, message: 'Código de permiso no válido' })
 	@IsOptional()
 	permissions?: string[];
@@ -66,14 +66,14 @@ export class DuplicateRoleDto {
 
 export class PutRoleAlertsDto {
 	@ApiProperty({ type: [String], example: ['salesforce_staging_blocked'] })
-	@IsArray({ message: 'types debe ser una lista' })
-	@ArrayMaxSize(20)
+	@IsArray({ message: 'Las alertas deben ser una lista' })
+	@ArrayMaxSize(20, { message: 'Demasiadas alertas' })
 	@IsString({ each: true, message: 'Tipo de alerta no válido' })
 	types!: string[];
 }
 
 export class ChangeUserRoleDto {
 	@ApiProperty()
-	@IsUUID(undefined, { message: 'role_id debe ser un UUID' })
+	@IsUUID(undefined, { message: 'El rol no es válido' })
 	role_id!: string;
 }

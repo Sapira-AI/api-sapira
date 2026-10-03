@@ -112,17 +112,17 @@ amount_contract`; `unconverted` cuenta solo valorizadas sin conversión; `system
 
 ## 4. Códigos de bloqueo y motivos
 
-- **Cola** (los del 360, con `action`): `not_pending`, `unified_invoice`, `legacy_invoice`, `credit_note_send_pending`, `period_closed`
+- **Cola** (los del 360, con `action`): `not_pending`, `unified_invoice`, `legacy_invoice`, `credit_note_send_pending` (sin `period_closed` desde 03-10: el cierre no bloquea facturas)
   (`reschedule`), `sent_to_erp_draft` / `already_sent` (`erp_reset`), `erp_send_disabled` (`billing_conditions`), `no_erp_integration`
   (`integrations`), `no_erp_partner` (`client_entity`), `needs_reference` (`references`), `no_lines` (`edit`), `item_without_product`
   (`contract_items`), `fixed_fx_without_rate` (`fx`), `tax_rate_missing` (`company_settings`); avisos `past_issue_date`, `spot_fx`.
   Con `issue_path = external` no aplican `erp_send_disabled`, `no_erp_integration`, `no_erp_partner`, `already_sent`, `tax_rate_missing`.
-- **Pagos, correo de cobro y proforma**: `no_contract` (factura sin contrato: solo lectura, spec §11.1; en cobranza bloquea la operación entera, 409), `not_issued`, `credit_note`, `cancelled`, `payment_currency_mismatch`, `overpayment`, `period_closed`, `client_mismatch`,
+- **Pagos, correo de cobro y proforma**: `no_contract` (factura sin contrato: solo lectura, spec §11.1; en cobranza bloquea la operación entera, 409), `not_issued`, `credit_note`, `cancelled`, `payment_currency_mismatch`, `overpayment`, `client_mismatch` (sin `period_closed` desde 03-10),
   `already_voided` (anular).
 - **Conciliación**: los de `planPayments` + `movement_not_found`, `movement_is_debit`, `movement_not_pending`, `movement_overapplied`,
   `movement_currency_mixed`, `fx_required`, `fx_inconsistent`, `note_required`, `invoice_not_found`, `nothing_to_apply`; aviso `multiple_clients`;
   importar `nothing_to_import`, `invalid_mapping` (400), `no_bank_account` (404); revertir `batch_has_payments`, `already_reverted`; deshacer
-  `movement_has_no_payments` (+ `already_voided`, `period_closed` de `void`); ignorar/reabrir `movement_has_payments`, `movement_not_pending`,
+  `movement_has_no_payments` (+ `already_voided` de `void`); ignorar/reabrir `movement_has_payments`, `movement_not_pending`,
   `movement_not_ignored`.
 - **Fan-out**: `not_found`, `no_contract`, `not_applied`, `error` + los que devuelva el contrato.
 - **Correos**: `skipped.reason` ∈ `no_contacts`, `paid`, `not_issued`, `credit_note`, `cancelled`, `not_found`; bloqueos `no_sender`,
@@ -184,7 +184,7 @@ Migración **aplicada en QA y producción el 02-10** (v0.0.75/76): `179075000000
 - `open_consumption` no se evalúa en la cola (necesita el consumo por contrato).
 - Proforma: la API no dibuja el PDF (no hay librería de PDF en la API); adjunta el del front, que lo manda siempre que puede (01-10).
 - Si existe un guard de período sobre `invoices`, un pago sobre una factura de un período cerrado podría fallar al escribir el estado
-  (sin verificar en base; la fecha de pago sí se valida con `period_closed`).
+  (sin verificar en base; desde 03-10 la fecha de pago no se compara con el cierre de períodos).
 - Pagos legacy en otra moneda que la factura no cuentan en `paid` (`counts: false` en el detalle).
 
 ## 8. Cierre de brechas del 01-10 (sin commit)

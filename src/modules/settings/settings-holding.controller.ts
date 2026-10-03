@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	HttpCode,
+	Param,
+	ParseUUIDPipe,
+	Patch,
+	Post,
+	Query,
+	Request,
+	UseGuards,
+	UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -7,7 +21,17 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PERMISSION_CODES } from '@/guards/permission-codes';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
-import { CreateFxRateDto, FxRatesQueryDto, LogoUploadDto, UpdateFxRateDto, UpdateHoldingDto, UpdatePreferencesDto } from './dtos/holding.dto';
+import {
+	CreateFxRateDto,
+	FxRatesQueryDto,
+	FxSyncHistoryQueryDto,
+	FxSyncMonthlyQueryDto,
+	LogoUploadDto,
+	UpdateFxRateDto,
+	UpdateHoldingDto,
+	UpdatePreferencesDto,
+} from './dtos/holding.dto';
+import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 import { SettingsHoldingService } from './settings-holding.service';
 
 import type { SettingsRequest } from './settings-common';
@@ -16,6 +40,7 @@ import type { SettingsRequest } from './settings-common';
 @ApiTags('Settings · Holding')
 @Controller('settings/holding')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewSettings)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })
@@ -88,6 +113,18 @@ export class SettingsHoldingController {
 	@ApiOperation({ summary: 'Última carga automática de tipos de cambio por moneda en uso (solo lectura)' })
 	fxSyncStatus(@HoldingId() holdingId: string) {
 		return this.holding.fxSyncStatus(holdingId);
+	}
+
+	@Get('fx-sync/history')
+	@ApiOperation({ summary: 'Tipo de cambio diario de una moneda en uso hacia la de consolidación (fecha, tasa, fuente)' })
+	fxSyncHistory(@HoldingId() holdingId: string, @Query() query: FxSyncHistoryQueryDto) {
+		return this.holding.fxSyncHistory(holdingId, query);
+	}
+
+	@Get('fx-sync/monthly')
+	@ApiOperation({ summary: 'Promedios mensuales de una moneda en uso hacia la de consolidación (12 meses del año)' })
+	fxSyncMonthly(@HoldingId() holdingId: string, @Query() query: FxSyncMonthlyQueryDto) {
+		return this.holding.fxSyncMonthly(holdingId, query);
 	}
 
 	@Get('tree')

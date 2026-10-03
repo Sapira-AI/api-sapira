@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
 import { voidedSql } from '@/modules/contracts/contract-360';
@@ -49,14 +50,16 @@ const text = (value: unknown) => (value === null || value === undefined ? null :
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : text(value));
 
-/** Factura con lo que necesita un pago: total, pagos confirmados en su moneda, anulada, cierre de período de la compañía. */
+/**
+ * Factura con lo que necesita un pago: total, pagos confirmados en su moneda, anulada. El cierre de períodos no bloquea pagos (Domi 03-10:
+ * protege solo contratos e ítems; pagos, facturas y consumos se registran o mueven en meses cerrados).
+ */
 const PAYMENT_INVOICE_SELECT = `SELECT i.id, i.invoice_number, i.status, i.document_type, i.is_active, i.contract_id,
 		COALESCE(i.client_id, c.client_id) AS client_id, UPPER(COALESCE(i.invoice_currency, i.contract_currency)) AS invoice_currency,
 		COALESCE(i.total_invoice_currency, i.amount_invoice_currency) AS total, i.due_date::text AS due_date, i.odoo_invoice_id, i.sent_to_odoo_at,
 		${voidedSql('i')} AS voided,
 		COALESCE((SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id = i.id AND p.holding_id = i.holding_id AND p.confirmed = true
-			AND UPPER(p.currency) = UPPER(COALESCE(i.invoice_currency, i.contract_currency))), 0) AS paid,
-		public.get_cutoff_date(i.holding_id, i.company_id)::text AS cutoff_date
+			AND UPPER(p.currency) = UPPER(COALESCE(i.invoice_currency, i.contract_currency))), 0) AS paid
 	FROM invoices i
 	LEFT JOIN contracts c ON c.id = i.contract_id AND c.holding_id = i.holding_id`;
 
@@ -75,7 +78,6 @@ const paymentInvoiceOf = (row: Row): PaymentInvoiceRow => ({
 	due_date: text(row.due_date),
 	odoo_invoice_id: num(row.odoo_invoice_id),
 	sent_to_odoo_at: iso(row.sent_to_odoo_at),
-	cutoff_date: text(row.cutoff_date),
 });
 
 /**
@@ -96,7 +98,7 @@ export class BillingPaymentsService {
 			dto.allocations.map((allocation) => allocation.invoice_id)
 		);
 
-		return planPayments(invoices, dto, todayFor(null, now));
+		return planPayments(invoices, dto, todayFor(await holdingTimezone(this.dataSource, holdingId), now));
 	}
 
 	/**
@@ -122,7 +124,7 @@ export class BillingPaymentsService {
 
 	async register(holdingId: string, dto: RegisterPaymentDto, authId: string, now = new Date(), options: RegisterPaymentOptions = {}) {
 		const userId = await resolveUserId(this.dataSource, authId);
-		const today = todayFor(null, now);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 
 		return await this.within(options.runner, async (runner) => {
 			const { plan } = await this.plan(runner, holdingId, dto, today, { allowMultipleClients: options.allowMultipleClients, lock: true });
@@ -217,7 +219,7 @@ export class BillingPaymentsService {
 
 	async void(holdingId: string, paymentId: string, dto: VoidPaymentDto, authId: string, now = new Date(), options: { runner?: QueryRunner } = {}) {
 		const userId = await resolveUserId(this.dataSource, authId);
-		const today = todayFor(null, now);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 
 		return await this.within(options.runner, async (runner) => {
 			const [payment] = (await runner.query(
@@ -231,13 +233,6 @@ export class BillingPaymentsService {
 			const blockers: BillingBlocker[] = [];
 
 			if (payment.confirmed !== true) blockers.push({ code: 'already_voided', message: 'El pago ya está anulado', next_step: null });
-			if (invoice.cutoff_date && text(payment.payment_date)! <= invoice.cutoff_date) {
-				blockers.push({
-					code: 'period_closed',
-					message: `El pago es del ${text(payment.payment_date)}, en un período cerrado (cierre al ${invoice.cutoff_date})`,
-					next_step: 'Reabre el período en Configuración para anularlo',
-				});
-			}
 			const countsForInvoice = text(payment.currency)?.toUpperCase() === invoice.invoice_currency;
 			const paidAfter = Math.max(invoice.paid - (countsForInvoice ? Number(payment.amount) || 0 : 0), 0);
 			const before = { status: invoice.status, paid: invoice.paid };

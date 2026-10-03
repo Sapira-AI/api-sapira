@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Raw, Repository } from 'typeorm';
 
+import { resolveCountryInput } from '@/core/utils/country-resolve';
+import { loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
@@ -15,6 +17,27 @@ import { CreateClientDto } from './dtos/create-client.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
 import { IClientFilterOptions, IClientWithEntities, IPaginatedClients } from './interfaces/client.interface';
+
+/** Listas del holding que validan `market`, `segment` e `industry` de un cliente (Configuración › Catálogos, ronda 3). */
+const CLIENT_LISTS = [
+	{
+		field: 'market',
+		category: 'markets',
+		label: (value: string) => `El mercado "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+	{
+		field: 'segment',
+		category: 'segments',
+		label: (value: string) => `El segmento "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+	{
+		field: 'industry',
+		category: 'industries',
+		label: (value: string) => `La industria "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+] as const;
+
+type ClientListField = (typeof CLIENT_LISTS)[number]['field'];
 
 @Injectable()
 export class ClientsService {
@@ -32,8 +55,74 @@ export class ClientsService {
 
 	/** Crea el cliente en el holding activo (validado por `HoldingScopeGuard`). */
 	async create(createClientDto: CreateClientDto, holdingId: string): Promise<Client> {
-		const client = this.clientRepository.create({ ...createClientDto, holding_id: holdingId });
+		const prepared = await this.prepareWrite(createClientDto, holdingId, null);
+		const client = this.clientRepository.create({ ...prepared, holding_id: holdingId } as unknown as Partial<Client>);
 		return await this.clientRepository.save(client);
+	}
+
+	/**
+	 * Ronda 3 de Configuración (contrato §8.8): país ISO (`country_code` manda y reescribe `country` en español; solo `country` busca su
+	 * código) y mercado/segmento/industria validados contra las listas activas del holding. Mandar el mismo valor que ya tiene el cliente no
+	 * se valida (los valores viejos fuera de la lista se conservan hasta la limpieza previa al switch); `''`/`null` lo borra.
+	 */
+	private async prepareWrite<T extends { country?: string | null; country_code?: string | null } & Partial<Record<ClientListField, string | null>>>(
+		dto: T,
+		holdingId: string,
+		current: Partial<Record<ClientListField, string | null>> | null
+	): Promise<T> {
+		const out = { ...dto };
+		const country = await resolveCountryInput(this.clientRepository, { country: dto.country, country_code: dto.country_code });
+
+		if (country) Object.assign(out, country);
+		const toCheck = CLIENT_LISTS.flatMap((list) => {
+			const raw = dto[list.field];
+
+			if (raw === undefined) return [];
+			const value = typeof raw === 'string' ? raw.trim() : raw;
+
+			(out as Record<string, unknown>)[list.field] = value === '' ? null : value;
+			if (!value || value === (current?.[list.field] ?? null)) return [];
+
+			return [{ ...list, value }];
+		});
+
+		if (toCheck.length) {
+			const rows = (await this.clientRepository.query(
+				`SELECT category, value FROM master_data WHERE holding_id = $1 AND is_active = true AND category = ANY($2::text[])`,
+				[holdingId, toCheck.map((item) => item.category)]
+			)) as Array<{ category: string; value: string }>;
+
+			for (const item of toCheck) {
+				if (!rows.some((row) => row.category === item.category && row.value === item.value))
+					throw new BadRequestException(item.label(item.value));
+			}
+		}
+
+		return out;
+	}
+
+	/** Opciones del formulario de clientes: mercados, segmentos e industrias activos del holding (Configuración › Catálogos). */
+	/**
+	 * Listas del holding para el formulario y `renewal_notice_days` (= `holding_settings.auto_renewal_notice_days`, Configuración ronda 4):
+	 * la ventana del aviso "vence pronto" del Cliente 360.
+	 */
+	async getFormOptions(holdingId: string): Promise<{ markets: string[]; segments: string[]; industries: string[]; renewal_notice_days: number }> {
+		const [rows, prefs] = await Promise.all([
+			this.clientRepository.query(
+				`SELECT category, value FROM master_data WHERE holding_id = $1 AND is_active = true AND category IN ('markets', 'segments', 'industries')
+				ORDER BY lower(value)`,
+				[holdingId]
+			) as Promise<Array<{ category: string; value: string }>>,
+			loadHoldingPreferences(this.clientRepository, holdingId),
+		]);
+		const of = (category: string) => rows.filter((row) => row.category === category).map((row) => row.value);
+
+		return {
+			markets: of('markets'),
+			segments: of('segments'),
+			industries: of('industries'),
+			renewal_notice_days: prefs.auto_renewal_notice_days,
+		};
 	}
 
 	/** Clientes del holding activo (validado por `HoldingScopeGuard`). */
@@ -198,10 +287,10 @@ export class ClientsService {
 		return new Map(rows.map((row) => [row.id, row.lifecycle]));
 	}
 
-	async update(id: string, updateClientDto: UpdateClientDto): Promise<Client> {
+	async update(id: string, updateClientDto: UpdateClientDto, holdingId?: string): Promise<Client> {
 		const client = await this.findOne(id);
 
-		Object.assign(client, updateClientDto);
+		Object.assign(client, await this.prepareWrite(updateClientDto, holdingId ?? String(client.holding_id), client));
 
 		return await this.clientRepository.save(client);
 	}

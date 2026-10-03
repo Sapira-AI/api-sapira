@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException, Logger, ServiceUnavailableExc
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-/** Bucket público ya existente para logos (lo usa también el front actual). */
+/** Bucket público ya existente para logos (lo usa también el front actual). Límites (2 MB, PNG/JPG/WEBP): migración 1790810000000. */
 export const COMPANY_LOGOS_BUCKET = 'company-logos';
 /** Bucket privado de archivos de compañías (migración M8 `1790790000000-CompanyLegalDocumentsStorage`). */
 export const COMPANY_FILES_BUCKET = 'company-files';
@@ -99,7 +99,6 @@ export const LOGO_MIME_TYPES: Record<string, string> = {
 	'image/png': 'png',
 	'image/jpeg': 'jpg',
 	'image/webp': 'webp',
-	'image/svg+xml': 'svg',
 };
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 

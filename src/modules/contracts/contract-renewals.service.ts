@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone, loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { setApiWriter } from './api-writer';
@@ -11,7 +12,6 @@ import { resolveUserId } from './contract-drafts.service';
 import {
 	AUTO_RENEWAL_JOB,
 	compactRenewalPreview,
-	DEFAULT_NOTICE_DAYS,
 	type DueCandidate,
 	dueKey,
 	dueReminders,
@@ -25,6 +25,7 @@ import {
 	proposalKey,
 	type ReminderCandidate,
 	reminderLabel,
+	reminderLadder,
 	reminderTone,
 	RENEWAL_PROPOSAL_CODES,
 	RENEWAL_PROPOSAL_DISMISSED,
@@ -53,7 +54,8 @@ const toText = (value: unknown) => (value === null || value === undefined ? null
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
-const isoDate = (date: Date) => todayFor(null, date);
+/** "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4; default America/Santiago). */
+const isoDate = (date: Date, timezone?: string | null) => todayFor(timezone, date);
 
 /** Resultado de una corrida por holding (try/catch por holding: un holding que falla no detiene a los demás). */
 export interface JobHoldingResult {
@@ -90,7 +92,7 @@ export class ContractRenewalsService {
 
 	/** `GET /contracts/renewal-proposals`: propuestas abiertas del holding con conteos (KPI "Renuevan en 30 días"). */
 	async listProposals(holdingId: string, asOf = new Date()): Promise<{ data: RenewalProposalView[]; counts: RenewalProposalCounts }> {
-		const data = await loadOpenRenewalProposals(this.dataSource, holdingId, isoDate(asOf));
+		const data = await loadOpenRenewalProposals(this.dataSource, holdingId, isoDate(asOf, await holdingTimezone(this.dataSource, holdingId)));
 
 		return { data, counts: proposalCounts(data) };
 	}
@@ -164,8 +166,9 @@ export class ContractRenewalsService {
 
 	/** Propuestas de un holding: un evento `RENEWAL_PROPOSED` por contrato con sus ítems no propuestos aún (por ítem y fin). Devuelve cuántos. */
 	async proposeRenewalsForHolding(holdingId: string, today = new Date()): Promise<number> {
-		const iso = isoDate(today);
-		const notice = await this.noticeDays(holdingId);
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
 		const rows = (await this.dataSource.query(
 			`SELECT ci.id, ci.contract_id, c.contract_number, ci.product_name, ci.end_date::text AS end_date, ci.quantity, ci.unit_price,
 				ci.monthly_price, ci.currency, ci.term_months, ci.billing_frequency
@@ -290,13 +293,14 @@ export class ContractRenewalsService {
 
 	/**
 	 * Alertas crecientes de un holding: ítems recurrentes con fin que siguen sin decisión (sin renovar ni baja; con o sin auto-renovación) de
-	 * contratos Activos, Por renovar o Vencidos. Escalones: `auto_renewal_notice_days` (primer aviso) y luego 60/30/15/7/0 días antes del fin;
-	 * vencido, cada 7 días. Una alerta por contrato, fin y escalón (evento `RENEWAL_REMINDER` con `metadata { threshold_days, items[] }`,
+	 * contratos Activos, Por renovar o Vencidos. Escalones: `auto_renewal_notice_days` (primer aviso) y luego la escalera del holding
+	 * (`renewal_reminder_days`, default 60/30/15/7/0) menor que él; vencido, cada `renewal_overdue_every_days` días (default 7). Una alerta por contrato, fin y escalón (evento `RENEWAL_REMINDER` con `metadata { threshold_days, items[] }`,
 	 * revisado con el contrato bloqueado) y la notificación del contrato (misma clave por fin: se actualiza al escalar, no se duplica).
 	 */
 	async remindRenewalsForHolding(holdingId: string, today = new Date()): Promise<number> {
-		const iso = isoDate(today);
-		const notice = await this.noticeDays(holdingId);
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
 		const rows = (await this.dataSource.query(
 			`SELECT ci.id, ci.contract_id, c.contract_number, ci.product_name, ci.end_date::text AS end_date
 			FROM contract_items ci
@@ -322,7 +326,9 @@ export class ContractRenewalsService {
 		const sent = await this.reminderKeys(this.dataSource, holdingId, [...new Set(candidates.map((row) => row.contract_id))]);
 		let created = 0;
 
-		for (const reminder of dueReminders(candidates, sent, iso, notice)) {
+		const schedule = { steps: prefs.renewal_reminder_days, overdue_every_days: prefs.renewal_overdue_every_days };
+
+		for (const reminder of dueReminders(candidates, sent, iso, notice, schedule)) {
 			const label = reminderLabel(reminder.days_to_end);
 			const names = reminder.items.map((item) => item.product_name ?? 'Producto').join(', ');
 			const eventId = await this.transaction(async (runner) => {
@@ -351,6 +357,8 @@ export class ContractRenewalsService {
 							end_date: reminder.end_date,
 							reminder_key: reminder.key,
 							notice_days: notice,
+							ladder: reminderLadder(notice, schedule.steps),
+							overdue_every_days: schedule.overdue_every_days,
 							items: reminder.items,
 						}),
 					]
@@ -383,7 +391,8 @@ export class ContractRenewalsService {
 
 	/**
 	 * Job `contracts-extend-horizon`: por holding, las Por Emitir que faltan para que los ítems sin término tengan siempre 12 períodos desde
-	 * hoy (`ContractChangesService.extendHorizonForHolding`; evento `HORIZON_EXTENDED` por contrato solo si creó algo).
+	 * hoy (`HORIZON_PERIODS_AHEAD`, fijo por sistema; `ContractChangesService.extendHorizonForHolding`; evento `HORIZON_EXTENDED` por contrato
+	 * solo si creó algo).
 	 */
 	async extendHorizons(today = new Date()): Promise<JobHoldingResult[]> {
 		return await this.perHolding(EXTEND_HORIZON_JOB, (holdingId) => this.changes.extendHorizonForHolding(holdingId, SYSTEM_ACTOR_ID, today));
@@ -398,8 +407,9 @@ export class ContractRenewalsService {
 	 * el aviso lleva la variación del índice a la fecha (`indicadores_economicos`, con `index_lag_months`) o `index_value_missing`.
 	 */
 	async flagDueForHolding(holdingId: string, today = new Date()): Promise<number> {
-		const iso = isoDate(today);
-		const notice = await this.noticeDays(holdingId);
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
 		const rows = (await this.dataSource.query(
 			`SELECT sc.id, sc.contract_id, c.contract_number, sc.contract_item_id, ci.product_name, sc.trigger, sc.kind, sc.value, sc.index_code,
 				sc.index_base_value, sc.index_lag_months,
@@ -527,14 +537,6 @@ export class ContractRenewalsService {
 		}
 
 		return results;
-	}
-
-	private async noticeDays(holdingId: string): Promise<number> {
-		const [row] = (await this.dataSource.query(`SELECT auto_renewal_notice_days FROM holding_settings WHERE holding_id = $1`, [
-			holdingId,
-		])) as Row[];
-
-		return toNumber(row?.auto_renewal_notice_days) || DEFAULT_NOTICE_DAYS;
 	}
 
 	/** Claves `ítem:fin` ya propuestas (cualquier estado: una propuesta omitida no se repite para el mismo fin). */

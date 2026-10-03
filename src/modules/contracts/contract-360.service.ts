@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
 
 import { diffDays } from './billing-engine';
@@ -39,7 +40,6 @@ const toText = (value: unknown) => (value === null || value === undefined ? null
 const toBool = (value: unknown) => (value === null || value === undefined ? null : Boolean(value));
 const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toText(value));
 const isoDay = (value: unknown) => iso(value)?.slice(0, 10) ?? null;
-const isoDate = (date: Date) => todayFor(null, date);
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
 
@@ -187,7 +187,7 @@ export class Contract360Service {
 
 	async overview(idOrNumber: string, holdingId: string, asOfDate = new Date()) {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [context, invoices, fxRows, itemRows, history, [recognizedRow]] = await Promise.all([
 			this.loadContext(contract.id, holdingId, today),
 			this.loadInvoices(contract.id, holdingId),
@@ -369,7 +369,7 @@ export class Contract360Service {
 
 	async schedule(idOrNumber: string, holdingId: string, options: { includeCancelled?: boolean } = {}, asOfDate = new Date()) {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [context, invoices, fxRows] = await Promise.all([
 			this.loadContext(contract.id, holdingId, today),
 			this.loadInvoices(contract.id, holdingId),

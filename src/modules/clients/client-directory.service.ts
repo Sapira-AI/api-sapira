@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { resolveCountryInput } from '@/core/utils/country-resolve';
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 
@@ -43,7 +44,9 @@ export interface CreateEntityInput {
 	client_id: string;
 	legal_name: string;
 	tax_id: string;
-	country: string;
+	country?: string;
+	/** País ISO (ronda 3 de Configuración). */
+	country_code?: string | null;
 	legal_address?: string;
 	email?: string;
 	phone?: string;
@@ -123,7 +126,7 @@ export class ClientDirectoryService {
 
 		const [rows, [countRow]] = await Promise.all([
 			this.dataSource.query<Row[]>(
-				`SELECT ce.id, ce.legal_name, ce.tax_id, ce.country, ce.email, ce.odoo_partner_id,
+				`SELECT ce.id, ce.legal_name, ce.tax_id, ce.country, ce.country_code, ce.email, ce.odoo_partner_id,
 					COALESCE(cl.clients, '[]'::json) AS clients, COALESCE(cl.clients_count, 0) AS clients_count,
 					COALESCE(ar.receivable, 0) AS receivable, COALESCE(ar.overdue, 0) AS overdue
 				FROM client_entities ce
@@ -156,6 +159,7 @@ export class ClientDirectoryService {
 				legal_name: (row.legal_name as string) ?? null,
 				tax_id: (row.tax_id as string) ?? null,
 				country: (row.country as string) ?? null,
+				country_code: (row.country_code as string | null)?.trim() ?? null,
 				email: (row.email as string) ?? null,
 				odoo_partner_id: row.odoo_partner_id === null || row.odoo_partner_id === undefined ? null : Number(row.odoo_partner_id),
 				clients: (row.clients as Array<{ id: string; name: string | null; is_primary: boolean }>) ?? [],
@@ -295,6 +299,7 @@ export class ClientDirectoryService {
 		'legal_name',
 		'tax_id',
 		'country',
+		'country_code',
 		'legal_address',
 		'email',
 		'phone',
@@ -342,7 +347,13 @@ export class ClientDirectoryService {
 			if (duplicate) throw new ConflictException(`Ya existe la razón social "${duplicate.legal_name}" con ese RUT / ID tributario`);
 		}
 
-		return this.updateRow('client_entities', entityId, holdingId, ClientDirectoryService.ENTITY_FIELDS, changes);
+		// País (ronda 3 de Configuración): `country_code` manda y reescribe `country` en español; solo `country` busca su código.
+		const country = await resolveCountryInput(this.dataSource, {
+			country: changes.country as string | null | undefined,
+			country_code: changes.country_code as string | null | undefined,
+		});
+
+		return this.updateRow('client_entities', entityId, holdingId, ClientDirectoryService.ENTITY_FIELDS, { ...changes, ...(country ?? {}) });
 	}
 
 	/**
@@ -360,6 +371,9 @@ export class ClientDirectoryService {
 	) {
 		await this.assertClientsInHolding([data.client_id], holdingId);
 		const taxId = data.tax_id.trim();
+		const country = await resolveCountryInput(this.dataSource, { country: data.country, country_code: data.country_code });
+
+		if (!country?.country) throw new BadRequestException('Elige el país');
 
 		if (!allowDuplicateTaxId) {
 			const duplicate = await findEntityWithTaxId(this.dataSource, holdingId, taxId);
@@ -387,7 +401,8 @@ export class ClientDirectoryService {
 					client_id: data.client_id,
 					legal_name: data.legal_name.trim(),
 					tax_id: taxId,
-					country: data.country.trim(),
+					country: country.country,
+					country_code: country.country_code,
 					address: data.legal_address?.trim() || null,
 					email: data.email?.trim() || null,
 					payment_terms: cleanTerms(data.payment_terms),

@@ -17,6 +17,8 @@ const userDto = (row: Row, actor: PermissionContext) => ({
 	role: row.role_id ? { id: String(row.role_id), name: String(row.role_name) } : null,
 	is_super_admin: row.is_super_admin === true,
 	is_self: String(row.id) === actor.userId,
+	/** Holdings activos a los que pertenece (ronda 3): > 1 → su rol es único y "Cambiar rol" responde 409. */
+	holdings_count: toCount(row.holdings_count),
 });
 
 /**
@@ -28,7 +30,8 @@ export class SettingsUsersService {
 	constructor(private readonly dataSource: DataSource) {}
 
 	private readonly select = `SELECT u.id, u.name, u.email, u.status, u.last_access, u.last_invitation_sent_at,
-		COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name
+		COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name,
+		(SELECT count(*) FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true) AS holdings_count
 		FROM user_holdings uh
 		JOIN users u ON u.id = uh.user_id
 		LEFT JOIN roles r ON r.id = u.role_id AND r.holding_id = uh.holding_id`;

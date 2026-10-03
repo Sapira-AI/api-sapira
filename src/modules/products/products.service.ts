@@ -17,6 +17,7 @@ const PRODUCT_SELECT = `SELECT p.id, p.product_code, p.name, p.is_recurring, p.s
 	(SELECT count(*) FROM prices pr WHERE pr.product_id = p.id) AS prices,
 	(SELECT count(*) FROM invoice_items ii WHERE ii.product_id = p.id) AS invoice_items,
 	(SELECT count(*) FROM subscription_items si WHERE si.product_id = p.id) AS subscription_items,
+	(SELECT count(*) FROM invoice_items_legacy_match lm WHERE lm.product_id = p.id) AS legacy_invoice_items,
 	(p.odoo_product_id IS NOT NULL OR EXISTS (SELECT 1 FROM odoo_product_mappings m WHERE m.sapira_product_id = p.id)) AS odoo,
 	(p.stripe_product_id IS NOT NULL OR EXISTS (SELECT 1 FROM stripe_product_mappings m WHERE m.sapira_product_id = p.id)) AS stripe,
 	((SELECT count(*) FROM salesforce_product_mappings m WHERE m.sapira_product_id = p.id AND m.is_active)
@@ -48,7 +49,12 @@ export class ProductsService {
 		const filters: string[] = [];
 
 		if (query.status && query.status !== 'all') filters.push(`p.status = $${params.push(query.status)}`);
-		if (query.search) filters.push(`(p.name ILIKE $${params.push(`%${query.search}%`)} OR p.product_code ILIKE $${params.length})`);
+		if (query.search) {
+			// `%` y `_` se buscan literales (no como comodines de ILIKE).
+			const pattern = `%${query.search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+
+			filters.push(`(p.name ILIKE $${params.push(pattern)} ESCAPE '\\' OR p.product_code ILIKE $${params.length} ESCAPE '\\')`);
+		}
 		const rows = (await this.dataSource.query(
 			`${PRODUCT_SELECT} WHERE p.holding_id = $1 ${filters.map((filter) => `AND ${filter}`).join(' ')} ORDER BY lower(p.name) NULLS LAST`,
 			params
@@ -80,7 +86,14 @@ export class ProductsService {
 	}
 
 	private inUse(row: Row): number {
-		return count(row.contracts) + count(row.quotes) + count(row.prices) + count(row.invoice_items) + count(row.subscription_items);
+		return (
+			count(row.contracts) +
+			count(row.quotes) +
+			count(row.prices) +
+			count(row.invoice_items) +
+			count(row.subscription_items) +
+			count(row.legacy_invoice_items)
+		);
 	}
 
 	async create(holdingId: string, dto: CreateProductDto) {
@@ -128,6 +141,9 @@ export class ProductsService {
 				count(row.prices) ? plural(count(row.prices), 'precio', 'precios') : '',
 				count(row.invoice_items) ? plural(count(row.invoice_items), 'línea de factura', 'líneas de factura') : '',
 				count(row.subscription_items) ? plural(count(row.subscription_items), 'ítem de suscripción', 'ítems de suscripción') : '',
+				count(row.legacy_invoice_items)
+					? plural(count(row.legacy_invoice_items), 'línea de factura antigua', 'líneas de factura antiguas')
+					: '',
 			].filter(Boolean);
 
 			throw new ConflictException(`El producto está en uso (${parts.join(', ')}): archívalo en vez de eliminarlo`);

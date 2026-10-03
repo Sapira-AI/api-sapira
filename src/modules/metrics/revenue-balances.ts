@@ -1,3 +1,5 @@
+import type { AccountMappingKey } from '@/core/utils/account-mappings';
+
 import { addMonths, type Month } from './metrics-period';
 
 /**
@@ -171,8 +173,8 @@ export function forwardSchedule(rows: RevenueItemMonth[], futureRows: RevenueIte
 /** Dimensión por la que se abren los asientos dentro de la compañía (Domi 02-10). */
 export type JournalGroupBy = 'market' | 'industry' | 'segment' | 'contract' | 'client' | 'product';
 
-/** Cuentas del asiento: las tres del mapping (`company_account_mappings`) + cuentas por cobrar y diferencia de cambio (sin código hoy). */
-export type JournalAccount = 'receivable' | 'deferred' | 'unbilled' | 'revenue' | 'fx_difference';
+/** Cuentas del asiento: las 5 del mapping (`company_account_mappings`, Configuración › Compañía 360). */
+export type JournalAccount = AccountMappingKey;
 
 /**
  * Líneas del asiento del mes (spec §1.7 "Asientos"): (a) facturación a diferido, (b) reconocimiento desde diferido, (c) reconocimiento

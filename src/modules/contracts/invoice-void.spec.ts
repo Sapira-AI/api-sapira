@@ -249,7 +249,7 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 			expect(planVoid(issued(), lines(), context(), { reason: 'client_request', reissue: true }).credit_note.credit_reason).toBe('other');
 		});
 
-		it('bloqueos: already_voided, not_issued (Por Emitir), unificada, legacy, período cerrado; NC → solo credit_note', () => {
+		it('bloqueos: already_voided, not_issued (Por Emitir), unificada, legacy (un mes cerrado no bloquea, Domi 03-10); NC → solo credit_note', () => {
 			expect(codes(planVoid(issued({ voided: true }), lines(), context(), { reason: 'other', reissue: false }).blockers)).toEqual([
 				'already_voided',
 			]);
@@ -263,7 +263,7 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 						reissue: false,
 					}).blockers
 				)
-			).toEqual(['unified_invoice', 'legacy_invoice', 'period_closed']);
+			).toEqual(['unified_invoice', 'legacy_invoice']);
 			expect(
 				codes(planVoid(issued({ document_type: 'NC', voided: true }), lines(), context(), { reason: 'other', reissue: false }).blockers)
 			).toEqual(['credit_note']);

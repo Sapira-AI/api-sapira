@@ -269,7 +269,7 @@ Contrato vigente: [`contrato-api-configuracion.md`](./contrato-api-configuracion
 | Usuarios y roles | Lista, cambio de rol, catálogo de permisos, roles propios (D7: los por defecto no se tocan), duplicar, alertas por rol |
 | Productos | Lista con uso y mapeos, crear/editar/archivar/reactivar/eliminar sin uso (permiso `EDIT_CONTRATOS`) |
 | Países | `GET /catalog/countries` (249 ISO) |
-| Migraciones | M2, M3, M7, M8, M9 (TypeORM) y M4 (seed + función, **para revisión de Domi**). Ninguna aplicada |
+| Migraciones | M2, M3, M7, M8, M9 (TypeORM) y seed 004: **aplicadas en QA y producción el 02-10**. Función `create_default_roles_for_holding`: sin aplicar, revisión de Domi |
 
 Decisiones tomadas al construir (para revisión):
 - Cambiar la **moneda de una compañía** con contratos o facturas → 409 (el trigger `sync_contracts_company_currency` reescribiría
@@ -287,3 +287,245 @@ Decisiones tomadas al construir (para revisión):
 | Pendiente | Módulo | Detalle |
 |---|---|---|
 | Ocultar productos archivados en los selectores | Contratos, Cotizaciones (cerrados) | Hoy un producto con `status = 'archived'` sigue apareciendo al agregar ítems; filtrarlo toca módulos cerrados y va con OK por módulo |
+
+## 12. Auditoría del 02-10 (noche) · API, front, enlaces y UI
+
+Sin acceso entre holdings; permisos correctos en los 6 controladores; las 45 rutas de la BFF calzan con la API.
+
+**Arreglos directos (módulo nuevo, sin cambio de reglas):** conteos de uso de datos maestros (facturas antiguas,
+importaciones de cantidades), fechas imposibles en tasas (500 → 400), documento legal repetido (500 → 409), cuenta
+bancaria con cartolas no cambia moneda ni número, renombrar holding propaga `companies.holding_name`, duplicar rol
+filtra códigos no otorgables, lock del cierre (`FOR NO KEY UPDATE`), mensajes sin nombres internos, conteo agrupado de
+campos personalizados, búsqueda de productos con `%`/`_`, estados "sin aplicar" en docs; front: abrir/descargar
+documentos (bloqueo de ventanas), vista rápida de usuario mientras carga, reinicio de "Cambiar rol" y bloqueos (super
+admin, uno mismo, varios holdings), error de contexto ≠ "sin permiso", `SaveButton` en Duplicar y Subir logo, decimales
+de tasa, validar body al editar compañía, regla de fila/ojo en listas sin 360, confirmación al cambiar moneda de
+consolidación, accesibilidad del árbol, tipo de documento con Combobox, `?catalogo=` en la URL, estado SII solo para
+Chile, concordancia de género, nombres de cuentas por defecto en español, permiso de lectura en la página, invalidar
+opciones de formulario de Contratos y Cotizaciones; enlaces desde Configuración: Integraciones con `Link`, usuario ↔
+rol, rol → usuarios, producto → contratos/cotizaciones/precios donde se usa, compañía → sus contratos y facturas,
+cuenta bancaria → Conciliación, cuentas y cierre → Ingresos. Quitar la pestaña Condiciones de pago (decisión Domi).
+
+**Requieren OK de Domi (módulos cerrados o compartidos):** Ingresos lee las 5 cuentas, exporta códigos del ERP y
+enlaza "cuentas contables de la compañía" y el cierre a la Compañía 360; Facturación enlaza Conciliación y bloqueos
+de la cola a Configuración y corrige "Producto sin mapeo en Odoo" → "ERP"; `Segmented` de Contratos con `disabled`;
+barra de selección responsive (`DataTableBulkBar`); productos archivados fuera de los selectores (pendiente final).
+SII "Volver" a la Compañía 360: Leon (D15).
+
+**Decisiones pendientes:** lecturas de compañía y períodos para quien tiene `CLOSE_PERIODS`; Editar implica Ver;
+cerrar solo meses terminados; límites del bucket de logos (2 MB, PNG/JPG/WebP); rechazar impuesto entre 0 y 1; índices
+únicos (vendedor por correo, código de producto, cuenta bancaria).
+
+**Costura `sapira.writer`:** no aplica a Configuración: los triggers de las tablas que escribe son `updated_at` o
+invariantes (validación de tasas y de compañía/holding); `sync_contracts_company_currency` se neutraliza bloqueando el
+cambio de moneda con contratos.
+
+### 12.1 Hecho el 03-10 (API, sin commit, sin aplicar nada)
+
+Contrato actualizado a v2.1 ([`contrato-api-configuracion.md`](./contrato-api-configuracion.md)); README del módulo al día.
+
+| # | Decisión / hallazgo | Hecho |
+|---|---|---|
+| 1 | Quitar Condiciones de pago | `master-data` solo `item_types` y `units_of_measure` (DTO, controlador, servicio, tests). Las filas `payment_terms` siguen; Contratos no se tocó |
+| 2 | Uso de Tipos de ítem y Unidades | Conteo por texto exacto en `contract_items`, `quote_items`, `subscription_items`, `invoice_items`, `invoice_items_legacy`, `quantities`, `sapira_quantity_imports` (columnas verificadas con `information_schema`); desglose `usage: { contracts, quotes, subscriptions, invoices, quantities }` |
+| 3 | Fechas imposibles | `@IsIsoDate` (calendario real) en tasas y cierre/reapertura → 400 con mensaje; el interceptor cubre `22007/22008` |
+| 4 | Nunca 500 sin mensaje | `settings-db-errors.ts`: interceptor en los 6 controladores de Configuración y en Productos (unicidad, FK, CHECK, NOT NULL, formato, trigger de tasas por solapamiento → 409 `Ya existe una tasa para ese par en esas fechas`, `RAISE` → 409, bloqueos → 409); documento legal repetido → 409 en el servicio |
+| 5 | Cuenta bancaria con cartolas | No cambia moneda ni número (409) |
+| 6 | Holding sin renombrar | `name` fuera del PATCH (400 claro si llega). Deja sin efecto el arreglo "propagar `companies.holding_name`" |
+| 7 | Moneda de consolidación y política FX | 409 con contratos para cada una; GET de preferencias con `locked` y `locked_reason` |
+| 8 | Finanzas entra a Configuración | `seed/005-finanzas-view-configuracion.sql` (idempotente, 7 roles Finanzas por defecto en prod) y `VIEW_CONFIGURACION` en la función; `ADMIN_FULL_ACCESS` quitado de la función (no existe en el catálogo). Sin aplicar |
+| 9 | Editar incluye Ver | `PermissionsService.allows`: `EDIT_X` satisface `VIEW_X`; crear/editar/duplicar rol agrega `VIEW_X` |
+| 10 | Cierre solo de meses terminados | `until_date` ≤ último día del mes anterior a hoy (hora Chile) → si no, 409 |
+| 11 | Bucket de logos | Migración `1790810000000-CompanyLogosBucketLimits` (2 MB; PNG, JPG, WEBP; sin aplicar; hoy sin límites, 21 PNG ≤ 125 KB); SVG fuera del DTO y la validación |
+| 12 | Resto de §12 | Duplicar rol filtra con `isGrantable`; cierre con `FOR NO KEY UPDATE`; mensajes en español de negocio; conteo agrupado de campos personalizados; `%`/`_` literales en productos; uso de productos cuenta `invoice_items_legacy_match`; nombres por defecto de cuentas en español al leer; docs con M2, M3, M7, M8, M9 y seed 004 aplicadas el 02-10 |
+| 13 | Resumen del holding | `GET /settings/holding` con `users_count` (miembros activos sin super admins) y `last_activity_at` (`users.last_access` más reciente) |
+| 14 | SII en la compañía | `CompanyDetail.sii_configured` |
+| 15 | Ingresos (OK de Domi, módulo cerrado) | Asientos leen las 5 cuentas con `external_code` (respuesta y export); `no_account_mapping` usa el criterio único de "completas" (`src/core/utils/account-mappings.ts`) |
+| + | Cierre de períodos no bloquea pagos, facturas ni consumos (agregado de Domi) | Fuera `period_closed` de la cola Por emitir, de pagos (registrar/anular, conciliar/deshacer), de consumos y de todas las operaciones de factura en Contratos (`contract-invoices.ts`, `invoice-edit`, `invoice-void`, `invoice-reorganize`, `invoice-consolidation`, chequeo de facturas en la activación). Se mantienen `contract-changes.ts` y los triggers `trg_period_guard_contracts`/`_contract_items`. No hay triggers de período en facturas ni pagos (verificado en prod 03-10) |
+
+Pendiente para después (anotado, no hecho): índices únicos, archivos huérfanos en Storage, productos archivados en selectores, impuesto por
+tipo de documento tributario. La descripción del rol Finanzas ("Control financiero completo sin configuración") quedó desactualizada.
+
+
+## 13. Ronda 3 (03-10, API, sin commit, sin aplicar nada)
+
+Contrato v3 ([`contrato-api-configuracion.md`](./contrato-api-configuracion.md) §8). Decisiones de Domi del 03-10 incluidas las
+simplificaciones del mismo día (sin activación de documentos por compañía).
+
+| # | Pedido | Hecho |
+|---|---|---|
+| 1 | Impuesto por documento tributario | M11 `1790820000000-TaxDocumentTypesTaxRate` (`tax_document_types.tax_rate` + CHECK 0–100; CL 33=19, 34/110/111/112=0; PE 01/03=18; MX CFDI-I=16; CO FE=0; notas nacionales y genéricos NULL) + seed 006 para entornos nuevos. `GET /settings/companies/:id/tax-documents` **solo lectura** (país o genéricos, tasa, tasa efectiva, regla, uso). Contratos: `form-options` igual que hoy + `tax_rate` por opción. Motor: `resolveTaxRate` |
+| 2 | Comunicaciones | `/settings/communications/domains|senders|test-email` con holding validado e id filtrado por holding; reutiliza `EmailsService` (SendGrid). Rutas viejas intactas; nota a Leon en [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md) §13 |
+| 3 | Detalle de tipos de cambio | `GET /settings/holding/fx-sync/history` (diario directo/inverso/cruce USD) y `/fx-sync/monthly` (`exchange_rates_monthly_avg` directo o inverso; si falta, promedio del diario) |
+| 4 | Catálogos | `master-data` acepta `markets`, `segments`, `industries` (uso = `clients.market/segment/industry`, verificadas); `GET /settings/business-types` y `GET /settings/contact-types` (solo lectura) |
+| 5 | Pendientes | `holdings_count` en `GET /settings/users`; `company_id` en la excepción `no_account_mapping` de Ingresos |
+| 6 | Campos personalizados con más tipos | M12 `1790830000000-CustomFieldTypes` (`options jsonb`, CHECK con `select`, `boolean`, `date`; `options` solo en `select`). API: valida opciones, `option_usage`, 409 al quitar una opción en uso |
+| 7 | País ISO y listas en Clientes (autorizado) | M13 `1790840000000-ClientsCountryCode` (`clients`/`client_entities.country_code` FK `countries`, backfill tolerante: espacio duro, tildes, inglés, códigos, alias). API de clientes y razones sociales lee/escribe `country_code` (y `country` en español); mercado/segmento/industria validados contra `master_data` activo (el mismo valor viejo se conserva); `GET /clients/form-options` |
+
+### 13.1 Impuesto por documento: todos los caminos (verificación pedida por Domi)
+
+Regla única `resolveTaxRate` (`src/modules/contracts/billing-engine.ts`): exportación 0 → Colombia 0 (lo aplica el ERP) → tasa del
+documento del contrato si no es NULL y es de la misma familia de la factura → tasa de la compañía. `taxRateFor` (modificaciones) y
+`taxRateForDocument` (editor/reorganización) delegan en ella; tests en `billing-engine.spec.ts` (4 casos + familia/1 %),
+`contract-changes.spec.ts` (paridad y 33 → 34) y `tax-document-types.spec.ts`.
+
+| Camino que crea o recalcula facturas | Fuente de la tasa | Estado |
+|---|---|---|
+| Activación de contrato (Por Emitir nuevas) | motor con el documento del contrato | ✔ usa `resolveTaxRate`; ya no bloquea `no_tax_rate` si el documento tiene tasa |
+| Vista previa del alta / borrador, cotización → contrato (mismo alta) | motor con el documento elegido | ✔ |
+| Modificaciones (agregar producto, renovar, precio/cantidad, frecuencia, multimoneda, reactivar, cambio de receptor) | `engineContract` + `taxRateFor` | ✔ (`tax_document_tax_rate` en el contexto) |
+| Cambio de documento en Condiciones de facturación | `taxRateFor` con el documento NUEVO | ✔ re-calcula las Por Emitir desde la fecha efectiva si cambia la familia **o la tasa** (33 → 34) |
+| Edición de factura (cambio de receptor) y regeneración desde el editor | `taxRateForDocument` / motor | ✔ |
+| Reorganizar facturas (factura nueva del generador) | `taxRateForDocument` con el documento del contrato | ✔ |
+| NC/ND de anulación y de descuento | heredan la tasa de la factura que corrigen | ✔ sin cambio (correcto según la regla) |
+| Consolidar facturas, OC parcial (remanente), consumos sobre una factura, revalorización multimoneda | heredan la tasa de la(s) factura(s) de origen | ✔ sin cambio |
+| Facturación v2 (`src/modules/billing`) | no crea facturas: lee/marca las de Contratos | n/a |
+| Emisión al ERP (`invoice-scheduler`) | envía la tasa guardada de la factura | n/a (Odoo no cambia) |
+| Odoo `invoice-processing` y Stripe sync | integraciones de Leon: crean facturas desde el ERP/Stripe con la tasa de origen | sin tocar (fuera de alcance) |
+
+**Triggers y funciones heredadas** (las usa solo el front actual; no se tocaron): `trigger_auto_populate_invoice_tax_rate` →
+`auto_populate_invoice_tax_rate` (copia `companies.tax_rate` si la factura llega sin tasa; **no-op en transacciones de la API** por la
+costura `sapira.writer`), y funciones SQL que fijan `tax_rate` desde la compañía: `generate_invoices_for_contract_item`,
+`generate_missing_invoices_for_contract`, `sync_invoices_for_contract_item`, `create_contract_renewal`, `approve_contract_amendment`,
+`apply_contract_contraction`, `apply_quote_downsell_to_contract`, `edit_pending_invoice`, `emit_invoice_manually`,
+`create_credit_note_safe`, `adjust_issued_invoice`, `invoice_reschedule_items`, `update_pending_invoices_on_override`,
+`sync_invoice_items_amounts_from_quantities`, `restore_invoice_items_amounts_on_quantity_delete`, `reconcile_legacy_invoice`,
+`apply_fixed_fx_to_contract`, `auto_populate_invoice_fx_to_system`. Mientras el front actual siga vivo, una factura creada por él usa la
+tasa de la compañía aunque el contrato tenga un documento exento.
+
+**Solo hacia adelante**: no se recalculó nada. Consulta de solo lectura para decidir caso a caso antes del switch (Por Emitir cuya tasa
+guardada difiere de la que daría su documento con la regla nueva; corrida en producción el 03-10: **0 filas**; hoy solo 24 Por Emitir
+tienen documento del catálogo, de Hanka Chile 33 y Hanka México CFDI-I):
+
+```sql
+WITH rates(country_code, code, rate) AS (VALUES
+  ('CL','33',19::numeric),('CL','34',0),('CL','110',0),('CL','111',0),('CL','112',0),
+  ('PE','01',18),('PE','03',18),('MX','CFDI-I',16),('CO','FE',0)),
+base AS (
+  SELECT h.name AS holding, t.country_code || ' ' || t.code AS documento,
+    CASE WHEN i.tax_rate > 0 AND i.tax_rate <= 1 THEN i.tax_rate * 100 ELSE i.tax_rate END AS tasa_guardada,
+    CASE
+      WHEN t.kind = 'export_invoice' OR i.document_type = 'FACTURA_EXPORTACION' THEN 0
+      WHEN COALESCE(trim(co.country_code), '') = 'CO' OR lower(co.country) = 'colombia' THEN 0
+      WHEN r.rate IS NOT NULL THEN r.rate
+      ELSE CASE WHEN co.tax_rate > 0 AND co.tax_rate <= 1 THEN co.tax_rate * 100 ELSE co.tax_rate END
+    END AS tasa_nueva
+  FROM invoices i
+  JOIN contracts c ON c.id = i.contract_id AND c.deleted_at IS NULL
+  JOIN tax_document_types t ON t.id = c.tax_document_type_id
+  LEFT JOIN rates r ON r.country_code = t.country_code AND r.code = t.code
+  LEFT JOIN companies co ON co.id = c.company_id
+  JOIN company_holdings h ON h.id = i.holding_id
+  WHERE i.status = 'Por Emitir' AND COALESCE(i.is_legacy, false) = false)
+SELECT holding, documento, tasa_guardada, tasa_nueva, count(*) AS facturas
+FROM base WHERE tasa_guardada IS DISTINCT FROM tasa_nueva
+GROUP BY 1, 2, 3, 4 ORDER BY 1, 2;
+```
+(Tras aplicar M11 se puede reemplazar el CTE `rates` por `t.tax_rate`.)
+
+**Arreglo de paso**: `contract-changes.service.ts` buscaba el documento nuevo con `tax_document_types.is_active` (la columna es `active`):
+cambiar el documento desde Condiciones de facturación respondía 500. Corregido.
+
+### 13.2 DTE chileno (revisión, sin implementar SII)
+
+`src/modules/sii/**` (Leon) hoy guarda configuración, certificado y CAF por tipo (`enabled_document_types: [33, 34, 61]`) y reserva
+folios; no arma el DTE. La referencia de emisión (notta.cl) pide: tipo (33, 34, 56, 61, 110, 112), RUT emisor, receptor (RUT, razón
+social; en 33/34 giro, dirección y comuna), líneas (nombre ≤ 80 → ya cubierto por `description_max_chars`, cantidad, precio, `exento`
+por línea, monto, descuento), totales (`monto_neto`, `monto_exento`, `iva` a 19 %, `monto_total`), referencias (NC/ND: tipo, folio,
+fecha, código 1/2/3 y razón; comerciales: OC, contrato, HES), forma de pago (33/34) y, en exportación, moneda, indicador de servicio,
+aduana y tipo de cambio.
+
+**Calza**: tipo de documento por contrato (código SII en `tax_document_types.code`), tasa 19/0 por documento (33 afecta, 34 y 110/112
+exentas → `monto_exento`), largo de glosa, referencias del contrato (OC/HES) y vínculo NC → factura de origen (`related_invoice_id`).
+**Falta para emitir** (para cuando se haga SII, no ahora): giro y comuna del receptor (`client_entities` no los tiene separados: hay
+`economic_activity` y dirección libre), marca **exento por línea** (hoy la exención es por documento; una 33 con líneas exentas mixtas no
+se puede representar), `forma_pago` (derivable de `payment_terms`: contado → 1, plazo → 2), código de referencia 1/2/3 en NC/ND
+(hoy hay `credit_reason` en texto), folio SII en la factura (lo reserva `sii` pero no se guarda en `invoices`), y datos de exportación
+(glosa de moneda SII, indicador de servicio, aduana).
+
+### 13.3 Pendiente (anotado)
+
+- `POST .../domains/:id/check-status` con `EDIT_CONFIGURACION` (escribe el estado guardado; decisión 03-10).
+- Entity de `custom_field_definitions` (generada desde prod): agregar `options` y el CHECK nuevo **junto con** `schema:snapshot` justo
+  después de aplicar M12 en producción (confirmado 03-10, según la GUIA) (si se edita antes, `base-tenancy.entities.spec` marca deriva). Las de `clients`/`client_entities` ya
+  declaran `country_code` (no las mide un snapshot).
+- Orden de despliegue: M11, M12 y M13 **antes** del código (la API ya lee `tax_document_types.tax_rate`, escribe `options` y
+  `country_code`). Sin las migraciones, esas rutas fallan con 500.
+- Los valores de mercado/segmento/industria que hoy no están en `master_data` se siguen devolviendo; limpieza antes del switch.
+
+## 14. Preferencias pendientes (inventario 03-10, propuesta para Domi)
+
+**A · Preferencias simples (propuestas para este bloque):** vigencia por defecto de cotizaciones (hoy 30 días fijo,
+`quotes.service.ts:67`, `cotizacion-form.ts:64`); formato del correlativo de cotización (hoy `COT-{año}-{NNNN}`,
+`quote-status.ts:250`); escalera de avisos de renovación (hoy `[60,30,15,7,0]` fija en `contract-renewals.ts:106-107`) y
+aviso de 90 días fijo en `ClienteContratosTab.tsx:23` que no lee `auto_renewal_notice_days`; zona horaria del holding
+(hoy `America/Santiago` fija en `business-date.ts`, `client-activity.service.ts:33`, `ClienteActividadTab.tsx:38` y
+crons); horizonte de ítems sin término (12 períodos, `contrato-form.ts:153`); `companies.fx_company_policy` con
+`fixed_period` y pantalla en la Compañía 360 (CHECK hoy solo `monthly_avg`).
+
+**B · Reglas de reconocimiento de ingresos (mini spec aparte, dominio de Domi, Compañía 360 › Reconocimiento de
+ingresos):** granularidad diaria/mensual por compañía (`auditoria-contratos.md` M6, `spec-revenue-y-metricas.md` R9;
+`financial_settings.recognition_granularity` nadie lo lee); devengo de no recurrentes (al facturar / % avance /
+lineal; M12; `revenue_rules` vacía); política de variables al cierre (true-up vs al facturar; S5-17); cierre
+automático N días con aviso de Por Emitir pendientes (`auditoria-contratos.md:668`); librería de reglas por producto y
+política de descuentos (R9, D5: pestaña "Reglas" de Ingresos oculta).
+
+**C · En sus módulos:** preferencias de notificaciones por usuario y resumen semanal (Notificaciones); aprobación de
+agentes y configuración por cliente (Automatizaciones); metas y resumen semanal (Métricas); año fiscal y probabilidad
+por etapa (Presupuestos); plantilla de glosa por holding y correlativo de proforma (Contratos/Facturación); "sin OC no
+se envía" por compañía (Facturación); ventana de tardíos/backfill de consumos (Precios); vistas guardadas en servidor
+(`user_view_preferences` existe); umbral de comisión de Conciliación en servidor; zona de IPC/redondeo por defecto en
+pactos; aprobaciones, plantillas de contrato e intercompañía (después del switch).
+
+## 15. Ronda 4 (03-10, API, sin commit, sin aplicar nada)
+
+Contrato: [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) §9. Migración única **M14**
+`1790850000000-HoldingSettingsPreferencesV4` (aditiva, sin aplicar): columnas nuevas en `holding_settings` cuyos defaults reproducen el
+comportamiento de hoy. La API lee las preferencias con `to_jsonb` (`src/core/utils/holding-preferences.ts`), así que desplegar el código
+antes de M14 no rompe nada (todo cae a los defaults); solo `PATCH /settings/holding/preferences` necesita M14.
+
+### 15.1 Construido
+
+| # | Qué | Dónde |
+|---|---|---|
+| 1 | **Documento tributario solo con cambio de razón social** (Contratos, autorizado). `billing_conditions` con documento (o familia) distinto → bloqueo `tax_document_requires_party_change` (preview `can_apply: false`; aplicar 409 "El documento tributario solo cambia junto con la razón social emisora o receptora"). `change_entity` acepta `tax_document_type_id` (o `document_type` sin catálogo): lo guarda y recalcula el IVA de las Por Emitir desde la fecha efectiva con `resolveTaxRate` (`taxRateFor`); metadata `tax_document_before/after` | `contract-changes.ts` (`planBillingConditions`, `planChangeEntity`), `contract-changes.service.ts` (carga del documento también en `change_entity`), DTO |
+| 2 | **Numeración de cotizaciones** (Cotizaciones, autorizado): `prefixed` (default `COT-{año}-{NNNN}`, prefijo/año/ancho configurables), `sequential` (solo correlativo) y `manual` (la usuaria lo escribe al crear; obligatorio y único, 409 `quote_number_taken`). En los automáticos un número escrito → 400. Solo cotizaciones creadas en Sapira (las del CRM conservan su número). Vista previa en preferencias y en `GET /quotes/form-options` | `quotes.service.ts` (`reserveNumber`, `formOptions`), `holding-preferences.ts` (`quoteNumberFormat`, `nextQuoteNumber`), DTO de duplicar |
+| 3 | **Recordatorios de vencimiento**: escalera (`renewal_reminder_days`, default `[15,7,0]`) y frecuencia vencido (`renewal_overdue_every_days`, default 7) por holding. El job 06:15 y la tarjeta del detalle de contrato los leen (antes la tarjeta usaba siempre 30 días de aviso). `GET /clients/form-options` expone `renewal_notice_days` para el aviso del Cliente 360 | `contract-renewals.ts` (`reminderLadder`, `reminderThreshold`, `dueReminders`, `loadRenewalReminder`), `contract-renewals.service.ts`, `contracts.service.ts`, `clients.service.ts` |
+| 4 | **Zona horaria del holding** (`timezone`, IANA validada con `Intl.supportedValuesOf`): el "hoy" de cada holding (`todayFor(zona)`) en jobs de contratos, cambios, activación, borradores, consumo, 360 y lista/detalle de contrato, Facturación (cola, exportación, pagos, conciliación, cobranza y su job), actividad del cliente y el año del correlativo de cotizaciones | ver §15.2 |
+
+### 15.2 Zona horaria: lugares cambiados
+
+- `src/modules/contracts/business-date.ts`: `todayFor(zona)` sigue siendo la utilidad única; el default `America/Santiago` queda como
+  respaldo. La zona se lee con `holdingTimezone` / `loadHoldingPreferences`.
+- Jobs de contratos (`contract-renewals.service.ts`: propuestas, recordatorios, pactos por vencer, lista de propuestas;
+  `contract-changes.service.ts`: "hoy" del job de horizonte, que sigue en 12 fijo). Los `@Cron` siguen en `America/Santiago` (hora de disparo del servidor).
+- Contratos: `contract-changes.service.ts` (preview y aplicar), `contract-activation.service.ts`, `contract-drafts.service.ts` (eventos y
+  correlativo), `consumption.service.ts`, `contract-scheduled-changes.service.ts`, `contract-360.service.ts`, `contracts.service.ts` (lista,
+  detalle e ítems; antes usaban la fecha UTC).
+- Facturación: `billing-read.service.ts` y `billing-reconciliation.service.ts` (`today()` ahora recibe el holding), `billing-export.service.ts`,
+  `billing-payments.service.ts`, `billing-collections.service.ts` (incluye el job de recordatorios de cobro).
+- Clientes: `client-activity.service.ts` (`AT TIME ZONE $3`, la zona del holding).
+- Cotizaciones: año del correlativo.
+
+**No cambiados (anotado):** `accounting-periods.service.ts` (`todayInChile`, cierre de períodos por compañía), `metrics-period.ts`
+(`currentMonth`), `quotes.service.ts` (`todayIso` UTC para la fecha por defecto y vigencia), `invoice-scheduler.service.ts`,
+`billing.scheduler.ts`, schedulers de Banco Central, Salesforce y BigQuery (globales, no por holding) y `main.ts` (`process.env.TZ`).
+
+### 15.3 Decisiones aplicadas y notas
+
+- Cambio de razón social **emisora** (compañía) no existe hoy en ningún camino de un contrato activo (solo en borradores, donde el
+  documento se elige libremente); el bloqueo deja el documento atado al cambio de receptora hasta que exista ese camino.
+- **Horizonte de ítems sin término: fijo en 12 períodos, rodante; no configurable** (Domi 03-10). Se llegó a construir como preferencia
+  (1, 3, 6 o 12, también en la activación) y se revirtió completo: sin columna en M14, sin campo en preferencias ni en form-options; la
+  activación genera 12 y el job `contracts-extend-horizon` mantiene 12 por delante (`HORIZON_PERIODS_AHEAD`). Nota de esa revisión: el
+  devengo (`revenue_schedule_rebuild_contract_ccy`) solo cuenta facturas emitidas, no las Por Emitir, así que el número de Por Emitir
+  generadas no altera el RSM.
+- Cambiar zona, escalera o numeración no tiene bloqueo con contratos: rigen hacia adelante y no recalculan nada.
+- Entity `holding-settings.entity.ts`: se actualiza con `schema:snapshot` después de aplicar M14 en producción.
+
+### 15.4 Pendientes de Configuración (no construidos)
+
+- **Plantilla de glosa por holding** (hoy la glosa sale de la plantilla del contrato o del default del motor).
+- **Correlativo y formato de proforma** por holding.
+- **Vigencia por defecto de cotizaciones** (hoy 30 días fijo en `quotes.service.ts` y en el formulario del front).
+

@@ -155,8 +155,8 @@ consolidados quedan `is_active = false` con `consolidated_into_invoice_id`.
 ### 4.2 Por emitir (cola de trabajo)
 Lista de PE activas con `COALESCE(issue_date, scheduled_at)` en el rango (default: hasta fin de mes) agrupada en **Listas** (sin bloqueos) /
 **Con bloqueo** (agrupadas por código, con la acción que lo resuelve) / **Rezagadas** (emisión < hoy; S6 propuesta 6) / **En el ERP como borrador**.
-Bloqueos (§5.3): `needs_reference` (OC/HES) → Referencias; `fixed_fx_without_rate` / `fx_rate_missing` → Tipo de cambio; `period_closed` →
-Reprogramar; `sent_to_erp_draft` → Restablecer; `no_erp_partner`, `item_without_product`, `tax_rate_missing` → enlace a Configuración/Clientes.
+Bloqueos (§5.3): `needs_reference` (OC/HES) → Referencias; `fixed_fx_without_rate` / `fx_rate_missing` → Tipo de cambio (`period_closed` →
+Reprogramar salió el 03-10: el cierre no bloquea facturas); `sent_to_erp_draft` → Restablecer; `no_erp_partner`, `item_without_product`, `tax_rate_missing` → enlace a Configuración/Clientes.
 Acciones por lote = §4.7. Vista "Calendario" (mes × cliente) del viejo como alternativa de lectura (F5). **Construido (01-10):** dos vistas
 **Lista · Calendario** (`?vista=calendario`); el calendario es la misma cola (`GET /billing/to-issue?until=<fin del mes «Hasta»>`, sin API nueva)
 en la grilla del mes por fecha de emisión, solo lectura: clic en un día lista sus facturas (fila → vista rápida); las de meses anteriores van
@@ -229,8 +229,8 @@ currentPage, pages, limit }` (`items` = `total`, compatibilidad con la casa; la 
 ### 5.2 Nuevos POST/PUT (forma final)
 | Ruta | Body | Efecto |
 |---|---|---|
-| `POST /billing/payments/preview` · `POST /billing/payments` | `{ allocations[{ invoice_id, amount }] (1–100), currency, payment_date, method?, reference?, notes? }` | Todo o nada. Inserta `invoice_payments` (`confirmed = true`, moneda y autor explícitos) en una transacción con `setApiWriter`, recalcula el estado en la API (§6.7) y evento `INVOICE_PAYMENT_REGISTERED` por factura con contrato. Respuesta `{ allocations[{ invoice_id, invoice_number, contract_id, amount, before, after, blockers[] }], blockers[], total_amount, currency, can_apply }` (+ `applied, payment_group_id, payment_ids[], event_ids[]`). Bloqueos: `not_issued`, `credit_note`, `cancelled`, `overpayment`, `payment_currency_mismatch`, `period_closed`, `client_mismatch` |
-| `POST /billing/payments/:paymentId/void` | `{ reason }` | `confirmed = false` (nunca DELETE), estado hacia atrás, `INVOICE_PAYMENT_VOIDED`; `{ payment_id, invoice_id, voided, before, after, event_id }`; `already_voided`, `period_closed` |
+| `POST /billing/payments/preview` · `POST /billing/payments` | `{ allocations[{ invoice_id, amount }] (1–100), currency, payment_date, method?, reference?, notes? }` | Todo o nada. Inserta `invoice_payments` (`confirmed = true`, moneda y autor explícitos) en una transacción con `setApiWriter`, recalcula el estado en la API (§6.7) y evento `INVOICE_PAYMENT_REGISTERED` por factura con contrato. Respuesta `{ allocations[{ invoice_id, invoice_number, contract_id, amount, before, after, blockers[] }], blockers[], total_amount, currency, can_apply }` (+ `applied, payment_group_id, payment_ids[], event_ids[]`). Bloqueos: `not_issued`, `credit_note`, `cancelled`, `overpayment`, `payment_currency_mismatch`, `client_mismatch` (sin `period_closed` desde 03-10) |
+| `POST /billing/payments/:paymentId/void` | `{ reason }` | `confirmed = false` (nunca DELETE), estado hacia atrás, `INVOICE_PAYMENT_VOIDED`; `{ payment_id, invoice_id, voided, before, after, event_id }`; `already_voided` |
 | `POST /billing/invoices/:invoiceId/proforma` | `{ recipients[], subject?, message?, pdf_base64?, filename? }` | Correo con el resumen de `invoiceDetail` del 360 y el PDF de `proforma-pdf.ts` adjunto si viene (la API no dibuja PDF); fila por destinatario en `invoice_emails`. El front lo manda siempre que puede (`proformaAttachment`: `buildProformaModel` + `drawProformaPdf` de Contratos sobre el detalle del contrato); si no se puede dibujar, sale solo el resumen |
 | `POST /billing/collections/preview` · `POST /billing/collections` | `{ invoice_ids[] (≤200), recipients_mode: entity_contacts\|custom, recipients?[], subject?, message? }` | Un correo por cliente (contactos del cliente; `bcc` de la configuración); `invoice_collection_logs` + `INVOICE_COLLECTION_SENT`; `skipped` con motivo (`no_contacts`, `paid`, `not_issued`, `credit_note`, `cancelled`, `not_found`) |
 | `PUT /billing/collection-settings` | `{ dunning_enabled, reminder_days_before[], reminder_days_after[], email_from?, bcc?, email_subject_template, email_body_template }` | Upsert por holding; variables de plantilla validadas (400) |
@@ -239,7 +239,7 @@ currentPage, pages, limit }` (`items` = `total`, compatibilidad con la casa; la 
 ### 5.3 Reutilizados tal cual (vía vista rápida, BFF existente `app/api/contratos/[id]/facturas/*`)
 Todos los de §0 (send-now, mark-issued, reschedule, fx, edit, deviation, bulk-edit, erp-reset, reorganize, descriptions, references,
 partial-by-po, void, credit-note, consolidations). **Códigos de bloqueo** que la cola muestra (unión, sin inventar nuevos):
-`not_pending`, `unified_invoice`, `legacy_invoice`, `credit_note`, `credit_note_send_pending`, `period_closed`, `sent_to_erp_draft`
+`not_pending`, `unified_invoice`, `legacy_invoice`, `credit_note`, `credit_note_send_pending`, `sent_to_erp_draft`
 (`action: erp_reset`), `already_sent`, `erp_send_disabled`, `no_erp_integration`, `no_erp_partner`, `needs_reference`, `item_without_product`,
 `fixed_fx_without_rate`, `fx_rate_missing`, `tax_rate_missing`, `past_issue_date` (aviso, no bloquea el envío manual), `open_consumption` (aviso).
 Facturación agrega solo los de pagos (`not_issued`, `cancelled`, `overpayment`, `payment_currency_mismatch`).
@@ -250,7 +250,9 @@ Facturación agrega solo los de pagos (`not_issued`, `cancelled`, `overpayment`,
 2. **Holding**: `HoldingScopeGuard` + `x-holding-id` de `apiClient`; toda consulta filtra `invoices.holding_id` y joins por holding.
 3. **Permisos** (construido 01-10): lectura = `VIEW_FACTURACION`; pagos, cobranza, proforma, recordatorios y fan-out = `EDIT_FACTURACION`;
    super admin siempre (`BillingPermissionGuard`). Las acciones de factura en la vista rápida usan los endpoints del contrato (360).
-4. **Período cerrado** (`accounting_period_cutoff`): bloquea mutaciones con fecha en período cerrado (emisión, NC, pago) → `period_closed`.
+4. **Período cerrado** (`accounting_period_cutoff`), cambio 03-10 (Domi): **el cierre de períodos protege contratos e ítems; pagos, facturas y
+   consumos se pueden registrar o mover en meses cerrados**. La cola y los pagos ya no generan `period_closed`; los triggers
+   `trg_period_guard_contracts` / `trg_period_guard_contract_items` siguen (no hay trigger de período en facturas ni pagos, verificado 03-10).
 5. **Multimoneda**: montos por `invoice_currency`; totales en sistema con `total_system_currency`; filas sin conversión en `unconverted`, nunca
    × 1.0. PE spot muestran "se valoriza al emitir" (monto NULL), no 0.
 6. **Consolidadas**: aparece **el consolidado** (activo) con chip y `contributions[]`; los orígenes (`is_active = false`) no se listan salvo

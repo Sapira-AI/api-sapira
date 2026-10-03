@@ -1,6 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { DEFAULT_TIMEZONE, holdingTimezone } from '@/core/utils/holding-preferences';
+
 type Row = Record<string, unknown>;
 
 /** Tipos de evento de la línea de tiempo del cliente (filtro de la pestaña Actividad). */
@@ -29,15 +31,18 @@ const FEED_COLUMNS = `SELECT NULL::text AS type, NULL::text AS id, NULL::timesta
 	NULL::date AS occurred_day, NULL::text AS ref_parent_id
 	WHERE false`;
 
-/** Zona del negocio (la misma de `metrics-period.ts` y de `process.env.TZ` en `main.ts`). */
-export const ACTIVITY_TIME_ZONE = 'America/Santiago';
+/**
+ * Zona por defecto del negocio. Desde la ronda 4 de Configuración cada holding tiene la suya (`holding_settings.timezone`, leída con
+ * `holdingTimezone`); va como parámetro `$3` de la consulta.
+ */
+export const ACTIVITY_TIME_ZONE = DEFAULT_TIMEZONE;
 
 /**
  * Día del evento. Las fuentes con solo fecha (emisión de factura, fecha de pago, cotización sin `created_at`) lo traen en
  * `occurred_day`: castearlas a `timestamptz` las dejaba a medianoche UTC, que en Chile es el día anterior a las 21:00, y quedaban
- * mezcladas con los eventos con hora de otro día. Las fuentes con hora se llevan al día de la zona del negocio.
+ * mezcladas con los eventos con hora de otro día. Las fuentes con hora se llevan al día de la zona del holding.
  */
-const OCCURRED_ON = `COALESCE(feed.occurred_day, (feed.occurred_at AT TIME ZONE '${ACTIVITY_TIME_ZONE}')::date)`;
+const OCCURRED_ON = `COALESCE(feed.occurred_day, (feed.occurred_at AT TIME ZONE $3::text)::date)`;
 
 /**
  * Cada fuente aporta filas con la misma forma. `occurred_day` (fecha sin hora) va solo en las fuentes que no guardan hora;
@@ -128,13 +133,14 @@ export class ClientActivityService {
 		const union = [FEED_COLUMNS, ...selected.flatMap((type) => SOURCES[type])].join('\nUNION ALL\n');
 		const offset = (page - 1) * limit;
 
+		const timezone = await holdingTimezone(this.dataSource, holdingId);
 		const [rows, [countRow], currentUserId] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT feed.*, ${OCCURRED_ON} AS occurred_on, (feed.occurred_day IS NOT NULL) AS all_day
 				FROM (${union}) feed WHERE occurred_at IS NOT NULL
 				ORDER BY ${OCCURRED_ON} DESC, (feed.occurred_day IS NOT NULL), occurred_at DESC, type, id
 				LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
-				[clientId, holdingId]
+				[clientId, holdingId, timezone]
 			),
 			this.dataSource.query<Row[]>(`SELECT COUNT(*) AS total FROM (${union}) feed WHERE occurred_at IS NOT NULL`, [clientId, holdingId]),
 			this.userId(authId),

@@ -123,6 +123,7 @@ describe('SettingsRolesService', () => {
 		await service.update(HOLDING, ROLE, { permissions: ['EDIT_CLIENTES'] }, admin);
 		expect((db.statements('INSERT INTO role_permissions')[0].params[1] as string[]).sort()).toEqual([
 			'p-EDIT_CLIENTES',
+			'p-VIEW_CLIENTES',
 			'p-VIEW_DOCUMENTACION',
 			'p-VIEW_REPORTS',
 		]);
@@ -172,6 +173,29 @@ describe('SettingsRolesService', () => {
 		expect(ids).toEqual(expect.arrayContaining(['p-VIEW_CLIENTES', 'p-EDIT_CONFIGURACION', 'p-CLOSE_PERIODS', 'p-VIEW_CONTRATOS']));
 	});
 
+	it('Editar incluye Ver: crear con EDIT_X agrega VIEW_X', async () => {
+		const { db, service } = build([['INSERT INTO roles', () => [{ id: ROLE }]], roleRow()]);
+
+		await service.create(HOLDING, { name: 'Cobranza', permissions: ['EDIT_CLIENTES', 'EDIT_CONFIGURACION'] }, admin);
+		expect((db.statements('INSERT INTO role_permissions')[0].params[1] as string[]).sort()).toEqual([
+			'p-EDIT_CLIENTES',
+			'p-EDIT_CONFIGURACION',
+			'p-VIEW_CLIENTES',
+			'p-VIEW_CONFIGURACION',
+		]);
+	});
+
+	it('duplicar filtra los códigos no otorgables (heredados como VIEW_REPORTS) aunque no haya comodín', async () => {
+		const { db, service } = build([
+			roleRow({ name: 'Antiguo', permissions: ['VIEW_CLIENTES', 'VIEW_REPORTS', 'VIEW_DOCUMENTACION'] }),
+			['SELECT name FROM roles WHERE holding_id', () => [{ name: 'Antiguo' }]],
+			['INSERT INTO roles', () => [{ id: OTHER_ROLE }]],
+		]);
+
+		await service.duplicate(HOLDING, ROLE, {}, admin);
+		expect(db.statements('INSERT INTO role_permissions')[0].params[1]).toEqual(['p-VIEW_CLIENTES']);
+	});
+
 	it('alertas: lista los 3 tipos con su estado y reemplaza solo las del rol', async () => {
 		const { service } = build([roleRow()]);
 		const alerts = await service.getAlerts(HOLDING, ROLE);
@@ -212,6 +236,14 @@ describe('SettingsUsersService', () => {
 		await service.list(HOLDING, superAdmin);
 		expect(db.calls[0].sql).toContain('COALESCE(u.is_super_admin, false) = false');
 		expect(db.calls[1].sql).not.toContain('COALESCE(u.is_super_admin, false) = false');
+	});
+
+	it('la lista trae holdings_count (holdings activos del usuario, ronda 3)', async () => {
+		const { db, service } = build([['FROM user_holdings uh JOIN users u', () => [member({ holdings_count: '2' })]]]);
+		const [user] = await service.list(HOLDING, admin);
+
+		expect(user.holdings_count).toBe(2);
+		expect(db.calls[0].sql).toContain('FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true');
 	});
 
 	it('cambiar rol: usuario o rol de otro holding → 404; super admin → 409; varios holdings → 409', async () => {

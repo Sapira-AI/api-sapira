@@ -45,6 +45,13 @@ describe('PermissionsService.allows', () => {
 		expect(PermissionsService.allows(ctx(['VIEW_CONFIGURACION']), ['EDIT_CONFIGURACION'])).toBe(false);
 	});
 
+	it('Editar incluye Ver en todos los módulos; Ver no incluye Editar', () => {
+		expect(PermissionsService.allows(ctx(['EDIT_CONFIGURACION']), ['VIEW_CONFIGURACION'])).toBe(true);
+		expect(PermissionsService.allows(ctx(['EDIT_FACTURACION']), ['VIEW_FACTURACION'])).toBe(true);
+		expect(PermissionsService.allows(ctx(['EDIT_FACTURACION']), ['VIEW_CONTRATOS'])).toBe(false);
+		expect(PermissionsService.allows(ctx(['VIEW_CONTRATOS']), ['EDIT_CONTRATOS'])).toBe(false);
+	});
+
 	it('basta uno de los códigos pedidos', () => {
 		expect(PermissionsService.allows(ctx(['VIEW_CONTRATOS']), ['VIEW_CONFIGURACION', 'VIEW_CONTRATOS'])).toBe(true);
 	});

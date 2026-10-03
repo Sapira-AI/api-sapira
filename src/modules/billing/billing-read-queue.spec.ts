@@ -44,7 +44,7 @@ const invoiceRow = (n: number, contract: string | null) => ({
  * BD simulada: solo devuelve las columnas que el SELECT de facturas proyecta (`i.contract_id` incluida o no), y contexto para todo id
  * pedido que no esté borrado.
  */
-function build(invoices: Array<Record<string, unknown>>, deleted = new Set<string>()) {
+function build(invoices: Array<Record<string, unknown>>, deleted = new Set<string>(), cutoff: string | null = null) {
 	const query = jest.fn(async (sql: string, params: unknown[]) => {
 		if (sql.startsWith(CONTRACT_INVOICE_SELECT)) {
 			const projectsContract = /\bi\.contract_id\b/.test(CONTRACT_INVOICE_SELECT.split('FROM invoices i')[0].split('(SELECT')[0]);
@@ -70,7 +70,7 @@ function build(invoices: Array<Record<string, unknown>>, deleted = new Set<strin
 					odoo_partner_id: 7,
 					company_country: 'CL',
 					odoo_integration_id: 1,
-					cutoff_date: null,
+					cutoff_date: cutoff,
 				}));
 		}
 
@@ -127,5 +127,14 @@ describe('BillingReadService.queueEntries · contexto por contrato', () => {
 		expect(deletedContract.blocked_reasons.map((blocker) => blocker.message)).toEqual([
 			'El contrato de la factura no existe en el holding o fue eliminado',
 		]);
+	});
+
+	it('una Por Emitir con emisión en un mes cerrado NO se bloquea por el cierre (protege solo contratos e ítems, Domi 03-10)', async () => {
+		const invoices = [invoiceRow(1, contractId(1))];
+		const [open] = await build(invoices).service.queueEntries(HOLDING, [invoiceId(1)], TODAY);
+		const [closed] = await build(invoices, new Set(), '2026-10-31').service.queueEntries(HOLDING, [invoiceId(1)], TODAY);
+
+		expect(closed.blocked_reasons.map((blocker) => blocker.code)).not.toContain('period_closed');
+		expect(closed.blocked_reasons).toEqual(open.blocked_reasons);
 	});
 });

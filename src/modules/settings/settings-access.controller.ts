@@ -12,6 +12,7 @@ import {
 	Put,
 	Request,
 	UseGuards,
+	UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -23,6 +24,7 @@ import type { PermissionContext } from '@/guards/permissions.service';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
 import { ChangeUserRoleDto, CreateRoleDto, DuplicateRoleDto, PutRoleAlertsDto, UpdateRoleDto } from './dtos/roles.dto';
+import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 import { SettingsRolesService } from './settings-roles.service';
 import { SettingsUsersService } from './settings-users.service';
 
@@ -38,6 +40,7 @@ const actorOf = (req: SettingsRequest): PermissionContext => {
 @ApiTags('Settings · Usuarios y roles')
 @Controller('settings')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewSettings)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })

@@ -915,7 +915,8 @@ describe('Contract360Service', () => {
 		const result = await service.overview(CONTRACT_ID, 'h-1', asOf);
 
 		expect(contracts.resolveContract).toHaveBeenCalledWith(CONTRACT_ID, 'h-1');
-		for (const [sql, params] of query.mock.calls) {
+		for (const [sql, params] of query.mock.calls.filter(([sql]) => !String(sql).includes('to_jsonb(hs)'))) {
+			// La zona horaria del holding (ronda 4) se lee aparte, solo por holding.
 			expect(params).toEqual(expect.arrayContaining([CONTRACT_ID, 'h-1']));
 			expect(sql).toMatch(/holding_id = \$2/);
 		}

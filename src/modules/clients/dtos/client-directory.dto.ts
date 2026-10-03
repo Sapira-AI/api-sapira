@@ -11,6 +11,7 @@ import {
 	IsOptional,
 	IsString,
 	IsUUID,
+	Matches,
 	Max,
 	MaxLength,
 	Min,
@@ -149,6 +150,16 @@ export class UpdateClientEntityDto {
 	@IsOptional()
 	country?: string;
 
+	@ApiPropertyOptional({
+		description: 'País ISO 3166-1 alfa-2 (manda sobre `country`, que se escribe con el nombre en español)',
+		example: 'CL',
+		nullable: true,
+	})
+	@ValidateIf((_, value) => value !== null && value !== '')
+	@Matches(/^[A-Za-z]{2}$/, { message: 'El país debe ser un código ISO de 2 letras' })
+	@IsOptional()
+	country_code?: string | null;
+
 	@ApiPropertyOptional()
 	@IsString()
 	@MaxLength(300)
@@ -210,11 +221,21 @@ export class CreateClientEntityDto {
 	@MaxLength(40)
 	tax_id!: string;
 
-	@ApiProperty({ example: 'Chile' })
+	@ApiPropertyOptional({ example: 'Chile', description: 'País en texto (front actual); obligatorio este o `country_code`' })
 	@IsString({ message: 'Escribe el país' })
-	@IsNotEmpty({ message: 'Escribe el país' })
 	@MaxLength(80)
-	country!: string;
+	@IsOptional()
+	country?: string;
+
+	@ApiPropertyOptional({
+		description: 'País ISO 3166-1 alfa-2 (manda sobre `country`, que se escribe con el nombre en español)',
+		example: 'CL',
+		nullable: true,
+	})
+	@ValidateIf((_, value) => value !== null && value !== '')
+	@Matches(/^[A-Za-z]{2}$/, { message: 'El país debe ser un código ISO de 2 letras' })
+	@IsOptional()
+	country_code?: string | null;
 
 	@ApiPropertyOptional()
 	@IsString()

@@ -144,7 +144,6 @@ describe('planPayments (todo o nada)', () => {
 		due_date: '2026-10-15',
 		odoo_invoice_id: null,
 		sent_to_odoo_at: null,
-		cutoff_date: null,
 		...overrides,
 	});
 	const input = (allocations: Array<{ invoice_id: string; amount: number }>, currency = 'CLP', payment_date = '2026-10-01') => ({
@@ -193,7 +192,8 @@ describe('planPayments (todo o nada)', () => {
 				]
 			)
 		).toEqual(['overpayment']);
-		expect(codes([invoice({ cutoff_date: '2026-09-30' })], [{ invoice_id: 'a', amount: 1 }], 'CLP', '2026-09-15')).toEqual(['period_closed']);
+		// El cierre de períodos no bloquea pagos (Domi 03-10): un pago con fecha en un mes cerrado se registra igual.
+		expect(codes([invoice()], [{ invoice_id: 'a', amount: 1 }], 'CLP', '2026-09-15')).toEqual([]);
 		// Factura sin contrato: solo lectura en v2 (spec §11.1); el front la saca de la selección y la API también la rechaza.
 		expect(codes([invoice({ contract_id: null })], [{ invoice_id: 'a', amount: 1 }])).toEqual(['no_contract']);
 		const mixed = planPayments(

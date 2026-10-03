@@ -181,9 +181,9 @@ describe('SQL de Facturación: todo parámetro agregado está referenciado', () 
 		await expect(build().read.invoice(HOLDING, INVOICE, NOW)).rejects.toThrow('Factura no encontrada');
 	});
 
-	it('vista previa de pago: facturas con pagos en su moneda y cierre de período', async () => {
+	it('vista previa de pago: facturas con pagos en su moneda (sin cierre de período: no bloquea pagos)', async () => {
 		const { query, payments } = build((sql) =>
-			sql.includes('get_cutoff_date')
+			sql.includes('AS total, i.due_date::text AS due_date, i.odoo_invoice_id')
 				? [
 						{
 							id: INVOICE,
@@ -206,7 +206,9 @@ describe('SQL de Facturación: todo parámetro agregado está referenciado', () 
 		);
 
 		expect(plan.can_apply).toBe(true);
-		const sql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes('get_cutoff_date'))!;
+		const sql = query.mock.calls
+			.map(([text]) => String(text))
+			.find((text) => text.includes('AS total, i.due_date::text AS due_date, i.odoo_invoice_id'))!;
 
 		expect(sql).toContain('p.confirmed = true');
 		expect(sql).toContain('UPPER(p.currency) = UPPER(COALESCE(i.invoice_currency, i.contract_currency))');

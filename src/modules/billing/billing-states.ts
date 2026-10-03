@@ -213,7 +213,6 @@ export interface PaymentInvoiceRow {
 	due_date: string | null;
 	odoo_invoice_id: number | string | null;
 	sent_to_odoo_at: string | null;
-	cutoff_date: string | null;
 }
 
 export interface PaymentInput {
@@ -258,7 +257,7 @@ const snapshotOf = (invoice: PaymentInvoiceRow, status: string | null, paid: num
 /**
  * Registrar pago(s) (todo o nada): una o varias facturas emitidas del mismo cliente y moneda. Bloqueos por factura: `no_contract` (solo lectura, §11.1), `credit_note`,
  * `not_issued` (B-F3: nunca sobre Por Emitir), `cancelled` (Cancelada, inactiva o anulada con NC), `payment_currency_mismatch` (B-F14),
- * `overpayment` (Σ asignado a la factura > saldo) y `period_closed` (fecha de pago en período cerrado de la compañía); globales
+ * `overpayment` (Σ asignado a la factura > saldo); globales
  * `client_mismatch` (§4.5) y `currency_mismatch` entre facturas.
  *
  * `allowMultipleClients` (solo el camino manual de conciliación, spec-conciliacion-v2 decisión 4): `client_mismatch` pasa a aviso
@@ -324,13 +323,7 @@ export function planPayments(
 		if (!blockers.length && balance === null) {
 			blockers.push({ code: 'not_issued', message: `La factura ${label} no tiene total valorizado`, next_step: null, action: 'issue' });
 		}
-		if (invoice.cutoff_date && input.payment_date <= invoice.cutoff_date) {
-			blockers.push({
-				code: 'period_closed',
-				message: `La fecha de pago (${input.payment_date}) cae en un período cerrado (cierre al ${invoice.cutoff_date})`,
-				next_step: 'Usa una fecha posterior al cierre o reabre el período en Configuración',
-			});
-		}
+		// Sin `period_closed`: el cierre de períodos protege contratos e ítems, no pagos (Domi 03-10).
 		const paidAfter = invoice.paid + previous + allocation.amount;
 		const statusAfter = blockers.length ? invoice.status : statusAfterPayments({ ...invoice, paid: paidAfter }, today);
 
@@ -713,8 +706,8 @@ export const withAction = (blocker: BillingBlocker): BillingBlocker => ({
 export type IssuePath = 'erp' | 'external';
 
 /**
- * Bloqueos de una Por Emitir en la cola: los del envío (`planSendNow`, que ya incluye `commonBlockers`) más `sent_to_erp_draft` y
- * `period_closed`; si la factura no va por el ERP se quitan los bloqueos propios del envío (`ERP_ONLY_CODES`). Sin duplicados por código.
+ * Bloqueos de una Por Emitir en la cola: los del envío (`planSendNow`, que ya incluye `commonBlockers`) más `sent_to_erp_draft` (el cierre
+ * de períodos no bloquea facturas, Domi 03-10); si la factura no va por el ERP se quitan los bloqueos propios del envío (`ERP_ONLY_CODES`). Sin duplicados por código.
  */
 export function queueBlockers(blockers: BillingBlocker[], issuePath: IssuePath): BillingBlocker[] {
 	const seen = new Set<string>();

@@ -1,3 +1,4 @@
+import { resolveCountryInput } from '@/core/utils/country-resolve';
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 
 import type { QueryRunner } from 'typeorm';
@@ -10,6 +11,8 @@ export interface NewClientEntity {
 	legal_name: string;
 	tax_id: string;
 	country: string;
+	/** País ISO (ronda 3 de Configuración); sin él se busca desde `country` con el mapeo tolerante de M13. */
+	country_code?: string | null;
 	address: string | null;
 	email: string | null;
 	payment_terms: PaymentTerms | null;
@@ -35,13 +38,30 @@ export async function insertClientEntity(
 	{ makePrimaryIfNone = false }: { makePrimaryIfNone?: boolean } = {}
 ): Promise<string> {
 	const extras = EXTRA_COLUMNS.filter((column) => entity[column] !== undefined && entity[column] !== null && entity[column] !== '');
-	const columns = ['holding_id', 'client_id', 'legal_name', 'tax_id', 'country', 'legal_address', 'email', 'payment_terms', ...extras];
+	// Con código: se valida y manda; sin código: se busca desde el texto (si no calza, queda null y el texto se respeta).
+	const country = (await resolveCountryInput(
+		runner,
+		entity.country_code ? { country_code: entity.country_code } : { country: entity.country }
+	)) ?? { country: entity.country, country_code: null };
+	const columns = [
+		'holding_id',
+		'client_id',
+		'legal_name',
+		'tax_id',
+		'country',
+		'country_code',
+		'legal_address',
+		'email',
+		'payment_terms',
+		...extras,
+	];
 	const values: unknown[] = [
 		holdingId,
 		entity.client_id,
 		entity.legal_name,
 		entity.tax_id,
-		entity.country,
+		country.country,
+		country.country_code,
 		entity.address,
 		entity.email,
 		entity.payment_terms ? JSON.stringify(entity.payment_terms) : null,

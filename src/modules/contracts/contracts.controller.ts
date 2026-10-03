@@ -315,7 +315,7 @@ export class ContractsController {
 	@ApiResponse({
 		status: 409,
 		description:
-			'`code: blocked` con `blockers[]` (credit_note, not_pending, already_consolidated, legacy_invoice, no_contract, partial_billing_invoice, open_consumption, sent_to_erp_draft (action erp_reset), period_closed, single_contract, company_mismatch, entity_mismatch, currency_mismatch, month_mismatch, document_type_mismatch, export_type_mismatch, series_mismatch, tax_rate_mismatch)',
+			'`code: blocked` con `blockers[]` (credit_note, not_pending, already_consolidated, legacy_invoice, no_contract, partial_billing_invoice, open_consumption, sent_to_erp_draft (action erp_reset), single_contract, company_mismatch, entity_mismatch, currency_mismatch, month_mismatch, document_type_mismatch, export_type_mismatch, series_mismatch, tax_rate_mismatch)',
 	})
 	async consolidate(@Body() body: ConsolidateInvoicesDto, @HoldingId() holdingId: string, @Request() req: AuthRequest) {
 		return await this.contractInvoiceConsolidationService.apply(body, holdingId, authIdOf(req));
@@ -909,7 +909,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa: registrar la emisión externa de una factura',
 		description:
-			'`{ invoice_number, issue_date, fx_rate?, notes?, reason? }`. Antes/después (estado, folio, emisión, vencimiento por condición de pago, tasa), bloqueos (sent_to_erp_draft, period_closed, fx_rate_missing…) y avisos (erp_auto_send). No escribe nada',
+			'`{ invoice_number, issue_date, fx_rate?, notes?, reason? }`. Antes/después (estado, folio, emisión, vencimiento por condición de pago, tasa), bloqueos (sent_to_erp_draft, fx_rate_missing…) y avisos (erp_auto_send). No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)
@@ -1077,8 +1077,7 @@ export class ContractsController {
 	})
 	@ApiResponse({
 		status: 409,
-		description:
-			'`code: blocked` con `blockers[]` (not_pending, not_sent_to_erp, unified_invoice, legacy_invoice, credit_note, period_closed) y `preview`',
+		description: '`code: blocked` con `blockers[]` (not_pending, not_sent_to_erp, unified_invoice, legacy_invoice, credit_note) y `preview`',
 	})
 	async erpResetBulk(@Param('id') id: string, @Body() body: ErpResetInvoicesBulkDto, @HoldingId() holdingId: string, @Request() req: AuthRequest) {
 		return await this.contractInvoicesService.erpResetBulk(id, body, holdingId, authIdOf(req));
@@ -1254,7 +1253,7 @@ export class ContractsController {
 	@ApiResponse({
 		status: 409,
 		description:
-			'`code: blocked` con `blockers[]` (credit_note, not_issued, unified_invoice, legacy_invoice, already_voided, period_closed, no_lines y los del editor en la reemisión) o `deviation_reason_required`',
+			'`code: blocked` con `blockers[]` (credit_note, not_issued, unified_invoice, legacy_invoice, already_voided, no_lines y los del editor en la reemisión) o `deviation_reason_required`',
 	})
 	async voidInvoice(
 		@Param('id') id: string,
@@ -1301,8 +1300,7 @@ export class ContractsController {
 	@ApiResponse({ status: 201, description: 'El preview más `applied`, `credit_note_id`, `event_id`, `invoice`' })
 	@ApiResponse({
 		status: 409,
-		description:
-			'`code: blocked` con `blockers[]` (not_issued, credit_note, already_voided, exceeds_line, period_closed, unified_invoice, legacy_invoice)',
+		description: '`code: blocked` con `blockers[]` (not_issued, credit_note, already_voided, exceeds_line, unified_invoice, legacy_invoice)',
 	})
 	async createCreditNote(
 		@Param('id') id: string,
@@ -1350,7 +1348,7 @@ export class ContractsController {
 	@ApiResponse({
 		status: 409,
 		description:
-			'`code: blocked` con `blockers[]` (not_pending, unified_invoice, legacy_invoice, credit_note, sent_to_erp_draft, period_closed, partial_billing_invoice, spot_without_rate, no_visible_lines, exceeds_invoice)',
+			'`code: blocked` con `blockers[]` (not_pending, unified_invoice, legacy_invoice, credit_note, sent_to_erp_draft, partial_billing_invoice, spot_without_rate, no_visible_lines, exceeds_invoice)',
 	})
 	async partialByPo(
 		@Param('id') id: string,

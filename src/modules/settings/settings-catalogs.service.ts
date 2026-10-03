@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { normalizeQuoteType, QUOTE_TYPE_CODES, QUOTE_TYPE_LABELS, type QuoteTypeCode } from '@/modules/quotes/quote-status';
+
 import { MASTER_DATA_CATEGORIES } from './dtos/catalogs.dto';
 import { plural, Row, toCount, withUniqueMessage } from './settings-common';
 
@@ -14,20 +16,41 @@ import type {
 	UpdateSellerDto,
 } from './dtos/catalogs.dto';
 
+/** Dónde se usa un valor de datos maestros (desglose para el tooltip del front). */
+export type MasterDataUsage = { contracts: number; quotes: number; subscriptions: number; invoices: number; quantities: number; clients: number };
+type UsageKey = keyof MasterDataUsage;
+
+const emptyUsage = (): MasterDataUsage => ({ contracts: 0, quotes: 0, subscriptions: 0, invoices: 0, quantities: 0, clients: 0 });
+
 /**
  * Uso de un valor de datos maestros: las tablas guardan el **texto** (no hay FK), así que se cuenta por coincidencia exacta dentro del
- * holding. Cada consulta recibe `$1` = holding y `$2` = valores.
+ * holding (columnas verificadas en `information_schema`, 03-10). Cada consulta recibe `$1` = holding y `$2` = valores.
  */
-const MASTER_DATA_USAGE: Record<MasterDataCategory, string[]> = {
-	payment_terms: [`SELECT payment_terms AS value, count(*) AS n FROM quotes WHERE holding_id = $1 AND payment_terms = ANY($2::text[]) GROUP BY 1`],
-	item_types: ['contract_items', 'quote_items', 'subscription_items'].map(
-		(table) => `SELECT item_type AS value, count(*) AS n FROM ${table} WHERE holding_id = $1 AND item_type = ANY($2::text[]) GROUP BY 1`
-	),
-	units_of_measure: ['contract_items', 'quote_items', 'invoice_items', 'quantities'].map(
-		(table) =>
-			`SELECT unit_of_measure AS value, count(*) AS n FROM ${table} WHERE holding_id = $1 AND unit_of_measure = ANY($2::text[]) GROUP BY 1`
-	),
+const usageSql = (table: string, column: string) =>
+	`SELECT ${column} AS value, count(*) AS n FROM ${table} WHERE holding_id = $1 AND ${column} = ANY($2::text[]) GROUP BY 1`;
+
+const MASTER_DATA_USAGE: Record<MasterDataCategory, { key: UsageKey; sql: string }[]> = {
+	item_types: [
+		{ key: 'contracts', sql: usageSql('contract_items', 'item_type') },
+		{ key: 'quotes', sql: usageSql('quote_items', 'item_type') },
+		{ key: 'subscriptions', sql: usageSql('subscription_items', 'item_type') },
+		{ key: 'invoices', sql: usageSql('invoice_items_legacy', 'item_type') },
+	],
+	units_of_measure: [
+		{ key: 'contracts', sql: usageSql('contract_items', 'unit_of_measure') },
+		{ key: 'quotes', sql: usageSql('quote_items', 'unit_of_measure') },
+		{ key: 'invoices', sql: usageSql('invoice_items', 'unit_of_measure') },
+		{ key: 'invoices', sql: usageSql('invoice_items_legacy', 'unit_of_measure') },
+		{ key: 'quantities', sql: usageSql('quantities', 'unit_of_measure') },
+		{ key: 'quantities', sql: usageSql('sapira_quantity_imports', 'unit_of_measure') },
+	],
+	// Ronda 3: texto exacto en las columnas de clientes (verificadas en `information_schema`, 03-10).
+	markets: [{ key: 'clients', sql: usageSql('clients', 'market') }],
+	segments: [{ key: 'clients', sql: usageSql('clients', 'segment') }],
+	industries: [{ key: 'clients', sql: usageSql('clients', 'industry') }],
 };
+
+const totalUsage = (usage: MasterDataUsage | undefined) => (usage ? Object.values(usage).reduce((sum, n) => sum + n, 0) : 0);
 
 const sellerDto = (row: Row) => ({
 	id: String(row.id),
@@ -48,9 +71,65 @@ const churnReasonDto = (row: Row) => ({
 	in_use: toCount(row.in_use),
 });
 
+/** Efecto guía de cada tipo de negocio en el MRR (el movimiento real lo calcula Métricas desde el cambio del contrato). */
+export const BUSINESS_TYPE_EFFECTS: Record<QuoteTypeCode, { mrr_effect: string; mrr_effect_label: string; description: string }> = {
+	new_business: {
+		mrr_effect: 'new',
+		mrr_effect_label: 'Nuevo',
+		description: 'Cliente sin contratos vigentes: crea un contrato nuevo y su MRR entra como Nuevo',
+	},
+	upsell: {
+		mrr_effect: 'expansion',
+		mrr_effect_label: 'Expansión',
+		description: 'Más cantidad o precio de lo que el cliente ya tiene: el aumento de MRR cuenta como Expansión',
+	},
+	cross_sell: {
+		mrr_effect: 'expansion',
+		mrr_effect_label: 'Expansión',
+		description: 'Un producto nuevo para un cliente con contrato: el MRR agregado cuenta como Expansión',
+	},
+	downsell: {
+		mrr_effect: 'contraction',
+		mrr_effect_label: 'Contracción',
+		description: 'Menos cantidad, precio o productos: la baja de MRR cuenta como Contracción (sin llegar a cero)',
+	},
+	renewal: {
+		mrr_effect: 'depends',
+		mrr_effect_label: 'Según el precio',
+		description: 'Renueva el plazo: sin cambio de precio no mueve el MRR; si sube es Expansión y si baja, Contracción',
+	},
+	renegotiation: {
+		mrr_effect: 'depends',
+		mrr_effect_label: 'Según el precio',
+		description: 'Cambia condiciones del contrato vigente: el MRR sube (Expansión), baja (Contracción) o no se mueve',
+	},
+	reactivation: {
+		mrr_effect: 'reactivation',
+		mrr_effect_label: 'Reactivación',
+		description: 'Vuelve un cliente que se había dado de baja: su MRR entra como Reactivación',
+	},
+};
+
+/** Tipos de contacto del sistema (lista fija) y qué hace cada uno (`billing-collections.service.ts`, procesadores de agentes). */
+export const CONTACT_TYPES: { value: string; description: string; used_by: string[] }[] = [
+	{
+		value: 'Principal',
+		description: 'Contacto principal del cliente; recibe correos si no hay uno de facturación o cobranza',
+		used_by: ['Cobranza (respaldo)'],
+	},
+	{ value: 'Comercial', description: 'Contacto de ventas y renovaciones', used_by: [] },
+	{ value: 'Facturación', description: 'Recibe facturas y recordatorios de cobranza', used_by: ['Cobranza (recordatorios)'] },
+	{
+		value: 'Cobranza',
+		description: 'Recibe recordatorios de pago y los avisos del agente de cobranza',
+		used_by: ['Cobranza (recordatorios)', 'Agente de cobranza'],
+	},
+	{ value: 'Proforma', description: 'Recibe la proforma antes de emitir la factura', used_by: ['Agente de proforma'] },
+];
+
 /**
- * Catálogos del Holding 360: vendedores, motivos de baja y datos maestros (solo condiciones de pago, tipos de ítem y unidades de medida;
- * el resto de categorías se retira tras el switch, spec §2). Borrar solo si no se usa; si se usa, desactivar (409 con la sugerencia).
+ * Catálogos del Holding 360: vendedores, motivos de baja y datos maestros (solo tipos de ítem y unidades de medida; condiciones de pago
+ * salió de Configuración por decisión de Domi 03-10 —sus filas siguen y Contratos las lee igual—; el resto se retira tras el switch). Borrar solo si no se usa; si se usa, desactivar (409 con la sugerencia).
  */
 @Injectable()
 export class SettingsCatalogsService {
@@ -182,26 +261,39 @@ export class SettingsCatalogsService {
 
 	assertCategory(category: string): MasterDataCategory {
 		if (!(MASTER_DATA_CATEGORIES as readonly string[]).includes(category)) {
-			throw new BadRequestException('Categoría no válida: solo payment_terms, item_types o units_of_measure');
+			throw new BadRequestException('Lista no válida: tipos de ítem, unidades de medida, mercados, segmentos o industrias');
 		}
 
 		return category as MasterDataCategory;
 	}
 
-	private async usageByValue(holdingId: string, category: MasterDataCategory, values: string[]): Promise<Map<string, number>> {
-		const usage = new Map<string, number>();
+	private async usageByValue(holdingId: string, category: MasterDataCategory, values: string[]): Promise<Map<string, MasterDataUsage>> {
+		const usage = new Map<string, MasterDataUsage>();
 
 		if (!values.length) return usage;
-		for (const sql of MASTER_DATA_USAGE[category]) {
-			for (const row of (await this.dataSource.query(sql, [holdingId, values])) as Row[]) {
-				usage.set(String(row.value), (usage.get(String(row.value)) ?? 0) + toCount(row.n));
+		const results = await Promise.all(
+			MASTER_DATA_USAGE[category].map(async (source) => ({
+				key: source.key,
+				rows: (await this.dataSource.query(source.sql, [holdingId, values])) as Row[],
+			}))
+		);
+
+		for (const { key, rows } of results) {
+			for (const row of rows) {
+				const value = String(row.value);
+				const entry = usage.get(value) ?? emptyUsage();
+
+				entry[key] += toCount(row.n);
+				usage.set(value, entry);
 			}
 		}
 
 		return usage;
 	}
 
-	private masterDataDto(row: Row, usage: Map<string, number>) {
+	private masterDataDto(row: Row, usage: Map<string, MasterDataUsage>) {
+		const detail = usage.get(String(row.value)) ?? emptyUsage();
+
 		return {
 			id: String(row.id),
 			category: String(row.category),
@@ -209,7 +301,8 @@ export class SettingsCatalogsService {
 			is_active: row.is_active === true,
 			created_at: row.created_at,
 			updated_at: row.updated_at,
-			in_use: usage.get(String(row.value)) ?? 0,
+			in_use: totalUsage(detail),
+			usage: detail,
 		};
 	}
 
@@ -258,7 +351,7 @@ export class SettingsCatalogsService {
 	async updateMasterData(holdingId: string, rawCategory: string, id: string, dto: UpdateMasterDataDto) {
 		const category = this.assertCategory(rawCategory);
 		const { row, usage } = await this.findMasterData(holdingId, category, id);
-		const inUse = usage.get(String(row.value)) ?? 0;
+		const inUse = totalUsage(usage.get(String(row.value)));
 
 		if (dto.value !== undefined && dto.value !== row.value && inUse > 0) {
 			throw new ConflictException(
@@ -283,11 +376,52 @@ export class SettingsCatalogsService {
 	async deleteMasterData(holdingId: string, rawCategory: string, id: string): Promise<void> {
 		const category = this.assertCategory(rawCategory);
 		const { row, usage } = await this.findMasterData(holdingId, category, id);
-		const inUse = usage.get(String(row.value)) ?? 0;
+		const inUse = totalUsage(usage.get(String(row.value)));
 
 		if (inUse > 0) {
 			throw new ConflictException(`Este valor está en uso (${plural(inUse, 'registro', 'registros')}): desactívalo en vez de eliminarlo`);
 		}
 		await this.dataSource.query(`DELETE FROM master_data WHERE id = $1 AND holding_id = $2`, [id, holdingId]);
+	}
+
+	// ── Tipos de negocio y de contacto (solo lectura, ronda 3) ─────────────────────────────────────────────────────────────────────
+
+	/** Los 7 tipos de negocio del sistema con su efecto guía en el MRR y los tipos de oportunidad de Salesforce mapeados del holding. */
+	async listBusinessTypes(holdingId: string) {
+		const mappings = (await this.dataSource.query(
+			`SELECT salesforce_type, sapira_quote_type FROM salesforce_quote_type_mappings
+			WHERE holding_id = $1 AND COALESCE(is_active, true) ORDER BY salesforce_type`,
+			[holdingId]
+		)) as Row[];
+
+		return QUOTE_TYPE_CODES.map((code) => ({
+			code,
+			label: QUOTE_TYPE_LABELS[code],
+			...BUSINESS_TYPE_EFFECTS[code],
+			salesforce_types: [
+				...new Set(
+					mappings
+						.filter((row) => normalizeQuoteType(row.sapira_quote_type as string | null) === code)
+						.map((row) => String(row.salesforce_type))
+				),
+			],
+		}));
+	}
+
+	/** Tipos de contacto fijos con qué hace cada uno y cuántos contactos del holding lo tienen (texto exacto). */
+	async listContactTypes(holdingId: string) {
+		const rows = (await this.dataSource.query(
+			`SELECT contact_type AS value, count(*) AS n FROM client_contacts WHERE holding_id = $1 AND contact_type = ANY($2::text[]) GROUP BY 1`,
+			[holdingId, CONTACT_TYPES.map((type) => type.value)]
+		)) as Row[];
+		const counts = new Map(rows.map((row) => [String(row.value), toCount(row.n)]));
+
+		return CONTACT_TYPES.map((type) => ({
+			value: type.value,
+			label: type.value,
+			description: type.description,
+			used_by: type.used_by,
+			in_use: counts.get(type.value) ?? 0,
+		}));
 	}
 }

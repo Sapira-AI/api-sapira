@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { CONTRACT_DOCUMENT_TYPES, type ContractDocumentType } from '@/databases/postgresql/entities/contratos/contract.entity';
@@ -82,7 +83,7 @@ export const DOCUMENT_TYPE_OPTIONS: Array<{ value: ContractDocumentType; label: 
 ).map((value) => ({ value, label: DOCUMENT_TYPE_LABELS[value] }));
 
 /** Columnas del catálogo que expone la API (mismo orden en todas las consultas). */
-const TAX_DOCUMENT_TYPE_COLUMNS = `id, country_code, code, name, kind, is_electronic, sort`;
+const TAX_DOCUMENT_TYPE_COLUMNS = `id, country_code, code, name, kind, is_electronic, sort, tax_rate`;
 
 const toTaxDocumentType = (row: Row): TaxDocumentTypeOption => ({
 	id: String(row.id),
@@ -92,6 +93,7 @@ const toTaxDocumentType = (row: Row): TaxDocumentTypeOption => ({
 	kind: String(row.kind) as TaxDocumentTypeOption['kind'],
 	is_electronic: row.is_electronic === true,
 	sort: Number(row.sort ?? 0) || 0,
+	tax_rate: row.tax_rate === null || row.tax_rate === undefined ? null : Number(row.tax_rate),
 });
 
 /** Condiciones de pago por defecto cuando el holding no las tiene en master data (`payment_terms`). */
@@ -111,8 +113,9 @@ const toIsoDate = (value: unknown) => {
 
 	return String(value).slice(0, 10);
 };
-// "Hoy" del holding (America/Santiago), la misma regla que cambios, consumo y activación (`business-date.ts`).
-const todayIso = (now = new Date()) => todayFor(null, now);
+// "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4 de Configuración; default America/Santiago), la misma regla
+// que cambios, consumo y activación (`business-date.ts`).
+const todayIso = (now = new Date(), timezone?: string | null) => todayFor(timezone, now);
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 
 /** 409 cuando falta `contracts.deleted_at` (migración `1790358766159-AddContractBillingFields` sin aplicar). */
@@ -381,7 +384,7 @@ export class ContractDraftsService {
 	}
 
 	async formOptions(holdingId: string, now = new Date(), options: { clientEntityId?: string } = {}) {
-		const year = Number(todayIso(now).slice(0, 4));
+		const year = Number(todayIso(now, await holdingTimezone(this.dataSource, holdingId)).slice(0, 4));
 		const [companies, currencies, masterData, usedTypes, usedUnits, products, taxDocumentTypes, [entity], catalogPrices] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT id, legal_name, holding_name, country, currency, contract_prefix, tax_rate,
@@ -499,7 +502,7 @@ export class ContractDraftsService {
 					 */
 					erp_integration_enabled: row.odoo_integration_id !== null && row.odoo_integration_id !== undefined,
 					next_number: formatContractNumber(prefix, year, nextByPrefix.get(prefix) ?? 1),
-					/** Documentos que puede emitir esta compañía (los de su país; si no tiene, los genéricos). */
+					/** Documentos que puede emitir esta compañía (los de su país; si no tiene, los genéricos), con `tax_rate` (ronda 3; null = la de la compañía). */
 					tax_document_types: catalog,
 					/** Sugerido: exportación si la razón social (`?client_entity_id`) es de otro país; si no, factura local. */
 					suggested_tax_document_type_id: suggestTaxDocumentType(catalog, country, entityCountry)?.id ?? null,
@@ -1192,6 +1195,9 @@ export class ContractDraftsService {
 				payment_terms: defaults.payment_terms,
 				document_type: defaults.document_type,
 				company: { country: context.company.country, tax_rate: context.company.tax_rate },
+				tax_document: defaults.tax_document_type
+					? { kind: defaults.tax_document_type.kind, tax_rate: defaults.tax_document_type.tax_rate ?? null }
+					: null,
 				entity_country: context.entity.country,
 				// Glosas como en la activación (spec facturas §3.6): plantilla del contrato, contexto y límite del documento.
 				description_template: extras.description_template ?? null,
@@ -1407,7 +1413,7 @@ export class ContractDraftsService {
 							)
 						: `Borrador ${contractNumber} creado manualmente con ${items.length} ítem(s)`,
 					userId,
-					todayIso(now),
+					todayIso(now, await holdingTimezone(this.dataSource, holdingId)),
 					JSON.stringify(itemIds),
 					JSON.stringify({
 						source: 'api_v2',
@@ -2402,7 +2408,7 @@ export class ContractDraftsService {
 					'Borrador editado',
 					`Borrador ${contractNumber ?? ''} editado${summary ? ` (${summary})` : ' sin cambios'}`.replace(/\s+/g, ' '),
 					userId,
-					todayIso(now),
+					todayIso(now, await holdingTimezone(this.dataSource, holdingId)),
 					JSON.stringify([...updated, ...inserted, ...toDelete]),
 					JSON.stringify({
 						source: 'api_v2',
@@ -2434,7 +2440,7 @@ export class ContractDraftsService {
 						holdingId,
 						`Se cambió el modelo de precio de ${priceChanges.length} ítem(s) del borrador ${contractNumber ?? ''}`.replace(/\s+/g, ' '),
 						userId,
-						todayIso(now),
+						todayIso(now, await holdingTimezone(this.dataSource, holdingId)),
 						JSON.stringify(priceChanges.map((change) => change.item_id)),
 						JSON.stringify({ source: 'api_v2', contract_number: contractNumber, changes: priceChanges }),
 					]
@@ -2608,7 +2614,7 @@ export class ContractDraftsService {
 		}
 
 		const prefix = contractPrefix(context.company.contract_prefix);
-		const year = Number(todayIso(now).slice(0, 4));
+		const year = Number(todayIso(now, await holdingTimezone(this.dataSource, holdingId)).slice(0, 4));
 
 		await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`contracts:${holdingId}:${prefix}:${year}`]);
 

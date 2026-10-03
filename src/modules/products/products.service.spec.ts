@@ -42,6 +42,23 @@ describe('ProductsService', () => {
 		expect(db.calls[0].params).toEqual([HOLDING, 'archived', '%tms%']);
 	});
 
+	it('búsqueda con % o _ los busca literales (ESCAPE)', async () => {
+		const { db, service } = build(null);
+
+		await service.list(HOLDING, { search: '50%_off' });
+		expect(db.calls[0].params).toEqual([HOLDING, '%50\\%\\_off%']);
+		expect(db.calls[0].sql).toContain("ILIKE $2 ESCAPE '\\'");
+	});
+
+	it('las líneas de facturas antiguas emparejadas (invoice_items_legacy_match) cuentan como uso', async () => {
+		const { db, service } = build(row({ legacy_invoice_items: 2 }));
+
+		await expect(service.remove(HOLDING, PRODUCT)).rejects.toThrow(
+			'El producto está en uso (2 líneas de factura antiguas): archívalo en vez de eliminarlo'
+		);
+		expect(db.calls[0].sql).toContain('FROM invoice_items_legacy_match lm WHERE lm.product_id = p.id');
+	});
+
 	it('código repetido (sin mayúsculas ni espacios) → 409', async () => {
 		const { db, service } = build(null, [['lower(btrim(product_code)) = lower(btrim($2))', () => [{ 1: 1 }]]]);
 

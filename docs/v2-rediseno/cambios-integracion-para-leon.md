@@ -313,6 +313,15 @@ libre está cerrado en Supabase) o, en las rutas `@Public`, cualquiera. Nada cor
 | `/database/*` (`@Public`), `/security/*`, `/audit/*`, `/devices/*` | Esquema completo sin sesión; bloquear la IP del front (caída total) |
 | `POST /invoices/bulk-update-currency`, `PATCH /invoices/:id/auto-invoice` | Cambiar facturas ajenas por id |
 
+**Correos: `/emails/*` y `/email/*` reemplazadas por `/settings/communications/*` (03-10-2026, ronda 3 de Configuración).** El hueco #15
+de [`revision-seguridad-api.md`](./revision-seguridad-api.md) (ver, editar y borrar dominios y remitentes de otro holding por id; mandar el
+correo de prueba desde el dominio de otro cliente) **no se arregla en las rutas viejas**: el front nuevo usa las rutas nuevas
+`/settings/communications/domains|senders|test-email` (contrato de Configuración §8.2), con `HoldingScopeGuard`, permiso
+`VIEW/EDIT_CONFIGURACION`, cada id filtrado por el holding del header y el correo de prueba solo a correos del propio usuario o de
+miembros del holding. Reutilizan la lógica de SendGrid de `EmailsService` (registro, borrado y envío) sin cambiarla. **Las rutas viejas
+siguen abiertas** porque el front actual (`app.aisapira.com`) las usa hasta el switch; se cierran en el bloque de seguridad. Si alguna
+integración tuya llama `/emails/*` o `/email/*`, avísanos para moverla a las nuevas antes de cerrarlas.
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

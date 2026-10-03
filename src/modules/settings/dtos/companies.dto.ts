@@ -19,7 +19,7 @@ import {
 	ValidateNested,
 } from 'class-validator';
 
-import { ISO_DATE } from '../settings-common';
+import { IsIsoDate } from '../settings-common';
 
 import { emptyToNull, trim } from './holding.dto';
 
@@ -107,7 +107,7 @@ export class UpdateCompanyDto extends CompanyFieldsDto {
 	@Transform(emptyToNull)
 	@ValidateIf((_, value) => value !== null)
 	@IsString({ message: 'El logo debe ser una URL' })
-	@MaxLength(1000)
+	@MaxLength(1000, { message: 'La URL del logo es demasiado larga' })
 	@IsOptional()
 	logo_url?: string | null;
 }
@@ -117,7 +117,7 @@ export type AccountKey = (typeof ACCOUNT_KEYS)[number];
 
 export class AccountDto {
 	@ApiProperty({ enum: ACCOUNT_KEYS })
-	@IsString()
+	@IsString({ message: 'La clave de la cuenta debe ser texto' })
 	key!: string;
 
 	@ApiProperty()
@@ -139,9 +139,9 @@ export class AccountDto {
 
 export class PutAccountsDto {
 	@ApiProperty({ type: [AccountDto] })
-	@IsArray({ message: 'accounts debe ser una lista' })
+	@IsArray({ message: 'Las cuentas deben ser una lista' })
 	@ArrayMinSize(1, { message: 'Faltan las cuentas' })
-	@ArrayMaxSize(10)
+	@ArrayMaxSize(10, { message: 'Son 5 cuentas' })
 	@ValidateNested({ each: true })
 	@Type(() => AccountDto)
 	accounts!: AccountDto[];
@@ -182,7 +182,7 @@ export class UpdateBankAccountDto {
 	@Transform(trim)
 	@IsString({ message: 'El banco debe ser texto' })
 	@MinLength(1, { message: 'El banco no puede quedar vacío' })
-	@MaxLength(100)
+	@MaxLength(100, { message: 'El banco no puede superar 100 caracteres' })
 	@IsOptional()
 	bank_name?: string;
 
@@ -190,7 +190,7 @@ export class UpdateBankAccountDto {
 	@Transform(trim)
 	@IsString({ message: 'El tipo de cuenta debe ser texto' })
 	@MinLength(1, { message: 'El tipo de cuenta no puede quedar vacío' })
-	@MaxLength(50)
+	@MaxLength(50, { message: 'El tipo de cuenta no puede superar 50 caracteres' })
 	@IsOptional()
 	account_type?: string;
 
@@ -198,7 +198,7 @@ export class UpdateBankAccountDto {
 	@Transform(trim)
 	@IsString({ message: 'El número de cuenta debe ser texto' })
 	@MinLength(1, { message: 'El número de cuenta no puede quedar vacío' })
-	@MaxLength(50)
+	@MaxLength(50, { message: 'El número de cuenta no puede superar 50 caracteres' })
 	@IsOptional()
 	account_number?: string;
 
@@ -214,30 +214,30 @@ export class UpdateBankAccountDto {
 export class LegalDocumentUploadDto {
 	@ApiProperty()
 	@Transform(trim)
-	@IsString({ message: 'file_name debe ser texto' })
+	@IsString({ message: 'El nombre del archivo debe ser texto' })
 	@MinLength(1, { message: 'Falta el nombre del archivo' })
-	@MaxLength(200)
+	@MaxLength(200, { message: 'El nombre del archivo no puede superar 200 caracteres' })
 	file_name!: string;
 
 	@ApiProperty()
-	@IsString({ message: 'mime_type debe ser texto' })
+	@IsString({ message: 'El tipo de archivo debe ser texto' })
 	mime_type!: string;
 
 	@ApiProperty({ description: 'Bytes' })
 	@Type(() => Number)
-	@IsInt({ message: 'size debe ser un número entero de bytes' })
+	@IsInt({ message: 'El tamaño del archivo no es válido' })
 	@Min(1, { message: 'El archivo está vacío' })
 	size!: number;
 }
 
 export class ConfirmLegalDocumentDto {
 	@ApiProperty()
-	@IsUUID(undefined, { message: 'document_id debe ser un UUID' })
+	@IsUUID(undefined, { message: 'El documento no es válido: vuelve a subir el archivo' })
 	document_id!: string;
 
 	@ApiProperty()
-	@IsString({ message: 'path debe ser texto' })
-	@MaxLength(500)
+	@IsString({ message: 'La ruta del archivo no es válida' })
+	@MaxLength(500, { message: 'La ruta del archivo es demasiado larga' })
 	path!: string;
 
 	@ApiProperty()
@@ -256,19 +256,19 @@ export class ConfirmLegalDocumentDto {
 
 	@ApiProperty()
 	@Transform(trim)
-	@IsString({ message: 'file_name debe ser texto' })
-	@MinLength(1)
-	@MaxLength(200)
+	@IsString({ message: 'El nombre del archivo debe ser texto' })
+	@MinLength(1, { message: 'Falta el nombre del archivo' })
+	@MaxLength(200, { message: 'El nombre del archivo no puede superar 200 caracteres' })
 	file_name!: string;
 
 	@ApiProperty()
-	@IsString({ message: 'mime_type debe ser texto' })
+	@IsString({ message: 'El tipo de archivo debe ser texto' })
 	mime_type!: string;
 }
 
 export class ClosePeriodDto {
 	@ApiProperty({ example: '2026-08-31', description: 'Último día de un mes' })
-	@Matches(ISO_DATE, { message: 'until_date debe ser YYYY-MM-DD' })
+	@IsIsoDate('La fecha de cierre no es válida (AAAA-MM-DD)')
 	until_date!: string;
 
 	@ApiProperty({ minLength: 10 })
@@ -281,7 +281,7 @@ export class ClosePeriodDto {
 
 export class ReopenPeriodDto {
 	@ApiProperty({ example: '2026-07-01', description: 'Día 1 de un mes' })
-	@Matches(ISO_DATE, { message: 'from_date debe ser YYYY-MM-DD' })
+	@IsIsoDate('La fecha de reapertura no es válida (AAAA-MM-DD)')
 	from_date!: string;
 
 	@ApiProperty({ minLength: 10 })

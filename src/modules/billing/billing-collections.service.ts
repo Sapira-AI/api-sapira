@@ -4,6 +4,7 @@ import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { alignToPeriods, budgetMonthlyByDimension, round2, splitWeighted } from '@/modules/budgets/budgets-rules';
 import { type BudgetDetail, BudgetsService } from '@/modules/budgets/budgets.service';
@@ -191,7 +192,7 @@ export class BillingCollectionsService {
 	 * filtro de compañía (`scope`).
 	 */
 	async goal(holdingId: string, query: BillingGoalQueryDto, now = new Date()) {
-		const year = query.year ?? Number(todayFor(null, now).slice(0, 4));
+		const year = query.year ?? Number(todayFor(await holdingTimezone(this.dataSource, holdingId), now).slice(0, 4));
 		const [budget] = await this.budgets.activeFor(holdingId, 'cash_in', [year]);
 		const { months, scope } = this.budgetMonthsFor(budget, splitList(query.company_id));
 		const progress = await this.read.goalProgress(holdingId, { ...query, year }, months, now);
@@ -396,7 +397,7 @@ export class BillingCollectionsService {
 				error = caught instanceof Error ? caught.message : String(caught);
 				this.logger.warn(`Correo de cobro no enviado (holding ${holdingId}, cliente ${email.client_id ?? 'sin cliente'}): ${error}`);
 			}
-			await this.logCollection(holdingId, userId, email, status, todayFor(null, now), {
+			await this.logCollection(holdingId, userId, email, status, todayFor(await holdingTimezone(this.dataSource, holdingId), now), {
 				kind: 'collection',
 				bulk_id: bulkId,
 				client_id: email.client_id,
@@ -416,7 +417,7 @@ export class BillingCollectionsService {
 	}
 
 	private async planCollection(holdingId: string, dto: CollectionDto, now: Date) {
-		const today = todayFor(null, now);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 		const ids = [...new Set(dto.invoice_ids)];
 		const rows = (await this.read.rowsByIds(holdingId, ids, today)).map(mapInvoiceRow);
 		const settings = await this.settings(holdingId);
@@ -513,7 +514,7 @@ export class BillingCollectionsService {
 		const result = { sent: 0, skipped: 0, failed: 0 };
 
 		if (!settings.exists || !settings.dunning_enabled) return result;
-		const today = todayFor(null, now);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 		const page = await this.read.invoices(
 			holdingId,
 			{ document_kind: 'invoice', payment_state: 'unpaid,partial,overdue', limit: 200, page: 1, sortBy: 'due_date', sortOrder: 'asc' },

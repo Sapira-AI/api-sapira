@@ -152,7 +152,7 @@ Tipos: `state` ∈ `pending|partial|reconciled|ignored|debit` · `confidence` �
 | `GET /billing/reconciliation/templates` · `POST` · `PUT /:id` · `DELETE /:id` | VIEW/EDIT | `{ bank_name, mapping_name, column_mapping, is_default }` | plantilla(s) | — |
 | `POST /billing/reconciliation/matches/preview` | EDIT | `{ items[{ key?, movement_ids[] (1–20), allocations[{ invoice_id, amount, original_amount? }], fx?{ rate }, adjustments?[{ invoice_id, amount, reason, note? }], allow_multiple_clients?, source?: suggestion\|manual, confidence?, score? }] (≤ 200) }` | `{ items[{ key, ok, movement_ids, currency, invoice_currency, fx_rate, movements[{ id, amount, applied_before, applied_after, remaining_after, state_after }], invoices[{ invoice_id, invoice_number, client_name, contract_id, cash_amount, adjustment_amount, adjustment_reason, before, after }], blockers[], warnings[] }], summary{ ok, blocked, by_currency[{ currency, cash, adjustments, items }] } }` | los de `planPayments` + `movement_not_found`, `movement_is_debit`, `movement_not_pending`, `movement_overapplied`, `movement_currency_mixed`, `fx_required`, `fx_inconsistent`, `note_required`; aviso `multiple_clients` |
 | `POST /billing/reconciliation/matches` | EDIT | igual | Por ítem lo mismo + `{ applied, payment_ids, event_ids, error? }`; **todo o nada por ítem**, ítems independientes | igual |
-| `POST /billing/reconciliation/movements/:id/undo` | EDIT | `{ reason }` | `{ movement_id, voided_payment_ids, state }` | los de `void` (`already_voided`, `period_closed`), `movement_has_no_payments` |
+| `POST /billing/reconciliation/movements/:id/undo` | EDIT | `{ reason }` | `{ movement_id, voided_payment_ids, state }` | los de `void` (`already_voided`), `movement_has_no_payments` |
 | `POST /billing/reconciliation/movements/:id/ignore` · `/reopen` | EDIT | `{ reason }` · `{ reason? }` | `{ movement_id, state }` (reabrir guarda `{ reason, previous_reason, by, at }` en `original_row_data.reopened`) | `movement_has_payments`, `movement_not_pending`, `movement_not_ignored` |
 | `POST /billing/reconciliation/suggestions/refresh` | EDIT | `{ fee_threshold_pct? }` | `{ updated, by_confidence }` | — |
 
@@ -193,7 +193,7 @@ BFF: `app/api/facturacion/conciliacion/*` con schemas Zod espejo (`lib/schemas/f
 
 1. **Holding**: todo `WHERE holding_id = $1` con `@HoldingId()`; `bank_movements.holding_id` nullable: filas sin holding no se leen.
 2. **Permisos**: lecturas `VIEW_FACTURACION`; importar, conciliar, deshacer, ignorar, plantillas `EDIT_FACTURACION`.
-3. **Período cerrado**: `payment_date = movement_date`; si ≤ `get_cutoff_date` → `period_closed` (del plan). Deshacer en período cerrado: bloqueado igual que `void`.
+3. **Período cerrado** (cambio 03-10): `payment_date = movement_date`; **El cierre de períodos protege contratos e ítems; pagos, facturas y consumos se pueden registrar o mover en meses cerrados** (decisión de Domi 03-10): conciliar y deshacer en un mes cerrado se permiten.
 4. **Multimoneda**: el pago va en la moneda de la factura. Si el movimiento es de otra moneda, solo a mano con tipo de cambio explícito
    (`original_amount` + `fx_rate`); nunca se convierte en silencio. KPIs por moneda.
 5. **Idempotencia de línea**: `fingerprint = sha256(cuenta | fecha | monto | glosa normalizada | referencia o saldo | n.º de ocurrencia en el

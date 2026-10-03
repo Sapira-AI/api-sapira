@@ -29,8 +29,13 @@ describe('insertClientEntity (camino único de alta)', () => {
 	it('inserta la razón social y su vínculo no principal; los campos extra solo si traen valor', async () => {
 		const query = jest.fn(
 			async (...args: [string, unknown[]?]): Promise<any> =>
-				args[0].includes('INSERT INTO client_entities') ? [{ id: 'e-new' }] : [{ id: 'link-1' }]
+				args[0].includes('INSERT INTO client_entities')
+					? [{ id: 'e-new' }]
+					: args[0].includes('FROM countries')
+						? [{ code: 'CL', name_es: 'Chile', name_en: 'Chile' }]
+						: [{ id: 'link-1' }]
 		);
+		const call = (text: string) => query.mock.calls.find((entry) => String(entry[0]).includes(text)) as [string, unknown[]];
 
 		await insertClientEntity({ query } as never, 'h-1', {
 			client_id: 'c-1',
@@ -42,9 +47,10 @@ describe('insertClientEntity (camino único de alta)', () => {
 			payment_terms: null,
 		});
 
-		expect(query.mock.calls[0][1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', null, null, null]);
-		expect(query.mock.calls[1][0]).toContain('is_primary) VALUES ($1, $2, $3, false)');
-		expect(query).toHaveBeenCalledTimes(2);
+		// Ronda 3 de Configuración: el país en texto se resuelve a su código ISO (`country_code`) y viaja en el INSERT.
+		expect(call('INSERT INTO client_entities')[1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', 'CL', null, null, null]);
+		expect(call('INSERT INTO client_entity_clients')[0]).toContain('is_primary) VALUES ($1, $2, $3, false)');
+		expect(query).toHaveBeenCalledTimes(3);
 
 		query.mockClear();
 		await insertClientEntity(
@@ -63,9 +69,20 @@ describe('insertClientEntity (camino único de alta)', () => {
 			{ makePrimaryIfNone: true }
 		);
 
-		expect(query.mock.calls[0][0]).toContain('payment_terms, phone)');
-		expect(query.mock.calls[0][1]).toEqual(['h-1', 'c-1', 'N', '1-9', 'Chile', null, null, '{"kind":"net","days":30}', '+56 2']);
-		expect(query.mock.calls[2][0]).toContain('SET is_primary = true');
+		expect(call('INSERT INTO client_entities')[0]).toContain('payment_terms, phone)');
+		expect(call('INSERT INTO client_entities')[1]).toEqual([
+			'h-1',
+			'c-1',
+			'N',
+			'1-9',
+			'Chile',
+			'CL',
+			null,
+			null,
+			'{"kind":"net","days":30}',
+			'+56 2',
+		]);
+		expect(call('SET is_primary = true')).toBeDefined();
 	});
 });
 
@@ -106,10 +123,12 @@ describe('ClientDirectoryService · crear razón social', () => {
 		expect(row).toMatchObject({ id: 'e-new' });
 		expect(sqls(query).some((sql) => sql.includes('regexp_replace'))).toBe(false);
 		const tx = sqls(txQuery);
+		const insert = txQuery.mock.calls.find((entry) => String(entry[0]).includes('INSERT INTO client_entities')) as unknown[];
 
 		expect(tx[0]).toContain("set_config('sapira.writer', 'api', true)");
-		expect(tx[1]).toContain('INSERT INTO client_entities');
-		expect(txQuery.mock.calls[1][1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', 'Av. 1', null, null]);
+		expect(tx.some((sql) => sql.includes('INSERT INTO client_entities'))).toBe(true);
+		// Sin catálogo de países en el mock, el código queda null y el texto se respeta.
+		expect(insert[1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', null, 'Av. 1', null, null]);
 		expect(tx.some((sql) => sql.includes('SET is_primary = true'))).toBe(true);
 	});
 
@@ -131,8 +150,10 @@ describe('ClientDirectoryService · crear razón social', () => {
 
 		expect(tx[0]).toContain("set_config('sapira.writer', 'api', true)");
 		expect(tx[1]).toContain('odoo_partner_id = ANY');
-		expect(tx[2]).toContain('payment_terms, odoo_partner_id)');
-		expect(txQuery.mock.calls[2][1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', 'Av. 1', null, null, 200]);
+		const insert = txQuery.mock.calls.find((entry) => String(entry[0]).includes('INSERT INTO client_entities')) as unknown[];
+
+		expect(String(insert[0])).toContain('payment_terms, odoo_partner_id)');
+		expect(insert[1]).toEqual(['h-1', 'c-1', 'Norte SpA', '76.543.210-K', 'Chile', null, 'Av. 1', null, null, 200]);
 	});
 
 	it('Traer desde ERP: si el partner se vinculó a otra razón social mientras tanto, 409 dentro de la transacción y no inserta', async () => {

@@ -280,7 +280,7 @@ export function periodLabel(start: string | null, end: string | null): string {
 export function planPartialByPo(ctx: PartialByPoContext, input: PartialByPoInput): PartialByPoPlan {
 	const { invoice, context, rules } = ctx;
 	const errors: FieldError[] = [];
-	const blockers: InvoiceBlocker[] = invoiceOperability(invoice, context);
+	const blockers: InvoiceBlocker[] = invoiceOperability(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const taxRate = invoice.tax_rate === null ? 0 : invoice.tax_rate > 0 && invoice.tax_rate <= 1 ? round2(invoice.tax_rate * 100) : invoice.tax_rate;
 	const multi = isMultiCurrency(invoice);

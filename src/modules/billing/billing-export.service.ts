@@ -52,7 +52,7 @@ export class BillingExportService {
 		now = new Date()
 	) {
 		const { zip } = await this.workbook(holdingId, query, now);
-		const stamp = this.read.today(now);
+		const stamp = await this.read.today(now, holdingId);
 
 		response.setHeader('Content-Type', XLSX_CONTENT_TYPE);
 		response.setHeader(

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -6,6 +6,7 @@ import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PERMISSION_CODES } from '@/guards/permission-codes';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
+import { SettingsDbErrorsInterceptor } from '@/modules/settings/settings-db-errors';
 
 import { CreateProductDto, ProductsQueryDto, UpdateProductDto } from './dtos/products.dto';
 import { ProductsService } from './products.service';
@@ -14,6 +15,7 @@ import { ProductsService } from './products.service';
 @ApiTags('Productos')
 @Controller('products')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewContracts)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })

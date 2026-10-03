@@ -1,5 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
+import {
+	ACCOUNT_MAPPING_COLUMNS,
+	ACCOUNT_MAPPING_KEYS,
+	ACCOUNT_MAPPING_LABELS,
+	accountsCompleteSql,
+	localizeAccountName,
+} from '@/core/utils/account-mappings';
+
 import { type CurrencyContext, inactiveEmptyRowSql, MetricsDataService, realGapSql, SqlParams, unconvertedSql } from './metrics-data.service';
 import { addMonths, currentMonth, type Month, monthStart, resolveRange } from './metrics-period';
 import { balancesAt, forwardSchedule, indexByItem, type JournalAccount, journalMonths, type RevenueItemMonth, rollforward } from './revenue-balances';
@@ -565,7 +573,7 @@ export class RevenueMetricsService {
 	 * Asientos por mes de UNA compañía en su moneda (§1.7 "Asientos"), con el movimiento del período de diferido y por facturar: líneas
 	 * (a)–(d) + tipo de cambio por contrato (`journalMonths`), saldo inicial · movimiento · saldo final por cuenta y, con `groupBy`, las
 	 * líneas abiertas por mercado, industria, segmento, contrato, cliente o producto con subtotal por valor. Cuentas de
-	 * `company_account_mappings`; cuentas por cobrar y diferencia de cambio aún no están en el mapping (salen sin código).
+	 * `company_account_mappings` (las 5, M2) con su código del ERP (`external_code`); sin código salen en `missing_codes`.
 	 */
 	async journal(holdingId: string, query: RevenueJournalDto) {
 		const companies = query.companyId?.split(',').filter(Boolean) ?? [];
@@ -587,13 +595,21 @@ export class RevenueMetricsService {
 			this.cutoffs(holdingId, companies[0]),
 		]);
 		const cutoff = cutoffs[0]?.cutoff_date ?? null;
-		const accounts: Record<JournalAccount, { code: string | null; name: string }> = {
-			receivable: { code: null, name: 'Cuentas por cobrar' },
-			deferred: { code: str(mapping?.deferred_account_code), name: str(mapping?.deferred_account_name) ?? 'Ingresos diferidos' },
-			unbilled: { code: str(mapping?.unbilled_account_code), name: str(mapping?.unbilled_account_name) ?? 'Ingresos por facturar' },
-			revenue: { code: str(mapping?.revenue_account_code), name: str(mapping?.revenue_account_name) ?? 'Ingresos' },
-			fx_difference: { code: null, name: 'Diferencia de cambio' },
-		};
+		// Las 5 cuentas del mapping (Configuración › Compañía 360) con el código del ERP (`external_code`) para el export.
+		const accounts = Object.fromEntries(
+			ACCOUNT_MAPPING_KEYS.map((key) => {
+				const columns = ACCOUNT_MAPPING_COLUMNS[key];
+
+				return [
+					key,
+					{
+						code: str(mapping?.[columns.code]),
+						name: localizeAccountName(mapping?.[columns.name]) ?? ACCOUNT_MAPPING_LABELS[key],
+						external_code: str(mapping?.[columns.external]),
+					},
+				];
+			})
+		) as Record<JournalAccount, { code: string | null; name: string; external_code: string | null }>;
 		const journal = journalMonths(rows, months, groupBy ?? null);
 		const used = new Set(journal.flatMap((month) => month.entries.map((entry) => entry.account)));
 
@@ -645,7 +661,9 @@ export class RevenueMetricsService {
 			this.data.query(
 				`SELECT co.id::text AS company_id, co.legal_name AS company_name
 				FROM companies co
-				WHERE co.holding_id = $1 AND NOT EXISTS (SELECT 1 FROM company_account_mappings m WHERE m.company_id = co.id)
+				LEFT JOIN company_account_mappings m ON m.company_id = co.id
+				-- Mismo criterio que el árbol de Configuración: las 5 cuentas con código y nombre.
+				WHERE co.holding_id = $1 AND NOT ${accountsCompleteSql('m')}
 					AND EXISTS (SELECT 1 FROM revenue_schedule_monthly r WHERE r.company_id = co.id AND r.holding_id = $1)`,
 				[holdingId]
 			),
@@ -708,7 +726,9 @@ export class RevenueMetricsService {
 			...noMapping.map((row) => ({
 				type: 'no_account_mapping',
 				severity: 'warning',
-				message: 'Compañía sin cuentas contables configuradas: los asientos salen sin código',
+				message: 'Compañía sin las 5 cuentas contables completas: los asientos salen sin código',
+				/** Ronda 3 de Configuración: para enlazar a las cuentas contables de la Compañía 360. */
+				company_id: str(row.company_id),
 				contract_id: null,
 				contract_number: null,
 				client_name: null,

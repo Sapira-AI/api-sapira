@@ -58,7 +58,7 @@ const build = (handler: Handler = () => undefined) => {
 		if (custom !== undefined) return custom;
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 		if (sql.includes('SELECT DISTINCT holding_id FROM contracts')) return [{ holding_id: HOLDING }];
-		if (sql.includes('FROM holding_settings')) return [{ auto_renewal_notice_days: 30 }];
+		if (sql.includes('FROM holding_settings')) return [{ settings: { auto_renewal_notice_days: 30 } }];
 		if (sql.includes('FROM contract_items ci') && sql.includes('ci.auto_renew = true')) return [candidateRow];
 		if (sql.includes('FROM contract_scheduled_changes sc') && sql.includes("sc.trigger IN ('on_date', 'every_n_months')")) return [];
 		if (sql.includes('INSERT INTO contract_lifecycle_events')) return [{ id: 'event-1' }];
@@ -145,7 +145,9 @@ describe('job contracts-auto-renewal (§9.3.5)', () => {
 	});
 
 	it('ventana de aviso: el SQL filtra auto_renew, sin renovar ni churn, contrato active | pending_renewal y fin ≤ hoy + días del holding', async () => {
-		const { service, dataSource } = build((sql) => (sql.includes('FROM holding_settings') ? [{ auto_renewal_notice_days: 45 }] : undefined));
+		const { service, dataSource } = build((sql) =>
+			sql.includes('FROM holding_settings') ? [{ settings: { auto_renewal_notice_days: 45 } }] : undefined
+		);
 
 		await service.proposeRenewalsForHolding(HOLDING, today);
 		const [query] = calls(dataSource.query as jest.Mock, 'ci.auto_renew = true');
@@ -384,6 +386,50 @@ describe('alertas crecientes antes del vencimiento (S2-1 / S5-4, 7b)', () => {
 			title: 'CTR-2026-001: vence en 3 días · sin decisión',
 			deduplication_key: `contracts:renewal-reminder:${CONTRACT}:2026-10-01`,
 			recipients: { include_super_admins: true },
+		});
+	});
+
+	it('ronda 4: escalera y frecuencia vencido del holding (preferencias); escalones mayores que el aviso no cuentan', () => {
+		expect(reminderLadder(30, [45, 20, 0])).toEqual([30, 20, 0]);
+		expect(reminderLadder(90, [0, 60, 7, 60])).toEqual([90, 60, 7, 0]);
+		const ladder = reminderLadder(30, [20, 0]);
+
+		expect([25, 20, 5, 0, -13, -14, -29].map((days) => reminderThreshold(days, ladder, 14))).toEqual([30, 20, 20, 0, 0, -14, -28]);
+		const items = [{ item_id: 'a', contract_id: 'k1', contract_number: 'K1', product_name: 'A', end_date: '2026-10-08' }];
+
+		// Con la escalera por defecto, a 10 días tocaría el escalón 15; con [20, 0] sigue en 20.
+		expect(dueReminders(items, new Set(), '2026-09-28', 30, { steps: [20, 0] })[0].threshold_days).toBe(20);
+		expect(dueReminders(items, new Set(['k1:2026-10-08:0']), '2026-10-15', 30, { overdue_every_days: 14 })).toEqual([]);
+		expect(dueReminders(items, new Set(['k1:2026-10-08:0']), '2026-10-22', 30, { overdue_every_days: 14 })[0].threshold_days).toBe(-14);
+	});
+
+	it('ronda 4 · job 06:15 lee las preferencias del holding: escalera, frecuencia y zona horaria (hoy en Lima)', async () => {
+		const prefs: Handler = (sql) =>
+			sql.includes('FROM holding_settings')
+				? [
+						{
+							settings: {
+								auto_renewal_notice_days: 30,
+								renewal_reminder_days: [20, 0],
+								renewal_overdue_every_days: 14,
+								timezone: 'America/Lima',
+							},
+						},
+					]
+				: isReminderQuery(sql)
+					? [reminderRow('2026-10-08')]
+					: undefined;
+		const { service, runner } = build(prefs);
+
+		// 2026-09-28 04:30 UTC = 27-09 23:30 en Lima (y 28-09 01:30 en Santiago): el "hoy" es el de Lima → 11 días al fin → escalón 20.
+		expect(await service.remindRenewalsForHolding(HOLDING, new Date('2026-09-28T04:30:00Z'))).toBe(1);
+		const [insert] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(JSON.parse((insert[1] as unknown[])[7] as string)).toMatchObject({
+			threshold_days: 20,
+			days_to_end: 11,
+			ladder: [30, 20, 0],
+			overdue_every_days: 14,
 		});
 	});
 

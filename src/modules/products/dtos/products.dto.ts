@@ -9,14 +9,14 @@ export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 
 export class ProductsQueryDto {
 	@ApiPropertyOptional({ enum: ['active', 'archived', 'all'], default: 'all' })
-	@IsIn(['active', 'archived', 'all'], { message: 'status debe ser active, archived o all' })
+	@IsIn(['active', 'archived', 'all'], { message: 'El estado debe ser activo, archivado o todos' })
 	@IsOptional()
 	status?: ProductStatus | 'all';
 
 	@ApiPropertyOptional({ description: 'Busca en código y nombre' })
 	@Transform(trim)
-	@IsString()
-	@MaxLength(100)
+	@IsString({ message: 'La búsqueda debe ser texto' })
+	@MaxLength(100, { message: 'La búsqueda no puede superar 100 caracteres' })
 	@IsOptional()
 	search?: string;
 }
@@ -37,7 +37,7 @@ export class CreateProductDto {
 	name!: string;
 
 	@ApiPropertyOptional({ default: true })
-	@IsBoolean({ message: 'is_recurring debe ser verdadero o falso' })
+	@IsBoolean({ message: 'Recurrente debe ser sí o no' })
 	@IsOptional()
 	is_recurring?: boolean;
 }
@@ -60,7 +60,7 @@ export class UpdateProductDto {
 	name?: string;
 
 	@ApiPropertyOptional()
-	@IsBoolean({ message: 'is_recurring debe ser verdadero o falso' })
+	@IsBoolean({ message: 'Recurrente debe ser sí o no' })
 	@IsOptional()
 	is_recurring?: boolean;
 }

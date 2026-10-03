@@ -12,6 +12,7 @@ import {
 	Put,
 	Request,
 	UseGuards,
+	UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -37,6 +38,7 @@ import {
 } from './dtos/companies.dto';
 import { LogoUploadDto } from './dtos/holding.dto';
 import { SettingsCompaniesService } from './settings-companies.service';
+import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 
 import type { SettingsRequest } from './settings-common';
 
@@ -53,6 +55,7 @@ const actorOf = (req: SettingsRequest): PermissionContext => {
 @ApiTags('Settings · Compañías')
 @Controller('settings/companies')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewSettings)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })

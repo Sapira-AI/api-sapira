@@ -33,7 +33,7 @@ const invoice = (overrides: Record<string, unknown> = {}) => ({
 
 function build(options: { invoice?: Record<string, unknown>; invoices?: Record<string, unknown>[]; payment?: Record<string, unknown> } = {}) {
 	const runnerQuery = jest.fn<Promise<unknown[]>, [string, unknown[]?]>(async (sql) => {
-		if (sql.includes('get_cutoff_date')) return options.invoices ?? [invoice(options.invoice)];
+		if (sql.includes('AS total, i.due_date::text AS due_date, i.odoo_invoice_id')) return options.invoices ?? [invoice(options.invoice)];
 		if (sql.includes('INSERT INTO invoice_payments')) return [{ id: PAYMENT }];
 		if (sql.includes('INSERT INTO contract_lifecycle_events')) return [{ id: 'event-1' }];
 		if (sql.includes('FROM invoice_payments p WHERE p.id')) return options.payment ? [options.payment] : [];
@@ -231,15 +231,17 @@ describe('BillingPaymentsService', () => {
 		expect(result.payment_ids).toHaveLength(2);
 	});
 
-	it('anular con runner del llamador: sin transacción propia, confirmed = false; período cerrado bloquea', async () => {
+	it('anular con runner del llamador: sin transacción propia, confirmed = false; un mes cerrado no bloquea (Domi 03-10)', async () => {
 		const payment = { id: PAYMENT, invoice_id: INVOICE, amount: '10', currency: 'CLP', payment_date: '2026-09-20', confirmed: true };
 		const { runner, runnerQuery, service } = build({ invoice: { status: 'Emitida', paid: '10' }, payment });
 
 		await service.void(HOLDING, PAYMENT, { reason: 'Deshacer conciliación' }, 'auth-1', NOW, { runner: runner as never });
 		expect(runner.startTransaction).not.toHaveBeenCalled();
 		expect(sqls(runnerQuery).some((sql) => sql.includes('UPDATE invoice_payments SET confirmed = false'))).toBe(true);
-		await expect(
-			build({ invoice: { cutoff_date: '2026-09-30' }, payment }).service.void(HOLDING, PAYMENT, { reason: 'x' }, 'auth-1', NOW)
-		).rejects.toMatchObject({ response: { blockers: [expect.objectContaining({ code: 'period_closed' })] } });
+		const closed = build({ invoice: { status: 'Emitida', paid: '10', cutoff_date: '2026-09-30' }, payment });
+
+		await closed.service.void(HOLDING, PAYMENT, { reason: 'Pago mal registrado' }, 'auth-1', NOW);
+		expect(sqls(closed.runnerQuery).some((sql) => sql.includes('get_cutoff_date'))).toBe(false);
+		expect(sqls(closed.runnerQuery).some((sql) => sql.includes('UPDATE invoice_payments SET confirmed = false'))).toBe(true);
 	});
 });

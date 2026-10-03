@@ -4,7 +4,11 @@ import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength, Validat
 
 import { emptyToNull, trim } from './holding.dto';
 
-export const MASTER_DATA_CATEGORIES = ['payment_terms', 'item_types', 'units_of_measure'] as const;
+/**
+ * Listas de datos maestros editables en Configuración. `payment_terms` salió por decisión de Domi (03-10); mercados, segmentos e
+ * industrias (las de `clients.market/segment/industry`) volvieron en la ronda 3.
+ */
+export const MASTER_DATA_CATEGORIES = ['item_types', 'units_of_measure', 'markets', 'segments', 'industries'] as const;
 export type MasterDataCategory = (typeof MASTER_DATA_CATEGORIES)[number];
 
 export class CreateSellerDto {
@@ -53,7 +57,7 @@ export class UpdateSellerDto {
 	phone?: string | null;
 
 	@ApiPropertyOptional()
-	@IsBoolean({ message: 'is_active debe ser verdadero o falso' })
+	@IsBoolean({ message: 'Activo debe ser sí o no' })
 	@IsOptional()
 	is_active?: boolean;
 }
@@ -77,7 +81,7 @@ export class UpdateNamedDto {
 	name?: string;
 
 	@ApiPropertyOptional()
-	@IsBoolean({ message: 'is_active debe ser verdadero o falso' })
+	@IsBoolean({ message: 'Activo debe ser sí o no' })
 	@IsOptional()
 	is_active?: boolean;
 }
@@ -101,7 +105,7 @@ export class UpdateMasterDataDto {
 	value?: string;
 
 	@ApiPropertyOptional()
-	@IsBoolean({ message: 'is_active debe ser verdadero o falso' })
+	@IsBoolean({ message: 'Activo debe ser sí o no' })
 	@IsOptional()
 	is_active?: boolean;
 }

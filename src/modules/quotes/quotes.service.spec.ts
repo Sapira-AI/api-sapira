@@ -213,7 +213,7 @@ describe('QuotesService.create', () => {
 		expect(runner.commitTransaction).toHaveBeenCalled();
 		expect(runner.release).toHaveBeenCalled();
 		expect(calls(runner.query, 'pg_advisory_xact_lock')[0][1]).toEqual(['quotes:h-1:COT:2026']);
-		expect(calls(runner.query, 'regexp_match(quote_number')[0][1]).toEqual(['h-1', '^COT-2026-(\\d{1,6})$']);
+		expect(calls(runner.query, 'regexp_match(quote_number')[0][1]).toEqual(['h-1', '^COT-2026-(\\d{1,12})$']);
 		const [[insertSql, insertParams]] = calls(runner.query, 'INSERT INTO quotes') as Array<[string, unknown[]]>;
 
 		// Nada derivado se guarda: ni json de la condición, ni actor (va en el evento), ni `updated_at` (trigger).
@@ -335,7 +335,12 @@ describe('QuotesService.create', () => {
 
 		await rejects(noDraft.service.create(baseDto(), 'h-1', 'auth-1', NOW), 'stage_kind_missing');
 		expect(noDraft.runner.rollbackTransaction).toHaveBeenCalled();
-		const taken = build((sql) => (sql.includes('SELECT 1 FROM quotes WHERE holding_id = $1 AND quote_number') ? [{ '?column?': 1 }] : undefined));
+		const manualMode: Handler = (sql) => (sql.includes('to_jsonb(hs)') ? [{ settings: { quote_numbering_mode: 'manual' } }] : undefined);
+		const taken = build(
+			(sql, params) =>
+				manualMode(sql, params) ??
+				(sql.includes('SELECT 1 FROM quotes WHERE holding_id = $1 AND quote_number') ? [{ '?column?': 1 }] : undefined)
+		);
 
 		await rejects(taken.service.create(baseDto({ quote_number: 'Q-9' }), 'h-1', 'auth-1', NOW), 'quote_number_taken');
 		const foreign = build((sql) => (sql.includes('FROM products WHERE id = ANY') ? [] : undefined));
@@ -345,6 +350,58 @@ describe('QuotesService.create', () => {
 			response: { errors: [{ field: 'items.0.product_id', message: 'El producto no existe en el catálogo del holding' }] },
 		});
 		expect(calls(foreign.runner.query, 'INSERT INTO quotes')).toHaveLength(0);
+	});
+});
+
+describe('QuotesService.create · numeración del holding (Configuración ronda 4)', () => {
+	const withSettings =
+		(settings: Record<string, unknown>, extra: Handler = () => undefined): Handler =>
+		(sql, params) =>
+			sql.includes('to_jsonb(hs)') ? [{ settings }] : extra(sql, params);
+
+	it('manual: el número es obligatorio (400) y se guarda tal cual, único en el holding', async () => {
+		const manual = build(withSettings({ quote_numbering_mode: 'manual' }));
+
+		await expect(manual.service.create(baseDto(), 'h-1', 'auth-1', NOW)).rejects.toMatchObject({
+			constructor: BadRequestException,
+			response: { errors: [{ field: 'quote_number', message: 'Escribe el número de la cotización (el holding usa numeración manual)' }] },
+		});
+		expect(manual.runner.rollbackTransaction).toHaveBeenCalled();
+		const ok = build(withSettings({ quote_numbering_mode: 'manual' }));
+
+		await ok.service.create(baseDto({ quote_number: 'ACME-OCT-1' }), 'h-1', 'auth-1', NOW);
+		const [[, params]] = calls(ok.runner.query, 'INSERT INTO quotes') as Array<[string, unknown[]]>;
+
+		expect(params).toContain('ACME-OCT-1');
+		expect(calls(ok.runner.query, 'pg_advisory_xact_lock')[0][1]).toEqual(['quotes:h-1:number:ACME-OCT-1']);
+	});
+
+	it('automáticos: un número escrito a mano → 400; con prefijo sin año y ancho 5; solo correlativo', async () => {
+		const auto = build();
+
+		await expect(auto.service.create(baseDto({ quote_number: 'Q-9' }), 'h-1', 'auth-1', NOW)).rejects.toMatchObject({
+			constructor: BadRequestException,
+			response: { errors: [{ field: 'quote_number', message: 'Este holding numera las cotizaciones automáticamente: no escribas el número' }] },
+		});
+		const prefixed = build(
+			withSettings(
+				{ quote_numbering_mode: 'prefixed', quote_number_prefix: 'PROP', quote_number_include_year: false, quote_number_width: 5 },
+				(sql) => (sql.includes('regexp_match(quote_number') ? [{ next: 42 }] : undefined)
+			)
+		);
+
+		await prefixed.service.create(baseDto(), 'h-1', 'auth-1', NOW);
+		expect(calls(prefixed.runner.query, 'regexp_match(quote_number')[0][1]).toEqual(['h-1', '^PROP-(\\d{1,12})$']);
+		expect((calls(prefixed.runner.query, 'INSERT INTO quotes') as Array<[string, unknown[]]>)[0][1]).toContain('PROP-00042');
+		const sequential = build(
+			withSettings({ quote_numbering_mode: 'sequential', quote_number_width: 3 }, (sql) =>
+				sql.includes('regexp_match(quote_number') ? [{ next: 7 }] : undefined
+			)
+		);
+
+		await sequential.service.create(baseDto(), 'h-1', 'auth-1', NOW);
+		expect(calls(sequential.runner.query, 'pg_advisory_xact_lock')[0][1]).toEqual(['quotes:h-1:sequential']);
+		expect((calls(sequential.runner.query, 'INSERT INTO quotes') as Array<[string, unknown[]]>)[0][1]).toContain('007');
 	});
 });
 

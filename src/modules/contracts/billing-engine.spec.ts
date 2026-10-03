@@ -13,6 +13,7 @@ import {
 	normalizeCountry,
 	normalizeTaxRate,
 	PRORATED_PERIOD_CODE,
+	resolveTaxRate,
 	round2,
 	suggestDocumentType,
 } from './billing-engine';
@@ -235,6 +236,74 @@ describe('billing-engine', () => {
 
 			expect(result.invoices[0]).toMatchObject({ document_type: 'FACTURA', export_type: 0, tax_rate: 0, tax: 0 });
 			expect(result.warnings).toContain('Compañía de Colombia: el IVA no se calcula en Por Emitir; lo aplica el ERP al emitir');
+		});
+
+		describe('tasa por documento tributario (Configuración v2 ronda 3)', () => {
+			it('documento con tasa propia (34 exenta = 0) manda sobre la de la compañía', () => {
+				const result = generateInvoices({
+					contract: contract({ document_type: 'FACTURA', tax_document: { kind: 'invoice', tax_rate: 0 } }),
+					items: [item({ term_months: 1 })],
+				});
+
+				expect(result.invoices[0]).toMatchObject({ document_type: 'FACTURA', tax_rate: 0, tax: 0, total: 100 });
+				expect(result.warnings.some((warning) => warning.includes('IVA'))).toBe(false);
+			});
+
+			it('documento sin tasa (null) usa la de la compañía, aunque venga como fracción', () => {
+				const result = generateInvoices({
+					contract: contract({ company: { country: 'Chile', tax_rate: 0.19 }, tax_document: { kind: 'invoice', tax_rate: null } }),
+					items: [item({ term_months: 1 })],
+				});
+
+				expect(result.invoices[0]).toMatchObject({ tax_rate: 19, tax: 19 });
+			});
+
+			it('exportación sigue en 0 aunque el documento tenga tasa', () => {
+				const result = generateInvoices({
+					contract: contract({ document_type: 'FACTURA_EXPORTACION', tax_document: { kind: 'export_invoice', tax_rate: 19 } }),
+					items: [item({ term_months: 1 })],
+				});
+
+				expect(result.invoices[0]).toMatchObject({ document_type: 'FACTURA_EXPORTACION', export_type: 1, tax_rate: 0, tax: 0 });
+			});
+
+			it('Colombia sigue en 0 (lo aplica el ERP) aunque FE tenga 19', () => {
+				const result = generateInvoices({
+					contract: contract({
+						company: { country: 'Colombia', tax_rate: 19 },
+						entity_country: 'Colombia',
+						tax_document: { kind: 'invoice', tax_rate: 19 },
+					}),
+					items: [item({ term_months: 1 })],
+				});
+
+				expect(result.invoices[0]).toMatchObject({ tax_rate: 0, tax: 0 });
+				expect(result.warnings).toContain('Compañía de Colombia: el IVA no se calcula en Por Emitir; lo aplica el ERP al emitir');
+			});
+
+			it('resolveTaxRate: la tasa de un documento de exportación no se aplica a una factura nacional; 1 % no se lee como fracción', () => {
+				expect(
+					resolveTaxRate({
+						documentType: 'FACTURA',
+						companyCountry: 'CL',
+						companyTaxRate: 19,
+						document: { kind: 'export_invoice', tax_rate: 0 },
+					})
+				).toEqual({
+					rate: 19,
+					rule: 'company',
+				});
+				expect(
+					resolveTaxRate({ documentType: 'FACTURA', companyCountry: 'CL', companyTaxRate: 19, document: { kind: 'invoice', tax_rate: 1 } })
+				).toEqual({
+					rate: 1,
+					rule: 'document',
+				});
+				expect(resolveTaxRate({ documentType: 'FACTURA', companyCountry: 'PE', companyTaxRate: null })).toEqual({
+					rate: null,
+					rule: 'company',
+				});
+			});
 		});
 
 		it('tasa guardada como fracción (0,19) se usa como 19 %', () => {

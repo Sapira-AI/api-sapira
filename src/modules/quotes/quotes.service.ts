@@ -1,11 +1,13 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { loadHoldingPreferences, nextQuoteNumber } from '@/core/utils/holding-preferences';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 import type { PaymentTerms } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { setApiWriter } from '@/modules/contracts/api-writer';
 import { pricingFields } from '@/modules/contracts/api-written-fields';
 import { itemEndDate, round2 } from '@/modules/contracts/billing-engine';
+import { todayFor } from '@/modules/contracts/business-date';
 import { catalogPriceErrors, catalogPriceIds, loadCatalogPrices } from '@/modules/contracts/catalog-prices';
 import { cleanPaymentTerms, ContractDraftsService, parsePaymentTermsText, resolveUserId } from '@/modules/contracts/contract-drafts.service';
 import { derivedStatusLateral } from '@/modules/contracts/contract-status';
@@ -22,7 +24,6 @@ import {
 	DELETABLE_STAGE_KINDS,
 	deriveQuoteStatus,
 	EDIT_CONFIRMATION_STAGE_KINDS,
-	formatQuoteNumber,
 	isStageKind,
 	normalizeQuoteType,
 	QUOTE_CONTRACT_LATERAL,
@@ -31,7 +32,6 @@ import {
 	QUOTE_TYPE_LABELS,
 	type QuoteDerivedStatus,
 	type QuoteEventType,
-	quoteNumberPattern,
 	type QuoteStageKind,
 	quoteStatusLateral,
 	transitionError,
@@ -513,6 +513,7 @@ export class QuotesService {
 			entities,
 			[contractsRow],
 			[lastContract],
+			prefs,
 		] = await Promise.all([
 			this.dataSource.query<Row[]>(`SELECT id, name_commercial AS name, country FROM clients WHERE holding_id = $1 ORDER BY name_commercial`, [
 				holdingId,
@@ -571,6 +572,7 @@ export class QuotesService {
 						[clientId, holdingId]
 					)
 				: Promise.resolve([] as Row[]),
+			loadHoldingPreferences(this.dataSource, holdingId),
 		]);
 		const byCategory = (category: string) => masterData.filter((row) => row.category === category).map((row) => String(row.value));
 		const merge = (a: string[], b: string[]) => [...new Set([...a, ...b])].sort((x, y) => x.localeCompare(y, 'es'));
@@ -635,6 +637,16 @@ export class QuotesService {
 						active_contracts: activeContracts,
 					}
 				: null,
+			// Configuración ronda 4: si el formulario pide el número (manual) y el próximo número (vista previa) en los automáticos.
+			quote_numbering: {
+				mode: prefs.quote_numbering.mode,
+				next_number_preview: await nextQuoteNumber(
+					this.dataSource,
+					holdingId,
+					prefs.quote_numbering,
+					Number(todayFor(prefs.timezone).slice(0, 4))
+				),
+			},
 			defaults: {
 				quote_date: todayIso(),
 				valid_days: DEFAULT_VALID_DAYS,
@@ -895,30 +907,35 @@ export class QuotesService {
 	}
 
 	/**
-	 * Número (§8): manual → 409 si ya existe en el holding (también entre borradas). Automático → `COT-{año}-{NNNN}` = MAX de los
-	 * que calzan el patrón + 1, con `pg_advisory_xact_lock` por (holding, año). El Id de Salesforce sigue en `salesforce_opportunity_id`.
+	 * Número según la preferencia del holding (`holding_settings.quote_numbering_*`, Configuración ronda 4):
+	 * - `manual`: lo escribe la usuaria (obligatorio, 400 si falta) → 409 `quote_number_taken` si ya existe en el holding (también borradas).
+	 * - `prefixed` (default, `COT-{año}-{NNNN}`) / `sequential` (`NNNN`): lo genera la API (mayor del formato + 1, con
+	 *   `pg_advisory_xact_lock` por holding y formato); un número escrito a mano → 400.
+	 * El año es el del "hoy" del holding (su zona horaria). Las cotizaciones del CRM no pasan por aquí (conservan el id de la oportunidad).
 	 */
 	private async reserveNumber(runner: QueryRunner, manual: string | undefined, holdingId: string, now: Date): Promise<string> {
-		if (manual) {
-			await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`quotes:${holdingId}:number:${manual}`]);
-			const [existing] = (await runner.query(`SELECT 1 FROM quotes WHERE holding_id = $1 AND quote_number = $2 LIMIT 1`, [
-				holdingId,
-				manual,
-			])) as Row[];
+		const prefs = await loadHoldingPreferences(runner, holdingId);
+		const numbering = prefs.quote_numbering;
 
-			if (existing) throw conflict('quote_number_taken', `Ya existe una cotización con el número ${manual}`);
+		if (numbering.mode !== 'manual') {
+			if (manual)
+				throw validationException([
+					{ field: 'quote_number', message: 'Este holding numera las cotizaciones automáticamente: no escribas el número' },
+				]);
 
-			return manual;
+			return (await nextQuoteNumber(runner, holdingId, numbering, Number(todayFor(prefs.timezone, now).slice(0, 4)), true))!;
 		}
-		const year = Number(todayIso(now).slice(0, 4));
+		if (!manual)
+			throw validationException([{ field: 'quote_number', message: 'Escribe el número de la cotización (el holding usa numeración manual)' }]);
+		await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`quotes:${holdingId}:number:${manual}`]);
+		const [existing] = (await runner.query(`SELECT 1 FROM quotes WHERE holding_id = $1 AND quote_number = $2 LIMIT 1`, [
+			holdingId,
+			manual,
+		])) as Row[];
 
-		await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`quotes:${holdingId}:COT:${year}`]);
-		const [row] = (await runner.query(
-			`SELECT COALESCE(MAX((regexp_match(quote_number, $2))[1]::int), 0) + 1 AS next FROM quotes WHERE holding_id = $1 AND quote_number ~ $2`,
-			[holdingId, quoteNumberPattern(year)]
-		)) as Row[];
+		if (existing) throw conflict('quote_number_taken', `Ya existe una cotización con el número ${manual}`);
 
-		return formatQuoteNumber(year, toNumber(row?.next) || 1);
+		return manual;
 	}
 
 	private async insertQuote(
@@ -1520,7 +1537,7 @@ export class QuotesService {
 				throw conflict('stage_kind_missing', 'El holding no tiene una etapa de tipo borrador (kind draft): configúrala en Etapas');
 			const resolved = resolveQuoteItems(body.items, context.products);
 			const header = QuotesService.headerValues(body, context, resolved, now);
-			const quoteNumber = await this.reserveNumber(runner, undefined, holdingId, now);
+			const quoteNumber = await this.reserveNumber(runner, dto.quote_number, holdingId, now);
 
 			newId = await this.insertQuote(runner, {
 				holdingId,

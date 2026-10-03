@@ -305,13 +305,13 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(missing.blockers)).toEqual(['fx_rate_missing']);
 		});
 
-		it('borrador en el ERP y período cerrado bloquean; auto-envío al ERP y fecha futura solo avisan; RSM desde el mes más temprano', () => {
+		it('borrador en el ERP bloquea y un mes cerrado no (Domi 03-10: el cierre protege contratos e ítems, no facturas); auto-envío al ERP y fecha futura solo avisan; RSM desde el mes más temprano', () => {
 			const blocked = planMarkIssued(invoice({ odoo_invoice_id: 5, invoice_currency: 'USD' }), context({ cutoff_date: '2026-09-30' }), {
 				invoice_number: 'A',
 				issue_date: '2026-09-15',
 			});
 
-			expect(codes(blocked.blockers)).toEqual(['sent_to_erp_draft', 'period_closed']);
+			expect(codes(blocked.blockers)).toEqual(['sent_to_erp_draft']);
 			const soft = planMarkIssued(invoice({ invoice_currency: 'USD', period_start: '2026-11-01' }), context(), {
 				invoice_number: 'A',
 				issue_date: '2026-10-05',
@@ -422,12 +422,11 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(plan.after.original_issue_date).toBe('2026-10-01');
 		});
 
-		it('fecha pasada avisa (el scheduler no la tomará); misma fecha avisa; período cerrado y borrador ERP bloquean', () => {
+		it('fecha pasada avisa (el scheduler no la tomará); misma fecha avisa; borrador ERP bloquea; un mes cerrado no (Domi 03-10: el cierre protege contratos e ítems, no facturas)', () => {
 			expect(codes(planRescheduleOne(invoice(), context(), '2026-09-01').warnings)).toEqual(['past_issue_date']);
 			expect(codes(planRescheduleOne(invoice(), context(), '2026-10-01').warnings)).toEqual(['same_date', 'outside_current_month']);
 			expect(codes(planRescheduleOne(invoice({ odoo_invoice_id: 3 }), context({ cutoff_date: '2026-09-30' }), '2026-09-10').blockers)).toEqual([
 				'sent_to_erp_draft',
-				'period_closed',
 			]);
 			expect(codes(planRescheduleOne(invoice({ status: 'Emitida' }), context(), '2026-10-10').blockers)).toEqual(['not_pending']);
 		});
@@ -632,10 +631,8 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(plan.after.total_invoice_currency).toBe(2380);
 		});
 
-		it('período cerrado en la fecha de emisión bloquea el cambio de tasa', () => {
-			expect(codes(planFx(invoice(), lines, context({ cutoff_date: '2026-10-31' }), { policy: 'fixed', rate: 900 }).blockers)).toEqual([
-				'period_closed',
-			]);
+		it('un mes cerrado en la fecha de emisión NO bloquea el cambio de tasa (Domi 03-10: el cierre protege contratos e ítems, no facturas)', () => {
+			expect(codes(planFx(invoice(), lines, context({ cutoff_date: '2026-10-31' }), { policy: 'fixed', rate: 900 }).blockers)).toEqual([]);
 		});
 
 		it('fixedFxLines: los centavos residuales de convertir van a la línea mayor (Σ líneas = total × tasa)', () => {
@@ -834,7 +831,7 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(planErpReset(invoice({ invoice_type: 'Unificada', odoo_invoice_id: 5 }), context()).blockers)).toEqual(['unified_invoice']);
 			expect(codes(planErpReset(invoice({ is_legacy: true, odoo_invoice_id: 5 }), context()).blockers)).toEqual(['legacy_invoice']);
 			expect(codes(planErpReset(invoice({ document_type: 'NC', odoo_invoice_id: 5 }), context()).blockers)).toEqual(['credit_note']);
-			expect(codes(planErpReset(invoice({ odoo_invoice_id: 5 }), context({ cutoff_date: '2026-10-31' })).blockers)).toEqual(['period_closed']);
+			expect(codes(planErpReset(invoice({ odoo_invoice_id: 5 }), context({ cutoff_date: '2026-10-31' })).blockers)).toEqual([]);
 		});
 
 		it('el bloqueo sent_to_erp_draft de las demás operaciones ofrece la acción erp_reset', () => {

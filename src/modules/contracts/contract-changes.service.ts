@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { insertClientEntity } from '@/modules/clients/client-entity-writer';
 
@@ -184,7 +185,13 @@ export class ContractChangesService {
 	): Promise<ChangePreview> {
 		validateChangeRequest(dto);
 		const resolved = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const ctx = await this.loadContext(this.dataSource, resolved.id, holdingId, dto, todayFor(null, today));
+		const ctx = await this.loadContext(
+			this.dataSource,
+			resolved.id,
+			holdingId,
+			dto,
+			todayFor(await holdingTimezone(this.dataSource, holdingId), today)
+		);
 		const plan = planChange(ctx, dto, options);
 
 		await this.planPendingTerms(this.dataSource, ctx, dto, plan, holdingId, false);
@@ -253,6 +260,8 @@ export class ContractChangesService {
 		const resolved = await this.contracts.resolveContract(idOrNumber, holdingId);
 		const userId = await resolveUserId(this.dataSource, authId);
 		const key = idempotencyKey?.trim() || null;
+		// "Hoy" del holding en su zona (ronda 4 de Configuración), leído antes de abrir la transacción.
+		const day = todayFor(await holdingTimezone(this.dataSource, holdingId), today);
 		const runner = this.dataSource.createQueryRunner();
 		let active = false;
 
@@ -298,8 +307,7 @@ export class ContractChangesService {
 					// La respuesta repite el preview guardado al aplicar (eventos anteriores sin preview: el contrato actual sin reglas).
 					const stored = metadata.preview as ChangePreview | undefined;
 					const preview =
-						stored ??
-						this.previewWithoutRules(await this.loadContext(this.dataSource, resolved.id, holdingId, dto, todayFor(null, today)), dto);
+						stored ?? this.previewWithoutRules(await this.loadContext(this.dataSource, resolved.id, holdingId, dto, day), dto);
 
 					return {
 						...preview,
@@ -315,7 +323,7 @@ export class ContractChangesService {
 					};
 				}
 			}
-			const ctx = await this.loadContext(runner, resolved.id, holdingId, dto, todayFor(null, today));
+			const ctx = await this.loadContext(runner, resolved.id, holdingId, dto, day);
 			const plan = planChange(ctx, dto, options);
 			const pendingTerms = await this.planPendingTerms(runner, ctx, dto, plan, holdingId, true);
 
@@ -411,7 +419,8 @@ export class ContractChangesService {
 	 * faltante) se omite con un aviso en el log. Devuelve cuántos contratos se extendieron.
 	 */
 	async extendHorizonForHolding(holdingId: string, actorId: string, today = new Date()): Promise<number> {
-		const day = todayFor(null, today);
+		// "Hoy" del holding (ronda 4 de Configuración: `timezone`); el horizonte es fijo (`HORIZON_PERIODS_AHEAD`).
+		const day = todayFor(await holdingTimezone(this.dataSource, holdingId), today);
 		const contracts = (await this.dataSource.query(
 			`SELECT DISTINCT c.id FROM contracts c
 			JOIN contract_items ci ON ci.contract_id = c.id AND ci.holding_id = c.holding_id
@@ -1480,7 +1489,7 @@ export class ContractChangesService {
 				`SELECT c.id, c.contract_number, c.status, c.client_id, c.client_entity_id, c.company_id, c.quote_id,
 					c.contract_currency, c.invoice_currency, c.system_currency, c.company_currency AS contract_company_currency,
 					c.fx_invoice_policy, c.fx_company_policy, c.group_invoices_by_period, c.auto_invoice, c.auto_send_to_odoo, c.requires_references_for_billing,
-					c.billing_anchor_day, c.payment_terms, c.document_type, c.tax_document_type_id, tdt.kind AS tax_document_type_kind,
+					c.billing_anchor_day, c.payment_terms, c.document_type, c.tax_document_type_id, tdt.kind AS tax_document_type_kind, tdt.tax_rate AS tax_document_tax_rate,
 					tdt.description_max_chars AS own_description_max_chars, ${DESCRIPTION_LIMITS_SQL} AS description_limits,
 					c.invoice_terms_and_conditions, c.total_value, c.contract_end_date::text AS contract_end_date, c.invoice_description_template,
 					co.legal_name AS company_legal_name, co.tax_id AS company_tax_id, co.legal_address AS company_address, co.country AS company_country,
@@ -1570,8 +1579,9 @@ export class ContractChangesService {
 						Row[]
 					>)
 				: Promise.resolve([] as Row[]),
-			change.type === 'billing_conditions' && change.tax_document_type_id
-				? (db.query(`SELECT id, code, name, kind, country_code FROM tax_document_types WHERE id = $1 AND is_active = true`, [
+			(change.type === 'billing_conditions' || change.type === 'change_entity') && change.tax_document_type_id
+				? // El catálogo tiene `active` (no `is_active`); `tax_rate` = tasa del documento (ronda 3 de Configuración).
+					(db.query(`SELECT id, code, name, kind, country_code, tax_rate FROM tax_document_types WHERE id = $1 AND active = true`, [
 						change.tax_document_type_id,
 					]) as Promise<Row[]>)
 				: Promise.resolve([] as Row[]),
@@ -1626,6 +1636,7 @@ export class ContractChangesService {
 			document_type: toText(contractRow.document_type),
 			tax_document_type_id: toText(contractRow.tax_document_type_id),
 			tax_document_type_kind: toText(contractRow.tax_document_type_kind),
+			tax_document_tax_rate: toNullableNumber(contractRow.tax_document_tax_rate),
 			invoice_terms_and_conditions: toText(contractRow.invoice_terms_and_conditions),
 			total_value: toNullableNumber(contractRow.total_value),
 			contract_end_date: toText(contractRow.contract_end_date),
@@ -1800,7 +1811,13 @@ export class ContractChangesService {
 				: null,
 			products: new Map(productRows.map((row) => [String(row.id), String(row.name ?? '')])),
 			tax_document_type: taxDocAllowed
-				? { id: String(taxDoc.id), code: toText(taxDoc.code) ?? '', name: toText(taxDoc.name) ?? '', kind: toText(taxDoc.kind) ?? '' }
+				? {
+						id: String(taxDoc.id),
+						code: toText(taxDoc.code) ?? '',
+						name: toText(taxDoc.name) ?? '',
+						kind: toText(taxDoc.kind) ?? '',
+						tax_rate: toNullableNumber(taxDoc.tax_rate),
+					}
 				: null,
 			quote: quote
 				? {

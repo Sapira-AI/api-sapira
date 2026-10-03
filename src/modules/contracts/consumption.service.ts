@@ -1,6 +1,7 @@
-import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
@@ -43,7 +44,7 @@ import {
 	type QuantityRow,
 	voidedSql,
 } from './contract-360';
-import { ERP_DRAFT_STALE_MESSAGE, REOPEN_PERIOD_STEP } from './contract-changes';
+import { ERP_DRAFT_STALE_MESSAGE } from './contract-changes';
 import { insertMirrorCreditNote } from './contract-changes.service';
 import { cleanPaymentTerms, resolveUserId } from './contract-drafts.service';
 import { INVOICE_EVENT_TYPES } from './contract-invoices';
@@ -91,37 +92,11 @@ const DEFAULT_LIMIT = 25;
 /** Revisiones por entry que devuelve `GET /contracts/:id/consumption` (más nuevas primero). */
 export const MAX_REVISIONS = 20;
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-const todayIso = () => todayFor();
 /** Línea del período con la fecha de envío al ERP (borrador): `odoo_invoice_id` o `sent_to_odoo_at` = borrador vigente. */
 type PeriodLine = ConsumptionPeriodLine & { sent_to_odoo_at?: string | null };
 const hasErpDraft = (line: PeriodLine) => (line.odoo_invoice_id !== null && line.odoo_invoice_id !== undefined) || Boolean(line.sent_to_odoo_at);
 export const ERP_DRAFT_STALE_CODE = 'erp_draft_stale';
 
-/**
- * Fechas que el consumo mueve (spec pricing §4.3/§4.4): el período de la línea (devengo) y la emisión de la factura que lo lleva (la Por
- * Emitir recalculada o la nueva de hoy). Una en período cerrado → 409 `period_closed`, como el resto de las operaciones.
- */
-export function consumptionPeriodClosed(
-	cutoff: string | null,
-	periodStart: string,
-	issueDate: string | null
-): { code: string; message: string; next_step: string } | null {
-	if (!cutoff) return null;
-	if (periodStart <= cutoff)
-		return {
-			code: 'period_closed',
-			message: `El período del consumo (${periodStart}) cae en un período cerrado (cierre al ${cutoff})`,
-			next_step: REOPEN_PERIOD_STEP,
-		};
-	if (issueDate && issueDate <= cutoff)
-		return {
-			code: 'period_closed',
-			message: `La emisión de la factura (${issueDate}) cae en un período cerrado (cierre al ${cutoff})`,
-			next_step: REOPEN_PERIOD_STEP,
-		};
-
-	return null;
-}
 /** Fila de respuesta sin los montos internos (`amounts`) que solo usa la escritura. */
 const stripAmounts = (part: ConsumptionLineRow & { amounts: LineAmounts }): ConsumptionLineRow => {
 	const copy: Partial<ConsumptionLineRow & { amounts: LineAmounts }> = { ...part };
@@ -535,7 +510,7 @@ export class ConsumptionService {
 			is_legacy: row.is_legacy === true,
 		}));
 
-		return buildConsumption({ entries, quantities, items, lines, today: todayFor(null, today) });
+		return buildConsumption({ entries, quantities, items, lines, today: todayFor(await holdingTimezone(this.dataSource, holdingId), today) });
 	}
 
 	// ---------------------------------------------------------------- lectura: pendientes de informar
@@ -548,7 +523,7 @@ export class ConsumptionService {
 	async pending(holdingId: string, query: QueryConsumptionPendingDto, contractId?: string, today = new Date()) {
 		const limit = query.limit ?? DEFAULT_LIMIT;
 		const page = query.page ?? 1;
-		const params: unknown[] = [holdingId, todayFor(null, today)];
+		const params: unknown[] = [holdingId, todayFor(await holdingTimezone(this.dataSource, holdingId), today)];
 		const where: string[] = [
 			`i.holding_id = $1`,
 			`i.is_active = true`,
@@ -654,7 +629,6 @@ export class ConsumptionService {
 		const existing = await this.loadEntry(this.dataSource, item.id, periodStart);
 		const plan = this.plan(item, lines, existing, periodStart, dto);
 
-		this.assertOpenPeriod(plan, periodStart, await this.cutoffOf(this.dataSource, contract.id, holdingId, false));
 		const base = {
 			entry: { ...plan.entry, id: existing?.id ?? null },
 			line: plan.line,
@@ -676,7 +650,7 @@ export class ConsumptionService {
 
 		if (plan.mode === 'additional' && plan.reference && plan.additional && plan.priced) {
 			const header = await this.loadInvoiceHeader(this.dataSource, plan.reference.invoice_id, holdingId);
-			const draft = this.additionalDraft(item, plan, header);
+			const draft = this.additionalDraft(item, plan, header, todayFor(await holdingTimezone(this.dataSource, holdingId)));
 
 			const [row] = draft.lines.map(stripAmounts);
 			const warnings = [...base.warnings];
@@ -696,7 +670,7 @@ export class ConsumptionService {
 		if (plan.mode === 'reissue' && plan.issued && plan.priced) {
 			const header = await this.loadInvoiceHeader(this.dataSource, plan.issued.invoice_id, holdingId);
 			const issuedLines = await this.loadInvoiceLines(this.dataSource, header.id, holdingId);
-			const draft = this.reissueDraft(item, plan, header, issuedLines);
+			const draft = this.reissueDraft(item, plan, header, issuedLines, todayFor(await holdingTimezone(this.dataSource, holdingId)));
 			const warnings = [...base.warnings];
 			const warningCodes = [...base.warning_codes];
 
@@ -1285,7 +1259,7 @@ export class ConsumptionService {
 	 * Complementaria (§4.4): una sola línea con la diferencia, encabezado = esa línea, mismo receptor/emisor/moneda/política FX que
 	 * la factura de referencia (la emitida, o la Por Emitir del período). Fecha de emisión = hoy; vencimiento según condición de pago.
 	 */
-	private additionalDraft(item: MeteredItem, plan: WritePlan, header: IssuedInvoiceHeader) {
+	private additionalDraft(item: MeteredItem, plan: WritePlan, header: IssuedInvoiceHeader, issueDay: string) {
 		const issued = plan.reference!;
 		const pending = isPendingLine(issued);
 		const fx = this.newInvoiceFx(header);
@@ -1296,7 +1270,7 @@ export class ConsumptionService {
 		});
 		const amounts = lineAmounts(priced, header.tax_rate, fx);
 		const base = lineDescription(item.product_name ?? 'Producto', item.account, issued.billing_period_start, issued.billing_period_end);
-		const issueDate = todayIso();
+		const issueDate = issueDay;
 		const fit: FitCounter = { count: 0 };
 		const suffix = ` - Consumo adicional sobre ${header.invoice_number ?? header.id}`;
 		const line: ConsumptionLineRow & { amounts: LineAmounts } = {
@@ -1360,7 +1334,7 @@ export class ConsumptionService {
 	 * Reemisión (§4.4): NC espejo completa de la emitida (ratio 1, `issue_error`, `cancellation`) y factura nueva Por Emitir del
 	 * período con todas las líneas de la emitida, salvo las de este ítem y período, que se reemplazan por las recalculadas.
 	 */
-	private reissueDraft(item: MeteredItem, plan: WritePlan, header: IssuedInvoiceHeader, issuedLines: IssuedLineRow[]) {
+	private reissueDraft(item: MeteredItem, plan: WritePlan, header: IssuedInvoiceHeader, issuedLines: IssuedLineRow[], issueDay: string) {
 		const issued = plan.issued!;
 		const fx = this.newInvoiceFx(header);
 		const replaced = new Set(plan.issued_lines.map((line) => line.line_id));
@@ -1414,7 +1388,7 @@ export class ConsumptionService {
 		const headerTotals = headerAmounts(subtotal, tax, header.tax_rate, fx);
 		const creditSubtotal = round2(issuedLines.reduce((sum, line) => sum + line.subtotal, 0));
 		const creditTax = round2(issuedLines.reduce((sum, line) => sum + line.tax_amount, 0));
-		const issueDate = todayIso();
+		const issueDate = issueDay;
 		const notes = `Reemisión de ${header.invoice_number ?? header.id} por consumo corregido de "${item.product_name ?? ''}" del período ${
 			issued.billing_period_start
 		} a ${issued.billing_period_end} (la emitida se anula con nota de crédito espejo)`.replace(/\s+/g, ' ');
@@ -1460,8 +1434,9 @@ export class ConsumptionService {
 		try {
 			// Costura `sapira.writer = 'api'`: primera sentencia (los triggers legacy no corren; la API escribe cada campo).
 			await setApiWriter(runner);
-			// Lock del contrato antes que nada (mismo orden que modificaciones y facturas: contrato → facturas → líneas), con su cierre de períodos.
-			const cutoff = await this.cutoffOf(runner, contractId, holdingId, true);
+			// Lock del contrato antes que nada (mismo orden que modificaciones y facturas: contrato → facturas → líneas). El cierre de períodos
+			// NO bloquea consumos (Domi 03-10: protege solo contratos e ítems; pagos, facturas y consumos se registran o mueven en meses cerrados).
+			await this.lockContract(runner, contractId, holdingId);
 			const item = await this.loadMeteredItem(runner, itemId, contractId, holdingId);
 
 			if (dto.idempotency_key?.trim()) {
@@ -1499,7 +1474,6 @@ export class ConsumptionService {
 			const existing = await this.loadEntry(runner, item.id, periodStart, true);
 			const plan = this.plan(item, lines, existing, periodStart, dto);
 
-			this.assertOpenPeriod(plan, periodStart, cutoff);
 			const entry = { ...plan.entry, source };
 			let invoice: ConsumptionInvoiceView | null = null;
 			let resultLines: ConsumptionLineRow[] = [];
@@ -1573,7 +1547,7 @@ export class ConsumptionService {
 				};
 			} else if (plan.mode === 'additional' && plan.reference && plan.additional) {
 				const header = await this.loadInvoiceHeader(runner, plan.reference.invoice_id, holdingId);
-				const draft = this.additionalDraft(item, plan, header);
+				const draft = this.additionalDraft(item, plan, header, todayFor(await holdingTimezone(this.dataSource, holdingId)));
 
 				addFittedWarning(plan.warnings, plan.warning_codes, draft.fitted_lines, item.description_max_chars);
 				const invoiceId = await this.insertInvoiceHeader(runner, header, draft, holdingId);
@@ -1601,7 +1575,7 @@ export class ConsumptionService {
 			} else if (plan.mode === 'reissue' && plan.issued && plan.priced) {
 				const header = await this.loadInvoiceHeader(runner, plan.issued.invoice_id, holdingId);
 				const issuedLines = await this.loadInvoiceLines(runner, header.id, holdingId);
-				const draft = this.reissueDraft(item, plan, header, issuedLines);
+				const draft = this.reissueDraft(item, plan, header, issuedLines, todayFor(await holdingTimezone(this.dataSource, holdingId)));
 
 				addFittedWarning(plan.warnings, plan.warning_codes, draft.fitted_lines, item.description_max_chars);
 				const creditNoteId = await insertMirrorCreditNote(
@@ -1911,7 +1885,7 @@ export class ConsumptionService {
 			target.invoice_id,
 			{ contract_currency: target.contract_currency, invoice_currency: target.invoice_currency, tax_rate: target.tax_rate },
 			target.fx,
-			target.issue_date ?? todayIso(),
+			target.issue_date ?? todayFor(await holdingTimezone(this.dataSource, holdingId)),
 			plan.parts.map((part) => ({
 				contract_item_id: item.id,
 				product_id: target.product_id ?? null,
@@ -2211,25 +2185,12 @@ export class ConsumptionService {
 	// ---------------------------------------------------------------- lectura de apoyo
 
 	/** Ítem del contrato (medido o estándar). El 409 `item_not_metered` ya no vive aquí: lo decide `plan` según la factura del período. */
-	/** Cierre de períodos de la compañía del contrato (`get_cutoff_date`); con `lock`, además bloquea el contrato (`FOR UPDATE`). */
-	private async cutoffOf(db: Queryable, contractId: string, holdingId: string, lock: boolean): Promise<string | null> {
-		const [row] = (await db.query(
-			`SELECT c.id, public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date FROM contracts c
-			WHERE c.id = $1 AND c.holding_id = $2 AND c.deleted_at IS NULL${lock ? ' FOR UPDATE' : ''}`,
-			[contractId, holdingId]
-		)) as Row[];
-
-		return toText(row?.cutoff_date)?.slice(0, 10) ?? null;
-	}
-
-	/** 409 `period_closed` si el consumo mueve una fecha en período cerrado (el período de la línea o la emisión de la factura que lo lleva). */
-	private assertOpenPeriod(plan: WritePlan, periodStart: string, cutoff: string | null) {
-		if (plan.mode === 'none') return;
-		const issueDate = plan.mode === 'recompute' ? (plan.target?.issue_date ?? null) : todayIso();
-		const blocker = consumptionPeriodClosed(cutoff, periodStart, issueDate);
-
-		if (blocker)
-			throw new ConflictException({ message: `No se puede registrar el consumo: ${blocker.message}`, code: 'blocked', blockers: [blocker] });
+	/** Bloquea el contrato (`FOR UPDATE`) para serializar escrituras de consumo. Sin chequeo de cierre de períodos (Domi 03-10). */
+	private async lockContract(db: Queryable, contractId: string, holdingId: string): Promise<void> {
+		await db.query(`SELECT c.id FROM contracts c WHERE c.id = $1 AND c.holding_id = $2 AND c.deleted_at IS NULL FOR UPDATE`, [
+			contractId,
+			holdingId,
+		]);
 	}
 
 	private async loadMeteredItem(db: Queryable, itemId: string, contractId: string, holdingId: string): Promise<MeteredItem> {

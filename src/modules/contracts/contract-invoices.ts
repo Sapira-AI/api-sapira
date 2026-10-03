@@ -8,7 +8,6 @@ import {
 	UNMAPPED_PRODUCTS_SQL,
 	unmappedProductsMessage,
 } from './contract-360';
-import { REOPEN_PERIOD_STEP } from './contract-changes';
 import { cleanPaymentTerms } from './contract-drafts.service';
 import { CONSOLIDATION_EVENT_TYPES } from './invoice-consolidation-read';
 import { codedValidationException, MULTICURRENCY_CODES, pairKey, upperCode, valuateLinesByPair } from './multicurrency';
@@ -269,17 +268,6 @@ export function partialBillingBlocker(invoice: Pick<ContractInvoiceRow, 'interna
 	};
 }
 
-/** Fecha en período cerrado → `period_closed` (misma regla que las modificaciones). */
-export function periodClosedBlocker(date: string | null, context: ContractInvoiceContext, what: string): InvoiceBlocker | null {
-	if (!date || !context.cutoff_date || date > context.cutoff_date) return null;
-
-	return {
-		code: 'period_closed',
-		message: `${what} (${date}) cae en un período cerrado (cierre al ${context.cutoff_date})`,
-		next_step: REOPEN_PERIOD_STEP,
-	};
-}
-
 export const isMultiCurrency = (invoice: Pick<ContractInvoiceRow, 'contract_currency' | 'invoice_currency'>) =>
 	!!invoice.invoice_currency && !!invoice.contract_currency && invoice.invoice_currency.toUpperCase() !== invoice.contract_currency.toUpperCase();
 
@@ -504,10 +492,8 @@ export function planMarkIssued(
 	const blockers = commonBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
-	const closed = periodClosedBlocker(input.issue_date, context, 'La fecha de emisión');
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	if (invoice.lines_count === 0) blockers.push({ code: 'no_lines', message: 'La factura no tiene líneas', next_step: null });
 	const multi = isMultiCurrency(invoice);
 	const bodyRate = input.fx_rate && input.fx_rate > 0 ? round6(input.fx_rate) : null;
@@ -604,10 +590,8 @@ export function planRescheduleOne(invoice: ContractInvoiceRow, context: Contract
 	const blockers = commonBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
-	const closed = periodClosedBlocker(issueDate, context, 'La nueva fecha de emisión');
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	if (invoice.issue_date === issueDate) warnings.push({ code: 'same_date', message: 'La fecha de emisión no cambia' });
 	if (issueDate < context.today) {
 		warnings.push({
@@ -1063,10 +1047,8 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 
 	if (draft) blockers.push(draft);
 	const partial = partialBillingBlocker(invoice);
-	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
 
 	if (partial) blockers.push(partial);
-	if (closed) blockers.push(closed);
 	// Multimoneda: el documento se valoriza por par (líneas en monedas de ítem distintas).
 	if (hasPairLines(invoice, lines)) {
 		if ((invoice.invoice_currency ?? '').toUpperCase() === 'CLF') {
@@ -1221,12 +1203,10 @@ export interface ErpResetPlan {
  */
 export function planErpReset(invoice: ContractInvoiceRow, context: ContractInvoiceContext, lines: ContractInvoiceLineRow[] = []): ErpResetPlan {
 	const blockers = commonBlockers(invoice);
-	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
 
 	if (!blockers.some((blocker) => blocker.code === 'credit_note') && invoice.odoo_invoice_id === null && invoice.sent_to_odoo_at === null) {
 		blockers.push({ code: 'not_sent_to_erp', message: 'La factura no está vinculada al ERP: no hay borrador que restablecer', next_step: null });
 	}
-	if (closed) blockers.push(closed);
 	const spotReset =
 		isMultiCurrency(invoice) &&
 		context.contract_fx_invoice_policy === 'spot' &&

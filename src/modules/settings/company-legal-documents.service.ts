@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
 
-import { assertCompanyInHolding, Row, toIsoDate, toNumber } from './settings-common';
+import { assertCompanyInHolding, Row, toIsoDate, toNumber, withUniqueMessage } from './settings-common';
 import {
 	COMPANY_FILES_BUCKET,
 	LEGAL_DOCUMENT_MAX_BYTES,
@@ -86,23 +86,28 @@ export class CompanyLegalDocumentsService {
 		const size = await this.storage.objectSize(COMPANY_FILES_BUCKET, input.path);
 
 		if (size === null) throw validationException([{ field: 'path', message: 'El archivo no se subió: vuelve a intentarlo' }]);
-		await this.dataSource.query(
-			`INSERT INTO company_legal_documents (id, company_id, holding_id, document_name, document_type, upload_date, storage_bucket, storage_path,
+		// Confirmar dos veces el mismo `document_id` (doble clic, reintento) → 409, no 500.
+		await withUniqueMessage(
+			() =>
+				this.dataSource.query(
+					`INSERT INTO company_legal_documents (id, company_id, holding_id, document_name, document_type, upload_date, storage_bucket, storage_path,
 				file_name, mime_type, file_size, uploaded_by)
 			VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7, $8, $9, $10, $11)`,
-			[
-				input.document_id,
-				companyId,
-				holdingId,
-				input.document_name,
-				input.document_type,
-				COMPANY_FILES_BUCKET,
-				input.path,
-				input.file_name,
-				input.mime_type,
-				size,
-				userId,
-			]
+					[
+						input.document_id,
+						companyId,
+						holdingId,
+						input.document_name,
+						input.document_type,
+						COMPANY_FILES_BUCKET,
+						input.path,
+						input.file_name,
+						input.mime_type,
+						size,
+						userId,
+					]
+				),
+			'Este documento ya está registrado'
 		);
 
 		return documentDto(await this.find(holdingId, companyId, input.document_id));

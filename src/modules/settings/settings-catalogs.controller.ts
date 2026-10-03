@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -7,15 +7,25 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PERMISSION_CODES } from '@/guards/permission-codes';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
-import { CreateMasterDataDto, CreateNamedDto, CreateSellerDto, UpdateMasterDataDto, UpdateNamedDto, UpdateSellerDto } from './dtos/catalogs.dto';
+import {
+	CreateMasterDataDto,
+	CreateNamedDto,
+	CreateSellerDto,
+	MASTER_DATA_CATEGORIES,
+	UpdateMasterDataDto,
+	UpdateNamedDto,
+	UpdateSellerDto,
+} from './dtos/catalogs.dto';
 import { SettingsCatalogsService } from './settings-catalogs.service';
+import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 
-const CATEGORY = { name: 'category', enum: ['payment_terms', 'item_types', 'units_of_measure'] };
+const CATEGORY = { name: 'category', enum: [...MASTER_DATA_CATEGORIES] };
 
 /** Catálogos del Holding 360 (contrato §2.1–2.3). Borrar solo si no se usa; activar/desactivar con `PATCH { is_active }`. */
 @ApiTags('Settings · Catálogos')
 @Controller('settings')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewSettings)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })
@@ -72,9 +82,21 @@ export class SettingsCatalogsController {
 		await this.catalogs.deleteChurnReason(holdingId, id);
 	}
 
+	@Get('business-types')
+	@ApiOperation({ summary: 'Tipos de negocio del sistema (efecto en MRR y mapeo de Salesforce del holding), solo lectura' })
+	listBusinessTypes(@HoldingId() holdingId: string) {
+		return this.catalogs.listBusinessTypes(holdingId);
+	}
+
+	@Get('contact-types')
+	@ApiOperation({ summary: 'Tipos de contacto (lista fija) y qué hace cada uno, solo lectura' })
+	listContactTypes(@HoldingId() holdingId: string) {
+		return this.catalogs.listContactTypes(holdingId);
+	}
+
 	@Get('master-data/:category')
 	@ApiParam(CATEGORY)
-	@ApiOperation({ summary: 'Condiciones de pago, tipos de ítem o unidades de medida' })
+	@ApiOperation({ summary: 'Tipos de ítem, unidades de medida, mercados, segmentos o industrias (con uso desglosado)' })
 	listMasterData(@HoldingId() holdingId: string, @Param('category') category: string) {
 		return this.catalogs.listMasterData(holdingId, category);
 	}

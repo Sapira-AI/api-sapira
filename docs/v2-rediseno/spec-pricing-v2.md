@@ -413,7 +413,8 @@ Respuesta del PUT y del preview (misma forma; el preview no escribe y devuelve `
 
 - `write()` bloquea el contrato (`FOR UPDATE`) inmediatamente después de la costura, antes de leer ítem, líneas y consumo.
 - **Período cerrado**: si el período de la línea (`period_start`) o la emisión de la factura que lleva el consumo (la Por Emitir recalculada,
-  o la complementaria/reemisión de hoy) caen en un período cerrado (`get_cutoff_date`) → 409 `blocked` con `period_closed`; el preview igual.
+  o la complementaria/reemisión de hoy) caen en un período cerrado: **ya no bloquea** (03-10: el cierre de períodos protege contratos e ítems;
+  pagos, facturas y consumos se pueden registrar o mover en meses cerrados). El contrato se sigue bloqueando (`FOR UPDATE`) para serializar.
 - **Borrador en el ERP**: ya no bloquea (tampoco al pasar a "sin cobro"); se recalcula y se avisa `erp_draft_stale` en preview y resultado
   (`warning_codes`).
 - **Reemisión** (`apply_as = reissue`): la NC espejo es exacta (`insertMirrorCreditNote` con `exact: true`: copia el IVA guardado de cada

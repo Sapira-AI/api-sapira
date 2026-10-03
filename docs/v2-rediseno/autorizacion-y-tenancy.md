@@ -102,7 +102,7 @@ Cadena (sin migración): `users` → `user_holdings` (pertenencia activa) → `u
 
 | Pieza | Archivo | Qué valida | Respuesta |
 |---|---|---|---|
-| `@RequirePermission(...codes)` + `RequirePermissionGuard` | `src/guards/require-permission.guard.ts` | Super admin pasa; `ALL_PERMISSIONS` cubre todo salvo los internos (`VIEW_LAB`, `VIEW_DOCUMENTACION`); el rol debe ser del holding activo y tener **alguno** de los códigos | 403 `No tienes permiso para <acción> · pídeselo a un administrador` |
+| `@RequirePermission(...codes)` + `RequirePermissionGuard` | `src/guards/require-permission.guard.ts` | Super admin pasa; `ALL_PERMISSIONS` cubre todo salvo los internos (`VIEW_LAB`, `VIEW_DOCUMENTACION`); el rol debe ser del holding activo y tener **alguno** de los códigos; **Editar incluye Ver** (`EDIT_X` satisface `VIEW_X`, 03-10) | 403 `No tienes permiso para <acción> · pídeselo a un administrador` |
 | `@SuperAdminOnly()` + `SuperAdminOnlyGuard` | `src/guards/super-admin-only.guard.ts` | `users.is_super_admin` (no mira el holding) | 403 `Solo un super admin de Sapira puede hacer esto` |
 | `PermissionsService` | `src/guards/permissions.service.ts` | `context(authId, holdingId)` (usuario, rol del holding, códigos), `assert(...)`, `isSuperAdmin(authId)` y `PermissionsService.allows(ctx, codes)` para reglas dentro del servicio | — |
 

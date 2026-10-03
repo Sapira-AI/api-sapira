@@ -1009,7 +1009,8 @@ describe('ContractChangesService · bloque B2 (spec modificaciones §9)', () => 
 		expect(sqlOf(runner.query)[0]).toContain("set_config('sapira.writer', 'api', true)");
 		const [[, entityParams]] = calls(runner.query, 'INSERT INTO client_entities');
 
-		expect(entityParams).toEqual([HOLDING, 'client-1', 'Cliente Norte SpA', '76.543.210-K', 'Chile', null, null, null]);
+		// `country_code` (ronda 3 de Configuración): sin catálogo de países en el mock queda null.
+		expect(entityParams).toEqual([HOLDING, 'client-1', 'Cliente Norte SpA', '76.543.210-K', 'Chile', null, null, null, null]);
 		expect(calls(runner.query, 'INSERT INTO client_entity_clients')[0][1]).toEqual(['entity-new', 'client-1', HOLDING]);
 		expect(calls(runner.query, 'INSERT INTO client_entity_clients')[0][0]).toContain('is_primary) VALUES ($1, $2, $3, false)');
 		expect(sqlIndex(runner, 'INSERT INTO client_entities')).toBeLessThan(sqlIndex(runner, 'UPDATE contracts SET'));

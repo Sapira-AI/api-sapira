@@ -330,4 +330,74 @@ describe('Asientos con apertura por dimensión', () => {
 		expect(result.missing_codes).toEqual(['receivable']);
 		expect(result.months[0].balances.deferred).toMatchObject({ opening: 0, movement: 1100, closing: 1100, reconciles: true });
 	});
+
+	it('lee las 5 cuentas del mapping con el código del ERP y nombres por defecto en español', async () => {
+		const rsm = [
+			{
+				contract_id: 'c-1',
+				contract_number: 'CTR-1',
+				item_id: 'i-1',
+				company_id: COMPANY,
+				period: '2026-01',
+				recognized: '100',
+				billed: '1200',
+				recognized_cum: '100',
+				billed_cum: '1200',
+			},
+		];
+		const { revenue } = build((sql) =>
+			sql.includes('SELECT currency FROM companies')
+				? [{ currency: 'CLP' }]
+				: sql.includes('company_account_mappings')
+					? [
+							{
+								receivable_account_code: '1.1.02',
+								receivable_account_name: 'Clientes',
+								external_receivable_code: '110200',
+								deferred_account_code: '2.2.05',
+								deferred_account_name: 'Deferred Revenue',
+								unbilled_account_code: '1.1.03',
+								unbilled_account_name: 'Por facturar',
+								revenue_account_code: '4.1.01',
+								revenue_account_name: 'Revenue',
+								external_revenue_code: '400100',
+								fx_difference_account_code: '6.1.01',
+								fx_difference_account_name: 'Diferencia de cambio',
+							},
+						]
+					: sql.includes('AS recognized_cum')
+						? rsm
+						: []
+		);
+		const result = await revenue.journal(HOLDING, { from: '2026-01', to: '2026-01', companyId: COMPANY });
+
+		expect(result.accounts.receivable).toEqual({ code: '1.1.02', name: 'Clientes', external_code: '110200' });
+		expect(result.accounts.fx_difference).toMatchObject({ code: '6.1.01', external_code: null });
+		expect(result.accounts.deferred.name).toBe('Ingresos diferidos');
+		expect(result.accounts.revenue).toMatchObject({ name: 'Ingresos', external_code: '400100' });
+		expect(result.missing_codes).toEqual([]);
+		expect(result.months[0].postings).toEqual(
+			expect.arrayContaining([expect.objectContaining({ account: 'receivable', code: '1.1.02', external_code: '110200', debit: 1200 })])
+		);
+	});
+
+	it('excepción no_account_mapping usa el criterio del árbol: las 5 cuentas completas', async () => {
+		const { query, revenue } = build();
+
+		await revenue.exceptions(HOLDING, {});
+		const sql = query.mock.calls.map(([text]) => String(text)).find((text) => text.includes('LEFT JOIN company_account_mappings m'))!;
+
+		expect(sql).toContain("NULLIF(btrim(m.receivable_account_code), '') IS NOT NULL");
+		expect(sql).toContain("NULLIF(btrim(m.fx_difference_account_name), '') IS NOT NULL");
+		expect(sql).toContain('AND NOT (m.id IS NOT NULL');
+	});
+
+	it('excepción no_account_mapping trae company_id para enlazar a la Compañía 360 (ronda 3 de Configuración)', async () => {
+		const { revenue } = build((sql) =>
+			sql.includes('LEFT JOIN company_account_mappings m') ? [{ company_id: 'co-1', company_name: 'Hanka SpA' }] : []
+		);
+		const result = (await revenue.exceptions(HOLDING, {})) as unknown as { data: Record<string, unknown>[] };
+
+		expect(result.data.find((item) => item.type === 'no_account_mapping')).toMatchObject({ company_id: 'co-1', company_name: 'Hanka SpA' });
+	});
 });

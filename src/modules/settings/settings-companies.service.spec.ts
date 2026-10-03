@@ -55,6 +55,14 @@ describe('SettingsCompaniesService', () => {
 		expect([normalizeTaxRate('0.19'), normalizeTaxRate(19), normalizeTaxRate(null), normalizeTaxRate(0)]).toEqual([19, 19, null, 0]);
 	});
 
+	it('detalle expone sii_configured (SII habilitado para la compañía)', async () => {
+		const { db, service } = build([['FROM sii_configurations', () => [{ '?column?': 1 }]], ...usage({})]);
+
+		await expect(service.get(HOLDING, COMPANY)).resolves.toMatchObject({ sii_configured: true, can_delete: true });
+		expect(db.statements('FROM sii_configurations WHERE company_id = $1 AND holding_id = $2 AND is_enabled = true')).toHaveLength(1);
+		await expect(build(usage({})).service.get(HOLDING, COMPANY)).resolves.toMatchObject({ sii_configured: false });
+	});
+
 	it('compañía de otro holding → 404', async () => {
 		const { service } = build();
 
@@ -129,17 +137,48 @@ describe('SettingsCompaniesService', () => {
 			]);
 		});
 
+		it('nombres por defecto en inglés de la tabla se leen en español; los propios se respetan', async () => {
+			const { service } = build([
+				[
+					'SELECT * FROM company_account_mappings',
+					() => [
+						{
+							id: 'm1',
+							revenue_account_code: '4.1.01',
+							revenue_account_name: 'Revenue',
+							deferred_account_code: '2.2.05',
+							deferred_account_name: 'Deferred Revenue',
+							unbilled_account_code: '1.1.03',
+							unbilled_account_name: 'Unbilled Revenue (Contract Asset)',
+							receivable_account_code: '1.1.02',
+							receivable_account_name: 'Clientes nacionales',
+						},
+					],
+				],
+			]);
+			const accounts = await service.getAccounts(HOLDING, COMPANY);
+
+			expect(accounts.accounts.map((account) => account.name)).toEqual([
+				'Clientes nacionales',
+				'Ingresos diferidos',
+				'Ingresos por facturar',
+				'Ingresos',
+				null,
+			]);
+			expect(accounts.complete).toBe(false);
+		});
+
 		it('PUT exige las 5 claves una vez cada una', async () => {
 			const { service } = build();
 			const account = (key: string) => ({ key, code: '1', name: 'Cuenta' });
 
 			await expect(service.putAccounts(HOLDING, COMPANY, { accounts: [account('revenue')] })).rejects.toThrow(
-				'Faltan cuentas: receivable, deferred, unbilled, fx_difference'
+				'Faltan cuentas: Cuentas por cobrar, Ingresos diferidos, Ingresos por facturar y Diferencia de cambio'
 			);
 			await expect(service.putAccounts(HOLDING, COMPANY, { accounts: [account('revenue'), account('revenue')] })).rejects.toThrow(
-				'Cuenta repetida: revenue'
+				'Cuenta repetida: Ingresos'
 			);
-			await expect(service.putAccounts(HOLDING, COMPANY, { accounts: [account('otra')] })).rejects.toThrow('Clave de cuenta no válida: otra');
+			await expect(service.putAccounts(HOLDING, COMPANY, { accounts: [account('otra')] })).rejects.toThrow('Cuenta no reconocida: otra');
 		});
 
 		it('PUT hace upsert de las 15 columnas', async () => {
@@ -172,6 +211,27 @@ describe('SettingsCompaniesService', () => {
 					currency: 'CLP',
 				})
 			).rejects.toThrow('Ya existe esa cuenta (banco y número) en esta compañía');
+		});
+
+		it('con cartolas cargadas no cambia moneda ni número (sí banco, tipo y titular)', async () => {
+			const current = {
+				id: ACCOUNT,
+				company_id: COMPANY,
+				bank_name: 'BCI',
+				account_type: 'Cuenta Corriente',
+				account_number: '12-345',
+				currency: 'CLP',
+				in_use: 2,
+			};
+			const { db, service } = build([['WHERE a.id = $1 AND a.company_id = $2 AND a.holding_id = $3', () => [current]]]);
+			const message = 'La cuenta ya tiene cartolas cargadas: no se puede cambiar su moneda ni su número';
+
+			await expect(service.updateBankAccount(HOLDING, COMPANY, ACCOUNT, { currency: 'USD' })).rejects.toThrow(new ConflictException(message));
+			await expect(service.updateBankAccount(HOLDING, COMPANY, ACCOUNT, { account_number: '99999' })).rejects.toThrow(message);
+			expect(db.statements('UPDATE company_bank_accounts')).toHaveLength(0);
+			// Mismo número con otro formato y misma moneda: no es un cambio.
+			await service.updateBankAccount(HOLDING, COMPANY, ACCOUNT, { account_number: '12345', currency: 'clp', account_holder: 'Hanka SpA' });
+			expect(db.statements('UPDATE company_bank_accounts')).toHaveLength(1);
 		});
 
 		it('con cargas de cartola no se elimina', async () => {
@@ -252,6 +312,17 @@ describe('CompanyLegalDocumentsService', () => {
 			'u1',
 		]);
 		expect(document.legacy).toBe(false);
+	});
+
+	it('confirmar dos veces el mismo documento → 409 (no 500)', async () => {
+		const { service } = build([
+			['INSERT INTO company_legal_documents', () => Promise.reject(Object.assign(new Error('duplicate key'), { code: '23505' }))],
+		]);
+
+		storage.objectSize.mockResolvedValueOnce(2048);
+		await expect(service.confirm(HOLDING, COMPANY, confirm(`${HOLDING}/${COMPANY}/legal/${DOC}/poder.pdf`), 'u1')).rejects.toThrow(
+			new ConflictException('Este documento ya está registrado')
+		);
 	});
 
 	it('eliminar borra la fila y el archivo', async () => {

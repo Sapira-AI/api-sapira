@@ -102,29 +102,36 @@ export function dueScheduledChanges(candidates: DueCandidate[], notified: Set<st
 
 // ---------------------------------------------------------------- alertas crecientes antes del vencimiento (S2-1 / S5-4, 7b)
 
-/** Escalera fija después del primer aviso (días antes del fin; 0 = el día del fin). Vencido sin decisión: cada 7 días. */
+/**
+ * Escalera por defecto después del primer aviso (días antes del fin; 0 = el día del fin) y frecuencia por defecto vencido sin decisión.
+ * Desde la ronda 4 de Configuración son preferencias del holding (`holding_settings.renewal_reminder_days` /
+ * `renewal_overdue_every_days`, `loadHoldingPreferences`); estos valores son sus defaults.
+ */
 export const REMINDER_LADDER = [60, 30, 15, 7, 0] as const;
 export const OVERDUE_REMINDER_EVERY_DAYS = 7;
 
 /**
  * Umbrales de aviso del holding: el primero es `holding_settings.auto_renewal_notice_days` (mismo significado: cuántos días antes empieza
- * a avisar) y después la escalera fija con los escalones menores que él. Ej.: 30 → [30, 15, 7, 0]; 90 → [90, 60, 30, 15, 7, 0].
+ * a avisar) y después los escalones de la escalera del holding menores que él. Ej. (escalera por defecto): 30 → [30, 15, 7, 0];
+ * 90 → [90, 60, 30, 15, 7, 0].
  */
-export function reminderLadder(noticeDays: number): number[] {
+export function reminderLadder(noticeDays: number, steps: readonly number[] = REMINDER_LADDER): number[] {
 	const first = Math.min(180, Math.max(1, Math.round(noticeDays || DEFAULT_NOTICE_DAYS)));
+	const rest = [...new Set(steps.filter((threshold) => Number.isInteger(threshold) && threshold >= 0 && threshold < first))];
 
-	return [first, ...REMINDER_LADDER.filter((threshold) => threshold < first)];
+	return [first, ...rest.sort((a, b) => b - a)];
 }
 
 /**
- * Escalón alcanzado a `daysToEnd` días del fin: el menor umbral ≥ días que faltan (antes del primero, null). Vencido: 0 la primera semana y
- * luego −7, −14… (un aviso por semana mientras siga sin decisión).
+ * Escalón alcanzado a `daysToEnd` días del fin: el menor umbral ≥ días que faltan (antes del primero, null). Vencido: 0 el primer tramo y
+ * luego −N, −2N… con N = `overdueEvery` (un aviso cada N días mientras siga sin decisión; default 7).
  */
-export function reminderThreshold(daysToEnd: number, ladder: number[]): number | null {
+export function reminderThreshold(daysToEnd: number, ladder: number[], overdueEvery: number = OVERDUE_REMINDER_EVERY_DAYS): number | null {
 	if (daysToEnd < 0) {
-		const weeks = Math.floor(-daysToEnd / OVERDUE_REMINDER_EVERY_DAYS);
+		const every = Math.max(1, Math.round(overdueEvery || OVERDUE_REMINDER_EVERY_DAYS));
+		const steps = Math.floor(-daysToEnd / every);
 
-		return weeks === 0 ? 0 : -OVERDUE_REMINDER_EVERY_DAYS * weeks;
+		return steps === 0 ? 0 : -every * steps;
 	}
 	const reached = ladder.filter((threshold) => daysToEnd <= threshold);
 
@@ -154,6 +161,12 @@ export interface ReminderCandidate {
 	end_date: string;
 }
 
+/** Escalera del holding (ronda 4): escalones y frecuencia vencido; sin valores = los de siempre. */
+export interface ReminderSchedule {
+	steps?: readonly number[];
+	overdue_every_days?: number;
+}
+
 export interface DueReminder {
 	contract_id: string;
 	contract_number: string | null;
@@ -169,8 +182,14 @@ export interface DueReminder {
  * (`sent`, claves `reminderKey`), una alerta con los ítems que terminan ese día. Solo el escalón actual (si el job no corrió, no se ponen al
  * día los anteriores).
  */
-export function dueReminders(candidates: ReminderCandidate[], sent: Set<string>, today: string, noticeDays: number): DueReminder[] {
-	const ladder = reminderLadder(noticeDays);
+export function dueReminders(
+	candidates: ReminderCandidate[],
+	sent: Set<string>,
+	today: string,
+	noticeDays: number,
+	schedule: ReminderSchedule = {}
+): DueReminder[] {
+	const ladder = reminderLadder(noticeDays, schedule.steps);
 	const byContract = new Map<string, ReminderCandidate[]>();
 	const out: DueReminder[] = [];
 
@@ -181,7 +200,7 @@ export function dueReminders(candidates: ReminderCandidate[], sent: Set<string>,
 	for (const [contractId, items] of byContract) {
 		const end = items.map((item) => item.end_date).sort()[0];
 		const daysToEnd = diffDays(today, end);
-		const threshold = reminderThreshold(daysToEnd, ladder);
+		const threshold = reminderThreshold(daysToEnd, ladder, schedule.overdue_every_days);
 
 		if (threshold === null) continue;
 		const key = reminderKey(contractId, end, threshold);
@@ -224,7 +243,8 @@ export async function loadRenewalReminder(
 	contractId: string,
 	holdingId: string,
 	today: string,
-	noticeDays = DEFAULT_NOTICE_DAYS
+	noticeDays = DEFAULT_NOTICE_DAYS,
+	schedule: ReminderSchedule = {}
 ): Promise<RenewalReminderView | null> {
 	const [row] = ((await db.query(
 		`SELECT e.id, e.metadata, e.created_at FROM contract_lifecycle_events e
@@ -248,7 +268,8 @@ export async function loadRenewalReminder(
 	if (!open.length) return null;
 	const end = open.map((item) => item.end_date).sort()[0];
 	const daysToEnd = diffDays(today, end);
-	const threshold = reminderThreshold(daysToEnd, reminderLadder(noticeDays)) ?? toNumber(metadata.threshold_days);
+	const threshold =
+		reminderThreshold(daysToEnd, reminderLadder(noticeDays, schedule.steps), schedule.overdue_every_days) ?? toNumber(metadata.threshold_days);
 
 	return {
 		event_id: String(row.id),

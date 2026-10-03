@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { holdingTimezone, loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 // MRR del mes sin "pendiente de renovar" (S5-3): la regla vive en Métricas (D-CTR-1), una sola definición.
 import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
 
+import { todayFor } from './business-date';
 import {
 	creditNotePendingEmission,
 	isVisibleLine,
@@ -83,7 +85,6 @@ export const DEVIATION_ADJUSTMENT_TYPES = `('discount', 'upsell', 'downsell', 'c
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 const money = (value: number, currency: string | null) =>
 	`${currency ? `${currency} ` : ''}${value.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -270,7 +271,7 @@ export class ContractsService {
 			sortOrder = 'desc',
 		} = filters;
 		const statuses = parseStatusFilter(filters.status);
-		const params: unknown[] = [holdingId, isoDate(asOfDate)];
+		const params: unknown[] = [holdingId, todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate)];
 		// Los borradores eliminados (borrado lógico, C5) no existen para v2.
 		const where = [`c.holding_id = $1`, NOT_DELETED];
 		const list = (value?: string) =>
@@ -512,7 +513,7 @@ export class ContractsService {
 	 * `ending_30d` es el mismo filtro que `?endingWithinDays=30`.
 	 */
 	async summary(holdingId: string, asOfDate = new Date()) {
-		const asOf = isoDate(asOfDate);
+		const asOf = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [metrics, [pendingRow], [countRow]] = await Promise.all([
 			this.holdingMetrics.monthMetrics(holdingId, asOf),
 			this.dataSource.query<Row[]>(
@@ -619,7 +620,9 @@ export class ContractsService {
 
 	async detail(idOrNumber: string, holdingId: string, asOfDate = new Date()) {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
+		// "Hoy" y escalera de recordatorios del holding (Configuración ronda 4: `timezone`, `renewal_reminder_days`, `renewal_overdue_every_days`).
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const today = todayFor(prefs.timezone, asOfDate);
 		const [[row], alerts, scheduledChanges, renewalProposals, pauses, renewalReminder] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT c.id, c.contract_number, c.status, c.type,
@@ -669,7 +672,10 @@ export class ContractsService {
 			// §9.3.3: pausas de los ítems.
 			loadItemPauses(this.dataSource, contract.id, holdingId, today),
 			// S2-1 / S5-4: última alerta creciente vigente (ítems que terminan sin decisión).
-			loadRenewalReminder(this.dataSource, contract.id, holdingId, today),
+			loadRenewalReminder(this.dataSource, contract.id, holdingId, today, prefs.auto_renewal_notice_days, {
+				steps: prefs.renewal_reminder_days,
+				overdue_every_days: prefs.renewal_overdue_every_days,
+			}),
 		]);
 
 		if (!row) throw new NotFoundException('Contrato no encontrado');
@@ -905,7 +911,7 @@ export class ContractsService {
 
 	async items(idOrNumber: string, holdingId: string, asOfDate = new Date()): Promise<{ items: PricedContractItem[]; groups: ItemGroup[] }> {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
-		const today = isoDate(asOfDate);
+		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
 		const [rows, lines, pauses] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT ci.id, ci.product_id, ci.product_name, ci.account, ci.item_type, ci.categoria, ci.unit_of_measure,

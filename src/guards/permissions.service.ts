@@ -19,7 +19,7 @@ type Row = Record<string, unknown>;
 /**
  * Permisos por rol resueltos en el holding activo (D1 de la spec Configuración v3): `user_holdings` (pertenencia activa) →
  * `users.role_id` → `roles` **del mismo holding** → `role_permissions` → `permissions`. Super admin pasa siempre; `ALL_PERMISSIONS`
- * cubre todo salvo los permisos internos (`VIEW_LAB`, `VIEW_DOCUMENTACION`). Va después de `HoldingScopeGuard`.
+ * cubre todo salvo los permisos internos (`VIEW_LAB`, `VIEW_DOCUMENTACION`); `EDIT_X` incluye `VIEW_X`. Va después de `HoldingScopeGuard`.
  */
 @Injectable()
 export class PermissionsService {
@@ -66,7 +66,13 @@ export class PermissionsService {
 		if (!context) return false;
 		if (context.isSuperAdmin) return true;
 
-		return codes.some((code) => context.codes.has(code) || (context.codes.has(ALL_PERMISSIONS) && !INTERNAL_PERMISSION_CODES.includes(code)));
+		return codes.some(
+			(code) =>
+				context.codes.has(code) ||
+				// Editar incluye Ver (decisión de Domi 03-10): `EDIT_X` satisface `VIEW_X` en todos los módulos.
+				(code.startsWith('VIEW_') && context.codes.has(`EDIT_${code.slice('VIEW_'.length)}`)) ||
+				(context.codes.has(ALL_PERMISSIONS) && !INTERNAL_PERMISSION_CODES.includes(code))
+		);
 	}
 
 	/** Exige alguno de los códigos; devuelve el contexto para reutilizarlo (usuario que firma la acción). */

@@ -3,7 +3,15 @@ import { DataSource } from 'typeorm';
 
 import type { PermissionContext } from '@/guards/permissions.service';
 
-import { AccountingPeriodsService, dayBefore, isFirstDayOfMonth, isLastDayOfMonth, monthLabel } from './accounting-periods.service';
+import {
+	AccountingPeriodsService,
+	dayBefore,
+	isFirstDayOfMonth,
+	isLastDayOfMonth,
+	lastClosableDate,
+	monthLabel,
+	todayInChile,
+} from './accounting-periods.service';
 import { fakeDb, Handler } from './fake-db.testing-spec';
 
 const HOLDING = '11111111-1111-4111-8111-111111111111';
@@ -20,7 +28,7 @@ const actor: PermissionContext = {
 const build = (cutoff: string | null, extra: Handler[] = []) => {
 	const db = fakeDb([
 		...extra,
-		['FOR UPDATE', (params) => (params[1] === HOLDING ? [{ id: COMPANY }] : [])],
+		['FOR NO KEY UPDATE', (params) => (params[1] === HOLDING ? [{ id: COMPANY }] : [])],
 		['SELECT cutoff_date FROM accounting_period_cutoff', () => (cutoff ? [{ cutoff_date: cutoff }] : [])],
 		['SELECT id, legal_name, currency FROM companies', (params) => (params[1] === HOLDING ? [{ id: COMPANY }] : [])],
 	]);
@@ -41,9 +49,38 @@ describe('fechas de período', () => {
 		expect(dayBefore('2026-03-01')).toBe('2026-02-28');
 		expect(monthLabel('2026-07-01')).toBe('Julio 2026');
 	});
+
+	it('hoy y último mes cerrable en hora de Chile (no UTC)', () => {
+		// 1 de octubre 01:00 UTC = 30 de septiembre 22:00 en Chile (UTC−3): septiembre aún no termina.
+		expect(todayInChile(new Date('2026-10-01T01:00:00Z'))).toBe('2026-09-30');
+		expect(lastClosableDate(new Date('2026-10-01T01:00:00Z'))).toBe('2026-08-31');
+		expect(lastClosableDate(new Date('2026-10-01T12:00:00Z'))).toBe('2026-09-30');
+		expect(lastClosableDate(new Date('2026-01-15T12:00:00Z'))).toBe('2025-12-31');
+	});
 });
 
 describe('AccountingPeriodsService', () => {
+	beforeEach(() => jest.useFakeTimers({ now: new Date('2026-10-03T15:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] }));
+	afterEach(() => jest.useRealTimers());
+
+	it('cerrar un mes que no ha terminado (hora Chile) → 409, sin abrir transacción', async () => {
+		const { db, service } = build(null);
+
+		await expect(service.close(HOLDING, COMPANY, { until_date: '2026-10-31', reason: 'Cierre de octubre' }, actor)).rejects.toThrow(
+			new ConflictException('Solo se pueden cerrar meses terminados: Octubre 2026 aún no termina (puedes cerrar hasta el 30-09-2026)')
+		);
+		expect(db.calls).toHaveLength(0);
+		await expect(service.close(HOLDING, COMPANY, { until_date: '2026-09-30', reason: 'Cierre de septiembre' }, actor)).resolves.toBeDefined();
+	});
+
+	it('el bloqueo de la compañía es FOR NO KEY UPDATE (no bloquea inserts que la referencian por FK)', async () => {
+		const { db, service } = build(null);
+
+		await service.close(HOLDING, COMPANY, { until_date: '2026-08-31', reason: 'Cierre contable de agosto' }, actor);
+		expect(db.statements('FOR NO KEY UPDATE')).toHaveLength(1);
+		expect(db.statements('FOR UPDATE')).toHaveLength(0);
+	});
+
 	it('cerrar: fecha que no es fin de mes o motivo corto → 400, sin abrir transacción', async () => {
 		const { db, service } = build(null);
 

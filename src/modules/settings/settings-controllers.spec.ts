@@ -1,3 +1,6 @@
+// `SettingsModule` importa `EmailsModule` (ronda 3) → `AuthModule` → logger con `uuid`, que desde la v13 es solo ESM: Jest no lo transforma.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+
 import { RequestMethod } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +12,7 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PermissionsService } from '@/guards/permissions.service';
 import { REQUIRED_PERMISSIONS_KEY, RequirePermissionGuard } from '@/guards/require-permission.guard';
 import { UserHoldingsService } from '@/guards/user-holdings.service';
+import { EmailsService } from '@/modules/emails/emails.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProductsController } from '@/modules/products/products.controller';
 import { ProductsModule } from '@/modules/products/products.module';
@@ -16,9 +20,11 @@ import { ProductsModule } from '@/modules/products/products.module';
 import { CountriesController } from './countries.controller';
 import { SettingsAccessController } from './settings-access.controller';
 import { SettingsCatalogsController } from './settings-catalogs.controller';
+import { SettingsCommunicationsController } from './settings-communications.controller';
 import { SettingsCompaniesController } from './settings-companies.controller';
 import { SettingsCustomFieldsController } from './settings-custom-fields.controller';
 import { SettingsHoldingController } from './settings-holding.controller';
+import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
 import { SettingsModule } from './settings.module';
 
 /**
@@ -31,6 +37,8 @@ const SCOPED = [
 	{ controller: SettingsCustomFieldsController, view: 'VIEW_CONFIGURACION', write: ['EDIT_CONFIGURACION'] },
 	{ controller: SettingsCompaniesController, view: 'VIEW_CONFIGURACION', write: ['EDIT_CONFIGURACION', 'CLOSE_PERIODS'] },
 	{ controller: SettingsAccessController, view: 'VIEW_CONFIGURACION', write: ['EDIT_CONFIGURACION'] },
+	{ controller: SettingsTaxDocumentsController, view: 'VIEW_CONFIGURACION', write: ['EDIT_CONFIGURACION'] },
+	{ controller: SettingsCommunicationsController, view: 'VIEW_CONFIGURACION', write: ['EDIT_CONFIGURACION'] },
 	{ controller: ProductsController, view: 'VIEW_CONTRATOS', write: ['EDIT_CONTRATOS'] },
 ];
 
@@ -88,6 +96,7 @@ describe('Controladores de Configuración y Productos', () => {
 				{ provide: DataSource, useValue: { query: jest.fn() } },
 				{ provide: ConfigService, useValue: { get: jest.fn() } },
 				{ provide: NotificationsService, useValue: {} },
+				{ provide: EmailsService, useValue: {} },
 			],
 		})
 			.overrideGuard(SupabaseAuthGuard)

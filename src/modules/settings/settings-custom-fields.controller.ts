@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	HttpCode,
+	Param,
+	ParseUUIDPipe,
+	Patch,
+	Post,
+	Query,
+	Request,
+	UseGuards,
+	UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -9,6 +23,7 @@ import { RequirePermission, RequirePermissionGuard } from '@/guards/require-perm
 
 import { CreateCustomFieldDto, CustomFieldsQueryDto, UpdateCustomFieldDto } from './dtos/custom-fields.dto';
 import { SettingsCustomFieldsService } from './settings-custom-fields.service';
+import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 
 import type { SettingsRequest } from './settings-common';
 
@@ -16,6 +31,7 @@ import type { SettingsRequest } from './settings-common';
 @ApiTags('Settings · Campos personalizados')
 @Controller('settings/custom-fields')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@UseInterceptors(SettingsDbErrorsInterceptor)
 @RequirePermission(PERMISSION_CODES.viewSettings)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })

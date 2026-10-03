@@ -744,7 +744,7 @@ describe('invoice-edit (spec facturas §3.4, lógica pura)', () => {
 	});
 
 	describe('auditoría 01-10: período anterior, OC en masivo y encabezado = Σ líneas', () => {
-		it('mover una línea de período: period_closed y el devengo miran también el período ANTERIOR', () => {
+		it('mover una línea de período: el devengo mira también el período ANTERIOR; un mes cerrado no bloquea (Domi 03-10)', () => {
 			const moved = body([edit({ billing_period_start: '2026-11-01', billing_period_end: '2026-11-30' })], {
 				deviation: { type: 'correction', reason: 'Período' },
 			});
@@ -755,8 +755,8 @@ describe('invoice-edit (spec facturas §3.4, lógica pura)', () => {
 			);
 
 			expect(open.rsm_from_month).toBe('2026-10-01');
-			expect(codes(closed.blockers)).toContain('period_closed');
-			expect(closed.blockers.find((blocker) => blocker.code === 'period_closed')?.message).toContain('2026-10-01');
+			expect(closed.rsm_from_month).toBe('2026-10-01');
+			expect(codes(closed.blockers)).not.toContain('period_closed');
 		});
 
 		it('masivo: una factura por OC no cambia de receptor ni de IVA (partial_billing_invoice); términos sí', () => {

@@ -96,7 +96,7 @@ function build(fixtures: Fixtures = {}) {
 		if (sql.includes('INSERT INTO bank_movements'))
 			return (JSON.parse(String(params[5])) as unknown[]).map((_, index) => ({ id: `new-${index}` }));
 		if (sql.includes('INSERT INTO bank_column_mappings')) return [{ id: 'tpl-1' }];
-		if (sql.includes('get_cutoff_date')) {
+		if (sql.includes('AS total, i.due_date::text AS due_date, i.odoo_invoice_id')) {
 			const ids = params[1] as string[];
 
 			return (fixtures.invoices ?? []).filter((row) => ids.includes(String(row.id)));
@@ -418,11 +418,12 @@ describe('Conciliación: conciliar (single path de pagos)', () => {
 		expect(allowed.items[0]).toMatchObject({ ok: true, blockers: [], warnings: [expect.objectContaining({ code: 'multiple_clients' })] });
 	});
 
-	it('período cerrado bloquea el ítem; los ítems son independientes (uno falla con rollback, el otro se aplica)', async () => {
+	it('los ítems son independientes (uno falla con rollback, el otro se aplica); un mes cerrado no bloquea pagos (Domi 03-10)', async () => {
 		const { service, runners } = build({
 			movements: [movementRow(), movementRow({ id: 'mov-2' })],
 			infos: [info(), info({ id: 'inv-2', invoice_number: 'F-2' })],
-			invoices: [payInvoice({ cutoff_date: '2026-10-31' }), payInvoice({ id: 'inv-2', invoice_number: 'F-2' })],
+			// La primera ya tiene la mitad pagada → sobrepago; la segunda está en un mes cerrado y se aplica igual.
+			invoices: [payInvoice({ paid: '500000' }), payInvoice({ id: 'inv-2', invoice_number: 'F-2', cutoff_date: '2026-10-31' })],
 		});
 		const result = await service.applyMatches(
 			HOLDING,
@@ -440,7 +441,7 @@ describe('Conciliación: conciliar (single path de pagos)', () => {
 			key: 'closed',
 			ok: false,
 			applied: false,
-			blockers: [expect.objectContaining({ code: 'period_closed' })],
+			blockers: [expect.objectContaining({ code: 'overpayment' })],
 		});
 		expect(result.items[1]).toMatchObject({ key: 'open', ok: true, applied: true });
 		expect(runners[0].rollbackTransaction).toHaveBeenCalled();
@@ -511,7 +512,7 @@ describe('Conciliación: deshacer, ignorar, reabrir', () => {
 		expect(result).toEqual({ movement_id: MOV, voided_payment_ids: ['p-2', 'p-1'], state: 'pending' });
 	});
 
-	it('deshacer sin pagos → 409 movement_has_no_payments; en período cerrado → 409 period_closed (de void); fuera del holding → 404', async () => {
+	it('deshacer sin pagos → 409 movement_has_no_payments; fuera del holding → 404 (un mes cerrado ya no bloquea, Domi 03-10)', async () => {
 		await expect(
 			build({ lock: { id: MOV, status: 'Pendiente', amount: '1000', payments: '0' } }).service.undo(
 				HOLDING,
@@ -521,14 +522,6 @@ describe('Conciliación: deshacer, ignorar, reabrir', () => {
 				NOW
 			)
 		).rejects.toMatchObject({ response: { blockers: [expect.objectContaining({ code: 'movement_has_no_payments' })] } });
-		await expect(
-			build({
-				lock: { id: MOV, status: 'Conciliado', amount: '1000', payments: '1' },
-				movementPayments: [{ id: 'p-1' }],
-				paymentsById: { 'p-1': payment('p-1') },
-				invoices: [payInvoice({ cutoff_date: '2026-10-31' })],
-			}).service.undo(HOLDING, MOV, { reason: 'x' }, 'auth-1', NOW)
-		).rejects.toMatchObject({ response: { blockers: [expect.objectContaining({ code: 'period_closed' })] } });
 		await expect(build({ lock: null }).service.undo(HOLDING, MOV, { reason: 'x' }, 'auth-1', NOW)).rejects.toBeInstanceOf(NotFoundException);
 	});
 

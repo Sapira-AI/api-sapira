@@ -246,7 +246,10 @@ export const quoteTypeLabel = (value: string | null | undefined): string | null 
 	return code ? QUOTE_TYPE_LABELS[code] : value ? String(value) : null;
 };
 
-/** Formato del correlativo por holding para cotizaciones manuales (§8, Supuesto de formato). */
+/**
+ * Formato por defecto del correlativo (`COT-{año}-{NNNN}`). Desde la ronda 4 de Configuración el formato es preferencia del holding
+ * (`quoteNumberFormat` / `nextQuoteNumber` en `src/core/utils/holding-preferences.ts`); estos helpers describen el default.
+ */
 export const QUOTE_NUMBER_PREFIX = 'COT';
 export const quoteNumberPattern = (year: number) => `^${QUOTE_NUMBER_PREFIX}-${year}-(\\d{1,6})$`;
 export const formatQuoteNumber = (year: number, correlative: number) => `${QUOTE_NUMBER_PREFIX}-${year}-${String(correlative).padStart(4, '0')}`;

@@ -39,6 +39,16 @@ export function isFirstDayOfMonth(iso: string): boolean {
 	return !Number.isNaN(date.getTime()) && format(date) === iso && date.getUTCDate() === 1;
 }
 
+/** Fecha de hoy en Chile (`YYYY-MM-DD`): el calendario contable del holding corre en hora de Chile. */
+export function todayInChile(now: Date = new Date()): string {
+	return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+/** Último día del mes anterior a hoy (hora Chile): lo más lejos que se puede cerrar (solo meses terminados, decisión de Domi 03-10). */
+export function lastClosableDate(now: Date = new Date()): string {
+	return dayBefore(`${todayInChile(now).slice(0, 7)}-01`);
+}
+
 export function dayBefore(iso: string): string {
 	const date = parse(iso);
 
@@ -50,8 +60,9 @@ export function dayBefore(iso: string): string {
 /**
  * Cierre de períodos por compañía (Compañía 360, D8). Servicio propio: replica `close_period_until` / `reopen_period_from` (mismas
  * tablas y mismos datos), pero con el usuario de la sesión de la API (esas funciones usan `auth.uid()` y no sirven desde la API) y el
- * permiso `CLOSE_PERIODS` (en vez de `is_holding_admin()`). Una transacción por acción, con la compañía bloqueada (`FOR UPDATE`) para
- * que dos cierres simultáneos no se pisen. Los triggers de bloqueo de período y de coherencia compañía↔holding no cambian.
+ * permiso `CLOSE_PERIODS` (en vez de `is_holding_admin()`). Una transacción por acción, con la compañía bloqueada (`FOR NO KEY UPDATE`:
+ * serializa dos cierres simultáneos sin bloquear las escrituras que solo referencian la compañía por FK). Solo se cierran meses ya
+ * terminados en el calendario (hora Chile). Los triggers de bloqueo de período y de coherencia compañía↔holding no cambian.
  */
 @Injectable()
 export class AccountingPeriodsService {
@@ -108,7 +119,7 @@ export class AccountingPeriodsService {
 
 	/** Bloquea la compañía (404 si no es del holding) y devuelve el cierre actual. */
 	private async lockCutoff(runner: QueryRunner, holdingId: string, companyId: string): Promise<string | null> {
-		const company = (await runner.query(`SELECT id FROM companies WHERE id = $1 AND holding_id = $2 FOR UPDATE`, [
+		const company = (await runner.query(`SELECT id FROM companies WHERE id = $1 AND holding_id = $2 FOR NO KEY UPDATE`, [
 			companyId,
 			holdingId,
 		])) as Row[];
@@ -158,6 +169,13 @@ export class AccountingPeriodsService {
 			throw validationException([{ field: 'until_date', message: 'La fecha de cierre debe ser el último día de un mes' }]);
 		}
 		this.assertReason(dto.reason);
+		const limit = lastClosableDate();
+
+		if (dto.until_date > limit) {
+			throw new ConflictException(
+				`Solo se pueden cerrar meses terminados: ${monthLabel(dto.until_date)} aún no termina (puedes cerrar hasta el ${displayDate(limit)})`
+			);
+		}
 		await this.inTransaction(async (runner) => {
 			const current = await this.lockCutoff(runner, holdingId, companyId);
 

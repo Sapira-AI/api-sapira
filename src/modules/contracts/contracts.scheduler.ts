@@ -6,13 +6,16 @@ import { AUTO_RENEWAL_JOB, EXTEND_HORIZON_JOB, RENEWAL_REMINDERS_JOB, SCHEDULED_
 import { ContractRenewalsService, type JobHoldingResult } from './contract-renewals.service';
 
 /**
- * Jobs diarios de contratos v2 (spec modificaciones §9.3.5 y §9.3.6, B2-4), en `America/Santiago`:
+ * Jobs diarios de contratos v2 (spec modificaciones §9.3.5 y §9.3.6, B2-4). Se disparan a su hora en `America/Santiago` (hora del
+ * servidor); dentro de la corrida cada holding calcula su "hoy" con su zona (`holding_settings.timezone`, Configuración ronda 4):
  * - `contracts-scheduled-changes` (05:30): pactos `on_date` / `every_n_months` por vencer → evento `SCHEDULED_CHANGE_DUE` + notificación.
- * - `contracts-extend-horizon` (05:45): ítems recurrentes sin término → las Por Emitir que faltan para tener siempre 12 períodos desde hoy
+ * - `contracts-extend-horizon` (05:45): ítems recurrentes sin término → las Por Emitir que faltan para tener siempre
+ *   12 períodos desde hoy (`HORIZON_PERIODS_AHEAD`, fijo por sistema: calendario rodante)
  *   (evento `HORIZON_EXTENDED` por contrato solo si creó algo; idempotente con el contrato bloqueado).
  * - `contracts-auto-renewal` (06:00): ítems `auto_renew` por vencer → evento `RENEWAL_PROPOSED` + notificación. **Nunca renueva sola.**
- * - `contracts-renewal-reminders` (06:15): ítems que terminan sin decisión → alertas crecientes (`auto_renewal_notice_days`, 60/30/15/7/0 días
- *   antes del fin y cada 7 días vencido), evento `RENEWAL_REMINDER` (idempotente por contrato, fin y escalón) + notificación (S2-1 / S5-4).
+ * - `contracts-renewal-reminders` (06:15): ítems que terminan sin decisión → alertas crecientes (`auto_renewal_notice_days` y la escalera del
+ *   holding `renewal_reminder_days`, default 60/30/15/7/0 días antes del fin; vencido, cada `renewal_overdue_every_days`, default 7),
+ *   evento `RENEWAL_REMINDER` (idempotente por contrato, fin y escalón) + notificación (S2-1 / S5-4).
  * Por holding con try/catch (un holding que falla no detiene a los demás) e idempotentes (por ítem y fin / por pacto y fecha, revisado con el
  * contrato bloqueado): dos réplicas o un reintento no duplican eventos. `CONTRACT_JOBS_ENABLED=false` los apaga. Reemplazan al cron legacy
  * `process_auto_renewals` (ya desprogramado; sus funciones se retiran al switch).

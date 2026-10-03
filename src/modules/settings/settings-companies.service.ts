@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { ACCOUNT_MAPPING_COLUMNS, ACCOUNT_MAPPING_KEYS, ACCOUNT_MAPPING_LABELS, localizeAccountName } from '@/core/utils/account-mappings';
 import { validationException } from '@/core/utils/validation-errors';
 
 import { ACCOUNT_KEYS } from './dtos/companies.dto';
@@ -74,24 +75,13 @@ const COMPANY_DEPENDENCIES: { key: string; label: [string, string]; sql: string 
 	},
 ];
 
-/** Las 5 cuentas del asiento (spec §1.3) → columnas de `company_account_mappings`. */
-const ACCOUNTS: Record<AccountKey, { label: string; code: string; name: string; external: string }> = {
-	receivable: {
-		label: 'Cuentas por cobrar',
-		code: 'receivable_account_code',
-		name: 'receivable_account_name',
-		external: 'external_receivable_code',
-	},
-	deferred: { label: 'Ingresos diferidos', code: 'deferred_account_code', name: 'deferred_account_name', external: 'external_deferred_code' },
-	unbilled: { label: 'Ingresos por facturar', code: 'unbilled_account_code', name: 'unbilled_account_name', external: 'external_unbilled_code' },
-	revenue: { label: 'Ingresos', code: 'revenue_account_code', name: 'revenue_account_name', external: 'external_revenue_code' },
-	fx_difference: {
-		label: 'Diferencia de cambio',
-		code: 'fx_difference_account_code',
-		name: 'fx_difference_account_name',
-		external: 'external_fx_difference_code',
-	},
-};
+/** Las 5 cuentas del asiento (spec §1.3) → columnas de `company_account_mappings` (fuente única en `core/utils/account-mappings`). */
+const ACCOUNTS: Record<AccountKey, { label: string; code: string; name: string; external: string }> = Object.fromEntries(
+	ACCOUNT_MAPPING_KEYS.map((key) => [key, { label: ACCOUNT_MAPPING_LABELS[key], ...ACCOUNT_MAPPING_COLUMNS[key] }])
+) as Record<AccountKey, { label: string; code: string; name: string; external: string }>;
+
+/** Número de cuenta comparable: solo letras y dígitos ("12-345 6" = "123456"). */
+const normalizeAccountNumber = (value: string) => value.replace(/[^0-9A-Za-z]/g, '');
 
 /** `tax_rate` siempre en porcentaje: las filas antiguas en fracción (`0.19`) se devuelven como `19` (spec §8). */
 export function normalizeTaxRate(value: unknown): number | null {
@@ -190,8 +180,13 @@ export class SettingsCompaniesService {
 	async get(holdingId: string, id: string) {
 		const company = companyDto(await this.findRow(holdingId, id));
 		const usage = await this.usage(id);
+		// Mismo criterio que el árbol: SII habilitado para la compañía. El front lo muestra solo si `country_code = 'CL'`.
+		const sii = (await this.dataSource.query(
+			`SELECT 1 FROM sii_configurations WHERE company_id = $1 AND holding_id = $2 AND is_enabled = true LIMIT 1`,
+			[id, holdingId]
+		)) as Row[];
 
-		return { ...company, usage, can_delete: Object.values(usage).every((count) => count === 0) };
+		return { ...company, sii_configured: sii.length > 0, usage, can_delete: Object.values(usage).every((count) => count === 0) };
 	}
 
 	async create(holdingId: string, dto: CreateCompanyDto) {
@@ -294,7 +289,13 @@ export class SettingsCompaniesService {
 				return typeof raw === 'string' && raw.trim() !== '' ? raw : null;
 			};
 
-			return { key, label: columns.label, code: value(columns.code), name: value(columns.name), external_code: value(columns.external) };
+			return {
+				key,
+				label: columns.label,
+				code: value(columns.code),
+				name: localizeAccountName(value(columns.name)),
+				external_code: value(columns.external),
+			};
 		});
 
 		return {
@@ -311,14 +312,18 @@ export class SettingsCompaniesService {
 
 		for (const account of dto.accounts) {
 			if (!(ACCOUNT_KEYS as readonly string[]).includes(account.key)) {
-				throw validationException([{ field: 'accounts', message: `Clave de cuenta no válida: ${account.key}` }]);
+				throw validationException([{ field: 'accounts', message: `Cuenta no reconocida: ${account.key}` }]);
 			}
-			if (seen.has(account.key)) throw validationException([{ field: 'accounts', message: `Cuenta repetida: ${account.key}` }]);
+			if (seen.has(account.key)) {
+				throw validationException([{ field: 'accounts', message: `Cuenta repetida: ${ACCOUNTS[account.key as AccountKey].label}` }]);
+			}
 			seen.add(account.key);
 		}
 		const missing = ACCOUNT_KEYS.filter((key) => !seen.has(key));
 
-		if (missing.length) throw validationException([{ field: 'accounts', message: `Faltan cuentas: ${missing.join(', ')}` }]);
+		if (missing.length) {
+			throw validationException([{ field: 'accounts', message: `Faltan cuentas: ${joinEs(missing.map((key) => ACCOUNTS[key].label))}` }]);
+		}
 		const columns: string[] = [];
 		const values: unknown[] = [];
 
@@ -402,6 +407,12 @@ export class SettingsCompaniesService {
 			account_holder: dto.account_holder === undefined ? ((current.account_holder as string | null) ?? null) : dto.account_holder,
 		};
 
+		const changesNumber = normalizeAccountNumber(next.account_number) !== normalizeAccountNumber(String(current.account_number));
+
+		if ((next.currency !== String(current.currency) || changesNumber) && toCount(current.in_use) > 0) {
+			// Las cartolas cargadas quedaron conciliadas con esa moneda y ese número.
+			throw new ConflictException('La cuenta ya tiene cartolas cargadas: no se puede cambiar su moneda ni su número');
+		}
 		if (dto.bank_name !== undefined || dto.account_number !== undefined) {
 			await this.assertBankAccountFree(companyId, next.bank_name, next.account_number, accountId);
 		}

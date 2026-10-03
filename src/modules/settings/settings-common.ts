@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ValidateBy, ValidationOptions } from 'class-validator';
 import { DataSource, EntityManager } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
@@ -16,6 +17,18 @@ export interface SettingsRequest {
 export const authIdOf = (req: SettingsRequest): string => String(req.user?.sub ?? req.user?.id ?? '');
 
 export const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** `YYYY-MM-DD` que existe en el calendario (rechaza `2026-02-30`, que Postgres respondería con un 500). */
+export function isRealIsoDate(value: unknown): boolean {
+	if (typeof value !== 'string' || !ISO_DATE.test(value)) return false;
+	const date = new Date(`${value}T00:00:00Z`);
+
+	return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/** Decorador: fecha pura real (`YYYY-MM-DD`). */
+export const IsIsoDate = (message: string, options?: ValidationOptions) =>
+	ValidateBy({ name: 'isIsoDate', validator: { validate: isRealIsoDate, defaultMessage: () => message } }, options);
 
 /** Fecha pura de Postgres (`date` llega como Date o string según el driver) → `YYYY-MM-DD`. */
 export function toIsoDate(value: unknown): string | null {

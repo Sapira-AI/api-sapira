@@ -14,7 +14,7 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { lineDescription } from './billing-engine';
 import { todayFor } from './business-date';
 import { ConsumptionController } from './consumption.controller';
-import { consumptionPeriodClosed, ConsumptionService, fitConsumptionGlosa } from './consumption.service';
+import { ConsumptionService, fitConsumptionGlosa } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
@@ -1429,7 +1429,8 @@ describe('ConsumptionService.pending y list', () => {
 
 		expect(contracts.resolveContract).toHaveBeenCalledWith('CTR-2026-001', HOLDING);
 		expect(result).toEqual({ uses_usage_pricing: false, rows: [], items: [], pending: [] });
-		for (const [sql, params] of (dataSource.query as jest.Mock).mock.calls) {
+		for (const [sql, params] of (dataSource.query as jest.Mock).mock.calls.filter(([sql]) => !String(sql).includes('to_jsonb(hs)'))) {
+			// La zona horaria del holding (ronda 4) se lee aparte, solo por holding.
 			expect(params).toEqual([CONTRACT, HOLDING]);
 			expect(sql).toMatch(/holding_id = \$2/);
 		}
@@ -1709,7 +1710,7 @@ describe('ConsumptionService · ediciones manuales, glosas protegidas y sin cobr
 		expect(preview.warning_codes).toContain('erp_draft_stale');
 	});
 
-	it('write: el contrato se bloquea (FOR UPDATE) justo después de la costura; período cerrado → 409 period_closed sin escribir', async () => {
+	it('write: el contrato se bloquea (FOR UPDATE) justo después de la costura; el cierre de períodos NO bloquea consumos (Domi 03-10)', async () => {
 		const { service, runner } = build(withStandardItem([standard()]));
 
 		await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 3 }, HOLDING, 'auth-1');
@@ -1718,25 +1719,12 @@ describe('ConsumptionService · ediciones manuales, glosas protegidas y sin cobr
 		expect(sql[0]).toContain('sapira.writer');
 		expect(sql[1]).toContain('FROM contracts c');
 		expect(sql[1]).toContain('FOR UPDATE');
-		const closed = build(
-			withStandardItem([standard()], (query) => (query.includes('get_cutoff_date') ? [{ id: CONTRACT, cutoff_date: '2026-10-31' }] : undefined))
-		);
-		const error = await rejection(closed.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 3 }, HOLDING, 'auth-1'), ConflictException);
+		// Ni el período de la línea ni la emisión de la factura se comparan con el cierre: ya no se lee `get_cutoff_date`.
+		expect(sql.some((query) => query.includes('get_cutoff_date'))).toBe(false);
+		const issue = build(withStandardItem([standard({ issue_date: '2026-09-25' })]));
 
-		expect((error.getResponse() as Row).blockers).toEqual([expect.objectContaining({ code: 'period_closed', next_step: expect.any(String) })]);
-		expect(closed.runner.commitTransaction).not.toHaveBeenCalled();
-		expect(calls(closed.runner.query, 'INSERT INTO')).toHaveLength(0);
-		// Período abierto pero la Por Emitir (anticipada) se emite en un mes cerrado (emisión 25-09, cierre 30-09) → también 409; el preview igual.
-		const issue = build(
-			withStandardItem([standard({ issue_date: '2026-09-25' })], (query) =>
-				query.includes('get_cutoff_date') ? [{ id: CONTRACT, cutoff_date: '2026-09-30' }] : undefined
-			)
-		);
-
-		await expect(issue.service.preview(CONTRACT, ITEM, '2026-10-01', { quantity: 3 }, HOLDING)).rejects.toBeInstanceOf(ConflictException);
-		expect(consumptionPeriodClosed('2026-11-15', '2026-12-01', '2026-11-01')).toMatchObject({ code: 'period_closed' });
-		expect(consumptionPeriodClosed('2026-09-30', '2026-10-01', '2026-11-01')).toBeNull();
-		expect(consumptionPeriodClosed(null, '2026-10-01', '2026-11-01')).toBeNull();
+		await expect(issue.service.preview(CONTRACT, ITEM, '2026-10-01', { quantity: 3 }, HOLDING)).resolves.toBeDefined();
+		expect(calls(issue.dataSource.query as unknown as jest.Mock, 'get_cutoff_date')).toHaveLength(0);
 	});
 });
 

@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone } from '@/core/utils/holding-preferences';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
 import { resolveUserId } from '@/modules/contracts/contract-drafts.service';
@@ -237,15 +238,16 @@ export class BillingReconciliationService {
 		private readonly payments: BillingPaymentsService
 	) {}
 
-	today(now = new Date()): string {
-		return todayFor(null, now);
+	/** "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4 de Configuración; default America/Santiago). */
+	async today(now = new Date(), holdingId?: string | null): Promise<string> {
+		return todayFor(await holdingTimezone(this.dataSource, holdingId), now);
 	}
 
 	// ---------------------------------------------------------------- lecturas
 
 	/** KPIs de la pestaña (montos por moneda, nunca sumados) + cuentas, fuente y último lote. */
 	async summary(holdingId: string, query: ReconciliationSummaryQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const period = { from: query.from ?? `${today.slice(0, 7)}-01`, to: query.to ?? monthEndOf(query.from ?? today) };
 		const params = new SqlParams();
 		const holding = params.add(holdingId);
@@ -341,7 +343,7 @@ export class BillingReconciliationService {
 
 	/** Cola paginada (abonos por defecto) con la mejor sugerencia calculada en vivo para la página y los pagos de cada movimiento. */
 	async movements(holdingId: string, query: ReconciliationMovementsQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
 		const params = new SqlParams();
@@ -414,7 +416,7 @@ export class BillingReconciliationService {
 
 	/** Detalle de un movimiento: hasta 5 sugerencias (incluye muchos-a-1) y movimientos relacionados del mismo pagador. */
 	async suggestions(holdingId: string, movementId: string, query: ReconciliationSuggestionsQueryDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const [row] = (await this.dataSource.query(`${movementsCte('$1')} SELECT mv.* FROM mv WHERE mv.id = $2`, [holdingId, movementId])) as Row[];
 
 		if (!row) throw new NotFoundException('Movimiento no encontrado');
@@ -444,7 +446,7 @@ export class BillingReconciliationService {
 
 	/** Facturas cobrables con saldo > 0 (regla única `balanceSql`), vencimiento más antiguo primero; las sin contrato van `read_only`. */
 	async candidates(holdingId: string, query: ReconciliationCandidatesQueryDto, now = new Date()) {
-		const rows = await this.candidateRows(holdingId, this.today(now), {
+		const rows = await this.candidateRows(holdingId, await this.today(now, holdingId), {
 			currencies: query.currency ? [query.currency.toUpperCase()] : [],
 			clientId: query.client_id,
 			q: query.q,
@@ -584,7 +586,8 @@ export class BillingReconciliationService {
 		let suggestions = emptyTiers();
 
 		try {
-			suggestions = (await this.refreshPersisted(holdingId, this.today(now), DEFAULT_FEE_THRESHOLD_PCT, credits)).by_confidence;
+			suggestions = (await this.refreshPersisted(holdingId, await this.today(now, holdingId), DEFAULT_FEE_THRESHOLD_PCT, credits))
+				.by_confidence;
 		} catch {
 			// Best effort: la importación ya quedó; las sugerencias se recalculan con "Actualizar sugerencias".
 		}
@@ -761,7 +764,7 @@ export class BillingReconciliationService {
 
 	/** Vista previa: por ítem, bloqueos del movimiento (`planMatch`) + los del plan de pagos (`planPayments`), antes/después. No escribe. */
 	async previewMatches(holdingId: string, dto: MatchesDto, now = new Date()) {
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const items = [];
 
 		for (const item of dto.items) items.push((await this.evaluate(this.dataSource, holdingId, item, today, false)).result);
@@ -775,7 +778,7 @@ export class BillingReconciliationService {
 	 */
 	async applyMatches(holdingId: string, dto: MatchesDto, authId: string, now = new Date()) {
 		const userId = await resolveUserId(this.dataSource, authId);
-		const today = this.today(now);
+		const today = await this.today(now, holdingId);
 		const items: Array<ItemResult & { applied: boolean; payment_ids: string[]; event_ids: string[]; error?: string | null }> = [];
 		const touched = new Set<string>();
 
@@ -902,7 +905,7 @@ export class BillingReconciliationService {
 
 	/** Recalcula y persiste la mejor sugerencia de los abonos abiertos del holding (filtro por confianza y KPI "Sin identificar"). */
 	async refreshSuggestions(holdingId: string, dto: RefreshSuggestionsDto, now = new Date()) {
-		return await this.refreshPersisted(holdingId, this.today(now), dto.fee_threshold_pct ?? DEFAULT_FEE_THRESHOLD_PCT, null);
+		return await this.refreshPersisted(holdingId, await this.today(now, holdingId), dto.fee_threshold_pct ?? DEFAULT_FEE_THRESHOLD_PCT, null);
 	}
 
 	// ---------------------------------------------------------------- internos
@@ -1039,7 +1042,7 @@ export class BillingReconciliationService {
 
 	private async refreshQuietly(holdingId: string, now: Date, ids: string[]) {
 		try {
-			await this.refreshPersisted(holdingId, this.today(now), DEFAULT_FEE_THRESHOLD_PCT, ids);
+			await this.refreshPersisted(holdingId, await this.today(now, holdingId), DEFAULT_FEE_THRESHOLD_PCT, ids);
 		} catch {
 			// Best effort.
 		}

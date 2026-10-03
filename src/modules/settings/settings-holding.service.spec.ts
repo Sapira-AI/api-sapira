@@ -17,8 +17,22 @@ const storage = {
 
 const currencies: Handler = ['FROM currencies', (params) => (['USD', 'CLP', 'EUR'].includes(String(params[0])) ? [{ code: params[0] }] : [])];
 const holdingRow: Handler = [
-	'FROM company_holdings WHERE id',
-	(params) => (params[0] === HOLDING ? [{ id: HOLDING, name: 'Hanka', website: null, phone: null, email: null, logo_url: null }] : []),
+	'FROM company_holdings h',
+	(params) =>
+		params[0] === HOLDING
+			? [
+					{
+						id: HOLDING,
+						name: 'Hanka',
+						website: null,
+						phone: null,
+						email: null,
+						logo_url: null,
+						users_count: '4',
+						last_activity_at: '2026-10-02T12:00:00Z',
+					},
+				]
+			: [],
 ];
 
 function build(handlers: Handler[] = []) {
@@ -35,14 +49,25 @@ describe('SettingsHoldingService', () => {
 			await expect(service.getHolding('otro')).rejects.toBeInstanceOf(NotFoundException);
 		});
 
-		it('PATCH solo escribe los campos enviados', async () => {
-			const { db, service } = build([['UPDATE company_holdings', () => [{ id: HOLDING, name: 'Hanka 2' }]]]);
+		it('resumen: miembros activos sin super admins y su último acceso', async () => {
+			const { db, service } = build();
+			const holding = await service.getHolding(HOLDING);
+			const [read] = db.statements('FROM company_holdings h');
 
-			await service.updateHolding(HOLDING, { name: 'Hanka 2', email: null });
+			expect(holding).toMatchObject({ name: 'Hanka', users_count: 4, last_activity_at: '2026-10-02T12:00:00Z' });
+			expect(read.sql).toContain('uh.is_active = true AND COALESCE(u.is_super_admin, false) = false');
+			expect(read.sql).toContain('max(u.last_access)');
+		});
+
+		it('PATCH solo escribe los campos enviados y nunca el nombre', async () => {
+			const { db, service } = build();
+
+			await service.updateHolding(HOLDING, { website: 'https://hanka.cl', email: null });
 			const [update] = db.statements('UPDATE company_holdings');
 
-			expect(update.sql).toContain('SET name = $2, email = $3 WHERE id = $1');
-			expect(update.params).toEqual([HOLDING, 'Hanka 2', null]);
+			expect(update.sql).toContain('SET website = $2, email = $3 WHERE id = $1');
+			expect(update.params).toEqual([HOLDING, 'https://hanka.cl', null]);
+			expect(update.sql).not.toContain('name');
 		});
 
 		it('logo_url ajeno al bucket o a la carpeta del holding → 400; la URL de logo-upload pasa', async () => {
@@ -59,7 +84,10 @@ describe('SettingsHoldingService', () => {
 			const { service } = build();
 
 			await expect(service.prepareLogoUpload(HOLDING, { file_name: 'a.gif', mime_type: 'image/gif', size: 10 })).rejects.toThrow(
-				'El logo debe ser PNG, JPG, WEBP o SVG'
+				'El logo debe ser PNG, JPG o WEBP'
+			);
+			await expect(service.prepareLogoUpload(HOLDING, { file_name: 'a.svg', mime_type: 'image/svg+xml', size: 10 })).rejects.toThrow(
+				'El logo debe ser PNG, JPG o WEBP'
 			);
 			await expect(service.prepareLogoUpload(HOLDING, { file_name: 'a.png', mime_type: 'image/png', size: 3 * 1024 * 1024 })).rejects.toThrow(
 				'El logo no puede superar 2 MB'
@@ -75,10 +103,20 @@ describe('SettingsHoldingService', () => {
 		it('sin fila devuelve los valores por defecto', async () => {
 			const { service } = build();
 
+			const year = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric' }).format(new Date());
+
 			await expect(service.getPreferences(HOLDING)).resolves.toEqual({
 				system_currency: 'USD',
 				fx_system_policy: 'monthly_avg',
 				auto_renewal_notice_days: 30,
+				locked: false,
+				locked_reason: null,
+				// Ronda 4: defaults = comportamiento anterior.
+				timezone: 'America/Santiago',
+				renewal_reminder_days: [15, 7, 0],
+				renewal_overdue_every_days: 7,
+				renewal_reminder_ladder: [30, 15, 7, 0],
+				quote_numbering: { mode: 'prefixed', prefix: 'COT', include_year: true, width: 4, next_number_preview: `COT-${year}-0001` },
 			});
 		});
 
@@ -87,13 +125,118 @@ describe('SettingsHoldingService', () => {
 
 			await expect(service.updatePreferences(HOLDING, { system_currency: 'xxx' })).rejects.toThrow('Moneda no reconocida: XXX');
 			await service.updatePreferences(HOLDING, { system_currency: 'clp', fx_system_policy: 'fixed_period' });
-			expect(db.statements('INSERT INTO holding_settings')[0].params).toEqual([HOLDING, 'CLP', 'fixed_period', 30]);
+			expect(db.statements('INSERT INTO holding_settings')[0].params).toEqual([
+				HOLDING,
+				'CLP',
+				'fixed_period',
+				30,
+				'America/Santiago',
+				[15, 7, 0],
+				7,
+				'prefixed',
+				'COT',
+				true,
+				4,
+			]);
 		});
 	});
 
-	describe('moneda de consolidación', () => {
-		it('con contratos → 409 y no escribe; misma moneda u otros campos sí se guardan', async () => {
-			const { db, service } = build([['FROM contracts WHERE holding_id = $1', () => [{ n: '3' }]]]);
+	describe('preferencias de la ronda 4 (zona horaria, recordatorios, numeración de cotizaciones)', () => {
+		const stored: Handler = [
+			'to_jsonb(hs)',
+			() => [
+				{
+					settings: {
+						auto_renewal_notice_days: 90,
+						timezone: 'America/Lima',
+						renewal_reminder_days: [45, 20, 0],
+						renewal_overdue_every_days: 14,
+						quote_numbering_mode: 'prefixed',
+						quote_number_prefix: 'PROP',
+						quote_number_include_year: false,
+						quote_number_width: 5,
+					},
+				},
+			],
+		];
+		const lastQuote: Handler = ['regexp_match(quote_number', (params) => [{ next: params[1] === '^PROP-(\\d{1,12})$' ? 13 : 1 }]];
+
+		it('GET: lee lo guardado, la escalera efectiva del job y la vista previa del próximo número', async () => {
+			const { service } = build([stored, lastQuote]);
+			const result = await service.getPreferences(HOLDING);
+
+			expect(result).toMatchObject({
+				timezone: 'America/Lima',
+				renewal_reminder_days: [45, 20, 0],
+				renewal_overdue_every_days: 14,
+				renewal_reminder_ladder: [90, 45, 20, 0],
+				quote_numbering: { mode: 'prefixed', prefix: 'PROP', include_year: false, width: 5, next_number_preview: 'PROP-00013' },
+			});
+		});
+
+		it('GET: modo manual sin vista previa; valores inválidos guardados caen al default', async () => {
+			const odd: Handler = ['to_jsonb(hs)', () => [{ settings: { timezone: 'Mars/Base', quote_numbering_mode: 'manual' } }]];
+			const result = await build([odd]).service.getPreferences(HOLDING);
+
+			expect(result.timezone).toBe('America/Santiago');
+			expect(result.quote_numbering).toMatchObject({ mode: 'manual', next_number_preview: null });
+		});
+
+		it('PATCH: guarda zona, escalera ordenada de mayor a menor y numeración mezclada con lo guardado', async () => {
+			const { db, service } = build([stored, lastQuote]);
+
+			await service.updatePreferences(HOLDING, {
+				timezone: 'America/Mexico_City',
+				renewal_reminder_days: [0, 30, 7],
+				quote_numbering: { mode: 'sequential' },
+			});
+			expect(db.statements('INSERT INTO holding_settings')[0].params).toEqual([
+				HOLDING,
+				'USD',
+				'monthly_avg',
+				90,
+				'America/Mexico_City',
+				[30, 7, 0],
+				14,
+				'sequential',
+				'PROP',
+				false,
+				5,
+			]);
+		});
+
+		it('PATCH: zona horaria desconocida → 400 con el campo', async () => {
+			const { db, service } = build();
+
+			await expect(service.updatePreferences(HOLDING, { timezone: 'America/Gotham' })).rejects.toThrow(
+				'Zona horaria no reconocida: America/Gotham'
+			);
+			expect(db.statements('INSERT INTO holding_settings')).toHaveLength(0);
+		});
+
+		it('con contratos, las preferencias de la ronda 4 se pueden cambiar (rigen hacia adelante)', async () => {
+			const withContracts: Handler = ['FROM contracts WHERE holding_id = $1', () => [{ '?column?': 1 }]];
+			const { db, service } = build([withContracts]);
+
+			await service.updatePreferences(HOLDING, { timezone: 'UTC', renewal_overdue_every_days: 30 });
+			expect(db.statements('INSERT INTO holding_settings')).toHaveLength(1);
+		});
+	});
+
+	describe('moneda de consolidación y política de tipo de cambio', () => {
+		const withContracts: Handler = ['FROM contracts WHERE holding_id = $1', () => [{ '?column?': 1 }]];
+
+		it('GET con contratos: locked y el motivo para el front', async () => {
+			const { service } = build([withContracts]);
+
+			await expect(service.getPreferences(HOLDING)).resolves.toMatchObject({
+				locked: true,
+				locked_reason: expect.stringContaining('El holding ya tiene contratos'),
+			});
+		});
+
+		it('con contratos: cambiar la moneda → 409 y no escribe; misma moneda u otros campos sí se guardan', async () => {
+			const { db, service } = build([withContracts]);
 
 			await expect(service.updatePreferences(HOLDING, { system_currency: 'CLP' })).rejects.toThrow(
 				new ConflictException(
@@ -101,15 +244,39 @@ describe('SettingsHoldingService', () => {
 				)
 			);
 			expect(db.statements('INSERT INTO holding_settings')).toHaveLength(0);
-			await service.updatePreferences(HOLDING, { system_currency: 'usd', auto_renewal_notice_days: 45 });
-			expect(db.statements('INSERT INTO holding_settings')[0].params).toEqual([HOLDING, 'USD', 'monthly_avg', 45]);
+			await service.updatePreferences(HOLDING, { system_currency: 'usd', fx_system_policy: 'monthly_avg', auto_renewal_notice_days: 45 });
+			expect(db.statements('INSERT INTO holding_settings')[0].params).toEqual([
+				HOLDING,
+				'USD',
+				'monthly_avg',
+				45,
+				'America/Santiago',
+				[15, 7, 0],
+				7,
+				'prefixed',
+				'COT',
+				true,
+				4,
+			]);
 		});
 
-		it('sin contratos se puede cambiar', async () => {
-			const { db, service } = build([['FROM contracts WHERE holding_id = $1', () => [{ n: 0 }]]]);
+		it('con contratos: cambiar la política de tipo de cambio → 409 con su propio mensaje', async () => {
+			const { db, service } = build([withContracts]);
 
-			await service.updatePreferences(HOLDING, { system_currency: 'EUR' });
-			expect(db.statements('INSERT INTO holding_settings')[0].params[1]).toBe('EUR');
+			await expect(service.updatePreferences(HOLDING, { fx_system_policy: 'fixed_period' })).rejects.toThrow(
+				new ConflictException(
+					'No se puede cambiar la política de tipo de cambio: el holding ya tiene contratos y cambiaría todas las métricas históricas'
+				)
+			);
+			expect(db.statements('INSERT INTO holding_settings')).toHaveLength(0);
+		});
+
+		it('sin contratos se pueden cambiar las dos', async () => {
+			const { db, service } = build();
+			const result = await service.updatePreferences(HOLDING, { system_currency: 'EUR', fx_system_policy: 'fixed_period' });
+
+			expect(db.statements('INSERT INTO holding_settings')[0].params.slice(1, 3)).toEqual(['EUR', 'fixed_period']);
+			expect(result.locked).toBe(false);
 		});
 	});
 
@@ -203,7 +370,7 @@ describe('SettingsHoldingService', () => {
 		});
 
 		it('árbol con chips por compañía', async () => {
-			const { service } = build([
+			const { db, service } = build([
 				[
 					'FROM companies c LEFT JOIN accounting_period_cutoff',
 					() => [
@@ -225,6 +392,9 @@ describe('SettingsHoldingService', () => {
 
 			expect(tree.holding).toMatchObject({ name: 'Hanka', system_currency: 'USD' });
 			expect(tree.companies[0]).toMatchObject({ closed_until: '2026-07-31', accounts_complete: false, sii_configured: true, erp_linked: true });
+			expect(db.statements('FROM companies c LEFT JOIN accounting_period_cutoff')[0].sql).toContain(
+				"NULLIF(btrim(m.fx_difference_account_name), '') IS NOT NULL"
+			);
 		});
 	});
 });
