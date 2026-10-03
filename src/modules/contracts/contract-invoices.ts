@@ -1,7 +1,13 @@
 import { addMonths, computeDueDate, diffDays, round2 } from './billing-engine';
 import { type HeaderAmounts, headerFromLines } from './consumption';
-import { creditNotePendingEmission, isCreditNote, PENDING_STATUS } from './contract-360';
-import { REOPEN_PERIOD_STEP } from './contract-changes';
+import {
+	creditNotePendingEmission,
+	isCreditNote,
+	PENDING_STATUS,
+	PRODUCT_WITHOUT_ERP_MAPPING_CODE,
+	UNMAPPED_PRODUCTS_SQL,
+	unmappedProductsMessage,
+} from './contract-360';
 import { cleanPaymentTerms } from './contract-drafts.service';
 import { CONSOLIDATION_EVENT_TYPES } from './invoice-consolidation-read';
 import { codedValidationException, MULTICURRENCY_CODES, pairKey, upperCode, valuateLinesByPair } from './multicurrency';
@@ -64,8 +70,11 @@ export interface InvoiceBlocker {
 	code: string;
 	message: string;
 	next_step: string | null;
-	/** Acción que la UI puede ofrecer para destrabar (hoy: `erp_reset` en `sent_to_erp_draft` → "Restablecer borrador y editar"). */
-	action?: 'erp_reset';
+	/**
+	 * Acción que la UI puede ofrecer para destrabar: `erp_reset` en `sent_to_erp_draft` → "Restablecer borrador y editar"; `map_product` en
+	 * `product_without_erp_mapping` → mapear el producto en Integraciones › Odoo.
+	 */
+	action?: 'erp_reset' | 'map_product';
 }
 export interface InvoiceWarning {
 	code: string;
@@ -115,6 +124,11 @@ export interface ContractInvoiceRow {
 	period_end: string | null;
 	lines_count: number;
 	lines_without_product: number;
+	/**
+	 * Productos (nombre) de las líneas que viajarían al ERP sin producto de Odoo resoluble (`UNMAPPED_PRODUCTS_SQL`): el scheduler los
+	 * rechaza (`product_without_erp_mapping`) en vez de mandarlos como producto 1. Ausente = no se cargó (sin bloqueo).
+	 */
+	unmapped_products?: string[];
 	references_count: number;
 	/** Σ cantidad × unitario en moneda de contrato (base del neto exacto, sin redondeos de subtotal). */
 	priced_base: number;
@@ -171,6 +185,18 @@ export interface ContractInvoiceLineRow {
 export const CREDIT_NOTE_SEND_PENDING_CODE = 'credit_note_send_pending';
 
 export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a intentarlo';
+
+// ---------------------------------------------------------------- producto sin mapeo al ERP
+
+export { PRODUCT_WITHOUT_ERP_MAPPING_CODE, UNMAPPED_PRODUCTS_SQL, unmappedProductsMessage };
+export const MAP_PRODUCT_STEP = 'Mapea el producto en Integraciones › Odoo';
+
+/** Bloqueo `product_without_erp_mapping` si alguna línea que viajaría al ERP no resuelve a un producto de Odoo; null si todo resuelve. */
+export function productMappingBlocker(products: string[] | undefined): InvoiceBlocker | null {
+	if (!products?.length) return null;
+
+	return { code: PRODUCT_WITHOUT_ERP_MAPPING_CODE, message: unmappedProductsMessage(products), next_step: MAP_PRODUCT_STEP, action: 'map_product' };
+}
 
 // ---------------------------------------------------------------- bloqueos comunes
 
@@ -242,17 +268,6 @@ export function partialBillingBlocker(invoice: Pick<ContractInvoiceRow, 'interna
 	};
 }
 
-/** Fecha en período cerrado → `period_closed` (misma regla que las modificaciones). */
-export function periodClosedBlocker(date: string | null, context: ContractInvoiceContext, what: string): InvoiceBlocker | null {
-	if (!date || !context.cutoff_date || date > context.cutoff_date) return null;
-
-	return {
-		code: 'period_closed',
-		message: `${what} (${date}) cae en un período cerrado (cierre al ${context.cutoff_date})`,
-		next_step: REOPEN_PERIOD_STEP,
-	};
-}
-
 export const isMultiCurrency = (invoice: Pick<ContractInvoiceRow, 'contract_currency' | 'invoice_currency'>) =>
 	!!invoice.invoice_currency && !!invoice.contract_currency && invoice.invoice_currency.toUpperCase() !== invoice.contract_currency.toUpperCase();
 
@@ -299,7 +314,10 @@ export interface SendNowPlan {
 	};
 }
 
-/** Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `erp_send_disabled`, `tax_rate_missing`). */
+/**
+ * Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `erp_send_disabled`, `tax_rate_missing`,
+ * `product_without_erp_mapping`).
+ */
 export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoiceContext): SendNowPlan {
 	// NC/ND: el envío al ERP (`out_refund`) todavía no existe (Leon); se rechaza con un código propio, no el genérico de edición.
 	const blockers = commonBlockers(invoice).map((blocker) =>
@@ -344,7 +362,9 @@ export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoic
 			message: context.has_entity
 				? 'La razón social todavía no está vinculada a un cliente en el ERP'
 				: 'El contrato no tiene razón social asignada',
-			next_step: context.has_entity ? 'Vincúlala en Clientes › Razones sociales' : 'Asigna la razón social en el contrato',
+			next_step: context.has_entity
+				? 'Abre la razón social en Clientes › Razones sociales y usa «Vincular con Odoo»'
+				: 'Asigna la razón social en el contrato',
 		});
 	}
 	if ((context.contract_requires_references || invoice.requires_references) && invoice.references_count === 0) {
@@ -367,6 +387,10 @@ export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoic
 			next_step: 'Asocia el producto en el ítem del contrato',
 		});
 	}
+	// Solo si la factura va por el ERP (si el contrato no envía o la compañía no tiene integración, ya lo dicen esos bloqueos).
+	const unmapped = context.auto_send_to_erp && context.has_erp_integration ? productMappingBlocker(invoice.unmapped_products) : null;
+
+	if (unmapped) blockers.push(unmapped);
 	if (isMultiCurrency(invoice) && policy === 'fixed' && effectiveFxRate(invoice) === null) {
 		blockers.push({
 			code: 'fixed_fx_without_rate',
@@ -468,10 +492,8 @@ export function planMarkIssued(
 	const blockers = commonBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
-	const closed = periodClosedBlocker(input.issue_date, context, 'La fecha de emisión');
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	if (invoice.lines_count === 0) blockers.push({ code: 'no_lines', message: 'La factura no tiene líneas', next_step: null });
 	const multi = isMultiCurrency(invoice);
 	const bodyRate = input.fx_rate && input.fx_rate > 0 ? round6(input.fx_rate) : null;
@@ -568,10 +590,8 @@ export function planRescheduleOne(invoice: ContractInvoiceRow, context: Contract
 	const blockers = commonBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
-	const closed = periodClosedBlocker(issueDate, context, 'La nueva fecha de emisión');
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	if (invoice.issue_date === issueDate) warnings.push({ code: 'same_date', message: 'La fecha de emisión no cambia' });
 	if (issueDate < context.today) {
 		warnings.push({
@@ -1027,10 +1047,8 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 
 	if (draft) blockers.push(draft);
 	const partial = partialBillingBlocker(invoice);
-	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
 
 	if (partial) blockers.push(partial);
-	if (closed) blockers.push(closed);
 	// Multimoneda: el documento se valoriza por par (líneas en monedas de ítem distintas).
 	if (hasPairLines(invoice, lines)) {
 		if ((invoice.invoice_currency ?? '').toUpperCase() === 'CLF') {
@@ -1185,12 +1203,10 @@ export interface ErpResetPlan {
  */
 export function planErpReset(invoice: ContractInvoiceRow, context: ContractInvoiceContext, lines: ContractInvoiceLineRow[] = []): ErpResetPlan {
 	const blockers = commonBlockers(invoice);
-	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
 
 	if (!blockers.some((blocker) => blocker.code === 'credit_note') && invoice.odoo_invoice_id === null && invoice.sent_to_odoo_at === null) {
 		blockers.push({ code: 'not_sent_to_erp', message: 'La factura no está vinculada al ERP: no hay borrador que restablecer', next_step: null });
 	}
-	if (closed) blockers.push(closed);
 	const spotReset =
 		isMultiCurrency(invoice) &&
 		context.contract_fx_invoice_policy === 'spot' &&

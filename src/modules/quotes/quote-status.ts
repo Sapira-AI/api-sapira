@@ -31,8 +31,13 @@ export const QUOTE_STATUS_LABELS: Record<QuoteDerivedStatus, string> = {
 	lost: 'Perdida',
 };
 
-/** Kinds en los que la cotización se edita y se elimina (§5a). */
-export const EDITABLE_STAGE_KINDS: readonly QuoteStageKind[] = ['draft', 'sent'];
+/**
+ * Kinds en los que la cotización se edita (§5a, Domi 02-10): todos menos `contract_created`. Con contrato vinculado no se edita en
+ * ninguno. En `signed`/`lost` la edición exige confirmación explícita (`EDIT_CONFIRMATION_STAGE_KINDS`) y queda con el diff en el historial.
+ */
+export const EDITABLE_STAGE_KINDS: readonly QuoteStageKind[] = ['draft', 'sent', 'signed', 'lost'];
+/** Kinds en los que editar exige `confirm_edit_after_signature: true` (409 `edit_requires_confirmation` si falta). */
+export const EDIT_CONFIRMATION_STAGE_KINDS: readonly QuoteStageKind[] = ['signed', 'lost'];
 export const DELETABLE_STAGE_KINDS: readonly QuoteStageKind[] = ['draft', 'sent', 'lost'];
 
 /** Etapas v2 que se siembran en un holding nuevo (mismo set que `functions/create_default_quote_stages_for_holding.sql`). */
@@ -137,7 +142,7 @@ export const QUOTE_TRANSITION_ERRORS = [
 	'items_incomplete',
 	'booking_date_required',
 	'stage_kind_mismatch',
-	'quote_signed_locked',
+	'edit_requires_confirmation',
 	'quote_not_deletable',
 	'item_linked_to_contract',
 ] as const;
@@ -160,31 +165,30 @@ export const QUOTE_EVENT_TYPES = [
 export type QuoteEventType = (typeof QUOTE_EVENT_TYPES)[number];
 
 /**
- * Transiciones válidas entre kinds: `draft ⇄ sent` · `draft|sent → signed` · `draft|sent → lost` · `signed → sent` (destrabar) ·
- * `signed → lost` · `lost → draft` (reabrir; Supuesto). Nada sale de `contract_created` ni entra a mano. Mover entre dos etapas
- * del mismo kind (Recepcionado → Negociando) vale en `draft` y `sent`. Con contrato vinculado nada se mueve.
+ * Transiciones entre kinds (Domi 02-10): **libres** entre `draft · sent · signed · lost` en ambos sentidos (también `signed → draft`,
+ * `lost → sent|signed` y entre dos etapas del mismo kind). Nada sale de `contract_created` ni entra a mano (lo marca Contratos al
+ * crear el contrato). Con contrato vinculado nada se mueve. Las exigencias del destino (ítems completos y booking al firmar, motivo
+ * al perder) las valida `QuotesService.transition`.
  */
 export function transitionError(from: QuoteStageKind, to: QuoteStageKind, hasContract: boolean): QuoteTransitionError | null {
 	if (hasContract) return 'quote_has_contract';
 	if (from === 'contract_created' || to === 'contract_created') return 'invalid_transition';
-	const allowed: Record<Exclude<QuoteStageKind, 'contract_created'>, readonly QuoteStageKind[]> = {
-		draft: ['draft', 'sent', 'signed', 'lost'],
-		sent: ['draft', 'sent', 'signed', 'lost'],
-		signed: ['sent', 'lost'],
-		lost: ['draft'],
-	};
 
-	return allowed[from].includes(to) ? null : 'invalid_transition';
+	return null;
 }
 
-/** Evento que deja una transición (`STAGE_CHANGED` cuando el kind no cambia). */
+/**
+ * Evento que deja una transición: mismo kind → `STAGE_CHANGED` · a `signed` → `SIGNED` · a `lost` → `LOST` · salir de `signed`/`lost`
+ * hacia `draft`/`sent` → `REOPENED` · a `sent` → `SENT` · `sent → draft` → `STAGE_CHANGED`.
+ */
 export function transitionEventType(from: QuoteStageKind, to: QuoteStageKind): QuoteEventType {
 	if (from === to) return 'STAGE_CHANGED';
 	if (to === 'signed') return 'SIGNED';
 	if (to === 'lost') return 'LOST';
-	if (to === 'sent') return from === 'signed' || from === 'lost' ? 'REOPENED' : 'SENT';
+	if (from === 'signed' || from === 'lost') return 'REOPENED';
+	if (to === 'sent') return 'SENT';
 
-	return 'REOPENED';
+	return 'STAGE_CHANGED';
 }
 
 // ------------------------------------------------------------------ tipo de negocio (Q-A9)
@@ -242,7 +246,10 @@ export const quoteTypeLabel = (value: string | null | undefined): string | null 
 	return code ? QUOTE_TYPE_LABELS[code] : value ? String(value) : null;
 };
 
-/** Formato del correlativo por holding para cotizaciones manuales (§8, Supuesto de formato). */
+/**
+ * Formato por defecto del correlativo (`COT-{año}-{NNNN}`). Desde la ronda 4 de Configuración el formato es preferencia del holding
+ * (`quoteNumberFormat` / `nextQuoteNumber` en `src/core/utils/holding-preferences.ts`); estos helpers describen el default.
+ */
 export const QUOTE_NUMBER_PREFIX = 'COT';
 export const quoteNumberPattern = (year: number) => `^${QUOTE_NUMBER_PREFIX}-${year}-(\\d{1,6})$`;
 export const formatQuoteNumber = (year: number, correlative: number) => `${QUOTE_NUMBER_PREFIX}-${year}-${String(correlative).padStart(4, '0')}`;

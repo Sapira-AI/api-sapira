@@ -58,6 +58,11 @@ export class QueryContractSubscriptionsDto {
 	@IsOptional()
 	clientId?: string;
 
+	@ApiPropertyOptional({ description: 'Razón social (pestaña Suscripciones del Razón social 360)' })
+	@IsUUID()
+	@IsOptional()
+	entityId?: string;
+
 	@ApiPropertyOptional({ enum: SUBSCRIPTION_SORT_FIELDS, default: 'start_date' })
 	@IsIn(SUBSCRIPTION_SORT_FIELDS)
 	@IsOptional()

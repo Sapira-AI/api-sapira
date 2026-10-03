@@ -1,13 +1,6 @@
 import { round2 } from './billing-engine';
 import { isCreditNote, PENDING_STATUS } from './contract-360';
-import {
-	type ContractInvoiceContext,
-	type ContractInvoiceRow,
-	erpDraftBlocker,
-	type InvoiceBlocker,
-	type InvoiceWarning,
-	periodClosedBlocker,
-} from './contract-invoices';
+import { type ContractInvoiceRow, erpDraftBlocker, type InvoiceBlocker, type InvoiceWarning } from './contract-invoices';
 import { isUnifiedType } from './invoice-consolidation-read';
 import { DESCRIPTION_FITTED_CODE, fitDescription, referenceKind } from './invoice-description';
 import { pairKey, upperCode } from './multicurrency';
@@ -39,7 +32,6 @@ export const CONSOLIDATION_BLOCKERS = {
 	partial_billing_invoice: 'partial_billing_invoice',
 	open_consumption: 'open_consumption',
 	sent_to_erp_draft: 'sent_to_erp_draft',
-	period_closed: 'period_closed',
 	single_contract: 'single_contract',
 	company_mismatch: 'company_mismatch',
 	entity_mismatch: 'entity_mismatch',
@@ -331,9 +323,6 @@ export function invoiceBlockers(invoice: ConsolidationInvoice): InvoiceBlocker[]
 	const erp = erpBlocker(invoice);
 
 	if (erp) blockers.push(erp);
-	const closed = periodClosedBlocker(invoice.issue_date, { cutoff_date: invoice.cutoff_date } as ContractInvoiceContext, `La emisión de ${name}`);
-
-	if (closed) blockers.push(closed);
 
 	return blockers;
 }

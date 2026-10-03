@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Country } from '@/databases/postgresql/entities/base-tenancy/country.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 
 /** Condición de pago por defecto de la razón social (se copia a contratos y facturas, que pueden sobrescribirla). */
@@ -8,6 +9,7 @@ export type PaymentTerms = { kind: 'net'; days: number } | { kind: 'end_of_month
 
 @Index('idx_client_entities_client_number', ['client_number'])
 @Index('idx_client_entities_holding_id', ['holding_id'])
+@Index('idx_client_entities_country_code', ['country_code'])
 @Index('idx_client_entities_odoo_partner_holding', ['odoo_partner_id', 'holding_id'], { unique: true, where: `(odoo_partner_id IS NOT NULL)` })
 @Index('idx_client_entities_odoo_partner_id', ['odoo_partner_id'], { where: `(odoo_partner_id IS NOT NULL)` })
 /** Forma de `payment_terms`: migración `1789200000000-AddClientEntityPaymentTerms` (roadmap operativo #11). */
@@ -34,6 +36,19 @@ export class ClientEntity {
 
 	@Column({ type: 'text', nullable: true })
 	country?: string;
+
+	/** Configuración v2 ronda 3 (migración `1790840000000-ClientsCountryCode`): país ISO; la API escribe también `country` en español. */
+	@Column({
+		type: 'character',
+		length: 2,
+		nullable: true,
+		comment: 'País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español',
+	})
+	country_code?: string | null;
+
+	@ManyToOne(() => Country, { onDelete: 'RESTRICT' })
+	@JoinColumn({ name: 'country_code', referencedColumnName: 'code', foreignKeyConstraintName: 'client_entities_country_code_fkey' })
+	countryRef?: Country;
 
 	@Column({ type: 'text', nullable: true })
 	legal_address?: string;

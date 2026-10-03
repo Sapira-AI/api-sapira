@@ -113,7 +113,7 @@ En una transacción por contrato: (1) INSERT de facturas Por Emitir y sus línea
   `validate_contract_item_currency_consistency` (no hay validador de moneda a nivel factura en el corpus). También siguen corriendo
   para la API (no están en la lista): `trg_00_period_guard_contract_items`, `prevent_end_date_update_when_active` (con su bypass
   explícito), `trg_audit_contract_item_changes`, `trg_z_fix_renewal_annual`, `trg_zzz_pending_renewal_on_item_change`,
-  `trg_cancel_schedule_on_contract_cancelled`, `sync_invoice_items_on_invoice_update`, los de `quantities` y los `updated_at`.
+  `trg_cancel_schedule_on_contract_cancelled`, `sync_invoice_items_on_invoice_update` (decisión de Domi 02-10: se deja como está: espejo de status e issue_date en las líneas, invariante simple hasta el switch; la API no escribe esos campos), los de `quantities` y los `updated_at`.
   ⚠️ `trg_z_fix_renewal_annual` pisa precio anual y mensual de un RENEWAL cuyo original era anual: candidato a la próxima tanda.
 - **`grants/030-generate-missing-invoices-execute.sql`** (aparte): REVOKE a PUBLIC/anon/authenticated, EXECUTE a `service_role`.
   **No aplicar sin OK**: el front viejo la llama por rpc desde código montado (`LegacyContractActivationModal.tsx:161` en la pestaña
@@ -217,6 +217,15 @@ ROLLBACK;
 
 Esperado: 1–5 iguales entre FV y API (salvo ids, `created_at` y la etiqueta de origen); en 4, `sin_item = 0` y `desalineadas = 0`
 en la API; en 6, solo el FV tiene filas en `contract_change_log`.
+
+### Agregado 01-10: pagos de Facturación v2 (sin commit, sin aplicar)
+
+`functions/after_invoice_payment_change.sql` (AFTER INSERT/UPDATE/DELETE de `invoice_payments` → `recalc_invoice_status`) lleva el guard
+(`RETURN NULL`): el módulo `billing` recalcula el estado por pagos en la API (pagos en la moneda de la factura, nunca sobre Por Emitir, hacia
+atrás al anular; [`mapa-v2-facturacion.md`](./mapa-v2-facturacion.md) §2). Va en la lista AFTER de `costura-sapira-writer.spec.ts` (24
+funciones con la marca). `set_invoice_payment_defaults` (BEFORE INSERT) no lleva guard: la API escribe `holding_id`, `currency` y
+`created_by` explícitos, así que no rellena nada. Aplicación (QA primero, con el despliegue de `billing`):
+`yarn postgres:assets --apply --target qa --only functions/after_invoice_payment_change.sql`.
 
 ### Retiro (baja, con doble confirmación)
 

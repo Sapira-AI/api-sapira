@@ -979,7 +979,7 @@
  "app_notifications": {
   "name": "public.app_notifications",
   "rls_enabled": true,
-  "rows": 2,
+  "rows": 16,
   "columns": [
    {
     "name": "id",

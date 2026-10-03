@@ -293,6 +293,8 @@ export interface ScheduleInvoice {
 	period_end: string | null;
 	lines_count: number;
 	lines_without_product: number;
+	/** Productos de líneas que viajarían al ERP sin producto de Odoo resoluble (`UNMAPPED_PRODUCTS_SQL`); ausente = no se cargó. */
+	unmapped_products?: string[];
 	/** Tiene al menos una línea de un ítem no recurrente (implementación, setup). */
 	has_non_recurring: boolean;
 	/** Referencias cargadas (propias o vinculadas desde una referencia del contrato). */
@@ -489,7 +491,47 @@ export function invoiceCurrencyInUse(
 
 // ---------------------------------------------------------------- bloqueos de envío
 
-export type BlockerCode = 'needs_reference' | 'fixed_fx_without_rate' | 'no_erp_partner' | 'item_without_product' | 'past_issue_date';
+export const PRODUCT_WITHOUT_ERP_MAPPING_CODE = 'product_without_erp_mapping';
+
+/**
+ * Nombres de los productos de las líneas que viajarían al ERP sin producto de Odoo (alias de factura `invoiceAlias`). Replica EXACTO el
+ * envío del scheduler (`invoice-scheduler.service.ts`, `mapInvoiceToOdooFormat` + `getProductMappingInfo`):
+ * - viajan las líneas visibles (`visible_line_id IS NULL`) con cantidad ≠ 0; si todas las visibles están en 0, viajan todas las visibles;
+ * - el producto resuelve si existe un `odoo_product_mappings` del holding (`holding_id`, `sapira_product_id`) o si
+ *   `products.odoo_product_id` tiene valor (≠ 0; el scheduler lo evalúa por verdad).
+ * Las líneas sin `product_id` no entran: ya las bloquea `item_without_product`. Devuelve `text[]` (vacío si todo resuelve).
+ */
+export const UNMAPPED_PRODUCTS_SQL = (
+	invoiceAlias: string
+) => `(SELECT COALESCE(array_agg(DISTINCT COALESCE(NULLIF(TRIM(p.name), ''), ii.product_id::text)
+			ORDER BY COALESCE(NULLIF(TRIM(p.name), ''), ii.product_id::text)), '{}'::text[])
+		FROM invoice_items ii
+		LEFT JOIN products p ON p.id = ii.product_id
+		WHERE ii.invoice_id = ${invoiceAlias}.id AND ii.visible_line_id IS NULL AND ii.product_id IS NOT NULL
+			AND (COALESCE(ii.quantity, 0) <> 0 OR NOT EXISTS (
+				SELECT 1 FROM invoice_items z WHERE z.invoice_id = ${invoiceAlias}.id AND z.visible_line_id IS NULL AND COALESCE(z.quantity, 0) <> 0))
+			AND NOT EXISTS (
+				SELECT 1 FROM odoo_product_mappings m WHERE m.holding_id = ${invoiceAlias}.holding_id AND m.sapira_product_id = ii.product_id)
+			AND COALESCE(p.odoo_product_id, 0) = 0)`;
+
+/** Mensaje del bloqueo con los productos nombrados (máximo 3 y "y N más"). */
+export function unmappedProductsMessage(products: string[]): string {
+	const shown = products.slice(0, 3).map((name) => `«${name}»`);
+	const rest = products.length - shown.length;
+	const list = rest > 0 ? `${shown.join(', ')} y ${rest} más` : shown.join(', ');
+
+	return products.length === 1
+		? `El producto ${list} no está mapeado a un producto del ERP (Odoo): la factura no se puede enviar`
+		: `Los productos ${list} no están mapeados a productos del ERP (Odoo): la factura no se puede enviar`;
+}
+
+export type BlockerCode =
+	| 'needs_reference'
+	| 'fixed_fx_without_rate'
+	| 'no_erp_partner'
+	| 'item_without_product'
+	| 'product_without_erp_mapping'
+	| 'past_issue_date';
 
 export interface Blocker {
 	code: BlockerCode;
@@ -551,6 +593,10 @@ export function computeBlockers(invoice: ScheduleInvoice, context: BlockerContex
 					? 'Una línea no tiene un producto del catálogo asociado.'
 					: `${count} líneas no tienen un producto del catálogo asociado.`,
 		});
+	}
+	// Mismo bloqueo que el envío (`productMappingBlocker` de `contract-invoices.ts`); aquí solo si el contrato envía al ERP.
+	if (context.auto_send && invoice.unmapped_products?.length) {
+		blockers.push({ code: 'product_without_erp_mapping', message: unmappedProductsMessage(invoice.unmapped_products) });
 	}
 	if (invoice.issue_date && invoice.issue_date.slice(0, 7) < context.today.slice(0, 7)) {
 		blockers.push({ code: 'past_issue_date', message: 'La fecha de emisión quedó en un mes pasado: actualízala para que se envíe' });

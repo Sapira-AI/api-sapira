@@ -15,11 +15,17 @@ import { NotificationsGateway } from './notifications.gateway';
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
 export const SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE = 'salesforce_sync_failure';
 export const INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE = 'invoice_odoo_failure';
-const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [
+export const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [
 	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
 	SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
 	INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE,
 ];
+/** Nombre visible de cada alerta suscribible (Configuración › Roles y permisos). */
+export const ROLE_SUBSCRIPTION_NOTIFICATION_LABELS: Record<string, string> = {
+	[SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE]: 'Importación del CRM bloqueada',
+	[SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE]: 'Falla de sincronización del CRM',
+	[INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE]: 'Falla de envío de factura al ERP',
+};
 type NotificationForRecipient = AppNotification & { is_read: boolean; read_at?: Date | null };
 
 @Injectable()
@@ -281,6 +287,38 @@ export class NotificationsService {
 			);
 			return subscriptions.length ? manager.save(subscriptions) : [];
 		});
+	}
+
+	/** Tipos suscribibles que tiene activos un rol (Configuración › alertas del rol). El rol ya fue validado contra el holding. */
+	async listRoleSubscriptionTypes(holdingId: string, roleId: string): Promise<string[]> {
+		const rows = await this.roleSubscriptionRepository.find({
+			where: { holding_id: holdingId, role_id: roleId, notification_type: In(ROLE_SUBSCRIPTION_NOTIFICATION_TYPES), is_enabled: true },
+		});
+		return [...new Set(rows.map((row) => row.notification_type))];
+	}
+
+	/**
+	 * Reemplaza las suscripciones de **un** rol (sin tocar las de otros roles ni la de super admins, `role_id NULL`). Complementa
+	 * `replaceSalesforceStagingBlockedSubscriptions`, que reemplaza las de todos los roles a la vez (front actual).
+	 */
+	async replaceRoleSubscriptionTypes(holdingId: string, roleId: string, types: string[]): Promise<string[]> {
+		const unique = [...new Set(types)].filter((type) => ROLE_SUBSCRIPTION_NOTIFICATION_TYPES.includes(type));
+		await this.ensureRolesBelongToHolding(holdingId, [roleId]);
+		await this.dataSource.transaction(async (manager) => {
+			await manager.delete(NotificationRoleSubscription, {
+				holding_id: holdingId,
+				role_id: roleId,
+				notification_type: In(ROLE_SUBSCRIPTION_NOTIFICATION_TYPES),
+			});
+			if (unique.length) {
+				await manager.save(
+					unique.map((notificationType) =>
+						manager.create(NotificationRoleSubscription, { holding_id: holdingId, role_id: roleId, notification_type: notificationType })
+					)
+				);
+			}
+		});
+		return unique;
 	}
 
 	private async resolveInternalUserId(authUserId: string): Promise<string> {

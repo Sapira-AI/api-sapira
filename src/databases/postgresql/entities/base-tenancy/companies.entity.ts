@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Country } from '@/databases/postgresql/entities/base-tenancy/country.entity';
 
 /**
  * Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo `monthly_avg`. **Un FX fijo se
@@ -11,6 +12,7 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 export const COMPANY_FX_POLICIES = ['monthly_avg'] as const;
 export type CompanyFxPolicy = (typeof COMPANY_FX_POLICIES)[number];
 
+@Index('idx_companies_country_code', ['country_code'])
 @Index('idx_companies_odoo_integration_id', ['odoo_integration_id'])
 @Index('unique_odoo_integration_id_per_holding', ['odoo_integration_id', 'holding_id'], { unique: true, where: `(odoo_integration_id IS NOT NULL)` })
 @Check('companies_fx_company_policy_check', `fx_company_policy = ANY (ARRAY['monthly_avg'::text])`)
@@ -30,6 +32,14 @@ export class Company {
 
 	@Column({ type: 'text', nullable: true })
 	country?: string;
+
+	@Column({
+		type: 'character',
+		length: 2,
+		nullable: true,
+		comment: 'País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español',
+	})
+	country_code?: string | null;
 
 	@Column({ type: 'text', nullable: true })
 	currency?: string;
@@ -111,6 +121,10 @@ export class Company {
 
 	@Column({ type: 'integer', nullable: true, comment: 'ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)' })
 	odoo_reteiva_tax_id?: number;
+
+	@ManyToOne(() => Country, { onDelete: 'RESTRICT' })
+	@JoinColumn({ name: 'country_code', referencedColumnName: 'code', foreignKeyConstraintName: 'companies_country_code_fkey' })
+	countryRef?: Country;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'SET NULL' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'companies_holding_fk' })

@@ -1414,6 +1414,17 @@
      "updatable"
     ],
     "comment": "ID del producto en Stripe para mapeo (ej: \"prod_ABC123\")"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'active'::text",
+    "comment": "active | archived. Archivado = no se ofrece en altas nuevas; se conserva su historial"
    }
   ],
   "primary_keys": [

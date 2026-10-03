@@ -154,11 +154,26 @@ de `GET /quotes`**.
 - **Mostrado** (calculado al leer, nunca guardado): Borrador · Enviada · **Vencida** (Q-A2: `kind ∈ {draft, sent}` y `valid_until <
   hoy`) · Firmada · **Contrato creado** (si existe `contracts.quote_id` no borrado o un evento con `origin.quote_id`, **aunque el holding
   no tenga la etapa**: arregla Hanka sin tocar datos) · Perdida. La etapa configurada se muestra como chip secundario.
-- **Transiciones válidas** (API, 409 si no): `draft ⇄ sent` · `draft|sent → signed` (ítems completos: producto del catálogo, precio > 0 o
-  `PriceSpec` válido, inicio, plazo o fin, frecuencia, método; `booking_date`) · `draft|sent → lost` · `signed → sent` (destrabar; solo
-  sin vínculo) · `signed → lost` (solo sin vínculo) · **nada sale de `contract_created`** ni entra a mano. Editar: `draft`, `sent`;
-  `signed` → 409 `quote_signed_locked` (hoy igual, pero en la API); con vínculo → 409 `quote_has_contract`.
-- Cada transición y edición deja un evento (§8 `quote_events`) con usuario, antes/después y motivo. Hoy no hay historial.
+- **Transiciones** (decisión Domi 02-10, reemplaza la matriz anterior): **libres** entre `draft · sent · signed · lost` en ambos sentidos
+  (también `signed → draft`, `lost → sent|signed` y entre dos etapas del mismo kind). Se mantiene: **nada entra ni sale de
+  `contract_created` a mano** (409 `invalid_transition`; lo marca Contratos) y **con contrato vinculado nada se mueve** (409
+  `quote_has_contract`). Las exigencias del destino siguen: a `signed` ítems completos (producto del catálogo, precio > 0 o `PriceSpec`
+  válido, inicio, plazo o fin, frecuencia, método; 409 `items_incomplete`) y `booking_date` (la del body o la guardada; 409
+  `booking_date_required`); a `lost` motivo (400). **Salir de firmada/perdida no limpia nada en silencio**: `booking_date` se conserva
+  salvo que venga en el body (el evento guarda `booking_date_before` si cambió). Evento (`transitionEventType`): mismo kind →
+  `STAGE_CHANGED` · a `signed` → `SIGNED` · a `lost` → `LOST` · salir de `signed`/`lost` hacia `draft`/`sent` → `REOPENED` · a `sent` →
+  `SENT` · `sent → draft` → `STAGE_CHANGED`.
+- **Editar** (Domi 02-10): en **cualquier etapa salvo con contrato** (vínculo creado/aplicado o etapa de kind `contract_created` → 409
+  `quote_has_contract`, único bloqueo). En `signed`/`lost` el `PUT` exige `confirm_edit_after_signature: true` (409
+  `edit_requires_confirmation` si falta) y no cambia la etapa. Se retiraron `quote_signed_locked` y `quote_not_editable`. Detalle y
+  `form`: `editable`/`can_edit` = sin contrato; `edit_blocker` solo `quote_has_contract`; `edit_requires_confirmation` en `signed`/`lost`.
+- Cada transición y edición deja un evento (§8 `quote_events`) con usuario, cuándo, antes/después y motivo. **Toda edición** (cualquier
+  etapa) guarda en el `UPDATED` el diff campo a campo: `metadata.changes[{ field, label, before, after, before_label?, after_label? }]`
+  (encabezado: cliente, contacto, vendedor, tipo, fechas, booking, moneda, total, condición de pago, notas, flags) y
+  `metadata.item_changes[{ action: added|removed|changed, item_id, product_name, changes[] }]` (producto, cantidad, precio mensual o
+  anual, descuento, inicio, fin, plazo, frecuencia, método, recurrente, total línea, modelo de precio). Editar firmada/perdida suma
+  `edited_after_signature: true` y `stage_kind`. No hay tipo `EDITED_AFTER_SIGNATURE`: el CHECK `quote_events_type_check` no lo admite y
+  el cambio no lleva migración (pura lógica `quote-edit-diff.ts`).
 
 ### 5b · Lista (`/lab/cotizaciones`, mockup 1d)
 
@@ -224,7 +239,7 @@ Edición = mismo formulario; `PUT /quotes/:id` con `items[].id` (con id UPDATE, 
 | `GET /quotes/form-options` | `clientId?` | clientes, contactos, vendedores, tipos de negocio, etapas, monedas, productos, tipos de ítem, unidades, métricas facturables, `payment_terms_default`, `suggested_quote_type` | — |
 | `POST /quotes/preview` | `CreateQuoteDto` | ítems tarifados (`priceLine`), MRR, total, primer período, `warnings[]`; no escribe | 400 |
 | `POST /quotes` | `CreateQuoteDto` = `{ client_id, client_contact_id?, seller_id?, quote_type, quote_date, valid_until?, currency, payment_terms?, payment_terms_text?, notes?, requires_* , items[{ product_id, product_name?, item_type, unit_of_measure?, quantity, unit_price? / annual_unit_price? + price_entry_mode, price?: PriceSpec, discount_value?, billing_frequency, billing_method, start_date, term_months, is_recurring, auto_renew?, auto_renew_term_months?, account?, custom_fields? }] }` | 360; etapa `kind = draft`; correlativo `quote_number` si no viene (§8) | 400 (espejo Zod en la BFF) |
-| `PUT /quotes/:id` | `CreateQuoteDto` + `items[].id` | 360 | 409 `quote_signed_locked`, `quote_has_contract`, `item_linked_to_contract` |
+| `PUT /quotes/:id` | `CreateQuoteDto` + `items[].id` + `confirm_edit_after_signature?` | 360 | 409 `quote_has_contract`, `edit_requires_confirmation`, `item_linked_to_contract` |
 | `POST /quotes/:id/duplicate` | `{ quote_date? }` | 360 nuevo (borrador, sin SF) | 404 |
 | `POST /quotes/:id/transition` | `{ to: 'sent' \| 'signed' \| 'lost' \| 'draft', stage_id?, booking_date?, reason?, notes? }` | 360 | 409 `invalid_transition`, `items_incomplete` (+ `errors[]` por ítem), `booking_date_required`, `stage_kind_mismatch`, `quote_has_contract` |
 | `POST /quotes/bulk-transition` | `{ ids (1–500), to, booking_date?, reason? }` | `{ updated, skipped[{ id, reason }] }` | — |
@@ -316,7 +331,7 @@ Decisiones Q-D1..D11 respetadas. **Supuestos** aplicados de las abiertas (recome
 | Q-A7 | Solo la conversión 90 d en la lista/KPIs; panel de vendedores fuera |
 | Q-A8 | Fuera: PDF, envío, firma, adjuntos. `GET /quotes/:id` lista `documents[]` de `quote_attachments` si hay filas (0 hoy), sin subir ni bajar |
 | Q-A9 | Catálogo en código (`QUOTE_TYPE_CODES`, 7 códigos + etiqueta): las nuevas guardan el código; las viejas se normalizan **al leer** (`normalizeQuoteType`, `Despliegue` → `new_business`) y el filtro cubre las grafías viejas. `quotes.quote_type` **no se reescribe** (el front viejo muestra el texto tal cual) |
-| Otros | `quote_number` correlativo `COT-{año}-{NNNN}` con `pg_advisory_xact_lock` por holding y año; **sin UNIQUE** hasta resolver duplicados de prod. Conversión 90 d = (`signed` + `contract_created` por `booking_date`) / (+ `lost` por la fecha del último evento `LOST`). Montos de lista y KPIs **por moneda, sin conversión** (la cotización vive en su moneda). `lost → draft` se permite como reabrir (evento `REOPENED`). Descuento de ítem solo en % (los "Monto fijo" viejos se muestran y `form` los devuelve como `discount_fixed_amount` de solo lectura). Bulk (`bulk-transition`, `bulk-settings`, `bulk-delete`), `GET /quotes/:id/contract-targets` y `GET /quotes/:id/events` paginado **no** entraron en esta entrega (el historial va dentro del 360) |
+| Otros | `quote_number` correlativo `COT-{año}-{NNNN}` con `pg_advisory_xact_lock` por holding y año; **sin UNIQUE** hasta resolver duplicados de prod. Conversión 90 d = (`signed` + `contract_created` por `booking_date`) / (+ `lost` por la fecha del último evento `LOST`). Montos de lista y KPIs **por moneda, sin conversión** (la cotización vive en su moneda). Transiciones libres entre `draft/sent/signed/lost` (Domi 02-10, §5a); salir de `signed`/`lost` deja `REOPENED`. Descuento de ítem solo en % (los "Monto fijo" viejos se muestran y `form` los devuelve como `discount_fixed_amount` de solo lectura). Bulk (`bulk-transition`, `bulk-settings`, `bulk-delete`), `GET /quotes/:id/contract-targets` y `GET /quotes/:id/events` paginado **no** entraron en esta entrega (el historial va dentro del 360) |
 
 ### 10a · Esquema (una migración, entities primero, nada aplicado)
 
@@ -342,8 +357,8 @@ Verificado en QA de solo lectura (28-09): los 3 holdings calzan el `ILIKE` (Rece
 | `POST /quotes` | `CreateQuoteDto = { client_id, client_contact_id?, seller_id?, quote_type (código), quote_date?, valid_until?: string \| null, booking_date?, currency, payment_terms?: PaymentTerms \| null, payment_terms_text?, quote_number?, notes?, requires_multicompany?, requires_multicurrency?, requires_references_for_billing?, requires_contract_document?, items[{ key?, product_id, product_name?, account?, item_type, unit_of_measure?, quantity, unit_price? \| annual_unit_price? + price_entry_mode \| price?: PriceSpec \| price_id?, discount_value? (%), billing_frequency, billing_method, start_date, term_months, is_recurring?, auto_renew?, auto_renew_term_months?, custom_fields? }] }` | 360 (etapa `kind = draft`). 400 `errors[]`; 409 `code: quote_number_taken \| stage_kind_missing` |
 | `GET /quotes/:id` | — | 360 = `QuoteListRow` + `{ client_contact_id, quote_stage_id, status_label, requires_*, totals { currency, total_amount, mrr, one_time, by_frequency[] }, items[{ id, product_id, product_name, account, item_type, unit_of_measure, quantity, unit_price, annual_unit_price, price_entry_mode, price, discount_type, discount_value, final_price, monthly_price, billing_period_price, billing_frequency, billing_method, start_date, end_date, expected_end_date, term_months, is_recurring, auto_renew, auto_renew_term_months, currency, custom_fields, quote_item_number, data_source, salesforce_line_item_id, pricing (resumen del precio o null), priced (PricedLine o null), contract }], links { contract, applied_to[], client }, alerts[{ code, severity, message, count? }], can_edit, can_delete, can_create_contract, can_apply_to_contract, events[{ id, type, from_stage, to_stage, from_kind, to_kind, reason, metadata, created_at, actor }], documents[] }`. Alertas: `items_without_product, items_without_start, items_end_date_off, items_currency_mismatch, payment_terms_unparsed, client_without_entities, expired, expiring_soon, total_mismatch, signed_without_contract` |
 | `GET /quotes/:id/form` | — | `{ id, quote_number, status, editable, edit_blocker, created_at, form: CreateQuoteDto & { quote_type_raw, items[].id, items[].linked_contract, items[].discount_fixed_amount? } }` |
-| `PUT /quotes/:id` | `UpdateQuoteDto` (= crear + `items[].id`) | 360. Ítems: con id UPDATE (el id sobrevive), sin id INSERT, ausentes DELETE. 409 `quote_signed_locked \| quote_has_contract \| quote_not_editable \| item_linked_to_contract (+ item_id)` |
-| `POST /quotes/:id/stage` | `{ stage_id? \| kind?, booking_date?, reason? }` | 360. 409 `invalid_transition \| quote_has_contract \| items_incomplete (+ errors[{ field: items.N.<campo>, message }]) \| booking_date_required \| stage_kind_mismatch`; 400 `reason` al marcar perdida |
+| `PUT /quotes/:id` | `UpdateQuoteDto` (= crear + `items[].id` + `confirm_edit_after_signature?`) | 360. Cualquier etapa sin contrato; firmada/perdida con confirmación. Ítems: con id UPDATE (el id sobrevive), sin id INSERT, ausentes DELETE. Evento `UPDATED` con diff (`changes`, `item_changes`). 409 `quote_has_contract \| edit_requires_confirmation \| item_linked_to_contract (+ item_id)` |
+| `POST /quotes/:id/stage` | `{ stage_id? \| kind?, booking_date?, reason? }` | 360. Libre entre draft/sent/signed/lost; conserva `booking_date` salvo que venga. 409 `invalid_transition` (contract_created) `\| quote_has_contract \| items_incomplete (+ errors[{ field: items.N.<campo>, message }]) \| booking_date_required \| stage_kind_mismatch`; 400 `reason` al marcar perdida |
 | `POST /quotes/:id/duplicate` | `{ quote_date? }` | 360 nuevo |
 | `POST /quotes/:id/contract` | `CreateContractDto` (el de `POST /contracts`, armado con `GET /contracts/from-quote/:id`; `quote_id` se fija en la ruta) | Contrato 360 (delegado a `ContractDraftsService.create`). 409 `quote_not_signed \| quote_already_applied` + los de Contratos |
 | `DELETE /quotes/:id` | — | `{ id, deleted: true }`. 409 `quote_not_deletable` |

@@ -728,20 +728,14 @@ describe('invoice-reorganize (spec facturas §3.5, lógica pura)', () => {
 			expect(result.continuity.reason_required).toBe(false);
 		});
 
-		it('una operación bloqueada no cambia nada y deja can_apply en false', () => {
+		it('reorganizar facturas de un mes cerrado no se bloquea (Domi 03-10: el cierre protege contratos e ítems, no facturas)', () => {
 			const closed = plan(
-				{ ...monthly(), context: { cutoff_date: '2026-10-31' } },
-				{ operations: [{ op: 'merge', invoice_ids: ['inv-nov', 'inv-dec'] }] }
-			);
-
-			expect(closed.can_apply).toBe(true);
-			const blocked = plan(
 				{ ...monthly(), context: { cutoff_date: '2026-10-31' } },
 				{ operations: [{ op: 'merge', invoice_ids: ['inv-oct', 'inv-nov'] }] }
 			);
 
-			expect(codes(blocked.blockers)).toEqual(['period_closed']);
-			expect(blocked.write.line_updates).toEqual([]);
+			expect(codes(closed.blockers)).not.toContain('period_closed');
+			expect(closed.can_apply).toBe(true);
 		});
 	});
 
@@ -763,8 +757,7 @@ describe('invoice-reorganize (spec facturas §3.5, lógica pura)', () => {
 						],
 					],
 				]),
-				new Map([[ITEM, item(ITEM)]]),
-				context()
+				new Map([[ITEM, item(ITEM)]])
 			);
 
 			expect(board.map((entry) => entry.id)).toEqual(['inv-oct', 'inv-nov']);

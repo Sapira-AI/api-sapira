@@ -507,7 +507,7 @@
     "options": [
      "updatable"
     ],
-    "default_value": "true"
+    "default_value": "false"
    },
    {
     "name": "email_from",
@@ -1381,6 +1381,36 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "original_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_rate",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "settlement_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
    }
   ],
   "primary_keys": [
@@ -1915,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 9788,
+  "rows": 9863,
   "columns": [
    {
     "name": "id",

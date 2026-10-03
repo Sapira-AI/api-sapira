@@ -12,7 +12,6 @@ import {
 	invoiceDueDate,
 	type InvoiceWarning,
 	partialBillingBlocker,
-	periodClosedBlocker,
 	round6,
 	sameDayOfMonth,
 } from './contract-invoices';
@@ -488,17 +487,11 @@ export function reamount(state: LineState, subtotal: number, period?: { start: s
 }
 
 /** Bloqueos de operabilidad de una Por Emitir (comunes + borrador en el ERP + fecha de emisión en período cerrado). */
-export function invoiceOperability(invoice: ContractInvoiceRow, context: ContractInvoiceContext): InvoiceBlocker[] {
+export function invoiceOperability(invoice: ContractInvoiceRow): InvoiceBlocker[] {
 	const blockers = commonBlockers(invoice);
 	const draft = erpDraftBlocker(invoice);
-	const closed = periodClosedBlocker(
-		invoice.issue_date,
-		context,
-		`La fecha de emisión de la factura ${invoice.invoice_number ?? invoice.issue_date ?? ''}`.trim()
-	);
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	const partial = partialBillingBlocker(invoice);
 
 	if (partial) blockers.push(partial);
@@ -736,7 +729,7 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 			treatment: row.nc_revenue_treatment ?? null,
 			created_by: null,
 			forced: false,
-			blockers: invoiceOperability(row, ctx.context),
+			blockers: invoiceOperability(row),
 			order: invoiceOrder++,
 		});
 		const rows = ctx.lines.get(row.id) ?? [];
@@ -907,9 +900,6 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 			return invoice.blockers.length > 0;
 		};
 		const checkIssueDate = (issueDate: string) => {
-			const closed = periodClosedBlocker(issueDate, ctx.context, 'La fecha de emisión de la factura nueva');
-
-			if (closed) block(closed.code, closed.message, closed.next_step);
 			if (issueDate < ctx.context.today)
 				warn(
 					'past_issue_date',
@@ -1839,9 +1829,6 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 				}, ${clash.billing_period_start} a ${clash.billing_period_end})`,
 				next_step: 'Las emitidas son ancla: ajusta la operación para que no cubra ese período',
 			});
-		const closed = periodClosedBlocker(start, ctx.context, 'El período de una línea reorganizada');
-
-		if (closed && !result.blockers.some((blocker) => blocker.code === closed.code)) result.blockers.push(closed);
 	}
 	// ---- el descuento puntual sigue a su línea (spec §3.4/§3.5): el destino toma el tratamiento de devengo del origen (conflicto si ya tiene
 	// otro), el origen lo pierde si no le queda ninguna línea con puntual, y la fila de `invoice_adjustments` se mueve o duplica por la parte.
@@ -2249,13 +2236,12 @@ export interface ScheduleBoardInvoice {
 export function scheduleBoard(
 	invoices: ContractInvoiceRow[],
 	lines: Map<string, EditLineRow[]>,
-	items: Map<string, EditItem>,
-	context: ContractInvoiceContext
+	items: Map<string, EditItem>
 ): ScheduleBoardInvoice[] {
 	return invoices
 		.map((invoice) => {
 			const rows = lines.get(invoice.id) ?? [];
-			const blockers = invoiceOperability(invoice, context);
+			const blockers = invoiceOperability(invoice);
 
 			return {
 				id: invoice.id,

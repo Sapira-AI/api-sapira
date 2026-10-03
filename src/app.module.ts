@@ -25,6 +25,8 @@ import { IpFilterMiddleware } from './middlewares/security/ip-filter.middleware'
 import { AgentsModule } from './modules/agents/agents.module';
 import { BancoCentralModule } from './modules/banco-central/banco-central.module';
 import { BigQueryModule } from './modules/bigquery/bigquery.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ClaudeModule } from './modules/claude/claude.module';
 import { ClientsModule } from './modules/clients';
 import { ContractsModule } from './modules/contracts';
@@ -38,9 +40,11 @@ import { HoldingsModule } from './modules/holdings/holdings.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OdooModule } from './modules/odoo/odoo.module';
+import { ProductsModule } from './modules/products/products.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { SalesforceModule } from './modules/salesforce/salesforce.module';
 import { SapiraCopilotModule } from './modules/sapira-copilot/sapira-copilot.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { SiiModule } from './modules/sii/sii.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
@@ -99,6 +103,10 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		UsersModule,
 		ClientsModule,
 		ContractsModule,
+		BillingModule,
+		BudgetsModule,
+		SettingsModule,
+		ProductsModule,
 		QuotesModule,
 		OdooModule,
 		SalesforceModule,

@@ -2,7 +2,7 @@
  "bank_movements": {
   "name": "public.bank_movements",
   "rls_enabled": true,
-  "rows": 158,
+  "rows": 167,
   "columns": [
    {
     "name": "id",
@@ -191,6 +191,16 @@
     "data_type": "jsonb",
     "format": "jsonb",
     "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "ignore_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"

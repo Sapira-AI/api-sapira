@@ -40,14 +40,18 @@ describe('TaxDocumentType (entity + migración + seed)', () => {
 			created_at: false,
 			// Migración 1790670000000-InvoiceDescriptionTemplate (spec facturas §3.6): NULL = sin límite.
 			description_max_chars: true,
+			// Migración 1790820000000-TaxDocumentTypesTaxRate (Configuración v2 ronda 3): NULL = usa la tasa de la compañía.
+			tax_rate: true,
 		});
 		expect(metadata.primaryColumns.map((column) => column.databaseName)).toEqual(['id']);
 		expect(Object.fromEntries(metadata.uniques.map((unique) => [unique.name, unique.columns.map((column) => column.databaseName)]))).toEqual({
 			tax_document_types_country_code_code_key: ['country_code', 'code'],
 		});
-		expect(metadata.checks.map((check) => check.name)).toEqual(['tax_document_types_kind_check']);
-		expect(metadata.checks[0].expression).toContain(`'invoice'::text`);
-		expect(metadata.checks[0].expression).toContain(`'export_invoice'::text`);
+		expect(metadata.checks.map((check) => check.name).sort()).toEqual(['tax_document_types_kind_check', 'tax_document_types_tax_rate_check']);
+		const kindCheck = metadata.checks.find((check) => check.name === 'tax_document_types_kind_check')!;
+
+		expect(kindCheck.expression).toContain(`'invoice'::text`);
+		expect(kindCheck.expression).toContain(`'export_invoice'::text`);
 		expect(Object.fromEntries(metadata.indices.map((index) => [index.name, index.columns.map((column) => column.databaseName)]))).toEqual({
 			idx_tax_document_types_country_active: ['country_code', 'active'],
 		});

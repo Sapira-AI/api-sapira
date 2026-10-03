@@ -1,3 +1,8 @@
+-- ⚠️ PENDIENTE DE REVISIÓN DE DOMI (Configuración v2, 02-10): M4 agrega CLOSE_PERIODS a Administrador y Finanzas y M9
+-- marca is_default = true en los 10 roles. Aplicar DESPUÉS de la migración RolesIsDefault1790800000000 y del seed
+-- seed/004-close-periods-permission.sql. Sin esos dos, el INSERT falla (columna is_default) o no asigna CLOSE_PERIODS.
+-- 03-10 (decisión de Domi): Finanzas recibe VIEW_CONFIGURACION (holdings existentes: seed/005-finanzas-view-configuracion.sql)
+-- y se quita ADMIN_FULL_ACCESS de Administrador y Admin Técnico (no existe en el catálogo `permissions`: el filtro lo ignoraba).
 CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -15,54 +20,54 @@ DECLARE
   v_admin_tecnico_role_id UUID;
 BEGIN
   -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW())
+    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW())
+    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW(), true)
   RETURNING id INTO v_invitado_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW())
+    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW(), true)
   RETURNING id INTO v_ventas_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Operaciones', 'Gestión operativa', NEW.id, NOW())
+    ('Operaciones', 'Gestión operativa', NEW.id, NOW(), true)
   RETURNING id INTO v_operaciones_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW())
+    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW(), true)
   RETURNING id INTO v_revenue_ops_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('BI', 'Análisis de datos', NEW.id, NOW())
+    ('BI', 'Análisis de datos', NEW.id, NOW(), true)
   RETURNING id INTO v_bi_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW())
+    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW(), true)
   RETURNING id INTO v_facturacion_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW())
+    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW(), true)
   RETURNING id INTO v_finanzas_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW())
+    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_negocio_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW())
+    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_tecnico_role_id;
 
   -- Insertar permisos para Administrador (todos los permisos)
@@ -80,7 +85,7 @@ BEGIN
     'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',
     'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',
     'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',
-    'ADMIN_FULL_ACCESS'
+    'CLOSE_PERIODS'
   );
 
   -- Insertar permisos para Invitado
@@ -142,7 +147,8 @@ BEGIN
     'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',
     'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',
     'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',
-    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'
+    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',
+    'CLOSE_PERIODS', 'VIEW_CONFIGURACION'
   );
 
   -- Insertar permisos para Admin de Negocio
@@ -165,7 +171,7 @@ BEGIN
     'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',
     'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',
     'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',
-    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES', 'ADMIN_FULL_ACCESS'
+    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'
   );
 
   RETURN NEW;

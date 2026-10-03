@@ -2,7 +2,7 @@
  "revenue_schedule_monthly": {
   "name": "public.revenue_schedule_monthly",
   "rls_enabled": true,
-  "rows": 21073,
+  "rows": 21093,
   "columns": [
    {
     "name": "id",
@@ -1247,6 +1247,299 @@
      "performed_by"
     ],
     "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "budgets": {
+  "name": "public.budgets",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "scenario",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'base'::text"
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Moneda de sistema del holding al guardar (los montos de las líneas van en esta moneda)"
+   },
+   {
+    "name": "period_granularity",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'month'::text"
+   },
+   {
+    "name": "fiscal_year",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Año fiscal (= año calendario)"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'active'::text"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "budget_lines_budget_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "budget_id"
+    ],
+    "target_table": "public.budgets",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budgets_holding_id_fkey",
+    "source_table": "public.budgets",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "budget_lines": {
+  "name": "public.budget_lines",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "budget_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "period_start",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "dimension_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'total'::text"
+   },
+   {
+    "name": "dimension_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "company, seller, product, client: id de la entidad; NULL en total, segment y market"
+   },
+   {
+    "name": "dimension_key",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "segment, market: valor del cliente (clients.segment / clients.market)"
+   },
+   {
+    "name": "amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "budget_lines_budget_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "budget_id"
+    ],
+    "target_table": "public.budgets",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budget_lines_holding_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
     "target_columns": [
      "id"
     ]

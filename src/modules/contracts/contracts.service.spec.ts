@@ -383,7 +383,7 @@ describe('ContractsService', () => {
 	describe('rutas por contrato', () => {
 		const notInHolding = (sql: string) => (sql.includes('LIMIT 1') ? [] : [{}]);
 
-		it.each(['detail', 'items', 'history', 'revenue'] as const)('%s responde 404 si el contrato no es del holding', async (method) => {
+		it.each(['detail', 'items', 'history'] as const)('%s responde 404 si el contrato no es del holding', async (method) => {
 			const { service, query } = build(notInHolding);
 
 			await expect(service[method](CONTRACT_ID, 'h-otro')).rejects.toBeInstanceOf(NotFoundException);
@@ -1401,11 +1401,13 @@ describe('ContractsController', () => {
 		expect(service.detail).toHaveBeenCalledWith(CONTRACT_ID, 'h-1');
 	});
 
-	it('detalle de factura: pasa contrato, factura y holding del guard al servicio', async () => {
+	it('detalle de factura: pasa contrato, factura y holding del guard al servicio (con el último intento de envío al ERP)', async () => {
 		const INVOICE_ID = '33333333-3333-4333-8333-333333333333';
-		const service = { invoiceDetail: jest.fn().mockResolvedValue({ id: INVOICE_ID, lines: [] }) } as unknown as ContractsService;
+		const service = {
+			invoiceDetail: jest.fn().mockResolvedValue({ id: INVOICE_ID, lines: [], last_send_attempt: null }),
+		} as unknown as ContractInvoicesService;
 		const controller = new ContractsController(
-			service,
+			{} as ContractsService,
 			{} as ContractDraftsService,
 			{} as ContractSubscriptionsService,
 			{} as Contract360Service,
@@ -1413,7 +1415,7 @@ describe('ContractsController', () => {
 			{} as ContractActivationService,
 			{} as ConsumptionService,
 			{} as ContractChangesService,
-			{} as ContractInvoicesService,
+			service,
 			{} as ContractInvoiceDescriptionsService,
 
 			{} as ContractInvoiceEditService,
@@ -1425,7 +1427,11 @@ describe('ContractsController', () => {
 			{} as never
 		);
 
-		await expect(controller.invoiceDetail('CTR-2026-184', INVOICE_ID, 'h-1')).resolves.toEqual({ id: INVOICE_ID, lines: [] });
+		await expect(controller.invoiceDetail('CTR-2026-184', INVOICE_ID, 'h-1')).resolves.toEqual({
+			id: INVOICE_ID,
+			lines: [],
+			last_send_attempt: null,
+		});
 		expect(service.invoiceDetail).toHaveBeenCalledWith('CTR-2026-184', INVOICE_ID, 'h-1');
 	});
 

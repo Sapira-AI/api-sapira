@@ -1,6 +1,6 @@
 import type { FieldError } from '@/core/utils/validation-errors';
 
-import { normalizeCountry, normalizeTaxRate, round2 } from './billing-engine';
+import { normalizeCountry, normalizeTaxRate, resolveTaxRate, round2, type TaxDocumentRate } from './billing-engine';
 import { headerFromLines, lineAmounts } from './consumption';
 import { isVisibleLine } from './contract-360';
 import {
@@ -13,7 +13,6 @@ import {
 	type InvoiceWarning,
 	isMultiCurrency,
 	partialBillingBlocker,
-	periodClosedBlocker,
 	round6,
 } from './contract-invoices';
 import {
@@ -234,6 +233,8 @@ export interface EditContext {
 	invoice: EditInvoiceRow;
 	context: ContractInvoiceContext;
 	company_tax_rate: number | string | null;
+	/** Documento tributario del contrato (familia y tasa, ronda 3); null en contratos sin catálogo. */
+	tax_document?: TaxDocumentRate | null;
 	contract_number: string | null;
 	client_name: string | null;
 	template: DescriptionTemplate | null;
@@ -395,12 +396,17 @@ export { isVisibleLine };
 export const invoiceFx = (invoice: Pick<ContractInvoiceRow, 'contract_currency' | 'invoice_currency' | 'fx_contract_to_invoice'>): number | null =>
 	isMultiCurrency(invoice) ? invoice.fx_contract_to_invoice : 1;
 
-/** IVA de la factura según su tipo de documento (misma regla del generador y de `change_entity`): exportación 0; Colombia 0; si no, la de la compañía. */
-export function taxRateForDocument(documentType: string | null, companyCountry: string | null, companyTaxRate: number | string | null): number {
-	if (documentType === 'FACTURA_EXPORTACION') return 0;
-	if (normalizeCountry(companyCountry) === 'CO') return 0;
-
-	return normalizeTaxRate(companyTaxRate) ?? 0;
+/**
+ * IVA de la factura según su tipo de documento (misma regla del generador y de `change_entity`, `resolveTaxRate`): exportación 0; Colombia 0;
+ * la tasa del documento tributario del contrato si la tiene y es de esa familia (ronda 3 de Configuración); si no, la de la compañía.
+ */
+export function taxRateForDocument(
+	documentType: string | null,
+	companyCountry: string | null,
+	companyTaxRate: number | string | null,
+	document: TaxDocumentRate | null = null
+): number {
+	return resolveTaxRate({ documentType, companyCountry, companyTaxRate, document }).rate ?? 0;
 }
 
 /** ¿El descuento del ítem ya está dentro del unitario? (línea con modelo de precio: el motor lo aplica como sublínea). */
@@ -935,7 +941,7 @@ interface HeaderPlan {
 
 /** Fechas, receptor (re-deriva RUT, IVA y exportación; aviso de documento) y condiciones. No cambia el tipo de documento. */
 function planHeader(
-	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver'>,
+	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver'> & { tax_document?: TaxDocumentRate | null },
 	input: Omit<InvoiceEditInput, 'lines' | 'line_mode'>
 ): HeaderPlan {
 	const { invoice, context } = ctx;
@@ -980,7 +986,7 @@ function planHeader(
 		else {
 			// Mismo criterio que la activación y `change_entity`: el IVA sale del tipo de documento (que aquí NO cambia: vive en Condiciones de
 			// facturación); RUT del receptor nuevo; aviso si el receptor es de otro país que la compañía emisora.
-			taxRate = taxRateForDocument(invoice.document_type, context.company_country, ctx.company_tax_rate);
+			taxRate = taxRateForDocument(invoice.document_type, context.company_country, ctx.company_tax_rate, ctx.tax_document ?? null);
 			after.client_entity_id = receiver.id;
 			after.client_tax_id = receiver.tax_id;
 			after.legal_name = receiver.legal_name;
@@ -1028,7 +1034,7 @@ const overlaps = (a: { start: string; end: string }, b: { start: string; end: st
  * `blockers` (409); diferencias contra el plan → `deviation` (nunca bloquean aquí; aplicar exige motivo si la edición las introduce).
  */
 export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): EditPlan {
-	const { invoice, context } = ctx;
+	const { invoice } = ctx;
 	const errors: FieldError[] = [];
 	// Una factura "sin cobro" (Cancelada por INVOICE_NO_CHARGE) se puede editar para devolverle cantidad: no cuenta como no Por Emitir.
 	const blockers: InvoiceBlocker[] = commonBlockers(invoice).filter((blocker) => !(invoice.no_charge && blocker.code === 'not_pending'));
@@ -1555,13 +1561,7 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 		...[...touchedAmounts].flatMap((id) => [current.get(id)?.billing_period_start ?? null, rows.get(id)?.billing_period_start ?? null]),
 		...createdStates.filter((entry) => entry.input_index !== undefined).map((entry) => entry.state.billing_period_start),
 	].filter((value): value is string => !!value);
-	const closedIssue = periodClosedBlocker(header.after.issue_date ?? invoice.issue_date, context, 'La fecha de emisión');
-
-	if (closedIssue) blockers.push(closedIssue);
 	const firstTouched = [...touchedStarts].sort()[0];
-	const closedLine = firstTouched ? periodClosedBlocker(firstTouched, context, 'El período de una línea editada') : null;
-
-	if (closedLine) blockers.push(closedLine);
 
 	// ---- descuento puntual: motivo tipado con devengo (400 si falta) y tratamiento en `invoices.nc_revenue_treatment`.
 	const oneOffAdded = bodyLines.some((line, index) => line.one_off_discount && oneOffTouched.has(line.id ?? `new:${index}`));
@@ -1767,10 +1767,12 @@ export interface BulkHeaderPlanItem {
  * bloqueos que la edición de una factura, sin tocar líneas salvo el IVA si el receptor cambia la tasa.
  */
 export function planBulkHeader(
-	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver' | 'lines' | 'multicurrency'>,
+	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver' | 'lines' | 'multicurrency'> & {
+		tax_document?: TaxDocumentRate | null;
+	},
 	input: BulkHeaderInput
 ): BulkHeaderPlanItem {
-	const { invoice, context } = ctx;
+	const { invoice } = ctx;
 	const blockers: InvoiceBlocker[] = [...commonBlockers(invoice)];
 	const draft = erpDraftBlocker(invoice);
 	const header = planHeader(ctx, input);
@@ -1801,12 +1803,10 @@ export function planBulkHeader(
 	if (pair) lines = lines.map((line, index) => ({ ...line, after: pair.states[index] }));
 	const afterLines = taxChanged ? lines.map((line) => line.after) : ctx.lines.map((row) => stateOf(row));
 	const amounts = headerFromLines(afterLines, { sameCurrency: !isMultiCurrency(invoice), fx, taxRate: header.tax_rate });
-	const closed = periodClosedBlocker(invoice.issue_date, context, 'La fecha de emisión');
 	const internalLines = ctx.lines.filter((row) => row.visible_line_id).length;
 	const partial = partialBillingBlocker({ ...invoice, internal_lines: internalLines || invoice.internal_lines });
 
 	if (draft) blockers.push(draft);
-	if (closed) blockers.push(closed);
 	// Facturada por OC: cambiar el receptor o el IVA reescribiría la visible y las internas; se salta y se informa (spec §3.7b).
 	if (partial && (!!input.client_entity_id || taxChanged)) blockers.push(partial);
 	blockers.push(...header.blockers);

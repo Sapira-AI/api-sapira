@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { holdingTimezone, loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { setApiWriter } from './api-writer';
@@ -11,9 +12,9 @@ import { resolveUserId } from './contract-drafts.service';
 import {
 	AUTO_RENEWAL_JOB,
 	compactRenewalPreview,
-	DEFAULT_NOTICE_DAYS,
 	type DueCandidate,
 	dueKey,
+	dueReminders,
 	dueScheduledChanges,
 	EXTEND_HORIZON_JOB,
 	groupRenewalCandidates,
@@ -22,10 +23,17 @@ import {
 	proposalCounts,
 	proposalItemOf,
 	proposalKey,
+	type ReminderCandidate,
+	reminderLabel,
+	reminderLadder,
+	reminderTone,
 	RENEWAL_PROPOSAL_CODES,
 	RENEWAL_PROPOSAL_DISMISSED,
 	RENEWAL_PROPOSED,
 	RENEWAL_PROPOSED_NOTIFICATION_TYPE,
+	RENEWAL_REMINDER,
+	RENEWAL_REMINDER_NOTIFICATION_TYPE,
+	RENEWAL_REMINDERS_JOB,
 	type RenewalCandidate,
 	type RenewalProposalCounts,
 	type RenewalProposalView,
@@ -46,7 +54,8 @@ const toText = (value: unknown) => (value === null || value === undefined ? null
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const parseJson = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
-const isoDate = (date: Date) => todayFor(null, date);
+/** "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4; default America/Santiago). */
+const isoDate = (date: Date, timezone?: string | null) => todayFor(timezone, date);
 
 /** Resultado de una corrida por holding (try/catch por holding: un holding que falla no detiene a los demás). */
 export interface JobHoldingResult {
@@ -83,7 +92,7 @@ export class ContractRenewalsService {
 
 	/** `GET /contracts/renewal-proposals`: propuestas abiertas del holding con conteos (KPI "Renuevan en 30 días"). */
 	async listProposals(holdingId: string, asOf = new Date()): Promise<{ data: RenewalProposalView[]; counts: RenewalProposalCounts }> {
-		const data = await loadOpenRenewalProposals(this.dataSource, holdingId, isoDate(asOf));
+		const data = await loadOpenRenewalProposals(this.dataSource, holdingId, isoDate(asOf, await holdingTimezone(this.dataSource, holdingId)));
 
 		return { data, counts: proposalCounts(data) };
 	}
@@ -157,8 +166,9 @@ export class ContractRenewalsService {
 
 	/** Propuestas de un holding: un evento `RENEWAL_PROPOSED` por contrato con sus ítems no propuestos aún (por ítem y fin). Devuelve cuántos. */
 	async proposeRenewalsForHolding(holdingId: string, today = new Date()): Promise<number> {
-		const iso = isoDate(today);
-		const notice = await this.noticeDays(holdingId);
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
 		const rows = (await this.dataSource.query(
 			`SELECT ci.id, ci.contract_id, c.contract_number, ci.product_name, ci.end_date::text AS end_date, ci.quantity, ci.unit_price,
 				ci.monthly_price, ci.currency, ci.term_months, ci.billing_frequency
@@ -274,11 +284,115 @@ export class ContractRenewalsService {
 		return created;
 	}
 
+	// ---------------------------------------------------------------- job contracts-renewal-reminders (S2-1 / S5-4, 7b)
+
+	/** Corrida diaria de alertas crecientes: todos los holdings con contratos Activos; try/catch por holding. */
+	async remindRenewals(today = new Date()): Promise<JobHoldingResult[]> {
+		return await this.perHolding(RENEWAL_REMINDERS_JOB, (holdingId) => this.remindRenewalsForHolding(holdingId, today));
+	}
+
+	/**
+	 * Alertas crecientes de un holding: ítems recurrentes con fin que siguen sin decisión (sin renovar ni baja; con o sin auto-renovación) de
+	 * contratos Activos, Por renovar o Vencidos. Escalones: `auto_renewal_notice_days` (primer aviso) y luego la escalera del holding
+	 * (`renewal_reminder_days`, default 60/30/15/7/0) menor que él; vencido, cada `renewal_overdue_every_days` días (default 7). Una alerta por contrato, fin y escalón (evento `RENEWAL_REMINDER` con `metadata { threshold_days, items[] }`,
+	 * revisado con el contrato bloqueado) y la notificación del contrato (misma clave por fin: se actualiza al escalar, no se duplica).
+	 */
+	async remindRenewalsForHolding(holdingId: string, today = new Date()): Promise<number> {
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
+		const rows = (await this.dataSource.query(
+			`SELECT ci.id, ci.contract_id, c.contract_number, ci.product_name, ci.end_date::text AS end_date
+			FROM contract_items ci
+			JOIN contracts c ON c.id = ci.contract_id AND c.holding_id = ci.holding_id
+			${derivedStatusLateral('$2')}
+			WHERE c.holding_id = $1 AND c.deleted_at IS NULL AND ds.derived_status IN ('active', 'pending_renewal', 'expired')
+				AND ci.is_recurring = true AND ci.renewed_by_item_id IS NULL AND ci.churn_date IS NULL
+				AND COALESCE(ci.categoria, '') NOT IN ('CHURN', 'DOWNSELL')
+				AND NOT (ci.related_item_id IS NOT NULL AND COALESCE(ci.categoria, '') = 'UPSELL')
+				AND ci.end_date IS NOT NULL AND ci.end_date <= $3::date
+			ORDER BY ci.contract_id, ci.end_date, ci.id`,
+			[holdingId, iso, noticeLimit(iso, notice)]
+		)) as Row[];
+		const candidates: ReminderCandidate[] = (rows ?? []).map((row) => ({
+			item_id: String(row.id),
+			contract_id: String(row.contract_id),
+			contract_number: toText(row.contract_number),
+			product_name: toText(row.product_name),
+			end_date: String(row.end_date).slice(0, 10),
+		}));
+
+		if (!candidates.length) return 0;
+		const sent = await this.reminderKeys(this.dataSource, holdingId, [...new Set(candidates.map((row) => row.contract_id))]);
+		let created = 0;
+
+		const schedule = { steps: prefs.renewal_reminder_days, overdue_every_days: prefs.renewal_overdue_every_days };
+
+		for (const reminder of dueReminders(candidates, sent, iso, notice, schedule)) {
+			const label = reminderLabel(reminder.days_to_end);
+			const names = reminder.items.map((item) => item.product_name ?? 'Producto').join(', ');
+			const eventId = await this.transaction(async (runner) => {
+				await runner.query(`SELECT id FROM contracts WHERE id = $1 AND holding_id = $2 FOR UPDATE`, [reminder.contract_id, holdingId]);
+				// Otra réplica pudo avisarlo entre la lectura y el lock.
+				if ((await this.reminderKeys(runner, holdingId, [reminder.contract_id])).has(reminder.key)) return null;
+				const [event] = (await runner.query(
+					`INSERT INTO contract_lifecycle_events (
+						contract_id, holding_id, event_type, event_status, title, description, summary, created_by, completed_at, effective_date,
+						amount_delta, items_affected, metadata
+					) VALUES ($1, $2, '${RENEWAL_REMINDER}', 'Completed', $3, $4, $4, $5, now(), $6::date, 0, $7::jsonb, $8::jsonb) RETURNING id`,
+					[
+						reminder.contract_id,
+						holdingId,
+						reminder.days_to_end < 0 ? 'Vencido sin decisión' : 'Vencimiento sin decisión',
+						`${label}: ${names} (fin ${reminder.end_date}). Renueva o registra la baja`,
+						SYSTEM_ACTOR_ID,
+						reminder.end_date,
+						JSON.stringify(reminder.items.map((item) => item.item_id)),
+						JSON.stringify({
+							source: 'api_v2',
+							job: RENEWAL_REMINDERS_JOB,
+							created_by_system: true,
+							threshold_days: reminder.threshold_days,
+							days_to_end: reminder.days_to_end,
+							end_date: reminder.end_date,
+							reminder_key: reminder.key,
+							notice_days: notice,
+							ladder: reminderLadder(notice, schedule.steps),
+							overdue_every_days: schedule.overdue_every_days,
+							items: reminder.items,
+						}),
+					]
+				)) as Row[];
+
+				return String(event.id);
+			});
+
+			if (!eventId) continue;
+			created += 1;
+			const tone = reminderTone(reminder.threshold_days);
+
+			await this.notify(holdingId, {
+				type: RENEWAL_REMINDER_NOTIFICATION_TYPE,
+				severity: tone === 'danger' ? 'error' : tone,
+				title: `${reminder.contract_number ?? 'Contrato'}: ${label.toLowerCase()}`,
+				message: `${names} ${reminder.days_to_end < 0 ? 'venció' : 'vence'} el ${reminder.end_date} y nadie decidió qué hacer. Renuévalo o registra la baja desde el contrato.`,
+				action_type: 'open_contract',
+				action_payload: { contract_id: reminder.contract_id, event_id: eventId, threshold_days: reminder.threshold_days },
+				resource_id: reminder.contract_id,
+				// Una notificación por contrato y fin: cada escalón la actualiza (no se acumulan).
+				deduplication_key: `contracts:renewal-reminder:${reminder.contract_id}:${reminder.end_date}`,
+			});
+		}
+
+		return created;
+	}
+
 	// ---------------------------------------------------------------- job contracts-scheduled-changes (§9.3.6)
 
 	/**
 	 * Job `contracts-extend-horizon`: por holding, las Por Emitir que faltan para que los ítems sin término tengan siempre 12 períodos desde
-	 * hoy (`ContractChangesService.extendHorizonForHolding`; evento `HORIZON_EXTENDED` por contrato solo si creó algo).
+	 * hoy (`HORIZON_PERIODS_AHEAD`, fijo por sistema; `ContractChangesService.extendHorizonForHolding`; evento `HORIZON_EXTENDED` por contrato
+	 * solo si creó algo).
 	 */
 	async extendHorizons(today = new Date()): Promise<JobHoldingResult[]> {
 		return await this.perHolding(EXTEND_HORIZON_JOB, (holdingId) => this.changes.extendHorizonForHolding(holdingId, SYSTEM_ACTOR_ID, today));
@@ -293,8 +407,9 @@ export class ContractRenewalsService {
 	 * el aviso lleva la variación del índice a la fecha (`indicadores_economicos`, con `index_lag_months`) o `index_value_missing`.
 	 */
 	async flagDueForHolding(holdingId: string, today = new Date()): Promise<number> {
-		const iso = isoDate(today);
-		const notice = await this.noticeDays(holdingId);
+		const prefs = await loadHoldingPreferences(this.dataSource, holdingId);
+		const iso = isoDate(today, prefs.timezone);
+		const notice = prefs.auto_renewal_notice_days;
 		const rows = (await this.dataSource.query(
 			`SELECT sc.id, sc.contract_id, c.contract_number, sc.contract_item_id, ci.product_name, sc.trigger, sc.kind, sc.value, sc.index_code,
 				sc.index_base_value, sc.index_lag_months,
@@ -424,14 +539,6 @@ export class ContractRenewalsService {
 		return results;
 	}
 
-	private async noticeDays(holdingId: string): Promise<number> {
-		const [row] = (await this.dataSource.query(`SELECT auto_renewal_notice_days FROM holding_settings WHERE holding_id = $1`, [
-			holdingId,
-		])) as Row[];
-
-		return toNumber(row?.auto_renewal_notice_days) || DEFAULT_NOTICE_DAYS;
-	}
-
 	/** Claves `ítem:fin` ya propuestas (cualquier estado: una propuesta omitida no se repite para el mismo fin). */
 	private async proposedKeys(db: Pick<DataSource, 'query'> | QueryRunner, holdingId: string, contractIds: string[]): Promise<Set<string>> {
 		const rows = (await db.query(
@@ -441,6 +548,17 @@ export class ContractRenewalsService {
 		)) as Row[];
 
 		return new Set((rows ?? []).map((row) => String(row.key)));
+	}
+
+	/** Claves `contrato:fin:escalón` ya avisadas (alertas crecientes). */
+	private async reminderKeys(db: Pick<DataSource, 'query'> | QueryRunner, holdingId: string, contractIds: string[]): Promise<Set<string>> {
+		const rows = (await db.query(
+			`SELECT metadata->>'reminder_key' AS key FROM contract_lifecycle_events
+			WHERE holding_id = $1 AND contract_id = ANY($2::uuid[]) AND event_type = '${RENEWAL_REMINDER}'`,
+			[holdingId, contractIds]
+		)) as Row[];
+
+		return new Set((rows ?? []).map((row) => toText(row.key)).filter((key): key is string => Boolean(key)));
 	}
 
 	/** Claves `pacto:fecha` ya avisadas. */
@@ -477,6 +595,7 @@ export class ContractRenewalsService {
 		holdingId: string,
 		input: {
 			type: string;
+			severity?: 'info' | 'warning' | 'error';
 			title: string;
 			message: string;
 			action_type: string;

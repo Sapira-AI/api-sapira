@@ -24,6 +24,7 @@ export const GENERIC_TAX_COUNTRY = '*';
 })
 @Unique('tax_document_types_country_code_code_key', ['country_code', 'code'])
 @Index('idx_tax_document_types_country_active', ['country_code', 'active'])
+@Check('tax_document_types_tax_rate_check', `"tax_rate" IS NULL OR ("tax_rate" >= 0 AND "tax_rate" <= 100)`)
 @Check(
 	'tax_document_types_kind_check',
 	`"kind" = ANY (ARRAY['invoice'::text, 'export_invoice'::text, 'credit_note'::text, 'debit_note'::text, 'receipt'::text])`
@@ -61,6 +62,17 @@ export class TaxDocumentType {
 		comment: 'Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite',
 	})
 	description_max_chars?: number | null;
+
+	/**
+	 * Configuración v2 ronda 3 (migración 1790820000000-TaxDocumentTypesTaxRate, decisión de Domi 03-10): tasa de impuesto del documento en porcentaje (19 = 19 %).
+	 * NULL = usa la tasa de la compañía. El motor la usa si el contrato tiene este documento (exportación sigue 0; Colombia sigue 0 y lo aplica el ERP).
+	 */
+	@Column({
+		type: 'numeric',
+		nullable: true,
+		comment: 'Tasa de impuesto del documento en porcentaje (19 = 19 %). NULL = usa la tasa de la compañía',
+	})
+	tax_rate?: number | null;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
 	created_at: Date;
