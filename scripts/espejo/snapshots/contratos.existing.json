@@ -4309,6 +4309,17 @@
     "scale": null,
     "array": false
    },
+   "tax_rate": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamp with time zone",
     "nullable": false,
@@ -4341,6 +4352,10 @@
    {
     "name": "tax_document_types_kind_check",
     "expression": "\"kind\" = ANY (ARRAY['invoice'::text, 'export_invoice'::text, 'credit_note'::text, 'debit_note'::text, 'receipt'::text])"
+   },
+   {
+    "name": "tax_document_types_tax_rate_check",
+    "expression": "\"tax_rate\" IS NULL OR (\"tax_rate\" >= 0 AND \"tax_rate\" <= 100)"
    }
   ],
   "foreignKeys": {}

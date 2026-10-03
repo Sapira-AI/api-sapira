@@ -3515,7 +3515,7 @@
 		{
 			"name": "public.client_entities",
 			"rls_enabled": true,
-			"rows": 1516,
+			"rows": 1553,
 			"columns": [
 				{
 					"name": "id",
@@ -3672,6 +3672,17 @@
 						"updatable"
 					],
 					"comment": "Condición de pago por defecto: {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. NULL = sin condición propia"
+				},
+				{
+					"name": "country_code",
+					"data_type": "character",
+					"format": "bpchar",
+					"type": "character(2)",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
 				}
 			],
 			"primary_keys": [
@@ -3698,6 +3709,17 @@
 					"target_table": "public.clients",
 					"target_columns": [
 						"id"
+					]
+				},
+				{
+					"name": "client_entities_country_code_fkey",
+					"source_table": "public.client_entities",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
 					]
 				},
 				{
@@ -3990,7 +4012,7 @@
 		{
 			"name": "public.clients",
 			"rls_enabled": true,
-			"rows": 1772,
+			"rows": 1816,
 			"columns": [
 				{
 					"name": "id",
@@ -4158,6 +4180,17 @@
 						"updatable"
 					],
 					"comment": "ID del cliente en Stripe, sincronizado desde BigQuery usando salesforce_account_id como clave de mapeo"
+				},
+				{
+					"name": "country_code",
+					"data_type": "character",
+					"format": "bpchar",
+					"type": "character(2)",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también clients.country con el nombre en español"
 				}
 			],
 			"primary_keys": [
@@ -4228,6 +4261,17 @@
 					"target_table": "public.clients",
 					"target_columns": [
 						"id"
+					]
+				},
+				{
+					"name": "clients_country_code_fkey",
+					"source_table": "public.clients",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
 					]
 				},
 				{
@@ -11371,6 +11415,28 @@
 			],
 			"foreign_key_constraints": [
 				{
+					"name": "client_entities_country_code_fkey",
+					"source_table": "public.client_entities",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
+					]
+				},
+				{
+					"name": "clients_country_code_fkey",
+					"source_table": "public.clients",
+					"source_columns": [
+						"country_code"
+					],
+					"target_table": "public.countries",
+					"target_columns": [
+						"code"
+					]
+				},
+				{
 					"name": "companies_country_code_fkey",
 					"source_table": "public.companies",
 					"source_columns": [
@@ -11557,7 +11623,7 @@
 					"options": [
 						"updatable"
 					],
-					"comment": "Tipo de dato: text o number"
+					"comment": "Tipo de dato: text, number, select, boolean o date"
 				},
 				{
 					"name": "is_required",
@@ -11610,6 +11676,17 @@
 						"nullable",
 						"updatable"
 					]
+				},
+				{
+					"name": "options",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Opciones de un campo select: [{ value, label }]. NULL en los otros tipos"
 				}
 			],
 			"primary_keys": [
@@ -11892,7 +11969,7 @@
 		{
 			"name": "public.exchange_rates_monthly_avg",
 			"rls_enabled": true,
-			"rows": 730,
+			"rows": 737,
 			"columns": [
 				{
 					"name": "id",
@@ -12954,6 +13031,80 @@
 					],
 					"default_value": "30",
 					"comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
+				},
+				{
+					"name": "timezone",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'America/Santiago'::text",
+					"comment": "Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago)"
+				},
+				{
+					"name": "renewal_reminder_days",
+					"data_type": "ARRAY",
+					"format": "_int2",
+					"type": "smallint[]",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{15,7,0}'::smallint[]",
+					"comment": "Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0)"
+				},
+				{
+					"name": "renewal_overdue_every_days",
+					"data_type": "smallint",
+					"format": "int2",
+					"type": "smallint",
+					"options": [
+						"updatable"
+					],
+					"default_value": "7",
+					"comment": "Vencido sin decisión: un recordatorio cada N días (default 7)"
+				},
+				{
+					"name": "quote_numbering_mode",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'prefixed'::text",
+					"comment": "Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual"
+				},
+				{
+					"name": "quote_number_prefix",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'COT'::text"
+				},
+				{
+					"name": "quote_number_include_year",
+					"data_type": "boolean",
+					"format": "bool",
+					"type": "boolean",
+					"options": [
+						"updatable"
+					],
+					"default_value": "true"
+				},
+				{
+					"name": "quote_number_width",
+					"data_type": "smallint",
+					"format": "int2",
+					"type": "smallint",
+					"options": [
+						"updatable"
+					],
+					"default_value": "4"
 				}
 			],
 			"primary_keys": [
@@ -21417,7 +21568,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21091,
+			"rows": 21093,
 			"columns": [
 				{
 					"name": "id",
@@ -24697,7 +24848,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 34,
+			"rows": 39,
 			"columns": [
 				{
 					"name": "id",
@@ -25360,7 +25511,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 27673,
+			"rows": 27675,
 			"columns": [
 				{
 					"name": "id",
@@ -25488,7 +25639,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 421,
+			"rows": 422,
 			"columns": [
 				{
 					"name": "id",
@@ -27028,6 +27179,17 @@
 						"updatable"
 					],
 					"comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
+				},
+				{
+					"name": "tax_rate",
+					"data_type": "numeric",
+					"format": "numeric",
+					"type": "numeric",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Tasa de impuesto del documento en porcentaje (19 = 19 %). NULL = usa la tasa de la compañía"
 				}
 			],
 			"primary_keys": [

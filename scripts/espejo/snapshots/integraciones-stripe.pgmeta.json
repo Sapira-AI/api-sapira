@@ -136,7 +136,7 @@
  "stripe_customers_stg": {
   "name": "public.stripe_customers_stg",
   "rls_enabled": true,
-  "rows": 421,
+  "rows": 422,
   "columns": [
    {
     "name": "id",
@@ -791,7 +791,7 @@
  "stripe_customers_bigquery": {
   "name": "public.stripe_customers_bigquery",
   "rls_enabled": true,
-  "rows": 27673,
+  "rows": 27675,
   "columns": [
    {
     "name": "id",

@@ -2,7 +2,7 @@
  "clients": {
   "name": "public.clients",
   "rls_enabled": true,
-  "rows": 1772,
+  "rows": 1816,
   "columns": [
    {
     "name": "id",
@@ -170,6 +170,17 @@
      "updatable"
     ],
     "comment": "ID del cliente en Stripe, sincronizado desde BigQuery usando salesforce_account_id como clave de mapeo"
+   },
+   {
+    "name": "country_code",
+    "data_type": "character",
+    "format": "bpchar",
+    "type": "character(2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también clients.country con el nombre en español"
    }
   ],
   "primary_keys": [
@@ -240,6 +251,17 @@
     "target_table": "public.clients",
     "target_columns": [
      "id"
+    ]
+   },
+   {
+    "name": "clients_country_code_fkey",
+    "source_table": "public.clients",
+    "source_columns": [
+     "country_code"
+    ],
+    "target_table": "public.countries",
+    "target_columns": [
+     "code"
     ]
    },
    {
@@ -324,7 +346,7 @@
  "client_entities": {
   "name": "public.client_entities",
   "rls_enabled": true,
-  "rows": 1516,
+  "rows": 1553,
   "columns": [
    {
     "name": "id",
@@ -481,6 +503,17 @@
      "updatable"
     ],
     "comment": "Condición de pago por defecto: {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. NULL = sin condición propia"
+   },
+   {
+    "name": "country_code",
+    "data_type": "character",
+    "format": "bpchar",
+    "type": "character(2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
    }
   ],
   "primary_keys": [
@@ -507,6 +540,17 @@
     "target_table": "public.clients",
     "target_columns": [
      "id"
+    ]
+   },
+   {
+    "name": "client_entities_country_code_fkey",
+    "source_table": "public.client_entities",
+    "source_columns": [
+     "country_code"
+    ],
+    "target_table": "public.countries",
+    "target_columns": [
+     "code"
     ]
    },
    {

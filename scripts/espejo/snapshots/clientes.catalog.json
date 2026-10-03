@@ -65,8 +65,19 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
+   {
+    "name": "clients_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
+   },
    {
     "name": "clients_holding_id_fkey",
     "type": "f",
@@ -92,6 +103,14 @@
     "name": "idx_clients_client_number",
     "cols": [
      "client_number"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_clients_country_code",
+    "cols": [
+     "country_code"
     ],
     "unique": false,
     "where": null
@@ -191,7 +210,11 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
    {
     "name": "client_entities_client_id_fkey",
@@ -199,6 +222,13 @@
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_entities_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
    },
    {
     "name": "client_entities_payment_terms_check",
@@ -225,6 +255,14 @@
     "name": "idx_client_entities_client_number",
     "cols": [
      "client_number"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_client_entities_country_code",
+    "cols": [
+     "country_code"
     ],
     "unique": false,
     "where": null

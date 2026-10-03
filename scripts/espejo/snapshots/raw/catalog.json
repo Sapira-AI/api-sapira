@@ -6777,6 +6777,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Condición de pago por defecto: {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. NULL = sin condición propia"
+				},
+				{
+					"column": "country_code",
+					"attnum": 25,
+					"data_type": "character",
+					"udt": "bpchar",
+					"type": "character(2)",
+					"char_len": 2,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
 				}
 			],
 			"constraints": [
@@ -6787,6 +6803,15 @@
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "client_entities_country_code_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "r",
 					"onupdate": "a"
 				},
 				{
@@ -6827,6 +6852,12 @@
 				{
 					"name": "idx_client_entities_client_number",
 					"def": "CREATE INDEX idx_client_entities_client_number ON public.client_entities USING btree (client_number)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_client_entities_country_code",
+					"def": "CREATE INDEX idx_client_entities_country_code ON public.client_entities USING btree (country_code)",
 					"unique": false,
 					"primary": false
 				},
@@ -7571,9 +7602,34 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "ID del cliente en Stripe, sincronizado desde BigQuery usando salesforce_account_id como clave de mapeo"
+				},
+				{
+					"column": "country_code",
+					"attnum": 17,
+					"data_type": "character",
+					"udt": "bpchar",
+					"type": "character(2)",
+					"char_len": 2,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también clients.country con el nombre en español"
 				}
 			],
 			"constraints": [
+				{
+					"name": "clients_country_code_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "r",
+					"onupdate": "a"
+				},
 				{
 					"name": "clients_holding_id_fkey",
 					"type": "f",
@@ -7612,6 +7668,12 @@
 				{
 					"name": "idx_clients_client_number",
 					"def": "CREATE INDEX idx_clients_client_number ON public.clients USING btree (client_number)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_clients_country_code",
+					"def": "CREATE INDEX idx_clients_country_code ON public.clients USING btree (country_code)",
 					"unique": false,
 					"primary": false
 				},
@@ -18145,7 +18207,7 @@
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "Tipo de dato: text o number"
+					"comment": "Tipo de dato: text, number, select, boolean o date"
 				},
 				{
 					"column": "is_required",
@@ -18226,6 +18288,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "options",
+					"attnum": 12,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Opciones de un campo select: [{ value, label }]. NULL en los otros tipos"
 				}
 			],
 			"constraints": [
@@ -18241,7 +18319,7 @@
 				{
 					"name": "custom_field_definitions_field_type_check",
 					"type": "c",
-					"def": "CHECK ((field_type = ANY (ARRAY['text'::text, 'number'::text])))",
+					"def": "CHECK ((field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -18255,6 +18333,15 @@
 					"deferred": false,
 					"ondelete": "c",
 					"onupdate": "a"
+				},
+				{
+					"name": "custom_field_definitions_options_check",
+					"type": "c",
+					"def": "CHECK (((field_type = 'select'::text) = ((options IS NOT NULL) AND (jsonb_typeof(options) = 'array'::text) AND (jsonb_array_length(options) > 0))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
 				},
 				{
 					"name": "custom_field_definitions_pkey",
@@ -21009,6 +21096,118 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
+				},
+				{
+					"column": "timezone",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'America/Santiago'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago)"
+				},
+				{
+					"column": "renewal_reminder_days",
+					"attnum": 11,
+					"data_type": "ARRAY",
+					"udt": "_int2",
+					"type": "smallint[]",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{15,7,0}'::smallint[]",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0)"
+				},
+				{
+					"column": "renewal_overdue_every_days",
+					"attnum": 12,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "7",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Vencido sin decisión: un recordatorio cada N días (default 7)"
+				},
+				{
+					"column": "quote_numbering_mode",
+					"attnum": 13,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'prefixed'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual"
+				},
+				{
+					"column": "quote_number_prefix",
+					"attnum": 14,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'COT'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "quote_number_include_year",
+					"attnum": 15,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "quote_number_width",
+					"attnum": 16,
+					"data_type": "smallint",
+					"udt": "int2",
+					"type": "smallint",
+					"char_len": null,
+					"num_prec": 16,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "4",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
 				}
 			],
 			"constraints": [
@@ -21043,6 +21242,60 @@
 					"name": "holding_settings_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (holding_id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_quote_number_prefix_check",
+					"type": "c",
+					"def": "CHECK ((quote_number_prefix ~ '^[A-Za-z0-9]{1,10}$'::text))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_quote_number_width_check",
+					"type": "c",
+					"def": "CHECK (((quote_number_width >= 1) AND (quote_number_width <= 8)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_quote_numbering_mode_check",
+					"type": "c",
+					"def": "CHECK ((quote_numbering_mode = ANY (ARRAY['prefixed'::text, 'sequential'::text, 'manual'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_renewal_overdue_every_days_check",
+					"type": "c",
+					"def": "CHECK (((renewal_overdue_every_days >= 1) AND (renewal_overdue_every_days <= 90)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_renewal_reminder_days_check",
+					"type": "c",
+					"def": "CHECK ((((cardinality(renewal_reminder_days) >= 1) AND (cardinality(renewal_reminder_days) <= 10)) AND (0 <= ALL (renewal_reminder_days)) AND (180 >= ALL (renewal_reminder_days))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_settings_timezone_check",
+					"type": "c",
+					"def": "CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64)))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -46757,6 +47010,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
+				},
+				{
+					"column": "tax_rate",
+					"attnum": 11,
+					"data_type": "numeric",
+					"udt": "numeric",
+					"type": "numeric",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tasa de impuesto del documento en porcentaje (19 = 19 %). NULL = usa la tasa de la compañía"
 				}
 			],
 			"constraints": [
@@ -46782,6 +47051,15 @@
 					"name": "tax_document_types_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "tax_document_types_tax_rate_check",
+					"type": "c",
+					"def": "CHECK (((tax_rate IS NULL) OR ((tax_rate >= (0)::numeric) AND (tax_rate <= (100)::numeric))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -65315,7 +65593,7 @@
 		},
 		{
 			"name": "create_default_roles_for_holding",
-			"def": "CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_admin_role_id UUID;\n  v_invitado_role_id UUID;\n  v_ventas_role_id UUID;\n  v_operaciones_role_id UUID;\n  v_revenue_ops_role_id UUID;\n  v_bi_role_id UUID;\n  v_facturacion_role_id UUID;\n  v_finanzas_role_id UUID;\n  v_admin_negocio_role_id UUID;\n  v_admin_tecnico_role_id UUID;\nBEGIN\n  -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW())\n  RETURNING id INTO v_admin_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW())\n  RETURNING id INTO v_invitado_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW())\n  RETURNING id INTO v_ventas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Operaciones', 'Gestión operativa', NEW.id, NOW())\n  RETURNING id INTO v_operaciones_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW())\n  RETURNING id INTO v_revenue_ops_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('BI', 'Análisis de datos', NEW.id, NOW())\n  RETURNING id INTO v_bi_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW())\n  RETURNING id INTO v_facturacion_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW())\n  RETURNING id INTO v_finanzas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW())\n  RETURNING id INTO v_admin_negocio_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at)\n  VALUES\n    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW())\n  RETURNING id INTO v_admin_tecnico_role_id;\n\n  -- Insertar permisos para Administrador (todos los permisos)\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'EDIT_DASHBOARD',\n    'VIEW_CLIENTES', 'EDIT_CLIENTES',\n    'VIEW_COTIZACIONES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'EDIT_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',\n    'ADMIN_FULL_ACCESS'\n  );\n\n  -- Insertar permisos para Invitado\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_invitado_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN ('VIEW_DASHBOARD', 'VIEW_REPORTES');\n\n  -- Insertar permisos para Ventas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_ventas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES', 'VIEW_CONTRATOS'\n  );\n\n  -- Insertar permisos para Operaciones\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_operaciones_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Revenue Ops\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_revenue_ops_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para BI\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_bi_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Facturación y Cobranza\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_facturacion_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'EDIT_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Finanzas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_finanzas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'\n  );\n\n  -- Insertar permisos para Admin de Negocio\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_negocio_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'EDIT_CLIENTES', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS', 'VIEW_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION', 'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin Técnico\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_tecnico_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES', 'ADMIN_FULL_ACCESS'\n  );\n\n  RETURN NEW;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_admin_role_id UUID;\n  v_invitado_role_id UUID;\n  v_ventas_role_id UUID;\n  v_operaciones_role_id UUID;\n  v_revenue_ops_role_id UUID;\n  v_bi_role_id UUID;\n  v_facturacion_role_id UUID;\n  v_finanzas_role_id UUID;\n  v_admin_negocio_role_id UUID;\n  v_admin_tecnico_role_id UUID;\nBEGIN\n  -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW(), true)\n  RETURNING id INTO v_invitado_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW(), true)\n  RETURNING id INTO v_ventas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Operaciones', 'Gestión operativa', NEW.id, NOW(), true)\n  RETURNING id INTO v_operaciones_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW(), true)\n  RETURNING id INTO v_revenue_ops_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('BI', 'Análisis de datos', NEW.id, NOW(), true)\n  RETURNING id INTO v_bi_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW(), true)\n  RETURNING id INTO v_facturacion_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW(), true)\n  RETURNING id INTO v_finanzas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_negocio_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_tecnico_role_id;\n\n  -- Insertar permisos para Administrador (todos los permisos)\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'EDIT_DASHBOARD',\n    'VIEW_CLIENTES', 'EDIT_CLIENTES',\n    'VIEW_COTIZACIONES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'EDIT_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',\n    'CLOSE_PERIODS'\n  );\n\n  -- Insertar permisos para Invitado\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_invitado_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN ('VIEW_DASHBOARD', 'VIEW_REPORTES');\n\n  -- Insertar permisos para Ventas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_ventas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES', 'VIEW_CONTRATOS'\n  );\n\n  -- Insertar permisos para Operaciones\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_operaciones_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Revenue Ops\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_revenue_ops_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para BI\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_bi_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Facturación y Cobranza\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_facturacion_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'EDIT_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Finanzas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_finanzas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'CLOSE_PERIODS', 'VIEW_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin de Negocio\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_negocio_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'EDIT_CLIENTES', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS', 'VIEW_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION', 'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin Técnico\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_tecnico_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'\n  );\n\n  RETURN NEW;\nEND;\n$function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": ""

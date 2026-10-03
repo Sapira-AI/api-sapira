@@ -1,7 +1,7 @@
-# Módulo 3 · Clientes — 12 tablas de prod (2026-10-02)
+# Módulo 3 · Clientes — 12 tablas de prod (2026-10-03)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-02 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-03 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
 
@@ -9,8 +9,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `clients` (1772) | `src/databases/postgresql/entities/clientes/client.entity.ts` · `Client` | ⚠️ difiere de prod | — | — | — | nombre de PK `clients_pkey`<br>CHECK `clients_status_check`<br>índice con expresión `idx_clients_custom_fields` |
-| `client_entities` (1516) | `src/databases/postgresql/entities/clientes/client-entity.entity.ts` · `ClientEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entities_pkey` |
+| `clients` (1816) | `src/databases/postgresql/entities/clientes/client.entity.ts` · `Client` | ⚠️ difiere de prod | — | — | — | nombre de PK `clients_pkey`<br>CHECK `clients_status_check`<br>índice con expresión `idx_clients_custom_fields` |
+| `client_entities` (1553) | `src/databases/postgresql/entities/clientes/client-entity.entity.ts` · `ClientEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entities_pkey` |
 | `client_entity_clients` (1512) | `src/databases/postgresql/entities/clientes/client-entity-client.entity.ts` · `ClientEntityClient` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entity_clients_pkey` |
 | `client_contacts` (262) | `src/databases/postgresql/entities/clientes/client-contact.entity.ts` · `ClientContact` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_contacts_pkey` |
 | `client_activity_notes` (0) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check` |

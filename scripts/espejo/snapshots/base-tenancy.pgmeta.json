@@ -2980,6 +2980,80 @@
     ],
     "default_value": "30",
     "comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
+   },
+   {
+    "name": "timezone",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'America/Santiago'::text",
+    "comment": "Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago)"
+   },
+   {
+    "name": "renewal_reminder_days",
+    "data_type": "ARRAY",
+    "format": "_int2",
+    "type": "smallint[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{15,7,0}'::smallint[]",
+    "comment": "Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0)"
+   },
+   {
+    "name": "renewal_overdue_every_days",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "7",
+    "comment": "Vencido sin decisión: un recordatorio cada N días (default 7)"
+   },
+   {
+    "name": "quote_numbering_mode",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'prefixed'::text",
+    "comment": "Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual"
+   },
+   {
+    "name": "quote_number_prefix",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'COT'::text"
+   },
+   {
+    "name": "quote_number_include_year",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "quote_number_width",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "4"
    }
   ],
   "primary_keys": [
@@ -3060,7 +3134,7 @@
     "options": [
      "updatable"
     ],
-    "comment": "Tipo de dato: text o number"
+    "comment": "Tipo de dato: text, number, select, boolean o date"
    },
    {
     "name": "is_required",
@@ -3113,6 +3187,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "options",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Opciones de un campo select: [{ value, label }]. NULL en los otros tipos"
    }
   ],
   "primary_keys": [

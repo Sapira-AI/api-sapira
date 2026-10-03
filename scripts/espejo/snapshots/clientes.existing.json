@@ -134,6 +134,17 @@
     "scale": null,
     "array": false
    },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "client_number": {
     "type": "text",
     "nullable": true,
@@ -208,6 +219,13 @@
     "unique": false,
     "where": "(salesforce_account_id IS NOT NULL)"
    },
+   "idx_clients_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_clients_holding_id": {
     "columns": [
      "holding_id"
@@ -230,6 +248,13 @@
    }
   ],
   "foreignKeys": {
+   "clients_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "clients_holding_id_fkey": {
     "columns": [
      "holding_id"
@@ -304,6 +329,17 @@
     "generated": null,
     "default": null,
     "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
     "precision": null,
     "scale": null,
     "array": false
@@ -425,6 +461,13 @@
     "unique": true,
     "where": "(odoo_partner_id IS NOT NULL)"
    },
+   "idx_client_entities_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_client_entities_holding_id": {
     "columns": [
      "holding_id"
@@ -447,6 +490,13 @@
    }
   ],
   "foreignKeys": {
+   "client_entities_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "fk_client_entities_holding_id": {
     "columns": [
      "holding_id"
