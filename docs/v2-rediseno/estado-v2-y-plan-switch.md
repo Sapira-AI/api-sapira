@@ -28,7 +28,8 @@
 | **Facturación** | Construido y revisado | Facturas, notas de crédito, cobranza (resumen, cuentas por cobrar, proyección, pagos y ajustes), conciliación bancaria, invoices de Stripe, acciones masivas, vistas sugeridas | [`spec-facturacion-v2.md`](./spec-facturacion-v2.md) · [`cobertura-facturacion-v2.md`](./cobertura-facturacion-v2.md) · [`spec-conciliacion-v2.md`](./spec-conciliacion-v2.md) |
 | **Ingresos** (ex Revenue) | Construido; Asientos sirve pero hay que afinarlo | Resumen, movimiento de saldos, reconocimiento futuro, detalle mensual con movimientos, asientos por cuenta con "Abrir por" dimensión, excepciones | [`spec-revenue-y-metricas.md`](./spec-revenue-y-metricas.md) |
 | **Métricas** | Construido | KPI, movimientos de MRR, retención, cohortes, renovaciones, bajas, bookings | [`spec-revenue-y-metricas.md`](./spec-revenue-y-metricas.md) |
-| **Precios** | Primera versión; falta una segunda vuelta | Modelos de precio v2 | [`spec-pricing-v2.md`](./spec-pricing-v2.md) |
+| **Precios** | Primera versión; falta una segunda vuelta | Modelos de precio v2 (+ pestaña Productos de Configuración) | [`spec-pricing-v2.md`](./spec-pricing-v2.md) |
+| **Configuración** | Construido y en producción (03-10; api v0.0.79–82, front v0.1.55–56). Pendiente: invitar, reenviar, desactivar y eliminar usuarios; reglas de reconocimiento de ingresos (grupo B); mostrar campos personalizados en formularios | Árbol del holding; Holding 360 (monedas y tipos de cambio con detalle, catálogos en tarjetas, vendedores, campos personalizados con lista/sí-no/fecha, comunicaciones, preferencias: avisos de renovación, numeración de cotizaciones, zona horaria); Compañía 360 (documentos tributarios con impuesto, cierre de períodos solo de contratos e ítems, 5 cuentas contables, cuentas bancarias, documentos legales); usuarios y roles con matriz de permisos; país ISO en compañías y clientes; impuesto por documento en toda la facturación | [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) · [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) · [`revision-seguridad-api.md`](./revision-seguridad-api.md) |
 
 Convenciones de pantalla que valen para todos (referencia: lista de Contratos):
 
@@ -45,10 +46,11 @@ Convenciones de pantalla que valen para todos (referencia: lista de Contratos):
 
 En el orden conversado con Domi (02-10):
 
-1. **Cotizaciones**: revisión funcional y de UI completa.
-2. **Configuración**: usuarios, roles y permisos (hoy la API solo controla permisos por rol en Facturación:
-   `VIEW_FACTURACION` / `EDIT_FACTURACION`), ocultar acciones sin permiso en todos los módulos, invitaciones,
-   cierre de períodos, catálogo de productos, cuentas contables por compañía.
+1. **Configuración, cierre**: invitar/reenviar/desactivar/eliminar usuarios (API con Supabase Auth + Resend); reglas de
+   reconocimiento de ingresos (granularidad diaria/mensual, no recurrentes, variables al cierre, cierre automático;
+   spec §14 B); permisos deshabilitados con aviso en los módulos cerrados (con OK por módulo).
+2. **Bloque de seguridad** (con OK de Domi y Leon): [`revision-seguridad-api.md`](./revision-seguridad-api.md);
+   urgentes #1, #2, #3, #11 y #16.
 3. **Notificaciones**: página completa, tareas pendientes, alertas, resumen semanal; textos claros con la solución.
 4. **Automatizaciones** (agentes): catálogo de acciones y configuración por cliente y en lote
    ([`spec-agentes-ia.md`](./spec-agentes-ia.md)). Hoy los agentes del lab son demostración de diseño.
