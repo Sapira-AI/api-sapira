@@ -1155,6 +1155,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Compañía de la alerta (factura, contrato). NULL = sin compañía: la ve todo destinatario"
    }
   ],
   "primary_keys": [
@@ -1173,12 +1184,34 @@
     ]
    },
    {
+    "name": "app_notifications_company_id_fkey",
+    "source_table": "public.app_notifications",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "app_notifications_holding_id_fkey",
     "source_table": "public.app_notifications",
     "source_columns": [
      "holding_id"
     ],
     "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_email_log_notification_id_fkey",
+    "source_table": "public.notification_email_log",
+    "source_columns": [
+     "notification_id"
+    ],
+    "target_table": "public.app_notifications",
     "target_columns": [
      "id"
     ]

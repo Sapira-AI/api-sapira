@@ -614,6 +614,13 @@
     ],
     "unique": false,
     "where": null
+   },
+   {
+    "name": "client_activity_notes_mentions_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX client_activity_notes_mentions_idx ON public.client_activity_notes USING gin (mentioned_user_ids)"
    }
   ],
   "triggers": [

@@ -1247,6 +1247,17 @@
     "scale": null,
     "array": false
    },
+   "company_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "status": {
     "type": "text",
     "nullable": false,
@@ -1294,6 +1305,14 @@
   },
   "uniques": {},
   "indices": {
+   "app_notifications_holding_company_idx": {
+    "columns": [
+     "holding_id",
+     "company_id"
+    ],
+    "unique": false,
+    "where": null
+   },
    "app_notifications_holding_status_created_idx": {
     "columns": [],
     "unique": false,
@@ -1324,6 +1343,13 @@
    }
   ],
   "foreignKeys": {
+   "app_notifications_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "SET NULL"
+   },
    "app_notifications_holding_id_fkey": {
     "columns": [
      "holding_id"

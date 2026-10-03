@@ -2448,9 +2448,34 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "company_id",
+					"attnum": 19,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Compañía de la alerta (factura, contrato). NULL = sin compañía: la ve todo destinatario"
 				}
 			],
 			"constraints": [
+				{
+					"name": "app_notifications_company_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
 				{
 					"name": "app_notifications_holding_id_fkey",
 					"type": "f",
@@ -2489,6 +2514,12 @@
 				}
 			],
 			"indexes": [
+				{
+					"name": "app_notifications_holding_company_idx",
+					"def": "CREATE INDEX app_notifications_holding_company_idx ON public.app_notifications USING btree (holding_id, company_id)",
+					"unique": false,
+					"primary": false
+				},
 				{
 					"name": "app_notifications_holding_resource_created_idx",
 					"def": "CREATE INDEX app_notifications_holding_resource_created_idx ON public.app_notifications USING btree (holding_id, resource_type, resource_id, created_at DESC) WHERE (resource_id IS NOT NULL)",
@@ -5690,6 +5721,38 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Borrado lógico: la nota deja de mostrarse pero se conserva"
+				},
+				{
+					"column": "mentioned_user_ids",
+					"attnum": 9,
+					"data_type": "ARRAY",
+					"udt": "_uuid",
+					"type": "uuid[]",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::uuid[]",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "users.id mencionados con @[user:<id>] en el texto (los deriva la API)"
+				},
+				{
+					"column": "references",
+					"attnum": 10,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'[]'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Elementos del cliente referenciados con #[<tipo>:<id>]: [{ type, id }] (los deriva la API)"
 				}
 			],
 			"constraints": [
@@ -5743,6 +5806,12 @@
 				{
 					"name": "client_activity_notes_client_idx",
 					"def": "CREATE INDEX client_activity_notes_client_idx ON public.client_activity_notes USING btree (client_id, created_at)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "client_activity_notes_mentions_idx",
+					"def": "CREATE INDEX client_activity_notes_mentions_idx ON public.client_activity_notes USING gin (mentioned_user_ids)",
 					"unique": false,
 					"primary": false
 				},
@@ -29608,6 +29677,270 @@
 				}
 			]
 		},
+		"notification_email_log": {
+			"comment": "Correos de notificación enviados (alerta inmediata y resumen semanal): deduplicación por usuario y clave. Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "user_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "kind",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "dedup_key",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "notification_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "status",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'pending'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "provider_id",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "error",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 10,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "sent_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "notification_email_log_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "notification_email_log_kind_check",
+					"type": "c",
+					"def": "CHECK ((kind = ANY (ARRAY['alert'::text, 'digest'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "notification_email_log_notification_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (notification_id) REFERENCES app_notifications(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "notification_email_log_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "notification_email_log_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "notification_email_log_user_dedup_key",
+					"type": "u",
+					"def": "UNIQUE (user_id, dedup_key)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "notification_email_log_user_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "notification_email_log_pkey",
+					"def": "CREATE UNIQUE INDEX notification_email_log_pkey ON public.notification_email_log USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "notification_email_log_user_dedup_key",
+					"def": "CREATE UNIQUE INDEX notification_email_log_user_dedup_key ON public.notification_email_log USING btree (user_id, dedup_key)",
+					"unique": true,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": []
+		},
 		"notification_role_subscriptions": {
 			"comment": null,
 			"rls": true,
@@ -47613,6 +47946,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "company_ids",
+					"attnum": 9,
+					"data_type": "ARRAY",
+					"udt": "_uuid",
+					"type": "uuid[]",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Solo en la fila my_companies: compañías que ve el usuario (NULL o vacío = todas)"
 				}
 			],
 			"constraints": [
@@ -58781,6 +59130,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"notification_email_log": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"notification_role_subscriptions": [
 			{
 				"grantee": "anon",
@@ -66196,7 +66659,7 @@
 		},
 		{
 			"name": "create_default_roles_for_holding",
-			"def": "CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_admin_role_id UUID;\n  v_invitado_role_id UUID;\n  v_ventas_role_id UUID;\n  v_operaciones_role_id UUID;\n  v_revenue_ops_role_id UUID;\n  v_bi_role_id UUID;\n  v_facturacion_role_id UUID;\n  v_finanzas_role_id UUID;\n  v_admin_negocio_role_id UUID;\n  v_admin_tecnico_role_id UUID;\nBEGIN\n  -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW(), true)\n  RETURNING id INTO v_invitado_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW(), true)\n  RETURNING id INTO v_ventas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Operaciones', 'Gestión operativa', NEW.id, NOW(), true)\n  RETURNING id INTO v_operaciones_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW(), true)\n  RETURNING id INTO v_revenue_ops_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('BI', 'Análisis de datos', NEW.id, NOW(), true)\n  RETURNING id INTO v_bi_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW(), true)\n  RETURNING id INTO v_facturacion_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW(), true)\n  RETURNING id INTO v_finanzas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_negocio_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_tecnico_role_id;\n\n  -- Insertar permisos para Administrador (todos los permisos)\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'EDIT_DASHBOARD',\n    'VIEW_CLIENTES', 'EDIT_CLIENTES',\n    'VIEW_COTIZACIONES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'EDIT_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',\n    'CLOSE_PERIODS'\n  );\n\n  -- Insertar permisos para Invitado\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_invitado_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN ('VIEW_DASHBOARD', 'VIEW_REPORTES');\n\n  -- Insertar permisos para Ventas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_ventas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES', 'VIEW_CONTRATOS'\n  );\n\n  -- Insertar permisos para Operaciones\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_operaciones_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Revenue Ops\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_revenue_ops_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para BI\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_bi_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Facturación y Cobranza\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_facturacion_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'EDIT_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Finanzas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_finanzas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'CLOSE_PERIODS', 'VIEW_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin de Negocio\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_negocio_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'EDIT_CLIENTES', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS', 'VIEW_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION', 'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin Técnico\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_tecnico_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'\n  );\n\n  -- Notificaciones v2 (N3): suscripciones por defecto por rol del holding nuevo (role_id NULL = super admins).\n  INSERT INTO notification_role_subscriptions (holding_id, role_id, notification_type)\n  SELECT NEW.id, d.role_id, d.notification_type\n  FROM (VALUES\n    (v_admin_role_id, 'invoice_odoo_failure'), (v_finanzas_role_id, 'invoice_odoo_failure'), (v_facturacion_role_id, 'invoice_odoo_failure'),\n    (v_admin_role_id, 'salesforce_staging_blocked'), (v_ventas_role_id, 'salesforce_staging_blocked'), (v_operaciones_role_id, 'salesforce_staging_blocked'),\n    (v_admin_role_id, 'salesforce_sync_failure'), (v_admin_tecnico_role_id, 'salesforce_sync_failure'), (NULL::uuid, 'salesforce_sync_failure'),\n    (v_admin_role_id, 'contract_renewal_proposed'), (v_finanzas_role_id, 'contract_renewal_proposed'),\n    (v_admin_role_id, 'contract_renewal_reminder'), (v_finanzas_role_id, 'contract_renewal_reminder'),\n    (v_admin_role_id, 'contract_scheduled_change_due'), (v_finanzas_role_id, 'contract_scheduled_change_due'),\n    (v_admin_role_id, 'bigquery_quantities_diff'), (v_finanzas_role_id, 'bigquery_quantities_diff'), (v_facturacion_role_id, 'bigquery_quantities_diff'),\n    (v_admin_role_id, 'bigquery_quantities_unmapped'), (v_finanzas_role_id, 'bigquery_quantities_unmapped'), (v_facturacion_role_id, 'bigquery_quantities_unmapped'),\n    (v_admin_role_id, 'bigquery_quantities_blocked'), (v_finanzas_role_id, 'bigquery_quantities_blocked'), (v_facturacion_role_id, 'bigquery_quantities_blocked'),\n    (v_admin_role_id, 'bigquery_quantities_currency_mismatch'), (v_finanzas_role_id, 'bigquery_quantities_currency_mismatch'),\n    (v_facturacion_role_id, 'bigquery_quantities_currency_mismatch'),\n    (v_admin_role_id, 'fx_sync_failure'), (v_admin_tecnico_role_id, 'fx_sync_failure'), (NULL::uuid, 'fx_sync_failure'),\n    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary')\n  ) AS d(role_id, notification_type);\n\n  RETURN NEW;\nEND;\n$function$\n",
+			"def": "CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_admin_role_id UUID;\n  v_invitado_role_id UUID;\n  v_ventas_role_id UUID;\n  v_operaciones_role_id UUID;\n  v_revenue_ops_role_id UUID;\n  v_bi_role_id UUID;\n  v_facturacion_role_id UUID;\n  v_finanzas_role_id UUID;\n  v_admin_negocio_role_id UUID;\n  v_admin_tecnico_role_id UUID;\nBEGIN\n  -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW(), true)\n  RETURNING id INTO v_invitado_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW(), true)\n  RETURNING id INTO v_ventas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Operaciones', 'Gestión operativa', NEW.id, NOW(), true)\n  RETURNING id INTO v_operaciones_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW(), true)\n  RETURNING id INTO v_revenue_ops_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('BI', 'Análisis de datos', NEW.id, NOW(), true)\n  RETURNING id INTO v_bi_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW(), true)\n  RETURNING id INTO v_facturacion_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW(), true)\n  RETURNING id INTO v_finanzas_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_negocio_role_id;\n\n  INSERT INTO roles (name, description, holding_id, created_at, is_default)\n  VALUES\n    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW(), true)\n  RETURNING id INTO v_admin_tecnico_role_id;\n\n  -- Insertar permisos para Administrador (todos los permisos)\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'EDIT_DASHBOARD',\n    'VIEW_CLIENTES', 'EDIT_CLIENTES',\n    'VIEW_COTIZACIONES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'EDIT_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',\n    'CLOSE_PERIODS'\n  );\n\n  -- Insertar permisos para Invitado\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_invitado_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN ('VIEW_DASHBOARD', 'VIEW_REPORTES');\n\n  -- Insertar permisos para Ventas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_ventas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES', 'VIEW_CONTRATOS'\n  );\n\n  -- Insertar permisos para Operaciones\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_operaciones_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'EDIT_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Revenue Ops\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_revenue_ops_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_COTIZACIONES',\n    'VIEW_CONTRATOS', 'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para BI\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_bi_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Facturación y Cobranza\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_facturacion_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'VIEW_DASHBOARD', 'VIEW_CLIENTES', 'VIEW_FACTURACION',\n    'EDIT_FACTURACION', 'VIEW_REPORTES'\n  );\n\n  -- Insertar permisos para Finanzas\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_finanzas_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',\n    'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',\n    'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',\n    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',\n    'CLOSE_PERIODS', 'VIEW_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin de Negocio\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_negocio_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'EDIT_CLIENTES', 'VIEW_CLIENTES',\n    'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS', 'VIEW_CONTRATOS',\n    'VIEW_FACTURACION', 'EDIT_FACTURACION', 'VIEW_REVENUE', 'EDIT_REVENUE',\n    'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES',\n    'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'\n  );\n\n  -- Insertar permisos para Admin Técnico\n  INSERT INTO role_permissions (role_id, permission_id, holding_id)\n  SELECT v_admin_tecnico_role_id, id, NEW.id\n  FROM permissions\n  WHERE code IN (\n    'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',\n    'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',\n    'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',\n    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'\n  );\n\n  -- Notificaciones v2 (N3): suscripciones por defecto por rol del holding nuevo (role_id NULL = super admins).\n  INSERT INTO notification_role_subscriptions (holding_id, role_id, notification_type)\n  SELECT NEW.id, d.role_id, d.notification_type\n  FROM (VALUES\n    (v_admin_role_id, 'invoice_odoo_failure'), (v_finanzas_role_id, 'invoice_odoo_failure'), (v_facturacion_role_id, 'invoice_odoo_failure'),\n    (v_admin_role_id, 'salesforce_staging_blocked'), (v_ventas_role_id, 'salesforce_staging_blocked'), (v_operaciones_role_id, 'salesforce_staging_blocked'),\n    (v_admin_role_id, 'salesforce_sync_failure'), (v_admin_tecnico_role_id, 'salesforce_sync_failure'), (NULL::uuid, 'salesforce_sync_failure'),\n    (v_admin_role_id, 'contract_renewal_proposed'), (v_finanzas_role_id, 'contract_renewal_proposed'),\n    (v_admin_role_id, 'contract_renewal_reminder'), (v_finanzas_role_id, 'contract_renewal_reminder'),\n    (v_admin_role_id, 'contract_scheduled_change_due'), (v_finanzas_role_id, 'contract_scheduled_change_due'),\n    (v_admin_role_id, 'bigquery_quantities_diff'), (v_finanzas_role_id, 'bigquery_quantities_diff'), (v_facturacion_role_id, 'bigquery_quantities_diff'),\n    (v_admin_role_id, 'bigquery_quantities_unmapped'), (v_finanzas_role_id, 'bigquery_quantities_unmapped'), (v_facturacion_role_id, 'bigquery_quantities_unmapped'),\n    (v_admin_role_id, 'bigquery_quantities_blocked'), (v_finanzas_role_id, 'bigquery_quantities_blocked'), (v_facturacion_role_id, 'bigquery_quantities_blocked'),\n    (v_admin_role_id, 'bigquery_quantities_currency_mismatch'), (v_finanzas_role_id, 'bigquery_quantities_currency_mismatch'),\n    (v_facturacion_role_id, 'bigquery_quantities_currency_mismatch'),\n    (v_admin_role_id, 'fx_sync_failure'), (v_admin_tecnico_role_id, 'fx_sync_failure'), (NULL::uuid, 'fx_sync_failure'),\n    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary'),\n    (v_admin_role_id, 'month_close_pending'), (v_finanzas_role_id, 'month_close_pending'), (v_facturacion_role_id, 'month_close_pending')\n  ) AS d(role_id, notification_type);\n\n  RETURN NEW;\nEND;\n$function$\n",
 			"extension": null,
 			"comment": null,
 			"identity_args": ""
@@ -68656,7 +69119,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 145,
+			"objetos": 146,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

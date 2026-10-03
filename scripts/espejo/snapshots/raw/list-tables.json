@@ -1331,6 +1331,17 @@
 						"nullable",
 						"updatable"
 					]
+				},
+				{
+					"name": "company_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Compañía de la alerta (factura, contrato). NULL = sin compañía: la ve todo destinatario"
 				}
 			],
 			"primary_keys": [
@@ -1349,12 +1360,34 @@
 					]
 				},
 				{
+					"name": "app_notifications_company_id_fkey",
+					"source_table": "public.app_notifications",
+					"source_columns": [
+						"company_id"
+					],
+					"target_table": "public.companies",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "app_notifications_holding_id_fkey",
 					"source_table": "public.app_notifications",
 					"source_columns": [
 						"holding_id"
 					],
 					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "notification_email_log_notification_id_fkey",
+					"source_table": "public.notification_email_log",
+					"source_columns": [
+						"notification_id"
+					],
+					"target_table": "public.app_notifications",
 					"target_columns": [
 						"id"
 					]
@@ -3027,6 +3060,28 @@
 						"updatable"
 					],
 					"comment": "Borrado lógico: la nota deja de mostrarse pero se conserva"
+				},
+				{
+					"name": "mentioned_user_ids",
+					"data_type": "ARRAY",
+					"format": "_uuid",
+					"type": "uuid[]",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::uuid[]",
+					"comment": "users.id mencionados con @[user:<id>] en el texto (los deriva la API)"
+				},
+				{
+					"name": "references",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'[]'::jsonb",
+					"comment": "Elementos del cliente referenciados con #[<tipo>:<id>]: [{ type, id }] (los deriva la API)"
 				}
 			],
 			"primary_keys": [
@@ -4666,6 +4721,17 @@
 					]
 				},
 				{
+					"name": "app_notifications_company_id_fkey",
+					"source_table": "public.app_notifications",
+					"source_columns": [
+						"company_id"
+					],
+					"target_table": "public.companies",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "bank_movements_company_id_fkey",
 					"source_table": "public.bank_movements",
 					"source_columns": [
@@ -5980,6 +6046,17 @@
 				{
 					"name": "mrr_legacy_holding_id_fkey",
 					"source_table": "public.mrr_legacy",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "notification_email_log_holding_id_fkey",
+					"source_table": "public.notification_email_log",
 					"source_columns": [
 						"holding_id"
 					],
@@ -17685,6 +17762,157 @@
 			]
 		},
 		{
+			"name": "public.notification_email_log",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "user_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "kind",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "dedup_key",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "notification_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'pending'::text"
+				},
+				{
+					"name": "provider_id",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "error",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "sent_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "notification_email_log_holding_id_fkey",
+					"source_table": "public.notification_email_log",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "notification_email_log_notification_id_fkey",
+					"source_table": "public.notification_email_log",
+					"source_columns": [
+						"notification_id"
+					],
+					"target_table": "public.app_notifications",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "notification_email_log_user_id_fkey",
+					"source_table": "public.notification_email_log",
+					"source_columns": [
+						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.notification_role_subscriptions",
 			"rls_enabled": true,
 			"rows": 246,
@@ -24881,7 +25109,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 43,
+			"rows": 44,
 			"columns": [
 				{
 					"name": "id",
@@ -27522,6 +27750,17 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "company_ids",
+					"data_type": "ARRAY",
+					"format": "_uuid",
+					"type": "uuid[]",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Solo en la fila my_companies: compañías que ve el usuario (NULL o vacío = todas)"
 				}
 			],
 			"primary_keys": [
@@ -28233,6 +28472,17 @@
 					"source_table": "public.mrr_legacy",
 					"source_columns": [
 						"migrated_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "notification_email_log_user_id_fkey",
+					"source_table": "public.notification_email_log",
+					"source_columns": [
+						"user_id"
 					],
 					"target_table": "public.users",
 					"target_columns": [
