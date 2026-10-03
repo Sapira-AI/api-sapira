@@ -223,3 +223,35 @@ Contrato: [`contrato-api-notificaciones.md`](./contrato-api-notificaciones.md). 
 - **Pendiente para OK de Domi**: la función de roles por defecto y pasar el corte U14 a Clientes y Contratos (`legacyCut` por defecto).
 - **Sigue**: front `/lab/notificaciones` (Tareas, Alertas, Preferencias), campana nueva y acciones directas; fase 2 (correos, resumen
   semanal, menciones, correos internos al catálogo).
+
+### Hecho · fase 2 en la API (03-10)
+
+Contrato: [`contrato-api-notificaciones.md`](./contrato-api-notificaciones.md) §8. Código: `src/modules/notifications/**`,
+`src/modules/notification-jobs/**` (nuevo), `src/modules/tasks/**`, `src/modules/clients/**` (Actividad), plantillas
+`src/auth/accounts/email-templates/{alert,digest}.ts`.
+
+- **Mis compañías** (decisión de Domi): `app_notifications.company_id` (lo pone el productor o se deriva de la factura, el contrato o el ítem
+  del contrato); preferencia `my_companies` con `company_ids`; lista, conteos, marcar todas, campana, socket, correo, tareas
+  (`company_ids` / `all=true`) y resumen semanal respetan la lista.
+- **Correo inmediato** (Resend + plantilla de marca "alerta", texto escapado) al crear o escalar, solo a quien tiene `email` para el tipo.
+  Defaults decididos: correo **sí** para tipos de gravedad error si el usuario es Administrador y para los correos internos si es super admin;
+  no en el resto. Deduplicado en `notification_email_log` (no se reenvía salvo escalamiento; alertas multi-holding, una vez por usuario).
+- **Resumen semanal** los lunes 08:00 en la zona de cada holding, por defecto para Administrador y Finanzas: tareas por módulo, alertas
+  abiertas de la semana, MRR del mes vs el anterior con 3 aumentos y 3 pérdidas por cliente (servicios de Métricas) y renovaciones ejecutadas.
+  Idempotente por semana. `POST /notifications/digest/preview` (super admin).
+- **Correos internos al catálogo**: tasa de respaldo, tasa faltante (se cierra al enviar la factura), resumen de errores del scheduler (se
+  cierra con la corrida sin errores) y falla de tipos de cambio (todos los holdings; se cierra con la sincronización buena). El reporte diario
+  de éxito ya no va por correo (Configuración › Monedas). Variables viejas solo como respaldo. `test-notification-*` solo super admin (#19).
+- **Cierre de mes** `month_close_pending`: tarea y alerta por compañía el último día hábil y los 3 primeros hábiles del mes siguiente, con
+  "Mover al mes siguiente" por el endpoint masivo existente `POST /billing/to-issue/reschedule` (`shift_months: 1`).
+- **Menciones y referencias** en la Actividad del Cliente 360: tokens `@[user:id]` y `#[tipo:id]` (contrato, factura, NC, cotización, razón
+  social, documento del cliente) validados al guardar, `GET /clients/:id/references`, `GET /notifications/mentionable-users`, actividad con
+  referencias resueltas y alerta `user_mention` con el fragmento. Además, los textos de la Actividad quedan en español de negocio (antes → después
+  en cambios del contrato, sin nombres de campo ni códigos), con diccionario único `clients/activity-labels.ts`.
+- **Novedades del sistema**: `POST /notifications/system-updates` (super admin, idempotente por slug) crea `system_update` para todos los
+  usuarios activos. Nota: §5 dice que las novedades viven en el Centro de ayuda; este endpoint solo deja el aviso con enlace a `/ayuda/<slug>`.
+- **Migraciones escritas, sin aplicar**: `1790900000000-NotificationsPhase2` (N4–N7), `seed/008-notification-month-close-subscriptions.sql`
+  (N8) y `create_default_roles_for_holding` con `month_close_pending` (volver a aplicar). Orden: migración → seed 008 → función → API.
+- **Pendiente**: front (preferencias de compañías y correo, banner de versión, `/lab/notificaciones?alerta=<id>`, `#` y `@` en notas);
+  refresh de "Tareas pendientes" del Dashboard (front).
+

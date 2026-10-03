@@ -4,6 +4,7 @@ import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module
 import { BillingModule } from '@/modules/billing/billing.module';
 import { ContractsModule } from '@/modules/contracts/contracts.module';
 import { MetricsModule } from '@/modules/metrics/metrics.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
@@ -13,7 +14,7 @@ import { TasksService } from './tasks.service';
  * (`GET /notifications/tasks`) y el Dashboard (`DashboardModule` importa este módulo).
  */
 @Module({
-	imports: [PostgreSQLDatabaseModule, BillingModule, ContractsModule, MetricsModule],
+	imports: [PostgreSQLDatabaseModule, BillingModule, ContractsModule, MetricsModule, NotificationsModule],
 	controllers: [TasksController],
 	providers: [TasksService],
 	exports: [TasksService],

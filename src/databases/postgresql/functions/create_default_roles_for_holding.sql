@@ -1,5 +1,6 @@
 -- ⚠️ PENDIENTE DE OK DE DOMI (Notificaciones v2, 03-10): al final crea las suscripciones por defecto de notificaciones del holding
--- nuevo (mismas filas que seed/007-notification-default-subscriptions.sql, espejo de defaultSubscriptions() del catálogo).
+-- nuevo (mismas filas que seed/007-notification-default-subscriptions.sql + seed/008 (fase 2: month_close_pending), espejo de
+-- defaultSubscriptions() del catálogo). Fase 2 (03-10): suma month_close_pending → volver a aplicar la función.
 -- ⚠️ PENDIENTE DE REVISIÓN DE DOMI (Configuración v2, 02-10): M4 agrega CLOSE_PERIODS a Administrador y Finanzas y M9
 -- marca is_default = true en los 10 roles. Aplicar DESPUÉS de la migración RolesIsDefault1790800000000 y del seed
 -- seed/004-close-periods-permission.sql. Sin esos dos, el INSERT falla (columna is_default) o no asigna CLOSE_PERIODS.
@@ -192,7 +193,8 @@ BEGIN
     (v_admin_role_id, 'bigquery_quantities_currency_mismatch'), (v_finanzas_role_id, 'bigquery_quantities_currency_mismatch'),
     (v_facturacion_role_id, 'bigquery_quantities_currency_mismatch'),
     (v_admin_role_id, 'fx_sync_failure'), (v_admin_tecnico_role_id, 'fx_sync_failure'), (NULL::uuid, 'fx_sync_failure'),
-    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary')
+    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary'),
+    (v_admin_role_id, 'month_close_pending'), (v_finanzas_role_id, 'month_close_pending'), (v_facturacion_role_id, 'month_close_pending')
   ) AS d(role_id, notification_type);
 
   RETURN NEW;

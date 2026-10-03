@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
 import { AppNotificationRecipient } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity';
+import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
 export type AppNotificationSeverity = 'info' | 'warning' | 'error';
@@ -14,6 +15,7 @@ export type AppNotificationStatus = 'open' | 'resolved';
 })
 @Index('app_notifications_holding_resource_created_idx', { synchronize: false })
 @Index('app_notifications_holding_status_created_idx', { synchronize: false })
+@Index('app_notifications_holding_company_idx', ['holding_id', 'company_id'])
 @Entity('app_notifications')
 export class AppNotification {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notifications_pkey' })
@@ -60,6 +62,10 @@ export class AppNotification {
 	@Column({ type: 'uuid', nullable: true })
 	resource_id?: string | null;
 
+	/** Compañía de la alerta (factura, contrato; N4 `1790900000000-NotificationsPhase2`). NULL = sin compañía: la ve todo destinatario. */
+	@Column({ type: 'uuid', nullable: true })
+	company_id?: string | null;
+
 	@Column({ type: 'text', default: 'open' })
 	status!: AppNotificationStatus;
 
@@ -74,6 +80,10 @@ export class AppNotification {
 
 	@OneToMany(() => AppNotificationRecipient, (recipient) => recipient.notification)
 	recipients!: AppNotificationRecipient[];
+
+	@ManyToOne(() => Company, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'app_notifications_company_id_fkey' })
+	company?: Company | null;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'app_notifications_holding_id_fkey' })

@@ -51,6 +51,10 @@ export interface TaskInputs {
 	waiting_mapping: Bucket;
 	quotes_unprocessed: Bucket;
 	revenue_exceptions: Bucket;
+	/** Cierre de mes (§8.6): Por Emitir del mes a cerrar; solo dentro de la ventana (null fuera de ella). */
+	month_close?: (Bucket & { month: string }) | null;
+	/** Compañías aplicadas ("Mis compañías"): se agregan al enlace de Facturación. */
+	company_ids?: string[];
 }
 
 const SEVERITY_ORDER: Record<TaskSeverity, number> = { error: 0, warning: 1, info: 2 };
@@ -70,6 +74,51 @@ export function monthBounds(date: string): { first: string; last: string; month:
 		previousMonth: `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}`,
 	};
 }
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+const isoDay = (date: Date) => `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+const isBusinessDay = (date: Date) => date.getUTCDay() !== 0 && date.getUTCDay() !== 6;
+const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "octubre de 2026" desde `YYYY-MM`. */
+export const monthLabel = (month: string) => {
+	const [year, value] = month.split('-').map(Number);
+
+	return `${MONTH_NAMES[value - 1] ?? month} de ${year}`;
+};
+
+/**
+ * Ventana del aviso de cierre de mes (contrato §8.6): el **último día hábil** del mes M y los **3 primeros días hábiles** de M+1 (lunes a
+ * viernes, sin feriados). Devuelve el mes a cerrar (M) y el escalón (0 = último hábil de M, 1–3 = días hábiles de M+1), o null fuera de ella.
+ */
+export function monthCloseWindow(today: string): { month: string; step: number } | null {
+	const [year, month, day] = today.split('-').map(Number);
+	const date = new Date(Date.UTC(year, month - 1, day));
+
+	if (!isBusinessDay(date)) return null;
+	// ¿Último hábil del mes?
+	const last = new Date(Date.UTC(year, month, 0));
+
+	while (!isBusinessDay(last)) last.setUTCDate(last.getUTCDate() - 1);
+	if (isoDay(last) === today) return { month: `${year}-${pad2(month)}`, step: 0 };
+	// ¿Uno de los 3 primeros hábiles del mes?
+	let count = 0;
+
+	for (let cursor = new Date(Date.UTC(year, month - 1, 1)); cursor <= date; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+		if (isBusinessDay(cursor)) count += 1;
+	}
+	if (count >= 1 && count <= 3) {
+		const previous = new Date(Date.UTC(year, month - 2, 1));
+
+		return { month: `${previous.getUTCFullYear()}-${pad2(previous.getUTCMonth() + 1)}`, step: count };
+	}
+
+	return null;
+}
+
+/** Cola Por emitir de un mes (y compañías) en Facturación del front nuevo. */
+export const monthQueueHref = (month: string, companyIds: string[] = []) =>
+	`/lab/facturacion?estado=Por+Emitir&desde=${month}&hasta=${month}${companyIds.length ? `&company_id=${companyIds.join(',')}` : ''}`;
 
 const contractHref = (bucket: Bucket, listHref: string, tab?: string) =>
 	bucket.count > 0 && bucket.contract_ids?.length === 1 ? `/lab/contratos/${bucket.contract_ids[0]}${tab ? `?tab=${tab}` : ''}` : listHref;
@@ -209,7 +258,34 @@ export function buildTasks(input: TaskInputs): Task[] {
 			true
 		),
 		task('revenue_exceptions', 'ingresos', 'Excepciones de Ingresos', input.revenue_exceptions, 'warning', '/lab/revenue?tab=excepciones'),
+		...(input.month_close
+			? [
+					task(
+						'month_close_pending',
+						'facturacion',
+						`${input.month_close.count} ${input.month_close.count === 1 ? 'factura Por Emitir' : 'facturas Por Emitir'} de ${monthLabel(
+							input.month_close.month
+						)} ${input.month_close.count === 1 ? 'sigue' : 'siguen'} sin emitir`,
+						input.month_close,
+						'warning',
+						monthQueueHref(input.month_close.month, input.company_ids),
+						true
+					),
+				]
+			: []),
 	];
 
-	return tasks.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+	const companies = input.company_ids ?? [];
+	const withCompanies = (href: string) =>
+		companies.length && href.startsWith('/lab/facturacion') && !href.includes('company_id=')
+			? `${href}${href.includes('?') ? '&' : '?'}company_id=${companies.join(',')}`
+			: href;
+
+	return tasks
+		.map((item) => ({
+			...item,
+			href: withCompanies(item.href),
+			...(item.breakdown ? { breakdown: item.breakdown.map((part) => ({ ...part, href: withCompanies(part.href) })) } : {}),
+		}))
+		.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }

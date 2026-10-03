@@ -16,6 +16,7 @@ import {
 	CreateActivityNoteDto,
 	PrepareDocumentUploadDto,
 	QueryClientActivityDto,
+	QueryClientReferencesDto,
 } from './dtos/client-activity-documents.dto';
 import { ClientResponseDto } from './dtos/client-response.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
@@ -214,6 +215,16 @@ export class ClientsController {
 		@Request() req: AuthRequest
 	) {
 		return await this.clientActivityService.addNote(id, holdingId, authIdOf(req), body.body);
+	}
+
+	@Get(':id/references')
+	@ApiOperation({
+		summary: 'Elementos del cliente para referenciar en una nota (#)',
+		description: 'Contratos, facturas, notas de crédito, cotizaciones, razones sociales y documentos de ESE cliente, con etiqueta legible',
+	})
+	@ApiParam({ name: 'id', type: String })
+	async getReferences(@Param('id', new ParseUUIDPipe()) id: string, @Query() query: QueryClientReferencesDto, @HoldingId() holdingId: string) {
+		return await this.clientActivityService.references(id, holdingId, query);
 	}
 
 	@Delete(':id/activity/notes/:noteId')

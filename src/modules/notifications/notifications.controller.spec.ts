@@ -7,6 +7,8 @@ import request from 'supertest';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import { PermissionsService } from '@/guards/permissions.service';
+import { SuperAdminOnlyGuard } from '@/guards/super-admin-only.guard';
 import { UserHoldingsService } from '@/guards/user-holdings.service';
 import { TasksController } from '@/modules/tasks/tasks.controller';
 import { TasksService } from '@/modules/tasks/tasks.service';
@@ -36,8 +38,12 @@ describe('NotificationsController y TasksController (tenancy y rutas)', () => {
 		setArchived: jest.fn().mockResolvedValue({ updated: 1 }),
 		markAsRead: jest.fn(),
 		markAsUnread: jest.fn(),
+		myCompaniesForAuthUser: jest.fn().mockResolvedValue([]),
+		mentionableUsers: jest.fn().mockResolvedValue({ data: [] }),
+		notifySystemUpdate: jest.fn().mockResolvedValue({ slug: 'x', holdings: 2, recipients: 5 }),
 	};
 	const tasks = { pending: jest.fn().mockResolvedValue({ tasks: [] }) };
+	const permissions = { isSuperAdmin: jest.fn().mockResolvedValue(false) };
 
 	beforeEach(async () => {
 		jest.clearAllMocks();
@@ -47,6 +53,8 @@ describe('NotificationsController y TasksController (tenancy y rutas)', () => {
 				{ provide: NotificationsService, useValue: notifications },
 				{ provide: TasksService, useValue: tasks },
 				HoldingScopeGuard,
+				SuperAdminOnlyGuard,
+				{ provide: PermissionsService, useValue: permissions },
 				{
 					provide: UserHoldingsService,
 					useValue: { isActiveMember: jest.fn(async (_authId: string, holdingId: string) => holdingId === HOLDING) },
@@ -98,7 +106,7 @@ describe('NotificationsController y TasksController (tenancy y rutas)', () => {
 	it('/notifications/tasks llega a Tareas (no al detalle) y /notifications/<no-uuid> no existe', async () => {
 		await request(app.getHttpServer()).get('/notifications/tasks?as_of=2026-10-03').set('x-holding-id', HOLDING).expect(200);
 
-		expect(tasks.pending).toHaveBeenCalledWith(HOLDING, '2026-10-03');
+		expect(tasks.pending).toHaveBeenCalledWith(HOLDING, '2026-10-03', []);
 		expect(notifications.getForAuthenticatedUser).not.toHaveBeenCalled();
 		await request(app.getHttpServer()).get('/notifications/otra-cosa').set('x-holding-id', HOLDING).expect(404);
 	});
@@ -141,5 +149,51 @@ describe('NotificationsController y TasksController (tenancy y rutas)', () => {
 		expect(notifications.markAsUnread).toHaveBeenCalledWith(HOLDING, 'auth-1', NOTIFICATION);
 		await request(app.getHttpServer()).patch(`/notifications/${NOTIFICATION}/read`).set('x-holding-id', HOLDING).expect(200);
 		expect(notifications.markAsRead).toHaveBeenCalledWith(HOLDING, 'auth-1', NOTIFICATION);
+	});
+
+	it('tareas: "Mis compañías" por defecto, company_ids explícitos o all=true', async () => {
+		const company = '44444444-4444-4444-8444-444444444444';
+
+		notifications.myCompaniesForAuthUser.mockResolvedValueOnce([company]);
+		await request(app.getHttpServer()).get('/notifications/tasks').set('x-holding-id', HOLDING).expect(200);
+		expect(tasks.pending).toHaveBeenLastCalledWith(HOLDING, undefined, [company]);
+
+		await request(app.getHttpServer())
+			.get(`/notifications/tasks?company_ids=${company},${NOTIFICATION}`)
+			.set('x-holding-id', HOLDING)
+			.expect(200);
+		expect(tasks.pending).toHaveBeenLastCalledWith(HOLDING, undefined, [company, NOTIFICATION]);
+
+		await request(app.getHttpServer()).get('/notifications/tasks?all=true').set('x-holding-id', HOLDING).expect(200);
+		expect(tasks.pending).toHaveBeenLastCalledWith(HOLDING, undefined, []);
+		await request(app.getHttpServer()).get('/notifications/tasks?company_ids=no-uuid').set('x-holding-id', HOLDING).expect(400);
+	});
+
+	it('novedades del sistema: solo super admin y validadas', async () => {
+		const body = { slug: 'notificaciones-v2', title: 'Nuevo centro', summary: 'Tareas y alertas en un solo lugar' };
+
+		await request(app.getHttpServer()).post('/notifications/system-updates').set('x-holding-id', HOLDING).send(body).expect(403);
+		expect(notifications.notifySystemUpdate).not.toHaveBeenCalled();
+
+		permissions.isSuperAdmin.mockResolvedValue(true);
+		await request(app.getHttpServer())
+			.post('/notifications/system-updates')
+			.set('x-holding-id', HOLDING)
+			.send({ ...body, slug: 'Con Espacios' })
+			.expect(400);
+		const response = await request(app.getHttpServer()).post('/notifications/system-updates').set('x-holding-id', HOLDING).send(body).expect(200);
+
+		expect(response.body).toEqual({ slug: 'x', holdings: 2, recipients: 5 });
+		expect(notifications.notifySystemUpdate).toHaveBeenCalledWith({
+			slug: 'notificaciones-v2',
+			title: 'Nuevo centro',
+			message: 'Tareas y alertas en un solo lugar',
+		});
+		permissions.isSuperAdmin.mockResolvedValue(false);
+	});
+
+	it('usuarios mencionables del holding activo', async () => {
+		await request(app.getHttpServer()).get('/notifications/mentionable-users?search=dom&limit=5').set('x-holding-id', HOLDING).expect(200);
+		expect(notifications.mentionableUsers).toHaveBeenCalledWith(HOLDING, 'dom', 5);
 	});
 });

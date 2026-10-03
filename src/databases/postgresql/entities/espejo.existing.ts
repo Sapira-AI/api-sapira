@@ -14,6 +14,7 @@ export { AppNotification } from '@/databases/postgresql/entities/automatizacione
 export { ClientAgentConfig } from '@/databases/postgresql/entities/automatizaciones-ia/client-agent-config.entity';
 export { EmailSenderAddress } from '@/databases/postgresql/entities/automatizaciones-ia/email-sender-address.entity';
 export { HoldingEmailSenderSettings } from '@/databases/postgresql/entities/automatizaciones-ia/holding-email-sender-settings.entity';
+export { NotificationEmailLog } from '@/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity';
 export { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
 export { RagDocument } from '@/databases/postgresql/entities/automatizaciones-ia/rag-document.entity';
 export { UserNotificationPreference } from '@/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity';

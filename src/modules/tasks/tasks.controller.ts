@@ -1,10 +1,12 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { NotificationTasksQueryDto } from '@/modules/notifications/dtos/notifications.dto';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { TasksService } from './tasks.service';
 
@@ -19,11 +21,19 @@ import { TasksService } from './tasks.service';
 @Controller('notifications/tasks')
 @UseGuards(SupabaseAuthGuard, HoldingScopeGuard)
 export class TasksController {
-	constructor(private readonly tasks: TasksService) {}
+	constructor(
+		private readonly tasks: TasksService,
+		private readonly notifications: NotificationsService
+	) {}
 
+	/** Compañías: `company_ids` si viene; si no, "Mis compañías" del usuario; `all=true` = todas (contrato §8.1). */
 	@Get()
 	@ApiOperation({ summary: 'Tareas del holding para hoy (calculadas en vivo; solo las con algo por hacer)' })
-	async list(@HoldingId() holdingId: string, @Query() query: NotificationTasksQueryDto) {
-		return this.tasks.pending(holdingId, query.as_of);
+	async list(@HoldingId() holdingId: string, @Request() request: RequestWithUser, @Query() query: NotificationTasksQueryDto) {
+		const companies = query.all
+			? []
+			: (query.company_ids ?? (await this.notifications.myCompaniesForAuthUser(holdingId, String(request.user?.id || request.user?.sub))));
+
+		return this.tasks.pending(holdingId, query.as_of, companies);
 	}
 }

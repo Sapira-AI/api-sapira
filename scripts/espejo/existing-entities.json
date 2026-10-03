@@ -145,6 +145,11 @@
   "file": "src/databases/postgresql/entities/base-tenancy/master-data.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/master-data.entity"
  },
+ "notification_email_log": {
+  "class": "NotificationEmailLog",
+  "file": "src/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity.ts",
+  "import": "@/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity"
+ },
  "notification_role_subscriptions": {
   "class": "NotificationRoleSubscription",
   "file": "src/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity.ts",

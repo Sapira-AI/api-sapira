@@ -18,8 +18,11 @@ import {
 	UpdateNotificationPreferencesDto,
 } from './dtos/notifications.dto';
 import {
+	defaultEmailFor,
+	defaultWeeklyDigestFor,
 	isCatalogType,
 	moduleOfType,
+	MY_COMPANIES_PREFERENCE,
 	NOTIFICATION_ACTION_LABELS,
 	NOTIFICATION_CATALOG,
 	NOTIFICATION_MODULE_KEYS,
@@ -33,6 +36,7 @@ import {
 	typesOfModules,
 	WEEKLY_DIGEST_PREFERENCE,
 } from './notification-catalog';
+import { NotificationEmailService } from './notification-email.service';
 import { NotificationsGateway } from './notifications.gateway';
 
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
@@ -59,6 +63,16 @@ export type NotificationView = ReturnType<typeof toView>;
 type CreateResult = { notification: AppNotification | null; recipient_count: number };
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+/**
+ * "Mis compañías" (contrato §8.1) sobre `n` con `$1` = usuario y `$2` = holding: las alertas sin compañía siempre; las con compañía solo si
+ * el usuario no filtró (sin fila o lista vacía) o la compañía está en su lista.
+ */
+export const MY_COMPANIES_SQL = `(n.company_id IS NULL OR NOT EXISTS (
+	SELECT 1 FROM user_notification_preferences mc
+	WHERE mc.user_id = $1 AND mc.holding_id = $2 AND mc.notification_type = '${MY_COMPANIES_PREFERENCE}'
+		AND COALESCE(cardinality(mc.company_ids), 0) > 0 AND NOT (n.company_id = ANY(mc.company_ids))
+))`;
 
 /** Notificación + estado del destinatario → forma de la API (superconjunto de la de siempre). */
 export function toView(row: NotificationForRecipient) {
@@ -96,7 +110,8 @@ export class NotificationsService {
 		private readonly userRepository: Repository<User>,
 		@InjectDataSource()
 		private readonly dataSource: DataSource,
-		private readonly notificationsGateway: NotificationsGateway
+		private readonly notificationsGateway: NotificationsGateway,
+		private readonly emails: NotificationEmailService
 	) {}
 
 	// ---------------------------------------------------------------- productores
@@ -117,6 +132,7 @@ export class NotificationsService {
 		}
 
 		const userIds = await this.resolveRecipients(holdingId, dto);
+		const companyId = userIds.length ? await this.companyOf(holdingId, dto) : null;
 
 		if (!userIds.length) {
 			this.logger.warn(
@@ -140,6 +156,7 @@ export class NotificationsService {
 				deduplication_key: dto.deduplication_key || null,
 				resource_type: dto.resource_type || null,
 				resource_id: dto.resource_id || null,
+				company_id: companyId,
 			});
 			const savedNotification = await manager.save(notification);
 
@@ -154,7 +171,10 @@ export class NotificationsService {
 			return { notification: savedNotification, recipient_count: userIds.length, recipientUserIds: userIds };
 		});
 
-		this.notificationsGateway.emitNotificationCreated(holdingId, result.recipientUserIds, result.notification);
+		const visible = await this.visibleTo(holdingId, companyId, result.recipientUserIds);
+
+		this.notificationsGateway.emitNotificationCreated(holdingId, visible, result.notification);
+		await this.emails.sendAlert(result.notification, visible);
 		return { notification: result.notification, recipient_count: result.recipient_count };
 	}
 
@@ -178,6 +198,7 @@ export class NotificationsService {
 				const currentIds = (existing.recipients || []).map((recipient) => recipient.user_id);
 				const resolved = await this.resolveRecipients(holdingId, dto);
 				const newIds = resolved.filter((userId) => !currentIds.includes(userId));
+				const companyId = (await this.companyOf(holdingId, dto)) ?? existing.company_id ?? null;
 
 				await this.notificationRepository.update(existing.id, {
 					severity,
@@ -187,6 +208,7 @@ export class NotificationsService {
 					action_type: dto.action_type || null,
 					action_payload: dto.action_payload || {},
 					metadata: this.metadataOf(dto),
+					company_id: companyId,
 					updated_at: new Date(),
 				});
 				if (newIds.length) {
@@ -205,9 +227,16 @@ export class NotificationsService {
 					);
 				}
 				const notification = await this.notificationRepository.findOneByOrFail({ id: existing.id });
+				const visibleNew = await this.visibleTo(holdingId, companyId, newIds);
 
-				if (newIds.length) this.notificationsGateway.emitNotificationCreated(holdingId, newIds, notification);
-				await this.emitUpdated(holdingId, currentIds, existing.id);
+				if (visibleNew.length) this.notificationsGateway.emitNotificationCreated(holdingId, visibleNew, notification);
+				await this.emitUpdated(holdingId, currentIds, existing.id, companyId);
+				// Correo: a los nuevos siempre; a todos solo si escaló (la clave de dedup lleva gravedad y escalón).
+				const mailTo = escalated
+					? [...visibleNew, ...(await this.visibleTo(holdingId, companyId, await this.activeMembers(holdingId, currentIds)))]
+					: visibleNew;
+
+				await this.emails.sendAlert(notification, mailTo, { escalated });
 				return { notification, recipient_count: currentIds.length + newIds.length };
 			}
 		}
@@ -249,7 +278,8 @@ export class NotificationsService {
 			await this.emitUpdated(
 				holdingId,
 				(notification.recipients || []).map((recipient) => recipient.user_id),
-				notification.id
+				notification.id,
+				notification.company_id ?? null
 			);
 		}
 
@@ -267,10 +297,16 @@ export class NotificationsService {
 	 * Novedad del sistema (`system_update`, canal listo; las novedades viven en el Centro de ayuda): a todos los miembros activos de los
 	 * holdings indicados (o de todos). Acción `open_help { slug }`. Una por holding y `slug` (deduplicada).
 	 */
-	async notifySystemUpdate(input: { slug: string; title: string; message: string; holdingIds?: string[] }): Promise<number> {
+	async notifySystemUpdate(input: {
+		slug: string;
+		title: string;
+		message: string;
+		holdingIds?: string[];
+	}): Promise<{ slug: string; holdings: number; recipients: number }> {
 		const holdingIds =
 			input.holdingIds ?? ((await this.dataSource.query(`SELECT id FROM company_holdings ORDER BY id`)) as Row[]).map((row) => String(row.id));
 		let created = 0;
+		let recipients = 0;
 
 		for (const holdingId of holdingIds) {
 			const result = await this.createOrUpdate(holdingId, {
@@ -284,10 +320,36 @@ export class NotificationsService {
 				deduplication_key: `system-update:${input.slug}`,
 				recipients: { all_members: true },
 			});
-			if (result.notification) created += 1;
+			if (result.notification) {
+				created += 1;
+				recipients += result.recipient_count;
+			}
 		}
 
-		return created;
+		return { slug: input.slug, holdings: created, recipients };
+	}
+
+	/** Miembros activos del holding para mencionar (`GET /notifications/mentionable-users`). */
+	async mentionableUsers(holdingId: string, search?: string, limit = 20) {
+		const params: unknown[] = [holdingId];
+		const like = search?.trim() ? `%${escapeLike(search.trim())}%` : null;
+
+		if (like) params.push(like);
+		const rows = (await this.dataSource.query(
+			`SELECT DISTINCT u.id, u.name, u.email FROM users u JOIN user_holdings uh ON uh.user_id = u.id
+			WHERE uh.holding_id = $1 AND uh.is_active = true AND u.status = 'Activo'${like ? ' AND (u.name ILIKE $2 OR u.email ILIKE $2)' : ''}
+			ORDER BY u.name NULLS LAST, u.email
+			LIMIT ${Math.min(Math.max(Number(limit) || 20, 1), 50)}`,
+			params
+		)) as Row[];
+
+		return {
+			data: (rows ?? []).map((row) => ({
+				id: String(row.id),
+				name: row.name ? String(row.name) : String(row.email),
+				email: String(row.email),
+			})),
+		};
 	}
 
 	// ---------------------------------------------------------------- lectura del usuario
@@ -312,7 +374,7 @@ export class NotificationsService {
 				`SELECT COUNT(*) AS unread
 				FROM app_notification_recipients r
 				JOIN app_notifications n ON n.id = r.notification_id
-				WHERE r.user_id = $1 AND n.holding_id = $2 AND r.is_read = false AND r.archived_at IS NULL`,
+				WHERE r.user_id = $1 AND n.holding_id = $2 AND r.is_read = false AND r.archived_at IS NULL AND ${MY_COMPANIES_SQL}`,
 				[userId, holdingId]
 			) as Promise<Row[]>,
 		]);
@@ -415,7 +477,7 @@ export class NotificationsService {
 		const rows = (await this.dataSource.query(
 			`SELECT n.type, COUNT(*) AS unread
 			FROM app_notification_recipients r JOIN app_notifications n ON n.id = r.notification_id
-			WHERE r.user_id = $1 AND n.holding_id = $2 AND r.is_read = false AND r.archived_at IS NULL
+			WHERE r.user_id = $1 AND n.holding_id = $2 AND r.is_read = false AND r.archived_at IS NULL AND ${MY_COMPANIES_SQL}
 			GROUP BY n.type`,
 			[userId, holdingId]
 		)) as Row[];
@@ -461,7 +523,13 @@ export class NotificationsService {
 		const invalid = (dto.types ?? []).map((item) => item.type).filter((type) => !PREFERENCE_NOTIFICATION_TYPES.includes(type));
 
 		if (invalid.length) throw validationException([{ field: 'types', message: `Tipo de aviso no válido: ${invalid.join(', ')}` }]);
-		const current = await this.preferencesOf(holdingId, userId);
+		if (dto.company_ids) {
+			const companies = new Set((await this.holdingCompanies(holdingId)).map((company) => company.id));
+			const foreign = dto.company_ids.filter((id) => !companies.has(id));
+
+			if (foreign.length) throw validationException([{ field: 'company_ids', message: `Compañía no válida: ${foreign.join(', ')}` }]);
+		}
+		const current = await this.preferencesOf(holdingId, userId, { allTypes: true });
 		const byType = new Map(current.types.map((item) => [item.type, item]));
 		const rows: Array<{ type: string; in_app: boolean; email: boolean }> = (dto.types ?? []).map((item) => {
 			const previous = byType.get(item.type)!;
@@ -478,20 +546,76 @@ export class NotificationsService {
 				[userId, holdingId, row.type, row.in_app, row.email]
 			);
 		}
+		if (dto.company_ids) {
+			await this.dataSource.query(
+				`INSERT INTO user_notification_preferences (user_id, holding_id, notification_type, in_app, email, company_ids)
+				VALUES ($1, $2, $3, false, false, $4::uuid[])
+				ON CONFLICT (user_id, holding_id, notification_type) DO UPDATE SET company_ids = EXCLUDED.company_ids, updated_at = now()`,
+				[userId, holdingId, MY_COMPANIES_PREFERENCE, [...new Set(dto.company_ids)]]
+			);
+			this.notificationsGateway.emitNotificationUpdated([userId], { holdingId, notificationId: '*' });
+		}
 
 		return this.preferencesOf(holdingId, userId);
 	}
 
-	private async preferencesOf(holdingId: string, userId: string) {
-		const rows = (await this.dataSource.query(
-			`SELECT notification_type, in_app, email FROM user_notification_preferences WHERE user_id = $1 AND holding_id = $2`,
-			[userId, holdingId]
-		)) as Row[];
-		const stored = new Map(rows.map((row) => [String(row.notification_type), row]));
+	/** "Mis compañías" del usuario en el holding (`[]` = todas). La usan Tareas y el resumen semanal. */
+	async myCompanies(holdingId: string, userId: string): Promise<string[]> {
+		try {
+			const [row] = (await this.dataSource.query(
+				`SELECT company_ids FROM user_notification_preferences WHERE user_id = $1 AND holding_id = $2 AND notification_type = $3`,
+				[userId, holdingId, MY_COMPANIES_PREFERENCE]
+			)) as Row[];
+
+			return Array.isArray(row?.company_ids) ? (row.company_ids as unknown[]).map(String) : [];
+		} catch (error) {
+			this.logger.warn(`No se pudo leer "Mis compañías": ${error instanceof Error ? error.message : String(error)}`);
+			return [];
+		}
+	}
+
+	/** `myCompanies` a partir del usuario autenticado. */
+	async myCompaniesForAuthUser(holdingId: string, authUserId: string): Promise<string[]> {
+		return this.myCompanies(holdingId, await this.resolveInternalUserId(authUserId));
+	}
+
+	private async holdingCompanies(holdingId: string): Promise<Array<{ id: string; name: string; country: string | null }>> {
+		const rows = (await this.dataSource.query(`SELECT id, legal_name, country FROM companies WHERE holding_id = $1 ORDER BY legal_name`, [
+			holdingId,
+		])) as Row[];
+
+		return (rows ?? []).map((row) => ({
+			id: String(row.id),
+			name: String(row.legal_name ?? ''),
+			country: row.country ? String(row.country) : null,
+		}));
+	}
+
+	private async preferencesOf(holdingId: string, userId: string, options: { allTypes?: boolean } = {}) {
+		const [rows, [user], companies] = await Promise.all([
+			this.dataSource.query(
+				`SELECT notification_type, in_app, email, company_ids FROM user_notification_preferences WHERE user_id = $1 AND holding_id = $2`,
+				[userId, holdingId]
+			) as Promise<Row[]>,
+			this.dataSource.query(
+				`SELECT COALESCE(u.is_super_admin, false) AS is_super_admin, r.name AS role_name FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+				[userId]
+			) as Promise<Row[]>,
+			this.holdingCompanies(holdingId),
+		]);
+		const stored = new Map((rows ?? []).map((row) => [String(row.notification_type), row]));
+		const profile = { is_super_admin: user?.is_super_admin === true, role_name: user?.role_name ? String(user.role_name) : null };
+		const types = PREFERENCE_NOTIFICATION_TYPES.filter(
+			(type) => options.allTypes || profile.is_super_admin || !notificationCatalogEntry(type)!.internal
+		);
+		const digestRow = stored.get(WEEKLY_DIGEST_PREFERENCE);
+		const companyIds = stored.get(MY_COMPANIES_PREFERENCE)?.company_ids;
 
 		return {
-			weekly_digest: stored.get(WEEKLY_DIGEST_PREFERENCE)?.email === true,
-			types: PREFERENCE_NOTIFICATION_TYPES.map((type) => {
+			weekly_digest: digestRow ? digestRow.email === true : defaultWeeklyDigestFor(profile.role_name),
+			company_ids: Array.isArray(companyIds) ? companyIds.map(String) : [],
+			companies,
+			types: types.map((type) => {
 				const entry = notificationCatalogEntry(type)!;
 				const row = stored.get(type);
 
@@ -502,9 +626,13 @@ export class NotificationsService {
 					module_label: NOTIFICATION_MODULES[entry.module],
 					reserved: entry.reserved,
 					in_app: row ? row.in_app !== false : true,
-					email: row ? row.email === true : false,
+					email: row ? row.email === true : defaultEmailFor(type, profile),
 				};
 			}),
+			defaults: {
+				weekly_digest: defaultWeeklyDigestFor(profile.role_name),
+				types: types.map((type) => ({ type, in_app: true, email: defaultEmailFor(type, profile) })),
+			},
 		};
 	}
 
@@ -615,7 +743,8 @@ export class NotificationsService {
 			params.push(value);
 			return `$${params.length}`;
 		};
-		const conditions: string[] = [filters.archived ? 'r.archived_at IS NOT NULL' : 'r.archived_at IS NULL'];
+		// `$1` = usuario y `$2` = holding en todas las consultas de lectura: "Mis compañías" (§8.1).
+		const conditions: string[] = [filters.archived ? 'r.archived_at IS NOT NULL' : 'r.archived_at IS NULL', MY_COMPANIES_SQL];
 
 		if (filters.status) conditions.push(`n.status = ${add(filters.status)}`);
 		if (filters.read !== undefined) conditions.push(`r.is_read = ${add(filters.read)}`);
@@ -659,11 +788,66 @@ export class NotificationsService {
 		return { ...recipient.notification, is_read: recipient.is_read, read_at: recipient.read_at, archived_at: recipient.archived_at ?? null };
 	}
 
-	/** Avisa a los destinatarios que siguen siendo miembros activos del holding (quien perdió la membresía no recibe nada). */
-	private async emitUpdated(holdingId: string, userIds: string[], notificationId: string) {
-		const members = await this.activeMembers(holdingId, userIds);
+	/** Avisa a los destinatarios que siguen siendo miembros activos del holding y ven la compañía (quien perdió la membresía no recibe nada). */
+	private async emitUpdated(holdingId: string, userIds: string[], notificationId: string, companyId: string | null = null) {
+		const members = await this.visibleTo(holdingId, companyId, await this.activeMembers(holdingId, userIds));
 
 		if (members.length) this.notificationsGateway.emitNotificationUpdated(members, { holdingId, notificationId });
+	}
+
+	/**
+	 * Destinatarios que ven una alerta de la compañía (§8.1): sin compañía, todos; con compañía, quien no filtró o la tiene en "Mis compañías".
+	 * Si la columna no existe aún (N5 sin aplicar) no filtra a nadie.
+	 */
+	async visibleTo(holdingId: string, companyId: string | null | undefined, userIds: string[]): Promise<string[]> {
+		const unique = [...new Set(userIds)];
+
+		if (!companyId || !unique.length) return unique;
+		try {
+			const rows = (await this.dataSource.query(
+				`SELECT user_id FROM user_notification_preferences
+				WHERE holding_id = $1 AND notification_type = $2 AND user_id = ANY($3::uuid[])
+					AND COALESCE(cardinality(company_ids), 0) > 0 AND NOT ($4::uuid = ANY(company_ids))`,
+				[holdingId, MY_COMPANIES_PREFERENCE, unique, companyId]
+			)) as Row[];
+			const hidden = new Set((rows ?? []).map((row) => String(row.user_id)));
+
+			return unique.filter((userId) => !hidden.has(userId));
+		} catch (error) {
+			this.logger.warn(`No se pudo leer "Mis compañías": ${error instanceof Error ? error.message : String(error)}`);
+			return unique;
+		}
+	}
+
+	/**
+	 * Compañía de la alerta (§8.1): la del productor o, si no la trae, la del recurso (factura, contrato) o la del contrato del ítem
+	 * (`metadata.contract_item_id`). Sin nada, null (la ve todo destinatario).
+	 */
+	private async companyOf(holdingId: string, dto: CreateAppNotificationDto): Promise<string | null> {
+		if (dto.company_id) return dto.company_id;
+		try {
+			const itemId = typeof dto.metadata?.contract_item_id === 'string' ? dto.metadata.contract_item_id : null;
+			let sql: string | null = null;
+			let id: string | null = null;
+
+			if (dto.resource_id && dto.resource_type === 'invoice') {
+				sql = `SELECT company_id FROM invoices WHERE id = $1 AND holding_id = $2`;
+				id = dto.resource_id;
+			} else if (dto.resource_id && dto.resource_type === 'contract') {
+				sql = `SELECT company_id FROM contracts WHERE id = $1 AND holding_id = $2`;
+				id = dto.resource_id;
+			} else if (itemId) {
+				sql = `SELECT c.company_id FROM contract_items ci JOIN contracts c ON c.id = ci.contract_id WHERE ci.id = $1 AND c.holding_id = $2`;
+				id = itemId;
+			}
+			if (!sql || !id) return null;
+			const [row] = (await this.dataSource.query(sql, [id, holdingId])) as Row[];
+
+			return row?.company_id ? String(row.company_id) : null;
+		} catch (error) {
+			this.logger.warn(`No se pudo resolver la compañía de la alerta ${dto.type}: ${error instanceof Error ? error.message : String(error)}`);
+			return null;
+		}
 	}
 
 	private async activeMembers(holdingId: string, userIds: string[]): Promise<string[]> {

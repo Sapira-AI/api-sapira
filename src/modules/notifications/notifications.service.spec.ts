@@ -60,17 +60,20 @@ describe('NotificationsService', () => {
 			emitNotificationRead: jest.fn(),
 			emitNotificationUpdated: jest.fn(),
 		};
+		const emails = { sendAlert: jest.fn(async () => 0) };
 		const service = new NotificationsService(
 			notificationRepository as any,
 			recipientRepository as any,
 			roleSubscriptionRepository as any,
 			userRepository as any,
 			dataSource as any,
-			notificationsGateway as any
+			notificationsGateway as any,
+			emails as any
 		);
 
 		return {
 			service,
+			emails,
 			notificationRepository,
 			recipientRepository,
 			recipientQueryBuilder,
@@ -125,6 +128,37 @@ describe('NotificationsService', () => {
 			expect(notificationsGateway.emitNotificationCreated).not.toHaveBeenCalled();
 		});
 
+		it('compañía: la del productor o la derivada del recurso; correo inmediato a los que ven la compañía', async () => {
+			const { service, manager, emails, notificationsGateway, userQueryBuilder } = buildService((sql, params) => {
+				if (sql.includes('SELECT company_id FROM invoices')) return [{ company_id: 'company-1' }];
+				// user-2 filtró "Mis compañías" a otra compañía.
+				if (sql.includes('cardinality(company_ids)')) return (params[2] as string[]).includes('user-2') ? [{ user_id: 'user-2' }] : [];
+				return undefined;
+			});
+
+			userQueryBuilder.getRawMany.mockResolvedValue([{ id: 'user-1' }, { id: 'user-2' }]);
+			await service.create('holding-1', {
+				...staging,
+				type: 'invoice_odoo_failure',
+				resource_type: 'invoice',
+				resource_id: '55555555-5555-4555-8555-555555555555',
+				recipients: { user_ids: ['user-1', 'user-2'] },
+			});
+
+			expect(manager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ company_id: 'company-1' }));
+			expect(notificationsGateway.emitNotificationCreated).toHaveBeenCalledWith('holding-1', ['user-1'], expect.anything());
+			expect(emails.sendAlert).toHaveBeenCalledWith(expect.objectContaining({ company_id: 'company-1' }), ['user-1']);
+
+			const explicit = buildService();
+			await explicit.service.create('holding-1', { ...staging, company_id: 'company-9', recipients: { user_ids: ['user-1'] } });
+			expect(explicit.manager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ company_id: 'company-9' }));
+
+			const none = buildService();
+			await none.service.create('holding-1', { ...staging, recipients: { user_ids: ['user-1'] } });
+			expect(none.manager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ company_id: null }));
+			expect(none.emails.sendAlert).toHaveBeenCalledWith(expect.anything(), ['user-1']);
+		});
+
 		it('rechaza una clave de deduplicación abierta', async () => {
 			const { service, notificationRepository } = buildService();
 			notificationRepository.findOne.mockResolvedValue({ id: 'existing-notification' });
@@ -143,7 +177,7 @@ describe('NotificationsService', () => {
 				holdingIds: ['h-1', 'h-2'],
 			});
 
-			expect(created).toBe(2);
+			expect(created).toEqual({ slug: 'notificaciones-v2', holdings: 2, recipients: 2 });
 			expect(userQueryBuilder.andWhere).toHaveBeenCalledWith('(true)');
 			expect(manager.create).toHaveBeenCalledWith(
 				expect.anything(),
@@ -220,6 +254,37 @@ describe('NotificationsService', () => {
 				{ notification_id: 'notification-1', user_id: expect.anything() },
 				{ is_read: false, read_at: null, archived_at: null }
 			);
+		});
+
+		it('correo: sin escalar solo a los destinatarios nuevos; al escalar a todos (la clave lleva el escalón)', async () => {
+			const quiet = buildService();
+			quiet.notificationRepository.findOne.mockResolvedValue(existing());
+			quiet.notificationRepository.findOneByOrFail.mockResolvedValue({ id: 'notification-1' });
+			quiet.userQueryBuilder.getRawMany.mockResolvedValue([{ id: 'user-1' }, { id: 'user-3' }]);
+			quiet.roleSubscriptionRepository.find.mockResolvedValue([{ role_id: 'role-1' }]);
+
+			await quiet.service.createOrUpdate('holding-1', {
+				...staging,
+				type: 'contract_renewal_reminder',
+				severity: 'warning',
+				escalation_step: 30,
+				deduplication_key: 'k',
+			});
+			expect(quiet.emails.sendAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-3'], { escalated: false });
+
+			const loud = buildService();
+			loud.notificationRepository.findOne.mockResolvedValue(existing());
+			loud.notificationRepository.findOneByOrFail.mockResolvedValue({ id: 'notification-1' });
+			loud.userQueryBuilder.getRawMany.mockResolvedValue([]);
+
+			await loud.service.createOrUpdate('holding-1', {
+				...staging,
+				type: 'contract_renewal_reminder',
+				severity: 'warning',
+				escalation_step: 15,
+				deduplication_key: 'k',
+			});
+			expect(loud.emails.sendAlert).toHaveBeenCalledWith({ id: 'notification-1' }, ['user-1', 'user-2'], { escalated: true });
 		});
 
 		it('si sube la gravedad también vuelve a "sin leer"; si baja, no', async () => {
@@ -471,6 +536,49 @@ describe('NotificationsService', () => {
 			]);
 		});
 
+		it('defaults por rol: Administrador recibe correo de los errores y el resumen semanal; lista sus compañías', async () => {
+			const { service } = buildService((sql) => {
+				if (sql.includes('FROM users u LEFT JOIN roles')) return [{ is_super_admin: false, role_name: 'Administrador' }];
+				if (sql.includes('FROM companies WHERE holding_id')) return [{ id: 'company-1', legal_name: 'Acme SpA', country: 'Chile' }];
+				return undefined;
+			});
+			const preferences = await service.getPreferences('holding-1', 'auth-1');
+
+			expect(preferences.weekly_digest).toBe(true);
+			expect(preferences.company_ids).toEqual([]);
+			expect(preferences.companies).toEqual([{ id: 'company-1', name: 'Acme SpA', country: 'Chile' }]);
+			expect(preferences.types.find((item) => item.type === 'invoice_odoo_failure')).toMatchObject({ email: true });
+			expect(preferences.types.find((item) => item.type === 'contract_renewal_proposed')).toMatchObject({ email: false });
+			// Los correos internos de Sapira solo los ve un super admin.
+			expect(preferences.types.map((item) => item.type)).not.toContain('invoice_fx_fallback');
+			expect(preferences.defaults.weekly_digest).toBe(true);
+		});
+
+		it('"Mis compañías": guarda la lista en su fila reservada y rechaza compañías de otro holding', async () => {
+			const { service, dataSource } = buildService((sql) =>
+				sql.includes('FROM companies WHERE holding_id') ? [{ id: '66666666-6666-4666-8666-666666666666', legal_name: 'Acme' }] : undefined
+			);
+
+			await service.updatePreferences('holding-1', 'auth-1', { company_ids: ['66666666-6666-4666-8666-666666666666'] });
+			const upsert = sqlCalls(dataSource, 'company_ids)')[0];
+
+			expect(upsert[1]).toEqual(['user-1', 'holding-1', 'my_companies', ['66666666-6666-4666-8666-666666666666']]);
+			await expect(service.updatePreferences('holding-1', 'auth-1', { company_ids: ['77777777-7777-4777-8777-777777777777'] })).rejects.toThrow(
+				'Compañía no válida'
+			);
+		});
+
+		it('la lista y los conteos filtran por "Mis compañías"', async () => {
+			const { service, dataSource } = buildService();
+
+			await service.listForAuthenticatedUser('holding-1', 'auth-1', {});
+			await service.countsForAuthenticatedUser('holding-1', 'auth-1');
+			const reads = sqlCalls(dataSource, 'FROM app_notification_recipients r');
+
+			expect(reads.length).toBeGreaterThanOrEqual(3);
+			for (const [sql] of reads) expect(sql).toContain("mc.notification_type = 'my_companies'");
+		});
+
 		it('tipo no válido → 400 con message en español', async () => {
 			const { service } = buildService();
 
@@ -513,7 +621,7 @@ describe('NotificationsService', () => {
 				service.replaceRoleSubscriptionTypes('holding-1', 'role-1', [
 					'contract_renewal_reminder',
 					'otro',
-					'fx_sync_failure',
+					'invoice_fx_fallback',
 					'contract_renewal_reminder',
 				])
 			).resolves.toEqual(['contract_renewal_reminder']);

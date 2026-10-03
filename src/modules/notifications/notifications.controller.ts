@@ -5,12 +5,15 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { RequestWithUser } from '@/core/interfaces/request-with-user.interface';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import { SuperAdminOnlyRoute } from '@/guards/super-admin-only.guard';
 
 import {
 	ListNotificationsDto,
+	MentionableUsersQueryDto,
 	NotificationFiltersDto,
 	NotificationIdsDto,
 	ReplaceSalesforceStagingBlockedSubscriptionsDto,
+	SystemUpdateDto,
 	UpdateNotificationPreferencesDto,
 } from './dtos/notifications.dto';
 import { NotificationsService } from './notifications.service';
@@ -59,6 +62,20 @@ export class NotificationsController {
 	@ApiOperation({ summary: 'Actualizar las preferencias del usuario en el holding' })
 	async updatePreferences(@HoldingId() holdingId: string, @Request() request: RequestWithUser, @Body() dto: UpdateNotificationPreferencesDto) {
 		return this.notificationsService.updatePreferences(holdingId, authIdOf(request), dto);
+	}
+
+	@Get('mentionable-users')
+	@ApiOperation({ summary: 'Miembros activos del holding para mencionar con @ (Actividad del Cliente 360)' })
+	async mentionableUsers(@HoldingId() holdingId: string, @Query() query: MentionableUsersQueryDto) {
+		return this.notificationsService.mentionableUsers(holdingId, query.search, query.limit);
+	}
+
+	@Post('system-updates')
+	@SuperAdminOnlyRoute()
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({ summary: 'Novedad del sistema para todos los usuarios activos de todos los holdings (solo super admin; idempotente por slug)' })
+	async systemUpdate(@Body() dto: SystemUpdateDto) {
+		return this.notificationsService.notifySystemUpdate({ slug: dto.slug, title: dto.title, message: dto.summary });
 	}
 
 	@Post('read-all')

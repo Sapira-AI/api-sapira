@@ -30,6 +30,12 @@ export const NOTIFICATION_ACTION_LABELS: Record<string, string> = {
 	replace_quantity_record: 'Reemplazar cantidades',
 	open_help: 'Ver novedad',
 	open_client: 'Ver cliente',
+	open_client_activity: 'Ver comentario',
+	open_billing_queue: 'Ver facturas por emitir',
+	open_invoice: 'Ver factura',
+	review_fx_rates: 'Revisar tipos de cambio',
+	/** Acción secundaria del cierre de mes (`action_payload.secondary`). */
+	move_to_next_month: 'Mover al mes siguiente',
 };
 
 /** Roles por defecto (`roles.is_default`, por nombre) y super admins (`role_id NULL`). */
@@ -56,8 +62,10 @@ export interface NotificationCatalogEntry {
 	severity: AppNotificationSeverity;
 	/** Se configura por rol en Configuración › Roles (los personales y las novedades no). */
 	subscribable: boolean;
-	/** Fase 2: está en el catálogo, la semilla y las preferencias, pero todavía sin productor ni oferta en Roles. */
+	/** Está en el catálogo, la semilla y las preferencias, pero todavía sin productor ni oferta en Roles (hoy ninguno: fase 2 los activó). */
 	reserved: boolean;
+	/** Correo interno de Sapira (solo super admins): no se ofrece en Configuración › Roles ni en las preferencias de quien no es super admin. */
+	internal: boolean;
 	/** Nombres de los roles por defecto suscritos. */
 	default_roles: string[];
 	/** Suscripción `role_id NULL`: super admins (Domi y Leon) con membresía activa en el holding. */
@@ -70,8 +78,8 @@ const SYNC_FAILURE_ROLES = [DEFAULT_ROLE.admin, DEFAULT_ROLE.tech];
 const DATA_WAREHOUSE_ROLES = [DEFAULT_ROLE.admin, DEFAULT_ROLE.finance, DEFAULT_ROLE.billing];
 const CONTRACT_ROLES = [DEFAULT_ROLE.admin, DEFAULT_ROLE.finance];
 
-const entry = (value: Omit<NotificationCatalogEntry, 'reserved' | 'default_super_admins'> & Partial<NotificationCatalogEntry>) =>
-	({ reserved: false, default_super_admins: false, ...value }) as NotificationCatalogEntry;
+const entry = (value: Omit<NotificationCatalogEntry, 'reserved' | 'internal' | 'default_super_admins'> & Partial<NotificationCatalogEntry>) =>
+	({ reserved: false, internal: false, default_super_admins: false, ...value }) as NotificationCatalogEntry;
 
 export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 	entry({
@@ -226,10 +234,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		icon: 'circle-dollar-sign',
 		severity: 'error',
 		subscribable: true,
-		reserved: true,
+
 		default_roles: SYNC_FAILURE_ROLES,
 		default_super_admins: true,
-		action_type: null,
+		action_type: 'review_fx_rates',
 		texts: {
 			what_happened: 'No pudimos traer los tipos de cambio del día.',
 			what_to_do: 'Si emites facturas en otra moneda hoy, revisa la tasa antes de emitir.',
@@ -243,10 +251,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		icon: 'circle-dollar-sign',
 		severity: 'warning',
 		subscribable: true,
-		reserved: true,
+		internal: true,
 		default_roles: [],
 		default_super_admins: true,
-		action_type: null,
+		action_type: 'open_invoice',
 		texts: {
 			what_happened: 'Una factura se emitió con la última tasa disponible porque faltaba la del día.',
 			what_to_do: 'Revisa la factura y, si la diferencia importa, ajústala.',
@@ -259,10 +267,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		icon: 'circle-dollar-sign',
 		severity: 'error',
 		subscribable: true,
-		reserved: true,
+		internal: true,
 		default_roles: [],
 		default_super_admins: true,
-		action_type: null,
+		action_type: 'open_invoice',
 		texts: {
 			what_happened: 'Una factura no se emitió porque no había tipo de cambio.',
 			what_to_do: 'Registra la tasa y vuelve a emitirla.',
@@ -275,13 +283,29 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		icon: 'list-x',
 		severity: 'error',
 		subscribable: true,
-		reserved: true,
+		internal: true,
 		default_roles: [],
 		default_super_admins: true,
-		action_type: null,
+		action_type: 'open_billing_queue',
 		texts: {
 			what_happened: 'La emisión automática del día terminó con errores.',
 			what_to_do: 'Revisa las facturas con error en la cola Por emitir.',
+		},
+	}),
+	entry({
+		type: 'month_close_pending',
+		label: 'Facturas del mes sin emitir',
+		module: 'facturacion',
+		icon: 'calendar-check',
+		severity: 'warning',
+		subscribable: true,
+		default_roles: DATA_WAREHOUSE_ROLES,
+		action_type: 'open_billing_queue',
+		texts: {
+			what_happened: 'El mes está por cerrar (o ya cerró) y quedan facturas Por Emitir de ese mes.',
+			what_to_do: 'Emítelas o muévelas al mes siguiente para que el cierre quede ordenado.',
+			what_we_do:
+				'Te avisamos el último día hábil del mes y los 3 primeros días hábiles del siguiente; el aviso se cierra solo cuando no quedan.',
 		},
 	}),
 	entry({
@@ -305,12 +329,11 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		icon: 'at-sign',
 		severity: 'info',
 		subscribable: false,
-		reserved: true,
 		default_roles: [],
-		action_type: 'open_client',
+		action_type: 'open_client_activity',
 		texts: {
 			what_happened: 'Alguien te mencionó en un comentario.',
-			what_to_do: 'Abre el comentario para responder.',
+			what_to_do: 'Abre el comentario en la Actividad del cliente para responder.',
 		},
 	}),
 ];
@@ -322,12 +345,32 @@ export const isCatalogType = (type: string) => BY_TYPE.has(type);
 
 /** Tipos suscribibles por rol (incluye los reservados: la semilla ya los deja listos). */
 export const SUBSCRIBABLE_NOTIFICATION_TYPES = NOTIFICATION_CATALOG.filter((item) => item.subscribable).map((item) => item.type);
-/** Los que Configuración › Roles ofrece hoy (suscribibles con productor). */
-export const OFFERED_ROLE_NOTIFICATION_TYPES = NOTIFICATION_CATALOG.filter((item) => item.subscribable && !item.reserved).map((item) => item.type);
-/** Configurables en las preferencias del usuario (todos menos las novedades, que llegan a todos). */
+/** Los que Configuración › Roles ofrece hoy (suscribibles con productor, sin los correos internos de Sapira). */
+export const OFFERED_ROLE_NOTIFICATION_TYPES = NOTIFICATION_CATALOG.filter((item) => item.subscribable && !item.reserved && !item.internal).map(
+	(item) => item.type
+);
+/** Configurables en las preferencias del usuario (todos menos las novedades, que llegan a todos; los internos solo para super admins). */
 export const PREFERENCE_NOTIFICATION_TYPES = NOTIFICATION_CATALOG.filter((item) => item.type !== 'system_update').map((item) => item.type);
 /** Fila reservada de `user_notification_preferences` para el resumen semanal (usa `email`). */
 export const WEEKLY_DIGEST_PREFERENCE = 'weekly_digest';
+/** Fila reservada de `user_notification_preferences` para "Mis compañías" (columna `company_ids`; vacío = todas). */
+export const MY_COMPANIES_PREFERENCE = 'my_companies';
+
+/**
+ * Correo inmediato por defecto (sin fila de preferencia, contrato §8.2): sí para los tipos de gravedad `error` si el usuario es
+ * Administrador, y para los tipos que van a super admins por defecto si el usuario es super admin (correos internos de siempre). No en el resto.
+ */
+export function defaultEmailFor(type: string, user: { role_name?: string | null; is_super_admin?: boolean | null }): boolean {
+	const item = BY_TYPE.get(type);
+
+	if (!item || item.type === 'system_update') return false;
+	if (user.is_super_admin && item.default_super_admins) return true;
+
+	return item.severity === 'error' && user.role_name === DEFAULT_ROLE.admin;
+}
+
+/** Resumen semanal por defecto (sin fila): sí para Administrador y Finanzas. */
+export const defaultWeeklyDigestFor = (roleName?: string | null): boolean => roleName === DEFAULT_ROLE.admin || roleName === DEFAULT_ROLE.finance;
 
 export const typesOfModules = (modules: string[]) => NOTIFICATION_CATALOG.filter((item) => modules.includes(item.module)).map((item) => item.type);
 

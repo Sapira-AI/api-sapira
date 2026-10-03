@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
 	ArrayMaxSize,
@@ -15,6 +15,7 @@ import {
 	Max,
 	MaxLength,
 	Min,
+	MinLength,
 	ValidateNested,
 } from 'class-validator';
 
@@ -142,6 +143,14 @@ export class UpdateNotificationPreferencesDto {
 	@ValidateNested({ each: true })
 	@Type(() => NotificationTypePreferenceDto)
 	types?: NotificationTypePreferenceDto[];
+
+	@ApiPropertyOptional({ type: [String], description: '"Mis compañías": [] = todas' })
+	@IsOptional()
+	@IsArray({ message: 'company_ids debe ser una lista' })
+	@ArrayMaxSize(100, { message: 'Hasta 100 compañías' })
+	@ArrayUnique()
+	@IsUUID('all', { each: true, message: 'Compañía inválida' })
+	company_ids?: string[];
 }
 
 export class NotificationTasksQueryDto {
@@ -149,6 +158,55 @@ export class NotificationTasksQueryDto {
 	@IsOptional()
 	@Matches(ISO_DATE, { message: 'Fecha inválida (AAAA-MM-DD)' })
 	as_of?: string;
+
+	@ApiPropertyOptional({ type: [String], description: 'Compañías (a,b). Sin esto: "Mis compañías" del usuario' })
+	@IsOptional()
+	@Transform(toList)
+	@IsArray()
+	@ArrayMaxSize(100)
+	@IsUUID('all', { each: true, message: 'Compañía inválida' })
+	company_ids?: string[];
+
+	@ApiPropertyOptional({ description: 'true = todas las compañías (ignora "Mis compañías")' })
+	@IsOptional()
+	@Transform(toBool)
+	@IsBoolean({ message: 'all debe ser true o false' })
+	all?: boolean;
+}
+
+export class MentionableUsersQueryDto {
+	@ApiPropertyOptional({ description: 'Busca por nombre o correo' })
+	@IsOptional()
+	@IsString()
+	@MaxLength(120)
+	search?: string;
+
+	@ApiPropertyOptional({ default: 20, maximum: 50 })
+	@IsOptional()
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(50, { message: 'El límite máximo es 50' })
+	limit?: number;
+}
+
+export class SystemUpdateDto {
+	@ApiProperty({ example: 'notificaciones-v2', description: 'Slug de la novedad en el Centro de ayuda (a-z, 0-9 y guiones)' })
+	@Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, { message: 'El slug solo admite minúsculas, números y guiones' })
+	@MaxLength(80, { message: 'El slug admite hasta 80 caracteres' })
+	slug!: string;
+
+	@ApiProperty({ example: 'Nuevo centro de notificaciones' })
+	@IsString()
+	@MinLength(1, { message: 'Escribe un título' })
+	@MaxLength(120, { message: 'El título admite hasta 120 caracteres' })
+	title!: string;
+
+	@ApiProperty({ example: 'Tareas y alertas en un solo lugar, con resumen semanal por correo.' })
+	@IsString()
+	@MinLength(1, { message: 'Escribe un resumen' })
+	@MaxLength(500, { message: 'El resumen admite hasta 500 caracteres' })
+	summary!: string;
 }
 
 export class ReplaceSalesforceStagingBlockedSubscriptionsDto {

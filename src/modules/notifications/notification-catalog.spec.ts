@@ -2,7 +2,9 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import {
+	defaultEmailFor,
 	defaultSubscriptions,
+	defaultWeeklyDigestFor,
 	NOTIFICATION_ACTION_LABELS,
 	NOTIFICATION_CATALOG,
 	NOTIFICATION_MODULES,
@@ -16,7 +18,7 @@ const DB = join(__dirname, '../../databases/postgresql');
 const read = (path: string) => readFileSync(join(DB, path), 'utf8');
 
 describe('catálogo de notificaciones', () => {
-	it('tiene los 10 tipos actuales, las novedades, las menciones y los 4 correos internos reservados', () => {
+	it('tiene los 10 tipos de la fase 1, los 4 correos internos, el cierre de mes, las novedades y las menciones (ninguno reservado)', () => {
 		expect(NOTIFICATION_CATALOG.map((item) => item.type)).toEqual([
 			'invoice_odoo_failure',
 			'salesforce_staging_blocked',
@@ -32,9 +34,34 @@ describe('catálogo de notificaciones', () => {
 			'invoice_fx_fallback',
 			'invoice_fx_missing',
 			'scheduler_error_summary',
+			'month_close_pending',
 			'system_update',
 			'user_mention',
 		]);
+		expect(NOTIFICATION_CATALOG.filter((item) => item.reserved)).toEqual([]);
+		expect(NOTIFICATION_CATALOG.filter((item) => item.internal).map((item) => item.type)).toEqual([
+			'invoice_fx_fallback',
+			'invoice_fx_missing',
+			'scheduler_error_summary',
+		]);
+	});
+
+	it('correo y resumen semanal por defecto (contrato §8.2)', () => {
+		const admin = { role_name: 'Administrador', is_super_admin: false };
+		const finance = { role_name: 'Finanzas', is_super_admin: false };
+		const superAdmin = { role_name: null, is_super_admin: true };
+
+		expect(defaultEmailFor('invoice_odoo_failure', admin)).toBe(true);
+		expect(defaultEmailFor('invoice_odoo_failure', finance)).toBe(false);
+		expect(defaultEmailFor('contract_renewal_reminder', admin)).toBe(false);
+		expect(defaultEmailFor('invoice_fx_fallback', superAdmin)).toBe(true);
+		expect(defaultEmailFor('fx_sync_failure', superAdmin)).toBe(true);
+		expect(defaultEmailFor('month_close_pending', superAdmin)).toBe(false);
+		expect(defaultEmailFor('system_update', admin)).toBe(false);
+		expect(defaultWeeklyDigestFor('Administrador')).toBe(true);
+		expect(defaultWeeklyDigestFor('Finanzas')).toBe(true);
+		expect(defaultWeeklyDigestFor('Ventas')).toBe(false);
+		expect(defaultWeeklyDigestFor(null)).toBe(false);
 	});
 
 	it('cada tipo tiene módulo conocido, ícono, textos y su acción con botón; el copy no nombra marcas', () => {
@@ -64,19 +91,23 @@ describe('catálogo de notificaciones', () => {
 		expect(rolesOf('bigquery_quantities_diff')).toEqual(['Administrador', 'Finanzas', 'Facturación y Cobranza']);
 		expect(rolesOf('scheduler_error_summary')).toEqual([null]);
 		expect(rolesOf('system_update')).toEqual([]);
+		expect(rolesOf('month_close_pending')).toEqual(['Administrador', 'Finanzas', 'Facturación y Cobranza']);
 	});
 
-	it('la semilla N3 y create_default_roles_for_holding son espejo exacto de defaultSubscriptions()', () => {
+	it('las semillas N3 + N8 y create_default_roles_for_holding son espejo exacto de defaultSubscriptions()', () => {
 		const expected = defaultSubscriptions()
 			.map((item) => `${item.type}|${item.role_name ?? 'NULL'}`)
 			.sort();
 		const seed = read('seed/007-notification-default-subscriptions.sql');
+		const seed8 = read('seed/008-notification-month-close-subscriptions.sql');
+		const seed8Roles = [...seed8.matchAll(/\('([a-z_]+)', '([^']+)'\)/g)].map(([, type, role]) => `${type}|${role}`);
 		const seedRoles = [...seed.matchAll(/\('([a-z_]+)', '([^']+)'\)/g)].map(([, type, role]) => `${type}|${role}`);
 		const superBlock = seed.slice(seed.indexOf('super_admin_types(notification_type) AS ('), seed.indexOf('CROSS JOIN'));
 		const seedSuper = [...superBlock.matchAll(/\('([a-z_]+)'\)/g)].map(([, type]) => `${type}|NULL`);
 
-		expect([...seedRoles, ...seedSuper].sort()).toEqual(expected);
+		expect([...seedRoles, ...seedSuper, ...seed8Roles].sort()).toEqual(expected);
 		expect(seed).toContain('r.is_default = true');
+		expect(seed8).toContain('NOT EXISTS');
 		expect(seed).toContain('NOT EXISTS');
 
 		const variables: Record<string, string> = {
@@ -96,9 +127,11 @@ describe('catálogo de notificaciones', () => {
 		expect(fn).toContain('PENDIENTE DE OK DE DOMI (Notificaciones v2');
 	});
 
-	it('Roles ofrece los suscribibles con productor; las preferencias, todos menos las novedades', () => {
-		expect(OFFERED_ROLE_NOTIFICATION_TYPES).toHaveLength(10);
-		expect(OFFERED_ROLE_NOTIFICATION_TYPES).not.toContain('fx_sync_failure');
+	it('Roles ofrece los suscribibles con productor sin los correos internos; las preferencias, todos menos las novedades', () => {
+		expect(OFFERED_ROLE_NOTIFICATION_TYPES).toHaveLength(12);
+		expect(OFFERED_ROLE_NOTIFICATION_TYPES).toContain('fx_sync_failure');
+		expect(OFFERED_ROLE_NOTIFICATION_TYPES).toContain('month_close_pending');
+		expect(OFFERED_ROLE_NOTIFICATION_TYPES).not.toContain('invoice_fx_fallback');
 		expect(PREFERENCE_NOTIFICATION_TYPES).toContain('user_mention');
 		expect(PREFERENCE_NOTIFICATION_TYPES).not.toContain('system_update');
 		expect(typesOfModules(['contratos'])).toEqual(['contract_renewal_proposed', 'contract_renewal_reminder', 'contract_scheduled_change_due']);
@@ -115,6 +148,20 @@ describe('catálogo de notificaciones', () => {
 			what_to_do: 'Hacer algo',
 			what_we_do: null,
 		});
+	});
+
+	it('migración de la fase 2 (N4–N7): aditiva, RLS activada sin políticas en el registro de correos', () => {
+		const n = read('migrations/1790900000000-NotificationsPhase2.ts');
+
+		expect(n).toContain('ALTER TABLE "app_notifications" ADD "company_id" uuid');
+		expect(n).toContain('ON DELETE SET NULL');
+		expect(n).toContain('ALTER TABLE "user_notification_preferences" ADD "company_ids" uuid array');
+		expect(n).toContain('CONSTRAINT "notification_email_log_user_dedup_key" UNIQUE ("user_id", "dedup_key")');
+		expect(n).toContain('ALTER TABLE "notification_email_log" ENABLE ROW LEVEL SECURITY');
+		expect(n).toContain('"mentioned_user_ids" uuid array NOT NULL DEFAULT \'{}\'');
+		expect(n).toContain('"references" jsonb NOT NULL DEFAULT \'[]\'');
+		expect(n).not.toContain('CREATE POLICY');
+		expect(n).not.toMatch(/DROP (TABLE|COLUMN)(?! IF EXISTS)/);
 	});
 
 	it('migraciones N1 y N2: aditivas, RLS activada sin políticas en la tabla nueva', () => {

@@ -7,18 +7,22 @@ import { ConsumptionService } from '@/modules/contracts/consumption.service';
 import { RevenueMetricsService } from '@/modules/metrics/revenue-metrics.service';
 import { QUOTE_CONTRACT_LATERAL, quoteStatusLateral } from '@/modules/quotes/quote-status';
 
-import { type Bucket, buildTasks, monthBounds, type Task, type TaskInputs } from './tasks';
+import { type Bucket, buildTasks, monthBounds, monthCloseWindow, type Task, type TaskInputs } from './tasks';
 
 type Row = Record<string, unknown>;
 
 const num = (value: unknown) => Number(value ?? 0) || 0;
 const ids = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
 const empty = (): Bucket => ({ count: 0, amount: null });
+/** Filtro de Facturación por compañías (`company_id` acepta `a,b`). */
+const companyFilter = (companies: string[]) => (companies.length ? { company_id: companies.join(',') } : {});
 
 export interface HoldingTasks {
 	holding_id: string;
 	as_of: string;
 	currency: string;
+	/** Compañías aplicadas ("Mis compañías"; `[]` = todas). */
+	company_ids: string[];
 	/** Todas las tareas (también en cero), ordenadas por gravedad. */
 	tasks: Task[];
 	/** Conteos que el Dashboard muestra con su definición de siempre (por renovar 30/90 y contratos vencidos). */
@@ -42,22 +46,28 @@ export class TasksService {
 		private readonly revenue: RevenueMetricsService
 	) {}
 
-	async forHolding(holdingId: string, asOf?: string): Promise<HoldingTasks> {
+	async forHolding(holdingId: string, asOf?: string, companyIds: string[] = []): Promise<HoldingTasks> {
 		const today = asOf ?? (await this.billing.today(new Date(), holdingId));
-		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions] = await Promise.all([
+		const companies = [...new Set(companyIds)];
+		const window = monthCloseWindow(today);
+		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions, monthClose] = await Promise.all([
 			this.billing.systemCurrency(holdingId),
-			this.safe('cola Por emitir', () => this.queueBuckets(holdingId, today), {
+			this.safe('cola Por emitir', () => this.queueBuckets(holdingId, today, companies), {
 				ready: empty(),
 				late: empty(),
 				blocked: { ...empty(), reasons: [] },
 				past_months: { ...empty(), first_month: null },
 				total: 0,
 			}),
-			this.safe('vencidas y notas de crédito', () => this.receivableBuckets(holdingId, today), { overdue: empty(), credit_notes: empty() }),
-			this.safe('contratos', () => this.contractBuckets(holdingId, today), null),
+			this.safe('vencidas y notas de crédito', () => this.receivableBuckets(holdingId, today, companies), {
+				overdue: empty(),
+				credit_notes: empty(),
+			}),
+			this.safe('contratos', () => this.contractBuckets(holdingId, today, companies), null),
 			this.safe('cotizaciones', () => this.quoteBuckets(holdingId, today), { waiting_mapping: empty(), quotes_unprocessed: empty() }),
-			this.safe('consumos por informar', () => this.consumptionBucket(holdingId, today), empty()),
+			this.safe('consumos por informar', () => this.consumptionBucket(holdingId, today, companies), empty()),
 			this.safe('excepciones de Ingresos', () => this.exceptionsBucket(holdingId), empty()),
+			window ? this.safe('cierre de mes', () => this.monthCloseBucket(holdingId, window.month, companies), null) : Promise.resolve(null),
 		]);
 		const input: TaskInputs = {
 			today,
@@ -72,12 +82,15 @@ export class TasksService {
 			consumptions,
 			...quotes,
 			revenue_exceptions: exceptions,
+			month_close: monthClose && window && monthClose.count > 0 ? { ...monthClose, month: window.month } : null,
+			company_ids: companies,
 		};
 
 		return {
 			holding_id: holdingId,
 			as_of: today,
 			currency,
+			company_ids: companies,
 			tasks: buildTasks(input),
 			dashboard: {
 				renew_30: contracts?.renew_30 ?? 0,
@@ -88,14 +101,20 @@ export class TasksService {
 		};
 	}
 
+	/** Moneda del sistema del holding (montos de las tareas). */
+	currency(holdingId: string): Promise<string> {
+		return this.billing.systemCurrency(holdingId);
+	}
+
 	/** Lo que muestra el centro: solo las tareas con algo por hacer. */
-	async pending(holdingId: string, asOf?: string) {
-		const result = await this.forHolding(holdingId, asOf);
+	async pending(holdingId: string, asOf?: string, companyIds: string[] = []) {
+		const result = await this.forHolding(holdingId, asOf, companyIds);
 
 		return {
 			holding_id: result.holding_id,
 			as_of: result.as_of,
 			currency: result.currency,
+			company_ids: result.company_ids,
 			tasks: result.tasks.filter((task) => task.count > 0),
 		};
 	}
@@ -112,8 +131,8 @@ export class TasksService {
 	}
 
 	/** Cola Por emitir hasta hoy (la misma de Facturación: grupos y motivos de bloqueo) + montos en moneda del sistema. */
-	private async queueBuckets(holdingId: string, today: string) {
-		const { entries } = await this.billing.queue(holdingId, {}, today, { until: today });
+	private async queueBuckets(holdingId: string, today: string, companies: string[] = []) {
+		const { entries } = await this.billing.queue(holdingId, companyFilter(companies), today, { until: today });
 		const amounts = new Map<string, { amount: number; date: string | null }>();
 
 		if (entries.length) {
@@ -159,9 +178,9 @@ export class TasksService {
 	}
 
 	/** Vencidas (saldo en moneda del sistema) y notas de crédito por emitir: mismas reglas de estado que la lista de Facturación. */
-	private async receivableBuckets(holdingId: string, today: string): Promise<{ overdue: Bucket; credit_notes: Bucket }> {
+	private async receivableBuckets(holdingId: string, today: string, companies: string[] = []): Promise<{ overdue: Bucket; credit_notes: Bucket }> {
 		const params = new SqlParams();
-		const { cte } = invoicesCte(holdingId, {}, params, { today, excludeCancelledByDefault: true });
+		const { cte } = invoicesCte(holdingId, companyFilter(companies), params, { today, excludeCancelledByDefault: true });
 		const [row] = (await this.dataSource.query(
 			`${cte} SELECT
 				COUNT(*) FILTER (WHERE d.is_overdue) AS overdue,
@@ -179,10 +198,11 @@ export class TasksService {
 	}
 
 	/** Contratos en una consulta agregada (misma regla de "sin decisión" que el job de alertas de renovación). */
-	private async contractBuckets(holdingId: string, today: string) {
+	private async contractBuckets(holdingId: string, today: string, companies: string[] = []) {
 		const [row] = (await this.dataSource.query(
 			`WITH live AS (
 				SELECT c.id, c.contract_end_date FROM contracts c WHERE c.holding_id = $1 AND c.deleted_at IS NULL AND c.status = 'Activo'
+					AND (cardinality($3::uuid[]) = 0 OR c.company_id = ANY($3::uuid[]))
 			), undecided AS (
 				SELECT ci.contract_id, ci.end_date FROM contract_items ci JOIN live ON live.id = ci.contract_id
 				WHERE ci.holding_id = $1 AND ci.is_recurring = true AND ci.renewed_by_item_id IS NULL AND ci.churn_date IS NULL
@@ -217,6 +237,7 @@ export class TasksService {
 				(SELECT array_agg(contract_id) FROM (SELECT contract_id FROM without_invoices LIMIT 2) x) AS without_invoice_ids,
 				(SELECT COUNT(DISTINCT ci.id) FROM contract_items ci JOIN contracts c ON c.id = ci.contract_id
 					WHERE c.holding_id = $1 AND c.deleted_at IS NULL AND ci.categoria IN ('NEW', 'UPSELL', 'CROSS-SELL') AND ci.churn_date IS NULL
+						AND (cardinality($3::uuid[]) = 0 OR c.company_id = ANY($3::uuid[]))
 						AND ci.start_date >= date_trunc('month', $2::date) AND ci.start_date < date_trunc('month', $2::date) + interval '1 month') AS starts,
 				(SELECT COUNT(*) FROM live WHERE contract_end_date BETWEEN $2::date AND $2::date + 30) AS renew_30,
 				(SELECT COUNT(*) FROM live WHERE contract_end_date BETWEEN $2::date AND $2::date + 90) AS renew_90,
@@ -224,7 +245,7 @@ export class TasksService {
 					SELECT 1 FROM contract_items ci WHERE ci.contract_id = live.id AND ci.is_recurring = true AND ci.churn_date IS NULL
 					GROUP BY ci.contract_id HAVING MAX(ci.end_date) < $2::date
 				)) AS expired_contracts`,
-			[holdingId, today]
+			[holdingId, today, companies]
 		)) as Row[];
 
 		return {
@@ -286,12 +307,61 @@ export class TasksService {
 	}
 
 	/** Líneas medidas por informar (regla de Contratos, `GET /consumption/pending`). */
-	private async consumptionBucket(holdingId: string, today: string): Promise<Bucket> {
-		const result = await this.consumption.pending(holdingId, { page: 1, limit: 200 }, undefined, new Date(`${today}T12:00:00.000Z`));
-		const contractIds = [...new Set(result.data.map((row) => row.contract.id))];
+	private async consumptionBucket(holdingId: string, today: string, companies: string[] = []): Promise<Bucket> {
+		const at = new Date(`${today}T12:00:00.000Z`);
+		// `GET /consumption/pending` filtra por una compañía: con varias, una consulta por compañía.
+		const results = await Promise.all(
+			(companies.length ? companies : [undefined]).map((companyId) =>
+				this.consumption.pending(holdingId, { page: 1, limit: 200, ...(companyId ? { company_id: companyId } : {}) }, undefined, at)
+			)
+		);
+		const total = results.reduce((sum, result) => sum + result.total, 0);
+		const loaded = results.reduce((sum, result) => sum + result.data.length, 0);
+		const contractIds = [...new Set(results.flatMap((result) => result.data.map((row) => row.contract.id)))];
 
 		// Con más líneas que la página no se sabe si son de un solo contrato: el enlace va a la lista.
-		return { count: result.total, contract_ids: result.total > result.data.length ? [] : contractIds.slice(0, 2) };
+		return { count: total, contract_ids: total > loaded ? [] : contractIds.slice(0, 2) };
+	}
+
+	/**
+	 * Cierre de mes (§8.6): Por Emitir activas (facturas, no NC) del mes a cerrar, por compañía, con monto en moneda del sistema. La usan la
+	 * tarea `month_close_pending` y la alerta del mismo nombre (`MonthCloseService`).
+	 */
+	async monthCloseByCompany(
+		holdingId: string,
+		month: string,
+		companies: string[] = []
+	): Promise<Array<{ company_id: string | null; company_name: string | null; count: number; amount: number; invoice_ids: string[] }>> {
+		const params = new SqlParams();
+		const { cte } = invoicesCte(holdingId, { ...companyFilter(companies), status: 'Por Emitir', from: month, to: month }, params, {
+			today: `${month}-01`,
+		});
+		const rows = (await this.dataSource.query(
+			`${cte} SELECT d.company_id::text AS company_id, MAX(d.company_name) AS company_name, COUNT(*) AS n,
+				COALESCE(SUM(i.amount_system_currency), 0) AS amount,
+				(array_agg(d.id::text ORDER BY COALESCE(d.issue_date, d.scheduled_at), d.id))[1:200] AS ids
+			FROM d JOIN invoices i ON i.id = d.id
+			WHERE d.status = 'Por Emitir' AND d.is_active AND d.document_kind = 'invoice'
+			GROUP BY d.company_id`,
+			params.values
+		)) as Row[];
+
+		return (rows ?? []).map((row) => ({
+			company_id: row.company_id ? String(row.company_id) : null,
+			company_name: row.company_name ? String(row.company_name) : null,
+			count: num(row.n),
+			amount: Math.round(num(row.amount) * 100) / 100,
+			invoice_ids: ids(row.ids),
+		}));
+	}
+
+	private async monthCloseBucket(holdingId: string, month: string, companies: string[]): Promise<Bucket> {
+		const rows = await this.monthCloseByCompany(holdingId, month, companies);
+
+		return {
+			count: rows.reduce((sum, row) => sum + row.count, 0),
+			amount: Math.round(rows.reduce((sum, row) => sum + row.amount, 0) * 100) / 100,
+		};
 	}
 
 	/** Excepciones de Ingresos (misma lista que la pestaña Excepciones). */

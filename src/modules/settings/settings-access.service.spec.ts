@@ -214,6 +214,8 @@ describe('SettingsRolesService', () => {
 			'bigquery_quantities_unmapped',
 			'bigquery_quantities_blocked',
 			'bigquery_quantities_currency_mismatch',
+			'fx_sync_failure',
+			'month_close_pending',
 		]);
 		expect(alerts.alerts.find((alert) => alert.type === 'invoice_odoo_failure')).toEqual({
 			type: 'invoice_odoo_failure',
@@ -223,8 +225,9 @@ describe('SettingsRolesService', () => {
 			icon: 'receipt-text',
 			enabled: true,
 		});
-		// Los reservados de fase 2 (sin productor) y los no suscribibles no se ofrecen todavía.
-		expect(alerts.alerts.map((alert) => alert.type)).not.toEqual(expect.arrayContaining(['fx_sync_failure', 'system_update']));
+		// Fase 2: los correos internos de Sapira (solo super admins) y los no suscribibles no se ofrecen.
+		expect(alerts.alerts.map((alert) => alert.type)).not.toContain('invoice_fx_fallback');
+		expect(alerts.alerts.map((alert) => alert.type)).not.toContain('system_update');
 		await expect(service.putAlerts(HOLDING, ROLE, ['otra'])).rejects.toThrow('Tipo de alerta no válido: otra');
 		await expect(service.putAlerts(HOLDING, ROLE, ['system_update'])).rejects.toThrow('Tipo de alerta no válido: system_update');
 		await service.putAlerts(HOLDING, ROLE, ['salesforce_sync_failure']);
