@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { GenericVatsService } from '@/common/services/generic-vats.service';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
@@ -17,6 +17,7 @@ import {
 	SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,
 } from '@/modules/notifications/notifications.service';
 import { OdooPartnersService } from '@/modules/odoo/odoo-partners.service';
+import { headerChanges, itemChanges, QuoteItemSnapshot } from '@/modules/quotes/quote-edit-diff';
 
 import { SyncCompleteResponseDto, SyncCompleteStats } from '../dtos/salesforce-sync-complete.dto';
 import { SalesforceTaxIdNormalizationResponseDto } from '../dtos/salesforce-tax-id-normalization.dto';
@@ -28,6 +29,23 @@ import {
 	SalesforceQuoteLineItem,
 } from '../interfaces/salesforce.interface';
 import { SalesforceSyncLogStage } from '../schemas/salesforce-sync-log.schema';
+import {
+	buildCrmQuoteSnapshot,
+	classifyExistingCrmQuote,
+	CRM_QUOTE_NOTES,
+	CRM_QUOTE_PROTECTION_MESSAGES,
+	CRM_QUOTE_PROTECTION_SQL,
+	CrmQuoteClassification,
+	CrmQuoteProtection,
+	crmQuoteProtection,
+	CrmQuoteSnapshot,
+	crmSnapshotChanged,
+	crmSnapshotChanges,
+	CrmSnapshotFieldChange,
+	readCrmQuoteSnapshot,
+	snapshotValue,
+	storedCrmQuoteSnapshot,
+} from '../utils/crm-quote-snapshot';
 import * as transformers from '../utils/salesforce-transformers';
 
 import { SalesforceFieldMappingEngineService } from './salesforce-field-mapping-engine.service';
@@ -62,7 +80,40 @@ interface OpportunityProcessingOptions {
 	salesforceIds?: string[];
 	processingStatuses?: string[];
 	insertOnly?: boolean;
+	/**
+	 * Usuario (`public.users.id`) que confirmó aplicar los cambios del CRM a cotizaciones existentes. Solo vale con `salesforceIds`
+	 * (nunca en la sincronización diaria ni con `all`); sin él, una cotización existente no se toca.
+	 */
+	confirmedBy?: string | null;
 }
+
+/** Resultado de llevar una oportunidad a su cotización (cotizaciones protegidas). */
+export type CrmQuoteSyncOutcome = 'created' | 'updated' | 'unchanged' | 'protected' | 'needs_confirmation' | 'skipped';
+
+export interface CrmQuoteSyncResult {
+	outcome: CrmQuoteSyncOutcome;
+	message: string | null;
+}
+
+/** Diferencias de una oportunidad: lo que llegó del CRM en la última importación frente a lo que llega ahora. */
+export interface SalesforceOpportunityChangesPreview {
+	salesforce_id: string;
+	label: string | null;
+	processing_status: string | null;
+	quote_id: string | null;
+	quote_label: string | null;
+	protection: CrmQuoteProtection;
+	/** Hay una base con qué comparar (snapshot de importación o base tomada al traer). */
+	has_snapshot: boolean;
+	last_imported_at: Date | null;
+	changes: CrmSnapshotFieldChange[];
+}
+
+/** Autor del evento `UPDATED` que deja la importación del CRM en el historial de la cotización. */
+export const CRM_SYNC_EVENT_AUTHOR = 'Sincronización del CRM';
+
+/** La cotización ya existía al crearla (índice único): la transacción quedó abortada y se revierte. */
+class QuoteAlreadyIntegratedError extends Error {}
 
 interface OpportunityClassificationOptions {
 	insertOnly?: boolean;
@@ -95,6 +146,36 @@ export interface ResolvedSalesforceLineItemPreview {
 		product_mapping: boolean;
 		derived_end_date: boolean;
 	};
+}
+
+/** Texto comparable: sin tildes, espacios repetidos ni mayúsculas ("CHANDRA" = "Chandra", "Mexico" = "México"). */
+export const normalizeComparableText = (value: string) =>
+	value
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.toLocaleLowerCase('es');
+
+/** Campos de la razón social que importar una cuenta no pisa si ya tienen valor en Sapira. */
+export const CLIENT_ENTITY_PROTECTED_FIELDS = ['legal_name', 'legal_address', 'country'];
+
+export interface SalesforceAccountFieldChange {
+	target: 'client' | 'client_entity';
+	field: string;
+	current: unknown;
+	incoming: unknown;
+	/** Importar la cuenta aplica este valor (false: se conserva el actual). */
+	applies: boolean;
+}
+
+export interface SalesforceAccountChangesPreview {
+	salesforce_id: string;
+	processing_status: string | null;
+	client_id: string | null;
+	client_name: string | null;
+	client_entity_id: string | null;
+	changes: SalesforceAccountFieldChange[];
 }
 
 export interface ResolvedSalesforceClientEntityPreview {
@@ -739,7 +820,7 @@ export class SalesforceSyncCompleteService {
 						? 'La sincronización automática de hoy no pudo leer las oportunidades del CRM: las ganadas no llegaron a Sapira.'
 						: 'Una parte de la sincronización automática de hoy falló: algunas oportunidades ganadas no llegaron a Sapira.',
 				recommendation:
-					'Revisa la conexión con el CRM y la bitácora de sincronización en Integraciones. Si sigue fallando, avísanos: la próxima corrida lo reintenta.',
+					'Revisa la conexión y el historial en Integraciones › CRM › Historial. Si sigue fallando, avísanos: la próxima corrida lo reintenta.',
 				action_type: 'review_salesforce_sync_log',
 				action_payload: {
 					job_id: metadata.job_id,
@@ -833,10 +914,19 @@ export class SalesforceSyncCompleteService {
 		return stats;
 	}
 
-	async processOpportunitiesStaging(holdingId: string, opportunityIds?: string[]): Promise<SyncCompleteStats> {
+	/**
+	 * Importa oportunidades de la tabla intermedia. `confirmedBy`: quien confirmó aplicar los cambios del CRM a cotizaciones existentes
+	 * (solo con `opportunityIds`); sin él, una cotización existente queda "Por revisar" y no se toca.
+	 */
+	async processOpportunitiesStaging(
+		holdingId: string,
+		opportunityIds?: string[],
+		options: { confirmedBy?: string | null } = {}
+	): Promise<SyncCompleteStats> {
 		const stats = this.createEmptyStats();
 		await this.processOpportunityStaging(holdingId, undefined, stats, {
 			salesforceIds: opportunityIds,
+			confirmedBy: opportunityIds?.length ? (options.confirmedBy ?? null) : null,
 		});
 		return stats;
 	}
@@ -1052,6 +1142,133 @@ export class SalesforceSyncCompleteService {
 		return [...accountMap.values()];
 	}
 
+	/**
+	 * Lo que llegó del CRM para una cuenta (mapeos de campos activos del holding) frente al cliente y la razón social actuales: la misma
+	 * comparación con la que `classifyAccountStaging` marca `create`/`update`.
+	 */
+	private async compareAccount(holdingId: string, account: SalesforceAccount) {
+		const clientPayload = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client', account);
+		const clientEntityPayload = this.normalizeClientEntityPayload(
+			await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account)
+		);
+		const existingClientId =
+			(await this.typeormService.getObjectMapping(holdingId, 'Account', account.Id)) ||
+			(clientPayload.client_number ? await this.typeormService.getClientByNumber(holdingId, clientPayload.client_number) : null);
+
+		if (!existingClientId) {
+			return {
+				existingClientId: null,
+				existingClient: null,
+				existingEntity: null,
+				clientPayload,
+				comparableClientEntityPayload: null,
+				changes: null,
+			};
+		}
+
+		const existingClient = await this.clientRepository.findOne({
+			where: { id: existingClientId, holding_id: holdingId },
+		});
+		const entityResolution = clientEntityPayload.tax_id
+			? await this.resolveClientEntityByTaxId(holdingId, clientEntityPayload.tax_id, clientEntityPayload.legal_name || account.Name)
+			: null;
+
+		const existingEntity =
+			entityResolution?.entities[0] ||
+			(!entityResolution?.isGenericExportVat
+				? await this.clientEntityRepository.findOne({
+						where: { holding_id: holdingId, client_id: existingClientId },
+					})
+				: null);
+
+		const comparableClientEntityPayload = this.removeBlankFields(clientEntityPayload);
+
+		return {
+			existingClientId,
+			existingClient,
+			existingEntity,
+			clientPayload,
+			comparableClientEntityPayload,
+			changes: this.accountFieldChanges(account, clientPayload, existingClient, comparableClientEntityPayload, existingEntity),
+		};
+	}
+
+	/**
+	 * Cambios de una cuenta frente a un cliente existente, con las reglas de la importación (Integraciones v2, OK de Domi 03-10):
+	 * - comparación normalizada (mayúsculas, tildes y espacios; identificador tributario con `normalizeTaxId`);
+	 * - razón social: `legal_name`, `legal_address` y `country` con valor en Sapira no se pisan → `applies: false` (no cuentan como cambio);
+	 * - `client_number` igual al id de la cuenta (respaldo del mapeo) no reemplaza uno existente → no es cambio.
+	 * Sin razón social existente, sus campos son cambios (importar la crea o vincula).
+	 */
+	private accountFieldChanges(
+		account: SalesforceAccount,
+		clientPayload: Record<string, any>,
+		existingClient: Record<string, any> | null,
+		entityPayload: Record<string, any>,
+		existingEntity: Record<string, any> | null
+	): SalesforceAccountFieldChange[] {
+		const plain = (value: unknown) => (value instanceof Date ? value.toISOString() : (value ?? null));
+		const list = (target: SalesforceAccountFieldChange['target'], payload: Record<string, any>, existing: Record<string, any> | null) =>
+			Object.entries(payload).flatMap(([field, incoming]): SalesforceAccountFieldChange[] => {
+				const current = existing ? existing[field] : null;
+
+				if (existing && field === 'client_number' && this.isFallbackClientNumber(incoming, account) && !this.isBlankValue(current)) return [];
+				if (existing && this.sameAccountValue(field, incoming, current)) return [];
+				const applies = !(
+					target === 'client_entity' &&
+					existing &&
+					CLIENT_ENTITY_PROTECTED_FIELDS.includes(field) &&
+					!this.isBlankValue(current)
+				);
+
+				return [{ target, field, current: plain(current), incoming: plain(incoming), applies }];
+			});
+
+		return [...list('client', clientPayload, existingClient), ...list('client_entity', entityPayload, existingEntity)];
+	}
+
+	/** El `client_number` mapeado es el respaldo (id de la cuenta del CRM) y no un número real del CRM. */
+	private isFallbackClientNumber(value: unknown, account: SalesforceAccount): boolean {
+		return Boolean(account?.Id) && value === account.Id;
+	}
+
+	/** Igualdad normalizada: textos sin distinguir mayúsculas, tildes ni espacios; identificador tributario canónico. */
+	private sameAccountValue(field: string, incoming: unknown, current: unknown): boolean {
+		if (incoming instanceof Date && current instanceof Date) return incoming.getTime() === current.getTime();
+		if (field === 'tax_id') {
+			const key = (value: unknown) => (transformers.normalizeTaxId(value as string) ?? '').toUpperCase();
+
+			return key(incoming) === key(current);
+		}
+		if (typeof incoming === 'string' && typeof current === 'string')
+			return normalizeComparableText(incoming) === normalizeComparableText(current);
+
+		return JSON.stringify(incoming ?? null) === JSON.stringify(current ?? null);
+	}
+
+	/**
+	 * Diferencias campo a campo de una cuenta del staging (Integraciones v2: "cambios a existentes"). Solo lectura. `applies = false`
+	 * cuando importar no pisa el valor actual (razón social: nombre legal, dirección y país se conservan si ya tienen valor).
+	 * `null` si la cuenta no está en el staging del holding.
+	 */
+	async previewAccountChanges(holdingId: string, salesforceId: string): Promise<SalesforceAccountChangesPreview | null> {
+		const record = await this.accountsStgRepository.findOne({ where: { holding_id: holdingId, salesforce_id: salesforceId } });
+
+		if (!record) return null;
+		const comparison = await this.compareAccount(holdingId, record.raw_data as SalesforceAccount);
+		// Lo que importar no aplica solo se muestra junto a un cambio real; si no hay ninguno, la cuenta no tiene cambios.
+		const changes = comparison.changes?.some((change) => change.applies) ? comparison.changes : [];
+
+		return {
+			salesforce_id: salesforceId,
+			processing_status: record.processing_status ?? null,
+			client_id: comparison.existingClientId,
+			client_name: comparison.existingClient?.name_commercial ?? null,
+			client_entity_id: comparison.existingEntity?.id ?? null,
+			changes,
+		};
+	}
+
 	private async classifyAccountStaging(holdingId: string, batchId?: string): Promise<void> {
 		const records = await this.accountsStgRepository.find({
 			where: batchId ? { holding_id: holdingId, batch_id: batchId } : { holding_id: holdingId },
@@ -1060,13 +1277,7 @@ export class SalesforceSyncCompleteService {
 
 		for (const record of records) {
 			const account = record.raw_data as SalesforceAccount;
-			const clientPayload = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client', account);
-			const clientEntityPayload = this.normalizeClientEntityPayload(
-				await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account)
-			);
-			const existingClientId =
-				(await this.typeormService.getObjectMapping(holdingId, 'Account', account.Id)) ||
-				(clientPayload.client_number ? await this.typeormService.getClientByNumber(holdingId, clientPayload.client_number) : null);
+			const { existingClientId, changes } = await this.compareAccount(holdingId, account);
 
 			if (!existingClientId) {
 				await this.accountsStgRepository.update(record.id, {
@@ -1076,24 +1287,8 @@ export class SalesforceSyncCompleteService {
 				continue;
 			}
 
-			const existingClient = await this.clientRepository.findOne({
-				where: { id: existingClientId, holding_id: holdingId },
-			});
-			const entityResolution = clientEntityPayload.tax_id
-				? await this.resolveClientEntityByTaxId(holdingId, clientEntityPayload.tax_id, clientEntityPayload.legal_name || account.Name)
-				: null;
-
-			const existingEntity =
-				entityResolution?.entities[0] ||
-				(!entityResolution?.isGenericExportVat
-					? await this.clientEntityRepository.findOne({
-							where: { holding_id: holdingId, client_id: existingClientId },
-						})
-					: null);
-
-			const comparableClientEntityPayload = this.removeBlankFields(clientEntityPayload);
-			const hasChanges =
-				this.hasRecordChanges(clientPayload, existingClient) || this.hasRecordChanges(comparableClientEntityPayload, existingEntity);
+			// Solo cuenta lo que importar aplica (los campos protegidos de la razón social con valor no son cambio).
+			const hasChanges = (changes ?? []).some((change) => change.applies);
 			await this.accountsStgRepository.update(record.id, {
 				processing_status: hasChanges ? 'update' : 'processed',
 				integration_notes: hasChanges ? 'Cliente existente con cambios pendientes' : 'Cliente staging sincronizado',
@@ -1216,19 +1411,17 @@ export class SalesforceSyncCompleteService {
 
 		for (const record of records) {
 			const opportunity = record.raw_data as SalesforceOpportunityWithLineItems;
-			if (options.insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
-				await this.opportunitiesStgRepository.update(record.id, {
-					processing_status: 'processed',
-					integration_notes: 'Cotización existente: omitida por la sincronización automática de solo inserción',
-					error_message: null,
-				});
-				await this.updateLineItemsStagingStatus(
-					holdingId,
-					batchId,
-					opportunity.Id,
-					'processed',
-					'Ítem omitido: la cotización ya existe en Sapira'
-				);
+			// Cotización ya existente (todas las rutas, también la diaria de solo inserción): se clasifica por la regla de cotizaciones
+			// protegidas — protegida, sin cambios o "Por revisar" si el CRM cambió desde la última importación — antes que por los
+			// bloqueos de cuenta o productos, que se revalidan al importar con confirmación.
+			const integratedQuoteId = await this.findIntegratedQuoteId(holdingId, opportunity.Id);
+			if (integratedQuoteId) {
+				const classification = await this.classifyExistingQuote(holdingId, record, opportunity, integratedQuoteId);
+				// La diaria (solo inserción) lo deja dicho: nunca aplica cambios a una cotización existente.
+				if (options.insertOnly && classification.processing_status === 'update') {
+					classification.integration_notes = `${classification.integration_notes} (la sincronización automática no actualiza cotizaciones)`;
+				}
+				await this.applyExistingQuoteClassification(record, batchId, classification);
 				continue;
 			}
 
@@ -1315,36 +1508,154 @@ export class SalesforceSyncCompleteService {
 				this.resolveOpportunityBlock(holdingId, record.salesforce_id, 'unmapped_products'),
 			]);
 
-			const existingQuote = await this.quoteRepository.findOne({
-				where: {
-					holding_id: holdingId,
-					salesforce_opportunity_id: opportunity.Id,
-				},
-			});
-
-			if (!existingQuote) {
-				await this.opportunitiesStgRepository.update(record.id, {
-					processing_status: 'create',
-					integration_notes: 'No existe cotización Sapira para esta oportunidad',
-				});
-				await this.updateLineItemsStagingStatus(holdingId, batchId, opportunity.Id, 'create', 'Ítem listo para crear junto a la cotización');
-				continue;
-			}
-
-			const hasChanges = await this.hasOpportunityChanges(holdingId, opportunity, existingQuote);
-			const processingStatus = hasChanges ? 'update' : 'processed';
 			await this.opportunitiesStgRepository.update(record.id, {
-				processing_status: processingStatus,
-				integration_notes: hasChanges ? 'Cotización existente con cambios pendientes' : 'Cotización staging sincronizada',
+				processing_status: 'create',
+				integration_notes: 'No existe cotización Sapira para esta oportunidad',
 			});
-			await this.updateLineItemsStagingStatus(
-				holdingId,
-				batchId,
-				opportunity.Id,
-				processingStatus,
-				hasChanges ? 'Ítem con cambios pendientes en la cotización' : 'Ítem staging sincronizado'
-			);
+			await this.updateLineItemsStagingStatus(holdingId, batchId, opportunity.Id, 'create', 'Ítem listo para crear junto a la cotización');
 		}
+	}
+
+	/**
+	 * Cotizaciones protegidas (Domi 03-10): una cotización existente se clasifica por lo que cambió **en el CRM** desde la última
+	 * importación (snapshot), no contra la cotización actual. Con contrato o en etapa `contract_created` queda protegida. Sin snapshot
+	 * (cotización anterior a la regla) queda "Sin cambios" y lo que llegó ahora pasa a ser la base.
+	 */
+	private async classifyExistingQuote(
+		holdingId: string,
+		record: SalesforceOpportunitiesStg,
+		opportunity: SalesforceOpportunityWithLineItems,
+		quoteId: string
+	): Promise<CrmQuoteClassification> {
+		const [protection, incoming] = await Promise.all([
+			this.getQuoteProtection(holdingId, quoteId),
+			this.buildIncomingSnapshot(holdingId, opportunity),
+		]);
+
+		return classifyExistingCrmQuote({
+			protection: protection.protection,
+			stored: readCrmQuoteSnapshot(record.last_imported_snapshot),
+			incoming,
+		});
+	}
+
+	private async applyExistingQuoteClassification(
+		record: SalesforceOpportunitiesStg,
+		batchId: string | undefined,
+		classification: CrmQuoteClassification
+	): Promise<void> {
+		await this.opportunitiesStgRepository.update(record.id, {
+			processing_status: classification.processing_status,
+			integration_notes: classification.integration_notes,
+			error_message: null,
+			// Base sin importación: `last_imported_at` queda NULL (no se importó nada).
+			...(classification.baseline ? { last_imported_snapshot: storedCrmQuoteSnapshot(classification.baseline) } : {}),
+		});
+		await this.updateLineItemsStagingStatus(
+			record.holding_id,
+			batchId,
+			record.salesforce_id,
+			classification.processing_status,
+			classification.processing_status === 'update' ? 'Ítem con cambios del CRM por revisar' : classification.integration_notes
+		);
+	}
+
+	/** Protección de una cotización: con contrato vigente (directo o por sus ítems) o en etapa de tipo `contract_created`. */
+	private async getQuoteProtection(
+		holdingId: string,
+		quoteId: string,
+		manager?: EntityManager
+	): Promise<{ protection: CrmQuoteProtection; stageId: string | null; stageKind: string | null }> {
+		const rows = (await (manager ?? this.quoteRepository.manager).query(CRM_QUOTE_PROTECTION_SQL, [quoteId, holdingId])) as Array<
+			Record<string, unknown>
+		>;
+		const row = rows[0] ?? null;
+
+		return {
+			protection: crmQuoteProtection(row),
+			stageId: (row?.stage_id as string) ?? null,
+			stageKind: (row?.stage_kind as string) ?? null,
+		};
+	}
+
+	/** Lo que llega ahora del CRM, con los mismos mapeos y resolución de ítems que usa la importación. */
+	private async buildIncomingSnapshot(holdingId: string, opportunity: SalesforceOpportunityWithLineItems): Promise<CrmQuoteSnapshot> {
+		const mapped = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'opportunity', opportunity, { opportunity });
+		const currency = mapped.currency || opportunity.CurrencyIsoCode || 'USD';
+		const items = await Promise.all(
+			(opportunity.OpportunityLineItems?.records || []).map(async (lineItem) => {
+				const { transformation, ...resolved } = await this.resolveLineItemPreview(holdingId, opportunity, lineItem, currency);
+				void transformation;
+
+				return resolved;
+			})
+		);
+
+		return this.snapshotFrom(opportunity, mapped, items);
+	}
+
+	private snapshotFrom(
+		opportunity: SalesforceOpportunityWithLineItems,
+		mapped: Record<string, any>,
+		items: Array<Record<string, any>>
+	): CrmQuoteSnapshot {
+		return buildCrmQuoteSnapshot({
+			header: mapped,
+			owner: opportunity.Owner?.Email || opportunity.Owner?.Name || opportunity.OwnerId || null,
+			accountId: opportunity.AccountId || null,
+			items,
+		});
+	}
+
+	/** Cotización de Sapira de una oportunidad: por el vínculo del CRM o por `salesforce_opportunity_id`. */
+	private async findIntegratedQuoteId(holdingId: string, opportunityId: string): Promise<string | null> {
+		const [mappedQuoteId, quote] = await Promise.all([
+			this.typeormService.getObjectMapping(holdingId, 'Opportunity', opportunityId),
+			this.quoteRepository.findOne({
+				where: { holding_id: holdingId, salesforce_opportunity_id: opportunityId },
+				select: ['id'],
+			}),
+		]);
+
+		return mappedQuoteId || quote?.id || null;
+	}
+
+	/**
+	 * Diferencias de una oportunidad (`GET /integrations/crm/records/opportunity/:id/changes`): lo que llegó del CRM en la última
+	 * importación (antes) frente a lo que llega ahora (después). Sin snapshot no hay diferencias que mostrar.
+	 */
+	async previewOpportunityChanges(holdingId: string, salesforceId: string): Promise<SalesforceOpportunityChangesPreview | null> {
+		const record = await this.opportunitiesStgRepository.findOne({ where: { holding_id: holdingId, salesforce_id: salesforceId } });
+		if (!record) {
+			return null;
+		}
+
+		const opportunity = record.raw_data as SalesforceOpportunityWithLineItems;
+		const quoteId = await this.findIntegratedQuoteId(holdingId, salesforceId);
+		const [quoteRows, protection] = quoteId
+			? await Promise.all([
+					this.quoteRepository.manager.query(
+						`SELECT NULLIF(concat_ws(' · ', q.quote_number, cl.name_commercial), '') AS label FROM quotes q
+						LEFT JOIN clients cl ON cl.id = q.client_id WHERE q.id = $1 AND q.holding_id = $2`,
+						[quoteId, holdingId]
+					) as Promise<Array<Record<string, unknown>>>,
+					this.getQuoteProtection(holdingId, quoteId),
+				])
+			: [[], null];
+		const stored = readCrmQuoteSnapshot(record.last_imported_snapshot);
+		const changes = stored && quoteId ? crmSnapshotChanges(stored, await this.buildIncomingSnapshot(holdingId, opportunity)) : [];
+
+		return {
+			salesforce_id: salesforceId,
+			label: record.salesforce_name || opportunity?.Name || null,
+			processing_status: record.processing_status ?? null,
+			quote_id: quoteId,
+			quote_label: (quoteRows[0]?.label as string) ?? null,
+			protection: protection?.protection ?? null,
+			has_snapshot: Boolean(stored),
+			last_imported_at: record.last_imported_at ?? null,
+			changes,
+		};
 	}
 
 	private async processOpportunityStaging(
@@ -1369,14 +1680,40 @@ export class SalesforceSyncCompleteService {
 			}
 
 			try {
-				await this.processOpportunity(record, holdingId, stats, options);
+				const result = await this.processOpportunity(record, holdingId, stats, options);
+				await this.resolveOpportunityBlock(holdingId, record.salesforce_id, 'opportunity_final_processing');
+
+				// Cotización existente con cambios del CRM sin confirmar: sigue "Por revisar" y no se marca integrada.
+				if (result.outcome === 'needs_confirmation') {
+					stats.quotesPendingConfirmation = (stats.quotesPendingConfirmation ?? 0) + 1;
+					stats.notices = [...(stats.notices ?? []), `Oportunidad ${record.salesforce_id}: ${CRM_QUOTE_NOTES.needsConfirmation}`];
+					await this.opportunitiesStgRepository.update(record.id, {
+						processing_status: 'update',
+						integration_notes: CRM_QUOTE_NOTES.needsConfirmation,
+						error_message: null,
+					});
+					await this.updateLineItemsStagingStatus(
+						holdingId,
+						batchId,
+						record.salesforce_id,
+						'update',
+						'Ítem con cambios del CRM por revisar'
+					);
+					continue;
+				}
+				if (result.outcome === 'protected') {
+					stats.quotesProtected = (stats.quotesProtected ?? 0) + 1;
+					stats.notices = [...(stats.notices ?? []), `Oportunidad ${record.salesforce_id}: ${result.message}`];
+				}
+
+				// Protegida o sin cambios: queda importada sin tocar la cotización ni su fecha de integración.
+				const untouched = result.outcome === 'protected' || result.outcome === 'unchanged';
 				await this.opportunitiesStgRepository.update(record.id, {
 					processing_status: 'processed',
 					error_message: null,
-					last_integrated_at: new Date(),
+					...(untouched ? { integration_notes: result.message } : { last_integrated_at: new Date() }),
 					processed_at: new Date(),
 				});
-				await this.resolveOpportunityBlock(holdingId, record.salesforce_id, 'opportunity_final_processing');
 
 				await this.lineItemsStgRepository.update(
 					batchId
@@ -1411,10 +1748,20 @@ export class SalesforceSyncCompleteService {
 		holdingId: string,
 		stats: SyncCompleteStats,
 		options: OpportunityProcessingOptions = {}
-	): Promise<void> {
+	): Promise<CrmQuoteSyncResult> {
 		const opportunity = record.raw_data as SalesforceOpportunityWithLineItems;
 		if (options.insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
-			return;
+			return { outcome: 'skipped', message: null };
+		}
+
+		// Cotización existente protegida o sin confirmación: no se toca nada (tampoco el cliente de la oportunidad).
+		const confirmedBy = options.salesforceIds?.length && !options.insertOnly ? (options.confirmedBy ?? null) : null;
+		const existingQuoteId = await this.findIntegratedQuoteId(holdingId, opportunity.Id);
+		if (existingQuoteId) {
+			const guard = await this.guardExistingQuote(holdingId, existingQuoteId, confirmedBy);
+			if (guard) {
+				return guard;
+			}
 		}
 
 		const clientId = await this.ensureOpportunityClientReady(record, opportunity, holdingId, stats);
@@ -1424,7 +1771,8 @@ export class SalesforceSyncCompleteService {
 			throw new Error(this.getUnmappedProductsMessage(unmappedProducts));
 		}
 
-		await this.syncQuote(opportunity, clientId, holdingId, stats, options.insertOnly);
+		// La confirmación solo vale para las oportunidades elegidas por id (nunca con `all` ni en la sincronización diaria).
+		return this.syncQuote(record, opportunity, clientId, holdingId, stats, { insertOnly: options.insertOnly, confirmedBy });
 	}
 
 	private async markUnmappedLineItemsAsError(
@@ -1574,7 +1922,14 @@ export class SalesforceSyncCompleteService {
 		if (existingClientId) {
 			const clientUpdatePayload = options.allowedClientFields?.length
 				? this.pickFields(clientPayload, options.allowedClientFields)
-				: clientPayload;
+				: { ...clientPayload };
+
+			// El id de la cuenta como número de cliente es solo un respaldo: no reemplaza el número que ya tiene el cliente.
+			if (this.isFallbackClientNumber(clientUpdatePayload.client_number, accountData)) {
+				const existingClient = await this.clientRepository.findOne({ where: { id: existingClientId, holding_id: holdingId } });
+
+				if (!this.isBlankValue(existingClient?.client_number)) delete clientUpdatePayload.client_number;
+			}
 
 			await this.clientRepository.update(
 				{ id: existingClientId, holding_id: holdingId },
@@ -1761,6 +2116,8 @@ export class SalesforceSyncCompleteService {
 			economic_activity: normalizedEntityPayload.economic_activity || accountData.Industry || null,
 			client_number: normalizedEntityPayload.client_number || null,
 		};
+		// Respaldo (id de la cuenta del CRM) como número de cliente: solo completa una razón social sin número, no reemplaza el existente.
+		const keepClientNumber = this.isFallbackClientNumber(normalizedEntityPayload.client_number, accountData) ? ['client_number'] : [];
 		const entityUpdatePayload = {
 			holding_id: holdingId,
 			legal_name: legalName,
@@ -1775,7 +2132,10 @@ export class SalesforceSyncCompleteService {
 			const entityResolution = await this.resolveClientEntityByTaxId(holdingId, taxId, legalName);
 			if (entityResolution.entities.length > 0) {
 				for (const entity of entityResolution.entities) {
-					await this.clientEntityRepository.update(entity.id, this.fillClientEntityFieldsWhenEmpty(entity, entityUpdatePayload));
+					await this.clientEntityRepository.update(
+						entity.id,
+						this.fillClientEntityFieldsWhenEmpty(entity, entityUpdatePayload, keepClientNumber)
+					);
 					await this.resolveOdooPartnerForEntity(holdingId, entity.id);
 				}
 				return;
@@ -1794,7 +2154,7 @@ export class SalesforceSyncCompleteService {
 		});
 		if (existingByClient) {
 			await this.clientEntityRepository.update(existingByClient.id, {
-				...this.fillClientEntityFieldsWhenEmpty(existingByClient, basePayload),
+				...this.fillClientEntityFieldsWhenEmpty(existingByClient, basePayload, keepClientNumber),
 				// La ausencia de RUT en Salesforce no autoriza eliminar un identificador fiscal ya validado en Sapira.
 				tax_id: taxId || existingByClient.tax_id || null,
 			});
@@ -1808,11 +2168,18 @@ export class SalesforceSyncCompleteService {
 		await this.resolveOdooPartnerForEntity(holdingId, savedEntity.id);
 	}
 
-	private fillClientEntityFieldsWhenEmpty(existing: Record<string, any>, candidate: Record<string, any>): Record<string, any> {
-		const protectedFields = ['legal_name', 'legal_address', 'country'];
+	private fillClientEntityFieldsWhenEmpty(
+		existing: Record<string, any>,
+		candidate: Record<string, any>,
+		extraProtected: string[] = []
+	): Record<string, any> {
 		return {
 			...candidate,
-			...Object.fromEntries(protectedFields.filter((field) => !this.isBlankValue(existing[field])).map((field) => [field, existing[field]])),
+			...Object.fromEntries(
+				[...CLIENT_ENTITY_PROTECTED_FIELDS, ...extraProtected]
+					.filter((field) => !this.isBlankValue(existing[field]))
+					.map((field) => [field, existing[field]])
+			),
 		};
 	}
 
@@ -1853,15 +2220,37 @@ export class SalesforceSyncCompleteService {
 		}
 	}
 
+	/**
+	 * Lleva una oportunidad a su cotización (único punto que crea o actualiza cotizaciones desde el CRM; lo usan la sincronización diaria,
+	 * `process_final`, `retry_full`, `/salesforce/staging/*` y `/salesforce/sync-complete`). Cotizaciones protegidas (Domi 03-10):
+	 * - con contrato o en etapa `contract_created` → nunca se actualiza (`protected`);
+	 * - sin confirmación (`confirmedBy`) → no se toca (`needs_confirmation`);
+	 * - sin cambios en el CRM desde la última importación (o sin snapshot) → no se toca (`unchanged`);
+	 * - al actualizar no cambia la etapa ni las notas; encabezado, ítems, evento `UPDATED` (`metadata.source = 'crm_sync'`) y snapshot van
+	 *   en una sola transacción. Al crear, la cotización, su vínculo, sus ítems y el snapshot también.
+	 */
 	private async syncQuote(
+		record: SalesforceOpportunitiesStg,
 		opportunity: SalesforceOpportunityWithLineItems,
 		clientId: string,
 		holdingId: string,
 		stats: SyncCompleteStats,
-		insertOnly = false
-	): Promise<void> {
+		options: { insertOnly?: boolean; confirmedBy?: string | null } = {}
+	): Promise<CrmQuoteSyncResult> {
+		const insertOnly = options.insertOnly === true;
 		if (insertOnly && (await this.isOpportunityAlreadyIntegrated(holdingId, opportunity.Id))) {
-			return;
+			return { outcome: 'skipped', message: null };
+		}
+
+		const existingQuoteId = await this.findIntegratedQuoteId(holdingId, opportunity.Id);
+		if (existingQuoteId) {
+			if (insertOnly) {
+				return { outcome: 'skipped', message: null };
+			}
+			const guard = await this.guardExistingQuote(holdingId, existingQuoteId, options.confirmedBy ?? null);
+			if (guard) {
+				return guard;
+			}
 		}
 
 		let stageId = await this.typeormService.getQuoteStageByName(holdingId, 'enviada');
@@ -1914,35 +2303,7 @@ export class SalesforceSyncCompleteService {
 			...mappedQuoteData,
 		};
 
-		const existingQuoteId =
-			(await this.typeormService.getObjectMapping(holdingId, 'Opportunity', opportunity.Id)) ||
-			(await this.quoteRepository
-				.findOne({
-					where: { holding_id: holdingId, salesforce_opportunity_id: opportunity.Id },
-					select: ['id'],
-				})
-				.then((quote) => quote?.id || null));
-
-		let quoteId: string;
-		if (existingQuoteId) {
-			if (insertOnly) {
-				return;
-			}
-			quoteId = await this.typeormService.upsertQuote({ ...quoteData, id: existingQuoteId });
-			stats.quotesUpdated++;
-		} else {
-			const createdQuoteId = insertOnly
-				? await this.typeormService.createQuoteIfAbsent(quoteData)
-				: await this.typeormService.upsertQuote(quoteData);
-			if (!createdQuoteId) {
-				return;
-			}
-			quoteId = createdQuoteId;
-			await this.typeormService.createObjectMapping(holdingId, 'Opportunity', opportunity.Id, 'quotes', quoteId);
-			stats.quotesCreated++;
-		}
-
-		const quoteItems: Record<string, any>[] = [];
+		const resolvedItems: Array<Record<string, any>> = [];
 		for (const lineItem of opportunity.OpportunityLineItems?.records || []) {
 			const { transformation, ...resolvedLineItem } = await this.resolveLineItemPreview(
 				holdingId,
@@ -1950,18 +2311,172 @@ export class SalesforceSyncCompleteService {
 				lineItem,
 				mappedQuoteData.currency || opportunity.CurrencyIsoCode || 'USD'
 			);
+			void transformation;
+			resolvedItems.push({ holding_id: holdingId, ...resolvedLineItem });
+		}
+		const snapshot = this.snapshotFrom(opportunity, mappedQuoteData, resolvedItems);
 
-			quoteItems.push({
-				quote_id: quoteId,
-				holding_id: holdingId,
-				...resolvedLineItem,
+		if (existingQuoteId) {
+			const stored = readCrmQuoteSnapshot(record.last_imported_snapshot);
+			// Sin base (cotización anterior a la regla) o sin cambios del CRM: no hay nada que aplicar. La base queda guardada.
+			if (!stored || !crmSnapshotChanged(stored, snapshot)) {
+				if (!stored) {
+					await this.opportunitiesStgRepository.update(record.id, {
+						last_imported_snapshot: storedCrmQuoteSnapshot({ ...snapshot, baseline: true }),
+					});
+				}
+				return { outcome: 'unchanged', message: stored ? CRM_QUOTE_NOTES.unchanged : CRM_QUOTE_NOTES.baseline };
+			}
+
+			// Al actualizar no cambia la etapa ni las notas (ni el holding).
+			const headerUpdate = Object.fromEntries(
+				Object.entries(quoteData).filter(([field]) => !['quote_stage_id', 'notes', 'holding_id'].includes(field))
+			);
+			const outcome = await this.quoteRepository.manager.transaction(async (manager) => {
+				// Revalida dentro de la transacción: un contrato creado entre la clasificación y la importación también protege.
+				const protection = await this.getQuoteProtection(holdingId, existingQuoteId, manager);
+				if (protection.protection) {
+					return { outcome: 'protected', message: CRM_QUOTE_PROTECTION_MESSAGES[protection.protection] } as CrmQuoteSyncResult;
+				}
+
+				const before = await manager.getRepository(Quote).findOne({ where: { id: existingQuoteId, holding_id: holdingId } });
+				const beforeItems = await manager.getRepository(QuoteItem).find({ where: { quote_id: existingQuoteId, holding_id: holdingId } });
+				await manager.getRepository(Quote).update({ id: existingQuoteId, holding_id: holdingId }, headerUpdate);
+				const quoteItems = resolvedItems.map((item) => ({ quote_id: existingQuoteId, ...item }));
+				await this.typeormService.createQuoteItems(quoteItems, manager);
+				const afterItems = await manager.getRepository(QuoteItem).find({ where: { quote_id: existingQuoteId, holding_id: holdingId } });
+
+				await this.insertCrmSyncEvent(manager, {
+					holdingId,
+					quoteId: existingQuoteId,
+					stageId: protection.stageId,
+					stageKind: protection.stageKind,
+					confirmedBy: options.confirmedBy ?? null,
+					opportunityId: opportunity.Id,
+					before: (before ?? {}) as Record<string, unknown>,
+					after: headerUpdate,
+					beforeItems,
+					afterItems,
+					crmChanges: crmSnapshotChanges(stored, snapshot),
+				});
+				await manager
+					.getRepository(SalesforceOpportunitiesStg)
+					.update(record.id, { last_imported_snapshot: storedCrmQuoteSnapshot(snapshot), last_imported_at: new Date() });
+				stats.quoteItemsCreated += quoteItems.length;
+
+				return { outcome: 'updated', message: CRM_QUOTE_NOTES.applied } as CrmQuoteSyncResult;
 			});
+			if (outcome.outcome === 'updated') {
+				stats.quotesUpdated++;
+			}
+
+			return outcome;
 		}
 
-		if (quoteItems.length) {
-			await this.typeormService.createQuoteItems(quoteItems);
-			stats.quoteItemsCreated += quoteItems.length;
+		try {
+			await this.quoteRepository.manager.transaction(async (manager) => {
+				const createdQuoteId = insertOnly
+					? await this.typeormService.createQuoteIfAbsent(quoteData, manager)
+					: await this.typeormService.upsertQuote(quoteData, manager);
+				if (!createdQuoteId) {
+					// Otro proceso ya la integró: el conflicto dejó la transacción abortada.
+					throw new QuoteAlreadyIntegratedError();
+				}
+				await this.typeormService.createObjectMapping(holdingId, 'Opportunity', opportunity.Id, 'quotes', createdQuoteId, manager);
+				const quoteItems = resolvedItems.map((item) => ({ quote_id: createdQuoteId, ...item }));
+				if (quoteItems.length) {
+					await this.typeormService.createQuoteItems(quoteItems, manager);
+				}
+				await manager
+					.getRepository(SalesforceOpportunitiesStg)
+					.update(record.id, { last_imported_snapshot: storedCrmQuoteSnapshot(snapshot), last_imported_at: new Date() });
+				stats.quoteItemsCreated += quoteItems.length;
+			});
+		} catch (error) {
+			if (error instanceof QuoteAlreadyIntegratedError) {
+				return { outcome: 'skipped', message: null };
+			}
+			throw error;
 		}
+		stats.quotesCreated++;
+
+		return { outcome: 'created', message: null };
+	}
+
+	/** Cotización existente que la importación no puede tocar: protegida o sin confirmación. `null` = se puede evaluar para aplicar. */
+	private async guardExistingQuote(holdingId: string, quoteId: string, confirmedBy: string | null): Promise<CrmQuoteSyncResult | null> {
+		const { protection } = await this.getQuoteProtection(holdingId, quoteId);
+		if (protection) {
+			return { outcome: 'protected', message: CRM_QUOTE_PROTECTION_MESSAGES[protection] };
+		}
+		if (!confirmedBy) {
+			return { outcome: 'needs_confirmation', message: CRM_QUOTE_NOTES.needsConfirmation };
+		}
+
+		return null;
+	}
+
+	/**
+	 * Evento `UPDATED` en el historial de la cotización (mismo mecanismo que la edición manual, `quote-edit-diff`): antes/después del
+	 * encabezado y por ítem, más lo que cambió en el CRM. Autor "Sincronización del CRM"; `actor_id` = quien confirmó.
+	 */
+	private async insertCrmSyncEvent(
+		manager: EntityManager,
+		input: {
+			holdingId: string;
+			quoteId: string;
+			stageId: string | null;
+			stageKind: string | null;
+			confirmedBy: string | null;
+			opportunityId: string;
+			before: Record<string, unknown>;
+			after: Record<string, unknown>;
+			beforeItems: QuoteItem[];
+			afterItems: QuoteItem[];
+			crmChanges: CrmSnapshotFieldChange[];
+		}
+	): Promise<void> {
+		const header = (source: Record<string, unknown>) =>
+			Object.fromEntries(Object.entries(source).map(([key, value]) => [key, snapshotValue(value)]));
+		const itemSnapshot = (item: Record<string, any>): QuoteItemSnapshot => ({
+			product_id: (snapshotValue(item.product_id) as string) ?? null,
+			product_name: (snapshotValue(item.product_name) as string) ?? null,
+			quantity: item.quantity == null ? null : Number(item.quantity),
+			unit_price: item.unit_price == null ? null : Number(item.unit_price),
+			annual_unit_price: item.annual_unit_price == null ? null : Number(item.annual_unit_price),
+			price_entry_mode: (snapshotValue(item.price_entry_mode) as string) ?? null,
+			discount_value: item.discount_value == null ? null : Number(item.discount_value),
+			final_price: item.final_price == null ? null : Number(item.final_price),
+			start_date: (snapshotValue(item.start_date) as string) ?? null,
+			end_date: (snapshotValue(item.end_date) as string) ?? null,
+			term_months: item.term_months == null ? null : Number(item.term_months),
+			billing_frequency: (snapshotValue(item.billing_frequency) as string) ?? null,
+			billing_method: (snapshotValue(item.billing_method) as string) ?? null,
+			is_recurring: item.is_recurring == null ? null : Boolean(item.is_recurring),
+		});
+		const amount = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value));
+		const beforeHeader = header(input.before);
+		const afterHeader = { ...beforeHeader, ...header(input.after) };
+		const metadata = {
+			source: 'crm_sync',
+			author_label: CRM_SYNC_EVENT_AUTHOR,
+			confirmed_by: input.confirmedBy,
+			salesforce_opportunity_id: input.opportunityId,
+			total_amount: { from: amount(input.before.total_amount), to: amount(afterHeader.total_amount) },
+			changes: headerChanges(beforeHeader, afterHeader),
+			item_changes: itemChanges(
+				new Map(input.beforeItems.map((item) => [item.id, itemSnapshot(item)])),
+				// Un ítem que no estaba antes queda como agregado; uno que ya no está, como quitado.
+				input.afterItems.map((item) => ({ id: item.id, snapshot: itemSnapshot(item) }))
+			),
+			crm_changes: input.crmChanges,
+		};
+
+		await manager.query(
+			`INSERT INTO quote_events (holding_id, quote_id, type, from_stage_id, to_stage_id, from_kind, to_kind, actor_id, reason, metadata)
+			VALUES ($1, $2, 'UPDATED', $3, $3, $4, $4, $5, $6, $7::jsonb)`,
+			[input.holdingId, input.quoteId, input.stageId, input.stageKind, input.confirmedBy, CRM_SYNC_EVENT_AUTHOR, JSON.stringify(metadata)]
+		);
 	}
 
 	async resolveLineItemPreview(
@@ -2076,80 +2591,6 @@ export class SalesforceSyncCompleteService {
 		]);
 
 		return Boolean(mappedQuoteId || quote);
-	}
-
-	private async hasOpportunityChanges(holdingId: string, opportunity: SalesforceOpportunityWithLineItems, existingQuote: Quote): Promise<boolean> {
-		const mappedQuote = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'opportunity', opportunity, { opportunity });
-		if (this.hasRecordChanges(mappedQuote, existingQuote, ['notes'])) {
-			return true;
-		}
-
-		const existingItems = await this.quoteItemRepository.find({
-			where: {
-				quote_id: existingQuote.id,
-				holding_id: holdingId,
-			},
-		});
-		const stagedLineItems = opportunity.OpportunityLineItems?.records || [];
-		if (existingItems.length !== stagedLineItems.length) {
-			return true;
-		}
-
-		for (const stagedLineItem of stagedLineItems) {
-			const existingItem = existingItems.find((item) => item.salesforce_line_item_id === stagedLineItem.Id);
-			if (!existingItem) {
-				return true;
-			}
-
-			const mappedLine = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'line_item', stagedLineItem, {
-				opportunity,
-				lineItem: stagedLineItem,
-			});
-			if (
-				this.hasRecordChanges(
-					{
-						product_name: mappedLine.product_name || stagedLineItem.Product2?.Name || null,
-						unit_price: mappedLine.unit_price || stagedLineItem.UnitPrice || null,
-						quantity: mappedLine.quantity || stagedLineItem.Quantity || null,
-						item_type: mappedLine.item_type || null,
-						unit_of_measure: mappedLine.unit_of_measure || null,
-						salesforce_product_id: mappedLine.salesforce_product_id || stagedLineItem.Product2Id || null,
-						salesforce_line_item_id: mappedLine.salesforce_line_item_id || stagedLineItem.Id,
-					},
-					existingItem
-				)
-			) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	private hasRecordChanges(candidate: Record<string, any>, existing?: Record<string, any> | null, ignoredKeys: string[] = []): boolean {
-		if (!existing) {
-			return true;
-		}
-
-		for (const [key, value] of Object.entries(candidate)) {
-			if (ignoredKeys.includes(key)) {
-				continue;
-			}
-
-			const current = (existing as any)[key];
-			if (value instanceof Date && current instanceof Date) {
-				if (value.getTime() !== current.getTime()) {
-					return true;
-				}
-				continue;
-			}
-
-			if (JSON.stringify(value) !== JSON.stringify(current)) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**

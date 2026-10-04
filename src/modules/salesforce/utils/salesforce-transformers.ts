@@ -328,9 +328,16 @@ export function normalizeTaxId(taxId: string | null | undefined): string | null 
 		return null;
 	}
 
-	const normalized = String(taxId).replace(/[\s.]+/gu, '');
+	let normalized = String(taxId).replace(/[\s.]+/gu, '');
 	if (!normalized || normalized.toLocaleLowerCase('es-CL') === 'pendiente') {
 		return null;
+	}
+
+	// Prefijo "RUT", "RUT:", "R.U.T." (los puntos ya se quitaron) delante de un RUT chileno: se descarta. Solo si lo que queda es un RUT
+	// (7–8 dígitos, guion opcional y dígito verificador), para no recortar otros identificadores que empiezan con esas letras (RFC).
+	const prefixed = /^RUT[:\-]?(\d{7,8}-?[\dkK])$/iu.exec(normalized);
+	if (prefixed) {
+		normalized = prefixed[1];
 	}
 
 	return normalized;

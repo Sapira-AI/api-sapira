@@ -167,6 +167,8 @@ Se reutilizan los endpoints existentes (sin rutas nuevas, sin migraciones). Ambo
   emisión de factura, fecha de pago, cotización sin `created_at`), `all_day` y `ref.contract_id` (facturas). Antes las fechas sin hora
   se casteaban a medianoche UTC (el día anterior en Chile) y quedaban mezcladas con eventos de otro día. Orden: día desc → con hora
   antes que solo fecha → hora desc → tipo → id.
+- `GET /clients/:id/activity` (03-10): cada nota trae `author_avatar` y cada mención resuelta `mentions[].avatar` (forma de Mi perfil §3;
+  detalle en `docs/v2-rediseno/contrato-api-notificaciones.md` §8.7).
 - `GET /contracts/subscriptions?entityId=` (`src/modules/contracts`, fuera de `clients`): filtro por razón social para la sección
   Suscripciones del Razón social 360. Test en `contract-subscriptions-entity.spec.ts`.
 

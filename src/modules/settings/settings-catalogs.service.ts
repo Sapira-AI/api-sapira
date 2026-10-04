@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { withApiWriter } from '@/modules/contracts/api-writer';
 import { normalizeQuoteType, QUOTE_TYPE_CODES, QUOTE_TYPE_LABELS, type QuoteTypeCode } from '@/modules/quotes/quote-status';
 
 import { MASTER_DATA_CATEGORIES } from './dtos/catalogs.dto';
@@ -11,6 +12,7 @@ import type {
 	CreateNamedDto,
 	CreateSellerDto,
 	MasterDataCategory,
+	MergeSellersDto,
 	UpdateMasterDataDto,
 	UpdateNamedDto,
 	UpdateSellerDto,
@@ -58,6 +60,8 @@ const sellerDto = (row: Row) => ({
 	email: String(row.email ?? ''),
 	phone: (row.phone as string | null) ?? null,
 	is_active: row.is_active === true,
+	/** Dueño del CRM que corresponde a este vendedor (Integraciones v2, D7). */
+	crm_owner_id: (row.crm_owner_id as string | null) ?? null,
 	created_at: row.created_at,
 	in_use: toCount(row.in_use),
 });
@@ -197,6 +201,59 @@ export class SettingsCatalogsService {
 			throw new ConflictException(`Este vendedor está en ${plural(inUse, 'cotización', 'cotizaciones')}: desactívalo en vez de eliminarlo`);
 		}
 		await this.dataSource.query(`DELETE FROM sellers WHERE id = $1 AND holding_id = $2`, [id, holdingId]);
+	}
+
+	/**
+	 * Fusiona vendedores duplicados (Integraciones v2, D7; p. ej. los `sf_<id>@salesforce.local` que crea el CRM): reasigna al destino
+	 * todas las referencias de los origen —hoy la única FK a `sellers` es `quotes.seller_id` (verificado en `pg_constraint` de QA, 03-10)—,
+	 * copia `crm_owner_id` si el destino no tiene y hay uno solo entre los origen, y borra los origen. Una transacción con `sapira.writer`.
+	 */
+	async mergeSellers(holdingId: string, dto: MergeSellersDto) {
+		const sourceIds = [...new Set(dto.source_ids)];
+
+		if (sourceIds.includes(dto.target_id)) throw new BadRequestException('El vendedor destino no puede estar entre los que se fusionan');
+		const sellers = (await this.dataSource.query(`SELECT id, crm_owner_id FROM sellers WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [
+			holdingId,
+			[dto.target_id, ...sourceIds],
+		])) as Row[];
+		const target = sellers.find((seller) => seller.id === dto.target_id);
+
+		if (!target || sellers.length !== sourceIds.length + 1) throw new NotFoundException('Vendedor no encontrado');
+		const sourceOwners = [
+			...new Set(
+				sellers
+					.filter((seller) => seller.id !== dto.target_id)
+					.map((seller) => seller.crm_owner_id)
+					.filter(Boolean)
+			),
+		] as string[];
+		const targetOwner = (target.crm_owner_id as string | null) ?? null;
+
+		if (sourceOwners.length > 1 || (targetOwner && sourceOwners.some((owner) => owner !== targetOwner))) {
+			throw new ConflictException({
+				message: 'Los vendedores tienen dueños distintos del CRM',
+				errors: [{ field: 'source_ids', message: 'Quita la relación con el CRM de los que sobran antes de fusionar' }],
+			});
+		}
+		const reassigned = await withApiWriter(this.dataSource, async (runner) => {
+			const quotes = (await runner.query(
+				`UPDATE quotes SET seller_id = $1 WHERE seller_id = ANY($2::uuid[]) AND holding_id = $3 RETURNING id`,
+				[dto.target_id, sourceIds, holdingId]
+			)) as unknown[];
+
+			await runner.query(`DELETE FROM sellers WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [holdingId, sourceIds]);
+			if (!targetOwner && sourceOwners.length === 1) {
+				await runner.query(`UPDATE sellers SET crm_owner_id = $3 WHERE id = $1 AND holding_id = $2`, [
+					dto.target_id,
+					holdingId,
+					sourceOwners[0],
+				]);
+			}
+
+			return Array.isArray(quotes[0]) ? (quotes[0] as unknown[]).length : quotes.length;
+		});
+
+		return { seller: sellerDto(await this.findSeller(holdingId, dto.target_id)), merged: sourceIds.length, reassigned: { quotes: reassigned } };
 	}
 
 	// ── Motivos de baja ─────────────────────────────────────────────────────────────────────────────────────────────────────────

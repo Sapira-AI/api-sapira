@@ -120,10 +120,20 @@
   "file": "src/databases/postgresql/entities/fx/generic-export-vat.entity.ts",
   "import": "@/databases/postgresql/entities/fx/generic-export-vat.entity"
  },
+ "holding_integration_settings": {
+  "class": "HoldingIntegrationSettings",
+  "file": "src/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity.ts",
+  "import": "@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity"
+ },
  "indicadores_economicos": {
   "class": "IndicadorEconomicoEntity",
   "file": "src/databases/postgresql/entities/fx/indicador-economico.entity.ts",
   "import": "@/databases/postgresql/entities/fx/indicador-economico.entity"
+ },
+ "integration_record_discards": {
+  "class": "IntegrationRecordDiscard",
+  "file": "src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts",
+  "import": "@/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity"
  },
  "invoice_items": {
   "class": "InvoiceItem",

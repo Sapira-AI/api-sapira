@@ -68,6 +68,11 @@
   "columns": {},
   "constraints": [
    {
+    "name": "users_avatar_one_kind_check",
+    "type": "c",
+    "expr": "(avatar_preset IS NULL) OR (avatar_path IS NULL)"
+   },
+   {
     "name": "users_email_key",
     "type": "u",
     "cols": [

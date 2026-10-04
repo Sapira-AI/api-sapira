@@ -9,6 +9,7 @@ import { AppNotification, AppNotificationSeverity } from '@/databases/postgresql
 import { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
 import { UserHolding } from '@/databases/postgresql/entities/base-tenancy/user-holding.entity';
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
+import { userAvatar, type UserAvatar } from '@/modules/me/user-avatar';
 
 import { CreateAppNotificationDto } from './dtos/create-app-notification.dto';
 import {
@@ -18,6 +19,7 @@ import {
 	UpdateNotificationPreferencesDto,
 } from './dtos/notifications.dto';
 import {
+	actionHref,
 	defaultEmailFor,
 	defaultWeeklyDigestFor,
 	isCatalogType,
@@ -74,6 +76,26 @@ export const MY_COMPANIES_SQL = `(n.company_id IS NULL OR NOT EXISTS (
 		AND COALESCE(cardinality(mc.company_ids), 0) > 0 AND NOT (n.company_id = ANY(mc.company_ids))
 ))`;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Persona que provocó la alerta (quien mencionó, en `user_mention`). */
+export interface NotificationActor {
+	id: string;
+	name: string;
+	avatar: UserAvatar;
+}
+
+/**
+ * Id de quien provocó la alerta: `metadata.actor_user_id` (genérico); las menciones creadas antes de ese campo guardaron el autor de la nota
+ * en `metadata.author_id`. Sin un UUID válido, null.
+ */
+export function actorIdOf(row: { type?: string; metadata?: Record<string, unknown> | null }): string | null {
+	const metadata = row.metadata ?? {};
+	const raw = metadata.actor_user_id ?? (row.type === 'user_mention' ? metadata.author_id : null);
+
+	return typeof raw === 'string' && UUID_RE.test(raw) ? raw.toLowerCase() : null;
+}
+
 /** Notificación + estado del destinatario → forma de la API (superconjunto de la de siempre). */
 export function toView(row: NotificationForRecipient) {
 	const catalog = notificationCatalogEntry(row.type);
@@ -87,7 +109,15 @@ export function toView(row: NotificationForRecipient) {
 		module_label: NOTIFICATION_MODULES[module],
 		icon: catalog?.icon ?? 'bell',
 		severity_label: SEVERITY_LABELS[row.severity] ?? row.severity,
-		action: actionType ? { type: actionType, label: NOTIFICATION_ACTION_LABELS[actionType] ?? 'Abrir', payload: row.action_payload ?? {} } : null,
+		action: actionType
+			? {
+					type: actionType,
+					label: NOTIFICATION_ACTION_LABELS[actionType] ?? 'Abrir',
+					payload: row.action_payload ?? {},
+					href: actionHref(actionType, row.action_payload as Record<string, unknown> | null),
+				}
+			: null,
+		integration_href: catalog?.integration_href ?? null,
 		is_read: Boolean(row.is_read),
 		read_at: row.read_at ?? null,
 		is_archived: Boolean(row.archived_at),
@@ -338,7 +368,7 @@ export class NotificationsService {
 
 		if (like) params.push(like);
 		const rows = (await this.dataSource.query(
-			`SELECT DISTINCT u.id, u.name, u.email FROM users u JOIN user_holdings uh ON uh.user_id = u.id
+			`SELECT DISTINCT u.id, u.name, u.email, u.avatar_path, u.avatar_preset FROM users u JOIN user_holdings uh ON uh.user_id = u.id
 			WHERE uh.holding_id = $1 AND uh.is_active = true AND u.status = 'Activo'${like ? ' AND (u.name ILIKE $2 OR u.email ILIKE $2)' : ''}
 			ORDER BY u.name NULLS LAST, u.email
 			LIMIT ${Math.min(Math.max(Number(limit) || 20, 1), 50)}`,
@@ -350,6 +380,7 @@ export class NotificationsService {
 				id: String(row.id),
 				name: row.name ? String(row.name) : String(row.email),
 				email: String(row.email),
+				avatar: userAvatar(row),
 			})),
 		};
 	}
@@ -381,12 +412,14 @@ export class NotificationsService {
 			) as Promise<Row[]>,
 		]);
 		const total = Number(rows[0]?.total_count ?? 0);
-		const data = rows.map((row) => {
-			const view = { ...row };
+		const data = await this.withActors(
+			rows.map((row) => {
+				const view = { ...row };
 
-			delete view.total_count;
-			return toView(view as unknown as NotificationForRecipient);
-		});
+				delete view.total_count;
+				return toView(view as unknown as NotificationForRecipient);
+			})
+		);
 
 		return {
 			data,
@@ -403,7 +436,7 @@ export class NotificationsService {
 
 	async getForAuthenticatedUser(holdingId: string, authUserId: string, notificationId: string) {
 		const userId = await this.resolveInternalUserId(authUserId);
-		const view = toView(await this.ownNotification(holdingId, userId, notificationId));
+		const [view] = await this.withActors([toView(await this.ownNotification(holdingId, userId, notificationId))]);
 
 		return { ...view, texts: resolveTexts(view) };
 	}
@@ -509,6 +542,7 @@ export class NotificationsService {
 				subscribable: item.subscribable,
 				reserved: item.reserved,
 				action_label: item.action_type ? (NOTIFICATION_ACTION_LABELS[item.action_type] ?? null) : null,
+				integration_href: item.integration_href ?? null,
 			})),
 		};
 	}
@@ -733,6 +767,34 @@ export class NotificationsService {
 
 	private severityOf(dto: CreateAppNotificationDto): AppNotificationSeverity {
 		return dto.severity || notificationCatalogEntry(dto.type)?.severity || 'error';
+	}
+
+	/**
+	 * Agrega `actor` (nombre y avatar de quien provocó la alerta, ver `actorIdOf`) a cada notificación, con una sola consulta por página.
+	 * Sin actor o si la persona ya no existe: `actor: null`.
+	 */
+	private async withActors<T extends { type?: string; metadata?: Record<string, unknown> | null }>(
+		views: T[]
+	): Promise<Array<T & { actor: NotificationActor | null }>> {
+		const ids = [...new Set(views.map(actorIdOf).filter((id): id is string => Boolean(id)))];
+		const rows = ids.length
+			? ((await this.dataSource.query(
+					`SELECT id, COALESCE(NULLIF(name, ''), email) AS name, avatar_path, avatar_preset FROM users WHERE id = ANY($1::uuid[])`,
+					[ids]
+				)) as Row[])
+			: [];
+		const byId = new Map(
+			(rows ?? []).map((row) => [
+				String(row.id).toLowerCase(),
+				{ id: String(row.id), name: String(row.name ?? 'Alguien'), avatar: userAvatar(row) },
+			])
+		);
+
+		return views.map((view) => {
+			const id = actorIdOf(view);
+
+			return { ...view, actor: (id && byId.get(id)) || null };
+		});
 	}
 
 	private metadataOf(dto: CreateAppNotificationDto): Record<string, unknown> {

@@ -36,6 +36,60 @@ describe('SettingsCatalogsService', () => {
 			expect(free.db.statements('DELETE FROM sellers')[0].params).toEqual([ID, HOLDING]);
 		});
 
+		describe('fusionar duplicados (Integraciones v2, D7)', () => {
+			const TARGET = '66666666-6666-4666-8666-666666666666';
+			const SOURCE = '77777777-7777-4777-8777-777777777777';
+
+			it('reasigna las cotizaciones, copia el dueño del CRM y borra los origen, con sapira.writer', async () => {
+				const { db, service } = catalogs([
+					[
+						'SELECT id, crm_owner_id FROM sellers',
+						() => [
+							{ id: TARGET, crm_owner_id: null },
+							{ id: SOURCE, crm_owner_id: '005A' },
+						],
+					],
+					['UPDATE quotes SET seller_id', () => [[{ id: 'q-1' }, { id: 'q-2' }], 2]],
+					[
+						'WHERE s.id = $1 AND s.holding_id = $2',
+						() => [{ id: TARGET, name: 'Ana', email: 'ana@x.cl', crm_owner_id: '005A', in_use: '2' }],
+					],
+				]);
+				const result = await service.mergeSellers(HOLDING, { target_id: TARGET, source_ids: [SOURCE] });
+
+				expect(db.statements("set_config('sapira.writer'")).toHaveLength(1);
+				expect(db.statements('UPDATE quotes SET seller_id')[0].params).toEqual([TARGET, [SOURCE], HOLDING]);
+				expect(db.statements('DELETE FROM sellers')[0].params).toEqual([HOLDING, [SOURCE]]);
+				expect(db.statements('UPDATE sellers SET crm_owner_id')[0].params).toEqual([TARGET, HOLDING, '005A']);
+				expect(result).toEqual(
+					expect.objectContaining({ merged: 1, reassigned: { quotes: 2 }, seller: expect.objectContaining({ crm_owner_id: '005A' }) })
+				);
+				expect(db.committed()).toBe(1);
+			});
+
+			it('dueños del CRM distintos → 409; destino entre los origen → 400; ajeno → 404', async () => {
+				const conflict = catalogs([
+					[
+						'SELECT id, crm_owner_id FROM sellers',
+						() => [
+							{ id: TARGET, crm_owner_id: '005A' },
+							{ id: SOURCE, crm_owner_id: '005B' },
+						],
+					],
+				]);
+
+				await expect(conflict.service.mergeSellers(HOLDING, { target_id: TARGET, source_ids: [SOURCE] })).rejects.toBeInstanceOf(
+					ConflictException
+				);
+				await expect(catalogs().service.mergeSellers(HOLDING, { target_id: TARGET, source_ids: [TARGET] })).rejects.toBeInstanceOf(
+					BadRequestException
+				);
+				await expect(catalogs().service.mergeSellers(HOLDING, { target_id: TARGET, source_ids: [SOURCE] })).rejects.toBeInstanceOf(
+					NotFoundException
+				);
+			});
+		});
+
 		it('vendedor de otro holding → 404', async () => {
 			const { service } = catalogs();
 

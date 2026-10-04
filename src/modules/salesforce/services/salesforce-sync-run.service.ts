@@ -26,7 +26,7 @@ export class SalesforceSyncRunService {
 		holdingId: string,
 		type: SalesforceSyncRunType,
 		opportunityIds: string[],
-		options: { dateFrom?: string; dateTo?: string } = {}
+		options: { dateFrom?: string; dateTo?: string; confirmedBy?: string | null } = {}
 	): Promise<SalesforceSyncRun> {
 		const ids = [...new Set(opportunityIds.filter(Boolean))];
 		if (!ids.length) {
@@ -48,6 +48,8 @@ export class SalesforceSyncRunService {
 					type,
 					date_from: options.dateFrom || null,
 					date_to: options.dateTo || null,
+					// Cotizaciones protegidas: quien confirmó actualizar cotizaciones existentes (solo `process_final` por ids).
+					confirmed_by: type === 'process_final' ? options.confirmedBy || null : null,
 					total_items: ids.length,
 				})
 			);
@@ -156,8 +158,9 @@ export class SalesforceSyncRunService {
 		});
 	}
 
-	async completeItem(item: SalesforceSyncRunItem): Promise<void> {
-		await this.itemRepository.update(item.id, { status: 'completed', processed_at: new Date(), error_message: null });
+	/** `notice`: aviso que no es error (p. ej. cotización protegida o pendiente de confirmación); queda en `error_message`. */
+	async completeItem(item: SalesforceSyncRunItem, notice?: string | null): Promise<void> {
+		await this.itemRepository.update(item.id, { status: 'completed', processed_at: new Date(), error_message: notice || null });
 		await this.runRepository
 			.createQueryBuilder()
 			.update(SalesforceSyncRun)

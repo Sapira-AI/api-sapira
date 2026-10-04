@@ -347,7 +347,7 @@ describe('cola Por emitir (§4.2)', () => {
 		const unmapped = {
 			code: 'product_without_erp_mapping',
 			message: 'x',
-			next_step: 'Mapea el producto en Integraciones › Odoo',
+			next_step: 'Mapea el producto en Integraciones › ERP',
 			action: 'map_product',
 		};
 

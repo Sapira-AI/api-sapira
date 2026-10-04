@@ -48,6 +48,7 @@ import { StripeClientsService } from './stripe-clients.service';
 		ClientEntityErpService,
 		StripeClientsService,
 	],
-	exports: [ClientsService, StripeClientsService],
+	// `ClientEntityErpService`: Integraciones › ERP › Mapeos › Clientes vincula con las mismas validaciones de la Razón social 360.
+	exports: [ClientsService, StripeClientsService, ClientEntityErpService],
 })
 export class ClientsModule {}

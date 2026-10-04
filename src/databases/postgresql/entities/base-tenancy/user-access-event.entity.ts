@@ -5,17 +5,20 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Auditoría de acceso de usuarios (Configuración v2, contrato §10, migración M15 `1790860000000-UserAccessEvents`): invitar, reenviar,
- * desactivar, reactivar y eliminar invitación. La escribe solo la API (`SettingsUserAccessService`); RLS activo **sin policies**.
+ * desactivar, reactivar y eliminar invitación; y eventos de la cuenta desde Mi perfil (`password_changed`, `sessions_revoked`, con
+ * `holding_id` NULL: no son de un holding; migración 1791050000000). La escribe solo la API (`SettingsUserAccessService`, `MeService`);
+ * RLS activo **sin policies**.
  * También es la fuente del límite de reenvíos (60 s entre envíos, 5 en 24 h). `user_id` y `actor_user_id` quedan en NULL si se borra la
  * persona (el correo queda en `details`).
  */
 @Entity({
 	name: 'user_access_events',
-	comment: 'Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación). Solo la API',
+	comment:
+		'Auditoría de acceso de usuarios por holding (invitar, reenviar, desactivar, reactivar, eliminar invitación) y de la cuenta (cambio de contraseña, cierre de sesiones; holding_id NULL). Solo la API',
 })
 @Check(
 	'user_access_events_action_check',
-	`"action" = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text])`
+	`"action" = ANY (ARRAY['invited'::text, 'invitation_resent'::text, 'deactivated'::text, 'reactivated'::text, 'invitation_deleted'::text, 'password_changed'::text, 'sessions_revoked'::text])`
 )
 @Index('user_access_events_user_idx', ['user_id', 'action', 'created_at'])
 @Index('user_access_events_holding_idx', ['holding_id', 'created_at'])
@@ -23,8 +26,8 @@ export class UserAccessEvent {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'user_access_events_pkey' })
 	id!: string;
 
-	@Column({ type: 'uuid', nullable: false })
-	holding_id!: string;
+	@Column({ type: 'uuid', nullable: true })
+	holding_id!: string | null;
 
 	@Column({ type: 'uuid', nullable: true })
 	user_id!: string | null;

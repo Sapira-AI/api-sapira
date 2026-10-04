@@ -144,6 +144,28 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "avatar_preset": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "avatar_path": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
@@ -171,6 +193,10 @@
    }
   },
   "checks": [
+   {
+    "name": "users_avatar_one_kind_check",
+    "expression": "avatar_preset IS NULL OR avatar_path IS NULL"
+   },
    {
     "name": "users_status_check",
     "expression": "((status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])))"

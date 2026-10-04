@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { DataSource } from 'typeorm';
 
 import type { PermissionContext } from '@/guards/permissions.service';
+import { userAvatar } from '@/modules/me/user-avatar';
 
 import { assertKeepsConfigAdmin } from './settings-admins';
 import { Row, toCount } from './settings-common';
@@ -19,6 +20,8 @@ export const userDto = (row: Row, actor: PermissionContext) => ({
 	id: String(row.id),
 	name: (row.name as string | null) ?? null,
 	email: String(row.email),
+	/** Avatar (contrato Mi perfil §3): `initials`, `preset` o `upload`. */
+	avatar: userAvatar(row),
 	status: (row.status as string | null) ?? null,
 	access_active: row.access_active === true,
 	last_access: row.last_access ?? null,
@@ -35,7 +38,7 @@ export const userDto = (row: Row, actor: PermissionContext) => ({
 
 /** Miembro del holding con su rol (si es de este holding) y su acceso aquí. Se filtra con `WHERE uh.holding_id = $1 …`. */
 export const USER_SELECT = `SELECT u.id, u.name, u.email, u.status, u.last_access, u.last_invitation_sent_at, u.last_invitation_status,
-		u.auth_id, COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name,
+		u.avatar_path, u.avatar_preset, u.auth_id, COALESCE(u.is_super_admin, false) AS is_super_admin, uh.is_active AS access_active, r.id AS role_id, r.name AS role_name,
 		(SELECT count(*) FROM user_holdings x WHERE x.user_id = u.id AND x.is_active = true) AS holdings_count
 		FROM user_holdings uh
 		JOIN users u ON u.id = uh.user_id

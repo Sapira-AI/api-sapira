@@ -29,5 +29,25 @@ describe('UsersService menu context', () => {
 		expect(context.permissions).toEqual(['VIEW_CONFIGURACION', 'EDIT_CONFIGURACION']);
 		expect(context.permissions).not.toContain('settings');
 		expect(userRepository.query).toHaveBeenNthCalledWith(2, expect.stringContaining('role_permissions'), ['role-admin']);
+		expect(context.user.avatar).toEqual({ kind: 'initials' });
+	});
+
+	it('includes the current user avatar (preset or uploaded photo)', async () => {
+		const base = { id: 'user-1', email: 'leon@example.com', auth_id: 'auth-1', created_at: new Date('2026-01-01'), is_super_admin: true };
+		const userRepository = {
+			findOne: jest
+				.fn()
+				.mockResolvedValueOnce({ ...base, avatar_preset: 'preset-05', avatar_path: null })
+				.mockResolvedValueOnce({ ...base, avatar_preset: null, avatar_path: 'users/user-1/foto.webp' }),
+			query: jest.fn().mockResolvedValue([]),
+		};
+		const holdingsService = { getUserHoldings: jest.fn().mockResolvedValue([]) };
+		const service = new UsersService(userRepository as never, holdingsService as never);
+
+		expect((await service.getUserMenuContext('auth-1')).user.avatar).toEqual({ kind: 'preset', preset_id: 'preset-05' });
+		expect((await service.getUserMenuContext('auth-1')).user.avatar).toEqual({
+			kind: 'upload',
+			url: expect.stringMatching(/\/storage\/v1\/object\/public\/user-avatars\/users\/user-1\/foto\.webp$/),
+		});
 	});
 });

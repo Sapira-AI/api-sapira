@@ -55,7 +55,35 @@ describe('SalesforceSyncRunWorker', () => {
 
 		expect(syncCompleteService.syncOpportunitiesToStaging).toHaveBeenCalledWith('holding-1', undefined, undefined, ['opp-1']);
 		expect(syncCompleteService.processOpportunitiesStaging).toHaveBeenCalledWith('holding-1', ['opp-1']);
-		expect(syncRunService.completeItem).toHaveBeenCalledWith(item);
+		expect(syncRunService.completeItem).toHaveBeenCalledWith(item, null);
+		expect(syncRunService.failItem).not.toHaveBeenCalled();
+	});
+	it('process_final pasa quién confirmó y deja como aviso una cotización protegida o pendiente de confirmación', async () => {
+		const item = { id: 'item-1', run_id: 'run-1', salesforce_opportunity_id: 'opp-1' };
+		const syncRunService = {
+			recoverExpiredClaims: jest.fn(),
+			acquireRunLock: jest.fn().mockResolvedValue(true),
+			releaseRunLock: jest.fn(),
+			getRunnableRuns: jest
+				.fn()
+				.mockResolvedValue([{ id: 'run-1', holding_id: 'holding-1', status: 'queued', type: 'process_final', confirmed_by: 'user-1' }]),
+			getRun: jest.fn().mockResolvedValue({ id: 'run-1', holding_id: 'holding-1', status: 'running' }),
+			finishRunIfDone: jest.fn(),
+			claimPendingItems: jest.fn().mockResolvedValue([item]),
+			completeItem: jest.fn(),
+			failItem: jest.fn(),
+		};
+		const syncCompleteService = {
+			processOpportunitiesStaging: jest
+				.fn()
+				.mockResolvedValue({ errors: [], notices: ['Oportunidad opp-1: La cotización ya tiene contrato: no se actualiza'] }),
+		};
+		const worker = new SalesforceSyncRunWorker(syncRunService as any, syncCompleteService as any);
+
+		await worker.processPendingRuns();
+
+		expect(syncCompleteService.processOpportunitiesStaging).toHaveBeenCalledWith('holding-1', ['opp-1'], { confirmedBy: 'user-1' });
+		expect(syncRunService.completeItem).toHaveBeenCalledWith(item, 'Oportunidad opp-1: La cotización ya tiene contrato: no se actualiza');
 		expect(syncRunService.failItem).not.toHaveBeenCalled();
 	});
 });
