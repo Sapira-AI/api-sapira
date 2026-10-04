@@ -87,7 +87,7 @@ describe('PermissionsService.context', () => {
 		const service = new PermissionsService({ query: jest.fn(async () => []) } as unknown as DataSource);
 
 		await expect(service.context('auth-1', H1)).resolves.toBeNull();
-		await expect(service.assert('auth-1', H1, ['VIEW_CONFIGURACION'])).rejects.toThrow('No tienes permiso para ver la configuración');
+		await expect(service.assert('auth-1', H1, ['VIEW_CONFIGURACION'])).rejects.toThrow('No tienes permiso para ver la administración');
 	});
 });
 
@@ -115,7 +115,7 @@ describe('RequirePermissionGuard', () => {
 	it('propaga el 403 del servicio', async () => {
 		permissions.assert.mockRejectedValue(new ForbiddenException(forbiddenMessage(['EDIT_CONFIGURACION'])));
 		await expect(guard.canActivate(contextFor('edit', { user: { sub: 'a' }, holdingId: H1 }))).rejects.toThrow(
-			'No tienes permiso para editar la configuración · pídeselo a un administrador'
+			'No tienes permiso para editar la administración · pídeselo a un administrador'
 		);
 	});
 });

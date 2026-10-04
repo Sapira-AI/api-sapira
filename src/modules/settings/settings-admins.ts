@@ -50,6 +50,6 @@ export async function assertKeepsConfigAdmin(db: Queryable, holdingId: string, o
 
 	if (before === 0) return;
 	if ((await countConfigAdmins(db, holdingId, override)) === 0) {
-		throw new ConflictException('El holding quedaría sin nadie que pueda editar la configuración');
+		throw new ConflictException('El holding quedaría sin nadie que pueda editar la administración');
 	}
 }

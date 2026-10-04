@@ -188,7 +188,7 @@ describe('NotificationEmailService (correo inmediato, contrato §8.3)', () => {
 			expect(mailer.sendRendered.mock.calls[0][0]).toBe('a@x.cl');
 			expect(mailer.sendRendered.mock.calls[0][1].subject).toBe('[Bloquea] No se pudo enviar la factura 12 de <Acme>');
 			expect(mailer.sendRendered.mock.calls[0][1].html).toContain('No se pudo enviar la factura 12 de &lt;Acme&gt;');
-			expect(mailer.sendRendered.mock.calls[0][1].html).toContain('https://app.test/lab/notificaciones?alerta=n-1');
+			expect(mailer.sendRendered.mock.calls[0][1].html).toContain('https://app.test/notificaciones?alerta=n-1');
 			expect(mailer.sendRendered.mock.calls[0][2]).toBe('notif:u-1:alert:n-1:error:0');
 			// Escaló dentro de la ventana: una sola vez, con el asunto de escalamiento.
 			expect(mailer.sendRendered.mock.calls[1][1].subject).toBe('[Bloquea] Sigue pendiente: No se pudo enviar la factura 12 de <Acme>');
@@ -222,7 +222,7 @@ describe('NotificationEmailService (correo inmediato, contrato §8.3)', () => {
 		const { service, mailer } = build();
 
 		await expect(service.sendAlertToAddresses(['ops@sapira.ai', 'leon@sapira.ai'], { ...alert, id: 'k' }, 'fallback:k')).resolves.toBe(2);
-		expect(mailer.sendRendered.mock.calls[0][1].html).toContain('https://app.test/lab/notificaciones');
+		expect(mailer.sendRendered.mock.calls[0][1].html).toContain('https://app.test/notificaciones');
 		expect(mailer.sendRendered.mock.calls[0][1].html).not.toContain('alerta=k');
 	});
 });
@@ -237,14 +237,14 @@ describe('plantillas de marca de Notificaciones', () => {
 			whatHappened: 'Quedan 3 por "USD 1.200"',
 			whatToDo: 'Emítelas o muévelas',
 			whatWeDo: 'Te avisamos 3 días',
-			url: 'https://app.test/lab/notificaciones?alerta=x',
+			url: 'https://app.test/notificaciones?alerta=x',
 		});
 
 		expect(email.html).toContain('Qué pasó');
 		expect(email.html).toContain('Qué hacemos nosotros');
 		expect(email.html).toContain('&quot;USD 1.200&quot;');
 		expect(email.text).toContain('QUÉ HACER');
-		expect(email.text).toContain('Ver alerta: https://app.test/lab/notificaciones?alerta=x');
+		expect(email.text).toContain('Ver alerta: https://app.test/notificaciones?alerta=x');
 	});
 
 	it('resumen semanal: omite secciones vacías y colorea aumentos y pérdidas', () => {
@@ -252,8 +252,8 @@ describe('plantillas de marca de Notificaciones', () => {
 			name: 'Domi',
 			holdingName: 'Hanka',
 			weekLabel: 'Semana del 5 de octubre de 2026',
-			url: 'https://app.test/lab/notificaciones',
-			tasks: [{ module: 'Facturación', title: 'Facturas por emitir hoy', count: 3, url: 'https://app.test/lab/facturacion' }],
+			url: 'https://app.test/notificaciones',
+			tasks: [{ module: 'Facturación', title: 'Facturas por emitir hoy', count: 3, url: 'https://app.test/facturacion' }],
 			alerts: { total: 0, items: [] },
 			mrr: {
 				month: 'octubre de 2026',

@@ -1122,7 +1122,7 @@ export class BillingReadService {
 	}
 
 	/**
-	 * Una factura (deep link `/lab/facturacion?invoice=<id>`): misma fila que la lista (decorada con `blocked_reasons`, grupo de la cola,
+	 * Una factura (deep link `/facturacion?invoice=<id>`): misma fila que la lista (decorada con `blocked_reasons`, grupo de la cola,
 	 * `related_documents` y unificadas) + `payments_summary` (pagos confirmados en la moneda de la factura, anulados aparte). 404 si no es
 	 * del holding. Incluye Canceladas e inactivas.
 	 */

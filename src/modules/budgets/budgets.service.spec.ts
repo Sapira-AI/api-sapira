@@ -6,7 +6,8 @@ import { DataSource } from 'typeorm';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
-import { BillingPermissionGuard, BillingPermissionsService } from '@/modules/billing/billing-permissions.service';
+import { PermissionsService } from '@/guards/permissions.service';
+import { BillingPermissionGuard } from '@/modules/billing/billing-permissions.service';
 
 import { BudgetsController } from './budgets.controller';
 import { BudgetsModule } from './budgets.module';
@@ -197,7 +198,7 @@ describe('BudgetsModule (DI)', () => {
 			controllers: [BudgetsController],
 			providers: [
 				BudgetsService,
-				BillingPermissionsService,
+				PermissionsService,
 				BillingPermissionGuard,
 				Reflector,
 				{ provide: DataSource, useValue: { query: jest.fn(async () => []) } },

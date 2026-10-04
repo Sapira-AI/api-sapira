@@ -2,25 +2,29 @@ import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 
-import { BILLING_PERMISSION_KEY, BILLING_PERMISSIONS, BillingPermissionGuard, BillingPermissionsService } from './billing-permissions.service';
+import { PermissionsService } from '@/guards/permissions.service';
+
+import { BILLING_PERMISSION_KEY, BILLING_PERMISSIONS, BillingPermissionGuard } from './billing-permissions.service';
 import { BillingController } from './billing.controller';
 
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 
 const HOLDING = '05583c6e-9364-4672-a610-0744324e44b4';
 
-function guard(row: Record<string, unknown> | null) {
-	const query = jest.fn(async () => (row ? [row] : []));
-	const service = new BillingPermissionsService({ query } as unknown as DataSource);
+/** Fila de `PermissionsService.context` (rol del holding activo con sus códigos); `null` = sin pertenencia activa al holding. */
+function guard(row: { is_super_admin?: boolean; role_id?: string | null; codes?: string[] } | null) {
+	const query = jest.fn(async () => (row ? [{ id: 'u-1', name: null, email: 'a@b.c', role_id: 'r-1', codes: [], ...row }] : []));
+	const service = new PermissionsService({ query } as unknown as DataSource);
 
 	return { query, guard: new BillingPermissionGuard(new Reflector(), service) };
 }
 
-const context = (handler: (...args: never[]) => unknown) =>
+const request = () => ({ user: { sub: 'auth-1' }, holdingId: HOLDING }) as Record<string, unknown>;
+const context = (handler: (...args: never[]) => unknown, req = request()) =>
 	({
 		getHandler: () => handler,
 		getClass: () => BillingController,
-		switchToHttp: () => ({ getRequest: () => ({ user: { sub: 'auth-1' }, holdingId: HOLDING }) }),
+		switchToHttp: () => ({ getRequest: () => req }),
 	}) as never;
 
 describe('Permisos de Facturación (VIEW_FACTURACION / EDIT_FACTURACION + super admin)', () => {
@@ -64,15 +68,44 @@ describe('Permisos de Facturación (VIEW_FACTURACION / EDIT_FACTURACION + super 
 		}
 	});
 
-	it('con el código del rol pasa; super admin pasa; sin código → 403; consulta el código exacto del holding', async () => {
-		const allowed = guard({ is_super_admin: false, has_permission: true });
+	it('usa PermissionsService (mismas reglas que RequirePermission): rol del holding activo, código exacto, super admin', async () => {
+		const allowed = guard({ codes: ['EDIT_FACTURACION'] });
+		const req = request();
 
-		await expect(allowed.guard.canActivate(context(proto.registerPayment))).resolves.toBe(true);
-		expect((allowed.query.mock.calls[0] as unknown[])[1]).toEqual(['auth-1', HOLDING, 'EDIT_FACTURACION']);
-		await expect(guard({ is_super_admin: true, has_permission: false }).guard.canActivate(context(proto.registerPayment))).resolves.toBe(true);
-		await expect(
-			guard({ is_super_admin: false, has_permission: false }).guard.canActivate(context(proto.registerPayment))
-		).rejects.toBeInstanceOf(ForbiddenException);
+		await expect(allowed.guard.canActivate(context(proto.registerPayment, req))).resolves.toBe(true);
+		expect((allowed.query.mock.calls[0] as unknown[])[1]).toEqual(['auth-1', HOLDING]);
+		expect(req.permissionContext).toMatchObject({ userId: 'u-1', isSuperAdmin: false });
+		await expect(guard({ is_super_admin: true }).guard.canActivate(context(proto.registerPayment))).resolves.toBe(true);
+		await expect(guard({ codes: ['VIEW_FACTURACION'] }).guard.canActivate(context(proto.registerPayment))).rejects.toBeInstanceOf(
+			ForbiddenException
+		);
 		await expect(guard(null).guard.canActivate(context(proto.invoices))).rejects.toBeInstanceOf(ForbiddenException);
+	});
+
+	it('Editar incluye Ver: EDIT_FACTURACION abre las lecturas', async () => {
+		await expect(guard({ codes: ['EDIT_FACTURACION'] }).guard.canActivate(context(proto.invoices))).resolves.toBe(true);
+		await expect(guard({ codes: ['VIEW_FACTURACION'] }).guard.canActivate(context(proto.invoices))).resolves.toBe(true);
+	});
+
+	it('el comodín ALL_PERMISSIONS cubre Facturación (leer y escribir)', async () => {
+		await expect(guard({ codes: ['ALL_PERMISSIONS'] }).guard.canActivate(context(proto.invoices))).resolves.toBe(true);
+		await expect(guard({ codes: ['ALL_PERMISSIONS'] }).guard.canActivate(context(proto.registerPayment))).resolves.toBe(true);
+	});
+
+	it('rol de otro holding (role_id null) o sin códigos → 403 con el mensaje común', async () => {
+		await expect(guard({ role_id: null, codes: [] }).guard.canActivate(context(proto.invoices))).rejects.toThrow(
+			'No tienes permiso para ver la facturación · pídeselo a un administrador'
+		);
+		await expect(guard({ codes: ['VIEW_CLIENTES'] }).guard.canActivate(context(proto.registerPayment))).rejects.toThrow(
+			'No tienes permiso para editar la facturación · pídeselo a un administrador'
+		);
+	});
+
+	it('sin @RequireBillingPermission no consulta', async () => {
+		const { query, guard: g } = guard({ codes: [] });
+		const bare = { getHandler: () => () => null, getClass: () => class {}, switchToHttp: () => ({ getRequest: request }) } as never;
+
+		await expect(g.canActivate(bare)).resolves.toBe(true);
+		expect(query).not.toHaveBeenCalled();
 	});
 });

@@ -36,7 +36,7 @@ export const NOTIFICATION_ACTION_LABELS: Record<string, string> = {
 	review_fx_rates: 'Revisar tipos de cambio',
 	/** Acción secundaria del cierre de mes (`action_payload.secondary`). */
 	move_to_next_month: 'Mover al mes siguiente',
-	/** Integraciones v2 (D11): `{ tipo, tab }` → `/lab/integraciones/<tipo>?tab=<tab>`. */
+	/** Integraciones v2 (D11): `{ tipo, tab }` → `/conexiones/<tipo>?tab=<tab>`. */
 	open_integration: 'Ver integración',
 };
 
@@ -45,12 +45,12 @@ const INTEGRATION_TIPOS = ['erp', 'crm', 'stripe', 'datos'];
 
 /** Destino en el lab de las acciones que llevan a Integraciones (D11). El resto lo arma el front (`null`). */
 export function actionHref(actionType: string | null | undefined, payload?: Record<string, unknown> | null): string | null {
-	if (actionType === 'review_salesforce_sync_log') return '/lab/integraciones/crm?tab=historial';
+	if (actionType === 'review_salesforce_sync_log') return '/conexiones/crm?tab=historial';
 	if (actionType === 'open_integration') {
 		const tipo = String(payload?.tipo ?? '');
 		const tab = String(payload?.tab ?? 'estado');
 
-		return INTEGRATION_TIPOS.includes(tipo) ? `/lab/integraciones/${tipo}?tab=${INTEGRATION_TABS.includes(tab) ? tab : 'estado'}` : null;
+		return INTEGRATION_TIPOS.includes(tipo) ? `/conexiones/${tipo}?tab=${INTEGRATION_TABS.includes(tab) ? tab : 'estado'}` : null;
 	}
 
 	return null;
@@ -111,7 +111,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: DATA_WAREHOUSE_ROLES,
 		action_type: 'open_contract',
-		integration_href: '/lab/integraciones/erp?tab=mapeos',
+		integration_href: '/conexiones/erp?tab=mapeos',
 		texts: {
 			what_happened: 'La factura no llegó al ERP: el ERP la rechazó o no respondió.',
 			what_to_do:
@@ -128,7 +128,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: [DEFAULT_ROLE.admin, DEFAULT_ROLE.sales, DEFAULT_ROLE.operations],
 		action_type: 'retry_salesforce_opportunity',
-		integration_href: '/lab/integraciones/crm?tab=mapeos',
+		integration_href: '/conexiones/crm?tab=mapeos',
 		texts: {
 			what_happened: 'Una oportunidad ganada en el CRM no se pudo convertir en cotización.',
 			what_to_do: 'Revisa el motivo (producto sin relacionar, cuenta o datos faltantes), corrígelo y reintenta la importación.',
@@ -145,7 +145,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		default_roles: SYNC_FAILURE_ROLES,
 		default_super_admins: true,
 		action_type: 'review_salesforce_sync_log',
-		integration_href: '/lab/integraciones/crm?tab=historial',
+		integration_href: '/conexiones/crm?tab=historial',
 		texts: {
 			what_happened: 'La sincronización automática con el CRM no terminó: las oportunidades nuevas no llegaron a Sapira.',
 			what_to_do: 'Revisa la conexión y el historial en Integraciones › CRM. Si sigue fallando, avísanos.',
@@ -204,7 +204,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: DATA_WAREHOUSE_ROLES,
 		action_type: 'replace_quantity_record',
-		integration_href: '/lab/integraciones/datos?tab=estado',
+		integration_href: '/conexiones/datos?tab=estado',
 		texts: {
 			what_happened: 'El almacén de datos cambió un consumo que ya estaba en Sapira. No lo sobrescribimos.',
 			what_to_do: 'Compara los valores y reemplaza si el dato nuevo es el correcto.',
@@ -219,7 +219,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: DATA_WAREHOUSE_ROLES,
 		action_type: null,
-		integration_href: '/lab/integraciones/datos?tab=estado',
+		integration_href: '/conexiones/datos?tab=estado',
 		texts: {
 			what_happened: 'Llegaron consumos del almacén de datos que no pudimos asociar a un producto de un contrato.',
 			what_to_do: 'Revisa que el producto del contrato tenga el número de ítem de la cotización y vuelve a procesar.',
@@ -234,7 +234,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: DATA_WAREHOUSE_ROLES,
 		action_type: null,
-		integration_href: '/lab/integraciones/datos?tab=estado',
+		integration_href: '/conexiones/datos?tab=estado',
 		texts: {
 			what_happened: 'Llegaron consumos de un período cuya factura ya no está por emitir.',
 			what_to_do: 'Anula la factura del período para que vuelva a estar por emitir y vuelve a procesar.',
@@ -249,7 +249,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		subscribable: true,
 		default_roles: DATA_WAREHOUSE_ROLES,
 		action_type: null,
-		integration_href: '/lab/integraciones/datos?tab=estado',
+		integration_href: '/conexiones/datos?tab=estado',
 		texts: {
 			what_happened: 'Llegaron consumos en una moneda distinta a la del contrato. No los integramos para no facturar montos errados.',
 			what_to_do: 'Revisa la moneda en el almacén de datos o en el contrato y vuelve a procesar.',

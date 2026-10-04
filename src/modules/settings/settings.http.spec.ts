@@ -266,14 +266,14 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 		it('sin VIEW_CONFIGURACION no lee → 403 con el mensaje de D3', async () => {
 			const res = await get('/settings/holding/tree', 'nobody').expect(403);
 
-			expect(res.body.message).toBe('No tienes permiso para ver la configuración · pídeselo a un administrador');
+			expect(res.body.message).toBe('No tienes permiso para ver la administración · pídeselo a un administrador');
 		});
 
 		it('con VIEW lee, pero no escribe', async () => {
 			await get('/settings/sellers', 'reader').expect(200);
 			const res = await send('post', '/settings/sellers', { name: 'Ana', email: 'a@x.cl' }, 'reader').expect(403);
 
-			expect(res.body.message).toBe('No tienes permiso para editar la configuración · pídeselo a un administrador');
+			expect(res.body.message).toBe('No tienes permiso para editar la administración · pídeselo a un administrador');
 			expect(services.catalogs.createSeller).not.toHaveBeenCalled();
 		});
 

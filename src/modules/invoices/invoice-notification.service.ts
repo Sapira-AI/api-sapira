@@ -151,7 +151,7 @@ export class InvoiceNotificationService {
 				(top.length ? `Errores más frecuentes: ${top.map((error) => `${error.message} (${error.count})`).join('; ')}.` : ''),
 			recommendation: 'Revisa las facturas con error en la cola Por Emitir.',
 			action_type: 'open_billing_queue',
-			action_payload: { href: '/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo' },
+			action_payload: { href: '/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo' },
 			metadata: {
 				job_id: params.jobId,
 				execution_source: params.executionSource,

@@ -192,16 +192,16 @@ const REFERENCE_SOURCES: Record<NoteReferenceType, string> = {
 export function referenceHref(type: NoteReferenceType, id: string, clientId: string): string {
 	switch (type) {
 		case 'contract':
-			return `/lab/contratos/${id}`;
+			return `/contratos/${id}`;
 		case 'invoice':
 		case 'credit_note':
-			return `/lab/facturacion?invoice=${id}`;
+			return `/facturacion?invoice=${id}`;
 		case 'quote':
-			return `/lab/cotizaciones/${id}`;
+			return `/cotizaciones/${id}`;
 		case 'client_entity':
-			return `/lab/clientes/razones-sociales/${id}`;
+			return `/clientes/razones-sociales/${id}`;
 		default:
-			return `/lab/clientes/${clientId}?tab=documentos`;
+			return `/clientes/${clientId}?tab=documentos`;
 	}
 }
 

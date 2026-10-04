@@ -1,6 +1,6 @@
 /**
  * Tareas del holding (Notificaciones v2, `docs/v2-rediseno/contrato-api-notificaciones.md` §4): cosas que **hay que hacer hoy**, calculadas
- * en vivo desde los módulos (no se guardan). Este archivo es puro: arma la lista de tareas con sus enlaces al front nuevo (`/lab/...` con
+ * en vivo desde los módulos (no se guardan). Este archivo es puro: arma la lista de tareas con sus enlaces a las rutas finales del front (`/facturacion`, `/contratos`… con
  * los parámetros que esas pantallas leen) a partir de los conteos que junta `TasksService`. Lo usan el centro (`GET /notifications/tasks`)
  * y el Dashboard (`GET /dashboard/home`): una sola definición.
  */
@@ -129,10 +129,10 @@ export function monthCloseWindow(today: string): { month: string; step: number }
 
 /** Cola Por emitir de un mes (y compañías) en Facturación del front nuevo. */
 export const monthQueueHref = (month: string, companyIds: string[] = []) =>
-	`/lab/facturacion?estado=Por+Emitir&desde=${month}&hasta=${month}${companyIds.length ? `&company_id=${companyIds.join(',')}` : ''}`;
+	`/facturacion?estado=Por+Emitir&desde=${month}&hasta=${month}${companyIds.length ? `&company_id=${companyIds.join(',')}` : ''}`;
 
 const contractHref = (bucket: Bucket, listHref: string, tab?: string) =>
-	bucket.count > 0 && bucket.contract_ids?.length === 1 ? `/lab/contratos/${bucket.contract_ids[0]}${tab ? `?tab=${tab}` : ''}` : listHref;
+	bucket.count > 0 && bucket.contract_ids?.length === 1 ? `/contratos/${bucket.contract_ids[0]}${tab ? `?tab=${tab}` : ''}` : listHref;
 
 /**
  * Rango de la cola Por emitir de una tarea: la tarea cuenta hasta hoy, así que el enlace abre desde el primer mes de sus facturas hasta el
@@ -163,7 +163,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 		severity,
 		href,
 	});
-	const blockedBase = `/lab/facturacion?estado=${PENDING}&grupo=blocked`;
+	const blockedBase = `/facturacion?estado=${PENDING}&grupo=blocked`;
 	const tasks: Task[] = [
 		task(
 			'invoices_to_issue_today',
@@ -171,7 +171,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Facturas por emitir hoy',
 			input.queue.ready,
 			'info',
-			`/lab/facturacion?estado=${PENDING}&grupo=ready`,
+			`/facturacion?estado=${PENDING}&grupo=ready`,
 			true
 		),
 		{
@@ -197,7 +197,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Facturas por emitir atrasadas',
 			input.queue.late,
 			'warning',
-			`/lab/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.first_month, month)}`,
+			`/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.first_month, month)}`,
 			true
 		),
 		task(
@@ -206,17 +206,17 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Por emitir de meses pasados',
 			input.queue.past_months,
 			'warning',
-			`/lab/facturacion?estado=${PENDING}&desde=${input.queue.past_months.first_month ?? previousMonth}&hasta=${previousMonth}`,
+			`/facturacion?estado=${PENDING}&desde=${input.queue.past_months.first_month ?? previousMonth}&hasta=${previousMonth}`,
 			true
 		),
-		task('invoices_overdue', 'facturacion', 'Facturas vencidas', input.overdue, 'warning', '/lab/facturacion?pago=overdue&periodo=todo', true),
+		task('invoices_overdue', 'facturacion', 'Facturas vencidas', input.overdue, 'warning', '/facturacion?pago=overdue&periodo=todo', true),
 		task(
 			'credit_notes_to_issue',
 			'facturacion',
 			'Notas de crédito por emitir',
 			input.credit_notes,
 			'warning',
-			'/lab/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo'
+			'/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo'
 		),
 		task(
 			'renewals_to_decide',
@@ -224,7 +224,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Renovaciones por confirmar',
 			input.proposals,
 			'warning',
-			contractHref(input.proposals, '/lab/contratos?f=estado:pending_renewal')
+			contractHref(input.proposals, '/contratos?f=estado:pending_renewal')
 		),
 		task(
 			'expirations_without_decision',
@@ -232,23 +232,16 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Vencidos sin decisión',
 			input.expired,
 			'error',
-			contractHref(input.expired, '/lab/contratos?f=estado:expired')
+			contractHref(input.expired, '/contratos?f=estado:expired')
 		),
-		task(
-			'scheduled_changes_due',
-			'contratos',
-			'Ajustes pactados por aplicar',
-			input.pacts,
-			'warning',
-			contractHref(input.pacts, '/lab/contratos')
-		),
+		task('scheduled_changes_due', 'contratos', 'Ajustes pactados por aplicar', input.pacts, 'warning', contractHref(input.pacts, '/contratos')),
 		task(
 			'consumptions_to_report',
 			'contratos',
 			'Consumos por informar',
 			input.consumptions,
 			'warning',
-			contractHref(input.consumptions, '/lab/contratos', 'consumos')
+			contractHref(input.consumptions, '/contratos', 'consumos')
 		),
 		task(
 			'contracts_without_invoices',
@@ -256,7 +249,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Contratos activos sin facturas programadas',
 			input.without_invoices,
 			'warning',
-			contractHref(input.without_invoices, '/lab/contratos?f=estado:active')
+			contractHref(input.without_invoices, '/contratos?f=estado:active')
 		),
 		task(
 			'service_starts_this_month',
@@ -264,26 +257,19 @@ export function buildTasks(input: TaskInputs): Task[] {
 			'Inicios de servicio del mes',
 			input.starts,
 			'info',
-			`/lab/contratos?f=inicio_desde:${first};inicio_hasta:${last}`
+			`/contratos?f=inicio_desde:${first};inicio_hasta:${last}`
 		),
-		task(
-			'quotes_waiting_mapping',
-			'cotizaciones',
-			'Cotizaciones del CRM en espera de mapeo',
-			input.waiting_mapping,
-			'warning',
-			'/lab/cotizaciones'
-		),
+		task('quotes_waiting_mapping', 'cotizaciones', 'Cotizaciones del CRM en espera de mapeo', input.waiting_mapping, 'warning', '/cotizaciones'),
 		task(
 			'quotes_unprocessed_this_month',
 			'cotizaciones',
 			'Cotizaciones firmadas del mes sin contrato',
 			input.quotes_unprocessed,
 			'warning',
-			`/lab/cotizaciones?f=booking_desde:${first};booking_hasta:${last};con_contrato:no;estado:signed`,
+			`/cotizaciones?f=booking_desde:${first};booking_hasta:${last};con_contrato:no;estado:signed`,
 			true
 		),
-		task('revenue_exceptions', 'ingresos', 'Excepciones de Ingresos', input.revenue_exceptions, 'warning', '/lab/revenue?tab=excepciones'),
+		task('revenue_exceptions', 'ingresos', 'Excepciones de Ingresos', input.revenue_exceptions, 'warning', '/ingresos?tab=excepciones'),
 		...(input.month_close
 			? [
 					task(
@@ -303,7 +289,7 @@ export function buildTasks(input: TaskInputs): Task[] {
 
 	const companies = input.company_ids ?? [];
 	const withCompanies = (href: string) =>
-		companies.length && href.startsWith('/lab/facturacion') && !href.includes('company_id=')
+		companies.length && href.startsWith('/facturacion') && !href.includes('company_id=')
 			? `${href}${href.includes('?') ? '&' : '?'}company_id=${companies.join(',')}`
 			: href;
 

@@ -42,6 +42,7 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 |---|---|
 | [`mejoras-y-brechas.md`](./mejoras-y-brechas.md) | Síntesis de mejoras y decisiones A1–A12 |
 | [`censo-prod.md`](./censo-prod.md) | Censo del estado real de la base al 21-08 |
+| [`rebuild-devengo-comparacion.md`](./rebuild-devengo-comparacion.md) | Rebuild del devengo en copia local de prod (04-10): antes/después por holding y mes (SimpliRoute, TiMining, uPlanner), chequeos, decisiones pendientes y procedimiento para prod |
 | [`benchmark-zenskar-tour.md`](./benchmarks/benchmark-zenskar-tour.md) · [`benchmark-zenskar-docs.md`](./benchmarks/benchmark-zenskar-docs.md) · [`benchmark-maxio.md`](./benchmarks/benchmark-maxio.md) · [`benchmark-alguna.md`](./benchmarks/benchmark-alguna.md) · [`benchmark-relvo-api.md`](./benchmarks/benchmark-relvo-api.md) | Benchmarks de competidores (pricing por tramos, modelos de contrato, APIs) |
 
 Único doc del rediseño fuera de acá: `front-sapira/docs/v2-rediseno/08-checklist-publicacion-www.md`

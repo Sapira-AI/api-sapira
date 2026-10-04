@@ -151,13 +151,14 @@ export class RevenueMetricsService {
 	async summary(holdingId: string, query: MetricsFiltersDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
 		const currency = await this.data.resolveCurrency(holdingId, query);
-		const [{ rows, unconverted }, cutoffs, top, fx, recurring, asOf] = await Promise.all([
+		const [{ rows, unconverted }, cutoffs, top, fx, recurring, asOf, fxProjected] = await Promise.all([
 			this.rows(holdingId, query, currency, to),
 			this.cutoffs(holdingId, query.companyId),
 			Promise.all((['client', 'product', 'company'] as const).map((dimension) => this.topBy(holdingId, query, currency, dimension, from, to))),
 			currency.mode === 'system' ? this.fxDifference(holdingId, query, from, to) : Promise.resolve(null),
 			this.recurringVsMrr(holdingId, query, currency, to),
 			this.data.asOf(holdingId),
+			this.data.fxProjected(holdingId, currency, from, to),
 		]);
 		const byItem = indexByItem(rows);
 		const sumMonth = (month: Month, field: 'recognized' | 'billed') =>
@@ -195,6 +196,7 @@ export class RevenueMetricsService {
 			top: { clients: top[0], products: top[1], companies: top[2] },
 			cutoffs,
 			unconverted,
+			fx_projected: fxProjected,
 		};
 	}
 
@@ -293,9 +295,10 @@ export class RevenueMetricsService {
 	async forward(holdingId: string, query: RevenueForwardDto) {
 		const asOf = query.asOf ?? currentMonth();
 		const currency = await this.data.resolveCurrency(holdingId, query);
-		const [{ rows, unconverted }, future] = await Promise.all([
+		const [{ rows, unconverted }, future, fxProjected] = await Promise.all([
 			this.rows(holdingId, query, currency, asOf),
 			this.futureRows(holdingId, query, currency, asOf),
+			this.data.fxProjected(holdingId, currency, asOf, null),
 		]);
 
 		return {
@@ -304,6 +307,7 @@ export class RevenueMetricsService {
 			rate_note: currency.mode === 'contract' ? null : 'Meses futuros sin tasa propia se convierten con la tasa del mes de corte',
 			...forwardSchedule(rows, future.rows, asOf),
 			unconverted: { ...unconverted, rows: unconverted.rows + future.missing },
+			fx_projected: fxProjected,
 		};
 	}
 

@@ -6,7 +6,7 @@ export interface DigestEmailValues {
 	holdingName: string;
 	/** "Semana del 5 de octubre". */
 	weekLabel: string;
-	/** Centro de notificaciones (`/lab/notificaciones`). */
+	/** Centro de notificaciones (`/notificaciones`). */
 	url: string;
 	tasks: Array<{ module: string; title: string; count: number; url: string | null }>;
 	alerts: { total: number; items: Array<{ title: string; severity: string; url: string | null }> };

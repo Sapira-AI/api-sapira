@@ -121,17 +121,40 @@ describe('classifyMonth', () => {
 		expect(keys(classifyMonth(lines, '2026-02', { currency: 'contract' }))).toEqual([['other', 'OTHER', 4]]);
 	});
 
-	it('legacy → su contrato no es movimiento; la diferencia real en moneda de contrato sí, y el resto es FX (D2)', () => {
+	it('legacy → su contrato no es movimiento; solo el neto en moneda de sistema es expansión/contracción (D2)', () => {
 		const legacy = line(
 			'l',
 			{ '2026-01': { value: 100, valueContract: 1000 } },
 			{ source: 'legacy', itemId: null, legacyContractId: 'c-9', contractId: 'c-9' }
 		);
-		const same = line('i', { '2026-02': { value: 98, valueContract: 1000, momentum: null } }, { contractId: 'c-9', categoria: 'RENEWAL' });
+		const same = line('i', { '2026-02': { value: 100, valueContract: 1000, momentum: null } }, { contractId: 'c-9', categoria: 'RENEWAL' });
 		const higher = line('i', { '2026-02': { value: 110, valueContract: 1100, momentum: null } }, { contractId: 'c-9', categoria: 'RENEWAL' });
 
-		expect(keys(classifyMonth([legacy, same], '2026-02', { currency: 'system' }))).toEqual([['fx', 'FX', -2]]);
+		expect(keys(classifyMonth([legacy, same], '2026-02', { currency: 'system' }))).toEqual([]);
 		expect(keys(classifyMonth([legacy, higher], '2026-02', { currency: 'system' }))).toEqual([['expansion', 'LEGACY_MIGRATION', 10]]);
+	});
+
+	it('legacy en otra moneda que su contrato (CLP → CLF): no mezcla monedas, usa solo la de sistema', () => {
+		// Caso SimpliRoute may-2026: legacy 13.650.047 CLP (14.677 USD) → contrato en UF (≈340 CLF, 14.700 USD).
+		const legacy = line(
+			'l',
+			{ '2026-04': { value: 14677, valueContract: 13650047 } },
+			{ source: 'legacy', itemId: null, legacyContractId: 'c-uf', contractId: 'c-uf' }
+		);
+		const contract = line('i', { '2026-05': { value: 14700, valueContract: 340, momentum: 'RENEWAL' } }, { contractId: 'c-uf' });
+
+		expect(keys(classifyMonth([legacy, contract], '2026-05', { currency: 'system' }))).toEqual([['expansion', 'LEGACY_MIGRATION', 23]]);
+	});
+
+	it('legacy del mismo cliente y producto que cambia de vínculo o moneda: neto como variación legacy, no baja + alta', () => {
+		const before = line('l1', { '2026-03': 100, '2026-04': 0 }, { source: 'legacy', itemId: null, product: 'P+', legacyContractId: null });
+		const after = line('l2', { '2026-04': 104 }, { source: 'legacy', itemId: null, product: 'P+', legacyContractId: 'c-later' });
+		const other = line('l3', { '2026-04': 50 }, { source: 'legacy', itemId: null, product: 'Otro', clientId: 'cl-2' });
+
+		expect(keys(classifyMonth([before, after, other], '2026-04', { currency: 'system' }))).toEqual([
+			['expansion', 'LEGACY_CHANGE', 4],
+			['new', 'LEGACY_NEW', 50],
+		]);
 	});
 
 	it('legacy que termina sin contrato: contracción si el cliente sigue con MRR, churn si queda en 0', () => {

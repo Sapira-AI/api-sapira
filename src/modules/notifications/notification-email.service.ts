@@ -70,7 +70,7 @@ export class NotificationEmailService {
 	}
 
 	alertUrl(notificationId: string): string {
-		return this.appUrl(`/lab/notificaciones?alerta=${encodeURIComponent(notificationId)}`);
+		return this.appUrl(`/notificaciones?alerta=${encodeURIComponent(notificationId)}`);
 	}
 
 	logoUrl(): string | undefined {
@@ -289,7 +289,7 @@ export class NotificationEmailService {
 		if (!this.enabled || !addresses.length) return 0;
 		try {
 			// Sin alerta guardada: el botón va al centro de notificaciones.
-			const email = renderAlertEmail({ ...(await this.alertValues(notification)), url: this.appUrl('/lab/notificaciones') });
+			const email = renderAlertEmail({ ...(await this.alertValues(notification)), url: this.appUrl('/notificaciones') });
 			let sent = 0;
 
 			for (const address of addresses) {

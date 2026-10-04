@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { loadFxProjected } from '@/modules/metrics/fx-projected';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 import { TasksService } from '@/modules/tasks/tasks.service';
 
@@ -20,11 +21,14 @@ export class DashboardService {
 
 		// MRR y clientes activos: definición compartida con Clientes (HoldingMetricsService), con el corte U14 del legacy (sin doble conteo).
 		// Tareas: la misma función que el centro de notificaciones (TasksService).
-		const [metrics, recognizedRevenue, invoices, holdingTasks] = await Promise.all([
+		// fx_projected: monedas del MRR del mes convertidas con tasa fija proyectada (sin tasa registrada del holding para el mes).
+		const month = `${date.slice(0, 7)}-01`;
+		const [metrics, recognizedRevenue, invoices, holdingTasks, fxProjected] = await Promise.all([
 			this.holdingMetrics.monthMetrics(holdingId, date, { legacyCut: true }),
 			this.getRecognizedRevenue(holdingId, date),
 			this.getInvoiceSummary(holdingId, date),
 			this.tasksService.forHolding(holdingId, date),
+			loadFxProjected(this.dataSource, holdingId, month, month),
 		]);
 		const countOf = (key: string) => holdingTasks.tasks.find((task) => task.key === key)?.count ?? 0;
 		const mrr = { value: metrics.mrr.value, trend: metrics.mrr.trend, currency: metrics.currency };
@@ -42,6 +46,7 @@ export class DashboardService {
 				recognized_revenue: recognizedRevenue,
 				pending_invoices: invoices.toIssue,
 			},
+			fx_projected: fxProjected,
 			// Claves de siempre (front actual) + `items`: las tareas con algo por hacer, con enlace (refresh de Tareas pendientes, fase 2).
 			tasks: {
 				overdue_invoices: countOf('invoices_overdue'),

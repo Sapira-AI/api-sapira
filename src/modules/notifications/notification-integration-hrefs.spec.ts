@@ -1,30 +1,30 @@
 import { actionHref, NOTIFICATION_CATALOG, notificationCatalogEntry } from './notification-catalog';
 import { toView } from './notifications.service';
 
-/** Integraciones v2 (D11): acciones y enlaces que llevan a `/lab/integraciones/<tipo>?tab=…`, y textos sin marcas. */
+/** Integraciones v2 (D11): acciones y enlaces que llevan a `/conexiones/<tipo>?tab=…`, y textos sin marcas. */
 describe('Notificaciones · enlaces a Integraciones (D11)', () => {
 	it('la falla del CRM abre el historial del CRM', () => {
-		expect(actionHref('review_salesforce_sync_log', {})).toBe('/lab/integraciones/crm?tab=historial');
+		expect(actionHref('review_salesforce_sync_log', {})).toBe('/conexiones/crm?tab=historial');
 	});
 
 	it('open_integration arma la ruta con tipo y pestaña válidos', () => {
-		expect(actionHref('open_integration', { tipo: 'erp', tab: 'mapeos' })).toBe('/lab/integraciones/erp?tab=mapeos');
-		expect(actionHref('open_integration', { tipo: 'datos', tab: 'otra' })).toBe('/lab/integraciones/datos?tab=estado');
+		expect(actionHref('open_integration', { tipo: 'erp', tab: 'mapeos' })).toBe('/conexiones/erp?tab=mapeos');
+		expect(actionHref('open_integration', { tipo: 'datos', tab: 'otra' })).toBe('/conexiones/datos?tab=estado');
 		expect(actionHref('open_integration', { tipo: 'odoo' })).toBeNull();
 		expect(actionHref('open_contract', { contract_id: 'c-1' })).toBeNull();
 	});
 
 	it('cada tipo de integraciones tiene su integration_href', () => {
-		expect(notificationCatalogEntry('invoice_odoo_failure')?.integration_href).toBe('/lab/integraciones/erp?tab=mapeos');
-		expect(notificationCatalogEntry('salesforce_staging_blocked')?.integration_href).toBe('/lab/integraciones/crm?tab=mapeos');
-		expect(notificationCatalogEntry('salesforce_sync_failure')?.integration_href).toBe('/lab/integraciones/crm?tab=historial');
+		expect(notificationCatalogEntry('invoice_odoo_failure')?.integration_href).toBe('/conexiones/erp?tab=mapeos');
+		expect(notificationCatalogEntry('salesforce_staging_blocked')?.integration_href).toBe('/conexiones/crm?tab=mapeos');
+		expect(notificationCatalogEntry('salesforce_sync_failure')?.integration_href).toBe('/conexiones/crm?tab=historial');
 		for (const type of [
 			'bigquery_quantities_diff',
 			'bigquery_quantities_unmapped',
 			'bigquery_quantities_blocked',
 			'bigquery_quantities_currency_mismatch',
 		]) {
-			expect(notificationCatalogEntry(type)?.integration_href).toBe('/lab/integraciones/datos?tab=estado');
+			expect(notificationCatalogEntry(type)?.integration_href).toBe('/conexiones/datos?tab=estado');
 		}
 	});
 
@@ -51,8 +51,8 @@ describe('Notificaciones · enlaces a Integraciones (D11)', () => {
 			type: 'review_salesforce_sync_log',
 			label: 'Revisar sincronización',
 			payload: { job_id: 'j-1' },
-			href: '/lab/integraciones/crm?tab=historial',
+			href: '/conexiones/crm?tab=historial',
 		});
-		expect(view.integration_href).toBe('/lab/integraciones/crm?tab=historial');
+		expect(view.integration_href).toBe('/conexiones/crm?tab=historial');
 	});
 });
