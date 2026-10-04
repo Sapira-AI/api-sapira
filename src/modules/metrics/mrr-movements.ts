@@ -60,7 +60,6 @@ const isZero = (value: number) => Math.abs(value) < EPS;
 
 /** Valor convertido de la línea en el mes (0 si no tiene fila). */
 export const valueAt = (line: MrrLine, month: Month) => line.months.get(month)?.value ?? 0;
-const contractValueAt = (line: MrrLine, month: Month) => line.months.get(month)?.valueContract ?? 0;
 
 /**
  * Separa las líneas con algún mes sin convertir dentro de los meses dados (§1.3): esas no entran a ningún total ni movimiento, así el
@@ -140,7 +139,8 @@ export function classifyMonth(lines: MrrLine[], month: Month, { currency }: Clas
 		push(categoryOf('RENEWAL', net), 'RENEWAL', net, line);
 	}
 
-	// 2. Legacy → su contrato (D2): no es movimiento; solo la diferencia real en moneda de contrato es expansión/contracción y el resto, FX.
+	// 2. Legacy → su contrato (D2): no es movimiento; solo el neto en la moneda leída (la de sistema: `mrr_legacy_system_currency` vs MRR
+	// del contrato) es expansión/contracción. No se compara en moneda de contrato: la del legacy puede ser otra (CLP → contrato en CLF).
 	const legacyByContract = new Map<string, MrrLine[]>();
 
 	for (const line of lines) {
@@ -156,15 +156,34 @@ export function classifyMonth(lines: MrrLine[], month: Month, { currency }: Clas
 		if (!contractLines.length) continue;
 		const members = [...legacy, ...contractLines];
 		const net = members.reduce((sum, item) => sum + delta(item), 0);
-		const contractNow = contractLines.reduce((sum, item) => sum + valueAt(item, month), 0);
-		const contractNowCtr = contractLines.reduce((sum, item) => sum + contractValueAt(item, month), 0);
-		const legacyPrevCtr = legacy.reduce((sum, item) => sum + contractValueAt(item, prevMonth), 0);
-		const netCtr = contractNowCtr - legacyPrevCtr;
-		const real = currency === 'contract' ? net : !isZero(netCtr) && !isZero(contractNowCtr) ? round2(netCtr * (contractNow / contractNowCtr)) : 0;
 
 		for (const item of members) handled.add(item.key);
-		push(categoryOf(DERIVED_KEYS.legacyMigration, real), DERIVED_KEYS.legacyMigration, real, contractLines[0]);
-		push('fx', DERIVED_KEYS.fx, net - real, contractLines[0]);
+		push(categoryOf(DERIVED_KEYS.legacyMigration, net), DERIVED_KEYS.legacyMigration, net, contractLines[0]);
+	}
+
+	// 2b. Mismo MRR histórico con otra identidad: la línea legacy es (cliente, producto, moneda, contrato vinculado); si en el mes una
+	// termina y otra del mismo cliente y producto aparece (la factura nueva viene vinculada a un contrato, o en otra moneda), no es baja
+	// + alta: el neto es "Variación legacy". No es tipo de cambio: todo se compara en la moneda leída.
+	const legacyMoves = new Map<string, { ends: MrrLine[]; starts: MrrLine[] }>();
+
+	for (const line of lines) {
+		if (line.source !== 'legacy' || handled.has(line.key)) continue;
+		const ends = disappears(line);
+
+		if (!ends && !appears(line)) continue;
+		const groupKey = `${line.clientId ?? ''}|${line.product ?? ''}`;
+		const group = legacyMoves.get(groupKey) ?? { ends: [], starts: [] };
+
+		(ends ? group.ends : group.starts).push(line);
+		legacyMoves.set(groupKey, group);
+	}
+	for (const { ends, starts } of legacyMoves.values()) {
+		if (!ends.length || !starts.length) continue;
+		const members = [...ends, ...starts];
+		const net = members.reduce((sum, item) => sum + delta(item), 0);
+
+		for (const item of members) handled.add(item.key);
+		push(categoryOf(DERIVED_KEYS.legacyChange, net), DERIVED_KEYS.legacyChange, net, starts[0]);
 	}
 
 	// 3. El resto, línea por línea.

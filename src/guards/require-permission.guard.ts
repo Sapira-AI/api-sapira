@@ -15,7 +15,7 @@ export const RequirePermission = (...codes: string[]) => SetMetadata(REQUIRED_PE
  * Guard genérico de permisos (spec Configuración v2 §5, D4): super admin pasa; `ALL_PERMISSIONS` cubre todo salvo internos; el rol
  * (`users.role_id`) debe ser del holding activo. Sin el código → 403 "No tienes permiso para … · pídeselo a un administrador".
  * Deja el contexto en `request.permissionContext` para que el servicio firme la acción sin volver a consultar.
- * `BillingPermissionGuard` sigue igual (D12).
+ * `BillingPermissionGuard` (Facturación y Presupuestos) usa este mismo `PermissionsService` desde el 04-10.
  */
 @Injectable()
 export class RequirePermissionGuard implements CanActivate {

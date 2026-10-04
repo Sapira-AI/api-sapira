@@ -85,7 +85,28 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 > (variables de correo, Secure password change, Skew Protection) → cierre de Integraciones (claves de API de Sapira y
 > documentación pública) → Automatizaciones → segunda vuelta de Precios → reglas de reconocimiento de ingresos →
 > onboarding/datos históricos →
-> switch. Detalle, pendientes por decisión y pasos previos al switch en
+> switch.
+>
+> **Plan del switch (decidido por Domi el 03-10; se ejecuta ya).** Lo que queda en construcción (Automatizaciones,
+> segunda vuelta de Precios, onboarding legacy/setup) no lo usa nadie en producción y se termina después del switch,
+> en el lab (solo super admin). Pasos:
+> 1. Sacar los módulos del lab a sus rutas finales (`migrated: true`), cada pantalla protegida por el permiso de su
+>    módulo, sin enlaces al front viejo; el lab queda para lo que siga en construcción.
+> 2. Configuración pasa a llamarse **Administración** (pestañas Holding y compañías · Usuarios y permisos); se
+>    actualizan sidebar, centro de ayuda y documentación interna (mismos permisos y API).
+> 3. SII como pestaña de Compañía 360 (solo Chile) con interfaz nueva; se retira `/admin/empresas-sii`.
+> 4. Tests automáticos de enlaces entre módulos.
+> 5. Revisión de cron jobs, edge functions, triggers y costuras de Supabase.
+> 6. Rebuild completo del devengo **en producción**, con comparación detallada antes/después para que Domi apruebe
+>    (QA no sirve: datos sucios).
+> 7. Auditoría de datos por holding, en paralelo (no bloquea).
+> 8. Switch: banner, correo de aviso y video (avisar que los agentes visibles —Billing Wizard, Agentes en este cliente— son demostraciones y estarán funcionales próximamente); `app.aisapira.com` redirige al nuevo; permiso de ayuda a todos los roles;
+>    invitaciones pendientes; retiro del flujo de usuarios del front viejo; **acceso de usuarios al front viejo
+>    bloqueado** (no se borra de inmediato). No hay vuelta atrás.
+> 9. Domi con Leon: publicación (API antes que el front), variables de correo (apagadas hasta el switch), merge de su
+>    rama y urgentes de seguridad (no bloquean).
+>
+> Detalle, pendientes por decisión y pasos previos al switch en
 > [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md).
 
 Los pasos 4–5 originales ("inventario y versión final de funciones/triggers") **reformulados**: la

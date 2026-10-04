@@ -12,7 +12,9 @@ export const PERMISSION_MODULES: { key: string; label: string; view: string | nu
 	{ key: 'reportes', label: 'Reportes', view: 'VIEW_REPORTES', edit: 'EDIT_REPORTES' },
 	{ key: 'agentes', label: 'Agentes IA', view: 'VIEW_AGENTES_IA', edit: 'EDIT_AGENTES_IA' },
 	{ key: 'integraciones', label: 'Integraciones', view: 'VIEW_INTEGRACIONES', edit: 'EDIT_INTEGRACIONES' },
-	{ key: 'configuracion', label: 'Configuración', view: 'VIEW_CONFIGURACION', edit: 'EDIT_CONFIGURACION' },
+	// Administración es el antiguo módulo Configuración: solo cambió el nombre visible. Los códigos siguen siendo
+	// `*_CONFIGURACION` (y la key `configuracion`) por decisión de Domi (03-10/04-10). No renombrar.
+	{ key: 'configuracion', label: 'Administración', view: 'VIEW_CONFIGURACION', edit: 'EDIT_CONFIGURACION' },
 ];
 
 /** Permisos de acción (fuera de la matriz). */

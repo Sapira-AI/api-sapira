@@ -139,7 +139,7 @@ describe('SettingsRolesService', () => {
 		]);
 
 		await expect(service.update(HOLDING, ROLE, { permissions: ['VIEW_CONFIGURACION'] }, admin)).rejects.toThrow(
-			new ConflictException('El holding quedaría sin nadie que pueda editar la configuración')
+			new ConflictException('El holding quedaría sin nadie que pueda editar la administración')
 		);
 		expect(db.statements('DELETE FROM role_permissions')).toHaveLength(0);
 	});
@@ -320,7 +320,7 @@ describe('SettingsUsersService', () => {
 		const lonely = build([...common, ...admins([{ id: USER, role_id: ROLE }], roles)]);
 
 		await expect(lonely.service.changeRole(HOLDING, USER, OTHER_ROLE, admin)).rejects.toThrow(
-			'El holding quedaría sin nadie que pueda editar la configuración'
+			'El holding quedaría sin nadie que pueda editar la administración'
 		);
 		const ok = build([
 			...common,

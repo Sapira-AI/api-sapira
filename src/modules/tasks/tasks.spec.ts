@@ -66,10 +66,10 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			count: 4,
 			amount: 1200,
 			severity: 'warning',
-			href: '/lab/facturacion?estado=Por+Emitir&desde=2026-10&hasta=2026-10&company_id=co-1,co-2',
+			href: '/facturacion?estado=Por+Emitir&desde=2026-10&hasta=2026-10&company_id=co-1,co-2',
 		});
 		expect(tasks.find((task) => task.key === 'invoices_to_issue_today')!.href).toBe(
-			'/lab/facturacion?estado=Por+Emitir&grupo=ready&company_id=co-1,co-2'
+			'/facturacion?estado=Por+Emitir&grupo=ready&company_id=co-1,co-2'
 		);
 		expect(tasks.find((task) => task.key === 'renewals_to_decide')!.href).not.toContain('company_id');
 		expect(buildTasks(inputs()).map((task) => task.key)).not.toContain('month_close_pending');
@@ -98,34 +98,34 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			count: 3,
 			amount: 900,
 			currency: 'USD',
-			href: '/lab/facturacion?estado=Por+Emitir&grupo=ready',
+			href: '/facturacion?estado=Por+Emitir&grupo=ready',
 		});
 		expect(byKey.invoices_blocked.breakdown).toEqual([
 			{
 				key: 'fx_rate_missing',
 				label: 'Falta el tipo de cambio',
 				count: 2,
-				href: '/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo&motivo=fx_rate_missing',
+				href: '/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo&motivo=fx_rate_missing',
 			},
 		]);
-		expect(byKey.invoices_past_months.href).toBe('/lab/facturacion?estado=Por+Emitir&desde=2026-07&hasta=2026-09');
-		expect(byKey.invoices_overdue.href).toBe('/lab/facturacion?pago=overdue&periodo=todo');
+		expect(byKey.invoices_past_months.href).toBe('/facturacion?estado=Por+Emitir&desde=2026-07&hasta=2026-09');
+		expect(byKey.invoices_overdue.href).toBe('/facturacion?pago=overdue&periodo=todo');
 		expect(byKey.credit_notes_to_issue).toMatchObject({
 			amount: null,
 			currency: null,
-			href: '/lab/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo',
+			href: '/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo',
 		});
 		// Un solo contrato → su 360; varios → la lista filtrada.
-		expect(byKey.expirations_without_decision.href).toBe('/lab/contratos/c-1');
-		expect(byKey.renewals_to_decide.href).toBe('/lab/contratos?f=estado:pending_renewal');
-		expect(byKey.consumptions_to_report.href).toBe('/lab/contratos/c-9?tab=consumos');
-		expect(byKey.service_starts_this_month.href).toBe('/lab/contratos?f=inicio_desde:2026-10-01;inicio_hasta:2026-10-31');
+		expect(byKey.expirations_without_decision.href).toBe('/contratos/c-1');
+		expect(byKey.renewals_to_decide.href).toBe('/contratos?f=estado:pending_renewal');
+		expect(byKey.consumptions_to_report.href).toBe('/contratos/c-9?tab=consumos');
+		expect(byKey.service_starts_this_month.href).toBe('/contratos?f=inicio_desde:2026-10-01;inicio_hasta:2026-10-31');
 		expect(byKey.quotes_unprocessed_this_month).toMatchObject({
 			amount: 300,
 			currency: 'CLP',
-			href: '/lab/cotizaciones?f=booking_desde:2026-10-01;booking_hasta:2026-10-31;con_contrato:no;estado:signed',
+			href: '/cotizaciones?f=booking_desde:2026-10-01;booking_hasta:2026-10-31;con_contrato:no;estado:signed',
 		});
-		expect(byKey.revenue_exceptions).toMatchObject({ module: 'ingresos', module_label: 'Ingresos', href: '/lab/revenue?tab=excepciones' });
+		expect(byKey.revenue_exceptions).toMatchObject({ module: 'ingresos', module_label: 'Ingresos', href: '/ingresos?tab=excepciones' });
 	});
 
 	describe('TasksService', () => {
@@ -192,10 +192,10 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			expect(byKey.invoices_to_issue_today).toMatchObject({ count: 1, amount: 100 });
 			expect(byKey.invoices_blocked).toMatchObject({ count: 1, amount: 50 });
 			expect(byKey.invoices_blocked.breakdown).toEqual([expect.objectContaining({ key: 'needs_reference', count: 1 })]);
-			expect(byKey.invoices_past_months).toMatchObject({ count: 1, href: '/lab/facturacion?estado=Por+Emitir&desde=2026-08&hasta=2026-09' });
+			expect(byKey.invoices_past_months).toMatchObject({ count: 1, href: '/facturacion?estado=Por+Emitir&desde=2026-08&hasta=2026-09' });
 			expect(byKey.invoices_overdue).toMatchObject({ count: 2, amount: 123.46 });
-			expect(byKey.expirations_without_decision.href).toBe('/lab/contratos/c-1');
-			expect(byKey.consumptions_to_report).toMatchObject({ count: 2, href: '/lab/contratos/c-7?tab=consumos' });
+			expect(byKey.expirations_without_decision.href).toBe('/contratos/c-1');
+			expect(byKey.consumptions_to_report).toMatchObject({ count: 2, href: '/contratos/c-7?tab=consumos' });
 			expect(byKey.quotes_waiting_mapping.count).toBe(2);
 			expect(byKey.quotes_unprocessed_this_month).toMatchObject({ count: 1, amount: 500, currency: 'USD' });
 			expect(byKey.revenue_exceptions.count).toBe(4);
@@ -208,11 +208,11 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			const result = await service.forHolding('holding-1');
 			const byKey = Object.fromEntries(result.tasks.map((task) => [task.key, task]));
 
-			expect(byKey.invoices_blocked.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10');
+			expect(byKey.invoices_blocked.href).toBe('/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10');
 			expect(byKey.invoices_blocked.breakdown![0].href).toBe(
-				'/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10&motivo=needs_reference'
+				'/facturacion?estado=Por+Emitir&grupo=blocked&desde=2026-08&hasta=2026-10&motivo=needs_reference'
 			);
-			expect(byKey.invoices_late.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=late&desde=2026-10&hasta=2026-10');
+			expect(byKey.invoices_late.href).toBe('/facturacion?estado=Por+Emitir&grupo=late&desde=2026-10&hasta=2026-10');
 		});
 
 		it('bloqueadas: excluye el motivo no_contract (facturas sin contrato, datos a sanear) del conteo, monto y desglose', async () => {
@@ -252,7 +252,7 @@ describe('tareas (Notificaciones v2 §4)', () => {
 		it('sin bloqueadas con fecha, el enlace queda en toda la cola (periodo=todo)', () => {
 			const tasks = buildTasks(inputs({ queue: { ...inputs().queue, blocked: { count: 1, amount: 5, first_month: null, reasons: [] } } }));
 
-			expect(tasks.find((task) => task.key === 'invoices_blocked')!.href).toBe('/lab/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo');
+			expect(tasks.find((task) => task.key === 'invoices_blocked')!.href).toBe('/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo');
 		});
 
 		it('filtra por compañías: cola y vencidas por company_id, contratos por $3, consumos una consulta por compañía', async () => {

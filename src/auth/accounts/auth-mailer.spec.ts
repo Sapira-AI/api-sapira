@@ -312,7 +312,7 @@ describe('AuthMailer', () => {
 		expect(await mailer.sendRendered('cliente@otra.cl', email, 'k1')).toMatchObject({ status: 'failed' });
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(await mailer.sendRendered('domi@aisapira.com', email, 'k2')).toEqual({ status: 'sent', id: 're_3' });
-		expect(mailer.appUrl('/lab/notificaciones')).toBe('https://qa.aisapira.com/lab/notificaciones');
+		expect(mailer.appUrl('/notificaciones')).toBe('https://qa.aisapira.com/notificaciones');
 		expect(new AuthMailer(config({})).appUrl('/x')).toBeNull();
 	});
 

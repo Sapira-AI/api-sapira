@@ -9,7 +9,7 @@ import { BillingBulkService } from './billing-bulk.service';
 import { BillingCollectionsService } from './billing-collections.service';
 import { BillingExportService } from './billing-export.service';
 import { BillingPaymentsService } from './billing-payments.service';
-import { BillingPermissionGuard, BillingPermissionsService } from './billing-permissions.service';
+import { BillingPermissionGuard } from './billing-permissions.service';
 import { BillingReadService } from './billing-read.service';
 import { BillingReconciliationController } from './billing-reconciliation.controller';
 import { BillingReconciliationService } from './billing-reconciliation.service';
@@ -29,7 +29,6 @@ import { BillingScheduler } from './billing.scheduler';
 	providers: [
 		BillingReadService,
 		BillingPaymentsService,
-		BillingPermissionsService,
 		BillingPermissionGuard,
 		BillingCollectionsService,
 		BillingBulkService,

@@ -9,6 +9,7 @@ import { DataSource } from 'typeorm';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import { PermissionsService } from '@/guards/permissions.service';
 import { BudgetsService } from '@/modules/budgets/budgets.service';
 import { ContractInvoicesService } from '@/modules/contracts/contract-invoices.service';
 import { ContractsService } from '@/modules/contracts/contracts.service';
@@ -18,7 +19,7 @@ import { BillingBulkService } from './billing-bulk.service';
 import { BillingCollectionsService } from './billing-collections.service';
 import { BillingExportService } from './billing-export.service';
 import { BillingPaymentsService } from './billing-payments.service';
-import { BillingPermissionGuard, BillingPermissionsService } from './billing-permissions.service';
+import { BillingPermissionGuard } from './billing-permissions.service';
 import { BillingReadService } from './billing-read.service';
 import { BillingReconciliationController } from './billing-reconciliation.controller';
 import { BillingReconciliationService } from './billing-reconciliation.service';
@@ -29,7 +30,7 @@ import { BILLING_REMINDERS_JOB, BillingScheduler } from './billing.scheduler';
 /**
  * Cableado sin levantar Nest contra la base: (1) cada dependencia de constructor tiene provider en el módulo o la exporta un módulo importado
  * (`ContractsModule` → `ContractInvoicesService`, `ContractsService`; `EmailsModule` → `EmailsService`; `BudgetsModule` → `BudgetsService`;
- * `DataSource`; `ConfigService` global);
+ * `DataSource`; `ConfigService` y `PermissionsService` (`GuardsModule`) globales);
  * (2) Nest resuelve el grafo real del módulo con esas piezas externas sustituidas.
  */
 describe('BillingModule (DI)', () => {
@@ -37,8 +38,8 @@ describe('BillingModule (DI)', () => {
 	const controllers = Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, BillingModule) as Array<new (...args: never[]) => unknown>;
 	const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, BillingModule) as unknown[];
 	const exported = imports.flatMap((imported) => (Reflect.getMetadata(MODULE_METADATA.EXPORTS, imported as object) as unknown[] | undefined) ?? []);
-	// `Reflector` lo aporta el núcleo de Nest en todo módulo.
-	const available = new Set<unknown>([...providers, ...exported, DataSource, ConfigService, Reflector]);
+	// `Reflector` lo aporta el núcleo de Nest en todo módulo; `PermissionsService`, `GuardsModule` (global).
+	const available = new Set<unknown>([...providers, ...exported, DataSource, ConfigService, Reflector, PermissionsService]);
 	const dependenciesOf = (target: unknown) => (Reflect.getMetadata('design:paramtypes', target as object) as unknown[] | undefined) ?? [];
 
 	it('toda dependencia de controlador y servicios está disponible en el módulo', () => {
@@ -57,6 +58,7 @@ describe('BillingModule (DI)', () => {
 			controllers: [BillingController, BillingReconciliationController],
 			providers: [
 				...providers,
+				PermissionsService,
 				{ provide: DataSource, useValue: { query: jest.fn(async () => []) } },
 				{ provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
 				{ provide: ContractInvoicesService, useValue: {} },
@@ -76,7 +78,6 @@ describe('BillingModule (DI)', () => {
 			BillingController,
 			BillingReadService,
 			BillingPaymentsService,
-			BillingPermissionsService,
 			BillingPermissionGuard,
 			BillingCollectionsService,
 			BillingBulkService,

@@ -28,8 +28,8 @@ export const PERMISSION_CODES = {
 
 /** Acción en infinitivo para el mensaje 403. */
 const ACTION_LABELS: Record<string, string> = {
-	VIEW_CONFIGURACION: 'ver la configuración',
-	EDIT_CONFIGURACION: 'editar la configuración',
+	VIEW_CONFIGURACION: 'ver la administración',
+	EDIT_CONFIGURACION: 'editar la administración',
 	CLOSE_PERIODS: 'cerrar y reabrir períodos contables',
 	VIEW_CONTRATOS: 'ver contratos y precios',
 	EDIT_CONTRATOS: 'editar contratos y precios',

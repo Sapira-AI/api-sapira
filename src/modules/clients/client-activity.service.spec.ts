@@ -186,7 +186,7 @@ describe('ClientActivityService', () => {
 			const result = await service.references('c-1', 'h-1', { type: 'invoice', search: 'F-1', limit: 5 });
 
 			expect(result.data).toEqual([
-				{ type: 'invoice', id: INVOICE, label: 'Factura F-12', sublabel: 'USD 1.200 · Pagada', href: `/lab/facturacion?invoice=${INVOICE}` },
+				{ type: 'invoice', id: INVOICE, label: 'Factura F-12', sublabel: 'USD 1.200 · Pagada', href: `/facturacion?invoice=${INVOICE}` },
 			]);
 			const [sql, params] = query.mock.calls.find(([text]) => (text as string).includes('ORDER BY r.sort'))! as [string, unknown[]];
 

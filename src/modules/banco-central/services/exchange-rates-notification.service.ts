@@ -58,7 +58,7 @@ export class ExchangeRatesNotificationService {
 			message: `No pudimos traer los tipos de cambio del ${today}${context ? ` (${context.toLowerCase()})` : ''}. Las facturas en otra moneda pueden quedar sin tasa.`,
 			recommendation: 'Si emites facturas en otra moneda hoy, revisa la tasa antes de emitir o fija una en la factura.',
 			action_type: 'review_fx_rates',
-			action_payload: { href: '/lab/configuracion?tab=monedas' },
+			action_payload: { href: '/administracion?tab=monedas' },
 			metadata: { error_message: detail, context: context ?? null, email_group: `${FX_SYNC_FAILURE_KEY}:${today}` },
 			deduplication_key: FX_SYNC_FAILURE_KEY,
 		};

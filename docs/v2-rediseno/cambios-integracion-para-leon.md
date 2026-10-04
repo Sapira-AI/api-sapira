@@ -414,6 +414,26 @@ Encontrado en prod (SimpliRoute, solo lectura, 03-10): 401 cotizaciones del CRM;
 24 en "Contrato creado" sin contrato. `quote_events` tiene 1 fila en toda la base: no hay historial de ediciones. Las 28 no se reparan:
 quedan para la auditoría previa al switch (`estado-v2-y-plan-switch.md` §5).
 
+## 15. Facturación usa las mismas reglas de permisos que el resto de la API (04-10-2026)
+
+**Facturación usa ahora las mismas reglas de permisos que el resto de la API; hoy ningún usuario real cambia de acceso (verificado 04-10
+en SimpliRoute, TiMining y uPlanner).**
+
+- `BillingPermissionGuard` (`src/modules/billing/billing-permissions.service.ts`; rutas `/billing/*`, conciliación y `/budgets/*`) ya no
+  tiene consulta propia: valida con `PermissionsService` (`src/guards/permissions.service.ts`, de `GuardsModule`, global), igual que
+  `@RequirePermission`. Se eliminó `BillingPermissionsService`; `@RequireBillingPermission` y los códigos `VIEW_FACTURACION` /
+  `EDIT_FACTURACION` no cambian.
+- Reglas que ahora aplica (antes comparaba el código exacto): super admin pasa; `ALL_PERMISSIONS` cubre Facturación; `EDIT_FACTURACION`
+  incluye `VIEW_FACTURACION`; el rol (`users.role_id`) cuenta solo si es del holding activo (`roles.holding_id`).
+- El 403 usa el mensaje común: "No tienes permiso para ver la facturación · pídeselo a un administrador" (antes "…de este holding").
+- Tests: `billing-permissions.service.spec.ts` (comodín, Editar incluye Ver, rol de otro holding, super admin, mensaje) y el cableado en
+  `billing.module.spec.ts` / `budgets.service.spec.ts`.
+- Si algo tuyo inyectaba `BillingPermissionsService`, usa `PermissionsService.assert(authId, holdingId, ['VIEW_FACTURACION'])`.
+
+Relacionado (mismo día): los enlaces que arma la API (tareas, actividad del Cliente 360, alertas nuevas, correos de alerta y resumen)
+apuntan a las rutas finales del front (`/facturacion`, `/contratos`, `/conexiones`, `/notificaciones`…) en vez de `/lab/...`. Las
+alertas ya guardadas no se tocan: el front redirige las rutas viejas.
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

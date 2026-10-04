@@ -334,7 +334,7 @@ describe('SettingsUserAccessService · acceso', () => {
 		const { admin, service } = build([...admins(0), others(0), memberRow(member({ status: 'Activo' }))]);
 
 		await expect(service.setAccess(HOLDING, TARGET, false, actor)).rejects.toThrow(
-			new ConflictException('El holding quedaría sin nadie que pueda editar la configuración')
+			new ConflictException('El holding quedaría sin nadie que pueda editar la administración')
 		);
 		expect(admin.setBanned).not.toHaveBeenCalled();
 	});
