@@ -4,6 +4,7 @@ import * as path from 'path';
 import { QueryRunner } from 'typeorm';
 
 import { UnificaTriggerGeneracionFacturas1790660000000 } from './migrations/1790660000000-UnificaTriggerGeneracionFacturas';
+import { RetiraTriggersDevengoQuantities1791300000000 } from './migrations/1791300000000-RetiraTriggersDevengoQuantities';
 
 /**
  * Costura `sapira.writer = 'api'` (30-09-2026, `docs/v2-rediseno/activacion-costura-triggers.md` § Construido, regla
@@ -42,7 +43,7 @@ const AFTER = [
 	'trg_audit_contract_changes',
 	'trigger_rsm_on_contract_item_change',
 	'trigger_rsm_on_invoice_change',
-	'trigger_rsm_on_quantity_change',
+	// trigger_rsm_on_quantity_change: retirado el 04-10 (RetiraTriggersDevengoQuantities), ver el describe de retiros.
 	// Facturación v2 (spec-facturacion-v2 §8): pagos registrados por la API no pasan por recalc_invoice_status.
 	'after_invoice_payment_change',
 ];
@@ -174,12 +175,63 @@ describe('U9 en el RSM: holding del registro, no el de la sesión', () => {
 	it.each([
 		['trigger_rsm_on_contract_item_change', `CASE WHEN TG_OP = 'DELETE' THEN OLD.holding_id ELSE NEW.holding_id END`],
 		['trigger_rsm_on_invoice_change', `CASE WHEN TG_OP = 'DELETE' THEN OLD.holding_id ELSE NEW.holding_id END`],
-		['trigger_rsm_on_quantity_change', 'NEW.holding_id'],
 	])('%s lee financial_settings del holding de la fila', (name, expression) => {
 		const sql = fn(name);
 
 		expect(sql).not.toContain('get_current_user_holding_id()');
 		expect(sql).toContain(`FROM financial_settings\n  WHERE holding_id = ${expression}\n  LIMIT 1;`);
+	});
+});
+
+describe('retiro de los triggers de devengo sobre quantities (04-10, Domi)', () => {
+	const RETIRADOS = {
+		triggers: ['trg_rsm_on_quantity_change', 'trg_restore_rsm_on_quantity_delete'],
+		functions: ['trigger_rsm_on_quantity_change', 'restore_rsm_on_quantity_delete'],
+	};
+
+	it('sus assets ya no están en el corpus y ningún otro asset los crea ni los llama', () => {
+		const triggers = fs.readdirSync(path.join(dir, 'triggers'));
+		const functions = fs.readdirSync(path.join(dir, 'functions'));
+
+		for (const name of RETIRADOS.triggers) expect(triggers).not.toContain(`${name}.sql`);
+		for (const name of RETIRADOS.functions) expect(functions).not.toContain(`${name}.sql`);
+
+		const names = [...RETIRADOS.triggers, ...RETIRADOS.functions];
+		const mentions = ['triggers', 'functions'].flatMap((folder) =>
+			fs
+				.readdirSync(path.join(dir, folder))
+				.filter((file) => file.endsWith('.sql') && names.some((name) => read(folder, file).includes(name)))
+				.map((file) => `${folder}/${file}`)
+		);
+
+		expect(mentions).toEqual([]);
+	});
+
+	it('los otros cuatro triggers de quantities se conservan', () => {
+		const triggers = fs.readdirSync(path.join(dir, 'triggers'));
+
+		for (const name of [
+			'trg_quantities_set_holding',
+			'trg_validate_quantity_invoice_status',
+			'trg_sync_invoice_items_from_quantities',
+			'trg_restore_invoice_items_on_quantity_delete',
+		])
+			expect(triggers).toContain(`${name}.sql`);
+	});
+
+	it('la migración borra primero los triggers y después sus funciones, sin CASCADE; el down() no los recrea', async () => {
+		const query = jest.fn<Promise<undefined>, [string]>(async () => undefined);
+		const runner = { query } as unknown as QueryRunner;
+		const migration = new RetiraTriggersDevengoQuantities1791300000000();
+
+		await migration.up(runner);
+		expect(query.mock.calls.map(([sql]) => sql)).toEqual([
+			'DROP TRIGGER IF EXISTS trg_rsm_on_quantity_change ON public.quantities',
+			'DROP TRIGGER IF EXISTS trg_restore_rsm_on_quantity_delete ON public.quantities',
+			'DROP FUNCTION IF EXISTS public.trigger_rsm_on_quantity_change()',
+			'DROP FUNCTION IF EXISTS public.restore_rsm_on_quantity_delete()',
+		]);
+		await expect(migration.down()).rejects.toThrow('no es reversible');
 	});
 });
 

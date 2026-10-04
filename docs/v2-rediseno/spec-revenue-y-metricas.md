@@ -32,6 +32,13 @@
 distintas es el bug de `rsm_metrics`) · `currency=contract` **solo con `contract_id`**. Es el mismo selector de tres monedas de Recurly
 (transaccional / compañía / reporte). La respuesta trae siempre `currency` (ISO), nunca un `$`/`USD` fijo.
 
+- **Métricas = solo moneda de sistema** (Domi 04-10, como el front viejo: no se mezclan monedas en el módulo). `mrr/*`,
+  `clients/activity`, `churn`, `renewals`, `cohorts` y `bookings` leen siempre `*_system_ccy`; `currency=company|contract` responde
+  400 (`errors[{ field: 'currency' }]`). El front de Métricas no tiene selector de moneda, no envía `currency` (la BFF la descarta, así
+  que vistas guardadas o enlaces viejos con `moneda=company` caen a sistema sin error) y avisa junto al título que todo va en moneda de
+  sistema, con enlace a Ingresos.
+- **Ingresos** (`revenue/*`) conserva las tres monedas (sistema / compañía en la pantalla; contrato desde el Contrato 360).
+
 ### 1.2 MRR y derivados (por mes `M`, sobre filas RSM del holding)
 | Métrica | Definición | Hoy (bug que se corrige) |
 |---|---|---|
@@ -61,6 +68,13 @@ Una fila RSM no se suma si:
 - `calc_version = 'missing_fx_rate'` (falta la tasa `item` del multimoneda: montos NULL), o
 - en la moneda leída, `fx_to_system_source` / `fx_to_company_source` empieza por `missing_fx_rate` (hoy `apply_fx` igual escribe el monto
   **× 1.0** con esa marca: el viejo lo sumaba como si CLP fuera USD).
+- **Meses sin cerrar en moneda de compañía no son "sin convertir"** (Domi 04-10): con promedio mensual, el mes en curso, los futuros y
+  el recién terminado sin promedio cerrado no se escriben en moneda de compañía (columnas `*_ccy` NULL,
+  `fx_to_company_source = 'pending_month_close'`; los completa el cierre del día 1, `FxMonthCloseService`). En `currency=company` esas
+  filas **no se leen** (`notPendingCloseSql`): no se muestran ni suman, no cuentan en `unconverted`, no son excepción y no sacan del
+  rango los demás meses del mismo contrato. Los saldos (diferido / por facturar) de un ítem quedan en su último mes con dato. En el
+  reconocimiento futuro no se proyectan con otra tasa. Las faltas reales (`missing_fx_rate` en meses terminados) siguen como arriba.
+  Detalle: `analisis-fx-y-mrr-historico.md` §4.3.
 - **Excepto** (01-10, misma regla que el rebuild desde api v0.0.69): una fila de un mes en que el ítem no está activo (antes de su
   inicio o después de su fin) y con todos los montos del período en 0/NULL no es un hueco de tipo de cambio aunque traiga la marca
   (`inactiveEmptyRowSql`); no entra al aviso, a las líneas sin convertir ni a Excepciones.
@@ -205,8 +219,8 @@ al MRR. Lo que está mal hoy es el doble conteo (≈16 mil USD en ago-2026, igua
     **Churn** si queda en 0 (misma regla que `DOWNSELL` vs `CHURN`). Si al cliente se le creó un contrato **sin** el vínculo
     `migrated_to_contract_id`, Métricas no puede saber que es el mismo MRR y lo verá como baja + nuevo: se lista en Excepciones
     ("legacy terminado y contrato nuevo del mismo cliente en el mismo mes") para revisarlo.
-- Moneda: solo `currency=system` (el legacy no tiene columna en moneda de compañía); con `currency=company` el legacy queda en
-  `unconverted` con motivo `legacy_without_company_ccy`.
+- Moneda: solo `currency=system`, como todo Métricas (§1.1). El motivo `legacy_without_company_ccy` se retiró el 04-10 junto con la
+  lectura de MRR en moneda de compañía.
 
 **Puntos revisados con Domi (01-10)**:
 - **L1** ✅ Los motivos de "No aplica" son comentarios; Métricas no los interpreta.
@@ -273,7 +287,7 @@ Comunes: `from`, `to` (`YYYY-MM`, default últimos 12 meses), `currency` (§1.1)
 | `GET /metrics/revenue/rollforward?period=YYYY-MM\|from&to` | `{ deferred: { opening, billed, recognized, reclass, fx_difference?, closing }, unbilled: { opening, recognized_unbilled, billed, reclass, closing }, check }` |
 | `GET /metrics/revenue/forward?as_of=YYYY-MM` | `{ months: [{ period, from_deferred, unbilled_backlog }], thereafter, short_term, long_term }` (RPO) |
 | `GET /metrics/revenue/by-dimension?dimension=client\|client_entity\|client_country\|entity_country\|product\|company\|recurring&measure=recognized\|billed&top=10` | `{ dimension, periods[], rows: [{ key, label, values[], total }], others, totals[] }` |
-| `GET /metrics/revenue/schedule` (paginado, `sortBy`, `sortOrder`, `limit` ≤ 1000) | filas período × contrato × ítem con compañía, contrato, cliente, razón social, países, producto, las 3 monedas y sus montos, `fx_source`, `unconverted` por fila; + `totals` del filtro (reconocido y facturado; los saldos por fila no se suman). Sirve también para "explicar esta cifra" (mismos filtros que la celda). **02-10 (aditivo)**: `deferred_opening`, `deferred_change`, `unbilled_opening`, `unbilled_change` por fila y en `amounts.{contract,company,system}`: inicial = `*_balance_eom` de la fila del mes anterior del mismo ítem (fila regular antes que la CHURN; 0 si no hay fila anterior), movimiento = cierre − inicial; ordenables (`sortBy=deferred_opening\|deferred_change\|unbilled_opening\|unbilled_change`). El 360 › Devengo (D-CTR-2) lee el mismo endpoint sin cambios |
+| `GET /metrics/revenue/schedule` (paginado, `sortBy`, `sortOrder`, `limit` ≤ 1000) | filas período × contrato × ítem con compañía, contrato, cliente, razón social, países, producto, las 3 monedas y sus montos, `fx_source`, `unconverted` por fila; + `totals` del filtro (reconocido y facturado; los saldos por fila no se suman). Sirve también para "explicar esta cifra" (mismos filtros que la celda). **02-10 (aditivo)**: `deferred_opening`, `deferred_change`, `unbilled_opening`, `unbilled_change` por fila y en `amounts.{contract,company,system}`: inicial = `*_balance_eom` de la fila del mes anterior del mismo ítem (fila regular antes que la CHURN; 0 si no hay fila anterior), movimiento = cierre − inicial; ordenables (`sortBy=deferred_opening\|deferred_change\|unbilled_opening\|unbilled_change`). El 360 › Devengo (D-CTR-2) lee el mismo endpoint sin cambios. **04-10 (aditivo)**: `amounts.{contract,company,system}.recognized_cum` y `billed_cum` = `recognized_cum_*` / `billed_cum_*` de la fila (acumulado del ítem al cierre del mes); son saldos: no entran en `totals` ni se ordenan |
 | `GET /metrics/revenue/journal?companyId&from&to&groupBy=market\|industry\|segment\|contract\|client\|product` | `{ company, currency, group_by, accounts: { receivable, deferred, unbilled, revenue, fx_difference, configured }, missing_codes[], cutoff_date, months: [{ period, closed, recognized, billed, entries: [{ account, code, name, debit, credit }] (por cuenta), postings: [{ line, group, account, code, name, debit, credit }], balances: { deferred, unbilled }: { opening, debit, credit, movement, closing, difference, reconciles }, groups: [{ key, label, debit, credit, balanced }], balanced, fx_difference }], unconverted }` (fórmulas en §1.7 "Asientos"; query en camelCase como el resto del módulo) |
 | `GET /metrics/revenue/exceptions` (paginado) | contratos sin tipo de cambio, ítems sin regla de devengo (RSM vacío con facturas), diferido negativo, compañías sin mapping de cuentas, cambios en meses cerrados (`updated_at` > corte) |
 

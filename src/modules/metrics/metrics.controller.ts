@@ -29,6 +29,10 @@ import { RevenueMetricsService } from './revenue-metrics.service';
  * Revenue y Métricas v2 (`docs/v2-rediseno/spec-revenue-y-metricas.md` §3): solo lectura sobre el devengo (RSM) y el MRR legacy.
  * Montos agregados solo desde columnas `*_system_ccy` / `*_ccy` / `*_contract_ccy` (nunca `monthly_price`); filas sin tipo de cambio
  * fuera de los totales y en `unconverted`. Holding por `HoldingScopeGuard` + `@HoldingId()`.
+ *
+ * Moneda (Domi 04-10): Métricas (`mrr/*`, `clients/activity`, `churn`, `renewals`, `cohorts`, `bookings`) va siempre en moneda de sistema
+ * (`currency` distinto de `system` → 400). Ingresos (`revenue/*`) admite sistema, compañía y contrato; en compañía, los meses sin cerrar
+ * (`fx_to_company_source = 'pending_month_close'`) no tienen dato y no se leen (no son "sin convertir").
  */
 @ApiTags('Metrics')
 @Controller('metrics')

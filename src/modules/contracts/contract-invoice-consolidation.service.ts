@@ -453,8 +453,11 @@ export class ContractInvoiceConsolidationService {
 			WHERE id = ANY($2::uuid[]) AND holding_id = $3 AND status = '${PENDING_STATUS}'`,
 			[consolidatedId, plan.invoices.map((invoice) => invoice.id), holdingId]
 		);
-		// Moneda del sistema: con una sola moneda de contrato, la cadena de siempre; con varias, el encabezado ya lleva Σ de los orígenes.
-		if (header.contract_currency_mode === 'same') await refreshInvoiceSystemAmounts(runner, holdingId, [consolidatedId]);
+		// Moneda de sistema con la regla por estado (04-10): el consolidado nace Por Emitir → desde la moneda de contrato del encabezado. En
+		// modo `mixed` no hay una sola moneda de contrato y el encabezado queda en moneda de factura (`amount_contract_currency` = neto en
+		// esa moneda): se convierte ese monto, igual que lo haría el trigger o cualquier edición posterior. Al emitir pasa a la moneda de
+		// factura (mismo monto en `mixed`).
+		await refreshInvoiceSystemAmounts(runner, holdingId, [consolidatedId]);
 
 		return consolidatedId;
 	}

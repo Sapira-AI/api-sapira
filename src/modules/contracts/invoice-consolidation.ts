@@ -219,7 +219,10 @@ export interface ConsolidatedHeader {
 	amount_invoice_currency: number | null;
 	total_invoice_currency: number | null;
 	fx_contract_to_invoice: number | null;
-	/** Solo en modo `mixed`: Σ de los orígenes (en `same` se recalcula con `refreshInvoiceSystemAmounts`). */
+	/**
+	 * Solo en modo `mixed`, como referencia de la vista previa: Σ de los orígenes. Al consolidar, el monto en moneda de sistema se recalcula
+	 * siempre con `refreshInvoiceSystemAmounts` (regla por estado, 04-10: Por Emitir desde el encabezado, en `mixed` en moneda de factura).
+	 */
 	amount_system_currency: number | null;
 	total_system_currency: number | null;
 	spot: boolean;

@@ -34,6 +34,16 @@ Lo que cambió desde el 03-10 y te conviene saber al resolver o después:
     `sites.framer.app`, despublicado) al valor que indique Vercel.
   - Test del front que falla por timeout desde antes del switch: `lib/api/factura-proxy.test.ts` › "propaga
     X-Factura-Company-Id desde empresaId en multipart cuando falta el header" (también falla corrido solo).
+- **Del catálogo de funciones y triggers** ([`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md), 04-10):
+  - **17 assets de staging/mapeo de Odoo** (p. ej. `detect_invoice_changes`, `get_hierarchical_mapping`,
+    `classify_invoice_before_insert`) están en el repo pero no existen ni en QA ni en producción, y no están en el registro de
+    huérfanos: un `postgres:assets --apply` sin `--only` los crearía. Decide si se aplican o se borran del repo.
+  - **Escritores de facturas sin `sapira.writer = 'api'`:** `invoice-scheduler.service.ts`, `invoices.service.ts`,
+    `stripe-sync.service.ts` (también inserta líneas de factura sin la marca; revisar `standardize_invoice_items`) y el webhook de
+    Odoo. Mientras no pongan la marca (`withApiWriter`), los triggers que completan `invoices` (moneda de sistema, etc.) siguen
+    corriendo para ellos y no se pueden retirar.
+  - Domi decidió **borrar ya las funciones sin ningún llamador** (front viejo, API, otras funciones, triggers, cron, edge): si
+    alguna la usa tu rama o algo tuyo fuera del repo, avísale antes de mergear.
 - **Pendientes tuyos que siguen abiertos:** respetar `auto_enabled` de `holding_integration_settings` en los crons de Salesforce,
   BigQuery y Stripe; `invoice_items.subscription_item_id` vacío desde mar-2026 (congela el devengo de suscripciones Stripe);
   `sync_user_on_login` se mantiene (la API aún no pasa Pendiente → Activo); urgentes de seguridad de

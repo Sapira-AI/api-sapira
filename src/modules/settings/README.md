@@ -39,6 +39,17 @@ Productos (pestaña de Precios) vive en `src/modules/products` con el mismo patr
     `contracts.company_currency`.
 -   Cambiar la moneda de consolidación **o la política de tipo de cambio** del holding con contratos → 409 (cambiarían todas las
     métricas históricas; Domi 02-10 y 03-10). El GET de preferencias trae `locked` y `locked_reason` para mostrarlas de solo lectura.
+-   Tasas fijas por período (`fixed_period`): crear, editar o borrar una tasa recalcula **en la misma transacción v2** el devengo
+    (`revenue_schedule_apply_fx_for_contract`, sin rebuild) y los montos en moneda del sistema de las facturas (no NC; las NC espejo copian
+    la de su original) cuya moneda de conversión es la otra moneda del par (regla por estado, 04-10: Por Emitir desde la moneda de contrato del
+    encabezado; emitidas y demás estados desde la moneda de factura, y sin neto en ella, el encabezado), desde el primer mes del período tocado y nunca antes del cierre de cada compañía
+    (`contracts/holding-fx-recalc.ts`). La respuesta de crear/editar trae `recalculated` (`from_month`, `contracts`, `invoices`).
+    Sin tasa registrada para un mes **posterior al mes en curso** (y a la última del par), el devengo y las facturas usan la última,
+    **proyectada** (`holding_fixed_fx_rate`, fuente `*_projected`, decisión de Domi 04-10); al registrar la del período, esa pasa a
+    proyectarse. Solo hacia adelante: un mes pasado o el actual sin tasa no se proyecta, queda "Sin tipo de cambio"
+    (`missing_fx_rate`) porque es un error de datos. El mes en curso es el del "hoy" del holding (`holding_settings.timezone`, default
+    America/Santiago), no `CURRENT_DATE` de la base (UTC). Las filas ya calculadas con tasa proyectada conservan esa tasa hasta el
+    siguiente recálculo (registrar la tasa del mes lo dispara; un rebuild o `apply_fx` también).
 -   El holding **no se renombra** (`name` en el PATCH → 400 "El nombre del holding no se puede cambiar").
 -   Cuenta bancaria con cartolas cargadas: no cambia moneda ni número (409).
 -   Cierre de períodos: solo meses terminados (hasta el último día del mes anterior a hoy, hora Chile → si no, 409); la compañía se bloquea

@@ -80,6 +80,9 @@ Notas:
 
 ## 3. Triggers y funciones de trigger en tablas de negocio
 
+> **Lista vigente:** [`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md) (04-10) es la fuente de qué trigger se mantiene,
+> cuál se retira y cuál ya se retiró. Esta sección conserva el análisis del 03-10 y el porqué.
+
 Estado en producción (03-10): **la costura está aplicada** (24 funciones con `current_setting('sapira.writer')`, U9 aplicado: los
 `trg_rsm_on_*` ya no dependen de la sesión) y `generate_invoices_on_contract_active` ya no existe (generación unificada). Total:
 128 triggers de usuario en `public` (incluye ~55 de `updated_at`) + 1 en `auth.users`. Sin webhooks de base (`supabase_functions.hooks`
@@ -94,7 +97,7 @@ no existe), sin tablas en `supabase_realtime`, y la única función que hace HTT
 | `invoices` | `invoices_fill_terms_from_contract_trigger`, `trg_assign_invoice_group_id`, `trg_rsm_on_invoice_change`, `trigger_auto_populate_invoice_fx_to_system`, `trigger_auto_populate_invoice_tax_rate` |
 | `invoice_items` | `standardize_invoice_items_trigger`, `trigger_auto_populate_invoice_item_fields`, `trigger_sync_invoice_item_contract_id` |
 | `invoice_payments` | `trg_recalc_after_{insert,update,delete}` (`after_invoice_payment_change`) |
-| `quantities`, `quote_items` | `trg_rsm_on_quantity_change`; `trg_quote_items_calculate_pricing` |
+| `quantities`, `quote_items` | ~~`trg_rsm_on_quantity_change`~~ (retirado 04-10, ver fila de `quantities` abajo); `trg_quote_items_calculate_pricing` |
 
 **Qué pasa cuando el front viejo deja de escribir:** para la API no cambia nada (ya los salta). **Pero no todos quedan sin
 escritor**: escriben sin la marca, y por lo tanto los disparan completos,
@@ -102,7 +105,7 @@ escritor**: escriben sin la marca, y por lo tanto los disparan completos,
 - la edge `check-overdue-invoices` (UPDATE de `invoices.status` con service role) → `trg_rsm_on_invoice_change`,
   `trigger_auto_populate_invoice_fx_to_system`, `trigger_sync_invoice_items_on_invoice_update`;
 - el webhook de Odoo de la API (`odoo-webhook.service.ts`, sin `setApiWriter`) y el sync del DWH (`bigquery.service.ts` → `quantities`)
-  → los `trg_rsm_on_*` (U9: es lo buscado) y los de relleno de `invoices`;
+  → los `trg_rsm_on_*` (U9: es lo buscado) y los de relleno de `invoices` (el DWH ya no: desde el 04-10 llama `revenue_schedule_rebuild` explícito);
 - el envío al ERP y los syncs de Stripe/Salesforce de la API que actualizan facturas sin la marca (no verificado uno por uno).
 
 Por eso el **drop "después del período de pruebas"** de §5 del estado no puede ser en bloque: antes, cada escritor sin marca debe
@@ -135,11 +138,14 @@ Candidatos claros a drop tras la baja (solo los usa el front viejo): `unified_ge
 | `trg_cancel_schedule_on_contract_cancelled` | `contracts` → `contract_invoices` | Retirar con `contract_invoices` tras la baja (`plan-coexistencia` §6.1) |
 | `trigger_log_contract_workflow_transition` | `contracts` | Congelar al switch, drop tras la baja |
 | `trg_set_amendment_holding`, `trg_set_amendment_item_holding` | `contract_amendments*` | Drop con las tablas tras la baja |
-| 6 triggers de `quantities` (`trg_quantities_set_holding`, `trg_validate_quantity_invoice_status`, `trg_sync_invoice_items_from_quantities`, `trg_restore_invoice_items_on_quantity_delete`, `trg_restore_rsm_on_quantity_delete` (gateado por sesión), `trg_rsm_on_quantity_change`) | `quantities` | **Ojo:** el DWH de la API **sigue escribiendo `quantities`**: no son solo del front viejo. Mantener hasta que `bigquery.service.ts` escriba `consumption_entries` (decisión #11, Leon) |
+| 4 triggers de `quantities` (`trg_quantities_set_holding`, `trg_validate_quantity_invoice_status`, `trg_sync_invoice_items_from_quantities`, `trg_restore_invoice_items_on_quantity_delete`) | `quantities` | **Ojo:** el DWH de la API **sigue escribiendo `quantities`**: no son solo del front viejo. Mantener hasta que `bigquery.service.ts` escriba `consumption_entries` (decisión #11, Leon). **Retirados el 04-10** (Domi, corrección de datos): `trg_rsm_on_quantity_change` y `trg_restore_rsm_on_quantity_delete` con sus funciones (`1791300000000-RetiraTriggersDevengoQuantities`); el DWH recalcula el devengo con `revenue_schedule_rebuild` y el front viejo deja de moverlo al editar cantidades. `revenue_schedule_update_period_quantities` quedó sin llamadores (candidata a retiro) |
 | 4 de `invoice_items_legacy_match`, 3 de `mrr_legacy`, 1 de `invoices_legacy` | legacy | Mantener hasta que exista el módulo de datos históricos v2 (B2) |
 | `t_sync_user_on_login` | `auth.users` | **Mantener** hasta B1; al dropearlo se va también la rama "Empresa de X" |
 
 ## 4. RPC y permisos que solo usa el front viejo
+
+> **Lista vigente:** [`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md) §2 (con el estado de `REVOKE` tras `grants/030`,
+> `grants/050` y `grants/060`, y las 70 funciones sin uso detectado). Esta sección conserva el uso medido el 03-10.
 
 El front viejo llama **61 funciones** por `rpc()` (grep 03-10); todas existen y todas tienen EXECUTE para `anon` y `authenticated`.
 La API llama directamente solo `revenue_schedule_rebuild`, `get_cutoff_date`, `contract_item_fx_rate` y `calculate_system_fx_rate`

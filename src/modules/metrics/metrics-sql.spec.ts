@@ -144,7 +144,6 @@ describe('Origen de las filas de bajas y movimientos (enlace a Contratos solo si
 		jest.spyOn(built.data, 'loadMrrLines').mockResolvedValue({
 			lines: [mrrLine('c:1', 'contract', 'contract-1'), mrrLine('s:1', 'subscription', 'subscription-1')],
 			itemFxMissing: new Set<string>(),
-			legacyCompanyRows: 0,
 		});
 
 		return built;
@@ -204,7 +203,7 @@ describe('MRR por dimensión: parte de MRR histórico (legacy) por celda', () =>
 	async function byDimension(lines: MrrLine[], top?: number) {
 		const built = build();
 
-		jest.spyOn(built.data, 'loadMrrLines').mockResolvedValue({ lines, itemFxMissing: new Set<string>(), legacyCompanyRows: 0 });
+		jest.spyOn(built.data, 'loadMrrLines').mockResolvedValue({ lines, itemFxMissing: new Set<string>() });
 
 		return built.mrr.byDimension(HOLDING, { from: '2026-01', to: '2026-02', dimension: 'client', top });
 	}
@@ -324,6 +323,31 @@ describe('Detalle mensual: saldo inicial y movimiento del mes (Domi 02-10)', () 
 			unbilled_opening: 0,
 			unbilled_change: 0,
 			amounts: { contract: { deferred_opening: 1000, deferred_change: -100 } },
+		});
+	});
+
+	it('acumulados del ítem al cierre del mes (reconocido y facturado) en las tres monedas', async () => {
+		const row = {
+			id: 'r-1',
+			period: '2026-02',
+			source: 'contract',
+			recognized_cum_contract_ccy: '200.004',
+			recognized_cum_ccy: '180000',
+			recognized_cum_system_ccy: '210',
+			billed_cum_contract_ccy: '300',
+			billed_cum_ccy: null,
+			billed_cum_system_ccy: '315.5',
+		};
+		const { query, revenue } = build((sql) => (sql.includes('OFFSET') ? [row] : [{ n: 1 }]));
+		const page = await revenue.schedule(HOLDING, { from: '2026-02', to: '2026-02' });
+		const rows = query.mock.calls.map(([sql]) => String(sql)).find((sql) => sql.includes('OFFSET'))!;
+
+		expect(rows).toContain('r.recognized_cum_contract_ccy, r.recognized_cum_ccy, r.recognized_cum_system_ccy');
+		expect(rows).toContain('r.billed_cum_contract_ccy, r.billed_cum_ccy, r.billed_cum_system_ccy');
+		expect(page.data[0].amounts).toMatchObject({
+			contract: { recognized_cum: 200, billed_cum: 300 },
+			company: { recognized_cum: 180000, billed_cum: null },
+			system: { recognized_cum: 210, billed_cum: 315.5 },
 		});
 	});
 });
