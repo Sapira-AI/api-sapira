@@ -270,11 +270,13 @@ Bucket **privado** `company-files` (M8). Ruta `<holding_id>/<company_id>/legal/<
 (Invitar, reenviar, desactivar y eliminar invitación: al final del bloque, D5/D6.)
 - `GET` (VIEW) → miembros del holding activo (`user_holdings`):
   ```json
-  [{ "id": "uuid", "name": "Ana", "email": "ana@…", "status": "Activo|Pendiente|Inactivo", "access_active": true,
+  [{ "id": "uuid", "name": "Ana", "email": "ana@…", "avatar": { "kind": "initials" }, "status": "Activo|Pendiente|Inactivo", "access_active": true,
      "last_access": "…", "last_invitation_sent_at": "…", "role": { "id": "uuid", "name": "Finanzas" } | null,
      "is_super_admin": false, "is_self": false }]
   ```
   Los super admin no aparecen salvo que quien consulta sea super admin. `role` es `null` si el rol no es de este holding.
+  `avatar` (03-10): forma de Mi perfil §3 (`initials` | `preset` + `preset_id` | `upload` + `url`), en la misma consulta; también en el
+  usuario que devuelven cambiar rol, invitar, reenviar y acceso (mismo shape).
 - `PATCH /settings/users/:id/role` (EDIT) `{ "role_id": "uuid" }` → el usuario.
   404 `Usuario no encontrado`; 404 `Rol no encontrado`; 409 `El rol de un super admin no se cambia desde aquí`;
   409 `Este usuario pertenece a más de un holding y su rol es único: cámbialo desde soporte`;

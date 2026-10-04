@@ -322,6 +322,98 @@ miembros del holding. Reutilizan la lógica de SendGrid de `EmailsService` (regi
 siguen abiertas** porque el front actual (`app.aisapira.com`) las usa hasta el switch; se cierran en el bloque de seguridad. Si alguna
 integración tuya llama `/emails/*` o `/email/*`, avísanos para moverla a las nuevas antes de cerrarlas.
 
+## 14. Integraciones v2: lo que es lógica de integración (03-10-2026)
+
+Módulo nuevo `src/modules/integrations/` con rutas `/integrations/*` (contrato:
+[`contrato-api-integraciones.md`](./contrato-api-integraciones.md); spec: [`spec-integraciones-v2.md`](./spec-integraciones-v2.md)).
+**No cambia la lógica de ninguna integración**: cada adaptador inyecta los servicios existentes (Odoo, Salesforce, Stripe, BigQuery,
+envío de facturas). Esto es lo que queda de tu lado:
+
+**Cómo se complementa con tu Fase 2 de tenancy (rama `leon`).** Las rutas nuevas nacen seguras (`SupabaseAuthGuard` +
+`HoldingScopeGuard` + `@HoldingId()` + `RequirePermission(VIEW/EDIT_INTEGRACIONES)`, DTOs sin `holding_id`, 404 por id, los 3 tests de
+guard) y **nunca devuelven claves**. Las viejas (`/odoo/*`, `/salesforce/*`, `/stripe/*`, `/bigquery/*`) no se tocaron: las usa la app
+actual hasta el switch y su cierre es tu Fase 2 (`inventario-tenancy-fase-2.md`). Cuando el front nuevo esté en producción, las viejas que
+solo usaba la app actual se pueden borrar en vez de proteger. Para no chocar con tu rama: no se editó `invoice-scheduler.service.ts`,
+su controlador, `dtos/scheduler-report.dto.ts` ni `notifications.controller.ts`; el historial del ERP lee `invoice_scheduler_jobs`
+directo y sirve con las dos versiones (jobs `all` filtrados al holding y jobs por holding). **`holding_integration_settings` es la tabla
+única de ajustes por integración**: `domi` trae tu entity y tu migración tal cual y la migración `1791000000000-IntegrationsV2` le agrega
+`settings jsonb` (etapas del CRM, filtro del ERP, reglas de exclusión) y `updated_by`, y suma `stripe` a su CHECK (mismo nombre de
+constraint). Tipo → `integration`: erp → odoo, crm → salesforce, stripe → stripe, datos → bigquery. El switch "Sincronización automática"
+(`auto_sync` en `/integrations/:tipo/settings`) escribe `auto_enabled` en la misma fila (TypeORM con la entity).
+
+| # | Pedido | Por qué |
+|---|---|---|
+| L1 | **Traer del ERP solo las facturas que no nacieron en Sapira** (sueltas o legacy) y **notas de crédito** (A9) | Hoy la importación trae todo; la API solo filtra al leer (regla `exclude_sapira_invoices` en `records`, por `invoices.odoo_invoice_id`) |
+| L2 | **Estados de pago desde el ERP**, sincronización continua (A9) | Todo queda pendiente de pago y no se concilia; una actualización masiva sirve una vez |
+| L3 | **Integración Kame** (TiMining) con el mismo esquema de adaptador (A9) | Declarar sus objetos (registros y mapeos) en un adaptador nuevo |
+| L4 | **Sync del CRM por `sellers.crm_owner_id`** (D7) | Hoy busca por email/nombre e inventa `sf_<ownerid>@salesforce.local` (en minúsculas: el id del CRM distingue mayúsculas). Con la columna nueva, buscar primero por `crm_owner_id` y guardarlo al crear. Sin esto, fusionar vendedores (`POST /settings/sellers/merge`) puede volver a crear duplicados |
+| L5 | **Etapas del CRM configurables en la corrida diaria y en la importación a revisión** | `holding_integration_settings.settings.opportunity_stages` hoy solo lo usa "Traer oportunidades" (vista previa). `syncOpportunitiesToStaging` y la corrida diaria siguen con `SALESFORCE_WON_STAGES`: una oportunidad de otra etapa se ve en la vista previa pero no entra a revisión |
+| L6 | **Respetar descartes y reglas de exclusión en los procesos que no aceptan ids** | `integration_record_discards` y las reglas (`holding_integration_settings.settings.rules`) se aplican al leer y al importar por ids (clientes del ERP, oportunidades y cuentas del CRM). `InvoiceProcessingService.startAsyncProcessing`, `StripeSyncService.syncAll` e `integrateSapiraQuantities` procesan todo lo listo |
+| L7 | **Respetar `holding_integration_settings.auto_enabled` en los crons de Salesforce, BigQuery y Stripe** (tu plan, paso 3) | El switch ya se escribe desde Integraciones (también para `stripe`, que entra al CHECK con la migración I2); hoy solo el envío a Odoo lo mira |
+| L8 | **`StripeService.getProducts` toma una sola cuenta activa** | Integraciones lista productos por cada cuenta con su clave (lectura); el mapeo (`stripe_product_mappings`) no guarda la cuenta |
+| L9 | **Locks con varias réplicas** | "Sincronizar ahora": ERP y CRM usan Mongo (jobs `running` < 3 h); Stripe, logs `running` < 2 h y `stripe_sync_jobs`; almacén de datos, lock en memoria de la réplica (igual que su cron) |
+| L10 | **Consulta del almacén de datos sin filtro de holding** | `ingestSapiraQuantities` lee `finance.sapira_base` por fecha sin acotar al holding: con dos holdings con conexión, ambos ingieren las mismas filas |
+| L11 | **Cifrado de claves** | Las nuevas rutas no devuelven claves, pero en la base siguen en texto plano (salvo la contraseña del CRM) |
+
+Copys de `translateErpError` (`erp-error-translation.ts`): los pasos que mandaban a "Integraciones › Odoo" ahora mandan a
+"Integraciones › ERP › Mapeos" (producto, impuestos, compañía) o "› Configuración" (conexión). El resto del mensaje sigue igual.
+`MAP_PRODUCT_STEP` de Contratos (módulo cerrado) sigue diciendo "Integraciones › Odoo" hasta el OK de Domi; el front lo pasa por `sinMarcas`.
+
+**Cambios en la sincronización de Salesforce (cuentas), OK de Domi 03-10.** Sí tocan lógica de integración, en
+`salesforce-sync-complete.service.ts` y `utils/salesforce-transformers.ts`, con tests:
+
+1. **Clasificación de cuentas (`classifyAccountStaging`).** Una cuenta con cliente existente pasa a `update` solo si hay un cambio que la
+   importación **aplica**. Antes, 22 cuentas de SimpliRoute quedaban en `update` para siempre: importar las dejaba en `processed` y la
+   siguiente clasificación las volvía a marcar. Las reglas:
+   - En la razón social, `legal_name`, `legal_address` y `country` con valor en Sapira no cuentan como cambio, porque
+     `createOrLinkClientEntity` los conserva.
+   - Los demás campos se comparan normalizados: sin mayúsculas, tildes ni espacios repetidos. El identificador tributario se compara con
+     `normalizeTaxId`.
+   - El `client_number` igual al id de la cuenta (el respaldo `client_number_fallback`) no cuenta como cambio si ya hay uno.
+   - Una sola función (`compareAccount` + `accountFieldChanges`) alimenta la clasificación y la vista de diferencias de Integraciones
+     (`GET /integrations/crm/records/account/:id/changes`).
+2. **Importación de cuentas** (`syncAccountFromData`, usada por `processAccountsStaging` y por la cuenta de cada oportunidad):
+   - El id de la cuenta del CRM, usado como `client_number` de respaldo, ya **no reemplaza** un número existente, ni del cliente ni de la
+     razón social. Solo completa uno vacío.
+   - `normalizeTaxId` quita el prefijo `RUT`, `RUT:` o `R.U.T.` cuando lo que sigue es un RUT chileno (7–8 dígitos + dígito verificador).
+     Así no recorta un RFC que empiece con esas letras. Se aplica al buscar la razón social y al guardar.
+   - Ese normalizador también lo usan `canonicalVat` (búsqueda de partner en Odoo) y `normalizeTaxIdsForHolding`.
+
+Resultado en prod (SimpliRoute, solo lectura): de las 22 cuentas `update`, 5 siguen con cambios reales (giro, nombre comercial, datos de
+una razón social sin completar) y 17 pasarán a `processed` en la próxima clasificación.
+
+**Cotizaciones del CRM protegidas, OK de Domi 03-10.** Toca lógica de integración en `salesforce-sync-complete.service.ts`
+(`syncQuote`, clasificación de oportunidades), `salesforce-typeorm.service.ts` (`manager` opcional), el worker de ejecuciones y
+`utils/crm-quote-snapshot.ts` (nuevo, puro), con tests. Migración `1791100000000-CrmQuoteSnapshot` **sin aplicar** (va antes del deploy:
+la entity ya declara las columnas).
+
+1. **Un solo lugar.** `syncQuote` es el único punto que crea o actualiza cotizaciones desde el CRM: lo usan la sincronización diaria,
+   `process_final`, `retry_full`, `POST /salesforce/staging/process`, `/salesforce/staging/opportunities/process*`, `/retry` y
+   `POST /salesforce/sync-complete`. Antes, todas las rutas manuales actualizaban una cotización existente si la clasificación la marcaba
+   `update` (comparación contra la cotización actual), **también con contrato**, y la devolvían a la etapa "Enviada" pisando sus notas.
+2. **Protegidas: nunca se actualizan.** Cotización con contrato vigente (`contracts.quote_id` o por `contract_items.quote_item_id`) o en una
+   etapa de tipo `contract_created` ("Procesada previamente"). La oportunidad queda `processed` con "La cotización ya tiene contrato: no se
+   actualiza" / "Procesada previamente: no se actualiza"; no se toca ni el cliente. Se revalida dentro de la transacción.
+3. **Cambio real = el CRM cambió desde la última importación.** `salesforce_opportunities_stg.last_imported_snapshot` guarda lo que llegó
+   del CRM al crear o actualizar la cotización (encabezado mapeado sin notas + dueño + cuenta + ítems resueltos), en la misma transacción.
+   La clasificación compara lo que llega con eso, no con la cotización: lo editado en Sapira se respeta mientras el CRM no cambie. Igual →
+   `processed` "Sin cambios"; distinto → `update` "Por revisar". Sin snapshot (cotizaciones de antes) → `processed` y lo que llegó queda
+   como base (`baseline: true`, `last_imported_at` NULL): es la única escritura de snapshot fuera de una importación.
+4. **Solo con confirmación por ids.** Una cotización existente se actualiza solo en una ejecución `process_final` con
+   `salesforce_sync_runs.confirmed_by` (`POST /integrations/crm/records/import` con `ids` + `confirm_updates: true`). Nunca en la diaria,
+   con `all` (ahora toma solo `create`), con `retry_full` ni por `/salesforce/*`: ahí la oportunidad sigue `update` y el ítem de la
+   ejecución termina `completed` con el aviso en `error_message`.
+5. **Al aplicar**: encabezado sin `quote_stage_id` ni `notes`, ítems (`createQuoteItems` con el `manager`), evento `UPDATED` en
+   `quote_events` (`actor_id` = quien confirmó, `reason` "Sincronización del CRM", `metadata.source = 'crm_sync'`, `changes` /
+   `item_changes` con antes/después como la edición manual, `crm_changes` con lo que cambió en el CRM) y snapshot nuevo: **una
+   transacción**. Crear también es una transacción (cotización, vínculo, ítems, snapshot); el conflicto de `createQuoteIfAbsent` la revierte.
+6. La diaria sigue siendo solo inserción, pero ahora clasifica las existentes con la misma regla (antes las marcaba "omitida").
+
+Encontrado en prod (SimpliRoute, solo lectura, 03-10): 401 cotizaciones del CRM; 144 con contrato (116 en "Contrato creado" y **28 en
+"Enviada"** con contrato, todas importadas desde el CRM después de crear el contrato: probablemente la importación les devolvió la etapa) y
+24 en "Contrato creado" sin contrato. `quote_events` tiene 1 fila en toda la base: no hay historial de ediciones. Las 28 no se reparan:
+quedan para la auditoría previa al switch (`estado-v2-y-plan-switch.md` §5).
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

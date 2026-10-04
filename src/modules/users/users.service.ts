@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 import { HoldingsService } from '../holdings/holdings.service';
+import { userAvatar } from '../me/user-avatar';
 
 import { UserMenuContextResponseDto, UserResponseDto } from './dtos/users.dto';
 
@@ -119,6 +120,7 @@ export class UsersService {
 			auth_id: user.auth_id,
 			created_at: user.created_at,
 			is_super_admin: user.is_super_admin,
+			avatar: userAvatar(user),
 		};
 	}
 }

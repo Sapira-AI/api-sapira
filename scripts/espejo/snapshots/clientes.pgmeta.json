@@ -1975,6 +1975,17 @@
      "updatable"
     ],
     "default_value": "now()"
+   },
+   {
+    "name": "crm_owner_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Id del dueño (usuario) en el CRM que corresponde a este vendedor. Único por holding"
    }
   ],
   "primary_keys": [

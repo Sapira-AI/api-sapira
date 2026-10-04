@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsUUID } from 'class-validator';
 
 import { UserHoldingResponseDto } from '@/modules/holdings/dtos/holdings.dto';
+import type { UserAvatar } from '@/modules/me/user-avatar';
 
 export class UserResponseDto {
 	@ApiProperty({
@@ -63,6 +64,13 @@ export class UserResponseDto {
 		example: false,
 	})
 	is_super_admin?: boolean;
+
+	@ApiProperty({
+		description:
+			'Avatar del usuario (contrato Mi perfil §3): `initials` (el front dibuja las iniciales), `preset` (`preset_id`) o `upload` (`url` pública).',
+		example: { kind: 'preset', preset_id: 'preset-03' },
+	})
+	avatar: UserAvatar;
 }
 
 export class UserMenuContextResponseDto {

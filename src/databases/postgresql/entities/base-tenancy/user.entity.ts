@@ -4,6 +4,7 @@ import { Role } from '@/databases/postgresql/entities/base-tenancy/role.entity';
 
 @Unique('users_email_key', ['email'])
 @Check('users_status_check', `((status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])))`)
+@Check('users_avatar_one_kind_check', `avatar_preset IS NULL OR avatar_path IS NULL`)
 @Index('idx_users_auth_id', ['auth_id'])
 @Index('idx_users_role_id', ['role_id'])
 @Entity('users')
@@ -48,6 +49,14 @@ export class User {
 
 	@Column({ type: 'text', nullable: true, comment: 'sent | failed (según respuesta de Resend)' })
 	last_invitation_status?: string;
+
+	// Mi perfil (migración 1791050000000): avatar elegido (preset) o foto subida (ruta en el bucket público `user-avatars`). Ambas NULL =
+	// iniciales. Nunca las dos (CHECK). Se guarda la ruta, no la URL.
+	@Column({ type: 'text', nullable: true, comment: 'Avatar elegido de la lista fija de Mi perfil (preset-01…preset-12); NULL = iniciales o foto' })
+	avatar_preset?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Ruta de la foto de perfil en el bucket user-avatars (users/<id>/<uuid>.<ext>)' })
+	avatar_path?: string | null;
 
 	@ManyToOne(() => Role)
 	@JoinColumn({ name: 'role_id', referencedColumnName: 'id', foreignKeyConstraintName: 'users_role_id_fkey' })

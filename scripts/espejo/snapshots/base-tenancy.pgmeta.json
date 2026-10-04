@@ -138,6 +138,28 @@
      "updatable"
     ],
     "comment": "sent | failed (según respuesta de Resend)"
+   },
+   {
+    "name": "avatar_preset",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Avatar elegido de la lista fija de Mi perfil (preset-01…preset-12); NULL = iniciales o foto"
+   },
+   {
+    "name": "avatar_path",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ruta de la foto de perfil en el bucket user-avatars (users/<id>/<uuid>.<ext>)"
    }
   ],
   "primary_keys": [
@@ -1757,6 +1779,17 @@
    {
     "name": "holding_settings_holding_id_fkey",
     "source_table": "public.holding_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "integration_record_discards_holding_id_fkey",
+    "source_table": "public.integration_record_discards",
     "source_columns": [
      "holding_id"
     ],

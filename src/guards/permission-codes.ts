@@ -22,6 +22,8 @@ export const PERMISSION_CODES = {
 	closePeriods: 'CLOSE_PERIODS',
 	viewContracts: 'VIEW_CONTRATOS',
 	editContracts: 'EDIT_CONTRATOS',
+	viewIntegrations: 'VIEW_INTEGRACIONES',
+	editIntegrations: 'EDIT_INTEGRACIONES',
 } as const;
 
 /** Acción en infinitivo para el mensaje 403. */
@@ -39,6 +41,8 @@ const ACTION_LABELS: Record<string, string> = {
 	EDIT_FACTURACION: 'editar la facturación',
 	VIEW_REVENUE: 'ver ingresos y métricas',
 	EDIT_REVENUE: 'editar ingresos y métricas',
+	VIEW_INTEGRACIONES: 'ver las integraciones',
+	EDIT_INTEGRACIONES: 'configurar las integraciones',
 };
 
 export function forbiddenMessage(codes: readonly string[]): string {

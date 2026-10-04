@@ -12,6 +12,7 @@ import {
 	CreateNamedDto,
 	CreateSellerDto,
 	MASTER_DATA_CATEGORIES,
+	MergeSellersDto,
 	UpdateMasterDataDto,
 	UpdateNamedDto,
 	UpdateSellerDto,
@@ -42,6 +43,14 @@ export class SettingsCatalogsController {
 	@RequirePermission(PERMISSION_CODES.editSettings)
 	createSeller(@HoldingId() holdingId: string, @Body() body: CreateSellerDto) {
 		return this.catalogs.createSeller(holdingId, body);
+	}
+
+	@Post('sellers/merge')
+	@HttpCode(200)
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Fusionar vendedores duplicados (reasigna cotizaciones y borra los origen)' })
+	mergeSellers(@HoldingId() holdingId: string, @Body() body: MergeSellersDto) {
+		return this.catalogs.mergeSellers(holdingId, body);
 	}
 
 	@Patch('sellers/:id')

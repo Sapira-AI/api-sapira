@@ -37,7 +37,9 @@ import { EmailModule } from './modules/email/email.module';
 import { EmailsModule } from './modules/emails/emails.module';
 import { FacturaModule } from './modules/factura/factura.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { MeModule } from './modules/me/me.module';
 import { NotificationJobsModule } from './modules/notification-jobs/notification-jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OdooModule } from './modules/odoo/odoo.module';
@@ -101,6 +103,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		FacturaModule,
 		HoldingsModule,
 		InvoicesModule,
+		IntegrationsModule,
 		NotificationsModule,
 		TasksModule,
 		NotificationJobsModule,
@@ -110,6 +113,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		BillingModule,
 		BudgetsModule,
 		SettingsModule,
+		MeModule,
 		ProductsModule,
 		QuotesModule,
 		OdooModule,

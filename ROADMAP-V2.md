@@ -79,10 +79,12 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 > **Avance al 03-10:** Fases 1 y 2 se están haciendo juntas, módulo a módulo, en el laboratorio de `front-sapira`
 > (`/lab/<modulo>`): cada módulo se construye una sola vez contra `api-sapira`, ya con el diseño nuevo. Construidos:
 > Clientes, Contratos, Cotizaciones, Facturación, Ingresos, Métricas, la primera versión de Precios y Configuración ✅
-> (en producción 03-10: holding, compañías, usuarios y roles con matriz de permisos). Sin commit todavía: gestión de
-> usuarios con correos propios (Resend) y el Centro de ayuda `/ayuda`, que reemplaza a `/documentacion` (meta: dar de
-> baja HelpKit y Notion). Siguen: configuración externa (Supabase Auth, variables) → Notificaciones → Integraciones →
-> Automatizaciones → segunda vuelta de Precios → reglas de reconocimiento de ingresos → onboarding/datos históricos →
+> (en producción 03-10: holding, compañías, usuarios y roles con matriz de permisos), gestión de usuarios con correos
+> propios, Centro de ayuda `/ayuda` (meta: dar de baja HelpKit y Notion), Notificaciones ✅, Integraciones (primera
+> versión ✅: ERP, CRM, Stripe y almacén de datos) y Mi perfil con avatares ✅. Siguen: configuración externa
+> (variables de correo, Secure password change, Skew Protection) → cierre de Integraciones (claves de API de Sapira y
+> documentación pública) → Automatizaciones → segunda vuelta de Precios → reglas de reconocimiento de ingresos →
+> onboarding/datos históricos →
 > switch. Detalle, pendientes por decisión y pasos previos al switch en
 > [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md).
 

@@ -146,7 +146,8 @@
  "integraciones/otras": [
   "bigquery_connections",
   "field_mappings",
-  "integration_configs"
+  "integration_configs",
+  "integration_record_discards"
  ],
  "automatizaciones-ia": [
   "ai_agents",

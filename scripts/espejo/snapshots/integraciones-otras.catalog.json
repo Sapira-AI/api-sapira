@@ -400,5 +400,46 @@
     "with_check": null
    }
   ]
+ },
+ "integration_record_discards": {
+  "comment": "Registros de tablas intermedias de integraciones descartados por el usuario (no se importan). Solo la API",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "integration_record_discards_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "integration_record_discards_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "tipo",
+     "object",
+     "record_key"
+    ]
+   },
+   {
+    "name": "integration_record_discards_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "integration_record_discards_tipo_check",
+    "type": "c",
+    "expr": "tipo = ANY (ARRAY['erp'::text, 'crm'::text, 'stripe'::text, 'datos'::text])"
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
  }
 }

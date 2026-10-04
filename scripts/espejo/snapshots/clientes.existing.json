@@ -1967,10 +1967,30 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "crm_owner_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "sellers_holding_crm_owner_key": {
+    "columns": [
+     "holding_id",
+     "crm_owner_id"
+    ],
+    "unique": true,
+    "where": "(crm_owner_id IS NOT NULL)"
+   }
+  },
   "checks": [],
   "foreignKeys": {
    "fk_sellers_holding_id": {

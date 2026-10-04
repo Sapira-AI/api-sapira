@@ -9,7 +9,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_status_check` |
+| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_avatar_one_kind_check`<br>CHECK `users_status_check` |
 | `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `user_holdings_pkey` |
 | `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `company_holdings_pkey` |
 | `companies` (24) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |

@@ -965,7 +965,17 @@
     ]
    }
   ],
-  "indexes": [],
+  "indexes": [
+   {
+    "name": "sellers_holding_crm_owner_key",
+    "cols": [
+     "holding_id",
+     "crm_owner_id"
+    ],
+    "unique": true,
+    "where": "crm_owner_id IS NOT NULL"
+   }
+  ],
   "triggers": [],
   "policies": [
    "Users can delete sellers from their holding (DELETE, public)",

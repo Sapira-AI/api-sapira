@@ -66,6 +66,7 @@ export class SalesforceSyncRunWorker {
 			}
 
 			try {
+				let notices: string[] = [];
 				if (run.type === 'update_staging' || run.type === 'retry_full') {
 					await this.syncCompleteService.syncOpportunitiesToStaging(run.holding_id, run.date_from || undefined, run.date_to || undefined, [
 						item.salesforce_opportunity_id,
@@ -86,14 +87,19 @@ export class SalesforceSyncRunWorker {
 						if (stats.errors.length) {
 							throw new Error(stats.errors.join(' | '));
 						}
+						notices = stats.notices ?? [];
 					}
 				} else {
-					const stats = await this.syncCompleteService.processOpportunitiesStaging(run.holding_id, [item.salesforce_opportunity_id]);
+					// `process_final`: solo una ejecución con `confirmed_by` (importación por ids confirmada) actualiza cotizaciones existentes.
+					const stats = await this.syncCompleteService.processOpportunitiesStaging(run.holding_id, [item.salesforce_opportunity_id], {
+						confirmedBy: run.confirmed_by ?? null,
+					});
 					if (stats.errors.length) {
 						throw new Error(stats.errors.join(' | '));
 					}
+					notices = stats.notices ?? [];
 				}
-				await this.syncRunService.completeItem(item);
+				await this.syncRunService.completeItem(item, notices.join(' | ') || null);
 			} catch (error) {
 				await this.syncRunService.failItem(item, error);
 				this.logger.warn(`Falló oportunidad ${item.salesforce_opportunity_id} en ejecución ${run.id}`);

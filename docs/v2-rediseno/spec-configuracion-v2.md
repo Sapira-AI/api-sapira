@@ -92,7 +92,7 @@ hasta el switch porque el front actual las usa).
 | Documentos legales de la compañía | 1 fila en producción, nadie los lee, sin subida real (solo URL) | Ver D13 |
 | Edge function `sync-exchange-rates` + `fx_api_sync_log` | La sincronización real la hace el scheduler de la API | El estado se muestra desde el scheduler |
 | Pantallas Banco Central / Perú API (sincronizar a mano, historial) | Datos globales, no del holding | Quedan solo para super admin (pantalla interna), fuera de la vista de clientes |
-| `holding_integration_settings` | 0 filas, sin entity, sin uso | Se elimina tras el switch |
+| `holding_integration_settings` | De Leon (corrida automática por integración) | **Se conserva**: es la tabla única de ajustes de Integraciones v2 (`auto_enabled` + `settings`, migración `1791000000000-IntegrationsV2`) |
 | Onboarding `/configuracion-inicial` | Bloque Onboarding (plan §3.7) | Se diseña allí; "Nueva compañía" cubre el alta de compañías |
 | Mapeo de compañías y productos con el ERP/Stripe | Bloque Integraciones | Configuración y Productos muestran el estado y enlazan |
 

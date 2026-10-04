@@ -25,6 +25,7 @@ export { Country } from '@/databases/postgresql/entities/base-tenancy/country.en
 export { Currency } from '@/databases/postgresql/entities/base-tenancy/currency.entity';
 export { CustomFieldDefinition } from '@/databases/postgresql/entities/base-tenancy/custom-field-definition.entity';
 export { FinancialSettings } from '@/databases/postgresql/entities/base-tenancy/financial-settings.entity';
+export { HoldingIntegrationSettings } from '@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity';
 export { HoldingSettings } from '@/databases/postgresql/entities/base-tenancy/holding-settings.entity';
 export { MasterData } from '@/databases/postgresql/entities/base-tenancy/master-data.entity';
 export { Permission } from '@/databases/postgresql/entities/base-tenancy/permission.entity';
@@ -112,6 +113,7 @@ export { OdooProductMapping } from '@/databases/postgresql/entities/integracione
 export { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 export { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 export { IntegrationConfig } from '@/databases/postgresql/entities/integraciones/otras/integration-config.entity';
+export { IntegrationRecordDiscard } from '@/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity';
 export { SalesforceAccountsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-accounts-stg.entity';
 export { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 export { SalesforceFieldMapping } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-field-mapping.entity';
