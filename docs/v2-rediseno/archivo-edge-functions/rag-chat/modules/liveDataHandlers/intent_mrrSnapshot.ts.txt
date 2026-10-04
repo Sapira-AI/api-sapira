@@ -1,0 +1,124 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentMrrSnapshot(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  currentMonthStr: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, currentMonthStr } = params;
+
+  try {
+    const targetMonth = currentMonthStr;
+
+    const { data: rsmRows, error: rsmErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, mrr_period_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .eq("period_month", targetMonth)
+      .limit(10000);
+    if (rsmErr) throw rsmErr;
+
+    const { data: legacyRows, error: legacyErr } = await supabaseAuth
+      .from("mrr_legacy")
+      .select("period_month, mrr_legacy_system_currency")
+      .eq("holding_id", holdingId)
+      .eq("is_recurring", true)
+      .eq("period_month", targetMonth)
+      .limit(10000);
+    if (legacyErr) throw legacyErr;
+
+    const rsmSum = (Array.isArray(rsmRows) ? rsmRows : []).reduce((acc, r: any) => {
+      const v = typeof r?.mrr_period_system_ccy === "number" ? r.mrr_period_system_ccy : r?.mrr_period_system_ccy ? Number(r.mrr_period_system_ccy) : 0;
+      return acc + (Number.isFinite(v) ? v : 0);
+    }, 0);
+
+    const legacySum = (Array.isArray(legacyRows) ? legacyRows : []).reduce((acc, r: any) => {
+      const v = typeof r?.mrr_legacy_system_currency === "number" ? r.mrr_legacy_system_currency : r?.mrr_legacy_system_currency ? Number(r.mrr_legacy_system_currency) : 0;
+      return acc + (Number.isFinite(v) ? v : 0);
+    }, 0);
+
+    const currency =
+      Array.isArray(rsmRows) && rsmRows?.[0]?.system_currency
+        ? String((rsmRows as any[])[0].system_currency)
+        : "USD";
+
+    const total = rsmSum + legacySum;
+    const hasAnyValue = [rsmSum, legacySum].some((v) => typeof v === "number" && v !== 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: `MRR total (${targetMonth.slice(0, 7)})`,
+        value: `${total.toFixed(2)} ${currency}`.trim(),
+      },
+      {
+        type: "table",
+        title: "Detalle MRR (RSM vs Legacy)",
+        columns: ["Fuente", `MRR (${currency})`],
+        rows: [
+          ["RSM", Number(rsmSum.toFixed(2))],
+          ["Legacy", Number(legacySum.toFixed(2))],
+          ["Total", Number(total.toFixed(2))],
+        ],
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_mrr_snapshot",
+      range_from: targetMonth,
+      range_to: targetMonth,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly", "mrr_legacy"],
+      filters_applied: { holding_id: holdingId, period_month: targetMonth, is_recurring: true },
+      holding_id: holdingId,
+      data_completeness: hasAnyValue ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: hasAnyValue
+        ? `INTENT: mrr_snapshot. MRR snapshot para ${targetMonth.slice(0, 7)} (system currency). Incluye RSM + Legacy.`
+        : `INTENT: mrr_snapshot. No encontré MRR para tu holding en ${targetMonth.slice(0, 7)}.`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_snapshot", filters: { period_month: targetMonth } },
+        { table: "mrr_legacy", query_type: "mrr_snapshot", filters: { is_recurring: true, period_month: targetMonth } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `INTENT: mrr_snapshot. No pude consultar MRR snapshot en vivo (error en Live Data). Motivo: ${e?.message ?? String(e)}`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_snapshot", filters: { period_month: currentMonthStr } },
+        { table: "mrr_legacy", query_type: "mrr_snapshot", filters: { is_recurring: true, period_month: currentMonthStr } },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - MRR snapshot",
+          columns: ["Detalle"],
+          rows: [[e?.message ?? String(e)]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_mrr_snapshot",
+        range_from: currentMonthStr,
+        range_to: currentMonthStr,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy"],
+        filters_applied: { holding_id: holdingId, period_month: currentMonthStr, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message ?? String(e),
+      } as any,
+    };
+  }
+}

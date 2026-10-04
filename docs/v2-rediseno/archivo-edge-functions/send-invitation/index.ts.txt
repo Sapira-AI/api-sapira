@@ -1,0 +1,309 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// v2 (2026-07-21) — fixes del flujo de invitación (memoria feature_invitation_flow_bugs):
+// - Bug A: la rama "usuario ya existe" llamaba auth.admin.getUserByEmail(), método
+//   que NO existe en supabase-js v2 → TypeError → 500 en TODOS los reenvíos.
+//   Ahora el usuario existente se resuelve con admin.generateLink(type: 'magiclink'),
+//   que devuelve el user sin enviar ningún correo.
+// - Bug D: al reenviar sin name/companyName venían fallbacks genéricos ("allí",
+//   "tu organización") y se pisaba la metadata. Ahora el reenvío completa los datos
+//   reales desde public.users + company_holdings y NO toca user_metadata existente.
+// - Bug C: cada intento de envío queda registrado en public.users
+//   (last_invitation_sent_at / last_invitation_email_id / last_invitation_status).
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
+  let payload: any;
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { email } = payload || {};
+  if (!email) {
+    return json({ error: 'Email is required' }, 400);
+  }
+
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  const rawSiteUrl = Deno.env.get('SITE_URL');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!resendApiKey) return json({ error: 'Falta RESEND_API_KEY' }, 500);
+  if (!rawSiteUrl) return json({ error: 'Falta SITE_URL' }, 500);
+  if (!supabaseUrl || !supabaseServiceKey) return json({ error: 'Falta configuración de Supabase' }, 500);
+
+  const site = rawSiteUrl.replace(/\/+$/, '');
+
+  const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  // Registrar el resultado del intento en public.users (Bug C). Nunca lanza.
+  const recordAttempt = async (status: 'sent' | 'failed', emailId: string | null) => {
+    try {
+      await supabaseClient
+        .from('users')
+        .update({
+          last_invitation_sent_at: new Date().toISOString(),
+          last_invitation_email_id: emailId,
+          last_invitation_status: status
+        })
+        .eq('email', email);
+    } catch (e) {
+      console.error('⚠️ No se pudo registrar el intento de envío:', e);
+    }
+  };
+
+  try {
+    console.log('🚀 Invitación para:', email);
+
+    // ── Completar datos reales desde BD (Bug D) ─────────────────────────────
+    // El reenvío desde la lista solo manda { email }; buscamos nombre y holding
+    // reales para que el correo no salga con "allí" / "tu organización".
+    const { data: dbUser } = await supabaseClient
+      .from('users')
+      .select('id, name, auth_id, user_holdings(holding_id, company_holdings(name))')
+      .eq('email', email)
+      .maybeSingle();
+
+    const dbHoldingName: string | null =
+      (dbUser as any)?.user_holdings?.[0]?.company_holdings?.name ?? null;
+
+    const safe = {
+      name:
+        (typeof payload?.name === 'string' && payload.name.trim()) ||
+        ((dbUser?.name as string | null) ?? '').trim() ||
+        'allí',
+      inviterName:
+        (typeof payload?.inviterName === 'string' && payload.inviterName.trim()) ||
+        'Tu equipo',
+      companyName:
+        (typeof payload?.companyName === 'string' && payload.companyName.trim()) ||
+        dbHoldingName ||
+        'tu organización'
+    };
+    console.log('📧 Datos efectivos:', safe);
+
+    // ── Asegurar el usuario en auth.users y vincular auth_id ────────────────
+    let authUserId: string | null = (dbUser?.auth_id as string | null) ?? null;
+
+    if (!authUserId) {
+      const { data: created, error: createError } = await supabaseClient.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: {
+          full_name: safe.name,
+          invited: true,
+          company_name: safe.companyName
+        }
+      });
+
+      if (!createError && created?.user) {
+        authUserId = created.user.id;
+        console.log('✅ Usuario pre-registrado en auth.users:', authUserId);
+      } else if (
+        createError &&
+        (createError.message?.includes('already registered') ||
+          createError.message?.includes('already exists') ||
+          (createError as any).code === 'email_exists')
+      ) {
+        // Bug A fix: resolver el usuario existente SIN getUserByEmail (no existe
+        // en supabase-js v2). generateLink NO envía correo; devuelve link + user.
+        console.log('ℹ️ Ya existe en auth.users; resolviendo id vía generateLink...');
+        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email
+        });
+        if (linkError || !linkData?.user) {
+          console.error('❌ No se pudo resolver el usuario existente:', linkError);
+          throw new Error(`No se pudo resolver el usuario existente: ${linkError?.message || 'sin datos'}`);
+        }
+        authUserId = linkData.user.id;
+        // Reenvío: NO tocar user_metadata existente (Bug D).
+      } else if (createError) {
+        console.error('❌ Error al crear usuario en auth.users:', createError);
+        throw new Error(`Error en pre-registro: ${createError.message}`);
+      }
+
+      // Vincular auth_id en public.users si aún no está
+      if (authUserId) {
+        const { error: linkErr } = await supabaseClient
+          .from('users')
+          .update({ auth_id: authUserId })
+          .eq('email', email)
+          .is('auth_id', null);
+        if (linkErr) console.error('⚠️ Error al vincular auth_id:', linkErr);
+        else console.log('✅ auth_id vinculado en public.users');
+      }
+    } else {
+      console.log('ℹ️ auth_id ya vinculado:', authUserId);
+    }
+
+    // ── Link de invitación (mismo formato de siempre) ───────────────────────
+    const u = new URL(`${site}/auth`);
+    u.searchParams.set('email', email);
+    u.searchParams.set('invitation', 'true');
+    const invitationLink = u.toString();
+
+    const logoUrl: string =
+      (typeof payload?.logoUrl === 'string' && payload.logoUrl.trim()) ||
+      Deno.env.get('BRAND_LOGO_URL') ||
+      `${site}/logo.png`;
+
+    const subject = `${safe.inviterName} te invita a unirte a ${safe.companyName} en Sapira`;
+
+    const invitationEmailHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitación a Sapira</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0; padding:20px; background-color:#f5f5f5; font-family:'Plus Jakarta Sans', Inter, Arial, sans-serif; color:#1E1E1E; line-height:1.6; -webkit-font-smoothing:antialiased;">
+  <!-- Hidden preheader -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+    Has sido invitado a unirte a Sapira. Activa tu cuenta en un minuto.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+  </div>
+
+  <div style="max-width:600px; margin:0 auto; background:#FFFFFF; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08);">
+    <!-- Header -->
+    <div style="background:#4917C6; background:linear-gradient(135deg,#E9B0FF 0%, #4917C6 55%); padding:32px 28px; text-align:center;">
+      <img src="${logoUrl}" alt="Sapira" width="128" style="display:block; margin:0 auto 10px auto;">
+      <p style="color:rgba(255,255,255,0.90); margin:8px 0 0 0; font-size:14px; font-weight:600; letter-spacing:.3px;">
+        El All-In-One Inteligente para automatizar el flujo Order-to-Cash.
+      </p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding:36px 28px;">
+      <h1 style="margin:0 0 10px 0; font-size:24px; line-height:1.25; color:#030418; font-weight:700;">
+        ¡Hola ${safe.name}!
+      </h1>
+
+      <p style="margin:0 0 16px 0; font-size:16px; color:#3A3A3A;">
+        <strong>${safe.inviterName}</strong> de <strong>${safe.companyName}</strong> te ha invitado a unirte a <strong>Sapira</strong>.
+      </p>
+
+      <p style="margin:0 0 24px 0; font-size:16px; color:#3A3A3A;">
+        Convierte tareas financieras complejas en procesos simples.
+      </p>
+
+      <!-- CTA -->
+      <div style="text-align:center; margin:32px 0;">
+        <a href="${invitationLink}"
+           style="background:#4917C6; background-image:linear-gradient(135deg,#E9B0FF 0%, #4917C6 100%);
+                  color:#FFFFFF; padding:14px 28px; text-decoration:none; border-radius:10px;
+                  font-weight:700; font-size:16px; display:inline-block; box-shadow:0 6px 16px rgba(73,23,198,0.25);">
+          🚀 Aceptar invitación
+        </a>
+      </div>
+
+      <!-- Info box -->
+      <div style="background:#F7F2FF; border:1px solid #E6DDFF; border-radius:10px; padding:20px; margin:24px 0;">
+        <h2 style="margin:0 0 10px 0; font-size:16px; color:#4917C6; font-weight:700;">
+          📋 Información de tu cuenta
+        </h2>
+        <p style="margin:6px 0; font-size:14px; color:#3A3A3A;"><strong>Email:</strong> ${email}</p>
+        <p style="margin:6px 0; font-size:14px; color:#3A3A3A;"><strong>Empresa:</strong> ${safe.companyName}</p>
+        <p style="margin:6px 0; font-size:14px; color:#3A3A3A;"><strong>Invitado por:</strong> ${safe.inviterName}</p>
+      </div>
+
+      <!-- Alternative link -->
+      <div style="background:#FFF6FD; border:1px solid #F1D3EA; border-radius:10px; padding:16px; text-align:center;">
+        <p style="margin:0 0 6px 0; font-size:14px; color:#7A254F; font-weight:700;">¿Problemas con el botón?</p>
+        <p style="margin:0; font-size:13px; color:#7A254F;">Copia y pega este enlace en tu navegador:</p>
+        <p style="margin:8px 0 0 0; font-size:13px; color:#4917C6; word-break:break-all;">
+          ${invitationLink}
+        </p>
+      </div>
+
+      <p style="margin:26px 0 0 0; font-size:13px; color:#484848; text-align:center;">
+        Si tienes alguna pregunta, puedes contactar directamente con ${safe.inviterName} o con nuestro equipo de soporte.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#F6F7F9; padding:18px 28px; text-align:center; border-top:1px solid #ECEFF3;">
+      <p style="font-size:12px; color:#6B7280; margin:0;">
+        Este email fue enviado desde Sapira. Si no esperabas este mensaje, puedes ignorarlo de forma segura.
+      </p>
+      <p style="font-size:12px; color:#6B7280; margin:8px 0 0 0;">
+        © 2025 Sapira — Sistema de Gestión Empresarial
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const textAlt =
+      `Hola ${safe.name}!\n\n` +
+      `${safe.inviterName} de ${safe.companyName} te ha invitado a unirte a Sapira.\n\n` +
+      `Acepta tu invitación aquí: ${invitationLink}\n\n` +
+      `Email: ${email}\nEmpresa: ${safe.companyName}\nInvitado por: ${safe.inviterName}\n\n` +
+      `Si no esperabas este mensaje, puedes ignorarlo de forma segura.`;
+
+    const emailData = {
+      from: 'Sapira <noreply@app.aisapira.com>',
+      to: [email],
+      subject,
+      html: invitationEmailHtml,
+      text: textAlt
+    };
+
+    console.log('📬 Enviando email...');
+    const emailResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(emailData)
+    });
+
+    const emailResult = await emailResponse.json();
+
+    if (!emailResponse.ok) {
+      const msg = emailResult?.message || emailResult?.error || 'Error desconocido de Resend';
+      console.error('❌ Error de Resend:', msg);
+      await recordAttempt('failed', null);
+      return json({ success: false, error: msg }, 502);
+    }
+
+    console.log('✅ Email enviado, ID:', emailResult.id);
+    await recordAttempt('sent', emailResult.id ?? null);
+
+    return json({
+      success: true,
+      message: 'Invitación enviada exitosamente',
+      emailId: emailResult.id,
+      invitationLink
+    });
+  } catch (error) {
+    const err = error as Error;
+    console.error('💥 Error completo:', err);
+    await recordAttempt('failed', null);
+    return json({ success: false, error: err.message || 'Error interno del servidor' }, 500);
+  }
+});

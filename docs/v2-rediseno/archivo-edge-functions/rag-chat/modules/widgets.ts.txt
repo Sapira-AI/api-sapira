@@ -1,0 +1,123 @@
+/**
+ * Módulo de widgets y auditoría para rag-chat
+ * Extraído de index.ts para mejor modularidad
+ */
+
+export type Widget =
+  | { type: "kpi"; title: string; value: string; subtitle?: string; unit?: string }
+  | { type: "text"; title: string; content: string }
+  | { type: "image"; title: string; url: string; alt?: string }
+  | { type: "table"; title: string; columns: string[]; rows: Array<Array<string | number | null>> }
+  | {
+      type: "chart_line";
+      title: string;
+      xKey: string;
+      series: Array<{ key: string; name: string; color?: string }>;
+      data: Array<Record<string, string | number | null>>;
+      metadata?: unknown;
+    }
+  | {
+      type: "chart_bar";
+      title: string;
+      xKey: string;
+      series: Array<{ key: string; name: string; color?: string }>;
+      data: Array<Record<string, string | number | null>>;
+      metadata?: unknown;
+    };
+
+export interface LiveDataAudit {
+  case_id?: string;
+  range_from?: string;
+  range_to?: string;
+  currency_mode: 'system' | 'contract' | 'invoice' | 'mixed';
+  source_breakdown: string[];
+  filters_applied: Record<string, unknown>;
+  holding_id?: string;
+  data_completeness: 'complete' | 'partial' | 'empty';
+  timestamp: string;
+  error_type?: 'validation' | 'database' | 'permission' | 'timeout' | 'data_quality' | 'live_data' | 'handler_not_found';
+  error_reason?: string;
+  warning?: string;
+  suggested_action?: string;
+  available_range?: { from: string; to: string };
+  [key: string]: unknown;
+}
+
+export function createKpiWidget(title: string, value: string, subtitle?: string): Widget {
+  return {
+    type: "kpi",
+    title,
+    value,
+    subtitle
+  };
+}
+
+export function createTableWidget(title: string, columns: string[], rows: Array<Array<string | number | null>>): Widget {
+  return {
+    type: "table",
+    title,
+    columns,
+    rows
+  };
+}
+
+export function createLineChartWidget(
+  title: string,
+  xKey: string,
+  series: Array<{ key: string; name: string; color?: string }>,
+  data: Array<Record<string, string | number | null>>
+): Widget {
+  return {
+    type: "chart_line",
+    title,
+    xKey,
+    series,
+    data
+  };
+}
+
+export function createBarChartWidget(
+  title: string,
+  xKey: string,
+  series: Array<{ key: string; name: string; color?: string }>,
+  data: Array<Record<string, string | number | null>>
+): Widget {
+  return {
+    type: "chart_bar",
+    title,
+    xKey,
+    series,
+    data
+  };
+}
+
+export function createAuditObject(
+  currencyMode: 'system' | 'contract' | 'mixed',
+  sourceBreakdown: string[],
+  filtersApplied: Record<string, unknown>,
+  dataCompleteness: 'complete' | 'partial' | 'empty',
+  options?: {
+    caseId?: string;
+    rangeFrom?: string;
+    rangeTo?: string;
+    holdingId?: string;
+    errorType?: 'validation' | 'live_data' | 'handler_not_found';
+    errorReason?: string;
+    warning?: string;
+  }
+): LiveDataAudit {
+  return {
+    case_id: options?.caseId,
+    range_from: options?.rangeFrom,
+    range_to: options?.rangeTo,
+    currency_mode: currencyMode,
+    source_breakdown: sourceBreakdown,
+    filters_applied: filtersApplied,
+    holding_id: options?.holdingId,
+    data_completeness: dataCompleteness,
+    timestamp: new Date().toISOString(),
+    error_type: options?.errorType,
+    error_reason: options?.errorReason,
+    warning: options?.warning
+  };
+}

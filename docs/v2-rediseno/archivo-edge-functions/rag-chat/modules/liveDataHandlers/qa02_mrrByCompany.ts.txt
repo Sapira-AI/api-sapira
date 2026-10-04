@@ -1,0 +1,275 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleQa02MrrByCompany(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  currentMonthStr: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, currentMonthStr } = params;
+
+  try {
+    const findLatestMrrMonth = async (): Promise<string | null> => {
+      const { data: rsmLatest, error: rsmLatestErr } = await supabaseAuth
+        .from("revenue_schedule_monthly")
+        .select("period_month")
+        .eq("holding_id", holdingId)
+        .neq("mrr_period_system_ccy", 0)
+        .order("period_month", { ascending: false })
+        .limit(1);
+      if (rsmLatestErr) throw rsmLatestErr;
+
+      const { data: legacyLatest, error: legacyLatestErr } = await supabaseAuth
+        .from("mrr_legacy")
+        .select("period_month")
+        .eq("holding_id", holdingId)
+        .eq("is_recurring", true)
+        .neq("mrr_legacy_system_currency", 0)
+        .order("period_month", { ascending: false })
+        .limit(1);
+      if (legacyLatestErr) throw legacyLatestErr;
+
+      const rsmMonth = rsmLatest?.[0]?.period_month ? String(rsmLatest[0].period_month).slice(0, 10) : null;
+      const legacyMonth = legacyLatest?.[0]?.period_month ? String(legacyLatest[0].period_month).slice(0, 10) : null;
+      if (!rsmMonth && !legacyMonth) return null;
+      if (rsmMonth && !legacyMonth) return rsmMonth;
+      if (!rsmMonth && legacyMonth) return legacyMonth;
+      return (rsmMonth as string) >= (legacyMonth as string) ? (rsmMonth as string) : (legacyMonth as string);
+    };
+
+    const targetMonth = currentMonthStr;
+
+    const { data: rsmData, error: rsmError } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: targetMonth,
+      date_to: targetMonth,
+      metric: "mrr",
+      currency_mode: "system",
+      group_by: ["company_id"],
+      filters: { is_total_row: false },
+    });
+    if (rsmError) throw rsmError;
+
+    const { data: legacyData, error: legacyError } = await supabaseAuth
+      .from("mrr_legacy")
+      .select("company_id, mrr_legacy_system_currency")
+      .eq("holding_id", holdingId)
+      .eq("is_recurring", true)
+      .eq("period_month", targetMonth);
+    if (legacyError) throw legacyError;
+
+    const { data: companiesData, error: companiesError } = await supabaseAuth
+      .from("companies")
+      .select("id, legal_name")
+      .eq("holding_id", holdingId);
+    if (companiesError) throw companiesError;
+
+    const companiesMap = new Map((companiesData || []).map((c: any) => [c.id, c.legal_name]));
+
+    const rsmRows = Array.isArray(rsmData) ? (rsmData as any[]) : [];
+
+    const companyMrr = new Map<string, number>();
+    const currency = (rsmRows[0] as any)?.currency || "USD";
+
+    rsmRows.forEach((r: any) => {
+      if (r.company_id) {
+        companyMrr.set(r.company_id, (companyMrr.get(r.company_id) || 0) + (r.value || 0));
+      }
+    });
+
+    (legacyData || []).forEach((r: any) => {
+      if (r.company_id) {
+        companyMrr.set(r.company_id, (companyMrr.get(r.company_id) || 0) + (r.mrr_legacy_system_currency || 0));
+      }
+    });
+
+    const chartData = Array.from(companyMrr.entries())
+      .map(([companyId, mrr]) => ({
+        company_name: companiesMap.get(companyId) || companyId,
+        mrr: Number(mrr.toFixed(2)),
+      }))
+      .sort((a, b) => b.mrr - a.mrr);
+
+    if (chartData.length === 0) {
+      const latest = await findLatestMrrMonth();
+      if (latest && latest !== targetMonth) {
+        const { data: rsmData2, error: rsmError2 } = await supabaseAuth.rpc("rsm_metrics", {
+          date_from: latest,
+          date_to: latest,
+          metric: "mrr",
+          currency_mode: "system",
+          group_by: ["company_id"],
+          filters: { is_total_row: false },
+        });
+        if (rsmError2) throw rsmError2;
+
+        const { data: legacyData2, error: legacyError2 } = await supabaseAuth
+          .from("mrr_legacy")
+          .select("company_id, mrr_legacy_system_currency")
+          .eq("holding_id", holdingId)
+          .eq("is_recurring", true)
+          .eq("period_month", latest);
+        if (legacyError2) throw legacyError2;
+
+        const companyMrr2 = new Map<string, number>();
+        const rsmRows2 = Array.isArray(rsmData2) ? (rsmData2 as any[]) : [];
+        rsmRows2.forEach((r: any) => {
+          if (r.company_id) {
+            companyMrr2.set(r.company_id, (companyMrr2.get(r.company_id) || 0) + (r.value || 0));
+          }
+        });
+        (legacyData2 || []).forEach((r: any) => {
+          if (r.company_id) {
+            companyMrr2.set(r.company_id, (companyMrr2.get(r.company_id) || 0) + (r.mrr_legacy_system_currency || 0));
+          }
+        });
+
+        const chartData2 = Array.from(companyMrr2.entries())
+          .map(([companyId, mrr]) => ({
+            company_name: companiesMap.get(companyId) || companyId,
+            mrr: Number(mrr.toFixed(2)),
+          }))
+          .sort((a, b) => b.mrr - a.mrr);
+
+        const widgetsFallback: Widget[] = [
+          {
+            type: "chart_bar",
+            title: `MRR por Compañía (${latest.slice(0, 7)})`,
+            xKey: "company_name",
+            series: [{ key: "mrr", name: "MRR", color: "#10B981" }],
+            data: chartData2,
+          },
+          {
+            type: "table",
+            title: "Detalle MRR por compañía",
+            columns: ["Compañía", `MRR (${currency})`],
+            rows: chartData2.map((r) => [r.company_name, r.mrr]),
+          },
+        ];
+
+        const auditFallback: LiveDataAudit = {
+          case_id: "QA-02",
+          range_from: latest,
+          range_to: latest,
+          currency_mode: "system",
+          source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "companies"],
+          filters_applied: { holding_id: holdingId, period_month: latest, is_recurring: true, fallback_from: targetMonth },
+          holding_id: holdingId,
+          data_completeness: chartData2.length > 0 ? "complete" : "empty",
+          timestamp: new Date().toISOString(),
+        };
+
+        return {
+          handled: true,
+          context: `HANDLER: QA-02. No había datos en ${targetMonth.slice(0, 7)}; usé el último mes disponible con MRR: ${latest.slice(0, 7)}.`,
+          sources: [
+            { table: "revenue_schedule_monthly", query_type: "mrr_by_company", filters: { period_month: latest } },
+            { table: "mrr_legacy", query_type: "mrr_by_company", filters: { is_recurring: true, period_month: latest } },
+            { table: "companies", query_type: "lookup", filters: { holding_id: holdingId } },
+          ],
+          widgets: widgetsFallback,
+          audit: auditFallback,
+        };
+      }
+    }
+
+    if (chartData.length === 0) {
+      const auditEmpty: LiveDataAudit = {
+        case_id: "QA-02",
+        range_from: targetMonth,
+        range_to: targetMonth,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "companies"],
+        filters_applied: { holding_id: holdingId, period_month: targetMonth, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        warning:
+          "No se encontraron filas con company_id para desglosar MRR por compañía (puede haber MRR pero sin dimensión de compañía).",
+      };
+
+      return {
+        handled: true,
+        context: "HANDLER: QA-02. No hay datos para desglosar MRR por compañía (sin company_id) en el rango consultado.",
+        sources: [
+          { table: "revenue_schedule_monthly", query_type: "mrr_by_company", filters: { period_month: targetMonth } },
+          { table: "mrr_legacy", query_type: "mrr_by_company", filters: { is_recurring: true, period_month: targetMonth } },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "Detalle MRR por compañía",
+            columns: ["Compañía", `MRR (${currency})`],
+            rows: [],
+          },
+        ],
+        audit: auditEmpty,
+      };
+    }
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_bar",
+        title: `MRR por Compañía (${targetMonth.slice(0, 7)})`,
+        xKey: "company_name",
+        series: [{ key: "mrr", name: "MRR", color: "#10B981" }],
+        data: chartData,
+      },
+      {
+        type: "table",
+        title: "Detalle MRR por compañía",
+        columns: ["Compañía", `MRR (${currency})`],
+        rows: chartData.map((r) => [r.company_name, r.mrr]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "QA-02",
+      range_from: targetMonth,
+      range_to: targetMonth,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "companies"],
+      filters_applied: { holding_id: holdingId, period_month: targetMonth, is_recurring: true },
+      holding_id: holdingId,
+      data_completeness: chartData.length > 0 ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `HANDLER: QA-02. MRR por compañía para ${targetMonth.slice(0, 7)}. Incluye RSM + Legacy. ${chartData.length} compañías encontradas.`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_by_company", filters: { period_month: targetMonth } },
+        { table: "mrr_legacy", query_type: "mrr_by_company", filters: { is_recurring: true, period_month: targetMonth } },
+        { table: "companies", query_type: "lookup", filters: { holding_id: holdingId } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `HANDLER: QA-02. No pude consultar MRR por compañía en vivo (error en Live Data). Motivo: ${e?.message ?? String(e)}`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_by_company", filters: { period_month: currentMonthStr } },
+        { table: "mrr_legacy", query_type: "mrr_by_company", filters: { is_recurring: true, period_month: currentMonthStr } },
+        { table: "companies", query_type: "lookup", filters: { holding_id: holdingId } },
+      ],
+      widgets: [],
+      audit: {
+        case_id: "QA-02",
+        range_from: currentMonthStr,
+        range_to: currentMonthStr,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "companies"],
+        filters_applied: { holding_id: holdingId, period_month: currentMonthStr, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message ?? String(e),
+      } as any,
+    };
+  }
+}

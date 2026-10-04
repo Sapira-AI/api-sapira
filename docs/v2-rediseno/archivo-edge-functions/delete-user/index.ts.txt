@@ -1,0 +1,165 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// delete-user v1 (2026-07-21) — eliminación completa de usuarios (bugs H y J de
+// memoria feature_invitation_flow_bugs).
+//
+// Antes el front hacía DELETE directo sobre public.users: auth.users quedaba
+// zombie (el email no se podía reinvitar) y las sesiones activas seguían vivas.
+// Esta función, con service role:
+//   1. Autoriza al caller (super admin, o comparte holding con el usuario objetivo
+//      y tiene permiso EDIT_CONFIGURACION).
+//   2. Borra public.users (cascadea user_holdings, preferences, etc.). Si el
+//      usuario tiene registros históricos con FK RESTRICT, devuelve 409 con el
+//      detalle en vez de fallar en silencio.
+//   3. Borra auth.users (revoca refresh tokens: la sesión muere al expirar el
+//      JWT vigente, máx ~1 hora).
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
+  let payload: { user_id?: string };
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const userId = payload?.user_id;
+  if (!userId) {
+    return json({ error: 'user_id is required' }, 400);
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) {
+    return json({ error: 'Falta configuración de Supabase' }, 500);
+  }
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  try {
+    // ── 1) Resolver caller desde el JWT ────────────────────────────────────
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const { data: callerAuth, error: callerErr } = await admin.auth.getUser(token);
+    if (callerErr || !callerAuth?.user) {
+      return json({ error: 'No autenticado' }, 401);
+    }
+
+    const { data: caller } = await admin
+      .from('users')
+      .select('id, email, is_super_admin, role_id')
+      .eq('auth_id', callerAuth.user.id)
+      .maybeSingle();
+
+    if (!caller) {
+      return json({ error: 'Usuario del sistema no encontrado para el caller' }, 403);
+    }
+
+    // ── 2) Cargar usuario objetivo ─────────────────────────────────────────
+    const { data: target } = await admin
+      .from('users')
+      .select('id, email, name, auth_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!target) {
+      return json({ error: 'Usuario no encontrado' }, 404);
+    }
+
+    if (target.id === caller.id) {
+      return json({ error: 'No puedes eliminar tu propio usuario' }, 400);
+    }
+
+    // ── 3) Autorización ────────────────────────────────────────────────────
+    if (!caller.is_super_admin) {
+      // Debe compartir al menos un holding con el objetivo
+      const [{ data: callerHoldings }, { data: targetHoldings }] = await Promise.all([
+        admin.from('user_holdings').select('holding_id').eq('user_id', caller.id),
+        admin.from('user_holdings').select('holding_id').eq('user_id', target.id)
+      ]);
+      const callerSet = new Set((callerHoldings || []).map((h) => h.holding_id));
+      const shares = (targetHoldings || []).some((h) => callerSet.has(h.holding_id));
+      if (!shares) {
+        return json({ error: 'No tienes acceso al holding del usuario' }, 403);
+      }
+
+      // Y tener permiso de configuración
+      const { data: perm } = await admin
+        .from('role_permissions')
+        .select('permission_id, permissions!inner(code)')
+        .eq('role_id', caller.role_id)
+        .eq('permissions.code', 'EDIT_CONFIGURACION')
+        .maybeSingle();
+      if (!perm) {
+        return json({ error: 'No tienes permiso para eliminar usuarios' }, 403);
+      }
+    }
+
+    console.log(`🗑️ Eliminando usuario ${target.email} (${target.id}) — caller: ${caller.email}`);
+
+    // ── 4) Borrar public.users (cascadea user_holdings, preferences, etc.) ─
+    const { error: deleteError } = await admin.from('users').delete().eq('id', target.id);
+    if (deleteError) {
+      // 23503 = foreign_key_violation → el usuario tiene registros históricos
+      if ((deleteError as any).code === '23503') {
+        console.error('❌ FK violation al borrar:', deleteError);
+        return json(
+          {
+            success: false,
+            error:
+              'El usuario tiene registros históricos asociados (p. ej. eventos contables o documentos) y no puede eliminarse. Contacta a soporte para desactivarlo.',
+            detail: deleteError.message
+          },
+          409
+        );
+      }
+      console.error('❌ Error al borrar public.users:', deleteError);
+      return json({ success: false, error: deleteError.message }, 500);
+    }
+
+    // ── 5) Borrar auth.users (si estaba vinculado) ─────────────────────────
+    let authDeleted = false;
+    if (target.auth_id) {
+      const { error: authDeleteError } = await admin.auth.admin.deleteUser(target.auth_id);
+      if (authDeleteError) {
+        // public.users ya se borró: reportar el parcial para limpieza manual,
+        // sin dejar al front creyendo que todo falló.
+        console.error('⚠️ public.users borrado pero auth.users falló:', authDeleteError);
+        return json({
+          success: true,
+          auth_deleted: false,
+          warning: `Usuario eliminado, pero su registro de acceso quedó pendiente de limpieza (${authDeleteError.message}).`
+        });
+      }
+      authDeleted = true;
+    }
+
+    console.log(`✅ Usuario ${target.email} eliminado (auth: ${authDeleted})`);
+    return json({ success: true, auth_deleted: authDeleted });
+  } catch (error) {
+    const err = error as Error;
+    console.error('💥 Error completo:', err);
+    return json({ success: false, error: err.message || 'Error interno del servidor' }, 500);
+  }
+});

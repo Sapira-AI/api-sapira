@@ -1,0 +1,377 @@
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
+
+// Reutilizar la clase XmlRpcClient del archivo principal
+class XmlRpcClient {
+  constructor(private url: string) {}
+
+  async methodCall(method: string, params: any[]): Promise<any> {
+    const xmlPayload = this.buildXmlRpcRequest(method, params);
+    
+    const response = await fetch(this.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Accept': 'text/xml'
+      },
+      body: xmlPayload
+    });
+
+    if (!response.ok) {
+      throw new Error(`XML-RPC request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+    return this.parseXmlRpcResponse(responseText);
+  }
+
+  private buildXmlRpcRequest(method: string, params: any[]): string {
+    let xml = '<?xml version="1.0"?>\n<methodCall>\n';
+    xml += `<methodName>${this.escapeXml(method)}</methodName>\n`;
+    xml += '<params>\n';
+    
+    for (const param of params) {
+      xml += '<param>\n';
+      xml += this.valueToXml(param);
+      xml += '</param>\n';
+    }
+    
+    xml += '</params>\n</methodCall>';
+    return xml;
+  }
+
+  private valueToXml(value: any): string {
+    let xml = '<value>';
+    
+    if (value === null || value === undefined) {
+      xml += '<nil/>';
+    } else if (typeof value === 'string') {
+      xml += `<string>${this.escapeXml(value)}</string>`;
+    } else if (typeof value === 'number') {
+      if (Number.isInteger(value)) {
+        xml += `<int>${value}</int>`;
+      } else {
+        xml += `<double>${value}</double>`;
+      }
+    } else if (typeof value === 'boolean') {
+      xml += `<boolean>${value ? '1' : '0'}</boolean>`;
+    } else if (Array.isArray(value)) {
+      xml += '<array><data>';
+      for (const item of value) {
+        xml += this.valueToXml(item);
+      }
+      xml += '</data></array>';
+    } else if (typeof value === 'object') {
+      xml += '<struct>';
+      for (const key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          xml += `<member><name>${this.escapeXml(key)}</name>`;
+          xml += this.valueToXml(value[key]);
+          xml += '</member>';
+        }
+      }
+      xml += '</struct>';
+    } else {
+      xml += `<string>${this.escapeXml(String(value))}</string>`;
+    }
+    
+    xml += '</value>';
+    return xml;
+  }
+
+  private escapeXml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  private parseXmlRpcResponse(xml: string): any {
+    console.log('Analizando respuesta XML-RPC con librería XML...');
+    
+    try {
+      // Usar librería XML para parsear
+      const parsed = parse(xml);
+      console.log('✅ XML parseado exitosamente');
+      
+      // Navegar por la estructura XML-RPC estándar
+      const methodResponse = parsed.methodResponse;
+      if (!methodResponse) {
+        throw new Error('No se encontró methodResponse');
+      }
+      
+      // Verificar si hay fault
+      if (methodResponse.fault) {
+        const faultValue = methodResponse.fault.value;
+        throw new Error(`XML-RPC Fault: ${JSON.stringify(faultValue)}`);
+      }
+      
+      // Obtener el valor de la respuesta
+      const params = methodResponse.params;
+      if (!params || !params.param || !params.param.value) {
+        throw new Error('Estructura de respuesta XML-RPC inválida');
+      }
+      
+      const responseValue = params.param.value;
+      
+      // Convertir la estructura XML parseada a objetos JavaScript
+      const result = this.convertXmlValueToJs(responseValue);
+      
+      console.log(`✅ Convertido a JavaScript: ${Array.isArray(result) ? result.length + ' elementos' : typeof result}`);
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Error al parsear XML-RPC:', error.message);
+      console.log('XML problemático (primeros 500 chars):', xml.substring(0, 500));
+      return [];
+    }
+  }
+  
+  private convertXmlValueToJs(value: any): any {
+    if (!value) return null;
+    
+    // Manejar diferentes tipos de valores XML-RPC
+    if (value.int !== undefined) return parseInt(value.int, 10);
+    if (value.i4 !== undefined) return parseInt(value.i4, 10);
+    if (value.double !== undefined) return parseFloat(value.double);
+    if (value.string !== undefined) return value.string;
+    if (value.boolean !== undefined) return value.boolean === '1';
+    
+    // Manejar arrays
+    if (value.array && value.array.data && value.array.data.value) {
+      const arrayValues = Array.isArray(value.array.data.value) 
+        ? value.array.data.value 
+        : [value.array.data.value];
+      
+      return arrayValues.map(v => this.convertXmlValueToJs(v));
+    }
+    
+    // Manejar structs (objetos)
+    if (value.struct && value.struct.member) {
+      const obj = {};
+      const members = Array.isArray(value.struct.member) 
+        ? value.struct.member 
+        : [value.struct.member];
+      
+      for (const member of members) {
+        if (member.name && member.value !== undefined) {
+          obj[member.name] = this.convertXmlValueToJs(member.value);
+        }
+      }
+      return obj;
+    }
+    
+    // Valor directo
+    return value;
+  }
+}
+
+serve(async (req) => {
+  const responseHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: responseHeaders, status: 204 });
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ success: false, message: 'Solo se permite método POST' }),
+      { headers: responseHeaders, status: 405 }
+    );
+  }
+
+  try {
+    const params = await req.json();
+    const { connection_id } = params;
+    
+    if (!connection_id) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Se requiere connection_id' }),
+        { headers: responseHeaders, status: 400 }
+      );
+    }
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabaseClient = createClient(supabaseUrl, supabaseKey);
+    
+    // Obtener la conexión de Odoo
+    const { data: connection, error: connectionError } = await supabaseClient
+      .from('odoo_connections')
+      .select('*')
+      .eq('id', connection_id)
+      .single();
+    
+    if (connectionError || !connection) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `Error al obtener la conexión: ${connectionError?.message || 'Conexión no encontrada'}` 
+        }),
+        { headers: responseHeaders, status: 400 }
+      );
+    }
+    
+    // Normalizar URL
+    let normalizedUrl = connection.url.trim();
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    if (!normalizedUrl.endsWith('/')) {
+      normalizedUrl += '/';
+    }
+    
+    const commonUrl = `${normalizedUrl}xmlrpc/2/common`;
+    const objectUrl = `${normalizedUrl}xmlrpc/2/object`;
+    
+    const commonClient = new XmlRpcClient(commonUrl);
+    
+    // Autenticar
+    const uid = await commonClient.methodCall('authenticate', [
+      connection.database_name,
+      connection.username || '',
+      connection.api_key,
+      {}
+    ]);
+    
+    if (!uid) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Autenticación fallida'
+        }),
+        { headers: responseHeaders, status: 401 }
+      );
+    }
+    
+    const objectClient = new XmlRpcClient(objectUrl);
+    
+    // DIAGNÓSTICO: Probar diferentes filtros
+    const diagnostics = [];
+    
+    // 1. Contar todas las facturas
+    try {
+      const allInvoicesCount = await objectClient.methodCall('execute_kw', [
+        connection.database_name,
+        uid,
+        connection.api_key,
+        'account.move',
+        'search_count',
+        [[['move_type', 'like', 'invoice']]]
+      ]);
+      diagnostics.push({ test: 'Total facturas (cualquier tipo)', count: allInvoicesCount });
+    } catch (e) {
+      diagnostics.push({ test: 'Total facturas (cualquier tipo)', error: e.message });
+    }
+    
+    // 2. Contar facturas de cliente
+    try {
+      const outInvoicesCount = await objectClient.methodCall('execute_kw', [
+        connection.database_name,
+        uid,
+        connection.api_key,
+        'account.move',
+        'search_count',
+        [[['move_type', '=', 'out_invoice']]]
+      ]);
+      diagnostics.push({ test: 'Facturas de cliente (cualquier estado)', count: outInvoicesCount });
+    } catch (e) {
+      diagnostics.push({ test: 'Facturas de cliente (cualquier estado)', error: e.message });
+    }
+    
+    // 3. Contar facturas confirmadas
+    try {
+      const postedInvoicesCount = await objectClient.methodCall('execute_kw', [
+        connection.database_name,
+        uid,
+        connection.api_key,
+        'account.move',
+        'search_count',
+        [[['move_type', '=', 'out_invoice'], ['state', '=', 'posted']]]
+      ]);
+      diagnostics.push({ test: 'Facturas de cliente confirmadas (filtro actual)', count: postedInvoicesCount });
+    } catch (e) {
+      diagnostics.push({ test: 'Facturas de cliente confirmadas (filtro actual)', error: e.message });
+    }
+    
+    // 4. Ver estados disponibles
+    try {
+      const statesSample = await objectClient.methodCall('execute_kw', [
+        connection.database_name,
+        uid,
+        connection.api_key,
+        'account.move',
+        'read_group',
+        [[['move_type', '=', 'out_invoice']]],
+        { fields: ['state'], groupby: ['state'] }
+      ]);
+      diagnostics.push({ test: 'Estados disponibles en facturas de cliente', states: statesSample });
+    } catch (e) {
+      diagnostics.push({ test: 'Estados disponibles en facturas de cliente', error: e.message });
+    }
+    
+    // 5. Muestra de facturas (primeras 5)
+    try {
+      const sampleIds = await objectClient.methodCall('execute_kw', [
+        connection.database_name,
+        uid,
+        connection.api_key,
+        'account.move',
+        'search',
+        [[['move_type', '=', 'out_invoice']]],
+        { limit: 5 }
+      ]);
+      
+      if (sampleIds && sampleIds.length > 0) {
+        const sampleData = await objectClient.methodCall('execute_kw', [
+          connection.database_name,
+          uid,
+          connection.api_key,
+          'account.move',
+          'read',
+          [sampleIds],
+          { fields: ['name', 'state', 'move_type', 'invoice_date', 'amount_total'] }
+        ]);
+        diagnostics.push({ test: 'Muestra de facturas', sample: sampleData });
+      } else {
+        diagnostics.push({ test: 'Muestra de facturas', message: 'No se encontraron facturas' });
+      }
+    } catch (e) {
+      diagnostics.push({ test: 'Muestra de facturas', error: e.message });
+    }
+    
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: 'Diagnóstico completado',
+        connection: {
+          name: connection.name,
+          url: normalizedUrl,
+          database: connection.database_name,
+          authenticated_uid: uid
+        },
+        diagnostics
+      }),
+      { headers: responseHeaders }
+    );
+    
+  } catch (error) {
+    console.error('Error en diagnóstico:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        message: `Error: ${error.message}`,
+        stack: error.stack
+      }),
+      { headers: responseHeaders, status: 500 }
+    );
+  }
+});

@@ -1,4 +1,43 @@
-# Nota para Leon · actualizar `leon` con `qa` (03-10-2026)
+# Nota para Leon · actualizar `leon` con `qa` (03-10-2026, actualizada 04-10)
+
+## Actualización 04-10: switch hecho
+
+`qa` y `main` ya traen el switch (API v0.0.106, front v0.1.65). Volvimos a simular `git merge origin/qa` sobre `origin/leon`
+(tu último commit es el merge del 27-09): salen **los mismos 5 conflictos de código** de abajo (§1–§5) más los mecánicos de
+snapshots/READMEs, nada nuevo. Ningún archivo de tu rama usa lo que se retiró hoy (`BillingPermissionsService`, rutas `/lab/...`).
+Tus 3 commits (v0.0.40, v0.0.41 y el merge) son los que pasan a `qa` al resolver.
+
+Lo que cambió desde el 03-10 y te conviene saber al resolver o después:
+
+- **Front:** todos los módulos en su ruta final (`aisapira.com/clientes`, `/contratos`, `/facturacion`, `/conexiones`,
+  `/administracion`…); `/lab/*` redirige. `app.aisapira.com` redirige con 308 a `aisapira.com` (dominio movido al proyecto
+  `front-sapira` en Vercel) y el proyecto `sapira-ai` quedó con Deployment Protection: el front viejo ya no es accesible.
+  Supabase Auth: Site URL `https://aisapira.com` y `https://aisapira.com/**` en Redirect URLs.
+- **API:** los `href` de tareas, alertas, actividad del cliente, correos e integraciones salen con la ruta final (sin `/lab`).
+  `BillingPermissionGuard` ahora usa `PermissionsService.assert` y se eliminó `BillingPermissionsService`. "Configuración" se
+  muestra como **Administración** (mismos códigos `*_CONFIGURACION`; ver AGENTS.md).
+- **Supabase:** se borraron las edge `send-invitation`, `delete-user`, `sync-exchange-rates`, `diagnose-odoo-model`,
+  `diagnose-odoo-invoices`, `get-odoo-companies`, `chargebee-proxy`, `data-gateway` y `rag-*` (fuentes en
+  `docs/v2-rediseno/archivo-edge-functions/`). Siguen las de Odoo que usas, `check-overdue-invoices`, `send-proforma`,
+  `send-collection` y las `agents-*` (huérfanas: ¿las borramos?). `grants/030` y `grants/060` aplicados en QA y prod: 30 RPC del
+  front viejo ya no tienen EXECUTE para `anon`/`authenticated` (`postgres` y `service_role` sí).
+- **Variables de la API en prod (Railway):** `INVITE_LANDING_URL` (y `DOCUMENTS_LINK_BASE_URL` si la usas) =
+  `https://aisapira.com`, **sin www** (`www.aisapira.com` todavía apunta a Framer). `FRONT_BASE_URL`/CORS ya aceptan
+  `aisapira.com` (probado). Falta tu confirmación y la prueba de una invitación de punta a punta.
+- **Vercel / front (chicos, post switch):**
+  - `NEXT_PUBLIC_API_WS_URL` ya está en Production (`https://api.aisapira.com`, tipo Config); falta agregarla en el entorno
+    `qa` con el valor de `API_URL` de qa y redeployar QA (sin ella, en QA la campana no se actualiza en vivo; ya no intenta
+    `localhost`).
+  - Borrar `NEXT_PUBLIC_LEGACY_APP_URL` y `AUTH_REDIRECT_URL` (Production y qa): el código ya no las usa.
+    `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` sí se usa: no tocar.
+  - `www.aisapira.com`: redirect 308 a `aisapira.com` en el proyecto `front-sapira` + CNAME `www` en GoDaddy (hoy
+    `sites.framer.app`, despublicado) al valor que indique Vercel.
+  - Test del front que falla por timeout desde antes del switch: `lib/api/factura-proxy.test.ts` › "propaga
+    X-Factura-Company-Id desde empresaId en multipart cuando falta el header" (también falla corrido solo).
+- **Pendientes tuyos que siguen abiertos:** respetar `auto_enabled` de `holding_integration_settings` en los crons de Salesforce,
+  BigQuery y Stripe; `invoice_items.subscription_item_id` vacío desde mar-2026 (congela el devengo de suscripciones Stripe);
+  `sync_user_on_login` se mantiene (la API aún no pasa Pendiente → Activo); urgentes de seguridad de
+  `revision-seguridad-api.md`.
 
 Tus commits v0.0.40 (tenancy fase 1 + corridas por holding + `holding_integration_settings`) y v0.0.41 (snapshot) no
 están en `qa`. `qa` ya trae todo lo de Domi hasta **v0.0.93** (Configuración v2, usuarios e invitaciones, Notificaciones
@@ -55,7 +94,7 @@ Revisar que tu `invoice-scheduler.service.ts` siga llamando con los parámetros 
 
 ### 4. `package.json` → versión de `qa`
 
-`"version": "0.0.93"` (la tuya es 0.0.41). El siguiente `yarn vcp` sube desde ahí.
+`"version"` de `qa` (hoy 0.0.106; la tuya es 0.0.41). El siguiente `yarn vcp` sube desde ahí.
 
 ### 5. `holding_integration_settings`: entity (add/add) → quedarse con la versión de `domi`
 

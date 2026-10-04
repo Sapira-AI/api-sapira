@@ -1,0 +1,57 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const CHARGEBEE_SITE = 'agendapro-test';
+const CHARGEBEE_API_KEY = 'test_3ugBcdlL4qfzdgEcdeiKhc9gXxlWbVLcucG';
+const CHARGEBEE_BASE_URL = `https://${CHARGEBEE_SITE}.chargebee.com/api/v2`;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+serve(async (req)=>{
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const url = new URL(req.url);
+    const endpoint = url.searchParams.get('endpoint') || 'subscriptions';
+    const queryParams = url.searchParams.get('params') || '';
+    // Build the ChargeBee URL
+    const chargebeeUrl = `${CHARGEBEE_BASE_URL}/${endpoint}${queryParams ? '?' + queryParams : ''}`;
+    console.log('Proxying request to:', chargebeeUrl);
+    // Create Basic Auth header
+    const authHeader = 'Basic ' + btoa(CHARGEBEE_API_KEY + ':');
+    // Make the request to ChargeBee
+    const response = await fetch(chargebeeUrl, {
+      method: req.method,
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: req.method !== 'GET' ? await req.text() : undefined
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`ChargeBee API error: ${response.status} - ${JSON.stringify(data)}`);
+    }
+    return new Response(JSON.stringify(data), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});

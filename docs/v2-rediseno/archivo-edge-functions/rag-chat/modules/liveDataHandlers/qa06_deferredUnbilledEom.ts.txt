@@ -1,0 +1,161 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { parseMonthRange } from "../utils.ts";
+
+export async function handleQa06DeferredUnbilledEom(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+  flags: {
+    deferredUnbilledEomSeries?: boolean;
+    deferredEomSeries?: boolean;
+    unbilledEomSeries?: boolean;
+  };
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, flags, question } = params;
+
+  const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+  const widgets: Widget[] = [];
+  const sources: any[] = [];
+
+  if (flags.deferredUnbilledEomSeries) {
+    const { data: rawData, error: rawError } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, deferred_balance_eom_system_ccy, unbilled_balance_eom_system_ccy")
+      .eq("holding_id", holdingId)
+      .gte("period_month", dateFrom)
+      .lte("period_month", dateTo)
+      .order("period_month")
+      .limit(100); // Limitar para evitar timeout
+
+    if (rawError) throw rawError;
+
+    const combinedData: any[] = [];
+    const monthMap = new Map();
+
+    (rawData || []).forEach((row: any) => {
+      const month = row.period_month.slice(0, 7);
+      if (!monthMap.has(month)) {
+        monthMap.set(month, { month, deferred: 0, unbilled: 0 });
+      }
+      const data = monthMap.get(month);
+      data.deferred += Number(row.deferred_balance_eom_system_ccy || 0);
+      data.unbilled += Number(row.unbilled_balance_eom_system_ccy || 0);
+    });
+
+    monthMap.forEach((value) => combinedData.push(value));
+
+    widgets.push({
+      type: "chart_line",
+      title: `Deferred y Unbilled Balance EOM últimos ${monthsBack} meses (USD)`,
+      xKey: "month",
+      series: [
+        { key: "deferred", name: "Deferred EOM", color: "#F59E0B" },
+        { key: "unbilled", name: "Unbilled EOM", color: "#3B82F6" },
+      ],
+      data: combinedData,
+      metadata: {
+        range: `${dateFrom} a ${dateTo}`,
+        currency_mode: "system",
+        source: "revenue_schedule_monthly",
+        completeness: "complete",
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    sources.push(
+      { table: "revenue_schedule_monthly", query_type: "deferred_eom_series", filters: {} },
+      { table: "revenue_schedule_monthly", query_type: "unbilled_eom_series", filters: {} },
+    );
+  } else {
+    if (flags.deferredEomSeries) {
+      const { data: rawData, error: rawError } = await supabaseAuth
+        .from("revenue_schedule_monthly")
+        .select("period_month, deferred_balance_eom_system_ccy")
+        .eq("holding_id", holdingId)
+        .gte("period_month", dateFrom)
+        .lte("period_month", dateTo)
+        .order("period_month")
+        .limit(100);
+
+      if (rawError) throw rawError;
+
+      const monthMap = new Map<string, number>();
+      (rawData || []).forEach((row: any) => {
+        const month = row.period_month.slice(0, 7);
+        monthMap.set(month, (monthMap.get(month) || 0) + Number(row.deferred_balance_eom_system_ccy || 0));
+      });
+
+      const deferredSeries = Array.from(monthMap.entries()).map(([month, deferred]) => ({
+        month,
+        deferred: Number(deferred.toFixed(2)),
+      }));
+
+      widgets.push({
+        type: "chart_line",
+        title: `Deferred Balance EOM últimos ${monthsBack} meses (USD)`,
+        xKey: "month",
+        series: [{ key: "deferred", name: "Deferred EOM", color: "#F59E0B" }],
+        data: deferredSeries,
+      });
+
+      sources.push({ table: "revenue_schedule_monthly", query_type: "deferred_eom_series", filters: {} });
+    }
+
+    if (flags.unbilledEomSeries) {
+      const { data: rawData, error: rawError } = await supabaseAuth
+        .from("revenue_schedule_monthly")
+        .select("period_month, unbilled_balance_eom_system_ccy")
+        .eq("holding_id", holdingId)
+        .gte("period_month", dateFrom)
+        .lte("period_month", dateTo)
+        .order("period_month")
+        .limit(100);
+
+      if (rawError) throw rawError;
+
+      const monthMap = new Map<string, number>();
+      (rawData || []).forEach((row: any) => {
+        const month = row.period_month.slice(0, 7);
+        monthMap.set(month, (monthMap.get(month) || 0) + Number(row.unbilled_balance_eom_system_ccy || 0));
+      });
+
+      const unbilledSeries = Array.from(monthMap.entries()).map(([month, unbilled]) => ({
+        month,
+        unbilled: Number(unbilled.toFixed(2)),
+      }));
+
+      widgets.push({
+        type: "chart_line",
+        title: `Unbilled Balance EOM últimos ${monthsBack} meses (USD)`,
+        xKey: "month",
+        series: [{ key: "unbilled", name: "Unbilled EOM", color: "#3B82F6" }],
+        data: unbilledSeries,
+      });
+
+      sources.push({ table: "revenue_schedule_monthly", query_type: "unbilled_eom_series", filters: {} });
+    }
+  }
+
+  const audit: LiveDataAudit = {
+    range_from: dateFrom,
+    range_to: dateTo,
+    currency_mode: "system",
+    source_breakdown: ["revenue_schedule_monthly"],
+    filters_applied: { holding_id: holdingId },
+    holding_id: holdingId,
+    data_completeness: "complete",
+    timestamp: new Date().toISOString(),
+  };
+
+  return {
+    handled: true,
+    context: `Balances EOM últimos ${monthsBack} meses. Deferred: ${flags.deferredEomSeries ? "incluido" : "no"}. Unbilled: ${flags.unbilledEomSeries ? "incluido" : "no"}.`,
+    sources,
+    widgets,
+    audit,
+  };
+}

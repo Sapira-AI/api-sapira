@@ -1,0 +1,233 @@
+// Utilidades para el sistema de plantillas de email
+
+/**
+ * Reemplaza variables en una plantilla de texto
+ */
+export function replaceTemplateVariables(template: string, variables: Record<string, any>): string {
+  if (!template) return '';
+  
+  let result = template;
+  
+  // Reemplazar cada variable en el formato {{variable}}
+  Object.entries(variables).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+    result = result.replace(regex, String(value || ''));
+  });
+  
+  return result;
+}
+
+/**
+ * Genera variables para plantillas de proformas
+ */
+export function generateProformaVariables(context: {
+  client?: { name_commercial?: string };
+  contact?: { name?: string };
+  invoice?: { 
+    scheduled_at?: string; 
+    invoice_number?: string;
+    total_invoice_currency?: number;
+    invoice_currency?: string;
+  };
+}): Record<string, string> {
+  const clientName = context.client?.name_commercial || 'Cliente';
+  const contactName = context.contact?.name || clientName;
+  const invoiceDate = context.invoice?.scheduled_at || '';
+  const invoiceNumber = context.invoice?.invoice_number || 'Pendiente';
+  
+  // Formatear fecha en español
+  let formattedDate = '';
+  if (invoiceDate) {
+    try {
+      const date = new Date(invoiceDate);
+      formattedDate = date.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    } catch {
+      formattedDate = invoiceDate;
+    }
+  }
+  
+  return {
+    client_name: clientName,
+    contact_name: contactName,
+    invoice_date: invoiceDate,
+    invoice_number: invoiceNumber,
+    formatted_date: formattedDate,
+    company_name: clientName // Alias para compatibilidad
+  };
+}
+
+/**
+ * Genera variables para plantillas de cobranzas
+ */
+export function generateCollectionsVariables(context: {
+  client?: { name_commercial?: string };
+  contact?: { name?: string };
+  invoices?: Array<{
+    id?: string;
+    invoice_number?: string;
+    due_date?: string;
+    total_invoice_currency?: number;
+    invoice_currency?: string;
+  }>;
+  totalAmount?: number;
+  currency?: string;
+}): Record<string, string> {
+  const clientName = context.client?.name_commercial || 'Cliente';
+  const contactName = context.contact?.name || clientName;
+  const invoices = context.invoices || [];
+  const invoiceCount = invoices.length;
+  const currency = context.currency || 'USD';
+  const totalAmount = context.totalAmount || 0;
+  
+  // Formatear monto total
+  const formattedTotal = new Intl.NumberFormat('es-ES', { 
+    style: 'currency', 
+    currency: currency 
+  }).format(totalAmount);
+  
+  // Calcular días de mora promedio
+  const today = new Date();
+  let totalDaysOverdue = 0;
+  
+  invoices.forEach(invoice => {
+    if (invoice.due_date) {
+      const dueDate = new Date(invoice.due_date);
+      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      totalDaysOverdue += Math.max(0, daysOverdue);
+    }
+  });
+  
+  const avgDaysOverdue = invoiceCount > 0 ? Math.round(totalDaysOverdue / invoiceCount) : 0;
+  
+  // Generar tabla HTML de facturas
+  const invoicesTable = generateInvoicesTable(invoices, currency);
+  
+  return {
+    client_name: clientName,
+    contact_name: contactName,
+    invoice_count: invoiceCount.toString(),
+    total_amount: formattedTotal,
+    currency: currency,
+    days_overdue: avgDaysOverdue.toString(),
+    invoices_table: invoicesTable
+  };
+}
+
+/**
+ * Genera una tabla HTML con el detalle de facturas
+ */
+function generateInvoicesTable(invoices: Array<{
+  invoice_number?: string;
+  due_date?: string;
+  total_invoice_currency?: number;
+  invoice_currency?: string;
+}>, defaultCurrency: string = 'USD'): string {
+  if (!invoices || invoices.length === 0) {
+    return '<p>No hay facturas para mostrar.</p>';
+  }
+  
+  let tableRows = '';
+  let totalAmount = 0;
+  
+  invoices.forEach(invoice => {
+    const invoiceNumber = invoice.invoice_number || 'Sin número';
+    const dueDate = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('es-ES') : 'Sin fecha';
+    const amount = invoice.total_invoice_currency || 0;
+    const currency = invoice.invoice_currency || defaultCurrency;
+    
+    const formattedAmount = new Intl.NumberFormat('es-ES', { 
+      style: 'currency', 
+      currency: currency 
+    }).format(amount);
+    
+    totalAmount += amount;
+    
+    tableRows += `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd;">${invoiceNumber}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${dueDate}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formattedAmount}</td>
+      </tr>
+    `;
+  });
+  
+  const formattedTotal = new Intl.NumberFormat('es-ES', { 
+    style: 'currency', 
+    currency: defaultCurrency 
+  }).format(totalAmount);
+  
+  return `
+    <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+      <thead>
+        <tr style="background-color: #f2f2f2;">
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Factura</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Vencimiento</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Monto</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight: bold;">
+          <td colspan="2" style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total:</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formattedTotal}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+/**
+ * Obtiene plantillas por defecto para proformas
+ */
+export function getDefaultProformaTemplates() {
+  return {
+    subject: 'Solicitud de referencia - {{client_name}}',
+    body: `Estimado/a {{contact_name}},
+
+Le enviamos la proforma de la factura programada para el {{formatted_date}}.
+
+Por favor, envíenos la orden de compra o referencia correspondiente.
+
+Saludos cordiales,
+Equipo de {{client_name}}`
+  };
+}
+
+/**
+ * Obtiene plantillas por defecto para cobranzas
+ */
+export function getDefaultCollectionsTemplates() {
+  return {
+    bucket1: {
+      subject: 'Recordatorio de pago - {{client_name}}',
+      body: `Estimado/a {{contact_name}},
+
+Le recordamos que tiene {{invoice_count}} factura(s) pendiente(s) por un total de {{total_amount}}.
+
+{{invoices_table}}
+
+Agradecemos su pronta atención.
+
+Saludos cordiales,
+Equipo de Cobranzas`
+    },
+    bucket2: {
+      subject: 'URGENTE: Facturas vencidas - {{client_name}}',
+      body: `Estimado/a {{contact_name}},
+
+AVISO IMPORTANTE: Tiene {{invoice_count}} factura(s) con vencimiento considerable por {{total_amount}}.
+
+{{invoices_table}}
+
+Le solicitamos regularizar esta situación a la brevedad.
+
+Departamento de Cobranzas`
+    }
+  };
+}

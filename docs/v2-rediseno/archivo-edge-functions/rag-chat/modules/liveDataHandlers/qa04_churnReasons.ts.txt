@@ -1,0 +1,148 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+import type { LiveDataResult, LiveDataSource } from "./types.ts";
+
+export async function handleQa04ChurnReasons(args: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = args;
+
+  try {
+    const { fromMonth, toMonth, monthsBack } = parseMonthRange(question);
+    const toExclusiveDate = new Date(toMonth);
+    toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+    const toExclusive = monthStartStr(toExclusiveDate);
+
+    const { data: churnRows, error: churnErr } = await supabaseAuth
+      .from("contract_items")
+      .select("churn_date, contract_id, contracts(churn_reason, client_id, clients(segment))")
+      .eq("holding_id", holdingId)
+      .not("churn_date", "is", null)
+      .gte("churn_date", fromMonth)
+      .lt("churn_date", toExclusive)
+      .limit(5000);
+
+    if (churnErr) throw churnErr;
+
+    const rows = Array.isArray(churnRows) ? (churnRows as unknown[]) : [];
+
+    type RowShape = {
+      contracts?: { churn_reason?: unknown; clients?: { segment?: unknown } | null } | null;
+    };
+
+    const pivot = new Map<string, number>();
+    for (const raw of rows) {
+      const r = raw as RowShape;
+      const reasonRaw = r?.contracts?.churn_reason;
+      const reason = typeof reasonRaw === "string" && reasonRaw.trim() ? reasonRaw.trim() : "(sin razón)";
+      const segRaw = r?.contracts?.clients?.segment;
+      const segment = typeof segRaw === "string" && segRaw.trim() ? segRaw.trim() : "(sin segmento)";
+      const key = `${segment}|${reason}`;
+      pivot.set(key, (pivot.get(key) || 0) + 1);
+    }
+
+    const tableRows = Array.from(pivot.entries())
+      .map(([key, count]) => {
+        const [segment, reason] = key.split("|");
+        return { segment, reason, count };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    const sources: LiveDataSource[] = [
+      { table: "contract_items", query_type: "select", filters: { holding_id: holdingId, churn_date_from: fromMonth, churn_date_to_exclusive: toExclusive } },
+      { table: "contracts", query_type: "join", filters: { fields: ["churn_reason", "client_id"] } },
+      { table: "clients", query_type: "join", filters: { fields: ["segment"] } },
+    ];
+
+    if (tableRows.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré churn (contract_items.churn_date) en los últimos ${monthsBack} meses para generar razones por segmento.`,
+        sources,
+        widgets: [
+          {
+            type: "table",
+            title: "Razones de churn por segmento (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay churn_date en contract_items dentro del rango."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["contracts", "contract_items", "clients"],
+          filters_applied: { holding_id: holdingId, churn_date_from: fromMonth, churn_date_to_exclusive: toExclusive },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as any,
+      };
+    }
+
+    const chartData = tableRows.slice(0, 20).map((r) => ({ reason: r.reason, count: r.count }));
+
+    return {
+      handled: true,
+      context: `Razones de churn por segmento (últimos ${monthsBack} meses) usando contract_items.churn_date + contracts.churn_reason + clients.segment.`,
+      sources,
+      widgets: [
+        {
+          type: "chart_bar",
+          title: `Churn por razón (top 20) - últimos ${monthsBack} meses`,
+          xKey: "reason",
+          series: [{ key: "count", name: "Contratos/items", color: "#EF4444" }],
+          data: chartData,
+        },
+        {
+          type: "table",
+          title: "Razones de churn por segmento",
+          columns: ["Segmento", "Razón", "Cantidad"],
+          rows: tableRows.map((r) => [r.segment, r.reason, r.count]),
+        },
+      ],
+      audit: {
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["contracts", "contract_items", "clients"],
+        filters_applied: { holding_id: holdingId, churn_date_from: fromMonth, churn_date_to_exclusive: toExclusive },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as any,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para razones de churn por segmento. Motivo: ${reason}`,
+      sources: [
+        { table: "contract_items", query_type: "select", filters: { holding_id: holdingId } },
+        { table: "contracts", query_type: "join", filters: {} },
+        { table: "clients", query_type: "join", filters: {} },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Razones de churn",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["contracts", "contract_items", "clients"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

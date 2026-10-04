@@ -1,0 +1,79 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { parseMonthRange } from "../utils.ts";
+
+export async function handleQa05RecognizedRevenue(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+  const { data: rawData, error: rawError } = await supabaseAuth
+    .from("revenue_schedule_monthly")
+    .select("period_month, recognized_period_system_ccy")
+    .eq("holding_id", holdingId)
+    .gte("period_month", dateFrom)
+    .lte("period_month", dateTo)
+    .order("period_month");
+
+  if (rawError) throw rawError;
+
+  const monthMap = new Map<string, number>();
+
+  for (const row of (rawData ?? [])) {
+    const r = row as unknown as { period_month?: string; recognized_period_system_ccy?: unknown };
+    const periodMonth = typeof r.period_month === "string" ? r.period_month : null;
+    if (!periodMonth) continue;
+    const month = periodMonth.slice(0, 7);
+    const rawVal = r.recognized_period_system_ccy;
+    const value = typeof rawVal === "number" ? rawVal : rawVal != null ? Number(rawVal) : 0;
+    monthMap.set(month, (monthMap.get(month) || 0) + (Number.isFinite(value) ? value : 0));
+  }
+
+  const seriesData = Array.from(monthMap.entries())
+    .map(([month, recognized]) => ({
+      month,
+      recognized: Number(recognized.toFixed(2)),
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  const widgets: Widget[] = [
+    {
+      type: "chart_line",
+      title: `Revenue Reconocido últimos ${monthsBack} meses (USD)`,
+      xKey: "month",
+      series: [{ key: "recognized", name: "Reconocido", color: "#22C55E" }],
+      data: seriesData,
+    },
+    {
+      type: "table",
+      title: "Detalle Revenue Reconocido",
+      columns: ["Mes", "Revenue Reconocido (USD)"],
+      rows: seriesData.map((r) => [r.month, r.recognized]),
+    },
+  ];
+
+  const audit: LiveDataAudit = {
+    range_from: dateFrom,
+    range_to: dateTo,
+    currency_mode: "system",
+    source_breakdown: ["revenue_schedule_monthly"],
+    filters_applied: { holding_id: holdingId },
+    holding_id: holdingId,
+    data_completeness: seriesData.length > 0 ? "complete" : "empty",
+    timestamp: new Date().toISOString(),
+  };
+
+  return {
+    handled: true,
+    context: `Revenue reconocido últimos ${monthsBack} meses desde ${dateFrom} hasta ${dateTo}. Incluye recurrente + no recurrente. ${seriesData.length} meses con datos.`,
+    sources: [{ table: "revenue_schedule_monthly", query_type: "recognized_series_direct", filters: {} }],
+    widgets,
+    audit,
+  };
+}

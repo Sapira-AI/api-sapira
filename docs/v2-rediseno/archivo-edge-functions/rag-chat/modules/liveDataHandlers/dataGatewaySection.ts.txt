@@ -1,0 +1,294 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { extractCountryFilter } from "../utils.ts";
+import type { Widget } from "../widgets.ts";
+import type { LiveDataResult, LiveDataSource } from "./types.ts";
+
+type GroupSpec = {
+  groupBy: "currency" | "status" | "country" | "industry" | null;
+  resource: "clients" | "contracts" | "invoices" | "mrr" | null;
+};
+
+export async function tryHandleDataGatewaySection(args: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+  todayStr: string;
+  currentMonthStr: string;
+  targetCurrency: string | null;
+  groupSpec: GroupSpec;
+  flags: Record<string, boolean>;
+  callDataGateway: (body: Record<string, unknown>) => Promise<any>;
+}): Promise<LiveDataResult | null> {
+  const { supabaseAuth, holdingId, question, todayStr, currentMonthStr, targetCurrency, groupSpec, flags, callDataGateway } = args;
+
+  const contextLines: string[] = [];
+  const widgets: Widget[] = [];
+  const sources: LiveDataSource[] = [{ id: "data_gateway", similarity: 1, metadata: { source_type: "data_gateway" } }];
+
+  const qLower = question.toLowerCase();
+
+  function extractSearchTerm(q: string): string | null {
+    const cleanQ = q
+      .toLowerCase()
+      .replace(/\b(buscar|encuentra|encontrar|ver|lista|listar|dame|trae|mu[eé]strame|muestra|sobre|del|cliente|contrato|factura)\b/gi, "")
+      .trim();
+    return cleanQ.length >= 2 ? cleanQ : q.trim();
+  }
+
+  // BI: MRR por industria (data-gateway)
+  if (/(\bmrr\b|ingres\w*\s+recurrent)/i.test(question) && /industr/i.test(question)) {
+    const gwRev = await callDataGateway({
+      resource: "revenue_schedule_monthly",
+      action: "list",
+      filters: { period_month: currentMonthStr },
+      limit: 500,
+    });
+    const revRows = Array.isArray(gwRev.data) ? gwRev.data : [];
+
+    const gwClients = await callDataGateway({ resource: "clients", action: "list", limit: 500 });
+    const clients = Array.isArray(gwClients.data) ? gwClients.data : [];
+    const industryByClientId = new Map<string, string>();
+    for (const c of clients) {
+      const id = (c as any)?.id;
+      if (typeof id === "string" && id) {
+        industryByClientId.set(id, String((c as any)?.industry ?? "(sin industria)"));
+      }
+    }
+
+    const systemCurrency =
+      typeof (revRows?.[0] as any)?.system_currency === "string" ? String((revRows[0] as any).system_currency) : null;
+
+    const byIndustry = new Map<string, number>();
+    for (const r of revRows) {
+      const clientId = (r as any)?.contracts?.client_id;
+      const industry = typeof clientId === "string" ? industryByClientId.get(clientId) : null;
+      const key = String(industry ?? "(sin industria)");
+      const mrr = typeof (r as any)?.mrr_period_system_ccy === "number" ? Number((r as any).mrr_period_system_ccy) : 0;
+      byIndustry.set(key, (byIndustry.get(key) || 0) + mrr);
+    }
+
+    const sorted = Array.from(byIndustry.entries())
+      .map(([key, sum]) => ({ group: key, mrr: Number(sum.toFixed(2)) }))
+      .sort((a, b) => b.mrr - a.mrr);
+
+    if (sorted.length === 0) {
+      return {
+        handled: true,
+        context: `No hay datos de MRR para ${String(currentMonthStr).slice(0, 7)}.`,
+        sources,
+        widgets: [],
+      };
+    }
+
+    const top = sorted.slice(0, 10);
+    const total = sorted.reduce((acc, r) => acc + r.mrr, 0);
+
+    return {
+      handled: true,
+      context: `MRR actual (system currency) por industria para ${String(currentMonthStr).slice(0, 7)}.`,
+      sources,
+      widgets: [
+        {
+          type: "kpi",
+          title: `MRR total (${String(currentMonthStr).slice(0, 7)})`,
+          value: `${total.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+        },
+        {
+          type: "chart_bar",
+          title: "MRR por industria",
+          xKey: "group",
+          series: [{ key: "mrr", name: `MRR${systemCurrency ? ` (${systemCurrency})` : ""}`.trim() }],
+          data: top,
+        },
+        {
+          type: "table",
+          title: "Resumen",
+          columns: ["Industria", "MRR"],
+          rows: top.map((r) => [r.group, r.mrr]),
+        },
+      ],
+    };
+  }
+
+  // BI: Agrupación dinámica (data-gateway)
+  if (groupSpec.groupBy && groupSpec.resource) {
+    const countryFilter = extractCountryFilter(question);
+
+    if (groupSpec.resource === "clients" && groupSpec.groupBy === "country") {
+      const gw = await callDataGateway({ resource: "clients", action: "list", limit: 200 });
+      const rows = Array.isArray(gw.data) ? gw.data : [];
+      const filtered = countryFilter
+        ? rows.filter((c: any) => String(c.market ?? "").toLowerCase().includes(countryFilter.toLowerCase()))
+        : rows;
+
+      const byKey = new Map<string, number>();
+      for (const c of filtered) {
+        const k = String((c as any).market ?? "(sin país)");
+        byKey.set(k, (byKey.get(k) || 0) + 1);
+      }
+
+      const data = Array.from(byKey.entries())
+        .map(([key, count]) => ({ group: key, value: count }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10);
+
+      return {
+        handled: true,
+        context: `Distribución de clientes por país: ${filtered.length} cliente(s).`,
+        sources,
+        widgets: [
+          {
+            type: "chart_bar",
+            title: "Clientes por país",
+            xKey: "group",
+            series: [{ key: "value", name: "Clientes" }],
+            data,
+          },
+          {
+            type: "table",
+            title: "Resumen",
+            columns: ["País", "Clientes"],
+            rows: data.map((d) => [d.group, d.value]),
+          },
+        ],
+      };
+    }
+
+    if (groupSpec.resource === "contracts" && (groupSpec.groupBy === "currency" || groupSpec.groupBy === "status")) {
+      const statusFilter = /\bactiv(o|os|as)\b/i.test(question) ? "Activo" : null;
+      const gw = await callDataGateway({
+        resource: "contracts",
+        action: "list",
+        filters: statusFilter ? { status: statusFilter } : undefined,
+        limit: 200,
+      });
+      const rows = Array.isArray(gw.data) ? gw.data : [];
+
+      const byKey = new Map<string, { count: number; sum: number }>();
+      for (const c of rows) {
+        const key =
+          groupSpec.groupBy === "currency" ? String((c as any).contract_currency ?? "(sin moneda)") : String((c as any).status ?? "(sin estado)");
+        const amount = typeof (c as any).total_value === "number" ? Number((c as any).total_value) : 0;
+        const prev = byKey.get(key) ?? { count: 0, sum: 0 };
+        prev.count += 1;
+        prev.sum += amount;
+        byKey.set(key, prev);
+      }
+
+      const sorted = Array.from(byKey.entries())
+        .map(([key, v]) => ({ group: key, count: v.count, sum: Number(v.sum.toFixed(2)) }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      return {
+        handled: true,
+        context: `Contratos${statusFilter ? ` (${statusFilter})` : ""} agrupados por ${groupSpec.groupBy === "currency" ? "moneda" : "estado"}.`,
+        sources,
+        widgets: [
+          {
+            type: "chart_bar",
+            title: "Contratos (conteo)",
+            xKey: "group",
+            series: [{ key: "count", name: "Contratos" }],
+            data: sorted.map((r) => ({ group: r.group, count: r.count })),
+          },
+          {
+            type: "table",
+            title: "Resumen",
+            columns: [groupSpec.groupBy === "currency" ? "Moneda" : "Estado", "Contratos", "Suma (moneda original)"],
+            rows: sorted.map((r) => [r.group, r.count, r.sum]),
+          },
+        ],
+      };
+    }
+
+    if (groupSpec.resource === "invoices" && (groupSpec.groupBy === "currency" || groupSpec.groupBy === "status")) {
+      const gw = await callDataGateway({ resource: "invoices", action: "list", limit: 200 });
+      const rows = Array.isArray(gw.data) ? gw.data : [];
+
+      const byKey = new Map<string, { count: number; sum: number }>();
+      for (const inv of rows) {
+        const key =
+          groupSpec.groupBy === "currency" ? String((inv as any).invoice_currency ?? "(sin moneda)") : String((inv as any).status ?? "(sin estado)");
+        const amount = typeof (inv as any).total_invoice_currency === "number" ? Number((inv as any).total_invoice_currency) : 0;
+        const prev = byKey.get(key) ?? { count: 0, sum: 0 };
+        prev.count += 1;
+        prev.sum += amount;
+        byKey.set(key, prev);
+      }
+
+      const sorted = Array.from(byKey.entries())
+        .map(([key, v]) => ({ group: key, count: v.count, sum: Number(v.sum.toFixed(2)) }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      return {
+        handled: true,
+        context: `Facturas agrupadas por ${groupSpec.groupBy === "currency" ? "moneda" : "estado"}.`,
+        sources,
+        widgets: [
+          {
+            type: "chart_bar",
+            title: "Facturas (conteo)",
+            xKey: "group",
+            series: [{ key: "count", name: "Facturas" }],
+            data: sorted.map((r) => ({ group: r.group, count: r.count })),
+          },
+          {
+            type: "table",
+            title: "Resumen",
+            columns: [groupSpec.groupBy === "currency" ? "Moneda" : "Estado", "Facturas", "Suma (moneda original)"],
+            rows: sorted.map((r) => [r.group, r.count, r.sum]),
+          },
+        ],
+      };
+    }
+  }
+
+  // Gateways simples
+  if (flags.gatewayClientsList) {
+    const gw = await callDataGateway({ resource: "clients", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Clientes: ${rows.length} (máximo 25).`);
+    widgets.push({
+      type: "table",
+      title: "Clientes",
+      columns: ["Nombre", "Industria", "Segmento", "Estado"],
+      rows: rows.map((c: any) => [c.name_commercial ?? null, c.industry ?? null, c.segment ?? null, c.status ?? null]),
+    });
+  }
+
+  if (flags.gatewayInvoicesList) {
+    const gw = await callDataGateway({ resource: "invoices", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Facturas: ${rows.length} (máximo 25).`);
+    widgets.push({
+      type: "table",
+      title: "Facturas",
+      columns: ["N°", "Emisión", "Vencimiento", "Status", "Monto", "Moneda"],
+      rows: rows.map((inv: any) => [inv.invoice_number ?? null, inv.issue_date ?? null, inv.due_date ?? null, inv.status ?? null, inv.total_invoice_currency ?? null, inv.invoice_currency ?? null]),
+    });
+  }
+
+  if (flags.activeContracts) {
+    const { count, error } = await supabaseAuth
+      .from("contracts")
+      .select("id", { count: "exact", head: true })
+      .eq("holding_id", holdingId)
+      .eq("status", "Activo");
+    if (error) throw error;
+    contextLines.push(`Contratos activos: ${count ?? 0}.`);
+  }
+
+  if (contextLines.length === 0 && widgets.length === 0) {
+    return null;
+  }
+
+  return {
+    handled: true,
+    context: contextLines.join("\n"),
+    sources,
+    widgets,
+  };
+}

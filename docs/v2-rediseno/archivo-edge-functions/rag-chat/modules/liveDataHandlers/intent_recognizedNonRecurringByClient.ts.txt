@@ -1,0 +1,312 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+type ContractItemRow = {
+  id: string;
+  is_recurring: boolean | null;
+};
+
+type ContractRow = {
+  id: string;
+  client_id: string | null;
+};
+
+type ClientRow = {
+  id: string;
+  name_commercial: string | null;
+};
+
+export async function handleIntentRecognizedNonRecurringByClient(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  try {
+    const { fromMonth, toMonth } = parseMonthRange(question);
+    const toExclusiveDate = new Date(toMonth);
+    toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+    const toExclusive = monthStartStr(toExclusiveDate);
+
+    const { data: rsmData, error: rsmErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("contract_id, contract_item_id, period_month, recognized_period_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .gte("period_month", fromMonth)
+      .lt("period_month", toExclusive)
+      .not("recognized_period_system_ccy", "is", null)
+      .limit(5000);
+
+    if (rsmErr) throw rsmErr;
+
+    const rsmRows = Array.isArray(rsmData) ? (rsmData as any[]) : [];
+
+    const contractItemIds = Array.from(
+      new Set(
+        rsmRows
+          .map((r) => (typeof r?.contract_item_id === "string" ? r.contract_item_id : null))
+          .filter((x): x is string => !!x),
+      ),
+    );
+
+    if (contractItemIds.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré filas con contract_item_id en revenue_schedule_monthly para el rango ${fromMonth} a ${toMonth}. No puedo aislar revenue no recurrente por cliente.`,
+        sources: [
+          {
+            table: "revenue_schedule_monthly",
+            query_type: "recognized_non_recurring_by_client",
+            filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+          },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "Revenue no recurrente por cliente (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay contract_item_id en el rango consultado."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["revenue_schedule_monthly"],
+          filters_applied: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+          error_type: "data_quality",
+          error_reason: "No contract_item_id found in RSM rows",
+        } as LiveDataAudit,
+      };
+    }
+
+    const { data: contractItems, error: ciErr } = await supabaseAuth
+      .from("contract_items")
+      .select("id, is_recurring")
+      .eq("holding_id", holdingId)
+      .in("id", contractItemIds)
+      .limit(5000);
+
+    if (ciErr) throw ciErr;
+
+    const nonRecurringContractItemIds = new Set(
+      (Array.isArray(contractItems) ? (contractItems as ContractItemRow[]) : [])
+        .filter((r) => r?.id && r.is_recurring === false)
+        .map((r) => r.id),
+    );
+
+    const nonRecurringRows = rsmRows.filter(
+      (r) => typeof r?.contract_item_id === "string" && nonRecurringContractItemIds.has(r.contract_item_id),
+    );
+
+    if (nonRecurringRows.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré revenue no recurrente (contract_items.is_recurring=false) en el rango ${fromMonth} a ${toMonth}.`,
+        sources: [
+          {
+            table: "revenue_schedule_monthly",
+            query_type: "select",
+            filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+          },
+          {
+            table: "contract_items",
+            query_type: "select",
+            filters: { holding_id: holdingId, is_recurring: false },
+          },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "Revenue no recurrente por cliente (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay filas no recurrentes en el rango."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["revenue_schedule_monthly", "contract_items"],
+          filters_applied: {
+            holding_id: holdingId,
+            period_month_from: fromMonth,
+            period_month_to_exclusive: toExclusive,
+            contract_items_is_recurring: false,
+          },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+    }
+
+    const contractIds = Array.from(
+      new Set(
+        nonRecurringRows
+          .map((r) => (typeof r?.contract_id === "string" ? r.contract_id : null))
+          .filter((x): x is string => !!x),
+      ),
+    );
+
+    const { data: contracts, error: cErr } = await supabaseAuth
+      .from("contracts")
+      .select("id, client_id")
+      .eq("holding_id", holdingId)
+      .in("id", contractIds)
+      .limit(5000);
+
+    if (cErr) throw cErr;
+
+    const clientIds = Array.from(
+      new Set(
+        (Array.isArray(contracts) ? (contracts as ContractRow[]) : [])
+          .map((c) => (typeof c?.client_id === "string" ? c.client_id : null))
+          .filter((x): x is string => !!x),
+      ),
+    );
+
+    const { data: clients, error: clErr } = await supabaseAuth
+      .from("clients")
+      .select("id, name_commercial")
+      .eq("holding_id", holdingId)
+      .in("id", clientIds)
+      .limit(5000);
+
+    if (clErr) throw clErr;
+
+    const clientNameById = new Map<string, string>();
+    for (const cl of Array.isArray(clients) ? (clients as ClientRow[]) : []) {
+      if (cl?.id) clientNameById.set(cl.id, String(cl.name_commercial ?? "(sin nombre)"));
+    }
+
+    const contractClientByContractId = new Map<string, string | null>();
+    for (const c of Array.isArray(contracts) ? (contracts as ContractRow[]) : []) {
+      if (c?.id) contractClientByContractId.set(c.id, c.client_id ?? null);
+    }
+
+    const sumByClientId = new Map<string, number>();
+    for (const r of nonRecurringRows) {
+      const contractId = typeof r?.contract_id === "string" ? r.contract_id : null;
+      const clientId = contractId ? (contractClientByContractId.get(contractId) ?? null) : null;
+      if (!clientId) continue;
+
+      const val = typeof r?.recognized_period_system_ccy === "number"
+        ? r.recognized_period_system_ccy
+        : r?.recognized_period_system_ccy
+          ? Number(r.recognized_period_system_ccy)
+          : 0;
+
+      if (!Number.isFinite(val)) continue;
+      sumByClientId.set(clientId, (sumByClientId.get(clientId) || 0) + val);
+    }
+
+    const systemCurrency =
+      typeof (rsmRows?.[0] as any)?.system_currency === "string" ? String((rsmRows[0] as any).system_currency) : null;
+
+    const sorted = Array.from(sumByClientId.entries())
+      .map(([clientId, total]) => ({
+        clientId,
+        clientName: clientNameById.get(clientId) ?? "(sin nombre)",
+        total: Number(total.toFixed(2)),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const totalAll = sorted.reduce((acc, r) => acc + r.total, 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: "Revenue no recurrente total",
+        value: `${totalAll.toFixed(2)}${systemCurrency ? ` ${systemCurrency}` : ""}`.trim(),
+      },
+      {
+        type: "table",
+        title: "Revenue no recurrente por cliente",
+        columns: ["Cliente", `Revenue no recurrente${systemCurrency ? ` (${systemCurrency})` : ""}`.trim()],
+        rows: sorted.slice(0, 50).map((r) => [r.clientName, r.total]),
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `Revenue reconocido NO recurrente por cliente (contract_items.is_recurring=false) para el rango ${fromMonth} a ${toMonth}.`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "select",
+          filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+        },
+        {
+          table: "contract_items",
+          query_type: "select",
+          filters: { holding_id: holdingId, is_recurring: false },
+        },
+        {
+          table: "contracts",
+          query_type: "select",
+          filters: { holding_id: holdingId },
+        },
+        {
+          table: "clients",
+          query_type: "select",
+          filters: { holding_id: holdingId },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "contract_items", "contracts", "clients"],
+        filters_applied: {
+          holding_id: holdingId,
+          period_month_from: fromMonth,
+          period_month_to_exclusive: toExclusive,
+          contract_items_is_recurring: false,
+        },
+        holding_id: holdingId,
+        data_completeness: sorted.length > 0 ? "complete" : "partial",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para revenue no recurrente por cliente. Motivo: ${reason}`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "recognized_non_recurring_by_client",
+          filters: { holding_id: holdingId },
+        },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Revenue no recurrente por cliente",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

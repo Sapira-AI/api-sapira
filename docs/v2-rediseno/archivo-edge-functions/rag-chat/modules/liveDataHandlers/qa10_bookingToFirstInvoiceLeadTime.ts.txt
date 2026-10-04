@@ -1,0 +1,356 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleQa10BookingToFirstInvoiceLeadTimeFlag(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  console.log("QA-10: INICIO - bookingToFirstInvoiceLeadTime activado");
+
+  try {
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setMonth(startDate.getMonth() - 6); // ÃƒÅ¡ltimos 6 meses
+
+    const { data: contractsData, error: contractsError } = await supabaseAuth
+      .from("contracts")
+      .select(
+        `
+          id,
+          contract_number,
+          booking_date,
+          client_name_commercial,
+          holding_id
+        `,
+      )
+      .eq("holding_id", holdingId)
+      .gte("booking_date", startDate.toISOString().slice(0, 10))
+      .lte("booking_date", endDate.toISOString().slice(0, 10))
+      .not("booking_date", "is", null)
+      .order("booking_date", { ascending: false });
+
+    if (contractsError) throw contractsError;
+
+    console.log(`QA-10: Contratos encontrados: ${contractsData?.length || 0}`);
+
+    if (!contractsData || contractsData.length === 0) {
+      const response: LiveDataResult = {
+        handled: true,
+        context: "No hay contratos con booking_date en los últimos 6 meses. No se puede calcular el lead time.",
+        sources: [{ table: "contracts", query_type: "booking_to_first_invoice", filters: { holding_id: holdingId, date_range: true } }],
+        widgets: [
+          {
+            type: "table",
+            title: "Análisis Lead Time",
+            columns: ["Métrica", "Valor"],
+            rows: [
+              ["Total de contratos", 0],
+              ["Lead time promedio", "N/A"],
+              ["Contratos con primera factura", 0],
+            ],
+          },
+        ],
+        audit: {
+          range_from: startDate.toISOString().slice(0, 10),
+          range_to: endDate.toISOString().slice(0, 10),
+          currency_mode: "mixed",
+          source_breakdown: ["contracts", "invoices"],
+          filters_applied: { holding_id: holdingId, booking_date_range: true },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+
+      console.log("QA-10: RESPUESTA SIN DATOS - Generada:", JSON.stringify(response, null, 2));
+      return response;
+    }
+
+    const leadTimes: number[] = [];
+    const contractDetails: any[] = [];
+
+    for (const contract of contractsData) {
+      const { data: invoicesData, error: invoicesError } = await supabaseAuth
+        .from("invoices")
+        .select("issue_date, scheduled_at, status")
+        .eq("contract_id", String((contract as any).id ?? ""))
+        .in("status", ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"])
+        .order("issue_date", { ascending: true, nullsFirst: false })
+        .order("scheduled_at", { ascending: true, nullsFirst: false })
+        .limit(1);
+
+      if (invoicesError) throw invoicesError;
+
+      if (invoicesData && invoicesData.length > 0) {
+        const firstInvoice = invoicesData[0];
+        const bookingDate = new Date(String((contract as any).booking_date ?? ""));
+
+        const firstIssueDate = (firstInvoice as any).issue_date
+          ? new Date(String((firstInvoice as any).issue_date))
+          : new Date(String((firstInvoice as any).scheduled_at ?? ""));
+
+        const leadTimeDays = Math.floor((firstIssueDate.getTime() - bookingDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (leadTimeDays >= 0) {
+          leadTimes.push(leadTimeDays);
+          contractDetails.push({
+            contract_number: (contract as any).contract_number,
+            client_name: (contract as any).client_name_commercial || "N/A",
+            booking_date: (contract as any).booking_date,
+            first_invoice_date: (firstInvoice as any).issue_date || (firstInvoice as any).scheduled_at,
+            lead_time_days: leadTimeDays,
+            first_invoice_status: (firstInvoice as any).status,
+            date_used: (firstInvoice as any).issue_date ? "issue_date" : "scheduled_at",
+          });
+        }
+      }
+    }
+
+    console.log(`QA-10: Lead times calculados: ${leadTimes.length}`);
+
+    leadTimes.sort((a, b) => a - b);
+    const avgLeadTime = leadTimes.length > 0 ? leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length : 0;
+    const p50 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.5)] : 0;
+    const p75 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.75)] : 0;
+    const p90 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.9)] : 0;
+
+    const distribution = [
+      { rango: "0-7 dÃƒÂ­as", count: leadTimes.filter((d) => d >= 0 && d <= 7).length },
+      { rango: "8-14 dÃƒÂ­as", count: leadTimes.filter((d) => d >= 8 && d <= 14).length },
+      { rango: "15-30 dÃƒÂ­as", count: leadTimes.filter((d) => d >= 15 && d <= 30).length },
+      { rango: "31-60 dÃƒÂ­as", count: leadTimes.filter((d) => d >= 31 && d <= 60).length },
+      { rango: "60+ dÃƒÂ­as", count: leadTimes.filter((d) => d > 60).length },
+    ];
+
+    const widgets: Widget[] = [
+      {
+        type: "table",
+        title: "Lead Time Promedio Booking Ã¢â€ â€™ Primera Factura",
+        columns: ["MÃƒÂ©trica", "Valor"],
+        rows: [
+          ["Lead time promedio", `${avgLeadTime.toFixed(1)} dÃƒÂ­as`],
+          ["P50 (Mediana)", `${p50} dÃƒÂ­as`],
+          ["P75", `${p75} dÃƒÂ­as`],
+          ["P90", `${p90} dÃƒÂ­as`],
+          ["Total de contratos", (contractsData as any[]).length],
+          ["Contratos con primera factura", leadTimes.length],
+        ],
+      },
+      {
+        type: "table",
+        title: "DistribuciÃƒÂ³n Lead Time",
+        columns: ["Rango", "Cantidad"],
+        rows: distribution.map((d) => [d.rango, d.count]),
+      },
+      {
+        type: "table",
+        title: "Detalle Contratos (ÃƒÂºltimos 10)",
+        columns: ["Contrato", "Cliente", "Booking", "Primera Factura", "Lead Time", "Status"],
+        rows: contractDetails.slice(0, 10).map((c: any) => [
+          c.contract_number || "N/A",
+          c.client_name || "N/A",
+          c.booking_date,
+          c.first_invoice_date,
+          `${c.lead_time_days} dÃƒÂ­as`,
+          c.first_invoice_status,
+        ]),
+      },
+    ];
+
+    const response: LiveDataResult = {
+      handled: true,
+      context: `Lead time booking → primera factura últimos 6 meses. ${leadTimes.length} contratos con primera factura analizados. Lead time promedio: ${avgLeadTime.toFixed(1)} días.`,
+      sources: [
+        { table: "contracts", query_type: "booking_to_first_invoice", filters: { holding_id: holdingId, date_range: true } },
+        {
+          table: "invoices",
+          query_type: "first_invoice_by_contract",
+          filters: { status: ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"] },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: startDate.toISOString().slice(0, 10),
+        range_to: endDate.toISOString().slice(0, 10),
+        currency_mode: "mixed",
+        source_breakdown: ["contracts", "invoices"],
+        filters_applied: {
+          holding_id: holdingId,
+          booking_date_range: true,
+          valid_invoice_status: ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"],
+        },
+        holding_id: holdingId,
+        data_completeness: leadTimes.length > 0 ? "complete" : "partial",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+
+    console.log("QA-10: RESPUESTA CON DATOS - Generada:", JSON.stringify(response, null, 2));
+    return response;
+  } catch (e: any) {
+    console.error("QA-10 Error:", e);
+    return {
+      handled: true,
+      context: `Error al analizar lead time booking Ã¢â€ â€™ primera factura: ${e.message}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        range_from: "error",
+        range_to: "error",
+        currency_mode: "mixed",
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message || "Unknown error",
+      } as any,
+    };
+  }
+}
+
+export async function handleQa10BookingToFirstInvoiceLeadTimeText(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setMonth(startDate.getMonth() - 6);
+
+  const { data: contractsData, error: contractsError } = await supabaseAuth
+    .from("contracts")
+    .select(
+      `
+        id,
+        booking_date,
+        invoices!inner(
+          issue_date,
+          status
+        )
+      `,
+    )
+    .eq("holding_id", holdingId)
+    .gte("booking_date", startDate.toISOString().slice(0, 10))
+    .lte("booking_date", endDate.toISOString().slice(0, 10))
+    .not("booking_date", "is", null)
+    .in("invoices.status", ["Emitida", "Enviada", "Pagada", "Vencida"]);
+
+  if (contractsError) throw contractsError;
+
+  const leadTimes: number[] = [];
+  const contractDetails: any[] = [];
+
+  const contractMap = new Map<string, any>();
+  (contractsData || []).forEach((contract: any) => {
+    const contractId = contract.id;
+    if (!contractMap.has(contractId)) {
+      contractMap.set(contractId, {
+        id: contractId,
+        booking_date: contract.booking_date,
+        first_invoice_date: null,
+        invoices: [],
+      });
+    }
+
+    const contractInfo = contractMap.get(contractId);
+    contractInfo.invoices.push({
+      issue_date: contract.invoices.issue_date,
+      status: contract.invoices.status,
+    });
+  });
+
+  contractMap.forEach((contractInfo, contractId) => {
+    const validInvoices = contractInfo.invoices
+      .filter((inv: any) => inv.issue_date)
+      .sort((a: any, b: any) => new Date(a.issue_date).getTime() - new Date(b.issue_date).getTime());
+
+    if (validInvoices.length > 0) {
+      const firstInvoiceDate = new Date(validInvoices[0].issue_date);
+      const bookingDate = new Date(contractInfo.booking_date);
+      const leadTimeDays = Math.floor((firstInvoiceDate.getTime() - bookingDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (leadTimeDays >= 0) {
+        leadTimes.push(leadTimeDays);
+        contractDetails.push({
+          contract_id: contractId.slice(-8),
+          booking_date: contractInfo.booking_date,
+          first_invoice_date: validInvoices[0].issue_date,
+          lead_time_days: leadTimeDays,
+        });
+      }
+    }
+  });
+
+  leadTimes.sort((a, b) => a - b);
+  const avgLeadTime = leadTimes.length > 0 ? leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length : 0;
+  const p50 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.5)] : 0;
+  const p75 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.75)] : 0;
+  const p90 = leadTimes.length > 0 ? leadTimes[Math.floor(leadTimes.length * 0.9)] : 0;
+
+  const ranges = [
+    { label: "0-7 dÃƒÂ­as", count: leadTimes.filter((d) => d <= 7).length },
+    { label: "8-30 dÃƒÂ­as", count: leadTimes.filter((d) => d > 7 && d <= 30).length },
+    { label: "31-60 dÃƒÂ­as", count: leadTimes.filter((d) => d > 30 && d <= 60).length },
+    { label: "60+ dÃƒÂ­as", count: leadTimes.filter((d) => d > 60).length },
+  ];
+
+  const widgets: Widget[] = [
+    {
+      type: "kpi",
+      title: "Lead Time Promedio (Booking Ã¢â€ â€™ Primera Factura)",
+      value: `${avgLeadTime.toFixed(1)} dÃƒÂ­as`,
+      subtitle: `P50: ${p50}d | P75: ${p75}d | P90: ${p90}d`,
+    },
+    {
+      type: "chart_bar",
+      title: "DistribuciÃƒÂ³n Lead Time",
+      xKey: "range",
+      series: [{ key: "count", name: "Contratos", color: "#3B82F6" }],
+      data: ranges.map((r) => ({ range: r.label, count: r.count })),
+    },
+    {
+      type: "table",
+      title: "Muestra de Contratos (ÃƒÂºltimos 10)",
+      columns: ["Contrato", "Booking", "Primera Factura", "Lead Time (dÃƒÂ­as)"],
+      rows: contractDetails.slice(0, 10).map((c: any) => [c.contract_id, c.booking_date, c.first_invoice_date, c.lead_time_days]),
+    },
+  ];
+
+  const audit: LiveDataAudit = {
+    range_from: startDate.toISOString().slice(0, 10),
+    range_to: endDate.toISOString().slice(0, 10),
+    currency_mode: "system",
+    source_breakdown: ["contracts", "invoices"],
+    filters_applied: {
+      holding_id: holdingId,
+      booking_date_range: true,
+      invoice_status: ["Emitida", "Enviada", "Pagada", "Vencida"],
+    },
+    holding_id: holdingId,
+    data_completeness: "complete",
+    timestamp: new Date().toISOString(),
+  };
+
+  return {
+    handled: true,
+    context: `Lead time bookingÃ¢â€ â€™factura ÃƒÂºltimos 6 meses. ${leadTimes.length} contratos analizados.`,
+    sources: [
+      { table: "contracts", query_type: "booking_to_first_invoice", filters: { booking_date: "range" } },
+      { table: "invoices", query_type: "first_invoice_lookup", filters: {} },
+    ],
+    widgets,
+    audit,
+  };
+}
+
+export function isQa10BookingFacturaQuestion(question: string): boolean {
+  return question.toLowerCase().includes("booking") && question.toLowerCase().includes("factura");
+}
