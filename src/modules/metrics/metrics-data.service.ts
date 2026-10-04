@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { type FxProjected, loadFxProjected } from './fx-projected';
 import { type Month, monthStart } from './metrics-period';
 import { NOT_PENDING_RENEWAL, PENDING } from './rsm-momentum';
 
@@ -109,6 +110,16 @@ export class MetricsDataService {
 
 	query<T = Row>(sql: string, params: unknown[]): Promise<T[]> {
 		return this.dataSource.query<T[]>(sql, params);
+	}
+
+	/**
+	 * Monedas convertidas con tasa fija proyectada entre `from` y `to` (`to` null = sin tope): suman en los totales y el front avisa
+	 * "tasa proyectada". Solo en moneda del sistema (la proyección es de las tasas fijas del holding).
+	 */
+	fxProjected(holdingId: string, currency: CurrencyContext, from: Month, to: Month | null): Promise<FxProjected[]> {
+		if (currency.mode !== 'system') return Promise.resolve([]);
+
+		return loadFxProjected(this.dataSource, holdingId, monthStart(from), to ? monthStart(to) : null);
 	}
 
 	/** Moneda de lectura: sistema (holding), compañía (exige una) o contrato (exige uno). 400 con `errors[]` si falta. */

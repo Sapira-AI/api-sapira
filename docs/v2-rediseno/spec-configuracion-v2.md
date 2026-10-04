@@ -154,7 +154,7 @@ M5/M6 quedan para el cierre (invitación). Ninguna se aplica sin OK.
 | Usuarios | `GET/POST /settings/users`, `PATCH /settings/users/:id` (rol), `POST .../resend-invitation`, `.../deactivate`, `.../reactivate`, `DELETE` (solo invitación pendiente) |
 | Roles | `GET /settings/permissions`, `GET/POST/PATCH/DELETE /settings/roles` (según D7), `GET/PUT /settings/roles/:id/alerts` |
 | Productos | `GET/POST/PATCH /products`, `POST /products/:id/archive|reactivate`, `DELETE` si nunca se usó |
-| Permisos | `@RequirePermission('EDIT_X')` genérico: super admin pasa; acepta `ALL_PERMISSIONS`; lee el rol de `user_holdings` del holding activo. `BillingPermissionGuard` no se toca (D12) |
+| Permisos | `@RequirePermission('EDIT_X')` genérico: super admin pasa; acepta `ALL_PERMISSIONS`; lee el rol de `user_holdings` del holding activo. `BillingPermissionGuard` no se tocó (D12) hasta el 04-10: desde entonces valida con el mismo `PermissionsService` |
 
 Asientos con 5 cuentas: el cambio en `revenue-metrics.service.ts` es del módulo Ingresos (cerrado) → con OK (D12).
 
@@ -250,7 +250,8 @@ Reglas para usarlo después:
 - Credenciales de terceros nunca viajan en una respuesta (se enmascaran).
 - Rutas `@Public` solo con secreto o firma propia (webhooks) o sin datos (salud).
 - El front usa el mismo catálogo con `useCan(code)` (deshabilitado con aviso, D3); el front nunca es la única barrera.
-- `BillingPermissionGuard` (Facturación) se reemplaza por `@RequirePermission` cuando Domi autorice tocar Facturación.
+- ~~`BillingPermissionGuard` (Facturación) se reemplaza por `@RequirePermission` cuando Domi autorice tocar Facturación.~~ Hecho el 04-10:
+  valida con `PermissionsService` (`cambios-integracion-para-leon.md` §15).
 
 ## 11. Construido · API (02-10, sin commit, sin aplicar)
 

@@ -100,7 +100,7 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 > 6. Rebuild completo del devengo **en producción**, con comparación detallada antes/después para que Domi apruebe
 >    (QA no sirve: datos sucios).
 > 7. Auditoría de datos por holding, en paralelo (no bloquea).
-> 8. Switch: banner, correo de aviso y video; `app.aisapira.com` redirige al nuevo; permiso de ayuda a todos los roles;
+> 8. Switch: banner, correo de aviso y video (avisar que los agentes visibles —Billing Wizard, Agentes en este cliente— son demostraciones y estarán funcionales próximamente); `app.aisapira.com` redirige al nuevo; permiso de ayuda a todos los roles;
 >    invitaciones pendientes; retiro del flujo de usuarios del front viejo; **acceso de usuarios al front viejo
 >    bloqueado** (no se borra de inmediato). No hay vuelta atrás.
 > 9. Domi con Leon: publicación (API antes que el front), variables de correo (apagadas hasta el switch), merge de su

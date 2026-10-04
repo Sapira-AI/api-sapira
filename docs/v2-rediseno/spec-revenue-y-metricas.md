@@ -192,9 +192,15 @@ al MRR. Lo que está mal hoy es el doble conteo (≈16 mil USD en ago-2026, igua
 - Origen visible: `source = contract | subscription | legacy` (chip "Legacy" y filtro), igual que suscripciones (D4).
 - Waterfall ✅ Domi 01-10: el legacy se trata por línea `(cliente, producto, moneda)`.
   - **Legacy que pasa a su contrato** (`migrated_to_contract_id`, el contrato arranca y el legacy termina el mes anterior): **no es
-    movimiento**, es el mismo MRR que cambia de origen. Se compara en **moneda de contrato** (`mrr_legacy` vs MRR del contrato): si hay
-    diferencia real, ese neto va a **Expansión o Contracción** (subcategoría `LEGACY_MIGRATION`); la diferencia en moneda de sistema que no
-    viene de la moneda de contrato va a **Tipo de cambio**. Sin diferencia, no aparece en el gráfico.
+    movimiento**, es el mismo MRR que cambia de origen. Se compara en **moneda de sistema**, como todo Métricas
+    (`mrr_legacy_system_currency` vs MRR del contrato en moneda de sistema): si hay diferencia, ese neto va a **Expansión o Contracción**
+    (subcategoría `LEGACY_MIGRATION`). Sin diferencia, no aparece en el gráfico. (Corrección 04-10, Domi: antes se comparaba `mrr_legacy` en
+    su moneda original como si fuera la del contrato; con legacy en CLP y contrato en UF salía una contracción de −575M USD en SimpliRoute
+    may-2026.)
+  - **Mismo MRR histórico con otra identidad** (04-10, OK Domi): la línea legacy es (cliente, producto, moneda, contrato vinculado). Si en un
+    mes una línea termina y aparece otra del **mismo cliente y producto** (la factura nueva ya viene vinculada a un contrato, o en otra
+    moneda), no es baja + alta: el neto va a **Variación legacy** (`LEGACY_CHANGE`, expansión o contracción por signo). No es tipo de
+    cambio: todo se compara en moneda de sistema.
   - **Legacy que termina sin contrato** (`LEGACY_END`, p. ej. "no aplica activación"): **Contracción** si el cliente sigue con MRR,
     **Churn** si queda en 0 (misma regla que `DOWNSELL` vs `CHURN`). Si al cliente se le creó un contrato **sin** el vínculo
     `migrated_to_contract_id`, Métricas no puede saber que es el mismo MRR y lo verá como baja + nuevo: se lista en Excepciones
@@ -207,7 +213,7 @@ al MRR. Lo que está mal hoy es el doble conteo (≈16 mil USD en ago-2026, igua
 - **L2** ✅ Fuera de este desarrollo: revisar las filas "No aplica" por duplicado, cambio de moneda o de razón social (dato).
 - **L3** ✅ Sin cambio: la moneda de contrato del legacy es fija por diseño (la factura legacy en su moneda corresponde a X en moneda de
   contrato) y la de sistema usa la política del sistema; dentro del mismo período de FX fijo del sistema no hay salto. Una diferencia en
-  moneda de contrato al migrar es real (Expansión/Contracción), no de tipo de cambio.
+  moneda de contrato al migrar es real (Expansión/Contracción), no de tipo de cambio. *(Reemplazado 04-10: el paso a contrato se mide en moneda de sistema; ver waterfall.)*
 
 ## 2. Inventario del front viejo (`sapira-ai`) y veredicto
 
@@ -245,7 +251,7 @@ Ninguna lectura paginaba: **todas** se cortaban en 1.000 filas (`max_rows`). En 
 | Asistente de reportes IA | Botón sin handler | **Se elimina** ahora; "Explicar este mes" queda en backlog (§4.3) |
 | Export CSV de la página | Roto | **Se reemplaza** por export por sección (XLSX) |
 | Cohortes, TCV, GRR/NRR YoY | No existían | **Nuevo** §1.5–1.6 |
-| MRR legacy (`mrr_legacy`) sumado a todo | Doble conteo con el contrato que lo migró (U14) y duplicados marcados que siguen sumando | **Mejorado** (D2, §1.8): entra al MRR con el corte U14, origen "Legacy"; el paso a su contrato no es movimiento salvo diferencia real en moneda de contrato |
+| MRR legacy (`mrr_legacy`) sumado a todo | Doble conteo con el contrato que lo migró (U14) y duplicados marcados que siguen sumando | **Mejorado** (D2, §1.8): entra al MRR con el corte U14, origen "Legacy"; el paso a su contrato no es movimiento salvo diferencia en moneda de sistema |
 | Suscripciones (Stripe) en RSM | MRR = facturado del mes (anual = 12× un mes); CHURN positivo | **Igual, como MRR** (D4): origen "Suscripciones" visible y filtrable; el devengo se corrige en la API (D-CTR-3) |
 
 ### 2c · Bugs del viejo que v2 corrige de raíz (resumen)
@@ -277,7 +283,7 @@ Comunes: `from`, `to` (`YYYY-MM`, default últimos 12 meses), `currency` (§1.1)
 | `GET /metrics/mrr/overview?as_of=YYYY-MM` | `{ kpis: { mrr, arr, cmrr, carr, pending_renewal: { mrr, cmrr, items, clients, contracts }, active_clients, arpa, net_new_mrr, growth, gross_mrr_churn, net_mrr_churn, logo_churn, nrr, grr, nrr_yoy, grr_yoy, quick_ratio }` cada uno `{ value, previous, delta, formula }`, `sparklines` (12 meses) `}` |
 | `GET /metrics/mrr/movements?basis=mrr\|cmrr` | `{ categories: [{ key, label, kind: gain\|loss\|neutral, subkeys[] }], months: [{ period, opening, movements: [{ category, key, amount, items, clients }], closing, check, partial }] }` — alimenta movimientos, puente y tabla |
 | `GET /metrics/mrr/movements/detail?period\|from&to&category[]&key[]&group_by=client\|contract\|item\|segment\|market` (paginado) | drill-down: cliente, segmento, mercado, contrato, producto, subcategoría, monto |
-| `GET /metrics/mrr/by-dimension?dimension=client\|product\|segment\|industry\|market\|company\|item_type\|unit_of_measure\|country&top=` | matriz + columna `pending_renewal` aparte |
+| `GET /metrics/mrr/by-dimension?dimension=client\|product\|segment\|industry\|market\|company\|item_type\|unit_of_measure\|country&top=` | matriz + columna `pending_renewal` aparte; opcionales `legacy_values[]` por fila (y en `others`) y `legacy_totals[]`: parte de cada celda que viene de `mrr_legacy` (incluida en `values`), solo si hay legacy |
 | `GET /metrics/clients/activity` | `{ months: [{ period, active, new, reactivated, churned, logo_churn }] }` |
 | `GET /metrics/churn` (paginado detalle) | `{ months: [{ period, clients_lost, mrr_lost, contraction }], by_reason: [{ reason, clients, mrr, pct }], data }` |
 | `GET /metrics/renewals?window=90\|180\|365\|overdue` (paginado) | ítems por vencer o vencidos sin decisión: cliente, contrato, compañía, producto, fin, días, MRR; `summary { items, contracts, clients, mrr }` |
@@ -362,7 +368,7 @@ Barra: rango · base MRR/CMRR · compañía · segmentos (filtros guardados) · 
 1. **D1 · Vencido sin renovar** ✅ Domi 01-10: subcategoría `EXPIRED` dentro de **Churn** y cuenta en GRR/NRR.
 2. **D2 · MRR legacy (`mrr_legacy`)** ✅ Domi 01-10 (con la spec), revisada con SimpliRoute (§1.8): **sí entra al MRR**, con la regla de corte U14
    (ya decidida en la auditoría S8a) aplicada al leer, origen "Legacy" visible y filtrable. El paso legacy → su contrato no es
-   movimiento; solo una diferencia real en moneda de contrato va a Expansión/Contracción (y la de sistema no explicada, a Tipo de cambio).
+   movimiento; solo la diferencia en moneda de sistema va a Expansión/Contracción.
    Legacy que termina sin contrato: Contracción o Churn según el cliente.
 3. **D3 · Un solo MRR + CMRR** (ver §1.2): MRR = plan (`mrr_period_contracted_*`); lo que resolvía el "reconocido" pasa a Revenue
    ("ingreso recurrente reconocido" + brecha explicada) y el consumo a "Ingreso por uso" aparte.

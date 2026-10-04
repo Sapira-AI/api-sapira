@@ -91,11 +91,12 @@ export class MrrMetricsService {
 		const currency = await this.data.resolveCurrency(holdingId, query);
 		const from = addMonths(asOf, -13);
 		const prevMonth = addMonths(asOf, -1);
-		const [mrr, cmrr, asOfStamp, pending] = await Promise.all([
+		const [mrr, cmrr, asOfStamp, pending, fxProjected] = await Promise.all([
 			this.lines(holdingId, query, currency, 'mrr', from, asOf),
 			this.lines(holdingId, query, currency, 'cmrr', from, asOf),
 			this.data.asOf(holdingId),
 			this.data.loadPendingRenewal(holdingId, query, currency, [prevMonth, asOf]),
+			this.data.fxProjected(holdingId, currency, from, asOf),
 		]);
 		const waterfall = buildWaterfall(mrr.lines, [prevMonth, asOf], { currency: currency.mode });
 		const indicatorsOf = (index: number) => periodIndicators(retentionOf([waterfall.months[index]]));
@@ -153,6 +154,7 @@ export class MrrMetricsService {
 				active_clients: sparkMonths.map((month) => logoStats(mrr.lines, month).active),
 			},
 			unconverted: mrr.unconverted,
+			fx_projected: fxProjected,
 		};
 	}
 
@@ -286,13 +288,20 @@ export class MrrMetricsService {
 				}
 			}
 		};
-		const rows = new Map<string, { key: string; label: string; values: number[]; pending: number }>();
+		type DimRow = { key: string; label: string; values: number[]; legacy: number[]; pending: number };
+		const rows = new Map<string, DimRow>();
+		const isLegacy = (line: MrrLine) => line.source === 'legacy';
 
 		for (const line of lines) {
 			const [key, label] = labelOf(line);
-			const row = rows.get(key) ?? { key, label, values: months.map(() => 0), pending: 0 };
+			const row = rows.get(key) ?? { key, label, values: months.map(() => 0), legacy: months.map(() => 0), pending: 0 };
 
-			months.forEach((month, index) => (row.values[index] += valueAt(line, month)));
+			months.forEach((month, index) => {
+				const value = valueAt(line, month);
+
+				row.values[index] += value;
+				if (isLegacy(line)) row.legacy[index] += value;
+			});
 			row.pending += line.months.get(to)?.pending ?? 0;
 			rows.set(key, row);
 		}
@@ -301,13 +310,17 @@ export class MrrMetricsService {
 		const top = query.top ?? 15;
 		const shown = sorted.slice(0, top);
 		const rest = sorted.slice(top);
-		const finalize = (row: { key: string; label: string; values: number[]; pending: number }) => ({
+		/** Parte de MRR histórico (`mrr_legacy`) de cada celda: solo si alguna es distinta de cero (campo opcional). */
+		const legacyValues = (values: number[]) => (values.some((value) => Math.abs(value) >= 0.005) ? { legacy_values: values.map(round2) } : {});
+		const finalize = (row: DimRow) => ({
 			key: row.key,
 			label: row.label,
 			values: row.values.map(round2),
+			...legacyValues(row.legacy),
 			total: round2(row.values[row.values.length - 1] ?? 0),
 			pending_renewal: round2(row.pending),
 		});
+		const legacyTotals = legacyValues(months.map((month) => totalAt(lines.filter(isLegacy), month)));
 
 		return {
 			currency: currency.code,
@@ -319,10 +332,12 @@ export class MrrMetricsService {
 						key: 'others',
 						label: `Otros (${rest.length})`,
 						values: months.map((_, i) => rest.reduce((s, r) => s + r.values[i], 0)),
+						legacy: months.map((_, i) => rest.reduce((s, r) => s + r.legacy[i], 0)),
 						pending: rest.reduce((s, r) => s + r.pending, 0),
 					})
 				: null,
 			totals: months.map((month) => totalAt(lines, month)),
+			...('legacy_values' in legacyTotals ? { legacy_totals: legacyTotals.legacy_values } : {}),
 			pending_renewal_total: (() => {
 				const month = pendingTotal.get(to);
 

@@ -40,7 +40,7 @@ export const DIRECTION_LABELS = { import: 'Importa', export: 'Exporta', both: 'E
 
 /** Pestañas del 360 (D1). */
 export const integrationHref = (tipo: IntegrationTipo, tab?: 'estado' | 'mapeos' | 'configuracion' | 'historial') =>
-	`/lab/integraciones/${tipo}${tab ? `?tab=${tab}` : ''}`;
+	`/conexiones/${tipo}${tab ? `?tab=${tab}` : ''}`;
 
 // ── Registros (estado de sincronización, A2) ────────────────────────────────────────────────────────────────────────────────
 

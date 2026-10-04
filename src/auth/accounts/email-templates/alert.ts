@@ -12,7 +12,7 @@ export interface AlertEmailValues {
 	whatWeDo?: string | null;
 	companyName?: string | null;
 	holdingName?: string | null;
-	/** `${INVITE_LANDING_URL}/lab/notificaciones?alerta=<id>`. */
+	/** `${INVITE_LANDING_URL}/notificaciones?alerta=<id>`. */
 	url: string;
 	/** Escaló (subió la gravedad o cambió el escalón): el asunto lo dice. */
 	escalated?: boolean;

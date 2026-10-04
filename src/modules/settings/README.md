@@ -1,6 +1,6 @@
-# Módulo `settings` (Configuración v2)
+# Módulo `settings` (Administración, antes Configuración v2)
 
-API del módulo Configuración del front nuevo (`/lab/configuracion`). Spec: `docs/v2-rediseno/spec-configuracion-v2.md` (manda
+API del módulo Administración (antes Configuración) del front nuevo (`/administracion`). Spec: `docs/v2-rediseno/spec-configuracion-v2.md` (manda
 "Decisiones v3"). **Contrato de endpoints** (shapes, permisos y mensajes 4xx): `docs/v2-rediseno/contrato-api-configuracion.md`.
 Productos (pestaña de Precios) vive en `src/modules/products` con el mismo patrón.
 

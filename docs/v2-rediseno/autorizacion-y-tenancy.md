@@ -133,7 +133,8 @@ Reglas:
   en `src/guards/permission-codes.ts`.
 - Tests obligatorios además de los del holding: "sin el código → 403", "con `ALL_PERMISSIONS` → pasa", "rol de otro holding → 403",
   "super admin → pasa".
-- `BillingPermissionGuard` (Facturación) se reemplaza por `@RequirePermission` cuando Domi autorice tocar Facturación (D12).
+- `BillingPermissionGuard` (Facturación y Presupuestos) valida con `PermissionsService` desde el 04-10: mismas reglas que
+  `@RequirePermission` (comodín, Editar incluye Ver, rol del holding activo, super admin). Detalle: `cambios-integracion-para-leon.md` §15.
 
 ## Limpieza de la base (dos niveles)
 - **Ahora**: la regla aplica a la API y al front nuevo. En la base solo se retira lo que el front viejo no usa

@@ -148,7 +148,7 @@ export class NotificationDigestService {
 			name: user.name,
 			holdingName,
 			weekLabel: weekLabel(mondayOf(today)),
-			url: this.emails.appUrl('/lab/notificaciones'),
+			url: this.emails.appUrl('/notificaciones'),
 			tasks: tasks.tasks.map((task) => ({
 				module: task.module_label,
 				title: task.title,
@@ -325,7 +325,7 @@ export class NotificationDigestService {
 			count: Number(rows?.[0]?.total ?? 0),
 			items: (rows ?? []).map((row) => ({
 				label: [row.contract_number, row.name_commercial].filter(Boolean).join(' · ') || 'Contrato',
-				url: this.emails.appUrl(`/lab/contratos/${String(row.id)}`),
+				url: this.emails.appUrl(`/contratos/${String(row.id)}`),
 			})),
 		};
 	}

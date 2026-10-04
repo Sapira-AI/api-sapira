@@ -173,6 +173,72 @@ describe('Origen de las filas de bajas y movimientos (enlace a Contratos solo si
 	});
 });
 
+describe('MRR por dimensión: parte de MRR histórico (legacy) por celda', () => {
+	const line = (key: string, source: MrrLine['source'], clientId: string, values: [number, number]): MrrLine => ({
+		key,
+		source,
+		contractId: source === 'legacy' ? null : `ctr-${key}`,
+		contractNumber: null,
+		itemId: key,
+		clientId,
+		clientName: `Cliente ${clientId}`,
+		companyId: 'co-1',
+		companyName: 'Compañía',
+		product: 'Producto',
+		categoria: null,
+		renewsItemId: null,
+		renewedByItemId: null,
+		legacyContractId: null,
+		segment: null,
+		market: null,
+		industry: null,
+		country: null,
+		itemType: null,
+		unitOfMeasure: null,
+		months: new Map([
+			['2026-01', { value: values[0], valueContract: values[0], pending: 0, momentum: null }],
+			['2026-02', { value: values[1], valueContract: values[1], pending: 0, momentum: null }],
+		]),
+	});
+
+	async function byDimension(lines: MrrLine[], top?: number) {
+		const built = build();
+
+		jest.spyOn(built.data, 'loadMrrLines').mockResolvedValue({ lines, itemFxMissing: new Set<string>(), legacyCompanyRows: 0 });
+
+		return built.mrr.byDimension(HOLDING, { from: '2026-01', to: '2026-02', dimension: 'client', top });
+	}
+
+	it('cada fila trae legacy_values (monto legacy de cada mes, incluido en values) y el total trae legacy_totals', async () => {
+		const result = await byDimension([
+			line('l:a', 'legacy', 'a', [100, 0]),
+			line('i:a', 'contract', 'a', [0, 120]),
+			line('i:b', 'contract', 'b', [50, 50]),
+		]);
+		const a = result.rows.find((row) => row.key === 'a');
+		const b = result.rows.find((row) => row.key === 'b');
+
+		expect(a).toEqual(expect.objectContaining({ values: [100, 120], legacy_values: [100, 0] }));
+		expect(b).not.toHaveProperty('legacy_values');
+		expect(result.totals).toEqual([150, 170]);
+		expect(result).toHaveProperty('legacy_totals', [100, 0]);
+	});
+
+	it('"Otros" suma la parte legacy de las filas agrupadas; sin legacy no se agregan los campos', async () => {
+		const withOthers = await byDimension(
+			[line('i:a', 'contract', 'a', [500, 500]), line('l:b', 'legacy', 'b', [10, 20]), line('l:c', 'legacy', 'c', [5, 5])],
+			1
+		);
+
+		expect(withOthers.others).toEqual(expect.objectContaining({ values: [15, 25], legacy_values: [15, 25] }));
+
+		const none = await byDimension([line('i:a', 'contract', 'a', [1, 2])]);
+
+		expect(none.rows[0]).not.toHaveProperty('legacy_values');
+		expect(none).not.toHaveProperty('legacy_totals');
+	});
+});
+
 describe('Detalle mensual por contrato (D-CTR-2: 360 › Devengo lee este endpoint)', () => {
 	it('filtra por contrato, lee la moneda del contrato y devuelve cada fila RSM tal cual con su ítem y la moneda del ítem', async () => {
 		const CONTRACT = '11111111-1111-4111-8111-111111111111';

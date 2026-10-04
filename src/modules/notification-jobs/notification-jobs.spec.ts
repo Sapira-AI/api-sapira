@@ -59,7 +59,7 @@ describe('aviso de cierre de mes (contrato §8.6)', () => {
 		expect(dto.message).toContain('USD 1.500');
 		expect(dto.action_payload).toMatchObject({
 			month: '2026-10',
-			href: '/lab/facturacion?estado=Por+Emitir&desde=2026-10&hasta=2026-10&company_id=co-1',
+			href: '/facturacion?estado=Por+Emitir&desde=2026-10&hasta=2026-10&company_id=co-1',
 			secondary: {
 				type: 'move_to_next_month',
 				label: 'Mover al mes siguiente',
@@ -98,7 +98,7 @@ describe('resumen semanal (contrato §8.4)', () => {
 						module_label: 'Facturación',
 						title: 'Facturas por emitir hoy',
 						count: 2,
-						href: '/lab/facturacion?estado=Por+Emitir&grupo=ready',
+						href: '/facturacion?estado=Por+Emitir&grupo=ready',
 					},
 				],
 			}),
@@ -124,7 +124,7 @@ describe('resumen semanal (contrato §8.4)', () => {
 		const emails = {
 			enabled: true,
 			appUrl: jest.fn((path: string) => `https://app.test${path}`),
-			alertUrl: jest.fn((id: string) => `https://app.test/lab/notificaciones?alerta=${id}`),
+			alertUrl: jest.fn((id: string) => `https://app.test/notificaciones?alerta=${id}`),
 			logoUrl: jest.fn(() => undefined),
 			deliver: jest.fn().mockResolvedValue('sent'),
 		};
@@ -200,13 +200,13 @@ describe('resumen semanal (contrato §8.4)', () => {
 			tasks:
 				companies[0] === 'co-1'
 					? [
-							{ key: 'invoices_blocked', module_label: 'Facturación', title: 'Bloqueadas', count: 2, href: '/lab/facturacion' },
-							{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/lab/facturacion' },
+							{ key: 'invoices_blocked', module_label: 'Facturación', title: 'Bloqueadas', count: 2, href: '/facturacion' },
+							{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/facturacion' },
 							// No distingue compañía: no se suma.
-							{ key: 'revenue_exceptions', module_label: 'Ingresos', title: 'Excepciones', count: 9, href: '/lab/revenue' },
+							{ key: 'revenue_exceptions', module_label: 'Ingresos', title: 'Excepciones', count: 9, href: '/ingresos' },
 						]
 					: companies[0] === 'co-2'
-						? [{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/lab/facturacion' }]
+						? [{ key: 'invoices_late', module_label: 'Facturación', title: 'Atrasadas', count: 1, href: '/facturacion' }]
 						: [],
 		}));
 		mrr.byDimension.mockResolvedValue({
