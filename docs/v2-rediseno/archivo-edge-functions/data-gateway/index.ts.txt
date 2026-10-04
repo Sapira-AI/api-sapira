@@ -1,0 +1,365 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+type Resource = "clients" | "contracts" | "invoices" | "client_contacts" | "revenue_schedule_monthly";
+type Action = "list" | "get" | "search";
+
+type RequestBody = {
+  resource: Resource;
+  action: Action;
+  filters?: Record<string, unknown>;
+  limit?: number;
+};
+
+function clampLimit(limit?: number): number {
+  const n = typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : 25;
+  if (n <= 0) return 25;
+  return Math.min(n, 50);
+}
+
+function pickString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length ? t : null;
+}
+
+function isUuid(v: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ success: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+    if (!supabaseUrl || !anonKey) {
+      return new Response(JSON.stringify({ success: false, error: "Server configuration error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+      return new Response(JSON.stringify({ success: false, error: "Missing Authorization Bearer token" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const supabaseAuth = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+      auth: {
+        persistSession: false,
+      },
+    });
+
+    const body = (await req.json()) as RequestBody;
+    const limit = clampLimit(body.limit);
+
+    if (!body?.resource || !body?.action) {
+      return new Response(JSON.stringify({ success: false, error: "Missing resource/action" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Multi-tenant enforcement
+    const { data: holdingIdData, error: holdingErr } = await supabaseAuth.rpc("get_current_user_holding_id");
+    const holdingId = holdingIdData as string | null;
+    if (holdingErr || !holdingId) {
+      return new Response(JSON.stringify({ success: false, error: "No holding_id for current user" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const filters = body.filters ?? {};
+
+    if (body.resource === "clients") {
+      if (body.action === "list") {
+        const { data, error } = await supabaseAuth
+          .from("clients")
+          .select("id, name_commercial, industry, segment, market, status, client_since, client_number")
+          .eq("holding_id", holdingId)
+          .order("name_commercial", { ascending: true })
+          .limit(limit);
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "get") {
+        const id = pickString(filters["id"]);
+        if (!id || !isUuid(id)) {
+          return new Response(JSON.stringify({ success: false, error: "Missing/invalid filters.id" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { data, error } = await supabaseAuth
+          .from("clients")
+          .select("*")
+          .eq("holding_id", holdingId)
+          .eq("id", id)
+          .single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit: 1 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "search") {
+        const q = pickString(filters["q"]);
+        if (!q) {
+          return new Response(JSON.stringify({ success: false, error: "Missing filters.q" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { data, error } = await supabaseAuth
+          .from("clients")
+          .select("id, name_commercial, industry, segment, market, status")
+          .eq("holding_id", holdingId)
+          .ilike("name_commercial", `%${q}%`)
+          .order("name_commercial", { ascending: true })
+          .limit(limit);
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    if (body.resource === "client_contacts") {
+      if (body.action === "list") {
+        const clientId = pickString(filters["client_id"]);
+        let query = supabaseAuth
+          .from("client_contacts")
+          .select("id, client_id, name, email, phone, position, contact_type")
+          .eq("holding_id", holdingId)
+          .order("name", { ascending: true })
+          .limit(limit);
+
+        if (clientId && isUuid(clientId)) {
+          query = query.eq("client_id", clientId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "search") {
+        const q = pickString(filters["q"]);
+        if (!q) {
+          return new Response(JSON.stringify({ success: false, error: "Missing filters.q" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { data, error } = await supabaseAuth
+          .from("client_contacts")
+          .select("id, client_id, name, email, phone, position, contact_type")
+          .eq("holding_id", holdingId)
+          .ilike("name", `%${q}%`)
+          .order("name", { ascending: true })
+          .limit(limit);
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    if (body.resource === "contracts") {
+      if (body.action === "list") {
+        const status = pickString(filters["status"]);
+        let query = supabaseAuth
+          .from("contracts")
+          .select("id, contract_number, status, type, term, booking_date, contract_end_date, client_id, client_name_commercial")
+          .eq("holding_id", holdingId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (status) {
+          query = query.eq("status", status);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "get") {
+        const id = pickString(filters["id"]);
+        const contractNumber = pickString(filters["contract_number"]);
+
+        if ((!id || !isUuid(id)) && !contractNumber) {
+          return new Response(JSON.stringify({ success: false, error: "Provide filters.id (uuid) or filters.contract_number" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        let query = supabaseAuth
+          .from("contracts")
+          .select("*")
+          .eq("holding_id", holdingId);
+
+        if (id && isUuid(id)) query = query.eq("id", id);
+        if (!id && contractNumber) query = query.eq("contract_number", contractNumber);
+
+        const { data, error } = await query.single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit: 1 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "search") {
+        const q = pickString(filters["q"]);
+        if (!q) {
+          return new Response(JSON.stringify({ success: false, error: "Missing filters.q" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        // Buscar por contract_number o client_name_commercial
+        const { data, error } = await supabaseAuth
+          .from("contracts")
+          .select("id, contract_number, status, type, booking_date, contract_end_date, client_name_commercial")
+          .eq("holding_id", holdingId)
+          .or(`contract_number.ilike.%${q}%,client_name_commercial.ilike.%${q}%`)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    if (body.resource === "invoices") {
+      if (body.action === "list") {
+        const status = pickString(filters["status"]);
+        let query = supabaseAuth
+          .from("invoices")
+          .select("id, issue_date, due_date, status, total_amount, currency, client_id")
+          .eq("holding_id", holdingId)
+          .order("due_date", { ascending: true })
+          .limit(limit);
+
+        if (status) query = query.eq("status", status);
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      if (body.action === "get") {
+        const id = pickString(filters["id"]);
+        if (!id || !isUuid(id)) {
+          return new Response(JSON.stringify({ success: false, error: "Missing/invalid filters.id" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { data, error } = await supabaseAuth
+          .from("invoices")
+          .select("*")
+          .eq("holding_id", holdingId)
+          .eq("id", id)
+          .single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, data, meta: { limit: 1 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    if (body.resource === "revenue_schedule_monthly") {
+      if (body.action === "list") {
+        const periodMonth = pickString(filters["period_month"]);
+        if (!periodMonth) {
+          return new Response(JSON.stringify({ success: false, error: "Missing filters.period_month (YYYY-MM-01)" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const { data, error } = await supabaseAuth
+          .from("revenue_schedule_monthly")
+          .select(
+            "period_month, contract_id, mrr_period_system_ccy, recognized_period_system_ccy, system_currency, is_total_row, contracts!inner(holding_id, client_id)"
+          )
+          .eq("contracts.holding_id", holdingId)
+          .eq("is_total_row", false)
+          .eq("period_month", periodMonth)
+          .limit(limit);
+
+        if (error) throw error;
+
+        return new Response(JSON.stringify({ success: true, data, meta: { limit } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ success: false, error: "Unsupported resource/action" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ success: false, error: msg }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+serve(handler);

@@ -1,0 +1,208 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+function toMonthKey(dateStr: string): string | null {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function seriesKeyForCurrency(currency: string): string {
+  const clean = String(currency || "").trim().toUpperCase();
+  return `amt_${clean.replace(/[^A-Z0-9]/g, "_")}`;
+}
+
+export async function handleIntentPaymentsSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  try {
+    const { fromMonth, toMonth } = parseMonthRange(question);
+    const toExclusiveDate = new Date(toMonth);
+    toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+    const toExclusive = monthStartStr(toExclusiveDate);
+
+    let payRows: unknown = null;
+    let payErr: any = null;
+
+    const primary = await supabaseAuth
+      .from("invoice_payments")
+      .select("payment_date, amount, currency")
+      .eq("holding_id", holdingId)
+      .eq("confirmed", true)
+      .gte("payment_date", fromMonth)
+      .lt("payment_date", toExclusive)
+      .limit(5000);
+
+    payRows = primary.data;
+    payErr = primary.error;
+
+    if (payErr) {
+      const fallback = await supabaseAuth
+        .from("invoice_payments")
+        .select("payment_date, amount, currency")
+        .eq("holding_id", holdingId)
+        .gte("payment_date", fromMonth)
+        .lt("payment_date", toExclusive)
+        .limit(5000);
+
+      payRows = fallback.data;
+      payErr = fallback.error;
+    }
+
+    if (payErr) throw payErr;
+
+    const rows = Array.isArray(payRows) ? (payRows as any[]) : [];
+
+    const byMonthCurrency = new Map<string, number>();
+    const currencies = new Set<string>();
+    const months = new Set<string>();
+
+    for (const r of rows) {
+      const month = typeof r?.payment_date === "string" ? toMonthKey(r.payment_date) : r?.payment_date ? toMonthKey(String(r.payment_date)) : null;
+      const currency = r?.currency ? String(r.currency) : null;
+      const amount = typeof r?.amount === "number" ? r.amount : r?.amount ? Number(r.amount) : null;
+
+      if (!month || !currency || amount === null || Number.isNaN(amount)) continue;
+
+      const key = `${month}||${currency}`;
+      byMonthCurrency.set(key, (byMonthCurrency.get(key) || 0) + amount);
+      currencies.add(currency);
+      months.add(month);
+    }
+
+    const sortedMonths = Array.from(months.values()).sort((a, b) => a.localeCompare(b));
+    const sortedCurrencies = Array.from(currencies.values()).sort((a, b) => a.localeCompare(b));
+
+    if (sortedMonths.length === 0 || sortedCurrencies.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré pagos confirmados en el rango ${fromMonth} a ${toMonth}.`,
+        sources: [
+          {
+            table: "invoice_payments",
+            query_type: "payments_series",
+            filters: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+          },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "Pagos por mes (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay pagos confirmados para este rango."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "mixed",
+          source_breakdown: ["invoice_payments"],
+          filters_applied: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+          error_type: "live_data",
+          error_reason: "No payments in range",
+        } as LiveDataAudit,
+      };
+    }
+
+    const series = sortedCurrencies.map((ccy) => ({
+      key: seriesKeyForCurrency(ccy),
+      name: ccy.toUpperCase(),
+    }));
+
+    const data: Array<Record<string, string | number | null>> = sortedMonths.map((m) => {
+      const row: Record<string, string | number | null> = { month: m };
+      for (const ccy of sortedCurrencies) {
+        const key = `${m}||${ccy}`;
+        const val = byMonthCurrency.get(key) || 0;
+        row[seriesKeyForCurrency(ccy)] = Number(val.toFixed(2));
+      }
+      return row;
+    });
+
+    const tableRows: Array<Array<string | number | null>> = [];
+    for (const m of sortedMonths) {
+      for (const ccy of sortedCurrencies) {
+        const key = `${m}||${ccy}`;
+        const val = byMonthCurrency.get(key) || 0;
+        if (val === 0) continue;
+        tableRows.push([m, ccy.toUpperCase(), Number(val.toFixed(2))]);
+      }
+    }
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_line",
+        title: "Pagos por mes (por moneda)",
+        xKey: "month",
+        series,
+        data,
+      },
+      {
+        type: "table",
+        title: "Pagos por mes",
+        columns: ["Mes", "Moneda", "Total"],
+        rows: tableRows,
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `Pagos confirmados agrupados por mes. Monedas separadas (sin conversión). Rango: ${fromMonth} a ${toMonth}.`,
+      sources: [
+        {
+          table: "invoice_payments",
+          query_type: "payments_series",
+          filters: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "mixed",
+        source_breakdown: ["invoice_payments"],
+        filters_applied: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive, currency_separation: true },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para pagos por mes. Motivo: ${reason}`,
+      sources: [{ table: "invoice_payments", query_type: "payments_series", filters: { holding_id: holdingId, confirmed: true } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Pagos por mes",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "mixed",
+        source_breakdown: ["invoice_payments"],
+        filters_applied: { holding_id: holdingId, confirmed: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

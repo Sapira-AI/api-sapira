@@ -1,0 +1,246 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleQa03MrrNewSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  const endMonth = new Date();
+  const startMonth = new Date(endMonth);
+  startMonth.setMonth(startMonth.getMonth() - 5); // 6 meses
+
+  const dateFrom = monthStartStr(startMonth);
+  const dateTo = monthStartStr(endMonth);
+
+  const { data: momentumData, error: momentumError } = await supabaseAuth.rpc("rsm_metrics", {
+    date_from: dateFrom,
+    date_to: dateTo,
+    metric: "mrr",
+    currency_mode: "system",
+    group_by: ["period_month"],
+    filters: { momentum: "NEW" },
+  });
+  if (momentumError) throw momentumError;
+
+  const momentumRows = Array.isArray(momentumData) ? (momentumData as unknown[]) : [];
+  const seriesData = momentumRows.map((row) => {
+    const r = row as unknown as { period_month?: string; value?: unknown };
+    const month = typeof r.period_month === "string" ? r.period_month.slice(0, 7) : "";
+    const rawVal = r.value;
+    const val = typeof rawVal === "number" ? rawVal : rawVal != null ? Number(rawVal) : 0;
+    return {
+      month,
+      mrr_new: Number((Number.isFinite(val) ? val : 0).toFixed(2)),
+    };
+  });
+
+  const widgets: Widget[] = [
+    {
+      type: "chart_bar",
+      title: "MRR NEW ÃƒÂºltimos 6 meses (USD)",
+      xKey: "month",
+      series: [{ key: "mrr_new", name: "MRR NEW", color: "#22C55E" }],
+      data: seriesData,
+    },
+    {
+      type: "table",
+      title: "Detalle MRR NEW por mes",
+      columns: ["Mes", "MRR NEW (USD)"],
+      rows: seriesData.map((r) => [r.month, r.mrr_new]),
+    },
+  ];
+
+  const audit: LiveDataAudit = {
+    range_from: dateFrom,
+    range_to: dateTo,
+    currency_mode: "system",
+    source_breakdown: ["revenue_schedule_monthly"],
+    filters_applied: { holding_id: holdingId, momentum: "NEW" },
+    holding_id: holdingId,
+    data_completeness: "complete",
+    timestamp: new Date().toISOString(),
+  };
+
+  const response: LiveDataResult = {
+    handled: true,
+    context: `MRR NEW serie 6 meses desde ${dateFrom} hasta ${dateTo}. Solo RSM (momentum no aplica a Legacy).`,
+    sources: [{ table: "revenue_schedule_monthly", query_type: "mrr_momentum_new", filters: { momentum: "NEW" } }],
+    widgets,
+    audit,
+  };
+
+  return response;
+}
+
+export async function handleQa03MrrMomentumSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  console.log("QA-03: INICIO - mrrMomentumSeries activado");
+
+  try {
+    const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+    let momentumFilter = "NEW";
+    if (question.toLowerCase().includes("upsell")) momentumFilter = "UPSELL";
+    else if (question.toLowerCase().includes("cross-sell") || question.toLowerCase().includes("cross sell")) momentumFilter = "CROSS-SELL";
+    else if (question.toLowerCase().includes("renewal") || question.toLowerCase().includes("renovaciÃƒÂ³n")) momentumFilter = "RENEWAL";
+    else if (question.toLowerCase().includes("churn")) momentumFilter = "CHURN";
+    else if (question.toLowerCase().includes("new") || question.toLowerCase().includes("nuevo")) momentumFilter = "NEW";
+
+    console.log(`QA-03: Momentum detectado: ${momentumFilter}`);
+
+    const { data: mrrData, error: mrrError } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, momentum, mrr_period_system_ccy")
+      .eq("holding_id", holdingId)
+      .eq("momentum", momentumFilter)
+      .gte("period_month", dateFrom)
+      .lte("period_month", dateTo)
+      .not("mrr_period_system_ccy", "is", null)
+      .order("period_month", { ascending: true });
+
+    if (mrrError) throw mrrError;
+
+    console.log(`QA-03: MRR ${momentumFilter} rows encontrados: ${mrrData?.length || 0}`);
+
+    if (!mrrData || mrrData.length === 0) {
+      const widgetsEmpty: Widget[] = [
+        {
+          type: "table",
+          title: `MRR Momentum ${momentumFilter}`,
+          columns: ["Métrica", "Valor"],
+          rows: [
+            ["Total de meses con " + momentumFilter, 0],
+            [`MRR ${momentumFilter} total`, "0.00"],
+            ["Promedio mensual", "0.00"],
+          ],
+        },
+      ];
+
+      const response: LiveDataResult = {
+        handled: true,
+        context: `No hay movimientos MRR ${momentumFilter} en los últimos ${monthsBack} meses. No se puede generar la serie de momentum.`,
+        sources: [
+          {
+            table: "revenue_schedule_monthly",
+            query_type: "mrr_momentum_specific",
+            filters: { holding_id: holdingId, momentum: momentumFilter, date_range: true },
+          },
+        ],
+        widgets: widgetsEmpty,
+        audit: {
+          range_from: dateFrom.slice(0, 7),
+          range_to: dateTo.slice(0, 7),
+          currency_mode: "system",
+          source_breakdown: ["revenue_schedule_monthly"],
+          filters_applied: { holding_id: holdingId, momentum_filter: momentumFilter, range_from: dateFrom, range_to: dateTo },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+
+      console.log("QA-03: RESPUESTA SIN DATOS - Generada:", JSON.stringify(response, null, 2));
+      return response;
+    }
+
+    const monthlyData = (Array.isArray(mrrData) ? (mrrData as unknown[]) : []).map((row) => {
+      const r = row as unknown as { period_month?: unknown; mrr_period_system_ccy?: unknown };
+      const month = r.period_month != null ? String(r.period_month).slice(0, 10) : "";
+      const rawVal = r.mrr_period_system_ccy;
+      const val = typeof rawVal === "number" ? rawVal : rawVal != null ? Number(rawVal) : 0;
+      return { month, mrr: Number.isFinite(val) ? val : 0 };
+    });
+
+    const totalNew = monthlyData.reduce((sum, item) => sum + item.mrr, 0);
+    const avgNew = monthlyData.length > 0 ? totalNew / monthlyData.length : 0;
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_line",
+        title: `MRR ${momentumFilter} - Últimos ${monthsBack} meses`,
+        xKey: "month",
+        series: [{ key: "mrr", name: `MRR ${momentumFilter}`, color: "#10b981" }],
+        data: monthlyData,
+      },
+      {
+        type: "table",
+        title: `MRR ${momentumFilter} por Mes`,
+        columns: ["Mes", `MRR ${momentumFilter}`],
+        rows: monthlyData.map((item) => [item.month, `${item.mrr.toFixed(2)}`]),
+      },
+      {
+        type: "table",
+        title: `Resumen MRR ${momentumFilter}`,
+        columns: ["MÃƒÂ©trica", "Valor"],
+        rows: [
+          ["Total de meses con " + momentumFilter, monthlyData.length],
+          [`MRR ${momentumFilter} total`, `${totalNew.toFixed(2)}`],
+          ["Promedio mensual", `${avgNew.toFixed(2)}`],
+          [
+            "Mes con mayor " + momentumFilter,
+            monthlyData.length > 0
+              ? `${monthlyData.reduce((max, item) => (item.mrr > max.mrr ? item : max)).month} (${Math.max(...monthlyData.map((d) => d.mrr)).toFixed(2)})`
+              : "N/A",
+          ],
+        ],
+      },
+    ];
+
+    const response: LiveDataResult = {
+      handled: true,
+      context: `MRR ${momentumFilter} últimos ${monthsBack} meses. ${monthlyData.length} meses con movimientos ${momentumFilter}. Total: ${totalNew.toFixed(2)}. Promedio mensual: ${avgNew.toFixed(2)}.`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "mrr_momentum_specific",
+          filters: { holding_id: holdingId, momentum: momentumFilter, date_range: true },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: dateFrom.slice(0, 7),
+        range_to: dateTo.slice(0, 7),
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId, momentum_filter: momentumFilter, date_range: true, range_from: dateFrom, range_to: dateTo },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+
+    console.log("QA-03: RESPUESTA CON DATOS - Generada:", JSON.stringify(response, null, 2));
+    return response;
+  } catch (e: unknown) {
+    console.error("QA-03 Error:", e);
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      handled: true,
+      context: `Error al analizar MRR momentum NEW: ${message}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        range_from: "error",
+        range_to: "error",
+        currency_mode: "system",
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: message || "Unknown error",
+      } as LiveDataAudit,
+    };
+  }
+}

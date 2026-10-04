@@ -1,0 +1,140 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleQa08OverdueInvoices(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { data: overdueData, error: overdueError } = await supabaseAuth
+      .from("invoices")
+      .select(
+        `
+          invoice_number,
+          status,
+          due_date,
+          issue_date,
+          total_system_currency,
+          total_invoice_currency,
+          invoice_currency,
+          client_id,
+          clients(name_commercial)
+        `,
+      )
+      .eq("holding_id", holdingId)
+      .or(`status.eq.Vencida,and(status.in.('Emitida','Enviada'),due_date.lt.${today})`)
+      .neq("status", "Cancelada")
+      .order("due_date", { ascending: false })
+      .limit(100);
+
+    if (overdueError) throw overdueError;
+
+    const overdueInvoices = Array.isArray(overdueData) ? overdueData : [];
+
+    const totalUSD = overdueInvoices.reduce((sum: number, inv: any) => {
+      if (inv.invoice_currency === "USD" || (!inv.invoice_currency && inv.total_system_currency)) {
+        return sum + (inv.total_system_currency || inv.total_invoice_currency || 0);
+      }
+      return sum;
+    }, 0);
+
+    const totalOther = overdueInvoices.reduce((sum: number, inv: any) => {
+      if (inv.invoice_currency && inv.invoice_currency !== "USD") {
+        return sum + (inv.total_invoice_currency || 0);
+      }
+      return sum;
+    }, 0);
+
+    const widgets: Widget[] = [];
+
+    if (overdueInvoices.length > 0) {
+      widgets.push({
+        type: "kpi",
+        title: "Total Facturas Vencidas",
+        value: overdueInvoices.length.toString(),
+        unit: "facturas",
+      });
+
+      widgets.push({
+        type: "kpi",
+        title: "Total Vencido USD",
+        value: totalUSD.toFixed(2),
+        unit: "USD",
+      });
+
+      if (totalOther > 0) {
+        widgets.push({
+          type: "kpi",
+          title: "Total Vencido Otras Monedas",
+          value: totalOther.toFixed(2),
+          unit: "varias",
+        });
+      }
+
+      const invoiceDetails = overdueInvoices
+        .map((inv: any, index: number) => {
+          const invoiceNum = inv.invoice_number || `INV-${index + 1}`;
+          const clientName = inv.clients?.name_commercial || "Sin cliente";
+          const amount =
+            inv.invoice_currency === "USD" || !inv.invoice_currency
+              ? `$${(inv.total_system_currency || inv.total_invoice_currency || 0).toFixed(2)}`
+              : `${inv.invoice_currency} ${(inv.total_invoice_currency || 0).toFixed(2)}`;
+          return `${invoiceNum} | ${clientName} | ${inv.due_date || "Sin vencimiento"} | ${amount} | ${inv.status || "Sin estado"}`;
+        })
+        .join("\n");
+
+      widgets.push({
+        type: "text",
+        title: "Detalle Facturas Vencidas",
+        content: invoiceDetails,
+      });
+    }
+
+    return {
+      handled: true,
+      context: `Se encontraron ${overdueInvoices.length} facturas vencidas. Fuente: invoices (Live Data). VERSIÃƒâ€œN FINAL 3.0`,
+      sources: [{ table: "invoices", query_type: "overdue_final_v3", filters: { status_overdue: true } }],
+      widgets,
+      audit: {
+        range_from: today,
+        range_to: today,
+        currency_mode: "mixed",
+        source_breakdown: ["invoices"],
+        filters_applied: {
+          holding_id: holdingId,
+          status_overdue: true,
+          exclude_cancelled: true,
+        },
+        holding_id: holdingId,
+        data_completeness: overdueInvoices.length > 0 ? "complete" : "empty",
+        timestamp: new Date().toISOString(),
+        version: "3.0-final",
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `No pude consultar facturas vencidas. Error: ${e?.message || "Desconocido"}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        range_from: new Date().toISOString().slice(0, 10),
+        range_to: new Date().toISOString().slice(0, 10),
+        currency_mode: "system",
+        source_breakdown: ["invoices"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message || "Unknown error",
+      } as any,
+    };
+  }
+}

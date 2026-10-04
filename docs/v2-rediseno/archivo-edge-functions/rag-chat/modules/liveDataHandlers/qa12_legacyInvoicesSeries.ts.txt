@@ -1,0 +1,159 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+type LegacyInvoiceRow = {
+  issue_date?: unknown;
+  invoice_currency?: unknown;
+  total_invoice_currency?: unknown;
+  status?: unknown;
+};
+
+export async function handleQa12LegacyInvoicesSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  console.log("QA-12: INICIO - legacyInvoicesSeries activado");
+
+  try {
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setMonth(startDate.getMonth() - 6);
+
+    const { data: legacyData, error: legacyError } = await supabaseAuth
+      .from("invoices_legacy")
+      .select("issue_date, invoice_currency, total_invoice_currency, status")
+      .eq("holding_id", holdingId)
+      .gte("issue_date", startDate.toISOString().slice(0, 10))
+      .lte("issue_date", endDate.toISOString().slice(0, 10))
+      .not("invoice_currency", "is", null)
+      .not("total_invoice_currency", "is", null)
+      .order("issue_date", { ascending: false });
+
+    if (legacyError) throw legacyError;
+
+    console.log(`QA-12: Legacy invoices encontrados: ${legacyData?.length || 0}`);
+
+    if (!legacyData || legacyData.length === 0) {
+      const response: LiveDataResult = {
+        handled: true,
+        context: `No hay invoices legacy en los ÃƒÂºltimos 6 meses. No se puede generar el histÃƒÂ³rico.`,
+        sources: [{ table: "invoices_legacy", query_type: "legacy_invoices_series", filters: { holding_id: holdingId, date_range: true } }],
+        widgets: [
+          {
+            type: "table",
+            title: "FacturaciÃƒÂ³n Legacy HistÃƒÂ³rica",
+            columns: ["MÃƒÂ©trica", "Valor"],
+            rows: [
+              ["Total de facturas legacy", 0],
+              ["Meses analizados", 0],
+              ["Monedas encontradas", 0],
+            ],
+          },
+        ],
+        audit: {
+          range_from: startDate.toISOString().slice(0, 10),
+          range_to: endDate.toISOString().slice(0, 10),
+          currency_mode: "mixed",
+          source_breakdown: ["invoices_legacy"],
+          filters_applied: { holding_id: holdingId, date_range: true },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+
+      console.log("QA-12: RESPUESTA SIN DATOS - Generada:", JSON.stringify(response, null, 2));
+      return response;
+    }
+
+    const monthCurrencyMap = new Map<string, number>();
+    const currencyTotals = new Map<string, number>();
+
+    (legacyData || []).forEach((raw: unknown) => {
+      const invoice = raw as LegacyInvoiceRow;
+      const issueDate = new Date(String(invoice.issue_date ?? ""));
+      const monthKey = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, "0")}`;
+      const currency = String(invoice.invoice_currency ?? "").trim() || "(sin moneda)";
+      const monthCurrencyKey = `${monthKey}|${currency}`;
+      const amount = Number(invoice.total_invoice_currency ?? 0);
+
+      monthCurrencyMap.set(monthCurrencyKey, (monthCurrencyMap.get(monthCurrencyKey) || 0) + amount);
+      currencyTotals.set(currency, (currencyTotals.get(currency) || 0) + amount);
+    });
+
+    const monthCurrencyData = Array.from(monthCurrencyMap.entries())
+      .map(([key, total]) => {
+        const [month, currency] = key.split("|");
+        return { month, currency, total: Number(total.toFixed(2)) };
+      })
+      .sort((a, b) => a.month.localeCompare(b.month) || a.currency.localeCompare(b.currency));
+
+    const currencyBreakdown = Array.from(currencyTotals.entries())
+      .map(([currency, total]) => ({ currency, total: Number(total.toFixed(2)) }))
+      .sort((a, b) => b.total - a.total);
+
+    const widgets: Widget[] = [
+      {
+        type: "table",
+        title: "FacturaciÃƒÂ³n Legacy por Mes y Moneda",
+        columns: ["Mes", "Moneda", "Total"],
+        rows: monthCurrencyData.map((item) => [item.month, item.currency, `${item.total.toFixed(2)}`]),
+      },
+      {
+        type: "table",
+        title: "Resumen por Moneda",
+        columns: ["Moneda", "Total"],
+        rows: currencyBreakdown.map((item) => [item.currency, `${item.total.toFixed(2)}`]),
+      },
+    ];
+
+    const response: LiveDataResult = {
+      handled: true,
+      context: `FacturaciÃƒÂ³n legacy histÃƒÂ³rica ÃƒÂºltimos 6 meses. ${legacyData.length} facturas analizadas. ${monthCurrencyData.length} combinaciones mes-moneda. Monedas separadas, sin conversiÃƒÂ³n (no se suma entre monedas).`,
+      sources: [{ table: "invoices_legacy", query_type: "legacy_invoices_series", filters: { holding_id: holdingId, date_range: true } }],
+      widgets,
+      audit: {
+        range_from: startDate.toISOString().slice(0, 10),
+        range_to: endDate.toISOString().slice(0, 10),
+        currency_mode: "mixed",
+        source_breakdown: ["invoices_legacy"],
+        filters_applied: {
+          holding_id: holdingId,
+          date_range: true,
+          currency_separation: true,
+        },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+
+    console.log("QA-12: RESPUESTA CON DATOS - Generada:", JSON.stringify(response, null, 2));
+    return response;
+  } catch (e: unknown) {
+    console.error("QA-12 Error:", e);
+    const reason = e instanceof Error ? e.message : String(e);
+    return {
+      handled: true,
+      context: `Error al analizar facturaciÃƒÂ³n legacy histÃƒÂ³rica: ${reason}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        range_from: "error",
+        range_to: "error",
+        currency_mode: "mixed",
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason || "Unknown error",
+      } as any,
+    };
+  }
+}

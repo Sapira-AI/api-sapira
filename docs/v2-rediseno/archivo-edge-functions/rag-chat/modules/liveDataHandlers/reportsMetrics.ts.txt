@@ -1,0 +1,269 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { monthStartStr } from "../utils.ts";
+import type { Widget } from "../widgets.ts";
+
+type SeriesRow = { period_month: string; value: number; currency: string };
+
+function normalizeMomentum(raw: unknown): string {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (!s) return "(sin momentum)";
+  if (s.includes("new") || s.includes("nuevo")) return "NEW";
+  if (s.includes("upsell") || s.includes("expansion") || s.includes("aumento")) return "UPSELL";
+  if (s.includes("cross") || s.includes("cross-sell") || s.includes("cross sell")) return "CROSS-SELL";
+  if (s.includes("downsell") || s.includes("reducci") || s.includes("contracci")) return "DOWNSELL";
+  if (s.includes("churn") || s.includes("cancel")) return "CHURN";
+  return s.toUpperCase();
+}
+
+function safeNum(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parsePeriodRange(today: Date, q: string): { from: string; to: string; months: number } {
+  const qq = q.toLowerCase();
+  const m = qq.match(/(últimos|ultimos)\s+(\d{1,2})\s+mes/);
+  const months = m?.[2] ? Math.max(1, Math.min(24, Number(m[2]))) : 6;
+
+  const toDate = new Date(today);
+  const to = monthStartStr(toDate);
+  const fromDate = new Date(toDate);
+  fromDate.setMonth(fromDate.getMonth() - (months - 1));
+  const from = monthStartStr(fromDate);
+  return { from, to, months };
+}
+
+async function convertSeriesIfNeeded(args: {
+  supabaseAuth: SupabaseClient;
+  rows: SeriesRow[];
+  targetCurrency: string | null;
+  holdingId: string;
+}): Promise<{ displayCurrency: string; rows: SeriesRow[]; fxSources: string[] }> {
+  const baseCurrency = args.rows.find((r) => r.currency)?.currency ?? "";
+  const target = args.targetCurrency ? String(args.targetCurrency).toUpperCase() : null;
+  const shouldConvert = !!target && !!baseCurrency && baseCurrency.toUpperCase() !== target;
+
+  if (!shouldConvert) {
+    return { displayCurrency: baseCurrency, rows: args.rows, fxSources: [] };
+  }
+
+  const convertedByMonth = new Map<string, { converted: number | null; source: string | null }>();
+  const conversions = await Promise.all(
+    args.rows.map(async (m) => {
+      const { data: fxData, error: fxErr } = await args.supabaseAuth.rpc("convert_amount", {
+        p_holding_id: args.holdingId,
+        p_amount: Number(m.value),
+        p_from_currency: baseCurrency,
+        p_to_currency: target,
+        p_reference_date: m.period_month,
+        p_policy: null,
+      });
+
+      if (fxErr) {
+        return { period_month: m.period_month, converted: null, source: `rpc_error: ${fxErr.message}` };
+      }
+
+      const json = fxData as unknown as { converted_amount?: unknown; fx_source?: unknown };
+      return {
+        period_month: m.period_month,
+        converted: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null,
+        source: json?.fx_source ? String(json.fx_source) : null,
+      };
+    }),
+  );
+
+  for (const c of conversions) convertedByMonth.set(c.period_month, { converted: c.converted, source: c.source });
+  const fxSources = Array.from(new Set(conversions.map((c) => c.source).filter((s): s is string => !!s)));
+
+  return {
+    displayCurrency: target,
+    fxSources,
+    rows: args.rows.map((m) => ({
+      ...m,
+      value: convertedByMonth.get(m.period_month)?.converted ?? 0,
+      currency: target,
+    })),
+  };
+}
+
+export async function appendReportsMetrics(args: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+  targetCurrency: string | null;
+}): Promise<{ handled: boolean; contextLines: string[]; widgets: Widget[] }> {
+  const { supabaseAuth, holdingId, question, targetCurrency } = args;
+
+  if (!/\b(mrr|arr|waterfall|retenci|ndr|quick ratio|m[eé]trica|metricas|métricas|reporte)\b/i.test(question)) {
+    return { handled: false, contextLines: [], widgets: [] };
+  }
+
+  const today = new Date();
+  const { from, to, months } = parsePeriodRange(today, question);
+  const wantWaterfall = /waterfall/i.test(question);
+  const wantARR = /\barr\b/i.test(question);
+  const wantMRRContracted = /mrr\s*_?contracted|contracted\b/i.test(question);
+  const wantRecognized = /recognized|reconoc/i.test(question);
+
+  const metricBase = wantMRRContracted ? "mrr_contracted" : "mrr";
+  const metricName = wantMRRContracted ? "MRR Contracted" : "MRR Recognized";
+
+  const contextLines: string[] = [];
+  const widgets: Widget[] = [];
+
+  const { data: seriesData, error: seriesErr } = await supabaseAuth.rpc("rsm_metrics", {
+    date_from: from,
+    date_to: to,
+    metric: metricBase,
+    currency_mode: "system",
+    group_by: ["period_month"],
+    filters: { is_total_row: true },
+  });
+  if (seriesErr) throw seriesErr;
+
+  const seriesRows = Array.isArray(seriesData) ? (seriesData as unknown[]) : [];
+  const monthly = seriesRows
+    .map((r) => {
+      const rr = r as any;
+      return {
+        period_month: String(rr.period_month).slice(0, 10),
+        value: safeNum(rr.value),
+        currency: rr.currency ? String(rr.currency) : "",
+      } as SeriesRow;
+    })
+    .filter((r) => r.period_month)
+    .sort((a, b) => a.period_month.localeCompare(b.period_month));
+
+  const currency = monthly.find((r) => r.currency)?.currency ?? "";
+  const shouldConvert = !!targetCurrency && !!currency && String(targetCurrency).toUpperCase() !== String(currency).toUpperCase();
+  const displayCurrency = shouldConvert ? String(targetCurrency).toUpperCase() : currency;
+
+  const monthlyConverted = await convertSeriesIfNeeded({ supabaseAuth, rows: monthly, targetCurrency, holdingId });
+  if (monthlyConverted.fxSources.length) {
+    contextLines.push(
+      `Conversión solicitada para reportes: ${currency} → ${monthlyConverted.displayCurrency}. Fuentes FX: ${monthlyConverted.fxSources.length ? monthlyConverted.fxSources.slice(0, 5).join(", ") : "(sin datos)"}.`,
+    );
+  }
+
+  const monthlyDisplay = monthlyConverted.rows;
+  const current = monthlyDisplay.length ? monthlyDisplay[monthlyDisplay.length - 1] : null;
+  const previous = monthlyDisplay.length >= 2 ? monthlyDisplay[monthlyDisplay.length - 2] : null;
+
+  const currentMRR = current ? current.value : 0;
+  const previousMRR = previous ? previous.value : 0;
+  const delta = currentMRR - previousMRR;
+  const pct = previousMRR > 0 ? (delta / previousMRR) * 100 : null;
+
+  widgets.push({
+    type: "kpi",
+    title: `${metricName} (${current?.period_month?.slice(0, 7) ?? ""})`.trim(),
+    value: `${currentMRR.toFixed(2)} ${displayCurrency}`.trim(),
+    subtitle: previous
+      ? `vs ${previous.period_month.slice(0, 7)}: ${delta.toFixed(2)} (${pct === null ? "n/a" : pct.toFixed(2) + "%"})`
+      : undefined,
+  });
+
+  if (wantARR) {
+    widgets.push({
+      type: "kpi",
+      title: `${wantMRRContracted ? "ARR Contracted" : "ARR Recognized"} (run-rate)`,
+      value: `${(currentMRR * 12).toFixed(2)} ${displayCurrency}`.trim(),
+    });
+  }
+
+  widgets.push({
+    type: "chart_line",
+    title: `${metricName} últimos ${months} meses (system currency)` ,
+    xKey: "month",
+    series: [{ key: "mrr", name: metricName, color: "#8B5CF6" }],
+    data: monthlyDisplay.map((r) => ({ month: r.period_month.slice(0, 7), mrr: Number(r.value.toFixed(2)) })),
+  });
+
+  if (wantWaterfall || wantRecognized || /ndr|quick ratio|retenci|churn/i.test(question)) {
+    const { data: byMomentumData, error: byMomentumErr } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: from,
+      date_to: to,
+      metric: metricBase,
+      currency_mode: "system",
+      group_by: ["period_month", "momentum"],
+      filters: { is_total_row: false },
+    });
+    if (byMomentumErr) throw byMomentumErr;
+
+    const breakdownRows = Array.isArray(byMomentumData) ? (byMomentumData as unknown[]) : [];
+    const byMonth = new Map<
+      string,
+      {
+        NEW: number;
+        UPSELL: number;
+        "CROSS-SELL": number;
+        DOWNSELL: number;
+        CHURN: number;
+        OTHER: number;
+      }
+    >();
+
+    for (const raw of breakdownRows) {
+      const r = raw as any;
+      const month = String(r.period_month ?? "").slice(0, 10);
+      if (!month) continue;
+
+      const cat = normalizeMomentum(r.momentum);
+      const valueRaw = safeNum(r.value);
+      const negCat = cat === "DOWNSELL" || cat === "CHURN";
+      const value = negCat ? -Math.abs(valueRaw) : valueRaw;
+
+      if (!byMonth.has(month)) {
+        byMonth.set(month, { NEW: 0, UPSELL: 0, "CROSS-SELL": 0, DOWNSELL: 0, CHURN: 0, OTHER: 0 });
+      }
+      const agg = byMonth.get(month)!;
+      if (cat === "NEW") agg.NEW += value;
+      else if (cat === "UPSELL") agg.UPSELL += value;
+      else if (cat === "CROSS-SELL") agg["CROSS-SELL"] += value;
+      else if (cat === "DOWNSELL") agg.DOWNSELL += value;
+      else if (cat === "CHURN") agg.CHURN += value;
+      else agg.OTHER += value;
+    }
+
+    const totalByMonth = new Map(monthlyDisplay.map((r) => [r.period_month, r.value] as const));
+    const monthsSorted = Array.from(new Set([...Array.from(byMonth.keys()), ...Array.from(totalByMonth.keys())])).sort((a, b) =>
+      a.localeCompare(b),
+    );
+
+    const waterfallTableRows: Array<Array<string | number | null>> = [];
+    for (let i = 0; i < monthsSorted.length; i++) {
+      const month = monthsSorted[i];
+      const eop = totalByMonth.get(month) ?? 0;
+      const bop = i > 0 ? totalByMonth.get(monthsSorted[i - 1]) ?? 0 : 0;
+      const b = byMonth.get(month) ?? { NEW: 0, UPSELL: 0, "CROSS-SELL": 0, DOWNSELL: 0, CHURN: 0, OTHER: 0 };
+      const computed = bop + b.NEW + b.UPSELL + b["CROSS-SELL"] + b.DOWNSELL + b.CHURN;
+      const diff = computed - eop;
+
+      waterfallTableRows.push([
+        month.slice(0, 7),
+        Number(bop.toFixed(2)),
+        Number(b.NEW.toFixed(2)),
+        Number(b.UPSELL.toFixed(2)),
+        Number(b["CROSS-SELL"].toFixed(2)),
+        Number(b.DOWNSELL.toFixed(2)),
+        Number(b.CHURN.toFixed(2)),
+        Number(eop.toFixed(2)),
+        Math.abs(diff) <= 0.01 ? 0 : Number(diff.toFixed(2)),
+      ]);
+    }
+
+    widgets.push({
+      type: "table",
+      title: `${metricName} Waterfall (mensual) (${shouldConvert ? `convertido a ${displayCurrency}` : `system currency: ${currency || "(desconocida)"}`})`,
+      columns: ["Mes", "BOP", "NEW", "UPSELL", "CROSS-SELL", "DOWNSELL", "CHURN", "EOP", "Diff"],
+      rows: waterfallTableRows,
+    });
+  }
+
+  contextLines.push(
+    `Reportes/Métricas calculados vía SQL (rsm_metrics) ${shouldConvert ? `convertidos a ${displayCurrency}` : `en moneda sistema ${currency ? `(${currency})` : ""}`}, período ${from.slice(0, 7)} → ${to.slice(0, 7)}.`,
+  );
+
+  return { handled: true, contextLines, widgets };
+}

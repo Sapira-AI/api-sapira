@@ -1,0 +1,207 @@
+# Sapira Copilot – Métricas y Reglas (v1.0)
+
+## Objetivo
+Definir conceptos y reglas de negocio para respuestas consistentes del Copiloto.
+
+**Principio:** los números se obtienen por Live Data (DB). Este documento define significado y reglas.
+
+---
+
+## 1) Monedas (regla estricta)
+Default: mostrar métricas en **system currency** y comunicarlo (“moneda sistema: USD” u otra según holding).
+
+Si el usuario pide otra moneda:
+- contract currency / company currency / invoice currency → entregar en esa moneda.
+
+**Prohibición:** nunca sumar montos de distintas monedas.
+Si hay mezcla, desagregar por currency (múltiples series o tablas separadas).
+
+### Campos de moneda y FX en RSM
+Tabla: `revenue_schedule_monthly`
+- Monedas:
+  - `system_currency`
+  - `company_currency`
+  - `contract_currency`
+- FX:
+  - `fx_contract_to_system`
+  - `fx_contract_to_company`
+  - `fx_to_system_source`, `fx_to_system_date`
+  - `fx_to_company_source`, `fx_to_company_date`
+
+---
+
+## 2) Revenue reconocido (Recognized revenue)
+### Definición
+Ingresos reconocidos contablemente en el período.
+
+### Recurrente y no recurrente
+**Revenue incluye recurrente + no recurrente.**
+Si el usuario pide “solo no recurrente” o “solo recurrente”, se debe separar por tipo de item.
+
+### Campos en RSM (por moneda)
+- Company currency:
+  - `recognized_period_ccy`
+  - `recognized_cum_ccy`
+- Contract currency:
+  - `recognized_period_contract_ccy`
+  - `recognized_cum_contract_ccy`
+- System currency:
+  - `recognized_period_system_ccy`
+  - `recognized_cum_system_ccy`
+
+### Cómo separar recurrente vs no recurrente (regla de implementación)
+RSM no trae `is_recurring` directo. Para segmentar:
+- Join con `contract_items` por `revenue_schedule_monthly.contract_item_id = contract_items.id`
+- Usar `contract_items.is_recurring`:
+  - recurrente: `is_recurring = true`
+  - no recurrente: `is_recurring = false`
+
+---
+
+## 3) Billed / Facturación
+### Definición
+Monto facturado en el período.
+
+### Campos en RSM (por moneda)
+- Company currency:
+  - `billed_period_ccy`
+  - `billed_cum_ccy`
+- Contract currency:
+  - `billed_period_contract_ccy`
+  - `billed_cum_contract_ccy`
+- System currency:
+  - `billed_period_system_ccy`
+  - `billed_cum_system_ccy`
+
+### Detalle operativo (documentos)
+Para listar documentos: usar `invoices` / `invoice_items`.
+Para reporting consolidado temporal: preferir RSM.
+
+---
+
+## 4) Deferred (ingresos diferidos)
+### Definición
+Saldo de ingresos facturados pero no reconocidos todavía.
+
+### Campos en RSM
+Saldo fin de mes (EOM):
+- `deferred_balance_eom_ccy`
+- `deferred_balance_eom_contract_ccy`
+- `deferred_balance_eom_system_ccy`
+
+Movimiento del período:
+- `deferred_balance_period_ccy`
+- `deferred_balance_period_contract_ccy`
+- `deferred_balance_period_system_ccy`
+
+---
+
+## 5) Unbilled (ingresos por facturar)
+### Definición
+Saldo de ingresos reconocidos/ganados que aún no han sido facturados.
+
+### Campos en RSM
+Saldo fin de mes (EOM):
+- `unbilled_balance_eom_ccy`
+- `unbilled_balance_eom_contract_ccy`
+- `unbilled_balance_eom_system_ccy`
+
+Movimiento del período:
+- `unbilled_balance_period_ccy`
+- `unbilled_balance_period_contract_ccy`
+- `unbilled_balance_period_system_ccy`
+
+---
+
+## 6) MRR (Monthly Recurring Revenue)
+### Definición
+MRR es un snapshot mensual de ingresos recurrentes.
+
+### Regla fundamental
+- **MRR NO se suma entre meses.**
+- Para “total anual” usar: **ARR = MRR * 12** (del mes de referencia).
+
+### Recurrente vs no recurrente (regla)
+- MRR aplica **solo a items recurrentes**.
+- En RSM, para items no recurrentes:
+  - las métricas de **MRR y CMRR no aplican** (no deben calcularse ni mostrarse).
+- Si el usuario pide “detalle no recurrente”, responder con **revenue reconocido / billed** (no con MRR/CMRR).
+
+### MRR en Sapira: 2 variantes
+Sapira maneja 2 MRR distintos (solo recurrentes):
+
+1) **MRR reconocido** (incluye descuentos puntuales; consistente con revenue)
+- system: `mrr_period_system_ccy`
+- contract: `mrr_period_contract_ccy`
+- company: `mrr_period_ccy`
+
+2) **MRR contrato** (no considera descuentos puntuales)
+- system: `mrr_period_contracted_system_ccy`
+- contract: `mrr_period_contracted_contract_ccy`
+- company: `mrr_period_contracted_ccy`
+
+### Regla UX (evitar confusión)
+- Si `MRR reconocido == MRR contrato` (o diferencia irrelevante), mostrar solo uno (por defecto: reconocido).
+- Si difieren, mostrar ambos y explicar:
+  - “MRR contrato no considera descuentos puntuales; MRR reconocido sí”.
+
+---
+
+## 7) CMRR (Committed MRR)
+### Definición
+MRR comprometido/contratado.
+
+### Regla Sapira
+CMRR cuenta desde **booking_date** (no start_date).
+Aplica solo a items recurrentes.
+
+### Campos en RSM
+- system: `cmrr_period_system_ccy`
+- contract: `cmrr_period_contract_ccy`
+- company: `cmrr_period_ccy`
+
+---
+
+## 8) Waterfall / Movimientos (momentum)
+### Definición
+Los movimientos de MRR por período se clasifican por `momentum`:
+- `NEW`, `REACTIVATION`, `UPSELL`, `CROSS-SELL`, `DOWNSELL`, `CHURN`, `RENEWAL`, `BOP`
+
+### Regla
+- Para **MRR total EOP del mes**: NO filtrar por momentum.
+- Para preguntas como “MRR nuevo”, “upsell”, “churn”, etc.: filtrar por `momentum`.
+
+---
+
+## 9) Estados de facturas (operativo)
+Fuente: `invoices.status`
+
+- Por Emitir: `status='Por Emitir'`
+- Vencida:
+  - `status='Vencida'` OR
+  - (`status in ('Emitida','Enviada')` AND `due_date < hoy`)
+- No vencida:
+  - `status in ('Pagada','Cancelada')`
+
+---
+
+## 10) Plazos / Cohortes (definición y fuente)
+### Emisión → pago (DSO / tiempo de cobro)
+- `invoices.issue_date` → `invoices.paid_at` (cuando exista)
+- Métricas: promedio, mediana, percentiles; cohortes por mes de emisión o mes de booking.
+
+### Booking → primera emisión
+- `contracts.booking_date` → primera `invoices.issue_date` asociada al contrato
+
+### Regla de salida
+Si el usuario pide cohortes:
+- devolver tabla por cohorte y un gráfico (heatmap/barras si el frontend lo soporta; si no, tabla)
+
+---
+
+## 11) Recordatorio de output correcto
+En métricas:
+- indicar rango
+- indicar moneda
+- incluir tabla base (y gráfico si aplica)
+- no inventar datos si live-data falla

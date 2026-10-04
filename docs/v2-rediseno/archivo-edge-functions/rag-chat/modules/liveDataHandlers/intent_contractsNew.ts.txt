@@ -1,0 +1,120 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentContractsNew(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  try {
+    const today = new Date();
+    const monthStart = `${today.toISOString().slice(0, 7)}-01`;
+
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextMonthStart = `${nextMonth.toISOString().slice(0, 7)}-01`;
+
+    const { data, error } = await supabaseAuth
+      .from("contracts")
+      .select(
+        "contract_number, client_name_commercial, status, booking_date, created_at, contract_currency, total_value_system_currency, system_currency",
+      )
+      .eq("holding_id", holdingId)
+      .not("booking_date", "is", null)
+      .gte("booking_date", monthStart)
+      .lt("booking_date", nextMonthStart)
+      .order("booking_date", { ascending: false })
+      .limit(500);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? (data as any[]) : [];
+    const systemCurrency =
+      typeof (rows?.[0] as any)?.system_currency === "string" ? String((rows[0] as any).system_currency) : null;
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: "Contratos nuevos (este mes)",
+        value: String(rows.length),
+      },
+      {
+        type: "table",
+        title: "Contratos nuevos",
+        columns: [
+          "Contrato",
+          "Cliente",
+          "Estado",
+          "Booking date",
+          "Creado",
+          "Moneda contrato",
+          `Total (system)${systemCurrency ? ` ${systemCurrency}` : ""}`.trim(),
+        ],
+        rows: rows.map((r) => [
+          r?.contract_number ?? null,
+          r?.client_name_commercial ?? null,
+          r?.status ?? null,
+          r?.booking_date ?? null,
+          r?.created_at ?? null,
+          r?.contract_currency ?? null,
+          typeof r?.total_value_system_currency === "number"
+            ? Number(r.total_value_system_currency.toFixed(2))
+            : r?.total_value_system_currency
+              ? Number(r.total_value_system_currency)
+              : null,
+        ]),
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `Contratos nuevos este mes (booking_date entre ${monthStart} y ${nextMonthStart}).`,
+      sources: [
+        {
+          table: "contracts",
+          query_type: "contracts_new",
+          filters: { holding_id: holdingId, booking_date_from: monthStart, booking_date_to_exclusive: nextMonthStart },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: monthStart,
+        range_to: nextMonthStart,
+        currency_mode: "system",
+        source_breakdown: ["contracts"],
+        filters_applied: { holding_id: holdingId, booking_date_from: monthStart, booking_date_to_exclusive: nextMonthStart },
+        holding_id: holdingId,
+        data_completeness: rows.length > 0 ? "complete" : "empty",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para contratos nuevos. Motivo: ${reason}`,
+      sources: [{ table: "contracts", query_type: "contracts_new", filters: { holding_id: holdingId } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Contratos nuevos",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["contracts"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

@@ -1,0 +1,18 @@
+import { type Widget, type LiveDataAudit } from "../widgets.ts";
+
+export interface LiveDataSource {
+  table?: string;
+  query_type?: string;
+  filters?: Record<string, any>;
+  id?: string;
+  similarity?: number;
+  metadata?: unknown;
+}
+
+export interface LiveDataResult {
+  handled: boolean;
+  context: string;
+  sources: LiveDataSource[];
+  widgets: Widget[];
+  audit?: LiveDataAudit;
+}

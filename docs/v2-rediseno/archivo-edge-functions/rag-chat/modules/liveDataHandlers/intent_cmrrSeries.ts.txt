@@ -1,0 +1,124 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleIntentCmrrSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+  try {
+    const { data: rsmRows, error: rsmErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, cmrr_period_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .gte("period_month", dateFrom)
+      .lte("period_month", dateTo)
+      .order("period_month")
+      .limit(20000);
+    if (rsmErr) throw rsmErr;
+
+    const rows = Array.isArray(rsmRows) ? (rsmRows as unknown[]) : [];
+    const first = rows?.[0] as unknown as { system_currency?: unknown } | undefined;
+    const currency = first?.system_currency ? String(first.system_currency) : "USD";
+
+    const monthly = new Map<string, number>();
+    for (const row of rows) {
+      const r = row as unknown as { period_month?: unknown; cmrr_period_system_ccy?: unknown };
+      const monthKey = monthStartStr(new Date(String(r.period_month ?? "")));
+      const raw = r.cmrr_period_system_ccy;
+      const v = typeof raw === "number" ? raw : raw != null ? Number(raw) : 0;
+      monthly.set(monthKey, (monthly.get(monthKey) || 0) + (Number.isFinite(v) ? v : 0));
+    }
+
+    const seriesData: Array<{ month: string; cmrr: number }> = [];
+    const startMonth = new Date(dateFrom);
+    for (let i = 0; i < monthsBack; i++) {
+      const month = new Date(startMonth);
+      month.setMonth(month.getMonth() + i);
+      const monthKey = monthStartStr(month);
+      seriesData.push({
+        month: monthKey.slice(0, 7),
+        cmrr: monthly.get(monthKey) || 0,
+      });
+    }
+
+    const hasAnyValue = seriesData.some((r) => typeof r.cmrr === "number" && r.cmrr !== 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_line",
+        title: monthsBack === 1 ? `CMRR este mes (${currency})` : `CMRR últimos ${monthsBack} meses (${currency})`,
+        xKey: "month",
+        series: [{ key: "cmrr", name: "CMRR", color: "#3B82F6" }],
+        data: seriesData.map((r) => ({ month: r.month, cmrr: Number(r.cmrr.toFixed(2)) })),
+      },
+      {
+        type: "table",
+        title: "Detalle CMRR por mes",
+        columns: ["Mes", `CMRR (${currency})`],
+        rows: seriesData.map((r) => [r.month, Number(r.cmrr.toFixed(2))]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_cmrr_series",
+      range_from: dateFrom,
+      range_to: dateTo,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly"],
+      filters_applied: { holding_id: holdingId },
+      holding_id: holdingId,
+      data_completeness: hasAnyValue ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: hasAnyValue
+        ? `INTENT: cmrr_series. CMRR serie desde ${dateFrom} hasta ${dateTo} (system currency).`
+        : `INTENT: cmrr_series. No encontré datos de CMRR para tu holding en el rango ${dateFrom}→${dateTo}.`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "cmrr_series", filters: { date_from: dateFrom, date_to: dateTo } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: unknown) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return {
+      handled: true,
+      context: `INTENT: cmrr_series. No pude consultar CMRR en vivo (error en Live Data). Motivo: ${reason}`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "cmrr_series", filters: { date_from: dateFrom, date_to: dateTo } },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - CMRR",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_cmrr_series",
+        range_from: dateFrom,
+        range_to: dateTo,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

@@ -1,0 +1,156 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentInvoicesIssuedMonth(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  currentMonthStr: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, currentMonthStr } = params;
+
+  const startOfMonth = `${currentMonthStr.slice(0, 7)}-01`;
+  const endOfMonth = new Date(
+    new Date(currentMonthStr).getFullYear(),
+    new Date(currentMonthStr).getMonth() + 1,
+    0,
+  )
+    .toISOString()
+    .slice(0, 10);
+
+  try {
+    const statuses = ["Emitida", "Enviada", "Pagada", "Vencida"];
+
+    const { data: rows, error } = await supabaseAuth
+      .from("invoices")
+      .select(
+        `
+          invoice_number,
+          status,
+          issue_date,
+          due_date,
+          total_system_currency,
+          total_invoice_currency,
+          invoice_currency,
+          client_id,
+          clients(name_commercial)
+        `,
+      )
+      .eq("holding_id", holdingId)
+      .gte("issue_date", startOfMonth)
+      .lte("issue_date", endOfMonth)
+      .in("status", statuses)
+      .neq("status", "Cancelada")
+      .order("issue_date", { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+
+    const invoices = Array.isArray(rows) ? rows : [];
+
+    const totalSystem = invoices.reduce((sum: number, inv: any) => {
+      const v = typeof inv?.total_system_currency === "number"
+        ? inv.total_system_currency
+        : inv?.total_system_currency
+          ? Number(inv.total_system_currency)
+          : 0;
+      return sum + (Number.isFinite(v) ? v : 0);
+    }, 0);
+
+    const tableRows = invoices.slice(0, 50).map((inv: any) => {
+      const clientName = inv?.clients?.name_commercial ?? null;
+      return [
+        inv?.invoice_number ?? null,
+        clientName,
+        inv?.issue_date ?? null,
+        inv?.status ?? null,
+        inv?.total_system_currency ?? null,
+        inv?.invoice_currency ?? null,
+        inv?.total_invoice_currency ?? null,
+      ] as Array<string | number | null>;
+    });
+
+    const widgets: Widget[] = [
+      { type: "kpi", title: "Facturas emitidas (mes)", value: String(invoices.length) },
+      { type: "kpi", title: "Total emitido (system currency)", value: totalSystem.toFixed(2) },
+      {
+        type: "table",
+        title: `Facturas emitidas (${currentMonthStr.slice(0, 7)}) (últimas 50)`,
+        columns: [
+          "Factura",
+          "Cliente",
+          "Emisión",
+          "Estado",
+          "Total (system)",
+          "Moneda factura",
+          "Total (factura)",
+        ],
+        rows: tableRows,
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_invoices_issued_month",
+      range_from: startOfMonth,
+      range_to: endOfMonth,
+      currency_mode: "system",
+      source_breakdown: ["invoices", "clients"],
+      filters_applied: { holding_id: holdingId, issue_date_from: startOfMonth, issue_date_to: endOfMonth, status_in: statuses },
+      holding_id: holdingId,
+      data_completeness: invoices.length > 0 ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: invoices.length
+        ? `INTENT: invoices_issued_month. Facturas emitidas en ${currentMonthStr.slice(0, 7)} (máx 200; tabla muestra 50).`
+        : `INTENT: invoices_issued_month. No encontré facturas emitidas en ${currentMonthStr.slice(0, 7)} para tu holding.`,
+      sources: [
+        {
+          table: "invoices",
+          query_type: "select",
+          filters: { holding_id: holdingId, issue_date_from: startOfMonth, issue_date_to: endOfMonth, status_in: statuses, limit: 200 },
+        },
+        { table: "clients", query_type: "join", filters: {} },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: invoices_issued_month. No pude consultar facturas emitidas en vivo. Motivo: ${reason}`,
+      sources: [
+        {
+          table: "invoices",
+          query_type: "select",
+          filters: { holding_id: holdingId, issue_date_from: startOfMonth, issue_date_to: endOfMonth },
+        },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Facturas emitidas",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_invoices_issued_month",
+        range_from: startOfMonth,
+        range_to: endOfMonth,
+        currency_mode: "system",
+        source_breakdown: ["invoices"],
+        filters_applied: { holding_id: holdingId, issue_date_from: startOfMonth, issue_date_to: endOfMonth },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

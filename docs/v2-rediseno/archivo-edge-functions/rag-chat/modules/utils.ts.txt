@@ -1,0 +1,210 @@
+/**
+ * Funciones utilitarias para rag-chat
+ * Extraídas de index.ts para mejor modularidad
+ */
+
+export function isUuidLike(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim());
+}
+
+export function cleanDataForUser<T extends Record<string, unknown>>(rows: T[]): Array<Record<string, unknown>> {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((obj) => {
+    const cleanObj: Record<string, unknown> = { ...obj };
+    for (const key of Object.keys(cleanObj)) {
+      const k = key.toLowerCase();
+      if (k === "id" || k.endsWith("_id") || k.includes("uuid") || k.includes("holding") || k.includes("tenant")) {
+        delete cleanObj[key];
+        continue;
+      }
+      const v = cleanObj[key];
+      if (typeof v === "string" && isUuidLike(v)) {
+        cleanObj[key] = null;
+      }
+    }
+    return cleanObj;
+  });
+}
+
+export function extractGroupBySpec(question: string): {
+  groupBy: "currency" | "status" | "country" | "industry" | null;
+  resource: "clients" | "contracts" | "invoices" | "mrr" | null;
+} {
+  const q = question.toLowerCase();
+  const wantsGroup = q.includes("agrupar") || q.includes("separ") || q.includes("dividir") || q.includes("distribuci");
+  if (!wantsGroup) return { groupBy: null, resource: null };
+
+  const resource: "clients" | "contracts" | "invoices" | "mrr" | null =
+    q.includes("mrr") || (q.includes("ingres") && q.includes("recurrent"))
+      ? "mrr"
+      : q.includes("cliente") || q.includes("clientes")
+        ? "clients"
+        : q.includes("contrat")
+          ? "contracts"
+          : q.includes("factur")
+            ? "invoices"
+            : null;
+
+  const groupBy: "currency" | "status" | "country" | "industry" | null =
+    q.includes("moneda") || q.includes("divisa")
+      ? "currency"
+      : q.includes("estado") || q.includes("status")
+        ? "status"
+        : q.includes("país") || q.includes("pais") || q.includes("country") || q.includes("mercado") || q.includes("market")
+          ? "country"
+          : q.includes("industr")
+            ? "industry"
+            : null;
+
+  return { groupBy, resource };
+}
+
+export function extractCountryFilter(question: string): string | null {
+  const q = question.toLowerCase();
+  if (/\bchile\b/i.test(q)) return "Chile";
+  if (/\bm[eé]xico\b/i.test(q)) return "México";
+  if (/\bper[uú]\b/i.test(q)) return "Perú";
+  if (/\bcolombia\b/i.test(q)) return "Colombia";
+  if (/\bargentina\b/i.test(q)) return "Argentina";
+  return null;
+}
+
+export function monthStartStr(d: Date): string {
+  return `${d.toISOString().slice(0, 7)}-01`;
+}
+
+/**
+ * Parsea rangos de tiempo en lenguaje natural según especificación
+ * Implementa A3.2 de la guía de corrección
+ */
+export function parseMonthRange(question: string): {
+  fromMonth: string;
+  toMonth: string;
+  monthsBack: number;
+} {
+  const q = question.toLowerCase();
+  const today = new Date();
+  
+  // Patrones específicos
+  const patterns = [
+    { regex: /últimos?\s+(\d+)\s+mes(?:es)?/i, extract: (m: RegExpMatchArray) => parseInt(m[1]) },
+    { regex: /ultimo?\s+(\d+)\s+mes(?:es)?/i, extract: (m: RegExpMatchArray) => parseInt(m[1]) },
+    { regex: /(\d+)\s+mes(?:es)?/i, extract: (m: RegExpMatchArray) => parseInt(m[1]) },
+    { regex: /último\s+año|ultimo\s+año/i, extract: () => 12 },
+    { regex: /12\s*mes(?:es)?/i, extract: () => 12 },
+    { regex: /6\s*mes(?:es)?/i, extract: () => 6 },
+    { regex: /3\s*mes(?:es)?/i, extract: () => 3 }
+  ];
+  
+  let monthsBack = 6; // Default para series
+  
+  for (const pattern of patterns) {
+    const match = q.match(pattern.regex);
+    if (match) {
+      const extracted = pattern.extract(match);
+      if (extracted && extracted > 0 && extracted <= 60) {
+        monthsBack = extracted;
+        break;
+      }
+    }
+  }
+  
+  // Si es snapshot ("este mes", "mes actual"), usar 1 mes
+  if (q.includes("este mes") || q.includes("mes actual") || q.includes("actual")) {
+    monthsBack = 1;
+  }
+  
+  const toMonth = new Date(today);
+  const fromMonth = new Date(toMonth);
+  fromMonth.setMonth(fromMonth.getMonth() - (monthsBack - 1));
+  
+  return {
+    fromMonth: monthStartStr(fromMonth),
+    toMonth: monthStartStr(toMonth),
+    monthsBack
+  };
+}
+
+export function extractSearchTerm(q: string): string | null {
+  const cleanQ = q
+    .toLowerCase()
+    .replace(
+      /\b(buscar|encuentra|encontrar|ver|lista|listar|dame|trae|muéstrame|muestra|sobre|del|cliente|contrato|factura)\b/gi,
+      "",
+    )
+    .trim();
+
+  return cleanQ.length >= 2 ? cleanQ : q.trim();
+}
+
+export function extractQuoteIdentifier(q: string): { id?: string; quote_number?: string } {
+  const uuidMatch = q.match(
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/,
+  );
+  if (uuidMatch?.[0]) {
+    return { id: uuidMatch[0] };
+  }
+
+  const m = q.match(/cotizaci[oó]n\s*[:#]?\s*([A-Za-z0-9\-_/\.]{4,})/i);
+  if (m?.[1]) {
+    return { quote_number: m[1] };
+  }
+
+  return {};
+}
+
+export function extractContractIdentifier(question: string): { id?: string; contract_number?: string } {
+  const uuidMatch = question.match(
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/,
+  );
+  if (uuidMatch?.[0]) {
+    return { id: uuidMatch[0] };
+  }
+
+  // Heurística: tomar el token que sigue a "contrato" (o "contrato:"), ej: "CTR-2025-ABC123".
+  const m = question.match(/contrato\s*[:#]?\s*([A-Za-z0-9\-_/\.]{4,})/i);
+  if (m?.[1]) {
+    return { contract_number: m[1] };
+  }
+
+  return {};
+}
+
+export function splitIntoTwoQuestions(raw: string): [string, string] | null {
+  const q = raw.trim();
+  if (!q) return null;
+
+  // Separadores comunes en español. Solo activamos si podemos dividir claramente en 2 partes.
+  // Nota: mantenemos el comportamiento actual si no hay split claro.
+  const candidates: string[] = [];
+
+  // Priorizamos separadores fuertes
+  for (const sep of [";", "\n"]) {
+    if (q.includes(sep)) {
+      candidates.push(sep);
+    }
+  }
+
+  // Separadores de frase
+  if (/\badem[aá]s\b/i.test(q)) candidates.push("además");
+  if (/\by\b/i.test(q)) candidates.push("y");
+
+  for (const sep of candidates) {
+    let parts: string[] = [];
+    if (sep === ";" || sep === "\n") {
+      parts = q.split(sep).map((s) => s.trim()).filter(Boolean);
+    } else if (sep === "además") {
+      parts = q.split(/\badem[aá]s\b/i).map((s) => s.trim()).filter(Boolean);
+    } else if (sep === "y") {
+      // Evitar dividir casos como "CTR-2025-ABC"; solo split si hay espacios alrededor.
+      parts = q.split(/\s+\by\b\s+/i).map((s) => s.trim()).filter(Boolean);
+    }
+
+    if (parts.length === 2 && parts[0].length >= 3 && parts[1].length >= 3) {
+      return [parts[0], parts[1]];
+    }
+  }
+
+  return null;
+}

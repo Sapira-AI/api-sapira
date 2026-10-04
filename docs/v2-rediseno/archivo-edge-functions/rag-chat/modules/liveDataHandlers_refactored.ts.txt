@@ -1,0 +1,444 @@
+/**
+ * Versión refactorizada de liveDataHandlers.ts
+ * Mantiene compatibilidad con handlers existentes pero con mejor organización
+ */
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import { isLiveDataQuery } from "./intentRouter.ts";
+import { type Widget, type LiveDataAudit } from "./widgets.ts";
+import { type LiveDataResult, type LiveDataSource } from "./liveDataHandlers/types.ts";
+import {
+  extractCountryFilter,
+  extractContractIdentifier,
+  extractGroupBySpec,
+  extractQuoteIdentifier,
+  extractSearchTerm,
+  monthStartStr,
+  parseMonthRange,
+} from "./utils.ts";
+import { createEmbedding } from "./openai.ts";
+
+// Importar handlers organizados por categoría
+import { handleQa01MrrSeries } from "./liveDataHandlers/qa01_mrrSeries.ts";
+import { handleQa02MrrByCompany } from "./liveDataHandlers/qa02_mrrByCompany.ts";
+import { handleQa05RecognizedRevenue } from "./liveDataHandlers/qa05_recognizedRevenue.ts";
+import { handleQa06DeferredUnbilledEom } from "./liveDataHandlers/qa06_deferredUnbilledEom.ts";
+import { handleQa07BilledByProductMonth } from "./liveDataHandlers/qa07_billedByProductMonth.ts";
+import { handleQa08OverdueInvoices } from "./liveDataHandlers/qa08_overdueInvoices.ts";
+import {
+  handleQa10BookingToFirstInvoiceLeadTimeFlag,
+  handleQa10BookingToFirstInvoiceLeadTimeText,
+  isQa10BookingFacturaQuestion,
+} from "./liveDataHandlers/qa10_bookingToFirstInvoiceLeadTime.ts";
+
+// Handlers de intents MRR
+import { handleIntentMrrSnapshot } from "./liveDataHandlers/intent_mrrSnapshot.ts";
+import { handleIntentCmrrSeries } from "./liveDataHandlers/intent_cmrrSeries.ts";
+import { handleIntentMrrMomentumSeries } from "./liveDataHandlers/intent_mrrMomentumSeries.ts";
+import { handleIntentMrrByContractCurrency } from "./liveDataHandlers/intent_mrrByContractCurrency.ts";
+import { handleIntentMrrMomentumByProduct } from "./liveDataHandlers/intent_mrrMomentumByProduct.ts";
+import { handleIntentMrrSeriesBySegment } from "./liveDataHandlers/intent_mrrSeriesBySegment.ts";
+
+// Handlers de intents de facturas
+import { handleIntentInvoicesIssuedMonth } from "./liveDataHandlers/intent_invoicesIssuedMonth.ts";
+import { handleIntentInvoicesToIssueList } from "./liveDataHandlers/intent_invoicesToIssueList.ts";
+import { handleIntentLegacyInvoicesSeries } from "./liveDataHandlers/intent_legacyInvoicesSeries.ts";
+import { handleIntentLegacyInvoicesByClient } from "./liveDataHandlers/intent_legacyInvoicesByClient.ts";
+import { handleInvoicesByStatusAndCurrency } from "./liveDataHandlers/intent_invoicesByStatusAndCurrency.ts";
+
+// Handlers de intents de contratos
+import { handleIntentContractsExpiring } from "./liveDataHandlers/intent_contractsExpiring.ts";
+import { handleIntentContractsNew } from "./liveDataHandlers/intent_contractsNew.ts";
+import { handleContractsActiveByStatus } from "./liveDataHandlers/intent_contractsActiveByStatus.ts";
+
+// Handlers de intents de revenue
+import { handleIntentRecognizedNonRecurringByClient } from "./liveDataHandlers/intent_recognizedNonRecurringByClient.ts";
+import { handleIntentRecognizedByProduct } from "./liveDataHandlers/intent_recognizedByProduct.ts";
+import { handleIntentDeferredEomSnapshot } from "./liveDataHandlers/intent_deferredEomSnapshot.ts";
+import { handleIntentUnbilledEomSnapshot } from "./liveDataHandlers/intent_unbilledEomSnapshot.ts";
+
+// Handlers de otros intents
+import { handleIntentPaymentsSeries } from "./liveDataHandlers/intent_paymentsSeries.ts";
+import { handleIntentQuantityVariationAvg } from "./liveDataHandlers/intent_quantityVariationAvg.ts";
+import { handleIntentQuantityVariationContract } from "./liveDataHandlers/intent_quantityVariationContract.ts";
+
+export type { LiveDataResult, LiveDataSource };
+
+/**
+ * Resuelve el holding_id del usuario autenticado
+ */
+async function resolveHoldingId(supabaseAuth: ReturnType<typeof createClient>): Promise<string> {
+  const { data: currentHoldingId, error: currentHoldingErr } = await supabaseAuth.rpc(
+    "get_current_user_holding_id",
+  );
+  if (!currentHoldingErr && currentHoldingId) {
+    return String(currentHoldingId);
+  }
+
+  const { data: holdingIdLegacy, error: holdingIdLegacyErr } = await supabaseAuth.rpc("get_user_holding_id");
+  if (!holdingIdLegacyErr && holdingIdLegacy) {
+    return String(holdingIdLegacy);
+  }
+
+  const { data: holdingData, error: holdingDataErr } = await supabaseAuth.rpc("get_user_holding_data_robust");
+  if (!holdingDataErr && holdingData) {
+    const row = Array.isArray(holdingData) ? (holdingData[0] as any) : (holdingData as any);
+    if (row?.id) return String(row.id);
+  }
+
+  throw new Error(
+    `No se pudo resolver holding_id para el usuario autenticado. Motivo: ${currentHoldingErr?.message ?? holdingIdLegacyErr?.message ?? holdingDataErr?.message ?? "unknown"}`,
+  );
+}
+
+/**
+ * Crea función para llamar al data-gateway
+ */
+function createDataGatewayCall(supabaseUrl: string, authHeader: string) {
+  return async function callDataGateway(body: Record<string, unknown>) {
+    const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/data-gateway`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as any;
+    if (!res.ok) {
+      throw new Error(`data-gateway error ${res.status}: ${json?.error ?? "unknown"}`);
+    }
+    return json;
+  };
+}
+
+/**
+ * Ejecuta handlers de QA originales (alta prioridad)
+ */
+async function executeQAHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.mrrSeries) {
+    return await handleQa01MrrSeries({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.mrrSnapshotByCompany) {
+    return await handleQa02MrrByCompany({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.recognizedSeries) {
+    return await handleQa05RecognizedRevenue({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.deferredUnbilledEomSeries) {
+    return await handleQa06DeferredUnbilledEom({ 
+      supabaseAuth, 
+      holdingId, 
+      question, 
+      flags: { 
+        deferredUnbilledEomSeries: flags.deferredUnbilledEomSeries,
+        deferredEomSeries: flags.deferredEomSeries,
+        unbilledEomSeries: flags.unbilledEomSeries
+      }
+    });
+  }
+  
+  if (flags.billedByProductMonth) {
+    return await handleQa07BilledByProductMonth({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.invoicesOverdueList) {
+    return await handleQa08OverdueInvoices({ supabaseAuth, holdingId });
+  }
+  
+  if (flags.bookingToFirstInvoiceLeadTime) {
+    if (isQa10BookingFacturaQuestion(question)) {
+      return await handleQa10BookingToFirstInvoiceLeadTimeFlag(supabaseAuth, question, holdingId);
+    } else {
+      return await handleQa10BookingToFirstInvoiceLeadTimeText(supabaseAuth, question, holdingId);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Ejecuta handlers de intents MRR
+ */
+async function executeMRRHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.mrrSnapshot) {
+    return await handleIntentMrrSnapshot({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.cmrrSeries) {
+    return await handleIntentCmrrSeries({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.mrrMomentumSeries) {
+    return await handleIntentMrrMomentumSeries({ supabaseAuth, holdingId });
+  }
+  
+  if (flags.mrrSnapshotByCurrencyContract) {
+    return await handleIntentMrrByContractCurrency({ supabaseAuth, holdingId });
+  }
+  
+  if (flags.mrrMomentumByProduct) {
+    return await handleIntentMrrMomentumByProduct({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.mrrSeriesBySegment) {
+    return await handleIntentMrrSeriesBySegment({ supabaseAuth, holdingId, question });
+  }
+  
+  return null;
+}
+
+/**
+ * Ejecuta handlers de intents de facturas
+ */
+async function executeInvoiceHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.invoicesIssuedMonth) {
+    return await handleIntentInvoicesIssuedMonth({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.invoicesToIssueList) {
+    return await handleIntentInvoicesToIssueList({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.legacyInvoicesSeries) {
+    return await handleIntentLegacyInvoicesSeries({ supabaseAuth, holdingId });
+  }
+  
+  if (flags.legacyInvoicesByClient) {
+    return await handleIntentLegacyInvoicesByClient({ supabaseAuth, holdingId, question });
+  }
+  
+  // Nuevo handler para facturas por estado y moneda
+  if (flags.invoicesByStatusAndCurrency) {
+    return await handleInvoicesByStatusAndCurrency(supabaseAuth, question, holdingId);
+  }
+  
+  return null;
+}
+
+/**
+ * Ejecuta handlers de intents de contratos
+ */
+async function executeContractHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.contractsExpiring) {
+    return await handleIntentContractsExpiring({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.contractsNew) {
+    return await handleIntentContractsNew({ supabaseAuth, holdingId, question });
+  }
+  
+  // Nuevo handler para contratos por estado
+  if (flags.contractsActiveByStatus) {
+    return await handleContractsActiveByStatus(supabaseAuth, question, holdingId);
+  }
+  
+  return null;
+}
+
+/**
+ * Ejecuta handlers de intents de revenue
+ */
+async function executeRevenueHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.recognizedNonRecurringByClient) {
+    return await handleIntentRecognizedNonRecurringByClient({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.recognizedByProduct) {
+    return await handleIntentRecognizedByProduct({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.deferredEomSnapshot) {
+    return await handleIntentDeferredEomSnapshot({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  if (flags.unbilledEomSnapshot) {
+    return await handleIntentUnbilledEomSnapshot({ supabaseAuth, holdingId, currentMonthStr: monthStartStr() });
+  }
+  
+  return null;
+}
+
+/**
+ * Ejecuta handlers de otros intents
+ */
+async function executeOtherHandlers(
+  flags: any,
+  supabaseAuth: ReturnType<typeof createClient>,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult | null> {
+  
+  if (flags.paymentsSeries) {
+    return await handleIntentPaymentsSeries({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.quantityVariationAvg) {
+    return await handleIntentQuantityVariationAvg({ supabaseAuth, holdingId, question });
+  }
+  
+  if (flags.quantityVariationContract) {
+    return await handleIntentQuantityVariationContract({ supabaseAuth, holdingId, question });
+  }
+  
+  return null;
+}
+
+/**
+ * Función principal refactorizada para manejar Live Data
+ */
+export async function tryHandleLiveData(
+  supabaseAuth: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  authHeader: string,
+  openaiApiKey: string,
+  question: string,
+): Promise<LiveDataResult> {
+  
+  const flags = isLiveDataQuery(question);
+  
+  // Resolver holding_id
+  let holdingId: string;
+  try {
+    holdingId = await resolveHoldingId(supabaseAuth);
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo: ${e?.message ?? String(e)}`,
+      sources: [],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data",
+          columns: ["Detalle"],
+          rows: [["No se pudo resolver holding_id para el usuario autenticado."]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: [],
+        filters_applied: {},
+        holding_id: null,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "tenant_resolution",
+        error_reason: e?.message ?? String(e),
+      } as any,
+    };
+  }
+
+  // Verificar si hay flags activos
+  const hasActiveFlags = Object.values(flags).some(flag => flag === true);
+  if (!hasActiveFlags) {
+    return { 
+      handled: false, 
+      context: "", 
+      sources: [], 
+      widgets: [],
+      audit: {
+        currency_mode: 'system',
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        data_completeness: 'empty',
+        timestamp: new Date().toISOString(),
+        error_type: 'validation',
+        error_reason: 'No matching intent found for this query'
+      }
+    };
+  }
+
+  // Ejecutar handlers en orden de prioridad
+  try {
+    // 1. Handlers QA originales (alta prioridad)
+    let result = await executeQAHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // 2. Handlers MRR
+    result = await executeMRRHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // 3. Handlers de facturas
+    result = await executeInvoiceHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // 4. Handlers de contratos
+    result = await executeContractHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // 5. Handlers de revenue
+    result = await executeRevenueHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // 6. Otros handlers
+    result = await executeOtherHandlers(flags, supabaseAuth, question, holdingId);
+    if (result) return result;
+
+    // Si llegamos aquí, no se encontró handler
+    return {
+      handled: false,
+      context: "No se encontró un handler apropiado para esta consulta",
+      sources: [],
+      widgets: [],
+      audit: {
+        currency_mode: 'system',
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        data_completeness: 'empty',
+        timestamp: new Date().toISOString(),
+        error_type: 'handler_not_found',
+        error_reason: 'No appropriate handler found for active flags'
+      }
+    };
+
+  } catch (error) {
+    return {
+      handled: true,
+      context: `Error ejecutando handler: ${error instanceof Error ? error.message : String(error)}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        currency_mode: 'system',
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        data_completeness: 'error',
+        timestamp: new Date().toISOString(),
+        error_type: 'live_data',
+        error_reason: error instanceof Error ? error.message : String(error)
+      }
+    };
+  }
+}

@@ -1,0 +1,180 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleIntentMrrSeriesBySegment(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { fromMonth, toMonth, monthsBack } = parseMonthRange(question);
+  const toExclusiveDate = new Date(toMonth);
+  toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+  const toExclusive = monthStartStr(toExclusiveDate);
+
+  try {
+    const { data: rsmRows, error: rsmErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select(
+        "period_month, mrr_period_system_ccy, system_currency, contract_id, contracts(client_id, clients(segment))",
+      )
+      .eq("holding_id", holdingId)
+      .gte("period_month", fromMonth)
+      .lt("period_month", toExclusive)
+      .limit(20000);
+    if (rsmErr) throw rsmErr;
+
+    const { data: legacyRows, error: legacyErr } = await supabaseAuth
+      .from("mrr_legacy")
+      .select("period_month, mrr_legacy_system_currency, client_id, clients(segment)")
+      .eq("holding_id", holdingId)
+      .eq("is_recurring", true)
+      .gte("period_month", fromMonth)
+      .lt("period_month", toExclusive)
+      .limit(20000);
+    if (legacyErr) throw legacyErr;
+
+    const rsm = Array.isArray(rsmRows) ? (rsmRows as any[]) : [];
+    const legacy = Array.isArray(legacyRows) ? (legacyRows as any[]) : [];
+
+    const currency = rsm?.[0]?.system_currency ? String(rsm[0].system_currency) : "USD";
+
+    const byMonthSegment = new Map<string, number>();
+    const segmentsSet = new Set<string>();
+
+    for (const row of rsm) {
+      const month = String(row?.period_month ?? "").slice(0, 7);
+      if (!month) continue;
+      const seg = String(row?.contracts?.clients?.segment ?? "(sin segmento)").trim() || "(sin segmento)";
+      segmentsSet.add(seg);
+      const v = typeof row?.mrr_period_system_ccy === "number"
+        ? row.mrr_period_system_ccy
+        : row?.mrr_period_system_ccy
+          ? Number(row.mrr_period_system_ccy)
+          : 0;
+      const key = `${month}||${seg}`;
+      byMonthSegment.set(key, (byMonthSegment.get(key) || 0) + (Number.isFinite(v) ? v : 0));
+    }
+
+    for (const row of legacy) {
+      const month = String(row?.period_month ?? "").slice(0, 7);
+      if (!month) continue;
+      const seg = String(row?.clients?.segment ?? "(sin segmento)").trim() || "(sin segmento)";
+      segmentsSet.add(seg);
+      const v = typeof row?.mrr_legacy_system_currency === "number"
+        ? row.mrr_legacy_system_currency
+        : row?.mrr_legacy_system_currency
+          ? Number(row.mrr_legacy_system_currency)
+          : 0;
+      const key = `${month}||${seg}`;
+      byMonthSegment.set(key, (byMonthSegment.get(key) || 0) + (Number.isFinite(v) ? v : 0));
+    }
+
+    const months: string[] = [];
+    const start = new Date(fromMonth);
+    for (let i = 0; i < monthsBack; i++) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i);
+      months.push(monthStartStr(d).slice(0, 7));
+    }
+
+    const allSegments = Array.from(segmentsSet).sort((a, b) => a.localeCompare(b));
+
+    const tableRows: Array<Array<string | number | null>> = [];
+    for (const m of months) {
+      for (const s of allSegments) {
+        const v = byMonthSegment.get(`${m}||${s}`) || 0;
+        tableRows.push([m, s, Number(v.toFixed(2))]);
+      }
+    }
+
+    const lastMonth = months.length ? months[months.length - 1] : null;
+    const bySegLast = allSegments
+      .map((s) => ({ segment: s, mrr: Number((byMonthSegment.get(`${lastMonth}||${s}`) || 0).toFixed(2)) }))
+      .sort((a, b) => b.mrr - a.mrr)
+      .slice(0, 15);
+
+    const totalLast = bySegLast.reduce((acc, r) => acc + r.mrr, 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: lastMonth ? `MRR (${lastMonth}) por segmento` : "MRR por segmento",
+        value: `${totalLast.toFixed(2)} ${currency}`.trim(),
+      },
+      {
+        type: "chart_bar",
+        title: lastMonth ? `MRR por segmento (${lastMonth}) (${currency})` : `MRR por segmento (${currency})`,
+        xKey: "segment",
+        series: [{ key: "mrr", name: `MRR (${currency})` }],
+        data: bySegLast,
+      },
+      {
+        type: "table",
+        title: "Detalle MRR por mes y segmento",
+        columns: ["Mes", "Segmento", `MRR (${currency})`],
+        rows: tableRows,
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_mrr_series_by_segment",
+      range_from: fromMonth,
+      range_to: toMonth,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "clients"],
+      filters_applied: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, is_recurring: true },
+      holding_id: holdingId,
+      data_completeness: tableRows.some((r) => (r?.[2] as number) !== 0) ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `INTENT: mrr_series_by_segment. MRR por segmento (system currency), ${monthsBack} meses.`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_series_by_segment", filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive } },
+        { table: "mrr_legacy", query_type: "mrr_series_by_segment", filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, is_recurring: true } },
+        { table: "clients", query_type: "join", filters: {} },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: mrr_series_by_segment. No pude consultar MRR por segmento. Motivo: ${reason}`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_series_by_segment", filters: { holding_id: holdingId } },
+        { table: "mrr_legacy", query_type: "mrr_series_by_segment", filters: { holding_id: holdingId, is_recurring: true } },
+        { table: "clients", query_type: "join", filters: {} },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - MRR por segmento",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_mrr_series_by_segment",
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy", "clients"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

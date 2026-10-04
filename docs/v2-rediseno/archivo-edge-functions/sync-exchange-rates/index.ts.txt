@@ -1,0 +1,335 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface ExchangeRateRecord {
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  rate_date: string;
+  api_source: string;
+  is_indirect_conversion: boolean;
+  conversion_chain?: any;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const syncDate = new Date().toISOString().split('T')[0];
+    const rates: ExchangeRateRecord[] = [];
+    const currenciesSynced: string[] = [];
+    let recordsCreated = 0;
+    let recordsUpdated = 0;
+
+    console.log(`🔄 Iniciando sincronización de tipos de cambio para ${syncDate}`);
+
+    // ============================================================================
+    // 1. Sincronizar desde ExchangeRate-API (monedas globales)
+    // ============================================================================
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      const data = await response.json();
+
+      if (data && data.rates) {
+        console.log(`✅ Datos obtenidos de ExchangeRate-API`);
+
+        const targetCurrencies = ['EUR', 'CLP', 'MXN', 'ARS', 'COP', 'BRL', 'UYU', 'GBP'];
+        
+        for (const targetCurrency of targetCurrencies) {
+          if (data.rates[targetCurrency]) {
+            rates.push({
+              from_currency: 'USD',
+              to_currency: targetCurrency,
+              rate: 1 / data.rates[targetCurrency], // USD to target
+              rate_date: syncDate,
+              api_source: 'exchangerate-api',
+              is_indirect_conversion: false,
+            });
+
+            rates.push({
+              from_currency: targetCurrency,
+              to_currency: 'USD',
+              rate: data.rates[targetCurrency], // target to USD
+              rate_date: syncDate,
+              api_source: 'exchangerate-api',
+              is_indirect_conversion: false,
+            });
+
+            if (!currenciesSynced.includes(targetCurrency)) {
+              currenciesSynced.push(targetCurrency);
+            }
+          }
+        }
+
+        // Cross-rates entre monedas Latam
+        const latamCurrencies = ['CLP', 'MXN', 'ARS', 'COP', 'BRL', 'UYU'];
+        for (const from of latamCurrencies) {
+          for (const to of latamCurrencies) {
+            if (from !== to && data.rates[from] && data.rates[to]) {
+              rates.push({
+                from_currency: from,
+                to_currency: to,
+                rate: data.rates[to] / data.rates[from],
+                rate_date: syncDate,
+                api_source: 'exchangerate-api',
+                is_indirect_conversion: false,
+              });
+            }
+          }
+        }
+
+        console.log(`✅ ${rates.length} tasas obtenidas de ExchangeRate-API`);
+      }
+    } catch (error) {
+      console.error('❌ Error obteniendo datos de ExchangeRate-API:', error);
+    }
+
+    // ============================================================================
+    // 2. Sincronizar desde Mindicador.cl (UF/CLP y CLP/USD Chile)
+    // ============================================================================
+    try {
+      const today = new Date();
+      const dateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getFullYear()}`;
+      
+      const response = await fetch(`https://mindicador.cl/api/${dateStr}`);
+      const data = await response.json();
+
+      if (data && data.uf && data.dolar) {
+        console.log(`✅ Datos obtenidos de Mindicador.cl`);
+        
+        const ufValue = data.uf.valor; // UF en CLP
+        const usdClpRate = data.dolar.valor; // 1 USD = X CLP
+
+        // UF (CLF) → CLP (directa)
+        rates.push({
+          from_currency: 'CLF',
+          to_currency: 'CLP',
+          rate: ufValue,
+          rate_date: syncDate,
+          api_source: 'mindicador',
+          is_indirect_conversion: false,
+        });
+
+        // CLP → UF (CLF) (inversa)
+        rates.push({
+          from_currency: 'CLP',
+          to_currency: 'CLF',
+          rate: 1 / ufValue,
+          rate_date: syncDate,
+          api_source: 'mindicador',
+          is_indirect_conversion: false,
+        });
+
+        // CLP → USD (desde Mindicador)
+        rates.push({
+          from_currency: 'CLP',
+          to_currency: 'USD',
+          rate: 1 / usdClpRate,
+          rate_date: syncDate,
+          api_source: 'mindicador',
+          is_indirect_conversion: false,
+        });
+
+        // USD → CLP (desde Mindicador)
+        rates.push({
+          from_currency: 'USD',
+          to_currency: 'CLP',
+          rate: usdClpRate,
+          rate_date: syncDate,
+          api_source: 'mindicador',
+          is_indirect_conversion: false,
+        });
+
+        // ============================================================================
+        // 3. Calcular Conversiones Indirectas: UF → otras monedas
+        // ============================================================================
+        const indirectTargets = ['USD', 'EUR', 'MXN', 'ARS', 'COP', 'PEN', 'BRL', 'UYU'];
+        for (const targetCurrency of indirectTargets) {
+          // Buscar CLP → targetCurrency
+          const clpToTarget = rates.find(r => 
+            r.from_currency === 'CLP' && r.to_currency === targetCurrency
+          );
+
+          if (clpToTarget) {
+            // CLF (UF) → targetCurrency
+            const ufToTarget = ufValue * clpToTarget.rate;
+            rates.push({
+              from_currency: 'CLF',
+              to_currency: targetCurrency,
+              rate: ufToTarget,
+              rate_date: syncDate,
+              api_source: 'mindicador',
+              is_indirect_conversion: true,
+              conversion_chain: {
+                from: 'CLF',
+                via: 'CLP',
+                to: targetCurrency,
+                rates: [
+                  { from: 'CLF', to: 'CLP', rate: ufValue },
+                  { from: 'CLP', to: targetCurrency, rate: clpToTarget.rate }
+                ]
+              }
+            });
+
+            // targetCurrency → CLF (UF) (inversa)
+            rates.push({
+              from_currency: targetCurrency,
+              to_currency: 'CLF',
+              rate: 1 / ufToTarget,
+              rate_date: syncDate,
+              api_source: 'mindicador',
+              is_indirect_conversion: true,
+              conversion_chain: {
+                from: targetCurrency,
+                via: 'CLP',
+                to: 'CLF',
+                rates: [
+                  { from: targetCurrency, to: 'CLP', rate: 1 / clpToTarget.rate },
+                  { from: 'CLP', to: 'CLF', rate: 1 / ufValue }
+                ]
+              }
+            });
+          }
+        }
+
+        if (!currenciesSynced.includes('CLF')) {
+          currenciesSynced.push('CLF');
+        }
+        if (!currenciesSynced.includes('CLP')) {
+          currenciesSynced.push('CLP');
+        }
+
+        console.log(`✅ UF: ${ufValue.toFixed(2)} CLP, Conversiones indirectas calculadas`);
+      }
+    } catch (error) {
+      console.error('❌ Error obteniendo datos de Mindicador.cl:', error);
+    }
+
+    // ============================================================================
+    // 4. Insertar/Actualizar tasas en la base de datos
+    // ============================================================================
+    if (rates.length > 0) {
+      console.log(`📊 Insertando ${rates.length} tasas en la base de datos...`);
+
+      for (const rate of rates) {
+        const { data: existing, error: selectError } = await supabase
+          .from('exchange_rates')
+          .select('*')
+          .eq('rate_date', rate.rate_date)
+          .eq('from_currency', rate.from_currency)
+          .eq('to_currency', rate.to_currency)
+          .eq('source_type', 'system')
+          .eq('api_source', rate.api_source)
+          .maybeSingle();
+
+        if (selectError) {
+          console.error('Error verificando tasa existente:', selectError);
+          continue;
+        }
+
+        if (existing) {
+          // Actualizar
+          const { error: updateError } = await supabase
+            .from('exchange_rates')
+            .update({
+              rate: rate.rate,
+              is_indirect_conversion: rate.is_indirect_conversion,
+              conversion_chain: rate.conversion_chain || null,
+            })
+            .eq('rate_date', rate.rate_date)
+            .eq('from_currency', rate.from_currency)
+            .eq('to_currency', rate.to_currency)
+            .eq('source_type', 'system')
+            .eq('api_source', rate.api_source);
+
+          if (!updateError) {
+            recordsUpdated++;
+          } else {
+            console.error('Error actualizando tasa:', updateError);
+          }
+        } else {
+          // Insertar
+          const { error: insertError } = await supabase
+            .from('exchange_rates')
+            .insert({
+              from_currency: rate.from_currency,
+              to_currency: rate.to_currency,
+              rate: rate.rate,
+              rate_date: rate.rate_date,
+              source_type: 'system',
+              api_source: rate.api_source,
+              is_indirect_conversion: rate.is_indirect_conversion,
+              conversion_chain: rate.conversion_chain || null,
+            });
+
+          if (!insertError) {
+            recordsCreated++;
+          } else {
+            console.error('Error insertando tasa:', insertError);
+          }
+        }
+      }
+
+      console.log(`✅ ${recordsCreated} tasas creadas, ${recordsUpdated} tasas actualizadas`);
+    }
+
+    // ============================================================================
+    // 5. Registrar en log de sincronización
+    // ============================================================================
+    const { error: logError } = await supabase
+      .from('fx_api_sync_log')
+      .insert({
+        holding_id: null, // Sincronización global
+        sync_date: syncDate,
+        api_source: 'hybrid',
+        currencies_synced: currenciesSynced,
+        records_created: recordsCreated,
+        records_updated: recordsUpdated,
+        status: recordsCreated + recordsUpdated > 0 ? 'success' : 'partial',
+        error_details: null,
+      });
+
+    if (logError) {
+      console.error('Error registrando log:', logError);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        sync_date: syncDate,
+        currencies_synced: currenciesSynced,
+        records_created: recordsCreated,
+        records_updated: recordsUpdated,
+        total_rates: rates.length,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error en sincronización:', error);
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    );
+  }
+});

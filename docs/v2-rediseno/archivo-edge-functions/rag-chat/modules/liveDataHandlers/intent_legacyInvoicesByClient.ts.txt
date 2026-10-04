@@ -1,0 +1,193 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+function extractClientHint(question: string): string {
+  const q = question.trim();
+
+  const m1 = q.match(/cliente\s*[:#]?\s*(.+)$/i);
+  if (m1?.[1]) return m1[1].trim();
+
+  const m2 = q.match(/cliente\s+(.+?)(?:\s+legacy|\s+hist[oó]ric|\s+factur|$)/i);
+  if (m2?.[1]) return m2[1].trim();
+
+  return q;
+}
+
+function looksLikeTaxId(v: string): boolean {
+  return /\d{6,}/.test(v.replace(/\s/g, ""));
+}
+
+export async function handleIntentLegacyInvoicesByClient(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  try {
+    const hint = extractClientHint(question);
+
+    const { data: clientRows, error: clientErr } = await supabaseAuth
+      .from("clients")
+      .select("id, name_commercial")
+      .eq("holding_id", holdingId)
+      .ilike("name_commercial", `%${hint}%`)
+      .limit(5);
+
+    if (clientErr) throw clientErr;
+
+    const resolvedClientId = Array.isArray(clientRows) && clientRows[0]?.id ? String((clientRows[0] as any).id) : null;
+
+    let invoicesQuery = supabaseAuth
+      .from("invoices_legacy")
+      .select(
+        "id, invoice_number, issue_date, due_date, invoice_currency, total_invoice_currency, status, legal_client_name, client_tax_id, client_id",
+      )
+      .eq("holding_id", holdingId)
+      .order("issue_date", { ascending: false })
+      .limit(200);
+
+    if (resolvedClientId) {
+      invoicesQuery = invoicesQuery.eq("client_id", resolvedClientId);
+    } else {
+      const hintClean = hint.trim();
+      invoicesQuery = looksLikeTaxId(hintClean)
+        ? invoicesQuery.ilike("client_tax_id", `%${hintClean}%`)
+        : invoicesQuery.ilike("legal_client_name", `%${hintClean}%`);
+    }
+
+    const { data: invoices, error: invErr } = await invoicesQuery;
+    if (invErr) throw invErr;
+
+    const invRows = Array.isArray(invoices) ? (invoices as any[]) : [];
+
+    if (invRows.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré facturas legacy para el cliente indicado (${hint}).`,
+        sources: [
+          { table: "clients", query_type: "search", filters: { holding_id: holdingId, name_commercial_ilike: hint } },
+          { table: "invoices_legacy", query_type: "legacy_invoices_by_client", filters: { holding_id: holdingId, client_hint: hint } },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "Facturas legacy (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay facturas legacy que coincidan con el cliente."]],
+          },
+        ],
+        audit: {
+          currency_mode: "invoice",
+          source_breakdown: ["invoices_legacy"],
+          filters_applied: { holding_id: holdingId, client_hint: hint },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+    }
+
+    const invoiceNumberById = new Map<string, string>();
+    for (const r of invRows) {
+      if (r?.id && r?.invoice_number) invoiceNumberById.set(String(r.id), String(r.invoice_number));
+    }
+
+    const invoiceIds = invRows.map((r) => String(r.id));
+
+    const { data: itemRows, error: itemsErr } = await supabaseAuth
+      .from("invoice_items_legacy")
+      .select(
+        "invoices_legacy_id, product_external_code, description, quantity, unit_price, currency, subtotal, tax_amount, total",
+      )
+      .eq("holding_id", holdingId)
+      .in("invoices_legacy_id", invoiceIds)
+      .limit(2000);
+
+    if (itemsErr) throw itemsErr;
+
+    const items = Array.isArray(itemRows) ? (itemRows as any[]) : [];
+
+    const invoicesWidget: Widget = {
+      type: "table",
+      title: "Facturas legacy",
+      columns: ["Factura", "Emisión", "Vence", "Moneda", "Total", "Estado", "Razón social", "Tax ID"],
+      rows: invRows.map((r) => [
+        r?.invoice_number ?? null,
+        r?.issue_date ?? null,
+        r?.due_date ?? null,
+        r?.invoice_currency ?? null,
+        r?.total_invoice_currency ?? null,
+        r?.status ?? null,
+        r?.legal_client_name ?? null,
+        r?.client_tax_id ?? null,
+      ]),
+    };
+
+    const itemsWidget: Widget = {
+      type: "table",
+      title: "Ítems de facturas legacy",
+      columns: ["Factura", "Producto (código)", "Descripción", "Cantidad", "Precio unit", "Moneda", "Subtotal", "IVA", "Total"],
+      rows: items.map((it) => [
+        invoiceNumberById.get(String(it?.invoices_legacy_id ?? "")) ?? null,
+        it?.product_external_code ?? null,
+        it?.description ?? null,
+        it?.quantity ?? null,
+        it?.unit_price ?? null,
+        it?.currency ?? null,
+        it?.subtotal ?? null,
+        it?.tax_amount ?? null,
+        it?.total ?? null,
+      ]),
+    };
+
+    return {
+      handled: true,
+      context: `Detalle de facturas legacy para el cliente indicado (${hint}).`,
+      sources: [
+        { table: "clients", query_type: "search", filters: { holding_id: holdingId, name_commercial_ilike: hint } },
+        { table: "invoices_legacy", query_type: "select", filters: { holding_id: holdingId, client_hint: hint } },
+        { table: "invoice_items_legacy", query_type: "select", filters: { holding_id: holdingId, invoices_legacy_id_in: invoiceIds.slice(0, 50) } },
+      ],
+      widgets: [invoicesWidget, itemsWidget],
+      audit: {
+        currency_mode: "invoice",
+        source_breakdown: ["invoices_legacy", "invoice_items_legacy"],
+        filters_applied: { holding_id: holdingId, client_hint: hint },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para detalle de facturas legacy por cliente. Motivo: ${reason}`,
+      sources: [
+        { table: "invoices_legacy", query_type: "legacy_invoices_by_client", filters: { holding_id: holdingId } },
+        { table: "invoice_items_legacy", query_type: "join", filters: {} },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Facturas legacy por cliente",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "invoice",
+        source_breakdown: ["invoices_legacy", "invoice_items_legacy"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

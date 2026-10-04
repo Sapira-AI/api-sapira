@@ -1,0 +1,249 @@
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export async function createEmbedding(apiKey: string, input: string): Promise<number[]> {
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI embeddings error (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const embedding = json?.data?.[0]?.embedding as number[] | undefined;
+  if (!embedding || !Array.isArray(embedding)) {
+    throw new Error("OpenAI embeddings response missing embedding");
+  }
+  return embedding;
+}
+
+export async function createAnswer(
+  apiKey: string,
+  question: string,
+  context: string,
+  history: ChatMessage[],
+  runtimeContext?: string,
+): Promise<string> {
+  const systemPrompt = `
+Eres Sapira AI, un asistente especializado en métricas SaaS y análisis de datos empresariales.
+
+INSTRUCCIONES PRINCIPALES:
+- Responde en español de manera clara y profesional
+- Si hay widgets (gráficos/tablas), menciona que están disponibles pero NO los describas en detalle
+- Para datos numéricos, usa formato claro con separadores de miles cuando sea apropiado
+- Si no hay datos o hay errores, explica posibles causas y soluciones
+
+FORMATO ESTRICTO (MUY IMPORTANTE):
+- Responde SOLO en texto plano.
+- NO uses Markdown.
+- NO uses símbolos de formato como **, __, ###, *, /, >.
+- NO uses listas con viñetas; si necesitas enumerar, usa frases separadas por saltos de línea.
+
+CONTEXTO DE DATOS:
+- Los datos provienen de sistemas en vivo (Live Data) o documentación (RAG)
+- Las métricas incluyen MRR, ARR, churn, revenue recognition, etc.
+- Los datos están filtrados por holding/tenant del usuario
+- Las monedas se manejan en "system currency" (USD) salvo indicación contraria
+
+FORMATO DE RESPUESTA:
+- Respuesta directa y concisa
+- Menciona fuentes de datos cuando sea relevante
+- Si hay limitaciones o advertencias, inclúyelas
+- Gráficos solo si aportan valor
+`.trim();
+
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...history,
+    {
+      role: "user",
+      content: [
+        "Pregunta:",
+        question,
+        "",
+        runtimeContext?.trim() ? "Contexto adicional proporcionado por el usuario (no verificado):" : "",
+        runtimeContext?.trim() ? runtimeContext.trim() : "",
+        runtimeContext?.trim() ? "" : "",
+        "Contexto (documentos relevantes o datos en vivo):",
+        context,
+      ].join("\n"),
+    },
+  ];
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI chat error (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const content = json?.choices?.[0]?.message?.content as string | undefined;
+  if (!content) {
+    throw new Error("OpenAI chat response missing content");
+  }
+  return content;
+}
+
+export async function generateLiveDataSummary(
+  apiKey: string,
+  widgets: Array<{ type: string; title: string; [key: string]: unknown }>,
+  audit: { range_from?: string; range_to?: string; currency_mode?: string; data_completeness?: string; [key: string]: unknown } | null,
+  question: string
+): Promise<string> {
+  const systemPrompt = `
+Eres un asistente que genera resúmenes narrativos específicos de datos Live Data.
+
+INSTRUCCIONES CRÍTICAS:
+- USA NÚMEROS ESPECÍFICOS de los widgets (ej: "$40,1K USD", "9 facturas", "61 días promedio")
+- NO uses términos vagos como "cifra significativa" o "monto considerable"
+- NO agregues frases genéricas como "Estos datos reflejan", "proporcionando una visión", "análisis completo"
+- Menciona rangos de fechas específicos si están disponibles
+- Sé directo y conciso: solo los datos más relevantes
+- Máximo 2 oraciones con números reales
+`.trim();
+
+  // Extraer información clave de widgets y audit
+  const widgetSummary = widgets.map(w => {
+    if (w.type === 'kpi') return `KPI "${w.title}": ${w.value || 'N/A'}`;
+    if (w.type === 'table') return `Tabla "${w.title}" con ${Array.isArray(w.rows) ? w.rows.length : 0} filas`;
+    if (w.type === 'chart_line' || w.type === 'chart_bar') return `Gráfico "${w.title}" con ${Array.isArray(w.data) ? w.data.length : 0} puntos`;
+    return `Widget "${w.title}"`;
+  }).join(', ');
+
+  const auditInfo = audit ? [
+    audit.range_from && audit.range_to ? `Rango: ${audit.range_from} a ${audit.range_to}` : '',
+    audit.currency_mode ? `Moneda: ${audit.currency_mode}` : '',
+    audit.data_completeness ? `Completitud: ${audit.data_completeness}` : ''
+  ].filter(Boolean).join(', ') : '';
+
+  const content = `
+Pregunta del usuario: ${question}
+
+Widgets generados: ${widgetSummary}
+
+Contexto de datos: ${auditInfo}
+
+Genera un resumen narrativo breve que explique qué muestran estos datos sin repetir números específicos.
+`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content }
+      ],
+      temperature: 0.3,
+      max_tokens: 200
+    }),
+  });
+
+  if (!res.ok) {
+    // Si falla OpenAI, devolver un resumen básico
+    return auditInfo || "Datos consultados exitosamente desde Live Data.";
+  }
+
+  const json = await res.json();
+  const summary = json?.choices?.[0]?.message?.content as string | undefined;
+  return summary || (auditInfo || "Datos consultados exitosamente desde Live Data.");
+}
+
+export async function generateAmbiguitySuggestions(
+  apiKey: string,
+  userQuery: string,
+): Promise<{ clarificationQuestion: string; suggestions: string[] }> {
+  const q = String(userQuery ?? "").trim();
+
+  const systemPrompt = `
+Eres Sapira AI. Tu tarea es ayudar al usuario a formular una pregunta accionable de métricas/reporting.
+
+INSTRUCCIONES CRÍTICAS:
+- Responde SIEMPRE en español.
+- Devuelve exactamente un JSON válido, sin markdown, sin texto adicional.
+- El JSON debe tener: {"clarificationQuestion": string, "suggestions": string[]}
+- "suggestions" debe tener 5 elementos, cada uno debe ser un prompt concreto y ejecutable.
+- No inventes métricas inexistentes. Usa solo conceptos típicos: MRR, CMRR, momentum (NEW/UPSELL/DOWNSELL/CHURN/REACTIVATION), revenue reconocido, deferred/unbilled, facturas (emitidas/vencidas/por emitir), contratos (nuevos/por vencer/activos por estado).
+- Si el query menciona una keyword (ej: "momentum", "revenue", "cmrr"), prioriza sugerencias relacionadas.
+`.trim();
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: JSON.stringify({ query: q }),
+        },
+      ],
+      temperature: 0.2,
+      max_tokens: 220,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI ambiguity suggestions error (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const content = json?.choices?.[0]?.message?.content as string | undefined;
+  if (!content) throw new Error("OpenAI ambiguity suggestions response missing content");
+
+  const parsed = JSON.parse(content) as { clarificationQuestion?: unknown; suggestions?: unknown };
+  const clarificationQuestion = typeof parsed?.clarificationQuestion === "string"
+    ? parsed.clarificationQuestion
+    : "¿Qué información específica necesitas?";
+  const suggestionsRaw = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+  const suggestions = suggestionsRaw
+    .filter((s): s is string => typeof s === "string")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  if (suggestions.length === 0) {
+    return {
+      clarificationQuestion: "¿Qué información específica necesitas?",
+      suggestions: [
+        "¿Cuál es el MRR de los últimos 12 meses?",
+        "MRR por compañía este mes",
+        "CMRR últimos 6 meses",
+        "Revenue reconocido últimos 3 meses",
+        "Muéstrame las facturas vencidas",
+      ],
+    };
+  }
+
+  return { clarificationQuestion, suggestions };
+}

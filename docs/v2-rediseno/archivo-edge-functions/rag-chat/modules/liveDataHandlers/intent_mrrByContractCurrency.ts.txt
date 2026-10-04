@@ -1,0 +1,11 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { handleQa11MrrByContractCurrency } from "./qa11_mrrByContractCurrency.ts";
+
+export async function handleIntentMrrByContractCurrency(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  return await handleQa11MrrByContractCurrency(params);
+}

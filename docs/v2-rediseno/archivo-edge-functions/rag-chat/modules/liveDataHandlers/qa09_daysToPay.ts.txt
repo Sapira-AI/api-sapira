@@ -1,0 +1,176 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+import type { LiveDataResult, LiveDataSource } from "./types.ts";
+
+export async function handleQa09DaysToPay(args: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = args;
+
+  try {
+    const { fromMonth, toMonth } = parseMonthRange(question);
+    const toExclusiveDate = new Date(toMonth);
+    toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+    const toExclusive = monthStartStr(toExclusiveDate);
+
+    const { data: payRows, error: payErr } = await supabaseAuth
+      .from("invoice_payments")
+      .select("payment_date, amount, currency, invoice_id, invoices(issue_date, invoice_number)")
+      .eq("holding_id", holdingId)
+      .eq("confirmed", true)
+      .gte("payment_date", fromMonth)
+      .lt("payment_date", toExclusive)
+      .limit(1000);
+
+    if (payErr) throw payErr;
+
+    const rows = Array.isArray(payRows) ? (payRows as any[]) : [];
+    const enriched = rows
+      .map((r) => {
+        const paymentDate = r?.payment_date ? new Date(String(r.payment_date)) : null;
+        const issueDate = r?.invoices?.issue_date ? new Date(String(r.invoices.issue_date)) : null;
+        if (!paymentDate || !issueDate || Number.isNaN(paymentDate.getTime()) || Number.isNaN(issueDate.getTime())) return null;
+        const days = Math.round((paymentDate.getTime() - issueDate.getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          invoice_number: r?.invoices?.invoice_number ?? null,
+          issue_date: r?.invoices?.issue_date ?? null,
+          payment_date: r?.payment_date ?? null,
+          days_to_pay: days,
+          amount: typeof r?.amount === "number" ? r.amount : r?.amount ? Number(r.amount) : null,
+          currency: r?.currency ?? null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x && typeof x.days_to_pay === "number");
+
+    const sources: LiveDataSource[] = [
+      {
+        table: "invoice_payments",
+        query_type: "select",
+        filters: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+      },
+      { table: "invoices", query_type: "join", filters: {} },
+    ];
+
+    if (enriched.length === 0) {
+      return {
+        handled: true,
+        context: `No encontré pagos confirmados en el rango ${fromMonth} a ${toMonth}.`,
+        sources,
+        widgets: [
+          {
+            type: "table",
+            title: "Días de pago (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay pagos confirmados para calcular días promedio de pago en este rango."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["invoice_payments", "invoices"],
+          filters_applied: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+          error_type: "live_data",
+          error_reason: "No payments in range",
+        },
+      };
+    }
+
+    const daysList = enriched.map((e) => e.days_to_pay).sort((a, b) => a - b);
+    const avg = daysList.reduce((a, b) => a + b, 0) / daysList.length;
+    const quantile = (p: number) => {
+      const idx = Math.max(0, Math.min(daysList.length - 1, Math.floor((daysList.length - 1) * p)));
+      return daysList[idx];
+    };
+
+    const p50 = quantile(0.5);
+    const p75 = quantile(0.75);
+    const p90 = quantile(0.9);
+
+    const buckets = [
+      { label: "0-7 días", min: 0, max: 7 },
+      { label: "8-14 días", min: 8, max: 14 },
+      { label: "15-30 días", min: 15, max: 30 },
+      { label: "31-60 días", min: 31, max: 60 },
+      { label: "60+ días", min: 61, max: Number.POSITIVE_INFINITY },
+    ];
+
+    const distRows = buckets.map((b) => {
+      const count = enriched.filter((e) => e.days_to_pay >= b.min && e.days_to_pay <= b.max).length;
+      return [b.label, count] as Array<string | number | null>;
+    });
+
+    const detailRows = enriched
+      .slice()
+      .sort((a, b) => String(b.payment_date ?? "").localeCompare(String(a.payment_date ?? "")))
+      .slice(0, 50);
+
+    return {
+      handled: true,
+      context: `Días promedio de pago calculado como payment_date - issue_date para pagos confirmados. Rango: ${fromMonth} a ${toMonth}.`,
+      sources,
+      widgets: [
+        { type: "kpi", title: "Días promedio de pago", value: `${avg.toFixed(1)} días` },
+        { type: "kpi", title: "P50 (mediana)", value: `${p50} días` },
+        { type: "kpi", title: "P75", value: `${p75} días` },
+        { type: "kpi", title: "P90", value: `${p90} días` },
+        {
+          type: "table",
+          title: "Distribución Lead Time",
+          columns: ["Rango", "Cantidad"],
+          rows: distRows,
+        },
+        {
+          type: "table",
+          title: "Detalle Pagos (top 50)",
+          columns: ["Factura", "Emisión", "Pago", "Días", "Moneda", "Monto"],
+          rows: detailRows.map((r) => [r.invoice_number, r.issue_date, r.payment_date, r.days_to_pay, r.currency, r.amount]),
+        },
+      ],
+      audit: {
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["invoice_payments", "invoices"],
+        filters_applied: { holding_id: holdingId, confirmed: true, payment_date_from: fromMonth, payment_date_to_exclusive: toExclusive },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      },
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para días promedio de pago. Motivo: ${reason}`,
+      sources: [
+        { table: "invoice_payments", query_type: "select", filters: { holding_id: holdingId, confirmed: true } },
+        { table: "invoices", query_type: "join", filters: {} },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Días promedio de pago",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["invoice_payments", "invoices"],
+        filters_applied: { holding_id: holdingId, confirmed: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      },
+    };
+  }
+}

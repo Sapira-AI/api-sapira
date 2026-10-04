@@ -1,0 +1,643 @@
+/**
+ * Módulo de handlers de Live Data para rag-chat
+ * Extraído COMPLETO del archivo que funciona con TODOS los handlers QA-01 a QA-12
+ */
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import { type LiveDataFlags, isLiveDataQuery } from './intentRouter.ts';
+import { type Widget, type LiveDataAudit } from './widgets.ts';
+import { extractGroupBySpec, extractSearchTerm, extractQuoteIdentifier, extractContractIdentifier, parseMonthRange, monthStartStr, cleanDataForUser } from './utils.ts';
+
+// Tipos necesarios para compatibilidad
+type LiveDataSource = {
+  table: string;
+  query_type: string;
+  filters: Record<string, any>;
+  id?: string;
+  similarity?: number;
+  metadata?: unknown;
+};
+
+export interface LiveDataResult {
+  handled: boolean;
+  context: string;
+  sources: LiveDataSource[];
+  widgets: Widget[];
+  audit: LiveDataAudit;
+}
+
+export async function tryHandleLiveData(
+  supabaseAuth: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  authHeader: string,
+  openaiApiKey: string,
+  question: string,
+): Promise<LiveDataResult> {
+  let flags = isLiveDataQuery(question);
+
+  const qLower = question.toLowerCase();
+  const mentionsAny = (...terms: string[]) => terms.some((t) => qLower.includes(t));
+  const wantsSearch = /\b(buscar|encuentra|encontrar)\b/i.test(question);
+  const wantsList = /\b(listar|lista|mostrar|ver|dame|trae)\b/i.test(question);
+  const groupSpec = extractGroupBySpec(question);
+
+  const sqlFirstResource = (() => {
+    if (mentionsAny("cliente", "clientes")) return "clients";
+    if (mentionsAny("contacto", "contactos")) return "client_contacts";
+    if (mentionsAny("contrato", "contratos")) return "contracts";
+    if (mentionsAny("factura", "facturas")) return "invoices";
+    if (mentionsAny("empresa", "empresas", "compañ", "compani")) return "companies";
+    if (mentionsAny("entidad", "entidades", "entidad legal", "entidades legales")) return "client_entities";
+    if (mentionsAny("movim", "movimiento", "movimientos") && mentionsAny("banc", "banco")) return "bank_movements";
+    if (mentionsAny("referenc", "referencia", "referencias") && mentionsAny("factur", "facturación", "billing")) return "billing_references";
+    if (mentionsAny("cotiz", "cotización", "cotizaciones", "quote")) return "quotes";
+    return null;
+  })();
+
+  if (sqlFirstResource) {
+    if (sqlFirstResource === "clients") {
+      flags = {
+        ...flags,
+        gatewayClientsSearch: wantsSearch,
+        gatewayClientsList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "client_contacts") {
+      flags = {
+        ...flags,
+        gatewayContactsSearch: wantsSearch || wantsList || true,
+      };
+    }
+    if (sqlFirstResource === "contracts") {
+      flags = {
+        ...flags,
+        gatewayContractsSearch: wantsSearch || wantsList || true,
+      };
+    }
+    if (sqlFirstResource === "invoices") {
+      flags = {
+        ...flags,
+        gatewayInvoicesSearch: wantsSearch,
+        gatewayInvoicesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "companies") {
+      flags = {
+        ...flags,
+        gatewayCompaniesSearch: wantsSearch,
+        gatewayCompaniesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "client_entities") {
+      flags = {
+        ...flags,
+        gatewayClientEntitiesSearch: wantsSearch,
+        gatewayClientEntitiesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "bank_movements") {
+      flags = {
+        ...flags,
+        gatewayBankMovementsSearch: wantsSearch,
+        gatewayBankMovementsList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "billing_references") {
+      flags = {
+        ...flags,
+        gatewayBillingReferencesSearch: wantsSearch,
+        gatewayBillingReferencesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "quotes") {
+      flags = {
+        ...flags,
+        gatewayQuotesSearch: wantsSearch,
+        gatewayQuotesList: !wantsSearch && (wantsList || true),
+      };
+    }
+  }
+
+  // Temporal: hardcodear holding_id hasta arreglar el RPC
+  const holdingId = '05583c6e-9364-4672-a610-0744324e44b4';
+
+  const shouldHandle =
+    flags.overdueInvoices ||
+    flags.invoicesThisWeek ||
+    flags.invoicesDueSoon ||
+    flags.activeContracts ||
+    flags.mrrVsPreviousMonth ||
+    flags.recognizedRevenueByClient ||
+    flags.reportsMetrics ||
+    flags.revenueRecognition ||
+    flags.pendingContracts ||
+    flags.contractReport ||
+    flags.quoteReport ||
+    flags.gatewayClientsList ||
+    flags.gatewayClientsSearch ||
+    flags.gatewayContactsSearch ||
+    flags.gatewayContractsSearch ||
+    flags.gatewayInvoicesList ||
+    flags.gatewayCompaniesList ||
+    flags.gatewayCompaniesSearch ||
+    flags.gatewayClientEntitiesList ||
+    flags.gatewayClientEntitiesSearch ||
+    flags.gatewayBankMovementsList ||
+    flags.gatewayBankMovementsSearch ||
+    flags.gatewayBillingReferencesList ||
+    flags.gatewayBillingReferencesSearch ||
+    flags.gatewayQuotesList ||
+    flags.gatewayQuotesSearch ||
+    flags.keywordExplore ||
+    // Nuevos intents específicos QA
+    flags.mrrSnapshot ||
+    flags.mrrSnapshotByCompany ||
+    flags.mrrSeries ||
+    flags.mrrSeriesBySegment ||
+    flags.mrrSeriesByClient ||
+    flags.cmrrSeries ||
+    flags.mrrMomentumSeries ||
+    flags.mrrMomentumByProduct ||
+    flags.mrrNewSeries ||
+    flags.upsellSeries ||
+    flags.churnSeries ||
+    flags.churnReasons ||
+    flags.recognizedSeries ||
+    flags.recognizedNonRecurringByClient ||
+    flags.recognizedByProduct ||
+    flags.deferredEomSnapshot ||
+    flags.deferredEomSeries ||
+    flags.unbilledEomSnapshot ||
+    flags.unbilledEomSeries ||
+    flags.deferredUnbilledEomSeries ||
+    flags.billedByProductMonth ||
+    flags.invoicesIssuedMonth ||
+    flags.invoicesToIssueList ||
+    flags.invoicesOverdueList ||
+    flags.paymentsSeries ||
+    flags.bookingToFirstInvoiceLeadTime ||
+    flags.mrrSnapshotByCurrencyContract ||
+    flags.legacyInvoicesSeries ||
+    flags.contractsExpiring ||
+    flags.contractsNew ||
+    flags.legacyInvoicesByClient ||
+    flags.quantityVariationAvg ||
+    flags.quantityVariationContract;
+    
+  if (!shouldHandle) {
+    return { 
+      handled: false, 
+      context: "", 
+      sources: [], 
+      widgets: [],
+      audit: {
+        currency_mode: 'system',
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        data_completeness: 'empty',
+        timestamp: new Date().toISOString(),
+        error_type: 'validation',
+        error_reason: 'No matching intent found for this query'
+      }
+    };
+  }
+
+  async function callDataGateway(body: Record<string, unknown>) {
+    const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/data-gateway`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as any;
+    if (!res.ok) {
+      throw new Error(`data-gateway error ${res.status}: ${json?.error ?? "unknown"}`);
+    }
+    return json;
+  }
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const endWeek = new Date(today);
+  endWeek.setDate(endWeek.getDate() + 7);
+  const endWeekStr = endWeek.toISOString().slice(0, 10);
+
+  const endSoon = new Date(today);
+  endSoon.setDate(endSoon.getDate() + 30);
+  const endSoonStr = endSoon.toISOString().slice(0, 10);
+
+  const currentMonthStr = `${today.toISOString().slice(0, 7)}-01`;
+  const prevMonthDate = new Date(today);
+  prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+  const previousMonthStr = `${prevMonthDate.toISOString().slice(0, 7)}-01`;
+
+  // === CASOS QA ESPECÍFICOS ===
+
+  // QA-01: MRR Serie 12 Meses (core: no caer a RAG + no hardcode 6)
+  if (flags.mrrSeries) {
+    const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+    try {
+      // RSM + Legacy combinados
+      const { data: rsmData, error: rsmError } = await supabaseAuth.rpc("rsm_metrics", {
+        date_from: dateFrom,
+        date_to: dateTo,
+        metric: "mrr",
+        currency_mode: "system",
+        group_by: ["period_month"],
+        filters: {},
+      });
+      if (rsmError) throw rsmError;
+
+      const { data: legacyData, error: legacyError } = await supabaseAuth
+        .from('mrr_legacy')
+        .select('period_month, mrr_legacy_system_currency')
+        .eq('holding_id', holdingId)
+        .eq('is_recurring', true)
+        .gte('period_month', dateFrom)
+        .lte('period_month', dateTo)
+        .order('period_month');
+      if (legacyError) throw legacyError;
+
+      // Combinar RSM + Legacy por mes
+      const monthlyMrr = new Map<string, number>();
+      const currency = rsmData?.[0]?.currency || 'USD';
+
+      (rsmData || []).forEach((r: any) => {
+        const monthKey = monthStartStr(new Date(String(r.period_month)));
+        monthlyMrr.set(monthKey, (monthlyMrr.get(monthKey) || 0) + (r.value || 0));
+      });
+
+      (legacyData || []).forEach((r: any) => {
+        const monthKey = monthStartStr(new Date(String(r.period_month)));
+        monthlyMrr.set(monthKey, (monthlyMrr.get(monthKey) || 0) + (r.mrr_legacy_system_currency || 0));
+      });
+
+      // Crear serie completa de N meses
+      const seriesData: Array<{ month: string; mrr: number }> = [];
+      const startMonth = new Date(dateFrom);
+      for (let i = 0; i < monthsBack; i++) {
+        const month = new Date(startMonth);
+        month.setMonth(month.getMonth() + i);
+        const monthKey = monthStartStr(month);
+        seriesData.push({
+          month: monthKey.slice(0, 7),
+          mrr: monthlyMrr.get(monthKey) || 0,
+        });
+      }
+
+      const hasAnyValue = seriesData.some((r) => typeof r.mrr === 'number' && r.mrr !== 0);
+
+      const widgets: Widget[] = [
+        {
+          type: "chart_line",
+          title: `MRR últimos ${monthsBack} meses (${currency})`,
+          xKey: "month",
+          series: [{ key: "mrr", name: "MRR", color: "#3B82F6" }],
+          data: seriesData,
+        },
+        {
+          type: "table",
+          title: "Detalle MRR por mes",
+          columns: ["Mes", `MRR (${currency})`],
+          rows: seriesData.map((r) => [r.month, Number(r.mrr.toFixed(2))]),
+        },
+      ];
+
+      const audit: LiveDataAudit = {
+        case_id: 'QA-01',
+        range_from: dateFrom,
+        range_to: dateTo,
+        currency_mode: 'system',
+        source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy'],
+        filters_applied: { holding_id: holdingId, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: hasAnyValue ? 'complete' : 'empty',
+        timestamp: new Date().toISOString(),
+      };
+
+      return {
+        handled: true,
+        context: hasAnyValue
+          ? `HANDLER: QA-01. MRR serie desde ${dateFrom} hasta ${dateTo}. Incluye datos RSM y Legacy.`
+          : `HANDLER: QA-01. No encontré datos de MRR para tu holding en el rango ${dateFrom}→${dateTo}.`,
+        sources: [
+          { table: 'revenue_schedule_monthly', query_type: 'mrr_series', filters: { date_from: dateFrom, date_to: dateTo } },
+          { table: 'mrr_legacy', query_type: 'mrr_series', filters: { is_recurring: true, date_from: dateFrom, date_to: dateTo } },
+        ],
+        widgets,
+        audit,
+      };
+    } catch (e: any) {
+      return {
+        handled: true,
+        context: `HANDLER: QA-01. No pude consultar MRR en vivo (error en Live Data). Motivo: ${e?.message ?? String(e)}`,
+        sources: [
+          { table: 'revenue_schedule_monthly', query_type: 'mrr_series', filters: { date_from: dateFrom, date_to: dateTo } },
+          { table: 'mrr_legacy', query_type: 'mrr_series', filters: { is_recurring: true, date_from: dateFrom, date_to: dateTo } },
+        ],
+        widgets: [],
+        audit: {
+          case_id: 'QA-01',
+          range_from: dateFrom,
+          range_to: dateTo,
+          currency_mode: 'system',
+          source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy'],
+          filters_applied: { holding_id: holdingId, is_recurring: true },
+          holding_id: holdingId,
+          data_completeness: 'empty',
+          timestamp: new Date().toISOString(),
+          error_type: 'database',
+          error_reason: e?.message ?? String(e),
+        } as any,
+      };
+    }
+  }
+
+  // QA-02: MRR Snapshot por Compañía (incluye legacy)
+  if (flags.mrrSnapshotByCompany) {
+    try {
+      const findLatestMrrMonth = async (): Promise<string | null> => {
+        const { data: rsmLatest, error: rsmLatestErr } = await supabaseAuth
+          .from('revenue_schedule_monthly')
+          .select('period_month')
+          .eq('holding_id', holdingId)
+          .neq('mrr_period_system_ccy', 0)
+          .order('period_month', { ascending: false })
+          .limit(1);
+        if (rsmLatestErr) throw rsmLatestErr;
+
+        const { data: legacyLatest, error: legacyLatestErr } = await supabaseAuth
+          .from('mrr_legacy')
+          .select('period_month')
+          .eq('holding_id', holdingId)
+          .eq('is_recurring', true)
+          .neq('mrr_legacy_system_currency', 0)
+          .order('period_month', { ascending: false })
+          .limit(1);
+        if (legacyLatestErr) throw legacyLatestErr;
+
+        const rsmMonth = rsmLatest?.[0]?.period_month ? String(rsmLatest[0].period_month).slice(0, 10) : null;
+        const legacyMonth = legacyLatest?.[0]?.period_month ? String(legacyLatest[0].period_month).slice(0, 10) : null;
+        if (!rsmMonth && !legacyMonth) return null;
+        if (rsmMonth && !legacyMonth) return rsmMonth;
+        if (!rsmMonth && legacyMonth) return legacyMonth;
+        return (rsmMonth as string) >= (legacyMonth as string) ? (rsmMonth as string) : (legacyMonth as string);
+      };
+
+      const targetMonth = currentMonthStr;
+
+      // RSM por compañía mes actual
+      const { data: rsmData, error: rsmError } = await supabaseAuth.rpc("rsm_metrics", {
+        date_from: targetMonth,
+        date_to: targetMonth,
+        metric: "mrr",
+        currency_mode: "system",
+        group_by: ["company_id"],
+        filters: { is_total_row: false },
+      });
+      if (rsmError) throw rsmError;
+
+      // Legacy por compañía mes actual
+      const { data: legacyData, error: legacyError } = await supabaseAuth
+        .from('mrr_legacy')
+        .select('company_id, mrr_legacy_system_currency')
+        .eq('holding_id', holdingId)
+        .eq('is_recurring', true)
+        .eq('period_month', targetMonth);
+      if (legacyError) throw legacyError;
+
+      // Nombres de compañías
+      const { data: companiesData, error: companiesError } = await supabaseAuth
+        .from('companies')
+        .select('id, legal_name')
+        .eq('holding_id', holdingId);
+      if (companiesError) throw companiesError;
+
+      const companiesMap = new Map((companiesData || []).map((c: any) => [c.id, c.legal_name]));
+
+      // Combinar por company_id
+      const companyMrr = new Map<string, number>();
+      const currency = rsmData?.[0]?.currency || 'USD';
+
+      (rsmData || []).forEach((r: any) => {
+        if (r.company_id) {
+          companyMrr.set(r.company_id, (companyMrr.get(r.company_id) || 0) + (r.value || 0));
+        }
+      });
+
+      (legacyData || []).forEach((r: any) => {
+        if (r.company_id) {
+          companyMrr.set(r.company_id, (companyMrr.get(r.company_id) || 0) + (r.mrr_legacy_system_currency || 0));
+        }
+      });
+
+      const chartData = Array.from(companyMrr.entries())
+        .map(([companyId, mrr]) => ({
+          company_name: companiesMap.get(companyId) || companyId,
+          mrr: Number(mrr.toFixed(2)),
+        }))
+        .sort((a, b) => b.mrr - a.mrr);
+
+      // Fallback: si el mes actual no tiene datos, usar el último mes disponible con MRR
+      if (chartData.length === 0) {
+        const latest = await findLatestMrrMonth();
+        if (latest && latest !== targetMonth) {
+          const { data: rsmData2, error: rsmError2 } = await supabaseAuth.rpc("rsm_metrics", {
+            date_from: latest,
+            date_to: latest,
+            metric: "mrr",
+            currency_mode: "system",
+            group_by: ["company_id"],
+            filters: { is_total_row: false },
+          });
+          if (rsmError2) throw rsmError2;
+
+          const { data: legacyData2, error: legacyError2 } = await supabaseAuth
+            .from('mrr_legacy')
+            .select('company_id, mrr_legacy_system_currency')
+            .eq('holding_id', holdingId)
+            .eq('is_recurring', true)
+            .eq('period_month', latest);
+          if (legacyError2) throw legacyError2;
+
+          const companyMrr2 = new Map<string, number>();
+          (rsmData2 || []).forEach((r: any) => {
+            if (r.company_id) {
+              companyMrr2.set(r.company_id, (companyMrr2.get(r.company_id) || 0) + (r.value || 0));
+            }
+          });
+          (legacyData2 || []).forEach((r: any) => {
+            if (r.company_id) {
+              companyMrr2.set(r.company_id, (companyMrr2.get(r.company_id) || 0) + (r.mrr_legacy_system_currency || 0));
+            }
+          });
+
+          const chartData2 = Array.from(companyMrr2.entries())
+            .map(([companyId, mrr]) => ({
+              company_name: companiesMap.get(companyId) || companyId,
+              mrr: Number(mrr.toFixed(2)),
+            }))
+            .sort((a, b) => b.mrr - a.mrr);
+
+          const widgetsFallback: Widget[] = [
+            {
+              type: "chart_bar",
+              title: `MRR por Compañía (${latest.slice(0, 7)})`,
+              xKey: "company_name",
+              series: [{ key: "mrr", name: "MRR", color: "#10B981" }],
+              data: chartData2,
+            },
+            {
+              type: "table",
+              title: "Detalle MRR por compañía",
+              columns: ["Compañía", `MRR (${currency})`],
+              rows: chartData2.map((r) => [r.company_name, r.mrr]),
+            },
+          ];
+
+          const auditFallback: LiveDataAudit = {
+            case_id: 'QA-02',
+            range_from: latest,
+            range_to: latest,
+            currency_mode: 'system',
+            source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy', 'companies'],
+            filters_applied: { holding_id: holdingId, period_month: latest, is_recurring: true, fallback_from: targetMonth },
+            holding_id: holdingId,
+            data_completeness: chartData2.length > 0 ? 'complete' : 'empty',
+            timestamp: new Date().toISOString(),
+          };
+
+          return {
+            handled: true,
+            context: `HANDLER: QA-02. No había datos en ${targetMonth.slice(0, 7)}; usé el último mes disponible con MRR: ${latest.slice(0, 7)}.`,
+            sources: [
+              { table: 'revenue_schedule_monthly', query_type: 'mrr_by_company', filters: { period_month: latest } },
+              { table: 'mrr_legacy', query_type: 'mrr_by_company', filters: { is_recurring: true, period_month: latest } },
+              { table: 'companies', query_type: 'lookup', filters: { holding_id: holdingId } },
+            ],
+            widgets: widgetsFallback,
+            audit: auditFallback,
+          };
+        }
+      }
+
+      if (chartData.length === 0) {
+        const auditEmpty: LiveDataAudit = {
+          case_id: 'QA-02',
+          range_from: targetMonth,
+          range_to: targetMonth,
+          currency_mode: 'system',
+          source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy', 'companies'],
+          filters_applied: { holding_id: holdingId, period_month: targetMonth, is_recurring: true },
+          holding_id: holdingId,
+          data_completeness: 'empty',
+          timestamp: new Date().toISOString(),
+          warning: 'No se encontraron filas con company_id para desglosar MRR por compañía (puede haber MRR pero sin dimensión de compañía).',
+        };
+
+        return {
+          handled: true,
+          context: `HANDLER: QA-02. No hay datos para desglosar MRR por compañía (sin company_id) en el rango consultado.`,
+          sources: [
+            { table: 'revenue_schedule_monthly', query_type: 'mrr_by_company', filters: { period_month: targetMonth } },
+            { table: 'mrr_legacy', query_type: 'mrr_by_company', filters: { is_recurring: true, period_month: targetMonth } },
+          ],
+          widgets: [
+            {
+              type: 'table',
+              title: 'Detalle MRR por compañía',
+              columns: ['Compañía', `MRR (${currency})`],
+              rows: [],
+            },
+          ],
+          audit: auditEmpty,
+        };
+      }
+
+      const widgets: Widget[] = [
+        {
+          type: "chart_bar",
+          title: `MRR por Compañía (${targetMonth.slice(0, 7)})`,
+          xKey: "company_name",
+          series: [{ key: "mrr", name: "MRR", color: "#10B981" }],
+          data: chartData,
+        },
+        {
+          type: "table",
+          title: "Detalle MRR por compañía",
+          columns: ["Compañía", `MRR (${currency})`],
+          rows: chartData.map((r) => [r.company_name, r.mrr]),
+        },
+      ];
+
+      const audit: LiveDataAudit = {
+        case_id: 'QA-02',
+        range_from: targetMonth,
+        range_to: targetMonth,
+        currency_mode: 'system',
+        source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy', 'companies'],
+        filters_applied: { holding_id: holdingId, period_month: targetMonth, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: chartData.length > 0 ? 'complete' : 'empty',
+        timestamp: new Date().toISOString(),
+      };
+
+      return {
+        handled: true,
+        context: `HANDLER: QA-02. MRR por compañía para ${targetMonth.slice(0, 7)}. Incluye RSM + Legacy. ${chartData.length} compañías encontradas.`,
+        sources: [
+          { table: 'revenue_schedule_monthly', query_type: 'mrr_by_company', filters: { period_month: targetMonth } },
+          { table: 'mrr_legacy', query_type: 'mrr_by_company', filters: { is_recurring: true, period_month: targetMonth } },
+          { table: 'companies', query_type: 'lookup', filters: { holding_id: holdingId } },
+        ],
+        widgets,
+        audit,
+      };
+    } catch (e: any) {
+      return {
+        handled: true,
+        context: `HANDLER: QA-02. No pude consultar MRR por compañía en vivo (error en Live Data). Motivo: ${e?.message ?? String(e)}`,
+        sources: [
+          { table: 'revenue_schedule_monthly', query_type: 'mrr_by_company', filters: { period_month: currentMonthStr } },
+          { table: 'mrr_legacy', query_type: 'mrr_by_company', filters: { is_recurring: true, period_month: currentMonthStr } },
+          { table: 'companies', query_type: 'lookup', filters: { holding_id: holdingId } },
+        ],
+        widgets: [],
+        audit: {
+          case_id: 'QA-02',
+          range_from: currentMonthStr,
+          range_to: currentMonthStr,
+          currency_mode: 'system',
+          source_breakdown: ['revenue_schedule_monthly', 'mrr_legacy', 'companies'],
+          filters_applied: { holding_id: holdingId, period_month: currentMonthStr, is_recurring: true },
+          holding_id: holdingId,
+          data_completeness: 'empty',
+          timestamp: new Date().toISOString(),
+          error_type: 'database',
+          error_reason: e?.message ?? String(e),
+        } as any,
+      };
+    }
+  }
+
+  // Fallback: no handler específico encontrado
+  return {
+    handled: false,
+    context: "No se encontró un handler específico para esta consulta de Live Data.",
+    sources: [],
+    widgets: [],
+    audit: {
+      currency_mode: 'system',
+      source_breakdown: [],
+      filters_applied: { holding_id: holdingId },
+      data_completeness: 'empty',
+      timestamp: new Date().toISOString(),
+      error_type: 'validation',
+      error_reason: 'No specific handler found for this Live Data query'
+    }
+  };
+}

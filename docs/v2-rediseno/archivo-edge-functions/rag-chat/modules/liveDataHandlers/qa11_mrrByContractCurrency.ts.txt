@@ -1,0 +1,128 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr } from "../utils.ts";
+
+export async function handleQa11MrrByContractCurrency(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  console.log("QA-11: INICIO - mrrSnapshotByCurrencyContract activado");
+
+  try {
+    const currentMonthStr = monthStartStr(new Date());
+
+    const { data: rsmData, error: rsmError } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("contract_currency, mrr_period_contract_ccy, period_month")
+      .eq("holding_id", holdingId)
+      .eq("period_month", currentMonthStr)
+      .not("contract_currency", "is", null)
+      .not("mrr_period_contract_ccy", "is", null);
+
+    if (rsmError) throw rsmError;
+
+    const { data: legacyData, error: legacyError } = await supabaseAuth
+      .from("mrr_legacy")
+      .select("contract_currency, mrr_legacy, period_month")
+      .eq("holding_id", holdingId)
+      .eq("period_month", currentMonthStr)
+      .eq("is_recurring", true)
+      .not("contract_currency", "is", null)
+      .not("mrr_legacy", "is", null);
+
+    if (legacyError) throw legacyError;
+
+    console.log(`QA-11: RSM rows: ${rsmData?.length || 0}, Legacy rows: ${legacyData?.length || 0}`);
+
+    const currencyMap = new Map<string, number>();
+
+    (rsmData || []).forEach((row: any) => {
+      const currency = row.contract_currency;
+      const mrr = Number(row.mrr_period_contract_ccy || 0);
+      currencyMap.set(currency, (currencyMap.get(currency) || 0) + mrr);
+    });
+
+    (legacyData || []).forEach((row: any) => {
+      const currency = row.contract_currency;
+      const mrr = Number(row.mrr_legacy || 0);
+      currencyMap.set(currency, (currencyMap.get(currency) || 0) + mrr);
+    });
+
+    const currencyData = Array.from(currencyMap.entries())
+      .map(([currency, mrr]) => ({
+        currency,
+        mrr: Number(mrr.toFixed(2)),
+      }))
+      .sort((a, b) => b.mrr - a.mrr);
+
+    const widgets: Widget[] = [
+      {
+        type: "table",
+        title: "MRR por Moneda de Contrato",
+        columns: ["Moneda", "MRR Total"],
+        rows: currencyData.map((item) => [item.currency, `${item.mrr.toFixed(2)}`]),
+      },
+      {
+        type: "table",
+        title: "Resumen por Moneda",
+        columns: ["Métrica", "Valor"],
+        rows: [
+          ["Total de monedas", currencyData.length],
+          ["Moneda principal", currencyData[0]?.currency || "N/A"],
+          ["MRR moneda principal", `${currencyData[0]?.mrr?.toFixed(2) || "0.00"}`],
+        ],
+      },
+    ];
+
+    const response: LiveDataResult = {
+      handled: true,
+      context: `MRR del mes en moneda de contrato. ${currencyData.length} monedas analizadas. Monedas separadas, sin conversiÃƒÂ³n (no se suma entre monedas).`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_by_contract_currency", filters: { holding_id: holdingId, period_month: currentMonthStr } },
+        { table: "mrr_legacy", query_type: "mrr_legacy_by_contract_currency", filters: { holding_id: holdingId, period_month: currentMonthStr, is_recurring: true } },
+      ],
+      widgets,
+      audit: {
+        range_from: currentMonthStr,
+        range_to: currentMonthStr,
+        currency_mode: "contract",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy"],
+        filters_applied: {
+          holding_id: holdingId,
+          period_month: currentMonthStr,
+          is_recurring: true,
+        },
+        holding_id: holdingId,
+        data_completeness: currencyData.length > 0 ? "complete" : "empty",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+
+    console.log("QA-11: RESPUESTA CON DATOS - Generada:", JSON.stringify(response, null, 2));
+    return response;
+  } catch (e: any) {
+    console.error("QA-11 Error:", e);
+    return {
+      handled: true,
+      context: `Error al analizar MRR por moneda de contrato: ${e.message}`,
+      sources: [],
+      widgets: [],
+      audit: {
+        range_from: "error",
+        range_to: "error",
+        currency_mode: "contract",
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message || "Unknown error",
+      } as any,
+    };
+  }
+}
