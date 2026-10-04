@@ -11,7 +11,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 |---|---|---|---|---|---|---|
 | `bigquery_connections` (1) | `src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts` · `BigQueryConnection` | ⚠️ difiere de prod | — | — | — | nombre de PK `bigquery_connections_pkey` |
 | `field_mappings` (4) | `src/databases/postgresql/entities/integraciones/otras/field-mapping.entity.ts` · `FieldMapping` | ⚠️ difiere de prod | — | — | — | nombre de PK `field_mappings_pkey`<br>CHECK `field_mappings_mapping_type_check` |
-| `integration_record_discards` (0) | `src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts` · `IntegrationRecordDiscard` | ⚠️ difiere de prod | — | — | — | nombre de PK `integration_record_discards_pkey` |
+| `integration_record_discards` (1) | `src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts` · `IntegrationRecordDiscard` | ⚠️ difiere de prod | — | — | — | nombre de PK `integration_record_discards_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (1): 1 promovidas, 0 apagadas
 

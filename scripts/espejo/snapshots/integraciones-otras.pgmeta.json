@@ -449,7 +449,7 @@
  "integration_record_discards": {
   "name": "public.integration_record_discards",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",

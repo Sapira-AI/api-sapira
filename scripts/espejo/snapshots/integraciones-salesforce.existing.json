@@ -634,6 +634,28 @@
     "scale": null,
     "array": false
    },
+   "last_imported_snapshot": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "last_imported_at": {
+    "type": "timestamptz",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamptz",
     "nullable": true,
@@ -1705,6 +1727,17 @@
    },
    "error_message": {
     "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "confirmed_by": {
+    "type": "uuid",
     "nullable": true,
     "primary": false,
     "generated": null,

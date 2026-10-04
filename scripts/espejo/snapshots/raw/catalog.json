@@ -41153,6 +41153,38 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "last_imported_snapshot",
+					"attnum": 17,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Lo que llegó del CRM en la última importación a Sapira (encabezado mapeado + ítems). Base para detectar cambios reales del CRM"
+				},
+				{
+					"column": "last_imported_at",
+					"attnum": 18,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuándo se guardó last_imported_snapshot al crear o actualizar la cotización (NULL: base tomada al traer, sin importar)"
 				}
 			],
 			"constraints": [
@@ -42451,6 +42483,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "confirmed_by",
+					"attnum": 16,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario (public.users.id) que confirmó actualizar cotizaciones existentes con los cambios del CRM. NULL: solo crea"
 				}
 			],
 			"constraints": [

@@ -13474,7 +13474,7 @@
 		{
 			"name": "public.integration_record_discards",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -24141,6 +24141,28 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "last_imported_snapshot",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Lo que llegó del CRM en la última importación a Sapira (encabezado mapeado + ítems). Base para detectar cambios reales del CRM"
+				},
+				{
+					"name": "last_imported_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Cuándo se guardó last_imported_snapshot al crear o actualizar la cotización (NULL: base tomada al traer, sin importar)"
 				}
 			],
 			"primary_keys": [
@@ -24804,6 +24826,17 @@
 						"updatable"
 					],
 					"default_value": "now()"
+				},
+				{
+					"name": "confirmed_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Usuario (public.users.id) que confirmó actualizar cotizaciones existentes con los cambios del CRM. NULL: solo crea"
 				}
 			],
 			"primary_keys": [
@@ -25246,7 +25279,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 46,
+			"rows": 47,
 			"columns": [
 				{
 					"name": "id",
