@@ -14,6 +14,13 @@ AS $function$
 -- (recognized_cum, deferred/unbilled_eom); 2) UPSELL a mitad de ciclo (Bosch): mes 1 = monthly_price × días/días_mes (180,46, no 169,95);
 -- 3) baja early a mitad de ciclo: fila CHURN del mes = −monthly_price × días restantes/días_mes; 4) contrato sin tasa compañía/sistema:
 -- *_ccy / *_system_ccy NULL y calc_version missing_fx_rate (revenue_schedule_apply_fx_for_contract).
+-- Decisiones de Domi 04-10 (rebuild-devengo-comparacion.md, corrida final):
+--  D2     override del período (`quantities`, front actual) = devengo del mes, con la regla con que la facturación arma la línea
+--         (sync_invoice_items_amounts_from_quantities). Solo meses activos del ítem; el MRR sigue siendo el plan.
+--  D3     facturas emitidas antes del inicio del contrato (datos históricos válidos): el rebuild arranca en el mes de la primera
+--         emisión (como ya llega hasta la última después del fin), así su facturado cae en el mes de su issue_date igual que las demás.
+--         En esos meses el ítem no está activo: devengo 0, MRR 0; el monto queda como facturado / diferido.
+--  Sin guard por estado: el rebuild procesa el contrato como está, también En revisión / Borrador (D1 descartada).
 DECLARE
   v_contract RECORD;
   v_item RECORD;
@@ -72,6 +79,8 @@ DECLARE
   -- U8: mes de inicio normalizado al día 1 y última fila previa del ítem (rebuild parcial).
   v_from_month date := DATE_TRUNC('month', p_from_month)::date;
   v_prev RECORD;
+  -- D2: monto del override del mes (NULL = sin override → plan).
+  v_override_amount NUMERIC;
 BEGIN
   SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,
     co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency
@@ -107,6 +116,24 @@ BEGIN
          AND i.is_active = true
          AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')),
       v_contract_end_date
+    )
+  );
+
+  -- D3 (Domi 04-10): espejo hacia atrás de FIX 1.2. Una línea de factura de un ítem del contrato emitida antes del inicio (datos
+  -- históricos) quedaba solo en el facturado acumulado inicial, sin mes que la mostrara; ahora el rebuild arranca en el mes de su
+  -- emisión y la línea cae en el mes de su issue_date, como las demás (en esos meses el ítem no está activo: devengo 0, MRR 0).
+  -- Solo líneas de ítems (las que entran al facturado); un rebuild parcial no cambia: el mes de inicio sigue siendo p_from_month.
+  v_contract_start_date := LEAST(
+    v_contract_start_date,
+    COALESCE(
+      (SELECT MIN(DATE_TRUNC('month', i.issue_date)::date)
+       FROM invoices i
+       JOIN invoice_items ii ON ii.invoice_id = i.id
+       JOIN contract_items ci ON ci.id = ii.contract_item_id
+       WHERE ci.contract_id = p_contract_id
+         AND i.is_active = true
+         AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')),
+      v_contract_start_date
     )
   );
 
@@ -261,6 +288,37 @@ BEGIN
            AND p.pause_start <= v_eom_of_cur AND COALESCE(p.pause_end, v_item.end_date) >= v_cur;
         IF v_paused_days > 0 AND v_active_days > 0 THEN
           v_recognized_period := ROUND(v_recognized_period * GREATEST(v_active_days - v_paused_days, 0)::numeric / v_active_days, 2);
+        END IF;
+        -- D2 (Domi 04-10): override del período en `quantities` (front actual) = devengo del mes, igual que la factura. Misma regla que
+        -- sync_invoice_items_amounts_from_quantities arma la línea: unitario × cantidad del override (el que falte, del ítem; solo monto →
+        -- monto) × (1 − descuento % de la línea de factura del período; sin línea, el % del ítem). Reemplaza el mensual del mes (con su
+        -- prorrateo o pausa), como la factura. Sin override: el plan. MRR: el plan (no se toca).
+        v_override_amount := NULL;
+        SELECT CASE
+                 WHEN q.unit_price IS NOT NULL AND q.quantity IS NOT NULL THEN q.unit_price * q.quantity
+                 WHEN q.amount IS NOT NULL AND q.unit_price IS NULL AND q.quantity IS NULL THEN q.amount
+                 WHEN q.quantity IS NOT NULL AND q.unit_price IS NULL THEN v_item.unit_price * q.quantity
+                 WHEN q.unit_price IS NOT NULL AND q.quantity IS NULL THEN q.unit_price * v_item.quantity
+               END
+               * (1 - COALESCE(
+                   (SELECT ii.discount_pct
+                      FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+                     WHERE ii.contract_item_id = v_item.id
+                       AND i.is_active = true
+                       AND i.status IN ('Por Emitir', 'Emitida', 'Enviada', 'Pagada', 'Vencida')
+                       AND i.document_type IS DISTINCT FROM 'NC'
+                       AND ii.billing_period_start IS NOT NULL
+                       AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur
+                     ORDER BY i.issue_date DESC NULLS LAST, ii.id
+                     LIMIT 1),
+                   CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END,
+                   0) / 100.0)
+          INTO v_override_amount
+          FROM quantities q
+         WHERE q.contract_item_id = v_item.id
+           AND q.period = v_cur;
+        IF v_override_amount IS NOT NULL THEN
+          v_recognized_period := ROUND(v_override_amount, 2);
         END IF;
       ELSE
         -- Item no activo en este mes. v_billed_period puede ser > 0 (capturado arriba).
@@ -528,4 +586,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días.';
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días. v3.6 (04-10, Domi D2): override del período (quantities) = devengo del mes con la regla de la factura (sync_invoice_items_amounts_from_quantities); el MRR sigue siendo el plan. v3.7 (04-10, Domi D3): el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio (devengo y MRR 0 en esos meses); sin guard por estado.';

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { findFixedRate, type FxPeriodRate, INDEFINITE_HORIZON_PERIODS } from './billing-engine';
+import { INDEFINITE_HORIZON_PERIODS } from './billing-engine';
 
 import type { QueryRunner } from 'typeorm';
 
@@ -214,38 +214,69 @@ export const taxRatePctSql = (column = 'tax_rate') =>
 export const TAX_RATE_PCT_SQL = taxRatePctSql();
 
 /**
- * Réplica de `auto_populate_invoice_fx_to_system` (BEFORE INSERT/UPDATE de `invoices`): `fx_contract_to_system`,
- * `system_currency`, `amount_system_currency` y `total_system_currency` de cada factura según la moneda del contrato, la
- * del sistema del holding (USD por defecto) y la política (`monthly_avg` por defecto) a la fecha de emisión (o programada,
- * u original, u hoy). Sin tasa: FX NULL y los montos quedan como estaban (nunca se completa con 1). Se llama después de
- * insertar o actualizar facturas en una transacción v2, con los ids tocados. Dos reglas v2 sobre el trigger: el sentido de la
- * tasa según la política (`systemFxDivides`) y el IVA normalizado a porcentaje (`TAX_RATE_PCT_SQL`: 0,19 → 19).
+ * Moneda en que está `invoices.amount_contract_currency` (alias `i` = factura, `c` = contrato): la del encabezado; sin ella, la del
+ * contrato. Mayúsculas y sin espacios. Es la "moneda de contrato" de la regla por estado (Por Emitir) y del respaldo.
+ */
+export const INVOICE_HEADER_CURRENCY_SQL = `UPPER(TRIM(COALESCE(NULLIF(TRIM(i.contract_currency), ''), c.contract_currency)))`;
+
+/** Estado de una factura que aún no es documento tributario: su monto en moneda de sistema sale de la moneda de contrato. */
+export const INVOICE_PENDING_STATUS = 'Por Emitir';
+
+/**
+ * La factura tiene monto en moneda de factura (alias `i`): moneda y neto del documento. Un neto 0 con monto en contrato ≠ 0 cuenta como
+ * "sin neto" (aún no se valorizó en moneda de factura); un documento en 0 en las dos monedas sí lo tiene.
+ */
+export const INVOICE_HAS_INVOICE_AMOUNT_SQL = `(i.amount_invoice_currency IS NOT NULL AND NULLIF(TRIM(i.invoice_currency), '') IS NOT NULL
+	AND (i.amount_invoice_currency <> 0 OR COALESCE(i.amount_contract_currency, 0) = 0))`;
+
+/**
+ * Regla por estado (decisión de Domi 04-10, reemplaza la de "siempre moneda de factura" de la mañana y la "sin vueltas" del 01-10): la
+ * factura se convierte desde la **moneda de factura** si ya es documento (cualquier estado salvo Por Emitir: Emitida, Enviada, Vencida,
+ * Pagada, Cancelada, NC…) y tiene neto en esa moneda. Alias `i` = factura.
+ */
+export const INVOICE_FROM_INVOICE_CURRENCY_SQL = `(i.status IS DISTINCT FROM '${INVOICE_PENDING_STATUS}' AND ${INVOICE_HAS_INVOICE_AMOUNT_SQL})`;
+
+/**
+ * Moneda desde la que se convierte una factura a la moneda de sistema (alias `i` = factura, `c` = contrato): la de factura
+ * (`INVOICE_FROM_INVOICE_CURRENCY_SQL`); si no —Por Emitir, o un documento sin neto en moneda de factura—, la moneda de contrato del
+ * encabezado (`INVOICE_HEADER_CURRENCY_SQL`). Mayúsculas y sin espacios. La usan `refreshInvoiceSystemAmounts` y `recalculateHoldingFx`
+ * (qué facturas recalcular al cambiar una tasa del holding).
+ */
+export const INVOICE_SYSTEM_SOURCE_CURRENCY_SQL = `(CASE WHEN ${INVOICE_FROM_INVOICE_CURRENCY_SQL} THEN UPPER(TRIM(i.invoice_currency)) ELSE ${INVOICE_HEADER_CURRENCY_SQL} END)`;
+
+/**
+ * Montos en moneda de sistema de cada factura (réplica con regla v2 de `auto_populate_invoice_fx_to_system`, BEFORE INSERT/UPDATE de
+ * `invoices`): `fx_contract_to_system`, `system_currency`, `amount_system_currency` y `total_system_currency`. Se llama después de
+ * insertar o actualizar facturas en una transacción v2, con los ids tocados.
  *
- * Sin vueltas (multimoneda, spec-multimoneda §5, decisión 01-10): las líneas cuya moneda (= la del ítem, ≠ la del contrato) ya es la
- * del sistema entran con su subtotal tal cual (tasa 1), nunca ítem → contrato → sistema. El resto del encabezado en moneda de contrato
- * (`amount_contract_currency` − Σ de esas líneas × tasa pactada ítem → contrato, redondeo por línea como `multicurrencyHeader`) se convierte
- * como siempre. Si todo el documento está en la moneda del sistema, se completa aunque falte la tasa contrato → sistema. Facturas con
- * líneas internas (facturar por OC) siguen por el camino del encabezado.
+ * **Regla por estado (decisión de Domi 04-10):**
+ * - **Por Emitir** (aún no hay documento): siempre desde la **moneda de contrato**, el monto del encabezado (`amount_contract_currency`
+ *   en `invoices.contract_currency`; sin ella, la del contrato). En una unificada/consolidada multimoneda el encabezado ya está en la
+ *   moneda de factura (no hay una sola moneda de contrato): se convierte ese monto.
+ * - **Cualquier otro estado** (Emitida, Enviada, Vencida, Pagada, Cancelada, NC…): desde la **moneda de factura**, lo que realmente se
+ *   cobra (`amount_invoice_currency` en `invoice_currency`). Sin neto en moneda de factura, el encabezado (respaldo).
+ *
+ * Conversión: `calculate_system_fx_rate(holding, moneda de origen, moneda de sistema, fecha, política)` a la fecha de emisión (o
+ * programada, u original, u hoy) y la política del holding (`monthly_avg` por defecto), con el sentido de `systemFxDivides`. Misma
+ * moneda que la de sistema → el mismo monto (FX 1). Total = monto en sistema × (1 + IVA %) (`TAX_RATE_PCT_SQL`: 0,19 → 19). Sin tasa:
+ * FX NULL y los montos quedan como estaban (nunca se completa con 1). `fx_contract_to_system` conserva su nombre pero guarda la tasa
+ * moneda de origen → sistema. Las líneas en moneda de sistema de una factura en otra moneda ya no entran "directo" (la regla "sin
+ * vueltas" del 01-10 quedó reemplazada; las diferencias por tipo de cambio son un ítem de `ROADMAP-V2.md`).
+ *
+ * Al emitir (Por Emitir → Emitida), el monto pasa de la moneda de contrato a la de factura: la emisión la escribe el envío al ERP
+ * (`InvoiceSchedulerService`) y el webhook del ERP (`OdooWebhookService`) sin la marca `sapira.writer`, así que el trigger recalcula en
+ * ese mismo UPDATE de estado; una transacción v2 que cambie el estado llama esta función.
+ *
+ * Las NC espejo no pasan por aquí: copian la tasa de su factura original (`mirrorInvoiceSystemAmounts`).
  */
 export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, invoiceIds: string[]): Promise<void> {
 	const ids = [...new Set(invoiceIds.filter(Boolean))];
 
 	if (!ids.length) return;
 	const rows = (await db.query(
-		`SELECT i.id, c.contract_currency,
+		`SELECT i.id, ${INVOICE_SYSTEM_SOURCE_CURRENCY_SQL} AS source_currency, ${INVOICE_FROM_INVOICE_CURRENCY_SQL} AS from_invoice,
 			COALESCE(i.issue_date, i.scheduled_at, i.original_issue_date, CURRENT_DATE)::text AS fx_date,
-			COALESCE(hs.system_currency, 'USD') AS system_currency, COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_policy,
-			i.amount_contract_currency,
-			(SELECT COALESCE(jsonb_agg(jsonb_build_object('subtotal', ii.subtotal_contract_currency, 'period_start', ii.billing_period_start)), '[]'::jsonb)
-				FROM invoice_items ii
-				WHERE ii.invoice_id = i.id
-					AND UPPER(TRIM(ii.contract_currency)) = UPPER(TRIM(COALESCE(hs.system_currency, 'USD')))
-					AND UPPER(TRIM(ii.contract_currency)) <> UPPER(TRIM(c.contract_currency))
-					AND NOT EXISTS (SELECT 1 FROM invoice_items v WHERE v.invoice_id = i.id AND v.visible_line_id IS NOT NULL)) AS system_lines,
-			(SELECT COALESCE(jsonb_agg(jsonb_build_object(
-					'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
-					'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
-				FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.purpose = 'item') AS item_rates
+			COALESCE(hs.system_currency, 'USD') AS system_currency, COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_policy
 		FROM invoices i
 		JOIN contracts c ON c.id = i.contract_id
 		LEFT JOIN LATERAL (SELECT system_currency, fx_system_policy FROM holding_settings WHERE holding_id = i.holding_id LIMIT 1) hs ON true
@@ -255,15 +286,18 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 	const rates = new Map<string, number | null>();
 
 	for (const row of rows) {
-		const contractCurrency = toText(row.contract_currency);
+		const sourceCurrency = toText(row.source_currency);
 
-		if (!contractCurrency) continue;
+		if (!sourceCurrency) continue;
 		const systemCurrency = String(row.system_currency);
+		// Documento: neto en moneda de factura. Por Emitir (o sin neto): monto del encabezado en moneda de contrato.
+		const fromInvoice = row.from_invoice === true || row.from_invoice === 't';
+		const source = fromInvoice ? 'amount_invoice_currency' : 'amount_contract_currency';
 
-		if (contractCurrency === systemCurrency) {
+		if (sourceCurrency === systemCurrency) {
 			await db.query(
-				`UPDATE invoices SET fx_contract_to_system = 1.0, system_currency = $3, amount_system_currency = amount_contract_currency,
-					total_system_currency = ROUND(amount_contract_currency * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)
+				`UPDATE invoices SET fx_contract_to_system = 1.0, system_currency = $3, amount_system_currency = ${source},
+					total_system_currency = ROUND(${source} * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)
 				WHERE id = $1 AND holding_id = $2`,
 				[row.id, holdingId, systemCurrency]
 			);
@@ -271,29 +305,13 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 		}
 		const fxDate = String(row.fx_date).slice(0, 10);
 		const policy = String(row.fx_policy);
-		const key = `${contractCurrency}|${systemCurrency}|${fxDate}|${policy}`;
+		const key = `${sourceCurrency}|${systemCurrency}|${fxDate}|${policy}`;
 
-		if (!rates.has(key)) rates.set(key, await systemFxRate(db, holdingId, contractCurrency, systemCurrency, fxDate, policy));
+		if (!rates.has(key)) rates.set(key, await systemFxRate(db, holdingId, sourceCurrency, systemCurrency, fxDate, policy));
 		const rate = rates.get(key) ?? null;
-		const direct = directSystemPart(row, contractCurrency, systemCurrency, fxDate);
 
-		if (direct && (rate !== null || direct.rest_contract === 0)) {
-			const rest =
-				direct.rest_contract === 0
-					? '0'
-					: `ROUND(CASE WHEN $7::boolean THEN $6::numeric / NULLIF($3::numeric, 0) ELSE $6::numeric * $3::numeric END, 2)`;
-
-			await db.query(
-				`UPDATE invoices SET fx_contract_to_system = $3::numeric, system_currency = $4,
-					amount_system_currency = ROUND($5::numeric + ${rest}, 2),
-					total_system_currency = ROUND(ROUND($5::numeric + ${rest}, 2) * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)
-				WHERE id = $1 AND holding_id = $2`,
-				[row.id, holdingId, rate, systemCurrency, direct.subtotal, direct.rest_contract, systemFxDivides(policy)]
-			);
-			continue;
-		}
 		if (rate === null) {
-			logger.warn(`Sin tasa ${contractCurrency} → ${systemCurrency} al ${fxDate} (${policy}) para la factura ${String(row.id)}`);
+			logger.warn(`Sin tasa ${sourceCurrency} → ${systemCurrency} al ${fxDate} (${policy}) para la factura ${String(row.id)}`);
 			await db.query(`UPDATE invoices SET fx_contract_to_system = NULL, system_currency = $3 WHERE id = $1 AND holding_id = $2`, [
 				row.id,
 				holdingId,
@@ -301,7 +319,7 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 			]);
 			continue;
 		}
-		const amount = systemAmountSql('amount_contract_currency', 3, 5);
+		const amount = systemAmountSql(source, 3, 5);
 
 		await db.query(
 			`UPDATE invoices SET fx_contract_to_system = $3::numeric, system_currency = $4,
@@ -314,59 +332,32 @@ export async function refreshInvoiceSystemAmounts(db: Db, holdingId: string, inv
 }
 
 /**
- * Parte "sin vueltas" del monto en moneda del sistema de una factura multimoneda: Σ subtotales de las líneas que ya están en la moneda del
- * sistema (directo, tasa 1) y lo que queda del encabezado en moneda de contrato para convertir (`amount_contract_currency` − Σ de esas
- * líneas × tasa pactada ítem → contrato, redondeo por línea; sin tasa el ítem no suma, como `multicurrencyHeader`). null sin esas líneas.
+ * La NC espejo `n` toma la tasa efectiva de su original `o` sobre el neto en moneda de factura si la original ya es documento (su monto en
+ * sistema salió de la moneda de factura, regla por estado 04-10) y las dos comparten moneda de factura; si no, sobre el monto en contrato.
  */
-export function directSystemPart(
-	row: Row,
-	contractCurrency: string,
-	systemCurrency: string,
-	fallbackDate: string
-): { subtotal: number; rest_contract: number } | null {
-	const parse = (value: unknown): Row[] => {
-		const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
-
-		return Array.isArray(parsed) ? (parsed as Row[]) : [];
-	};
-	const lines = parse(row.system_lines);
-
-	if (!lines.length) return null;
-	const itemRates = parse(row.item_rates) as unknown as FxPeriodRate[];
-	let subtotal = 0;
-	let inContract = 0;
-
-	for (const line of lines) {
-		const amount = Number(line.subtotal ?? 0);
-		const date = String(line.period_start ?? fallbackDate).slice(0, 10);
-		const rate = findFixedRate(itemRates, systemCurrency, contractCurrency, date) ?? 0;
-
-		subtotal += amount;
-		inContract += pgRound(amount * rate, 2);
-	}
-
-	return {
-		subtotal: pgRound(subtotal, 2),
-		rest_contract: pgRound(Number(row.amount_contract_currency ?? 0) - inContract, 2),
-	};
-}
+export const MIRROR_BY_INVOICE_SQL = `n.amount_invoice_currency IS NOT NULL AND COALESCE(o.amount_invoice_currency, 0) <> 0
+		AND o.status IS DISTINCT FROM '${INVOICE_PENDING_STATUS}' AND UPPER(TRIM(n.invoice_currency)) = UPPER(TRIM(o.invoice_currency))`;
 
 /**
  * Montos en moneda del sistema de una **NC espejo** (regla v2, ROADMAP-OPERATIVO #10: "la NC debe replicar exacto la factura
  * original en negativo … fx de la original, independiente de la fecha de emisión"): la NC toma el `fx_contract_to_system`,
- * la moneda del sistema y la tasa efectiva de la original (monto de la NC × monto en sistema ÷ monto en contrato de la
- * original), así anula exactamente lo mismo en reportes. El trigger (y `refreshInvoiceSystemAmounts`) la valorizaba a la tasa
- * de la fecha de la NC. Si la original no tiene montos en sistema, cae a `refreshInvoiceSystemAmounts`.
+ * la moneda del sistema y la tasa efectiva de la original, así anula exactamente lo mismo en reportes. Tasa efectiva = monto en sistema ÷
+ * neto en moneda de factura de la original, aplicada al neto en moneda de factura de la NC (regla por estado, 04-10) cuando la original
+ * ya es documento y las dos tienen monto en la misma moneda de factura (`MIRROR_BY_INVOICE_SQL`); si no, monto en sistema ÷ monto en
+ * contrato de la original sobre el monto en contrato de la NC (como antes). El trigger la valorizaba a la tasa de la fecha de la NC. Si la original no tiene montos en sistema, cae a
+ * `refreshInvoiceSystemAmounts`.
  */
 export async function mirrorInvoiceSystemAmounts(db: Db, holdingId: string, creditNoteId: string, originalId: string): Promise<void> {
-	const amount = `ROUND(n.amount_contract_currency * o.amount_system_currency / o.amount_contract_currency, 2)`;
+	const byInvoice = MIRROR_BY_INVOICE_SQL;
+	const amount = `ROUND(CASE WHEN ${byInvoice} THEN n.amount_invoice_currency * o.amount_system_currency / o.amount_invoice_currency
+		ELSE n.amount_contract_currency * o.amount_system_currency / o.amount_contract_currency END, 2)`;
 	const updated = (await db.query(
 		`UPDATE invoices n SET fx_contract_to_system = o.fx_contract_to_system, system_currency = o.system_currency,
 			amount_system_currency = ${amount},
 			total_system_currency = ROUND(${amount} * (1 + ${taxRatePctSql('n.tax_rate')} / 100.0), 2)
 		FROM invoices o
 		WHERE n.id = $1 AND n.holding_id = $3 AND o.id = $2 AND o.holding_id = $3
-			AND o.amount_system_currency IS NOT NULL AND COALESCE(o.amount_contract_currency, 0) <> 0
+			AND o.amount_system_currency IS NOT NULL AND (${byInvoice} OR COALESCE(o.amount_contract_currency, 0) <> 0)
 		RETURNING n.id`,
 		[creditNoteId, originalId, holdingId]
 	)) as Row[];

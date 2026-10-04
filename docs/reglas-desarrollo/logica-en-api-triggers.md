@@ -49,3 +49,11 @@
 
 Cuando el front viejo se apague, los triggers con el guard se eliminan (migración con `DROP` + borrar el asset, doble
 confirmación); los invariantes quedan.
+
+Un trigger puede salir antes si Domi lo ordena, siempre que todo escritor que dependía de él lo haga explícito en la API:
+
+- **04-10-2026 · devengo sobre `quantities`** (`trg_rsm_on_quantity_change`, `trg_restore_rsm_on_quantity_delete` y sus
+  funciones; migración `1791300000000-RetiraTriggersDevengoQuantities`). Motivo: corrección de datos sin que lógica en desuso la
+  pise. El único escritor de la API sin la marca (sync del DWH, `bigquery.service.ts`) llama ahora `revenue_schedule_rebuild`;
+  los consumos v2 ya lo hacían. El front viejo deja de mover el devengo al editar cantidades. Los otros 4 triggers de
+  `quantities` siguen (ninguno escribe devengo).

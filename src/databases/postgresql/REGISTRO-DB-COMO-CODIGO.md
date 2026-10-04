@@ -287,7 +287,8 @@ TypeORM y no tienen arreglo desde el repo.
 > ✅ **CERRADO el 2026-09-21** (OK de Domi): `invoices_with_net_amounts` e
 > `invoice_items_consolidated` **eliminadas de ambas ramas** con la migración
 > `1789100000000-DropVistasSinUso` (aplicada dev→prod). Eran prototipos del ejercicio NC/devengo;
-> la lógica reutilizable vive en `get_invoice_net_amount()` / `get_invoice_items_with_credits()`.
+> la lógica reutilizable vivía en `get_invoice_net_amount()` / `get_invoice_items_with_credits()` (sin llamadores; retiradas el
+> 2026-10-04 con `1791400000000-RetiraFuncionesSinUso`).
 > Evidencia de no-uso en el comentario de la migración (0 referencias en 3 repos, 0 funciones,
 > 0 en el catálogo semántico del copiloto). El `down()` las recrea verbatim.
 >

@@ -6,8 +6,10 @@ import { DataSource } from 'typeorm';
 import { accountsCompleteSql } from '@/core/utils/account-mappings';
 import { isValidTimezone, loadHoldingPreferences, nextQuoteNumber } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
+import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
 import { reminderLadder } from '@/modules/contracts/contract-renewals';
+import { recalculateHoldingFx } from '@/modules/contracts/holding-fx-recalc';
 
 import { assertCurrency, displayDate, Row, toCount, toIsoDate, toNumber } from './settings-common';
 import { COMPANY_LOGOS_BUCKET, LOGO_MAX_BYTES, LOGO_MIME_TYPES, SettingsStorageService } from './settings-storage.service';
@@ -293,15 +295,27 @@ export class SettingsHoldingService {
 		return { ...rate, from_currency: from, to_currency: to };
 	}
 
+	/**
+	 * Crear, editar o borrar una tasa fija recalcula en la misma transacción lo que depende de ella desde su período (devengo y montos en
+	 * moneda del sistema de las facturas; los meses posteriores se proyectan desde la última tasa del par): `recalculateHoldingFx`.
+	 * La respuesta lleva `recalculated` (primer mes, contratos y facturas recalculados) para el aviso del front.
+	 */
 	async createFxRate(holdingId: string, dto: CreateFxRateDto, userId: string | null) {
 		const rate = await this.validateFxRate(holdingId, dto, null);
-		const [row] = (await this.dataSource.query(
-			`INSERT INTO holding_fx_period_rates (holding_id, from_currency, to_currency, rate, period_start, period_end, notes, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-			[holdingId, rate.from_currency, rate.to_currency, rate.rate, rate.period_start, rate.period_end, dto.notes ?? null, userId]
-		)) as Row[];
+		const { id, recalculated } = await withApiWriter(this.dataSource, async (runner) => {
+			const [row] = (await runner.query(
+				`INSERT INTO holding_fx_period_rates (holding_id, from_currency, to_currency, rate, period_start, period_end, notes, created_by)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[holdingId, rate.from_currency, rate.to_currency, rate.rate, rate.period_start, rate.period_end, dto.notes ?? null, userId]
+			)) as Row[];
 
-		return fxRateDto(await this.findFxRate(holdingId, String(row.id)));
+			return {
+				id: String(row.id),
+				recalculated: await recalculateHoldingFx(runner, holdingId, [rate.from_currency, rate.to_currency], rate.period_start),
+			};
+		});
+
+		return { ...fxRateDto(await this.findFxRate(holdingId, id)), recalculated };
 	}
 
 	async updateFxRate(holdingId: string, id: string, dto: UpdateFxRateDto) {
@@ -318,28 +332,48 @@ export class SettingsHoldingService {
 			id
 		);
 
-		await this.dataSource.query(
-			`UPDATE holding_fx_period_rates SET from_currency = $3, to_currency = $4, rate = $5, period_start = $6, period_end = $7,
-				notes = $8, updated_at = now()
-			WHERE id = $1 AND holding_id = $2`,
-			[
-				id,
-				holdingId,
-				rate.from_currency,
-				rate.to_currency,
-				rate.rate,
-				rate.period_start,
-				rate.period_end,
-				dto.notes === undefined ? (current.notes ?? null) : dto.notes,
-			]
-		);
+		const previousStart = String(toIsoDate(current.period_start));
+		const recalculated = await withApiWriter(this.dataSource, async (runner) => {
+			await runner.query(
+				`UPDATE holding_fx_period_rates SET from_currency = $3, to_currency = $4, rate = $5, period_start = $6, period_end = $7,
+					notes = $8, updated_at = now()
+				WHERE id = $1 AND holding_id = $2`,
+				[
+					id,
+					holdingId,
+					rate.from_currency,
+					rate.to_currency,
+					rate.rate,
+					rate.period_start,
+					rate.period_end,
+					dto.notes === undefined ? (current.notes ?? null) : dto.notes,
+				]
+			);
 
-		return fxRateDto(await this.findFxRate(holdingId, id));
+			// Desde el menor de los dos inicios, con las monedas de antes y de ahora (si cambió el par, el viejo también se recalcula).
+			return recalculateHoldingFx(
+				runner,
+				holdingId,
+				[String(current.from_currency), String(current.to_currency), rate.from_currency, rate.to_currency],
+				previousStart < rate.period_start ? previousStart : rate.period_start
+			);
+		});
+
+		return { ...fxRateDto(await this.findFxRate(holdingId, id)), recalculated };
 	}
 
 	async deleteFxRate(holdingId: string, id: string): Promise<void> {
-		await this.findFxRate(holdingId, id);
-		await this.dataSource.query(`DELETE FROM holding_fx_period_rates WHERE id = $1 AND holding_id = $2`, [id, holdingId]);
+		const current = await this.findFxRate(holdingId, id);
+
+		await withApiWriter(this.dataSource, async (runner) => {
+			await runner.query(`DELETE FROM holding_fx_period_rates WHERE id = $1 AND holding_id = $2`, [id, holdingId]);
+			await recalculateHoldingFx(
+				runner,
+				holdingId,
+				[String(current.from_currency), String(current.to_currency)],
+				String(toIsoDate(current.period_start))
+			);
+		});
 	}
 
 	// ── Sincronización automática (solo lectura) ────────────────────────────────────────────────────────────────────────────────

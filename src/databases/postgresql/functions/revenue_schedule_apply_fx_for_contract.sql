@@ -8,6 +8,15 @@ AS $function$
 -- 1/rate, inversa rate); la inversa ya no queda tapada por el 1,0 de la directa. Verificación tras aplicar en QA: contrato USD de una
 -- compañía CLP sin promedio del mes → filas del mes con recognized_period_ccy NULL y missing_fx_rate; al cargar la tasa y volver a
 -- llamar apply_fx (sin rebuild) la fila se completa y pasa a v4-fx-normalized.
+-- Moneda de compañía con promedio mensual (decisión de Domi 04-10): solo se convierte un mes de calendario YA TERMINADO cuyo promedio está
+-- CERRADO (exchange_rates_monthly_avg recalculado después de terminar el mes, armado con tasas diarias: data_points > 1). El mes en curso
+-- y los futuros quedan sin convertir: columnas *_ccy y fx_contract_to_company NULL, fx_to_company_source 'pending_month_close' (no es un
+-- hueco de datos: calc_version no pasa a missing_fx_rate). El mes recién terminado cuyo promedio aún no se cierra también queda
+-- 'pending_month_close'; un mes anterior sin promedio cerrado es un hueco ('missing_fx_rate'). El mes en curso es el del "hoy" del
+-- holding (holding_settings.timezone, default America/Santiago; mismo criterio que holding_fixed_fx_rate). La política fija del contrato
+-- (fixed_period, contract_fx_period_rates purpose company) se llena siempre con su tasa. El cierre lo hace el proceso del día 1 de la
+-- API (FxMonthCloseService): valida que el mes tenga sus tasas diarias, recalcula el promedio y vuelve a llamar esta función.
+-- La moneda de sistema no cambia (tasa fija del holding, proyectada hacia adelante; o promedio mensual si el holding usa monthly_avg).
 DECLARE
   v_info RECORD;
   -- Sin vueltas (spec-multimoneda §5, decisión 01-10): ítems en otra moneda que la del contrato cuya moneda ES la de la compañía (o la del
@@ -15,13 +24,15 @@ DECLARE
   -- aquí no se recalculan desde la moneda de contrato (eso sería ítem → contrato → compañía, con redondeo y tasas que no aplican).
   v_company_direct_items uuid[];
   v_system_direct_items uuid[];
+  v_current_month date;
 BEGIN
   SELECT
     c.id, c.holding_id, c.contract_currency,
     co.currency AS company_currency,
     COALESCE(hs.system_currency, 'USD') AS system_currency,
     COALESCE(c.fx_company_policy, 'monthly_avg') AS fx_company_policy,
-    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy
+    COALESCE(hs.fx_system_policy, 'monthly_avg') AS fx_system_policy,
+    COALESCE(NULLIF(TRIM(hs.timezone), ''), 'America/Santiago') AS timezone
   INTO v_info
   FROM contracts c
   JOIN companies co ON co.id = c.company_id
@@ -31,6 +42,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Contract % not found', p_contract_id;
   END IF;
+
+  -- Mes en curso del holding (no CURRENT_DATE de la sesión, que en Supabase es UTC y adelanta el cambio de mes 3–4 horas).
+  v_current_month := (DATE_TRUNC('month', now() AT TIME ZONE v_info.timezone))::date;
 
   SELECT
     COALESCE(array_agg(ci.id) FILTER (WHERE UPPER(TRIM(ci.currency)) = UPPER(TRIM(v_info.company_currency))), '{}'::uuid[]),
@@ -51,29 +65,39 @@ BEGIN
 
     UNION ALL
 
+    -- Promedio mensual (Domi 04-10): solo meses terminados con promedio cerrado; el mes en curso y los futuros, sin convertir.
     SELECT
       rsm.period_month,
-      COALESCE(
-        CASE WHEN ema_direct.avg_rate > 0 THEN ema_direct.avg_rate END,
-        CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) END
-      ) AS rate,
+      CASE WHEN rsm.period_month < v_current_month THEN
+        COALESCE(
+          CASE WHEN ema_direct.avg_rate > 0 THEN ema_direct.avg_rate END,
+          CASE WHEN ema_inverse.avg_rate > 0 THEN ROUND(1.0 / ema_inverse.avg_rate, 6) END
+        )
+      END AS rate,
       CASE
+        WHEN rsm.period_month >= v_current_month THEN 'pending_month_close'
         WHEN ema_direct.avg_rate > 0 THEN 'monthly_average'
         WHEN ema_inverse.avg_rate > 0 THEN 'monthly_average_inverse'
+        WHEN rsm.period_month = (v_current_month - INTERVAL '1 month')::date THEN 'pending_month_close'
         ELSE 'missing_fx_rate'
       END AS src,
       rsm.period_month::date AS dte
     FROM revenue_schedule_monthly rsm
+    -- Promedio cerrado: recalculado después de terminar el mes (hora del holding) y armado con tasas diarias (más de un punto).
     LEFT JOIN exchange_rates_monthly_avg ema_direct
       ON ema_direct.from_currency = v_info.contract_currency
      AND ema_direct.to_currency = v_info.company_currency
      AND ema_direct.year = EXTRACT(YEAR FROM rsm.period_month)::integer
      AND ema_direct.month = EXTRACT(MONTH FROM rsm.period_month)::integer
+     AND ema_direct.data_points > 1
+     AND ema_direct.calculated_at >= ((rsm.period_month::date + INTERVAL '1 month')::timestamp AT TIME ZONE v_info.timezone)
     LEFT JOIN exchange_rates_monthly_avg ema_inverse
       ON ema_inverse.from_currency = v_info.company_currency
      AND ema_inverse.to_currency = v_info.contract_currency
      AND ema_inverse.year = EXTRACT(YEAR FROM rsm.period_month)::integer
      AND ema_inverse.month = EXTRACT(MONTH FROM rsm.period_month)::integer
+     AND ema_inverse.data_points > 1
+     AND ema_inverse.calculated_at >= ((rsm.period_month::date + INTERVAL '1 month')::timestamp AT TIME ZONE v_info.timezone)
     WHERE rsm.contract_id = p_contract_id
       AND v_info.fx_company_policy = 'monthly_avg'
       AND v_info.contract_currency <> v_info.company_currency
@@ -158,31 +182,18 @@ BEGIN
 
     UNION ALL
 
+    -- Tasas fijas del holding (una sola búsqueda: holding_fixed_fx_rate). Conservan su convención (directa 1/rate, inversa rate). Sin tasa
+    -- que cubra el mes y mes posterior a la última tasa del par: la última, proyectada (fuente *_projected, decisión de Domi 04-10).
     SELECT
       rsm.period_month,
-      COALESCE(
-        CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) END,
-        CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate END
-      ) AS rate,
+      CASE WHEN hpr.rate > 0 THEN CASE WHEN hpr.is_inverse THEN hpr.rate ELSE ROUND(1.0 / hpr.rate, 10) END END AS rate,
       CASE
-        WHEN hpr_direct.rate > 0 THEN 'holding_fixed_period'
-        WHEN hpr_inverse.rate > 0 THEN 'holding_fixed_period_inverse'
-        ELSE 'missing_fx_rate'
+        WHEN hpr.rate IS NULL THEN 'missing_fx_rate'
+        ELSE 'holding_fixed_period' || CASE WHEN hpr.is_inverse THEN '_inverse' ELSE '' END || CASE WHEN hpr.projected THEN '_projected' ELSE '' END
       END AS src,
       rsm.period_month::date AS dte
     FROM revenue_schedule_monthly rsm
-    LEFT JOIN holding_fx_period_rates hpr_direct
-      ON hpr_direct.holding_id = v_info.holding_id
-     AND hpr_direct.from_currency = v_info.contract_currency
-     AND hpr_direct.to_currency = v_info.system_currency
-     AND rsm.period_month >= hpr_direct.period_start
-     AND rsm.period_month <= hpr_direct.period_end
-    LEFT JOIN holding_fx_period_rates hpr_inverse
-      ON hpr_inverse.holding_id = v_info.holding_id
-     AND hpr_inverse.from_currency = v_info.system_currency
-     AND hpr_inverse.to_currency = v_info.contract_currency
-     AND rsm.period_month >= hpr_inverse.period_start
-     AND rsm.period_month <= hpr_inverse.period_end
+    LEFT JOIN LATERAL public.holding_fixed_fx_rate(v_info.holding_id, v_info.contract_currency, v_info.system_currency, rsm.period_month::date) hpr ON true
     WHERE rsm.contract_id = p_contract_id
       AND v_info.fx_system_policy = 'fixed_period'
       AND v_info.contract_currency <> v_info.system_currency
@@ -204,7 +215,7 @@ BEGIN
     mrr_period_contracted_ccy       = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.mrr_period_contracted_ccy ELSE ROUND(r.mrr_period_contracted_contract_ccy * fc.rate, 2) END,
     cmrr_period_ccy                 = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.cmrr_period_ccy ELSE ROUND(r.cmrr_period_contract_ccy * fc.rate, 2) END,
     fx_contract_to_company          = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_contract_to_company ELSE fc.rate END,
-    fx_to_company_source            = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_source ELSE CASE WHEN fc.rate IS NULL THEN 'missing_fx_rate' ELSE COALESCE(fc.src, 'no_conversion_needed') END END,
+    fx_to_company_source            = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_source ELSE CASE WHEN fc.rate IS NULL THEN CASE WHEN fc.src = 'pending_month_close' THEN fc.src ELSE 'missing_fx_rate' END ELSE COALESCE(fc.src, 'no_conversion_needed') END END,
     fx_to_company_date              = CASE WHEN r.contract_item_id = ANY(v_company_direct_items) THEN r.fx_to_company_date ELSE fc.dte END,
     recognized_period_system_ccy        = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_period_system_ccy ELSE ROUND(r.recognized_period_contract_ccy * fs.rate, 2) END,
     recognized_cum_system_ccy           = CASE WHEN r.contract_item_id = ANY(v_system_direct_items) THEN r.recognized_cum_system_ccy ELSE ROUND(r.recognized_cum_contract_ccy * fs.rate, 2) END,
@@ -224,7 +235,8 @@ BEGIN
     -- tasa compañía/sistema de una columna que se convierte aquí (no directa) → también missing_fx_rate (se limpia al volver a llamar con tasa).
     calc_version                        = CASE
       WHEN r.calc_version = 'missing_fx_rate' AND r.recognized_cum_contract_ccy IS NULL THEN r.calc_version
-      WHEN fc.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(v_company_direct_items), false) THEN 'missing_fx_rate'
+      -- Mes sin cerrar (pending_month_close) no es un hueco: no marca missing_fx_rate.
+      WHEN fc.rate IS NULL AND COALESCE(fc.src, '') <> 'pending_month_close' AND NOT COALESCE(r.contract_item_id = ANY(v_company_direct_items), false) THEN 'missing_fx_rate'
       WHEN fs.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(v_system_direct_items), false) THEN 'missing_fx_rate'
       ELSE 'v4-fx-normalized' END
   FROM fx_company fc
@@ -243,4 +255,6 @@ Convierte campos *_contract_ccy a *_ccy (company) y *_system_ccy.
 Ejemplo: MXN 2,462,610 con FX 18.29 = 2,462,610 / 18.29 = 134,618 USD.
 fixed_period (contract_fx_period_rates, solo purpose = company): regla única "1 [from] = rate [to]"; la fila directa contrato → compañía se multiplica y la inversa es 1/rate (28-09-2026, igual que monthly_avg). Las tasas del holding (sistema) mantienen su convención.
 Sin vueltas (multimoneda, 01-10): filas de ítems cuya moneda (≠ contrato) es la de la compañía o la del sistema conservan las columnas *_ccy / *_system_ccy que escribe el rebuild con el monto directo del ítem; calc_version missing_fx_rate se conserva.
-S5-10 (01-10): sin tasa compañía/sistema nunca 1,0: columnas convertidas y fx_contract_to_* NULL, fx_to_*_source y calc_version missing_fx_rate; las directas no se tocan.';
+S5-10 (01-10): sin tasa compañía/sistema nunca 1,0: columnas convertidas y fx_contract_to_* NULL, fx_to_*_source y calc_version missing_fx_rate; las directas no se tocan.
+Tasa proyectada (04-10): la tasa fija del holding sale de holding_fixed_fx_rate; después de la última tasa registrada del par se usa esa, proyectada (fx_to_system_source holding_fixed_period[_inverse]_projected).
+Moneda de compañía con promedio mensual (Domi 04-10): solo meses terminados (mes del holding, holding_settings.timezone) con promedio cerrado (recalculado después de terminar el mes y con data_points > 1); el mes en curso, los futuros y el recién terminado sin promedio cerrado quedan sin convertir (columnas NULL, fx_to_company_source pending_month_close, calc_version sin missing_fx_rate). La política fija del contrato se llena siempre. El proceso del día 1 (FxMonthCloseService de la API) cierra el promedio y completa el mes.';

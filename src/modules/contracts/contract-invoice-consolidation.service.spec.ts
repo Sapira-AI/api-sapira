@@ -140,7 +140,9 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes('INSERT INTO contract_lifecycle_events')) return [{ id: `event-${String(params[0])}` }];
 		if (sql.includes('UPDATE invoices SET is_active = true')) return (fixture.origins ?? []).map((row) => ({ id: row.id }));
 		if (sql.includes('FROM invoices i') && sql.includes('JOIN contracts c ON c.id = i.contract_id') && sql.includes('holding_settings'))
-			return [{ id: CONS, contract_currency: 'USD', fx_date: '2026-10-05', system_currency: 'USD', fx_policy: 'monthly_avg' }];
+			return [
+				{ id: CONS, source_currency: 'USD', from_invoice: false, fx_date: '2026-10-05', system_currency: 'USD', fx_policy: 'monthly_avg' },
+			];
 
 		return [];
 	};
@@ -286,6 +288,20 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 			event_ids: [`event-${CTR_B}`, `event-${CTR_A}`],
 			invoice: { id: CONS },
 		});
+	});
+
+	it('aplica en modo mixed (contratos en monedas distintas): el consolidado Por Emitir se recalcula desde su encabezado, que queda en moneda de factura (04-10)', async () => {
+		const { service, runner } = build({ invoices: [invoiceRow(), invoiceB({ contract_currency: 'CLF' })] });
+
+		await service.apply(dto(), HOLDING, 'auth-1', TODAY);
+		const [header] = calls(runner.query, 'INSERT INTO invoices');
+
+		// Encabezado en moneda de factura (modo mixed); la vista previa trae Σ de los orígenes, pero se reemplaza con el refresh.
+		expect((header[1] as unknown[])[10]).toBe('CLP');
+		const refresh = calls(runner.query, 'holding_settings');
+
+		expect(refresh).toHaveLength(1);
+		expect(refresh[0][1]).toEqual([[CONS], HOLDING]);
 	});
 
 	it('aplica con bloqueos (serie distinta, borrador en el ERP) → 409 blocked sin escribir y con rollback', async () => {

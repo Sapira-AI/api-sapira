@@ -325,6 +325,39 @@ describe('SettingsHoldingService', () => {
 			expect(rate).toMatchObject({ id: RATE_ID, rate: 0.001, created_by_name: 'Ana' });
 		});
 
+		it('tasa proyectada (04-10): crear recalcula en la misma transacción v2 el devengo y las facturas desde su período', async () => {
+			const { db, service } = build([
+				['INSERT INTO holding_fx_period_rates', () => [{ id: RATE_ID }]],
+				['WHERE r.id = $1 AND r.holding_id = $2', () => [{ id: RATE_ID, ...base, rate: '930' }]],
+				['FROM holding_settings WHERE holding_id = $1', () => [{ system_currency: 'USD', fx_system_policy: 'fixed_period' }]],
+				['FROM contracts c WHERE c.holding_id = $1', () => [{ id: 'c-1', from_month: '2026-01-01' }]],
+			]);
+			const rate = await service.createFxRate(HOLDING, { ...base, rate: 930 }, null);
+			const order = db.calls.map((call) => call.sql);
+			const writer = order.findIndex((sql) => sql.includes(`set_config('sapira.writer', 'api', true)`));
+
+			expect(writer).toBeGreaterThanOrEqual(0);
+			expect(writer).toBeLessThan(order.findIndex((sql) => sql.includes('INSERT INTO holding_fx_period_rates')));
+			expect(db.statements('revenue_schedule_apply_fx_for_contract')[0].params).toEqual(['c-1', '2026-01-01']);
+			expect(db.committed()).toBe(1);
+			expect(rate.recalculated).toEqual({ from_month: '2026-01-01', contracts: 1, invoices: 0 });
+		});
+
+		it('editar recalcula desde el menor de los dos inicios y con las monedas de antes y de ahora; borrar desde su inicio', async () => {
+			const { db, service } = build([
+				['WHERE r.id = $1 AND r.holding_id = $2', () => [{ id: RATE_ID, ...base, period_start: '2027-01-01', period_end: '2027-12-31' }]],
+				['FROM holding_settings WHERE holding_id = $1', () => [{ system_currency: 'USD', fx_system_policy: 'fixed_period' }]],
+			]);
+
+			await service.updateFxRate(HOLDING, RATE_ID, { from_currency: 'EUR', period_start: '2026-07-01' });
+			const [contracts] = db.statements('FROM contracts c WHERE c.holding_id = $1');
+
+			expect(contracts.params).toEqual([HOLDING, ['CLP', 'EUR'], '2026-07-01']);
+			await service.deleteFxRate(HOLDING, RATE_ID);
+			expect(db.statements('FROM contracts c WHERE c.holding_id = $1')[1].params).toEqual([HOLDING, ['CLP'], '2027-01-01']);
+			expect(db.statements('DELETE FROM holding_fx_period_rates')).toHaveLength(1);
+		});
+
 		it('editar o borrar una tasa de otro holding → 404', async () => {
 			const { service } = build();
 

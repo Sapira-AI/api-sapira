@@ -11,6 +11,7 @@ import { CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto } from '../dtos/
 import { ExchangeRateResponseDto, GetExchangeRatesDto, GetLatestExchangeRatesDto, MonthlyAvgResponseDto } from '../dtos/get-exchange-rates.dto';
 import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from '../dtos/sync-exchange-rates.dto';
 import { IndicadorEconomico } from '../interfaces/banco-central.interface';
+import { MONTHLY_AVG_BY_PAIR_SQL, monthlyAverageRange } from '../monthly-average';
 
 import { BancoCentralSchemaService } from './banco-central-schema.service';
 
@@ -447,7 +448,17 @@ export class ExchangeRatesService {
 		}
 	}
 
-	async calculateMonthlyAverages(dto: CalculateMonthlyAvgDto): Promise<CalculateMonthlyAvgResponseDto> {
+	/**
+	 * Promedios mensuales desde `exchange_rates` con la regla de `../monthly-average.ts` (04-10): todas las fuentes diarias, una tasa por
+	 * par y día (prioridad de fuente y, a igual fuente, la más reciente), solo días hábiles para todas las monedas. Upsert por par y mes con
+	 * `calculated_at = now()`: un mes recalculado después de terminar queda **cerrado** (`isMonthlyAverageClosed`); el mes en curso queda
+	 * abierto. `dto.year`/`dto.month` acotan los meses (sin ninguno, todos). `onlyPairs` limita el cálculo a esos pares (el cierre mensual
+	 * de la moneda de compañía, `FxMonthCloseService`, solo cierra los pares con sus tasas diarias completas).
+	 */
+	async calculateMonthlyAverages(
+		dto: CalculateMonthlyAvgDto,
+		onlyPairs?: Array<{ from_currency: string; to_currency: string }>
+	): Promise<CalculateMonthlyAvgResponseDto> {
 		try {
 			await this.bancoCentralSchemaService.ensureSchema();
 			this.logger.log('Calculando promedios mensuales de tipos de cambio');
@@ -458,97 +469,30 @@ export class ExchangeRatesService {
 				recordsCreated: 0,
 				recordsUpdated: 0,
 			};
+			const [from, to] = monthlyAverageRange(dto);
+			const rows = ((await this.exchangeRateRepository.query(MONTHLY_AVG_BY_PAIR_SQL, [from, to])) as Array<Record<string, unknown>>).filter(
+				(row) =>
+					(!dto.month || Number(row.month) === dto.month) &&
+					(!onlyPairs || onlyPairs.some((only) => only.from_currency === row.from_currency && only.to_currency === row.to_currency))
+			);
+			const pairs = new Set<string>();
 
-			const query = this.exchangeRateRepository
-				.createQueryBuilder('er')
-				.select('er.from_currency', 'from_currency')
-				.addSelect('er.to_currency', 'to_currency')
-				.distinct(true);
+			for (const row of rows) {
+				const [saved] = (await this.monthlyAvgRepository.query(
+					`INSERT INTO exchange_rates_monthly_avg (from_currency, to_currency, year, month, avg_rate, min_rate, max_rate, data_points, calculated_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+					ON CONFLICT (from_currency, to_currency, year, month) DO UPDATE SET avg_rate = EXCLUDED.avg_rate, min_rate = EXCLUDED.min_rate,
+						max_rate = EXCLUDED.max_rate, data_points = EXCLUDED.data_points, calculated_at = EXCLUDED.calculated_at
+					RETURNING (xmax = 0) AS inserted`,
+					[row.from_currency, row.to_currency, row.year, row.month, row.avg_rate, row.min_rate, row.max_rate, row.data_points]
+				)) as Array<{ inserted: boolean }>;
 
-			if (dto.year) {
-				query.andWhere('EXTRACT(YEAR FROM er.rate_date) = :year', { year: dto.year });
+				if (saved?.inserted) stats.recordsCreated++;
+				else stats.recordsUpdated++;
+				stats.periodsProcessed++;
+				pairs.add(`${String(row.from_currency)}/${String(row.to_currency)}`);
 			}
-
-			if (dto.month) {
-				query.andWhere('EXTRACT(MONTH FROM er.rate_date) = :month', { month: dto.month });
-			}
-
-			const currencyPairs = await query.getRawMany();
-
-			for (const pair of currencyPairs) {
-				const periodsQuery = this.exchangeRateRepository
-					.createQueryBuilder('er')
-					.select('EXTRACT(YEAR FROM er.rate_date)', 'year')
-					.addSelect('EXTRACT(MONTH FROM er.rate_date)', 'month')
-					.where('er.from_currency = :fromCurrency', { fromCurrency: pair.from_currency })
-					.andWhere('er.to_currency = :toCurrency', { toCurrency: pair.to_currency })
-					.groupBy('year, month')
-					.orderBy('year', 'DESC')
-					.addOrderBy('month', 'DESC');
-
-				if (dto.year) {
-					periodsQuery.andWhere('EXTRACT(YEAR FROM er.rate_date) = :year', { year: dto.year });
-				}
-
-				if (dto.month) {
-					periodsQuery.andWhere('EXTRACT(MONTH FROM er.rate_date) = :month', { month: dto.month });
-				}
-
-				const periods = await periodsQuery.getRawMany();
-
-				for (const period of periods) {
-					const avgQuery = this.exchangeRateRepository
-						.createQueryBuilder('er')
-						.select('AVG(er.rate)', 'avg_rate')
-						.addSelect('MIN(er.rate)', 'min_rate')
-						.addSelect('MAX(er.rate)', 'max_rate')
-						.addSelect('COUNT(*)', 'data_points')
-						.where('er.from_currency = :fromCurrency', { fromCurrency: pair.from_currency })
-						.andWhere('er.to_currency = :toCurrency', { toCurrency: pair.to_currency })
-						.andWhere('er.source_type = :sourceType', {
-							sourceType: pair.from_currency === 'USD' && pair.to_currency === 'PEN' ? 'PERU_API' : 'BANCOCENTRAL',
-						})
-						.andWhere('EXTRACT(YEAR FROM er.rate_date) = :year', { year: period.year })
-						.andWhere('EXTRACT(MONTH FROM er.rate_date) = :month', { month: period.month });
-
-					const result = await avgQuery.getRawOne();
-
-					if (result && result.data_points > 0) {
-						const monthlyAvg = this.monthlyAvgRepository.create({
-							from_currency: pair.from_currency,
-							to_currency: pair.to_currency,
-							year: parseInt(period.year),
-							month: parseInt(period.month),
-							avg_rate: parseFloat(result.avg_rate),
-							min_rate: parseFloat(result.min_rate),
-							max_rate: parseFloat(result.max_rate),
-							data_points: parseInt(result.data_points),
-							calculated_at: new Date(),
-						});
-
-						const existing = await this.monthlyAvgRepository.findOne({
-							where: {
-								from_currency: pair.from_currency,
-								to_currency: pair.to_currency,
-								year: parseInt(period.year),
-								month: parseInt(period.month),
-							},
-						});
-
-						if (existing) {
-							await this.monthlyAvgRepository.update({ id: existing.id }, monthlyAvg);
-							stats.recordsUpdated++;
-						} else {
-							await this.monthlyAvgRepository.save(monthlyAvg);
-							stats.recordsCreated++;
-						}
-
-						stats.periodsProcessed++;
-					}
-				}
-
-				stats.currencyPairsProcessed++;
-			}
+			stats.currencyPairsProcessed = pairs.size;
 
 			this.logger.log(
 				`Promedios mensuales calculados: ${stats.periodsProcessed} períodos, ${stats.currencyPairsProcessed} pares de monedas, ${stats.recordsCreated} creados, ${stats.recordsUpdated} actualizados`

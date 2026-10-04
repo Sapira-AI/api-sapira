@@ -143,6 +143,15 @@ Ejemplo de referencia: `seed/002-view-documentacion-permission.sql` + el cambio 
 
 > ⚠️ El seed no basta por sí solo: la función filtra `WHERE code IN (…)` contra `permissions`, así que si el permiso no existe todavía, no asigna nada. Aplica el seed **antes** que la función.
 
+### Corregir datos con respaldo
+
+Una migración que cambia o borra datos guarda antes lo que toca en una tabla del esquema de respaldo, **fuera de `public`** (no es
+una tabla del modelo, no la ve la API de datos y no necesita entity). El nombre del esquema es **una sola constante**,
+`BACKUP_SCHEMA` en [`backups.ts`](./backups.ts) (hoy `sapira_backups`, por confirmar con Domi): la migración crea el esquema y su
+tabla `<esquema>.<tabla>_<timestamp>` con RLS activo y sin policies, respalda el **primer** valor (`ON CONFLICT DO NOTHING`, idempotente)
+y su `down()` restaura solo las filas que siguen con los valores de la migración y borra la tabla (y el esquema, si quedó vacío).
+Ejemplos: `1791200000000-InvoiceSystemAmountsFromInvoiceCurrency` y `1791500000000-LimpiaPromediosMensualesManuales`.
+
 ### Una función, un trigger o una policy
 
 Un archivo `.sql` por objeto, en su carpeta, y `yarn postgres:assets --apply --only <ruta>`.
@@ -601,8 +610,9 @@ más te pueden afectar al tocar algo:
   migración que resultó estar equivocada. **Verifica contra la base, no contra el corpus.**
 - **Las 131 tablas tienen RLS** desde el 2026-09-14. Cuatro están deny-all a propósito
   (`claude_skills`, `sii_*`) y hay una guarda que impide que alguien les escriba una policy.
-- **`cleanup_duplicate_partners_by_vat` está en ventana de observación**: se le revocó el `EXECUTE`
-  a PUBLIC y se elimina si nadie reclama.
+- ~~**`cleanup_duplicate_partners_by_vat` en ventana de observación**~~ — ✅ eliminada el 2026-10-04 junto con
+  otras 61 funciones sin uso (`1791400000000-RetiraFuncionesSinUso`; respaldo en
+  `docs/v2-rediseno/archivo-funciones/2026-10-04-sin-uso.sql.txt`).
 - **Anomalías de FK heredadas de producción** (FKs duplicadas con `ON DELETE` divergente,
   `SET NULL` sobre columna `NOT NULL`). Se replican tal cual; corregirlas es decisión de negocio.
 - **2 vistas sin asset ni entity**: `invoices_with_net_amounts`, `invoice_items_consolidated`.

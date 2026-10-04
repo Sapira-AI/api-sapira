@@ -42,22 +42,51 @@ describe('MetricsDataService', () => {
 		expect(query.mock.calls[0][1]?.[0]).toBe(HOLDING);
 	});
 
-	it('en moneda de compañía el legacy no se suma: se cuenta como sin convertir', async () => {
-		const { query, data } = build((sql) => (sql.includes('COUNT(*) AS n') ? [{ n: 7 }] : []));
-		const loaded = await data.loadMrrLines(
-			HOLDING,
-			{ companyId: 'bb0caa69-162e-4b9e-8e54-9aff347abf1f' },
-			{ mode: 'company', code: 'COP' },
-			'mrr',
-			'2026-01',
-			'2026-01'
-		);
+	it('Métricas va solo en moneda de sistema: currency=company|contract → 400 con errors[currency]', async () => {
+		const { mrr, query } = build();
 
-		expect(sqlOf(query)[0]).toContain('r.mrr_period_contracted_ccy');
-		expect(loaded.legacyCompanyRows).toBe(7);
-		expect(data.summarizeUnconverted({ currency: { mode: 'company', code: 'COP' }, legacyCompanyRows: 7 }).contracts[0].reason).toBe(
-			'legacy_without_company_ccy'
-		);
+		for (const currency of ['company', 'contract'] as const) {
+			const error = await mrr.movements(HOLDING, { from: '2026-01', to: '2026-02', currency }).catch((e: unknown) => e);
+
+			expect(error).toBeInstanceOf(BadRequestException);
+			expect((error as BadRequestException).getResponse()).toMatchObject({ errors: [{ field: 'currency' }] });
+		}
+		expect(sqlOf(query).some((sql) => sql.includes('revenue_schedule_monthly'))).toBe(false);
+	});
+
+	it('Métricas sin currency o con currency=system lee columnas *_system_ccy', async () => {
+		const { mrr, query } = build();
+		const result = await mrr.movements(HOLDING, { from: '2026-01', to: '2026-02', currency: 'system' });
+
+		expect(result.currency).toBe('USD');
+		expect(sqlOf(query).find((sql) => sql.includes('FROM revenue_schedule_monthly r'))).toContain('r.mrr_period_contracted_system_ccy');
+		await mrr.renewals(HOLDING, {});
+		expect(sqlOf(query).at(-1)).toContain('mrr_period_contracted_system_ccy');
+	});
+
+	it('Ingresos en moneda de compañía no lee las filas pending_month_close (sin dato, no "sin convertir"); en sistema no filtra', async () => {
+		const companyId = 'bb0caa69-162e-4b9e-8e54-9aff347abf1f';
+		const { data, query } = build();
+
+		await data.loadRevenueRows(HOLDING, { companyId }, { mode: 'company', code: 'CLP' }, null, '2026-10');
+		expect(sqlOf(query).at(-1)).toContain("COALESCE(r.fx_to_company_source, '') <> 'pending_month_close'");
+		await data.loadRevenueRows(HOLDING, {}, { mode: 'system', code: 'USD' }, null, '2026-10');
+		expect(sqlOf(query).at(-1)).not.toContain('pending_month_close');
+	});
+
+	it('Ingresos › detalle y reconocimiento futuro en moneda de compañía tampoco leen los meses sin cerrar', async () => {
+		const companyId = 'bb0caa69-162e-4b9e-8e54-9aff347abf1f';
+		const { revenue, query } = build((sql) => (sql.includes('SELECT currency FROM companies') ? [{ currency: 'CLP' }] : []));
+		const filter = "COALESCE(r.fx_to_company_source, '') <> 'pending_month_close'";
+
+		await revenue.schedule(HOLDING, { from: '2026-01', to: '2026-12', companyId, currency: 'company' });
+		const schedule = sqlOf(query).filter((sql) => sql.includes('FROM revenue_schedule_monthly r'));
+
+		expect(schedule.length).toBeGreaterThanOrEqual(2);
+		schedule.forEach((sql) => expect(sql).toContain(filter));
+		query.mockClear();
+		await revenue.forward(HOLDING, { asOf: '2026-10', companyId, currency: 'company' });
+		expect(sqlOf(query).find((sql) => sql.includes('r.period_month >'))).toContain(filter);
 	});
 
 	it('filas sin convertir quedan fuera de las líneas y se informan por contrato', async () => {

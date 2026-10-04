@@ -4,9 +4,10 @@ type Db = Pick<DataSource, 'query'> | Pick<QueryRunner, 'query'>;
 type Row = Record<string, unknown>;
 
 /**
- * Tasa proyectada (decisión de Domi 04-10): sin tasa fija del holding registrada para un mes posterior a la última del par, el devengo usa
- * la última tasa registrada extendida hacia adelante (`holding_fixed_fx_rate`, fuente `holding_fixed_period[_inverse]_projected`). Esas
- * filas SÍ suman (no son "Sin tipo de cambio"), pero las lecturas avisan qué monedas y meses van con tasa proyectada y desde qué tasa.
+ * Tasa proyectada (decisión de Domi 04-10): sin tasa fija del holding registrada para un mes posterior al mes en curso (y a la última
+ * del par), el devengo usa la última tasa registrada extendida hacia adelante (`holding_fixed_fx_rate`, fuente
+ * `holding_fixed_period[_inverse]_projected`). Esas filas SÍ suman (no son "Sin tipo de cambio"), pero las lecturas avisan qué monedas y
+ * meses van con tasa proyectada y desde qué tasa. Un mes pasado o el actual sin tasa no se proyecta: queda "Sin tipo de cambio".
  */
 export interface FxProjected {
 	/** Moneda del contrato que se convierte con tasa proyectada. */

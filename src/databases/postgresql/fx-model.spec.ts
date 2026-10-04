@@ -3,10 +3,13 @@ import * as path from 'path';
 
 import { QueryRunner } from 'typeorm';
 
+import { BACKUP_SCHEMA } from './backups';
 import { AddFxRatePurposeAndCompanyFxPolicy1790610000000 } from './migrations/1790610000000-AddFxRatePurposeAndCompanyFxPolicy';
 import { FixHankaCompanyFxRatesDirection1790610000001 } from './migrations/1790610000001-FixHankaCompanyFxRatesDirection';
 import { FixHankaCompanyFxRatesDirectionTrimmedName1790610000002 } from './migrations/1790610000002-FixHankaCompanyFxRatesDirectionTrimmedName';
 import { MulticurrencyContract1790700000000 } from './migrations/1790700000000-MulticurrencyContract';
+import { InvoiceSystemAmountsFromInvoiceCurrency1791200000000 } from './migrations/1791200000000-InvoiceSystemAmountsFromInvoiceCurrency';
+import { LimpiaPromediosMensualesManuales1791500000000 } from './migrations/1791500000000-LimpiaPromediosMensualesManuales';
 
 /**
  * Modelo FX de contratos v2 (28-09-2026): regla única "1 [from] = rate [to]" y `contract_fx_period_rates.purpose`.
@@ -31,9 +34,78 @@ describe('assets FX: purpose y dirección', () => {
 		expect(sql).toContain(FixHankaCompanyFxRatesDirection1790610000001.RSM_MARKER);
 		// Firma sin cambios.
 		expect(sql).toContain('revenue_schedule_apply_fx_for_contract(p_contract_id uuid, p_from_month date DEFAULT NULL::date)');
-		// Las tasas del holding (sistema) mantienen su convención (directa 1/rate, inversa rate), sin 1,0 de relleno (S5-10).
-		expect(sql).toContain('CASE WHEN hpr_direct.rate > 0 THEN ROUND(1.0 / hpr_direct.rate, 10) END,');
-		expect(sql).toContain('CASE WHEN hpr_inverse.rate > 0 THEN hpr_inverse.rate END');
+		// Las tasas del holding (sistema) mantienen su convención (directa 1/rate, inversa rate), sin 1,0 de relleno (S5-10), y salen de
+		// holding_fixed_fx_rate (tasa proyectada, 04-10).
+		expect(sql).toContain('CASE WHEN hpr.rate > 0 THEN CASE WHEN hpr.is_inverse THEN hpr.rate ELSE ROUND(1.0 / hpr.rate, 10) END END AS rate');
+		expect(sql).toContain(
+			'LEFT JOIN LATERAL public.holding_fixed_fx_rate(v_info.holding_id, v_info.contract_currency, v_info.system_currency, rsm.period_month::date) hpr ON true'
+		);
+		expect(sql).toContain(`WHEN hpr.rate IS NULL THEN 'missing_fx_rate'`);
+		expect(sql).not.toContain('LEFT JOIN holding_fx_period_rates');
+	});
+
+	it('holding_fixed_fx_rate (tasa proyectada, 04-10): cubre → directa o inversa; después de la última tasa del par → la última, projected', () => {
+		const sql = asset('holding_fixed_fx_rate');
+
+		expect(sql).toContain(
+			'holding_fixed_fx_rate(p_holding_id uuid, p_from text, p_to text, p_date date)\n RETURNS TABLE(rate numeric, is_inverse boolean, period_start date, period_end date, projected boolean)'
+		);
+		// Orden: directa que cubre, inversa que cubre, proyectada.
+		const direct = sql.indexOf('r.from_currency = p_from AND r.to_currency = p_to\n    AND p_date BETWEEN');
+		const inverse = sql.indexOf('r.from_currency = p_to AND r.to_currency = p_from\n    AND p_date BETWEEN');
+		const projected = sql.indexOf('SELECT last.rate, last.is_inverse, last.period_start, last.period_end, true');
+
+		expect(direct).toBeGreaterThan(0);
+		expect(inverse).toBeGreaterThan(direct);
+		expect(projected).toBeGreaterThan(inverse);
+		// Solo hacia adelante: la última tasa del par (mayor fin, en cualquier sentido) tiene que terminar antes de la fecha; un hueco no se proyecta.
+		expect(sql).toContain('ORDER BY r.period_end DESC, (r.from_currency = p_to), r.created_at DESC NULLS LAST');
+		expect(sql).toContain('WHERE last.period_end < p_date;');
+		expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/);
+	});
+
+	it('holding_fixed_fx_rate: la proyección aplica solo a meses posteriores al mes en curso del holding; pasado o actual sin tasa → sin filas', () => {
+		const sql = asset('holding_fixed_fx_rate');
+		const flat = sql.replace(/\s+/g, ' ');
+
+		// Mes en curso = el del "hoy" del holding (holding_settings.timezone, default America/Santiago), no CURRENT_DATE (UTC).
+		expect(flat).toContain(
+			"SELECT (DATE_TRUNC('month', now() AT TIME ZONE COALESCE( (SELECT hs.timezone FROM holding_settings hs WHERE hs.holding_id = p_holding_id LIMIT 1), 'America/Santiago')) + INTERVAL '1 month')::date INTO v_next_month;"
+		);
+		expect(flat).toContain('IF p_date < v_next_month THEN RETURN; END IF;');
+		expect(flat).not.toMatch(/(?<!-- )CURRENT_DATE (?!de la sesión)/);
+		// El corte va después de las tasas que cubren la fecha (un mes pasado con tasa registrada la sigue usando) y antes de la proyección.
+		const cut = sql.indexOf('IF p_date < v_next_month THEN');
+
+		expect(cut).toBeGreaterThan(sql.indexOf('r.from_currency = p_to AND r.to_currency = p_from\n    AND p_date BETWEEN'));
+		expect(cut).toBeLessThan(sql.indexOf('SELECT last.rate, last.is_inverse, last.period_start, last.period_end, true'));
+	});
+
+	it('calculate_system_fx_rate (facturas) usa la misma búsqueda y conserva su sentido (directa rate, inversa 1/rate a 6 decimales)', () => {
+		const sql = asset('calculate_system_fx_rate');
+
+		expect(sql).toContain('FROM public.holding_fixed_fx_rate(p_holding_id, p_from_currency, p_to_currency, p_period_date) h;');
+		expect(sql).toContain('CASE WHEN h.is_inverse THEN ROUND(1.0 / h.rate, 6) ELSE h.rate END');
+		expect(sql).toContain(`v_source := 'missing_holding_fx_rate';`);
+		expect(sql).not.toContain('FROM holding_fx_period_rates');
+	});
+
+	it('auto_populate_invoice_fx_to_system (04-10): regla por estado (documento → neto en moneda de factura; Por Emitir → encabezado)', () => {
+		const sql = asset('auto_populate_invoice_fx_to_system');
+
+		expect(sql).toContain(`IF NEW.status IS DISTINCT FROM 'Por Emitir'
+     AND NEW.amount_invoice_currency IS NOT NULL AND NULLIF(TRIM(NEW.invoice_currency), '') IS NOT NULL
+     AND (NEW.amount_invoice_currency <> 0 OR COALESCE(NEW.amount_contract_currency, 0) = 0) THEN`);
+		// La guarda de la migración reconoce este asset.
+		expect(sql).toContain(InvoiceSystemAmountsFromInvoiceCurrency1791200000000.TRIGGER_MARKER);
+		expect(sql).toContain('v_contract_currency := UPPER(TRIM(NEW.invoice_currency));');
+		expect(sql).toContain('v_source_amount := NEW.amount_invoice_currency;');
+		// Respaldo: moneda del encabezado (unificadas mixtas) y monto en contrato.
+		expect(sql).toContain(`SELECT UPPER(TRIM(COALESCE(NULLIF(TRIM(NEW.contract_currency), ''), c.contract_currency))) INTO v_contract_currency`);
+		expect(sql).toContain('v_source_amount := NEW.amount_contract_currency;');
+		expect(sql).toContain('NEW.amount_system_currency := v_source_amount;');
+		expect(sql).toContain('NEW.amount_system_currency := ROUND(v_source_amount / NULLIF(v_fx_result.rate, 0), 2);');
+		expect(sql).not.toContain('NEW.amount_contract_currency / NULLIF');
 	});
 
 	it('calculate_contract_fx_rate y bulk_confirm_fx_policy leen solo tasas de la compañía', () => {
@@ -159,10 +231,10 @@ describe('assets FX: purpose y dirección', () => {
 		expect(sql).not.toMatch(/ELSE 1\.0 END/);
 		expect(sql).not.toMatch(/COALESCE\(f[cs]\.rate, 1\.0\)/);
 		expect(sql.match(/SELECT rsm\.period_month, 1\.0::numeric AS rate, NULL::text AS src/g)).toHaveLength(2);
-		// Promedio mensual: directa o 1/inversa, NULL sin ninguna (compañía y sistema).
+		// Promedio mensual: directa o 1/inversa, NULL sin ninguna (compañía y sistema; en compañía, además, solo meses terminados).
 		expect(
 			sql.match(
-				/COALESCE\(\s+CASE WHEN ema_direct\.avg_rate > 0 THEN ema_direct\.avg_rate END,\s+CASE WHEN ema_inverse\.avg_rate > 0 THEN ROUND\(1\.0 \/ ema_inverse\.avg_rate, 6\) END\s+\) AS rate/g
+				/COALESCE\(\s+CASE WHEN ema_direct\.avg_rate > 0 THEN ema_direct\.avg_rate END,\s+CASE WHEN ema_inverse\.avg_rate > 0 THEN ROUND\(1\.0 \/ ema_inverse\.avg_rate, 6\) END\s+\)/g
 			)
 		).toHaveLength(2);
 		// Columnas convertidas = monto de contrato × tasa (NULL × … = NULL); fx_contract_to_* = la tasa (NULL sin tasa).
@@ -172,10 +244,14 @@ describe('assets FX: purpose y dirección', () => {
 		] as const) {
 			for (const amount of ['recognized_period', 'recognized_cum', 'billed_period', 'deferred_balance_eom', 'mrr_period', 'cmrr_period'])
 				expect(sql).toContain(`ELSE ROUND(r.${amount}_contract_ccy * ${alias}.rate, 2) END`);
+			// Compañía: el mes sin cerrar (pending_month_close, Domi 04-10) conserva su fuente y no es missing_fx_rate.
+			const pending = alias === 'fc' ? `CASE WHEN fc.src = 'pending_month_close' THEN fc.src ELSE 'missing_fx_rate' END` : `'missing_fx_rate'`;
+			const notPending = alias === 'fc' ? ` AND COALESCE(fc.src, '') <> 'pending_month_close'` : '';
+
+			expect(sql).toContain(`ELSE CASE WHEN ${alias}.rate IS NULL THEN ${pending} ELSE COALESCE(${alias}.src, 'no_conversion_needed') END END`);
 			expect(sql).toContain(
-				`ELSE CASE WHEN ${alias}.rate IS NULL THEN 'missing_fx_rate' ELSE COALESCE(${alias}.src, 'no_conversion_needed') END END`
+				`WHEN ${alias}.rate IS NULL${notPending} AND NOT COALESCE(r.contract_item_id = ANY(${list}), false) THEN 'missing_fx_rate'`
 			);
-			expect(sql).toContain(`WHEN ${alias}.rate IS NULL AND NOT COALESCE(r.contract_item_id = ANY(${list}), false) THEN 'missing_fx_rate'`);
 			expect(sql).toMatch(new RegExp(`recognized_period${prefix}_ccy\\s+= CASE WHEN r\\.contract_item_id = ANY\\(${list}\\)`));
 		}
 		expect(sql).toContain(
@@ -186,6 +262,51 @@ describe('assets FX: purpose y dirección', () => {
 		);
 		expect(sql).toContain(`ELSE 'v4-fx-normalized' END`);
 		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('moneda de compañía solo en meses terminados con promedio cerrado (Domi 04-10)', () => {
+	const sql = asset('revenue_schedule_apply_fx_for_contract');
+	const companyAvg = sql.slice(sql.indexOf('-- Promedio mensual (Domi 04-10)'), sql.indexOf(`AND v_info.fx_company_policy = 'monthly_avg'`));
+
+	it('mes en curso del holding (timezone, default America/Santiago), no CURRENT_DATE de la sesión', () => {
+		expect(sql).toContain(`COALESCE(NULLIF(TRIM(hs.timezone), ''), 'America/Santiago') AS timezone`);
+		expect(sql).toContain(`v_current_month := (DATE_TRUNC('month', now() AT TIME ZONE v_info.timezone))::date;`);
+		// Fuera de comentarios, nunca CURRENT_DATE (UTC en Supabase).
+		expect(sql).not.toMatch(/^[^-\n]*CURRENT_DATE/m);
+	});
+
+	it('promedio mensual: tasa solo si el mes terminó; en curso y futuros pending_month_close; el recién terminado sin cierre también', () => {
+		expect(companyAvg).toContain('CASE WHEN rsm.period_month < v_current_month THEN');
+		expect(companyAvg).toContain(`WHEN rsm.period_month >= v_current_month THEN 'pending_month_close'`);
+		expect(companyAvg).toContain(`WHEN rsm.period_month = (v_current_month - INTERVAL '1 month')::date THEN 'pending_month_close'`);
+		// El orden importa: primero el mes no terminado, después las tasas, al final el hueco.
+		expect(companyAvg.indexOf(`>= v_current_month THEN 'pending_month_close'`)).toBeLessThan(companyAvg.indexOf(`THEN 'monthly_average'`));
+		expect(companyAvg.indexOf(`(v_current_month - INTERVAL '1 month')`)).toBeGreaterThan(companyAvg.indexOf(`THEN 'monthly_average_inverse'`));
+	});
+
+	it('promedio cerrado: recalculado después de terminar el mes y armado con tasas diarias (directo e inverso)', () => {
+		for (const alias of ['ema_direct', 'ema_inverse']) {
+			expect(companyAvg).toContain(`AND ${alias}.data_points > 1`);
+			expect(companyAvg).toContain(
+				`AND ${alias}.calculated_at >= ((rsm.period_month::date + INTERVAL '1 month')::timestamp AT TIME ZONE v_info.timezone)`
+			);
+		}
+		// La moneda de sistema no cambia: su promedio no exige cierre.
+		const systemAvg = sql.slice(sql.indexOf('fx_system AS ('), sql.indexOf(`AND v_info.fx_system_policy = 'monthly_avg'`));
+
+		expect(systemAvg).not.toContain('data_points');
+		expect(systemAvg).not.toContain('v_current_month');
+	});
+
+	it('la política fija del contrato se llena siempre (sin condición de mes)', () => {
+		const fixed = sql.slice(
+			sql.indexOf('LEFT JOIN contract_fx_period_rates cpr_direct') - 900,
+			sql.indexOf(`v_info.fx_company_policy = 'fixed_period'`)
+		);
+
+		expect(fixed).not.toContain('v_current_month');
+		expect(fixed).not.toContain('pending_month_close');
 	});
 });
 
@@ -369,5 +490,229 @@ describe('migración 1790610000001 (Hanka: 0.000025 → 40.000)', () => {
 		expect(updateSql).toContain(`r.notes LIKE '%' || $7::text || '%'`);
 		expect((updateParams as unknown[]).slice(4, 6)).toEqual(['0.000025', '40000']);
 		expect(query.mock.calls.filter(([sql]) => (sql as string).includes('revenue_schedule_rebuild'))).toHaveLength(2);
+	});
+});
+
+describe('migración 1791200000000 (montos en moneda de sistema con la regla por estado, 04-10)', () => {
+	const Migration = InvoiceSystemAmountsFromInvoiceCurrency1791200000000;
+	const squash = (sql: string) => sql.replace(/\s+/g, ' ');
+
+	it('alcance: documentos (ni Por Emitir ni Canceladas), neto en moneda de factura, sin meses cerrados, con tasa; fuera bruto como neto y monto sin convertir', () => {
+		const sql = squash(Migration.INVOICES_SQL);
+
+		expect(sql).toContain(`i.status IS DISTINCT FROM 'Por Emitir' AND i.status IS DISTINCT FROM 'Cancelada'`);
+		expect(sql).toContain(`UPPER(TRIM(i.invoice_currency)) AS source_currency, i.amount_invoice_currency AS source_amount`);
+		expect(sql).toContain('AND (i.amount_invoice_currency <> 0 OR COALESCE(i.amount_contract_currency, 0) = 0)');
+		// Meses cerrados: desde el primer mes abierto de la compañía.
+		expect(sql).toContain(
+			`COALESCE(i.issue_date, i.scheduled_at, i.original_issue_date, CURRENT_DATE) >= COALESCE((date_trunc('month', public.get_cutoff_date(i.holding_id, i.company_id)) + interval '1 month')::date, '-infinity'::date)`
+		);
+		// Solo donde la conversión cambia: moneda de factura ≠ contrato, encabezado mixto, neto ≠ monto en contrato o líneas "sin vueltas".
+		expect(sql).toContain('UPPER(TRIM(i.invoice_currency)) <> UPPER(TRIM(c.contract_currency))');
+		expect(sql).toContain('ABS(i.amount_invoice_currency - COALESCE(i.amount_contract_currency, 0)) > 0.005');
+		expect(sql).toContain('public.calculate_system_fx_rate(b.holding_id, b.source_currency, b.system_currency, b.fx_date, b.policy)');
+		expect(sql).toContain(`CASE WHEN policy = 'fixed_period' THEN source_amount / NULLIF(rate, 0) ELSE source_amount * rate END`);
+		expect(sql).toContain('FROM rated WHERE rate IS NOT NULL');
+		expect(sql).toContain('ROUND(new_amount * (1 + tax_pct / 100.0), 2) AS new_total');
+		expect(sql).toContain('AND i.amount_invoice_currency = i.total_invoice_currency');
+		expect(sql).toContain('AND i.amount_invoice_currency = i.amount_contract_currency');
+		// NC espejo: tasa efectiva de la original.
+		const credit = squash(Migration.CREDIT_NOTES_SQL);
+
+		expect(credit).toContain('n.amount_invoice_currency * o.amount_system_currency / o.amount_invoice_currency');
+		expect(credit).toContain(`o.status IS DISTINCT FROM 'Por Emitir'`);
+		expect(credit).toContain(`n.status IS DISTINCT FROM 'Cancelada'`);
+		expect(credit).toContain(`b.invoice_id = o.id AND b.kind IN ('invoice', 'pending')`);
+	});
+
+	it('Por Emitir: solo las unificadas multimoneda (encabezado en otra moneda que el contrato), desde la moneda de contrato del encabezado', () => {
+		const sql = squash(Migration.PENDING_SQL);
+
+		expect(sql).toContain(`i.status = 'Por Emitir'`);
+		expect(sql).toContain(
+			`UPPER(TRIM(COALESCE(NULLIF(TRIM(i.contract_currency), ''), c.contract_currency))) AS source_currency, i.amount_contract_currency AS source_amount`
+		);
+		expect(sql).toContain(
+			`AND UPPER(TRIM(COALESCE(NULLIF(TRIM(i.contract_currency), ''), c.contract_currency))) <> UPPER(TRIM(c.contract_currency))`
+		);
+		expect(sql).toContain(
+			`COALESCE((date_trunc('month', public.get_cutoff_date(i.holding_id, i.company_id)) + interval '1 month')::date, '-infinity'::date)`
+		);
+	});
+
+	it('sin el asset nuevo del trigger aborta sin escribir', async () => {
+		const { runner: db, query } = runner((sql) =>
+			sql.includes('pg_get_functiondef') ? [{ definition: 'SELECT contract_currency INTO v_contract_currency' }] : undefined
+		);
+
+		await expect(new Migration().up(db)).rejects.toThrow('Aplica primero el asset');
+		expect(sqls(query).some((sql) => sql.includes('UPDATE invoices') || sql.includes('CREATE'))).toBe(false);
+	});
+
+	it('up: sapira.writer, respaldo fuera de public, facturas y después NC espejo; solo escribe los campos en moneda de sistema', async () => {
+		const { runner: db, query } = runner((sql) =>
+			sql.includes('pg_get_functiondef') ? [{ definition: `... ${Migration.TRIGGER_MARKER} ...` }] : undefined
+		);
+
+		await new Migration().up(db);
+		const statements = sqls(query);
+		const writer = statements.findIndex((sql) => sql.includes(`set_config('sapira.writer', 'api', true)`));
+		const table = statements.findIndex((sql) => sql.includes(`CREATE TABLE IF NOT EXISTS ${Migration.BACKUP_TABLE}`));
+		const updates = statements.map((sql, index) => [sql, index] as const).filter(([sql]) => sql.includes('UPDATE invoices i'));
+
+		// El esquema del respaldo sale de una sola constante (`backups.ts`).
+		expect(Migration.BACKUP_TABLE).toBe(`${BACKUP_SCHEMA}.invoice_system_fx_1791200000000`);
+		expect(statements).toContain(`CREATE SCHEMA IF NOT EXISTS ${BACKUP_SCHEMA}`);
+		expect(writer).toBeGreaterThan(0);
+		expect(table).toBeGreaterThan(writer);
+		expect(updates).toHaveLength(3);
+		expect(updates[0][0]).toContain(`'invoice'`);
+		expect(updates[1][0]).toContain(`'pending'`);
+		expect(updates[2][0]).toContain(`'credit_note'`);
+		expect(updates[0][1]).toBeGreaterThan(table);
+		for (const [sql] of updates) {
+			expect(sql).toContain('ON CONFLICT (invoice_id) DO NOTHING');
+			expect(squash(sql)).toContain(
+				'SET fx_contract_to_system = v.new_fx, system_currency = v.new_system_currency, amount_system_currency = v.new_amount, total_system_currency = v.new_total'
+			);
+			// El SET solo escribe los cuatro campos de sistema (el `status = 'Por Emitir'` del WHERE de las Por Emitir no cuenta).
+			const set = squash(sql).split('UPDATE invoices i SET ')[1].split(' FROM v ')[0];
+
+			expect(set).not.toMatch(/amount_contract_currency\s*=|amount_invoice_currency\s*=|invoice_number\s*=|status\s*=/);
+		}
+	});
+
+	it('down: restaura solo las filas que siguen con los valores de la migración y borra el respaldo si no queda nada', async () => {
+		const restored = runner((sql) => {
+			if (sql.includes('to_regclass')) return [{ present: true }];
+			if (sql.includes('count(*)::int')) return [{ n: 0 }];
+
+			return undefined;
+		});
+
+		await new Migration().down(restored.runner);
+		const statements = sqls(restored.query);
+		const restore = statements.find((sql) => sql.includes('UPDATE invoices i'))!;
+
+		expect(restore).toContain('i.total_system_currency IS NOT DISTINCT FROM b.new_total');
+		expect(restore).toContain('amount_system_currency = b.old_amount');
+		expect(statements).toContain(`DROP TABLE ${Migration.BACKUP_TABLE}`);
+		// El esquema solo se borra si quedó vacío (otra migración puede tener su respaldo ahí).
+		expect(statements.some((sql) => sql.includes(`DROP SCHEMA ${BACKUP_SCHEMA}`) && sql.includes('IF NOT EXISTS'))).toBe(true);
+
+		const pending = runner((sql) => {
+			if (sql.includes('to_regclass')) return [{ present: true }];
+			if (sql.includes('count(*)::int')) return [{ n: 3 }];
+
+			return undefined;
+		});
+
+		await new Migration().down(pending.runner);
+		expect(sqls(pending.query).some((sql) => sql.startsWith('DROP TABLE'))).toBe(false);
+
+		const absent = runner((sql) => (sql.includes('to_regclass') ? [{ present: false }] : undefined));
+
+		await new Migration().down(absent.runner);
+		expect(sqls(absent.query)).toHaveLength(1);
+	});
+});
+
+describe('migración 1791500000000 (limpieza de promedios mensuales manuales y recálculo con la regla corregida, 04-10)', () => {
+	const Migration = LimpiaPromediosMensualesManuales1791500000000;
+	const squash = (sql: string) => sql.replace(/\s+/g, ' ');
+
+	it('borra solo las filas a mano: una tasa, hasta dic-2027 y sin tasas diarias de una fuente diaria detrás', () => {
+		const sql = squash(Migration.MANUAL_ROWS_SQL);
+
+		expect(sql).toContain('ma.data_points = 1');
+		expect(sql).toContain(`make_date(ma.year, ma.month, 1) <= '2027-12-01'`);
+		expect(sql).toContain(`AND NOT EXISTS ( SELECT 1 FROM exchange_rates er`);
+		expect(sql).toContain(`er.source_type IN ('PERU_API', 'BANCOCENTRAL', 'BANCOCENTRALCHILE')`);
+	});
+
+	it('borra las inversas sin tasas propias: par inverso con tasas diarias de una fuente diaria y sin exchange_rates del par en el mes', () => {
+		const sql = squash(Migration.INVERSE_ROWS_SQL);
+
+		expect(sql).toContain('ma.data_points > 1');
+		expect(sql).toContain(
+			"NOT EXISTS ( SELECT 1 FROM exchange_rates er WHERE er.from_currency = ma.from_currency AND er.to_currency = ma.to_currency AND er.rate_date >= make_date(ma.year, ma.month, 1) AND er.rate_date < (make_date(ma.year, ma.month, 1) + interval '1 month') )"
+		);
+		expect(sql).toContain('WHERE er.from_currency = ma.to_currency AND er.to_currency = ma.from_currency');
+		expect(sql).toContain(`er.source_type IN ('PERU_API', 'BANCOCENTRAL', 'BANCOCENTRALCHILE')`);
+		// El recálculo arma cada par-mes solo desde las tasas de ese mismo par: no puede recrear una inversa sin tasas propias.
+		expect(squash(Migration.RECALC_SQL)).toContain(
+			'SELECT DISTINCT ON (er.from_currency, er.to_currency, er.rate_date) er.from_currency, er.to_currency'
+		);
+	});
+
+	it('recalcula ene-2025 → sep-2026 (nunca el mes en curso) con la regla de monthly-average.ts: fuentes diarias, una por día, días hábiles', () => {
+		const sql = squash(Migration.RECALC_SQL);
+
+		expect(sql).toContain(
+			`er.rate_date >= '2025-01-01'::date AND er.rate_date < LEAST('2026-10-01'::date, date_trunc('month', now() AT TIME ZONE 'America/Santiago')::date)`
+		);
+		expect(sql).toContain('SELECT DISTINCT ON (er.from_currency, er.to_currency, er.rate_date)');
+		expect(sql).toContain(`er.source_type IN ('PERU_API', 'BANCOCENTRAL', 'BANCOCENTRALCHILE')`);
+		expect(sql).toContain('EXTRACT(ISODOW FROM er.rate_date) < 6');
+		expect(sql).toContain('er.created_at DESC');
+		// Completo como `isMonthComplete` del cierre: días hábiles − 3 y la última tasa a ≤ 3 días del último hábil.
+		expect(sql).toContain('m.data_points >= GREATEST(1, w.weekdays - 3) AND m.last_date >= w.last_weekday - 3');
+	});
+
+	it('up: respaldo fuera de public, borra con respaldo y después recalcula (solo filas existentes o meses completos) con calculated_at = now()', async () => {
+		const { runner: db, query } = runner(() => undefined);
+
+		await new Migration().up(db);
+		const statements = sqls(query);
+		const table = statements.findIndex((sql) => sql.includes(`CREATE TABLE IF NOT EXISTS ${Migration.BACKUP_TABLE}`));
+		const remove = statements.findIndex((sql) => sql.includes('DELETE FROM exchange_rates_monthly_avg ma'));
+		const recalc = statements.findIndex((sql) => sql.includes('INSERT INTO exchange_rates_monthly_avg'));
+
+		expect(Migration.BACKUP_TABLE).toBe(`${BACKUP_SCHEMA}.exchange_rates_monthly_avg_1791500000000`);
+		expect(table).toBeGreaterThan(0);
+		expect(remove).toBeGreaterThan(table);
+		expect(recalc).toBeGreaterThan(remove);
+		expect(statements[remove]).toContain(`'deleted'`);
+		const inverse = statements.findIndex((sql) => sql.includes(`'deleted_inverse'`));
+
+		expect(inverse).toBeGreaterThan(remove);
+		expect(recalc).toBeGreaterThan(inverse);
+		expect(squash(statements[recalc])).toContain('WHERE ma.id IS NOT NULL OR c.complete');
+		expect(squash(statements[recalc])).toContain(
+			'ON CONFLICT (from_currency, to_currency, year, month) DO UPDATE SET avg_rate = EXCLUDED.avg_rate'
+		);
+		expect(statements[recalc]).toContain(`CASE WHEN old_id IS NULL THEN 'inserted' ELSE 'updated' END`);
+	});
+
+	it('down: deshace inserted, updated y deleted solo si siguen con los valores de la migración; borra el respaldo si no queda nada', async () => {
+		const done = runner((sql) => {
+			if (sql.includes('to_regclass')) return [{ present: true }];
+			if (sql.includes('count(*)::int')) return [{ n: 0 }];
+
+			return undefined;
+		});
+
+		await new Migration().down(done.runner);
+		const statements = sqls(done.query);
+
+		expect(
+			statements.some(
+				(sql) => sql.includes(`b.action = 'inserted'`) && sql.includes('ma.calculated_at IS NOT DISTINCT FROM b.new_calculated_at')
+			)
+		).toBe(true);
+		expect(statements.some((sql) => sql.includes(`b.action = 'updated'`) && sql.includes('avg_rate = b.old_avg_rate'))).toBe(true);
+		expect(
+			statements.some(
+				(sql) =>
+					sql.includes(`b.action IN ('deleted', 'deleted_inverse')`) &&
+					sql.includes('ON CONFLICT (from_currency, to_currency, year, month) DO NOTHING')
+			)
+		).toBe(true);
+		expect(statements).toContain(`DROP TABLE ${Migration.BACKUP_TABLE}`);
+
+		const absent = runner((sql) => (sql.includes('to_regclass') ? [{ present: false }] : undefined));
+
+		await new Migration().down(absent.runner);
+		expect(sqls(absent.query)).toHaveLength(1);
 	});
 });

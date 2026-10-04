@@ -44,6 +44,9 @@ Regla de retiro (saneamiento 24-09): **doble confirmación** = (1) código: ning
 
 ## 2. Tabla maestra por objeto
 
+> **Estado vigente de cada función y trigger** (se mantiene / se retira / ya retirada): [`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md)
+> (04-10). Esta tabla conserva el análisis y las decisiones de Contratos del 28-09.
+
 Leyenda · **FV** = front viejo (`sapira-ai/src/…`, grep 28-09) · **v2** = `api-sapira/src/modules/contracts` · Cuándo:
 **AHORA** · **SWITCH** (Contratos) · **SWITCH-F** (switch de Facturación) · **BAJA** (baja del front viejo).
 
@@ -110,7 +113,7 @@ Leyenda · **FV** = front viejo (`sapira-ai/src/…`, grep 28-09) · **v2** = `a
 
 | Objeto | Tipo | Qué hace hoy | Quién lo usa | Decisión | Cuándo | Riesgo · cómo verificar |
 |---|---|---|---|---|---|---|
-| `quantities` (+ `trg_quantities_set_holding`, `trg_validate_quantity_invoice_status`, `trg_sync_invoice_items_from_quantities`, `trg_restore_invoice_items_on_quantity_delete`, `trg_rsm_on_quantity_change`, `trg_restore_rsm_on_quantity_delete`) | tabla + 6 triggers | Cantidades variables por mes | FV ✔ **escribe** (`hooks/useQuantityOverrides.ts:146,207`, `legacy/BulkQuantitiesImportModal.tsx:311`) · API `bigquery.service.ts:1014,1337` **escribe** (canal DWH, 0 filas integradas) · v2 **lee** (`source = legacy`) | Reemplazada por `consumption_entries`. Al switch: solo lectura + migración parcial (spec pricing §7); triggers anotados "reemplazados por consumption.service" | SWITCH (REVOKE + migración) · BAJA (drop) | Alto si el DWH sigue escribiendo `quantities` tras el switch → **antes** re-apuntar `bigquery.service.ts` a `consumption_entries` (etapa 2 pendiente) |
+| `quantities` (+ `trg_quantities_set_holding`, `trg_validate_quantity_invoice_status`, `trg_sync_invoice_items_from_quantities`, `trg_restore_invoice_items_on_quantity_delete`; `trg_rsm_on_quantity_change` y `trg_restore_rsm_on_quantity_delete` retirados el 04-10, el DWH llama `revenue_schedule_rebuild`) | tabla + 4 triggers | Cantidades variables por mes | FV ✔ **escribe** (`hooks/useQuantityOverrides.ts:146,207`, `legacy/BulkQuantitiesImportModal.tsx:311`) · API `bigquery.service.ts:1014,1337` **escribe** (canal DWH, 0 filas integradas) · v2 **lee** (`source = legacy`) | Reemplazada por `consumption_entries`. Al switch: solo lectura + migración parcial (spec pricing §7); triggers anotados "reemplazados por consumption.service" | SWITCH (REVOKE + migración) · BAJA (drop) | Alto si el DWH sigue escribiendo `quantities` tras el switch → **antes** re-apuntar `bigquery.service.ts` a `consumption_entries` (etapa 2 pendiente) |
 | `sync_invoice_items_amounts_from_quantities` + `restore_invoice_items_amounts_on_quantity_delete` | funciones de trigger | Sync de líneas por override; **no filtran `document_type`** (U13/B4: grep confirma que no aparece) | FV ✔ · v2 ✖ | **Fix compartido U13 AHORA**; retirar con `quantities` | AHORA (fix) · BAJA (drop) | Bajo: 19 NC Por Emitir expuestas hoy. Test QA: override sobre período con NC ligada |
 | `update_pending_invoices_on_override` | función | "Está muerta" (S4a) | por verificar `pg_trigger`/`pg_proc` + logs | Retirar | AHORA (doble confirmación) | Bajo |
 | `sapira_quantity_imports` + `bigquery.scheduler.ts` (cron horario) | tabla + cron API | Staging DWH → `quantities`; ventana solo mes en curso (B7) | API ✔ · v2 ✖ | Pasa a escribir `consumption_entries` con `source = dwh` e `idempotency_key` (etapa 2) | SWITCH (antes de él) | Medio: decisión pendiente #11 (Leon): `billing_date` = período de servicio, ventana mes anterior, conflictos |
@@ -173,6 +176,8 @@ Orden propuesto; cada paso con la **doble confirmación** del 24-09 (código en 
 
 ## 4. Al SWITCH de Contratos (`migrated: true`)
 
+> Lo aplicado al switch (04-10, `grants/060`) y lo que queda por retirar está en [`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md) §2.1–§2.2.
+
 Lo que cambia el día que el FV deja de escribir contratos (mapa §1.8 y §5; cada retiro con la doble confirmación):
 
 - **Prerrequisitos de paridad** (hoy no construidos, flujo §6 y mapa "Después"): F4 editar ítems en contrato Activo, Reestructurar
@@ -202,6 +207,8 @@ Lo que cambia el día que el FV deja de escribir contratos (mapa §1.8 y §5; ca
   pendiente #8) se planifican como migración de datos aparte.
 
 ## 5. DESPUÉS de la baja del front viejo
+
+> Lista vigente por objeto: [`catalogo-funciones-y-triggers.md`](./catalogo-funciones-y-triggers.md) §2 (con llamador del front viejo) y §2.6 (sin uso detectado).
 
 - Triggers de la costura y `standardize_invoice_items` (cuando el generador v2 sea el único que inserta líneas con ítem);
   `generate_missing_invoices_for_contract` + `trigger_generate_invoices_on_*` + sus 2 triggers.
