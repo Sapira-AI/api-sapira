@@ -2010,7 +2010,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 278,
+  "rows": 350,
   "columns": [
    {
     "name": "id",

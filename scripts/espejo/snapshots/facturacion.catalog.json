@@ -1906,8 +1906,6 @@
   "triggers": [
    "trg_quantities_set_holding · BEFORE INSERT FOR EACH ROW → quantities_set_holding_from_contract_item()",
    "trg_restore_invoice_items_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_invoice_items_amounts_on_quantity_delete()",
-   "trg_restore_rsm_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_rsm_on_quantity_delete()",
-   "trg_rsm_on_quantity_change · AFTER INSERT OR UPDATE FOR EACH ROW → trigger_rsm_on_quantity_change()",
    "trg_sync_invoice_items_from_quantities · AFTER INSERT OR UPDATE FOR EACH ROW → sync_invoice_items_amounts_from_quantities()",
    "trg_validate_quantity_invoice_status · BEFORE INSERT OR DELETE OR UPDATE FOR EACH ROW → validate_invoice_status_for_quantity_change()"
   ],

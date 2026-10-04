@@ -1,8 +1,8 @@
 import { DataSource } from 'typeorm';
 
-import { inactiveEmptyRowSql, MetricsDataService, SqlParams } from './metrics-data.service';
+import { contractColumnOf, inactiveEmptyRowSql, MetricsDataService, SqlParams, unconvertedSql } from './metrics-data.service';
 import { MrrMetricsService, renewalWindowSql } from './mrr-metrics.service';
-import { RevenueMetricsService } from './revenue-metrics.service';
+import { RevenueMetricsService, scheduleOrderSql } from './revenue-metrics.service';
 
 import type { MrrLine } from './mrr-movements';
 
@@ -489,5 +489,63 @@ describe('Asientos con apertura por dimensión', () => {
 		const result = (await revenue.exceptions(HOLDING, {})) as unknown as { data: Record<string, unknown>[] };
 
 		expect(result.data.find((item) => item.type === 'no_account_mapping')).toMatchObject({ company_id: 'co-1', company_name: 'Hanka SpA' });
+	});
+});
+
+describe('Detalle mensual: orden secundario (Domi 04-10)', () => {
+	it('al ordenar por Contrato, los empates van por Período ascendente y luego por Producto', () => {
+		expect(scheduleOrderSql('_system_ccy', 'contract_number', 'ASC')).toBe(
+			'c.contract_number ASC NULLS LAST, r.period_month ASC, COALESCE(ci.product_name, r.product_name) ASC, r.id'
+		);
+	});
+
+	it('al ordenar por Período o Producto no repite la columna elegida', () => {
+		expect(scheduleOrderSql('_system_ccy', 'period', 'DESC')).toBe(
+			'r.period_month DESC NULLS LAST, COALESCE(ci.product_name, r.product_name) ASC, r.id'
+		);
+		expect(scheduleOrderSql('_ccy', 'product', 'ASC')).toBe('COALESCE(ci.product_name, r.product_name) ASC NULLS LAST, r.period_month ASC, r.id');
+	});
+
+	it('la consulta de filas usa ese orden', async () => {
+		const { query, revenue } = build();
+
+		await revenue.schedule(HOLDING, { from: '2026-01', to: '2026-03', sortBy: 'recognized', sortOrder: 'desc' });
+		const rows = query.mock.calls.map(([sql]) => String(sql)).find((sql) => sql.includes('OFFSET'))!;
+
+		expect(rows).toContain('ORDER BY recognized DESC NULLS LAST, r.period_month ASC, COALESCE(ci.product_name, r.product_name) ASC, r.id');
+	});
+});
+
+describe('"Sin tipo de cambio" solo si hay monto en moneda de contrato (Domi 04-10)', () => {
+	it('sistema y compañía: falta en destino y la columna de contrato tiene monto (o falta la tasa ítem → contrato)', () => {
+		expect(contractColumnOf('r.recognized_period_system_ccy')).toBe('r.recognized_period_contract_ccy');
+		expect(contractColumnOf('r.billed_period_ccy')).toBe('r.billed_period_contract_ccy');
+		expect(contractColumnOf('r.mrr_period_contracted_contract_ccy')).toBe('r.mrr_period_contracted_contract_ccy');
+
+		const system = unconvertedSql('system', 'r.recognized_period_system_ccy');
+
+		expect(system).toContain("(r.recognized_period_system_ccy IS NULL OR COALESCE(r.fx_to_system_source, '') LIKE 'missing_fx_rate%')");
+		expect(system).toContain('COALESCE(r.recognized_period_contract_ccy, 0) <> 0');
+		expect(system).toContain("(r.recognized_period_contract_ccy IS NULL AND r.calc_version = 'missing_fx_rate')");
+		expect(unconvertedSql('company', 'r.billed_period_ccy')).toContain('COALESCE(r.billed_period_contract_ccy, 0) <> 0');
+	});
+
+	it('moneda de contrato: solo cuenta si falta la tasa pactada ítem → contrato', () => {
+		expect(unconvertedSql('contract', 'r.recognized_period_contract_ccy')).toBe(
+			"(r.recognized_period_contract_ccy IS NULL AND r.calc_version = 'missing_fx_rate')"
+		);
+	});
+
+	it('el devengo, el detalle y las líneas de MRR usan la regla con la columna de contrato que corresponde', async () => {
+		const { query, data, revenue } = build();
+
+		await revenue.schedule(HOLDING, { from: '2026-01', to: '2026-03' });
+		await data.loadMrrLines(HOLDING, {}, { mode: 'system', code: 'USD' }, 'mrr', '2026-01', '2026-03');
+		const sqls = query.mock.calls.map(([sql]) => String(sql));
+		const detail = sqls.find((sql) => sql.includes('AS unconverted') && sql.includes('LIMIT'))!;
+		const lines = sqls.find((sql) => sql.includes('AS item_fx_missing') && sql.includes('mrr_period_contracted_system_ccy'))!;
+
+		expect(detail).toContain(`${unconvertedSql('system', 'r.recognized_period_system_ccy')} AND NOT`);
+		expect(lines).toContain('COALESCE(r.mrr_period_contracted_contract_ccy, 0) <> 0');
 	});
 });

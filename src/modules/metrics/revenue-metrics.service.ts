@@ -77,6 +77,17 @@ const scheduleSort = (s: string): Record<ScheduleSortField, string> => ({
 	unbilled_change: `unbilled_change${s}`,
 });
 
+/**
+ * ORDER BY del detalle: la columna elegida y, en los empates, Período ascendente y luego Producto (Domi 04-10: al ordenar por Contrato
+ * los meses de un mismo contrato quedan en orden). `r.id` al final deja el orden estable entre páginas.
+ */
+export function scheduleOrderSql(s: string, sortBy: ScheduleSortField, direction: 'ASC' | 'DESC'): string {
+	const columns = scheduleSort(s);
+	const ties = (['period', 'product'] as const).filter((field) => field !== sortBy).map((field) => `${columns[field]} ASC`);
+
+	return [`${columns[sortBy]} ${direction} NULLS LAST`, ...ties, 'r.id'].join(', ');
+}
+
 const CURRENCY_SUFFIXES = ['_contract_ccy', '_ccy', '_system_ccy'] as const;
 
 /**
@@ -466,7 +477,7 @@ export class RevenueMetricsService {
 		};
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 50;
-		const order = `${scheduleSort(s)[query.sortBy ?? 'period']} ${query.sortOrder === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, r.id`;
+		const order = scheduleOrderSql(s, query.sortBy ?? 'period', query.sortOrder === 'asc' ? 'ASC' : 'DESC');
 		const unconv = unconvertedSql(currency.mode, `r.recognized_period${s}`);
 		// Parámetros propios por consulta: el CTE del mes anterior solo va en la de filas (un `$n` sin usar rompe Postgres).
 		const rowParams = new SqlParams();

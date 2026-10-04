@@ -83,11 +83,25 @@ export function notPendingCloseSql(mode: MetricCurrency, alias = 'r'): string[] 
 	return mode === 'company' ? [`COALESCE(${alias}.fx_to_company_source, '') <> '${PENDING_MONTH_CLOSE}'`] : [];
 }
 
-/** Condición SQL de fila sin convertir para una columna del RSM. */
+/** Columna equivalente en moneda de contrato (`r.recognized_period_system_ccy` → `r.recognized_period_contract_ccy`). */
+export const contractColumnOf = (column: string) => column.replace(/(_system_ccy|_contract_ccy|_ccy)$/, '_contract_ccy');
+
+/**
+ * Condición SQL de fila sin convertir para una columna del RSM (Domi 04-10): solo si **hay monto que convertir** —la misma columna en
+ * moneda de contrato no es NULL ni 0— y falta en la moneda de destino (NULL o fuente `missing_fx_rate`). Las filas de división de una
+ * renovación con cambio de precio (UPSELL/DOWNSELL que solo registran MRR, con reconocido, facturado y acumulados NULL en todas las
+ * monedas) ya no cuentan como "sin tipo de cambio" en Ingresos. Excepción: si falta la tasa pactada ítem → contrato
+ * (`calc_version = 'missing_fx_rate'`) y la fila tampoco tiene monto en moneda de contrato, el origen es el que falta y sigue siendo un
+ * hueco. En moneda de contrato solo cuenta ese caso. Necesita el RSM con alias `r`.
+ */
 export function unconvertedSql(mode: MetricCurrency, column: string): string {
 	const source = fxSource(mode);
+	const contract = contractColumnOf(column);
+	const itemRateMissing = `(${contract} IS NULL AND r.calc_version = 'missing_fx_rate')`;
 
-	return source ? `(${column} IS NULL OR COALESCE(${source}, '') LIKE 'missing_fx_rate%')` : `(${column} IS NULL)`;
+	if (!source) return `(${column} IS NULL AND r.calc_version = 'missing_fx_rate')`;
+
+	return `((${column} IS NULL OR COALESCE(${source}, '') LIKE 'missing_fx_rate%') AND (COALESCE(${contract}, 0) <> 0 OR ${itemRateMissing}))`;
 }
 
 /**
