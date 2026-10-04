@@ -1,0 +1,297 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import type { LiveDataResult, LiveDataAudit } from "../liveDataHandlers.ts";
+import { formatMoney } from "../liveDataHandlers.ts";
+
+/**
+ * Handler para mostrar facturas por estado y moneda
+ * Soporta filtros por estado, moneda, compañía, y rango de fechas
+ */
+export async function handleInvoicesByStatusAndCurrency(
+  supabase: SupabaseClient,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult> {
+  const audit: LiveDataAudit = {
+    holding_id: holdingId,
+    source_breakdown: ["invoices"],
+    filters_applied: {},
+    data_completeness: "complete",
+    timestamp: new Date().toISOString(),
+    currency_mode: "invoice"
+  };
+
+  try {
+    // Detectar filtros de la pregunta
+    const statusFilter = detectInvoiceStatusFilter(question);
+    const currencyFilter = detectCurrencyFilter(question);
+    const dateRange = detectDateRange(question);
+
+    // Construir query base
+    let query = supabase
+      .from('invoices')
+      .select(`
+        id,
+        invoice_number,
+        status,
+        invoice_currency,
+        total_invoice_currency,
+        total_system_currency,
+        issue_date,
+        due_date,
+        scheduled_at,
+        client_id,
+        company_id,
+        contract_id,
+        clients!inner(name_commercial, segment, market),
+        companies!inner(legal_name),
+        contracts(contract_number)
+      `)
+      .eq('holding_id', holdingId);
+
+    // Aplicar filtros
+    if (statusFilter.length > 0) {
+      query = query.in('status', statusFilter);
+      audit.filters_applied.status = statusFilter;
+    }
+
+    if (currencyFilter) {
+      query = query.eq('invoice_currency', currencyFilter);
+      audit.filters_applied.currency = currencyFilter;
+    }
+
+    // Filtro de fechas
+    if (dateRange.from) {
+      query = query.gte('issue_date', dateRange.from);
+      audit.filters_applied.date_from = dateRange.from;
+    }
+    if (dateRange.to) {
+      query = query.lte('issue_date', dateRange.to);
+      audit.filters_applied.date_to = dateRange.to;
+    }
+
+    // Ordenar por fecha de emisión descendente
+    query = query.order('issue_date', { ascending: false });
+
+    const { data: invoices, error } = await query;
+
+    if (error) {
+      throw new Error(`Error consultando facturas: ${error.message}`);
+    }
+
+    if (!invoices || invoices.length === 0) {
+      return {
+        handled: true,
+        answer: "No se encontraron facturas con los criterios especificados.",
+        widgets: [],
+        sources: [{ table: "invoices", query_type: "status_currency_filter", filters: audit.filters_applied }],
+        audit
+      };
+    }
+
+    // Estadísticas por estado y moneda
+    const stats = invoices.reduce((acc, invoice) => {
+      const status = invoice.status || 'Sin estado';
+      const currency = invoice.invoice_currency || 'Sin moneda';
+      const key = `${status}_${currency}`;
+      
+      if (!acc[key]) {
+        acc[key] = {
+          status,
+          currency,
+          count: 0,
+          total_amount: 0,
+          total_system: 0
+        };
+      }
+      
+      acc[key].count++;
+      acc[key].total_amount += invoice.total_invoice_currency || 0;
+      acc[key].total_system += invoice.total_system_currency || 0;
+      
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Crear widgets
+    const widgets = [];
+
+    // KPI: Total de facturas
+    widgets.push({
+      type: 'kpi',
+      title: 'Total Facturas',
+      value: invoices.length.toString(),
+      subtitle: `Estados: ${[...new Set(invoices.map(i => i.status))].join(', ')}`
+    });
+
+    // KPI: Valor total en moneda sistema
+    const totalSystemValue = invoices.reduce((sum, i) => sum + (i.total_system_currency || 0), 0);
+    widgets.push({
+      type: 'kpi',
+      title: 'Valor Total (Sistema)',
+      value: formatMoney(totalSystemValue, 'USD'),
+      subtitle: 'En moneda del sistema'
+    });
+
+    // Detectar facturas vencidas para KPI especial
+    const overdueInvoices = invoices.filter(i => 
+      (i.status === 'Emitida' || i.status === 'Enviada') && 
+      i.due_date && 
+      new Date(i.due_date) < new Date()
+    );
+
+    if (overdueInvoices.length > 0) {
+      const overdueTotal = overdueInvoices.reduce((sum, i) => sum + (i.total_system_currency || 0), 0);
+      widgets.push({
+        type: 'kpi',
+        title: 'Facturas Vencidas',
+        value: `${overdueInvoices.length} (${formatMoney(overdueTotal, 'USD')})`,
+        subtitle: 'Requieren seguimiento'
+      });
+    }
+
+    // Tabla principal de facturas
+    const tableData = invoices.map(invoice => ({
+      'Número': invoice.invoice_number || 'N/A',
+      'Cliente': invoice.clients?.name_commercial || 'N/A',
+      'Compañía': invoice.companies?.legal_name || 'N/A',
+      'Estado': invoice.status || 'N/A',
+      'Moneda': invoice.invoice_currency || 'N/A',
+      'Monto': invoice.total_invoice_currency ? 
+        formatMoney(invoice.total_invoice_currency, invoice.invoice_currency || 'USD') : 'N/A',
+      'Monto Sistema': invoice.total_system_currency ? 
+        formatMoney(invoice.total_system_currency, 'USD') : 'N/A',
+      'Fecha Emisión': invoice.issue_date || 'N/A',
+      'Fecha Vencimiento': invoice.due_date || 'N/A',
+      'Contrato': invoice.contracts?.contract_number || 'N/A',
+      'Segmento': invoice.clients?.segment || 'N/A'
+    }));
+
+    widgets.push({
+      type: 'table',
+      title: 'Detalle de Facturas',
+      columns: ['Número', 'Cliente', 'Compañía', 'Estado', 'Moneda', 'Monto', 'Monto Sistema', 'Fecha Emisión', 'Fecha Vencimiento', 'Contrato', 'Segmento'],
+      rows: tableData.map(row => Object.values(row))
+    });
+
+    // Tabla resumen por estado y moneda
+    const summaryData = Object.values(stats).map((stat: any) => [
+      stat.status,
+      stat.currency,
+      stat.count.toString(),
+      formatMoney(stat.total_amount, stat.currency),
+      formatMoney(stat.total_system, 'USD')
+    ]);
+
+    widgets.push({
+      type: 'table',
+      title: 'Resumen por Estado y Moneda',
+      columns: ['Estado', 'Moneda', 'Cantidad', 'Total Moneda', 'Total Sistema'],
+      rows: summaryData
+    });
+
+    audit.data_completeness = "complete";
+    
+    return {
+      handled: true,
+      answer: `Se encontraron ${invoices.length} facturas con los criterios especificados.`,
+      widgets,
+      sources: [{ table: "invoices", query_type: "status_currency_filter", filters: audit.filters_applied }],
+      audit
+    };
+
+  } catch (error) {
+    audit.error_type = "database";
+    audit.error_reason = error instanceof Error ? error.message : "Error desconocido";
+    
+    return {
+      handled: true,
+      answer: `Error al consultar facturas: ${audit.error_reason}`,
+      widgets: [],
+      sources: [{ table: "invoices", query_type: "status_currency_filter", filters: audit.filters_applied }],
+      audit
+    };
+  }
+}
+
+function detectInvoiceStatusFilter(question: string): string[] {
+  const q = question.toLowerCase();
+  const statuses: string[] = [];
+
+  if (q.includes('por emitir') || q.includes('programada') || q.includes('programadas')) {
+    statuses.push('Por Emitir');
+  }
+  if (q.includes('emitida') || q.includes('emitidas')) {
+    statuses.push('Emitida');
+  }
+  if (q.includes('enviada') || q.includes('enviadas')) {
+    statuses.push('Enviada');
+  }
+  if (q.includes('pagada') || q.includes('pagadas')) {
+    statuses.push('Pagada');
+  }
+  if (q.includes('vencida') || q.includes('vencidas') || q.includes('overdue')) {
+    statuses.push('Vencida');
+  }
+  if (q.includes('cancelada') || q.includes('canceladas')) {
+    statuses.push('Cancelada');
+  }
+  if (q.includes('pendiente') || q.includes('pendientes')) {
+    // Pendientes incluye emitidas y enviadas
+    statuses.push('Emitida', 'Enviada');
+  }
+  if (q.includes('cobrar') || q.includes('cobranza')) {
+    // Por cobrar incluye emitidas, enviadas y vencidas
+    statuses.push('Emitida', 'Enviada', 'Vencida');
+  }
+
+  return statuses;
+}
+
+function detectCurrencyFilter(question: string): string | null {
+  const q = question.toLowerCase();
+  
+  if (q.includes('usd') || q.includes('dólar') || q.includes('dolar')) return 'USD';
+  if (q.includes('clp') || q.includes('peso') || q.includes('pesos chilenos')) return 'CLP';
+  if (q.includes('clf') || q.includes('uf') || q.includes('unidad de fomento')) return 'CLF';
+  if (q.includes('mxn') || q.includes('peso mexicano') || q.includes('pesos mexicanos')) return 'MXN';
+  if (q.includes('eur') || q.includes('euro') || q.includes('euros')) return 'EUR';
+  
+  return null;
+}
+
+function detectDateRange(question: string): { from?: string; to?: string } {
+  const q = question.toLowerCase();
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+
+  // Este mes
+  if (q.includes('este mes') || q.includes('mes actual')) {
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    return {
+      from: firstDay.toISOString().split('T')[0],
+      to: lastDay.toISOString().split('T')[0]
+    };
+  }
+
+  // Últimos N meses
+  const monthsMatch = q.match(/últimos?\s+(\d+)\s+meses?/);
+  if (monthsMatch) {
+    const months = parseInt(monthsMatch[1]);
+    const fromDate = new Date(currentYear, currentMonth - months + 1, 1);
+    return {
+      from: fromDate.toISOString().split('T')[0],
+      to: today.toISOString().split('T')[0]
+    };
+  }
+
+  // Este año
+  if (q.includes('este año') || q.includes('año actual')) {
+    return {
+      from: `${currentYear}-01-01`,
+      to: `${currentYear}-12-31`
+    };
+  }
+
+  return {};
+}

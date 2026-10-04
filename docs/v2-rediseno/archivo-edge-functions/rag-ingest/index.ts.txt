@@ -1,0 +1,189 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+type IngestRequestBody = {
+  source_type: string;
+  source_id?: string | null;
+  content: string;
+  metadata?: Record<string, unknown>;
+  chunk_size?: number;
+  chunk_overlap?: number;
+};
+
+function chunkText(text: string, chunkSize = 1200, chunkOverlap = 200): string[] {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+
+  const chunks: string[] = [];
+  let start = 0;
+
+  while (start < normalized.length) {
+    const end = Math.min(start + chunkSize, normalized.length);
+    const chunk = normalized.slice(start, end).trim();
+    if (chunk) chunks.push(chunk);
+
+    if (end >= normalized.length) break;
+    start = Math.max(0, end - chunkOverlap);
+  }
+
+  return chunks;
+}
+
+async function createEmbedding(apiKey: string, input: string): Promise<number[]> {
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI embeddings error (${res.status}): ${text}`);
+  }
+
+  const json = await res.json();
+  const embedding = json?.data?.[0]?.embedding as number[] | undefined;
+  if (!embedding || !Array.isArray(embedding)) {
+    throw new Error("OpenAI embeddings response missing embedding");
+  }
+  return embedding;
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+      return new Response(JSON.stringify({ error: "Server configuration error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    if (!openaiApiKey) {
+      return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const supabaseAuth = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: authData, error: authError } = await supabaseAuth.auth.getUser();
+    if (authError || !authData?.user) {
+      return new Response(JSON.stringify({ error: "Invalid JWT" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const body = (await req.json()) as IngestRequestBody;
+    if (!body?.source_type || !body?.content) {
+      return new Response(JSON.stringify({
+        error: "Missing required fields: source_type, content",
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const chunkSize = typeof body.chunk_size === "number" ? body.chunk_size : 1200;
+    const chunkOverlap = typeof body.chunk_overlap === "number" ? body.chunk_overlap : 200;
+
+    const chunks = chunkText(body.content, chunkSize, chunkOverlap);
+    if (chunks.length === 0) {
+      return new Response(JSON.stringify({ error: "Content produced 0 chunks" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const { data: holdingId, error: holdingError } = await supabaseAuth.rpc("get_current_user_holding_id");
+    if (holdingError || !holdingId) {
+      return new Response(JSON.stringify({ error: "User has no holding" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const insertedIds: string[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const embedding = await createEmbedding(openaiApiKey, chunk);
+
+      const { data: inserted, error: insertError } = await supabaseAdmin
+        .from("rag_documents")
+        .insert({
+          holding_id: holdingId,
+          source_type: body.source_type,
+          source_id: body.source_id ?? null,
+          content: chunk,
+          metadata: {
+            ...(body.metadata ?? {}),
+            chunk_index: i,
+            chunk_count: chunks.length,
+          },
+          embedding,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      insertedIds.push(inserted.id);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      holding_id: holdingId,
+      chunks: chunks.length,
+      inserted_ids: insertedIds,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: "Internal server error",
+      details: error?.message ?? String(error),
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+serve(handler);

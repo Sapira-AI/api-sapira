@@ -13,8 +13,8 @@ import { defaultEmailFor, moduleOfType, NOTIFICATION_MODULES, notificationCatalo
 
 type Row = Record<string, unknown>;
 
-/** Front de producción si falta `INVITE_LANDING_URL` (el botón nunca queda sin destino). */
-export const DEFAULT_APP_URL = 'https://www.aisapira.com';
+/** Front de producción si falta `INVITE_LANDING_URL` (el botón nunca queda sin destino). Sin www: `www.aisapira.com` aún apunta a Framer (04-10). */
+export const DEFAULT_APP_URL = 'https://aisapira.com';
 
 export interface EmailRecipient {
 	id: string;

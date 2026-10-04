@@ -1,0 +1,82 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { cleanDataForUser } from "./utils.ts";
+import { createEmbedding } from "./openai.ts";
+
+export type RagSource = { table: string; query_type: string; filters: Record<string, unknown> };
+
+export async function runRagRetrieval(params: {
+  supabaseAuth: SupabaseClient;
+  openaiApiKey: string;
+  question: string;
+  matchCount: number;
+  matchThreshold: number;
+}) {
+  const { supabaseAuth, openaiApiKey, question, matchCount, matchThreshold } = params;
+
+  const embedding = await createEmbedding(openaiApiKey, question);
+  const { data: documents, error } = await supabaseAuth.rpc("rag_match_documents", {
+    query_embedding: embedding,
+    match_threshold: matchThreshold,
+    match_count: matchCount,
+  });
+
+  if (error) throw error;
+
+  const cleanedDocs = cleanDataForUser(documents || []);
+  const contextParts = cleanedDocs.map((doc: any) => doc.content || "").filter(Boolean);
+
+  return {
+    context: contextParts.join("\n\n"),
+    sources: cleanedDocs.map((doc: any) => ({
+      table: "documents",
+      query_type: "similarity_search",
+      filters: { similarity_threshold: matchThreshold },
+    })) as RagSource[],
+    matchCountUsed: cleanedDocs.length,
+  };
+}
+
+export async function runConceptualRagRetrieval(params: {
+  supabaseAuth: SupabaseClient;
+  openaiApiKey: string;
+  question: string;
+  matchCount: number;
+  matchThreshold: number;
+}) {
+  const { supabaseAuth, openaiApiKey, question, matchCount, matchThreshold } = params;
+
+  const embedding = await createEmbedding(openaiApiKey, question);
+  const { data: conceptualDocs, error: conceptualError } = await supabaseAuth.rpc("match_copilot_rules", {
+    query_embedding: embedding,
+    match_threshold: matchThreshold,
+    match_count: matchCount,
+  });
+
+  if (conceptualError) {
+    return {
+      hasConceptualContent: false,
+      context: "",
+      sources: [] as RagSource[],
+      matchCountUsed: 0,
+    };
+  }
+
+  const hasConceptualContent = conceptualDocs && conceptualDocs.length > 0;
+  const cleanedConceptualDocs = cleanDataForUser(conceptualDocs || []);
+  const conceptualContext = cleanedConceptualDocs
+    .map((doc: any) => doc.content || "")
+    .filter(Boolean)
+    .join("\n\n");
+
+  return {
+    hasConceptualContent,
+    context: conceptualContext,
+    sources: cleanedConceptualDocs.map((doc: any) => ({
+      table: "copilot_rules",
+      query_type: "conceptual_search",
+      filters: { similarity_threshold: matchThreshold },
+    })) as RagSource[],
+    matchCountUsed: cleanedConceptualDocs.length,
+  };
+}

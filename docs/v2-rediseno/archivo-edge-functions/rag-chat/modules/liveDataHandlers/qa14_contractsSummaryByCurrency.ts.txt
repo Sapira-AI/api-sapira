@@ -1,0 +1,212 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { monthStartStr } from "../utils.ts";
+import type { LiveDataResult, LiveDataSource } from "./types.ts";
+import type { LiveDataAudit } from "../widgets.ts";
+
+export async function handleQa14ContractsSummaryByCurrency(args: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = args;
+
+  try {
+    const today = new Date();
+    const horizon = new Date(today);
+    horizon.setDate(horizon.getDate() + 90);
+    const horizonStr = horizon.toISOString().slice(0, 10);
+    const todayStr = today.toISOString().slice(0, 10);
+
+    const { data: contractsRows, error: contractsErr } = await supabaseAuth
+      .from("contracts")
+      .select("id, status, contract_currency, contract_end_date")
+      .eq("holding_id", holdingId)
+      .limit(20000);
+    if (contractsErr) throw contractsErr;
+
+    type ContractRow = {
+      id?: unknown;
+      status?: unknown;
+      contract_currency?: unknown;
+      contract_end_date?: unknown;
+    };
+
+    const contracts = Array.isArray(contractsRows) ? (contractsRows as unknown[]) : [];
+
+    const byCurrency = new Map<
+      string,
+      {
+        active: number;
+        negotiation: number;
+        expiringSoon: number;
+        total: number;
+      }
+    >();
+
+    for (const raw of contracts) {
+      const c = raw as ContractRow;
+      const status = typeof c.status === "string" ? c.status : c.status != null ? String(c.status) : "";
+      const currency =
+        typeof c.contract_currency === "string" && c.contract_currency.trim() ? c.contract_currency.trim() : "(sin moneda)";
+
+      const bucket = byCurrency.get(currency) || { active: 0, negotiation: 0, expiringSoon: 0, total: 0 };
+      bucket.total += 1;
+
+      if (status === "Activo") bucket.active += 1;
+      if (status === "En revisión" || status === "En proceso") bucket.negotiation += 1;
+
+      const endStr = c.contract_end_date != null ? String(c.contract_end_date) : "";
+      if (endStr && endStr >= todayStr && endStr <= horizonStr) {
+        bucket.expiringSoon += 1;
+      }
+
+      byCurrency.set(currency, bucket);
+    }
+
+    const { data: invoicesToIssue, error: invErr } = await supabaseAuth
+      .from("invoices")
+      .select("id, contract_currency")
+      .eq("holding_id", holdingId)
+      .eq("status", "Por Emitir")
+      .limit(20000);
+    if (invErr) throw invErr;
+
+    const invoices = Array.isArray(invoicesToIssue) ? (invoicesToIssue as Array<{ contract_currency?: unknown }>) : [];
+    const toIssueByCurrency = new Map<string, number>();
+    for (const inv of invoices) {
+      const cc =
+        typeof inv.contract_currency === "string" && inv.contract_currency.trim() ? inv.contract_currency.trim() : "(sin moneda)";
+      toIssueByCurrency.set(cc, (toIssueByCurrency.get(cc) || 0) + 1);
+    }
+
+    const currentMonth = monthStartStr(new Date());
+    const { data: rsmRows, error: rsmErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("contract_currency, mrr_period_contract_ccy, cmrr_period_contract_ccy")
+      .eq("holding_id", holdingId)
+      .eq("period_month", currentMonth)
+      .limit(20000);
+    if (rsmErr) throw rsmErr;
+
+    const rsm =
+      Array.isArray(rsmRows)
+        ? (rsmRows as Array<{ contract_currency?: unknown; mrr_period_contract_ccy?: unknown; cmrr_period_contract_ccy?: unknown }>)
+        : [];
+    const mrrByCurrency = new Map<string, { mrr: number; cmrr: number }>();
+    for (const r of rsm) {
+      const cc =
+        typeof r.contract_currency === "string" && r.contract_currency.trim() ? r.contract_currency.trim() : "(sin moneda)";
+      const mrr =
+        typeof r.mrr_period_contract_ccy === "number"
+          ? r.mrr_period_contract_ccy
+          : r.mrr_period_contract_ccy != null
+            ? Number(r.mrr_period_contract_ccy)
+            : 0;
+      const cmrr =
+        typeof r.cmrr_period_contract_ccy === "number"
+          ? r.cmrr_period_contract_ccy
+          : r.cmrr_period_contract_ccy != null
+            ? Number(r.cmrr_period_contract_ccy)
+            : 0;
+      const b = mrrByCurrency.get(cc) || { mrr: 0, cmrr: 0 };
+      b.mrr += Number.isFinite(mrr) ? mrr : 0;
+      b.cmrr += Number.isFinite(cmrr) ? cmrr : 0;
+      mrrByCurrency.set(cc, b);
+    }
+
+    const rows = Array.from(byCurrency.entries())
+      .map(([currency, v]) => ({
+        currency,
+        total_contracts: v.total,
+        active_contracts: v.active,
+        negotiation_contracts: v.negotiation,
+        expiring_90d: v.expiringSoon,
+        invoices_to_issue: toIssueByCurrency.get(currency) || 0,
+        mrr_contract_ccy: Number((mrrByCurrency.get(currency)?.mrr || 0).toFixed(2)),
+        cmrr_contract_ccy: Number((mrrByCurrency.get(currency)?.cmrr || 0).toFixed(2)),
+      }))
+      .sort((a, b) => b.active_contracts - a.active_contracts);
+
+    const sources: LiveDataSource[] = [
+      { table: "contracts", query_type: "contracts_summary_by_currency", filters: { holding_id: holdingId } },
+      { table: "invoices", query_type: "invoices_to_issue_by_contract_currency", filters: { holding_id: holdingId, status: "Por Emitir" } },
+      { table: "revenue_schedule_monthly", query_type: "mrr_cmrr_by_contract_currency", filters: { holding_id: holdingId, period_month: currentMonth } },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "QA-14",
+      range_from: todayStr,
+      range_to: horizonStr,
+      currency_mode: "contract",
+      source_breakdown: ["contracts", "invoices", "revenue_schedule_monthly"],
+      filters_applied: { holding_id: holdingId, expiring_horizon_days: 90, invoice_status: "Por Emitir", period_month: currentMonth },
+      holding_id: holdingId,
+      data_completeness: rows.length > 0 ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `Contratos por moneda de contrato (holding). Incluye activos, en negociación, por renovar (90 días) y facturas Por Emitir. MRR/CMRR del mes ${currentMonth.slice(0, 7)} por moneda (sin conversión).`,
+      sources,
+      widgets: [
+        {
+          type: "table",
+          title: "Contratos por moneda (resumen)",
+          columns: [
+            "Moneda",
+            "Activos",
+            "En negociación",
+            "Por renovar (90d)",
+            "Facturas Por Emitir",
+            "MRR (moneda contrato)",
+            "CMRR (moneda contrato)",
+            "Total contratos",
+          ],
+          rows: rows.map((r) => [
+            r.currency,
+            r.active_contracts,
+            r.negotiation_contracts,
+            r.expiring_90d,
+            r.invoices_to_issue,
+            r.mrr_contract_ccy,
+            r.cmrr_contract_ccy,
+            r.total_contracts,
+          ]),
+        },
+      ],
+      audit,
+    };
+  } catch (e: unknown) {
+    const reason = e instanceof Error ? e.message : String(e);
+    const audit: LiveDataAudit = {
+      case_id: "QA-14",
+      currency_mode: "contract",
+      source_breakdown: ["contracts", "invoices", "revenue_schedule_monthly"],
+      filters_applied: { holding_id: holdingId },
+      holding_id: holdingId,
+      data_completeness: "empty",
+      timestamp: new Date().toISOString(),
+      error_type: "live_data",
+      error_reason: reason,
+    };
+    return {
+      handled: true,
+      context: `No pude consultar contratos por moneda (QA-14). Motivo: ${reason}`,
+      sources: [
+        { table: "contracts", query_type: "contracts_summary_by_currency", filters: { holding_id: holdingId } },
+        { table: "invoices", query_type: "invoices_to_issue_by_contract_currency", filters: { holding_id: holdingId } },
+        { table: "revenue_schedule_monthly", query_type: "mrr_cmrr_by_contract_currency", filters: { holding_id: holdingId } },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - QA-14 Contratos por moneda",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit,
+    };
+  }
+}

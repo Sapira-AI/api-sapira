@@ -1,0 +1,126 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleIntentRecognizedByProduct(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { fromMonth, toMonth, monthsBack } = parseMonthRange(question);
+  const toExclusiveDate = new Date(toMonth);
+  toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+  const toExclusive = monthStartStr(toExclusiveDate);
+
+  try {
+    const { data, error } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, product_name, recognized_period_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .gte("period_month", fromMonth)
+      .lt("period_month", toExclusive)
+      .limit(20000);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? (data as any[]) : [];
+    const currency = rows?.[0]?.system_currency ? String(rows[0].system_currency) : "USD";
+
+    const byProduct = new Map<string, number>();
+    for (const r of rows) {
+      const product = String(r?.product_name ?? "(sin producto)").trim() || "(sin producto)";
+      const v = typeof r?.recognized_period_system_ccy === "number"
+        ? r.recognized_period_system_ccy
+        : r?.recognized_period_system_ccy
+          ? Number(r.recognized_period_system_ccy)
+          : 0;
+      byProduct.set(product, (byProduct.get(product) || 0) + (Number.isFinite(v) ? v : 0));
+    }
+
+    const sorted = Array.from(byProduct.entries())
+      .map(([product, value]) => ({ product, value: Number(value.toFixed(2)) }))
+      .sort((a, b) => b.value - a.value);
+
+    const top = sorted.slice(0, 20);
+    const total = sorted.reduce((acc, r) => acc + r.value, 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: `Revenue reconocido (${monthsBack} mes${monthsBack === 1 ? "" : "es"})`,
+        value: `${total.toFixed(2)} ${currency}`.trim(),
+      },
+      {
+        type: "chart_bar",
+        title: `Revenue reconocido por producto (${currency})`,
+        xKey: "product",
+        series: [{ key: "value", name: `Reconocido (${currency})` }],
+        data: top,
+      },
+      {
+        type: "table",
+        title: "Detalle por producto",
+        columns: ["Producto", `Revenue reconocido (${currency})`],
+        rows: top.map((r) => [r.product, r.value]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_recognized_by_product",
+      range_from: fromMonth,
+      range_to: toMonth,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly"],
+      filters_applied: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+      holding_id: holdingId,
+      data_completeness: rows.length ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `INTENT: recognized_by_product. Revenue reconocido por producto (${monthsBack} meses).`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "recognized_by_product",
+          filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive },
+        },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: recognized_by_product. No pude consultar revenue reconocido por producto. Motivo: ${reason}`,
+      sources: [{ table: "revenue_schedule_monthly", query_type: "recognized_by_product", filters: { holding_id: holdingId } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Revenue reconocido por producto",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_recognized_by_product",
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

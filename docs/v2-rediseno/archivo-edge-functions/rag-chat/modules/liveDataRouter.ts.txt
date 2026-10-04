@@ -1,0 +1,167 @@
+/**
+ * Router centralizado para handlers de Live Data
+ * Maneja el routing y ejecución de handlers basado en flags
+ */
+
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import type { LiveDataResult, LiveDataFlags } from "./liveDataHandlers/types.ts";
+
+// Importar todos los handlers
+import { handleQa01MrrSeries } from "./liveDataHandlers/qa01_mrrSeries.ts";
+import { handleQa02MrrByCompany } from "./liveDataHandlers/qa02_mrrByCompany.ts";
+import { handleQa05RecognizedRevenue } from "./liveDataHandlers/qa05_recognizedRevenue.ts";
+import { handleQa06DeferredUnbilledEom } from "./liveDataHandlers/qa06_deferredUnbilledEom.ts";
+import { handleQa07BilledByProductMonth } from "./liveDataHandlers/qa07_billedByProductMonth.ts";
+import { handleQa08OverdueInvoices } from "./liveDataHandlers/qa08_overdueInvoices.ts";
+import { handleIntentMrrSnapshot } from "./liveDataHandlers/intent_mrrSnapshot.ts";
+import { handleIntentCmrrSeries } from "./liveDataHandlers/intent_cmrrSeries.ts";
+import { handleIntentInvoicesIssuedMonth } from "./liveDataHandlers/intent_invoicesIssuedMonth.ts";
+import { handleIntentInvoicesToIssueList } from "./liveDataHandlers/intent_invoicesToIssueList.ts";
+import { handleIntentMrrMomentumSeries } from "./liveDataHandlers/intent_mrrMomentumSeries.ts";
+import { handleIntentMrrByContractCurrency } from "./liveDataHandlers/intent_mrrByContractCurrency.ts";
+import { handleIntentLegacyInvoicesSeries } from "./liveDataHandlers/intent_legacyInvoicesSeries.ts";
+import { handleIntentPaymentsSeries } from "./liveDataHandlers/intent_paymentsSeries.ts";
+import { handleIntentRecognizedNonRecurringByClient } from "./liveDataHandlers/intent_recognizedNonRecurringByClient.ts";
+import { handleIntentContractsExpiring } from "./liveDataHandlers/intent_contractsExpiring.ts";
+import { handleIntentContractsNew } from "./liveDataHandlers/intent_contractsNew.ts";
+import { handleIntentLegacyInvoicesByClient } from "./liveDataHandlers/intent_legacyInvoicesByClient.ts";
+import { handleIntentMrrMomentumByProduct } from "./liveDataHandlers/intent_mrrMomentumByProduct.ts";
+import { handleIntentMrrSeriesBySegment } from "./liveDataHandlers/intent_mrrSeriesBySegment.ts";
+import { handleIntentRecognizedByProduct } from "./liveDataHandlers/intent_recognizedByProduct.ts";
+import { handleIntentDeferredEomSnapshot } from "./liveDataHandlers/intent_deferredEomSnapshot.ts";
+import { handleIntentUnbilledEomSnapshot } from "./liveDataHandlers/intent_unbilledEomSnapshot.ts";
+import { handleIntentQuantityVariationAvg } from "./liveDataHandlers/intent_quantityVariationAvg.ts";
+import { handleIntentQuantityVariationContract } from "./liveDataHandlers/intent_quantityVariationContract.ts";
+import { handleContractsActiveByStatus } from "./liveDataHandlers/intent_contractsActiveByStatus.ts";
+import { handleInvoicesByStatusAndCurrency } from "./liveDataHandlers/intent_invoicesByStatusAndCurrency.ts";
+import {
+  handleQa10BookingToFirstInvoiceLeadTimeFlag,
+  handleQa10BookingToFirstInvoiceLeadTimeText,
+  isQa10BookingFacturaQuestion,
+} from "./liveDataHandlers/qa10_bookingToFirstInvoiceLeadTime.ts";
+
+export interface HandlerContext {
+  supabase: SupabaseClient;
+  question: string;
+  holdingId: string;
+  openaiApiKey: string;
+  supabaseUrl: string;
+  authHeader: string;
+}
+
+export interface HandlerRegistration {
+  flag: keyof LiveDataFlags;
+  handler: (context: HandlerContext) => Promise<LiveDataResult>;
+  priority: number; // Para manejar orden de ejecución
+}
+
+/**
+ * Registro de todos los handlers disponibles
+ * Organizados por prioridad (menor número = mayor prioridad)
+ */
+const HANDLER_REGISTRY: HandlerRegistration[] = [
+  // Handlers QA originales (alta prioridad)
+  { flag: 'mrrSeries', handler: handleQa01MrrSeries, priority: 1 },
+  { flag: 'mrrSnapshotByCompany', handler: handleQa02MrrByCompany, priority: 1 },
+  { flag: 'recognizedSeries', handler: handleQa05RecognizedRevenue, priority: 1 },
+  { flag: 'deferredUnbilledEomSeries', handler: handleQa06DeferredUnbilledEom, priority: 1 },
+  { flag: 'billedByProductMonth', handler: handleQa07BilledByProductMonth, priority: 1 },
+  { flag: 'invoicesOverdueList', handler: handleQa08OverdueInvoices, priority: 1 },
+
+  // Handlers de intents específicos (prioridad media)
+  { flag: 'mrrSnapshot', handler: handleIntentMrrSnapshot, priority: 2 },
+  { flag: 'cmrrSeries', handler: handleIntentCmrrSeries, priority: 2 },
+  { flag: 'invoicesIssuedMonth', handler: handleIntentInvoicesIssuedMonth, priority: 2 },
+  { flag: 'invoicesToIssueList', handler: handleIntentInvoicesToIssueList, priority: 2 },
+  { flag: 'mrrMomentumSeries', handler: handleIntentMrrMomentumSeries, priority: 2 },
+  { flag: 'mrrSnapshotByCurrencyContract', handler: handleIntentMrrByContractCurrency, priority: 2 },
+  { flag: 'legacyInvoicesSeries', handler: handleIntentLegacyInvoicesSeries, priority: 2 },
+  { flag: 'paymentsSeries', handler: handleIntentPaymentsSeries, priority: 2 },
+  { flag: 'recognizedNonRecurringByClient', handler: handleIntentRecognizedNonRecurringByClient, priority: 2 },
+  { flag: 'contractsExpiring', handler: handleIntentContractsExpiring, priority: 2 },
+  { flag: 'contractsNew', handler: handleIntentContractsNew, priority: 2 },
+  { flag: 'legacyInvoicesByClient', handler: handleIntentLegacyInvoicesByClient, priority: 2 },
+  { flag: 'mrrMomentumByProduct', handler: handleIntentMrrMomentumByProduct, priority: 2 },
+  { flag: 'mrrSeriesBySegment', handler: handleIntentMrrSeriesBySegment, priority: 2 },
+  { flag: 'recognizedByProduct', handler: handleIntentRecognizedByProduct, priority: 2 },
+  { flag: 'deferredEomSnapshot', handler: handleIntentDeferredEomSnapshot, priority: 2 },
+  { flag: 'unbilledEomSnapshot', handler: handleIntentUnbilledEomSnapshot, priority: 2 },
+  { flag: 'quantityVariationAvg', handler: handleIntentQuantityVariationAvg, priority: 2 },
+  { flag: 'quantityVariationContract', handler: handleIntentQuantityVariationContract, priority: 2 },
+
+  // Nuevos handlers (prioridad media)
+  { flag: 'contractsActiveByStatus', handler: handleContractsActiveByStatus, priority: 2 },
+  { flag: 'invoicesByStatusAndCurrency', handler: handleInvoicesByStatusAndCurrency, priority: 2 },
+];
+
+/**
+ * Ejecuta el handler apropiado basado en los flags activos
+ */
+export async function routeToHandler(
+  flags: LiveDataFlags,
+  context: HandlerContext
+): Promise<LiveDataResult | null> {
+  
+  // Ordenar handlers por prioridad
+  const sortedHandlers = HANDLER_REGISTRY.sort((a, b) => a.priority - b.priority);
+  
+  // Buscar el primer handler que tenga su flag activo
+  for (const registration of sortedHandlers) {
+    if (flags[registration.flag]) {
+      try {
+        console.log(`Ejecutando handler para flag: ${registration.flag}`);
+        return await registration.handler(context);
+      } catch (error) {
+        console.error(`Error en handler ${registration.flag}:`, error);
+        // Continuar con el siguiente handler si hay error
+        continue;
+      }
+    }
+  }
+
+  // Handlers especiales que requieren lógica adicional
+  if (flags.bookingToFirstInvoiceLeadTime) {
+    if (isQa10BookingFacturaQuestion(context.question)) {
+      return await handleQa10BookingToFirstInvoiceLeadTimeFlag(
+        context.supabase,
+        context.question,
+        context.holdingId
+      );
+    } else {
+      return await handleQa10BookingToFirstInvoiceLeadTimeText(
+        context.supabase,
+        context.question,
+        context.holdingId
+      );
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Verifica si algún flag está activo
+ */
+export function hasActiveFlags(flags: LiveDataFlags): boolean {
+  return HANDLER_REGISTRY.some(registration => flags[registration.flag]) ||
+         flags.bookingToFirstInvoiceLeadTime;
+}
+
+/**
+ * Obtiene la lista de flags activos para debugging
+ */
+export function getActiveFlags(flags: LiveDataFlags): string[] {
+  const active: string[] = [];
+  
+  for (const registration of HANDLER_REGISTRY) {
+    if (flags[registration.flag]) {
+      active.push(registration.flag);
+    }
+  }
+  
+  if (flags.bookingToFirstInvoiceLeadTime) {
+    active.push('bookingToFirstInvoiceLeadTime');
+  }
+  
+  return active;
+}

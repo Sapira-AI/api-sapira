@@ -1,0 +1,115 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentDeferredEomSnapshot(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  currentMonthStr: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, currentMonthStr } = params;
+
+  try {
+    const targetMonth = currentMonthStr;
+
+    const { data, error } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("period_month, deferred_balance_eom_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .eq("period_month", targetMonth)
+      .limit(10000);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? (data as any[]) : [];
+    const currency = rows?.[0]?.system_currency ? String(rows[0].system_currency) : "USD";
+
+    const total = rows.reduce((acc, r) => {
+      const v = typeof r?.deferred_balance_eom_system_ccy === "number"
+        ? r.deferred_balance_eom_system_ccy
+        : r?.deferred_balance_eom_system_ccy
+          ? Number(r.deferred_balance_eom_system_ccy)
+          : 0;
+      return acc + (Number.isFinite(v) ? v : 0);
+    }, 0);
+
+    const hasAnyValue = typeof total === "number" && total !== 0;
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: `Deferred balance EOM (${targetMonth.slice(0, 7)})`,
+        value: `${total.toFixed(2)} ${currency}`.trim(),
+      },
+      {
+        type: "table",
+        title: "Deferred EOM snapshot",
+        columns: ["Mes", `Deferred EOM (${currency})`],
+        rows: [[targetMonth.slice(0, 7), Number(total.toFixed(2))]],
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_deferred_eom_snapshot",
+      range_from: targetMonth,
+      range_to: targetMonth,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly"],
+      filters_applied: { holding_id: holdingId, period_month: targetMonth },
+      holding_id: holdingId,
+      data_completeness: hasAnyValue ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: hasAnyValue
+        ? `INTENT: deferred_eom_snapshot. Deferred EOM para ${targetMonth.slice(0, 7)} (system currency).`
+        : `INTENT: deferred_eom_snapshot. No encontré deferred EOM para ${targetMonth.slice(0, 7)}.`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "deferred_eom_snapshot",
+          filters: { holding_id: holdingId, period_month: targetMonth },
+        },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: deferred_eom_snapshot. No pude consultar deferred EOM en vivo. Motivo: ${reason}`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "deferred_eom_snapshot",
+          filters: { holding_id: holdingId, period_month: currentMonthStr },
+        },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Deferred EOM snapshot",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_deferred_eom_snapshot",
+        range_from: currentMonthStr,
+        range_to: currentMonthStr,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId, period_month: currentMonthStr },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

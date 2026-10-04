@@ -1,0 +1,208 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type Widget } from "../widgets.ts";
+
+type InvoiceJoin = {
+  issue_date?: unknown;
+  status?: unknown;
+  invoice_currency?: unknown;
+  total_invoice_currency?: unknown;
+  total_system_currency?: unknown;
+} | null;
+
+type InvoiceItemRow = {
+  description?: unknown;
+  total_invoice_currency?: unknown;
+  total_contract_currency?: unknown;
+  invoice_id?: unknown;
+  invoices?: InvoiceJoin;
+};
+
+export async function handleQa07BilledByProductMonth(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  currentMonthStr: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, currentMonthStr } = params;
+
+  try {
+    const startOfMonth = `${currentMonthStr.slice(0, 7)}-01`;
+    const endOfMonth = new Date(
+      new Date(currentMonthStr).getFullYear(),
+      new Date(currentMonthStr).getMonth() + 1,
+      0,
+    )
+      .toISOString()
+      .slice(0, 10);
+
+    const { data: itemRows, error: itemErr } = await supabaseAuth
+      .from("invoice_items")
+      .select(
+        `
+          description,
+          total_invoice_currency,
+          invoice_id,
+          invoices(
+            issue_date,
+            status,
+            total_invoice_currency,
+            total_system_currency
+          )
+        `,
+      )
+      .eq("holding_id", holdingId)
+      .gte("invoices.issue_date", startOfMonth)
+      .lte("invoices.issue_date", endOfMonth)
+      .in("invoices.status", ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"])
+      .limit(5000);
+
+    if (itemErr) throw itemErr;
+
+    const rows = Array.isArray(itemRows) ? (itemRows as unknown[]) : [];
+    // Totales por producto y moneda (para no mezclar)
+    const productTotalsByCurrency = new Map<string, Map<string, number>>();
+
+    for (const r of rows) {
+      const row = r as InvoiceItemRow;
+      const inv = row?.invoices;
+      const invTotalInvoice =
+        typeof inv?.total_invoice_currency === "number"
+          ? inv.total_invoice_currency
+          : inv?.total_invoice_currency != null
+            ? Number(inv.total_invoice_currency)
+            : null;
+      const invTotalSystem =
+        typeof inv?.total_system_currency === "number"
+          ? inv.total_system_currency
+          : inv?.total_system_currency != null
+            ? Number(inv.total_system_currency)
+            : null;
+      const itemTotalInvoice =
+        typeof row?.total_invoice_currency === "number"
+          ? row.total_invoice_currency
+          : row?.total_invoice_currency != null
+            ? Number(row.total_invoice_currency)
+            : null;
+      const itemTotalContract =
+        typeof row?.total_contract_currency === "number"
+          ? row.total_contract_currency
+          : row?.total_contract_currency != null
+            ? Number(row.total_contract_currency)
+            : null;
+
+      if (!inv) continue;
+
+      // Si no hay totales en invoice_currency, intentamos con contrato (mínimo para no devolver vacío)
+      const itemBaseInvoice = itemTotalInvoice ?? itemTotalContract;
+
+      // Determinar moneda del monto que vamos a mostrar
+      const invoiceCurrency = String(inv?.invoice_currency ?? "").trim();
+      const rowCurrency = invoiceCurrency || "invoice";
+
+      if (itemBaseInvoice == null || !Number.isFinite(itemBaseInvoice) || itemBaseInvoice <= 0) continue;
+
+      let amount: number | null = null;
+      let currency: string = rowCurrency;
+
+      // Preferimos system currency si está disponible (QA-07), con prorrateo usando invoice.total_invoice_currency
+      if (
+        invTotalInvoice != null &&
+        Number.isFinite(invTotalInvoice) &&
+        invTotalInvoice > 0 &&
+        invTotalSystem != null &&
+        Number.isFinite(invTotalSystem)
+      ) {
+        const share = (itemTotalInvoice ?? itemBaseInvoice) / invTotalInvoice;
+        amount = invTotalSystem * share;
+        currency = "system";
+      } else {
+        // Fallback: no inventamos conversión, devolvemos en moneda de la factura
+        amount = itemBaseInvoice;
+      }
+
+      if (amount == null || !Number.isFinite(amount) || amount <= 0) continue;
+
+      const productName = String(row?.description ?? "(sin producto)").trim() || "(sin producto)";
+
+      const byCurrency = productTotalsByCurrency.get(currency) || new Map<string, number>();
+      byCurrency.set(productName, (byCurrency.get(productName) || 0) + amount);
+      productTotalsByCurrency.set(currency, byCurrency);
+    }
+
+    const systemMap = productTotalsByCurrency.get("system") || new Map<string, number>();
+    const systemProductData = Array.from(systemMap.entries())
+      .map(([product_name, billed]) => ({ product_name, billed: Number(billed.toFixed(2)) }))
+      .sort((a, b) => b.billed - a.billed);
+
+    const chartData = systemProductData.slice(0, 20);
+    const tableData = systemProductData;
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_bar",
+        title: `FacturaciÃƒÂ³n por producto (${currentMonthStr.slice(0, 7)})`,
+        xKey: "product_name",
+        series: [{ key: "billed", name: "Facturado", color: "#3B82F6" }],
+        data: chartData,
+      },
+      {
+        type: "table",
+        title: "Detalle FacturaciÃƒÂ³n por producto (mes actual)",
+        columns: ["Producto", "Facturado (system)"],
+        rows: tableData.map((r) => [r.product_name, r.billed]),
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `FacturaciÃƒÂ³n por producto mes ${currentMonthStr.slice(0, 7)} (solo system currency) usando invoice_items + invoices (NO RSM).`,
+      sources: [
+        { table: "invoice_items", query_type: "billed_by_product_month", filters: { holding_id: holdingId } },
+        { table: "invoices", query_type: "join", filters: { issue_date_range: true, status: ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"] } },
+      ],
+      widgets,
+      audit: {
+        range_from: startOfMonth,
+        range_to: endOfMonth,
+        currency_mode: "system",
+        source_breakdown: ["invoice_items", "invoices"],
+        filters_applied: {
+          holding_id: holdingId,
+          issue_date_range: true,
+          status: ["Emitida", "Enviada", "Pagada", "Vencida", "Por Emitir"],
+        },
+        holding_id: holdingId,
+        data_completeness: tableData.length > 0 ? "complete" : "empty",
+        timestamp: new Date().toISOString(),
+      },
+    };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      handled: true,
+      context: `No pude consultar facturaciÃƒÂ³n por producto. Error: ${message || "Desconocido"}`,
+      sources: [],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - FacturaciÃƒÂ³n por producto",
+          columns: ["Detalle"],
+          rows: [[message || "Desconocido"]],
+        },
+      ],
+      audit: {
+        range_from: currentMonthStr,
+        range_to: currentMonthStr,
+        currency_mode: "system",
+        source_breakdown: ["invoices"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: message || "Unknown error",
+      },
+    };
+  }
+}

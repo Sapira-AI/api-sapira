@@ -1,0 +1,306 @@
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
+
+// Configuración de CORS
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+// Cliente XML-RPC para Odoo (compatible con sync-odoo-invoices)
+class XmlRpcClient {
+  constructor(private url: string) {}
+
+  async methodCall(method: string, params: any[]): Promise<any> {
+    const xmlPayload = this.buildXmlRpcRequest(method, params);
+    
+    console.log(`🔗 Enviando solicitud XML-RPC a ${this.url}`);
+    console.log(`📋 Método: ${method}`);
+    
+    const response = await fetch(this.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Accept': 'text/xml'
+      },
+      body: xmlPayload
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const xmlResponse = await response.text();
+    return this.parseXmlRpcResponse(xmlResponse);
+  }
+
+  private buildXmlRpcRequest(method: string, params: any[]): string {
+    let xml = '<?xml version="1.0"?>\n<methodCall>\n';
+    xml += `<methodName>${method}</methodName>\n<params>\n`;
+    
+    for (const param of params) {
+      xml += '<param>\n';
+      xml += this.valueToXml(param);
+      xml += '</param>\n';
+    }
+    
+    xml += '</params>\n</methodCall>';
+    return xml;
+  }
+
+  private valueToXml(value: any): string {
+    if (value === null || value === undefined) {
+      return '<value><nil/></value>\n';
+    }
+    
+    if (typeof value === 'string') {
+      return `<value><string>${this.escapeXml(value)}</string></value>\n`;
+    }
+    
+    if (typeof value === 'number') {
+      if (Number.isInteger(value)) {
+        return `<value><int>${value}</int></value>\n`;
+      } else {
+        return `<value><double>${value}</double></value>\n`;
+      }
+    }
+    
+    if (typeof value === 'boolean') {
+      return `<value><boolean>${value ? '1' : '0'}</boolean></value>\n`;
+    }
+    
+    if (Array.isArray(value)) {
+      let xml = '<value><array><data>\n';
+      for (const item of value) {
+        xml += this.valueToXml(item);
+      }
+      xml += '</data></array></value>\n';
+      return xml;
+    }
+    
+    if (typeof value === 'object') {
+      let xml = '<value><struct>\n';
+      for (const [key, val] of Object.entries(value)) {
+        xml += '<member>\n';
+        xml += `<name>${this.escapeXml(key)}</name>\n`;
+        xml += this.valueToXml(val);
+        xml += '</member>\n';
+      }
+      xml += '</struct></value>\n';
+      return xml;
+    }
+    
+    return '<value><nil/></value>\n';
+  }
+
+  private parseXmlRpcResponse(xmlText: string): any {
+    try {
+      const doc = parse(xmlText);
+      
+      if (doc.methodResponse?.fault) {
+        const fault = this.extractValue(doc.methodResponse.fault.value);
+        throw new Error(`XML-RPC Fault: ${fault.faultString} (Code: ${fault.faultCode})`);
+      }
+      
+      if (doc.methodResponse?.params?.param?.value) {
+        return this.extractValue(doc.methodResponse.params.param.value);
+      }
+      
+      throw new Error('Invalid XML-RPC response format');
+    } catch (error) {
+      console.error('Error parsing XML-RPC response:', error);
+      console.error('Response text:', xmlText.substring(0, 1000));
+      throw error;
+    }
+  }
+
+  private extractValue(valueNode: any): any {
+    if (!valueNode) return null;
+    
+    if (valueNode.string !== undefined) return valueNode.string;
+    if (valueNode.int !== undefined) return parseInt(valueNode.int);
+    if (valueNode.i4 !== undefined) return parseInt(valueNode.i4);
+    if (valueNode.double !== undefined) return parseFloat(valueNode.double);
+    if (valueNode.boolean !== undefined) return valueNode.boolean === '1';
+    if (valueNode.nil !== undefined) return null;
+    
+    if (valueNode.array?.data) {
+      const items = Array.isArray(valueNode.array.data.value) 
+        ? valueNode.array.data.value 
+        : [valueNode.array.data.value];
+      return items.map(item => this.extractValue(item));
+    }
+    
+    if (valueNode.struct?.member) {
+      const members = Array.isArray(valueNode.struct.member) 
+        ? valueNode.struct.member 
+        : [valueNode.struct.member];
+      
+      const result: any = {};
+      for (const member of members) {
+        if (member.name && member.value !== undefined) {
+          result[member.name] = this.extractValue(member.value);
+        }
+      }
+      return result;
+    }
+    
+    return null;
+  }
+
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+}
+
+serve(async (req) => {
+  // Manejar preflight CORS
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const { connection_id } = await req.json();
+
+    if (!connection_id) {
+      return new Response(
+        JSON.stringify({ error: 'connection_id es requerido' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Obtener la conexión de Odoo
+    console.log(`📋 Obteniendo configuración de conexión: ${connection_id}`);
+    const { data: connection, error: connectionError } = await supabaseClient
+      .from('odoo_connections')
+      .select('*')
+      .eq('id', connection_id)
+      .single();
+
+    if (connectionError || !connection) {
+      throw new Error(`Error obteniendo conexión: ${connectionError?.message || 'Conexión no encontrada'}`);
+    }
+
+    console.log(`🏢 Obteniendo companies de Odoo para conexión: ${connection.url}`);
+
+    // Crear clientes XML-RPC
+    const commonClient = new XmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+    const objectClient = new XmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+    // Autenticar
+    console.log('🔐 Autenticando con Odoo...');
+    const uid = await commonClient.methodCall('authenticate', [
+      connection.database_name,
+      connection.username,
+      connection.api_key,
+      {}
+    ]);
+
+    if (!uid) {
+      throw new Error('Falló la autenticación con Odoo');
+    }
+
+    console.log(`✅ Autenticado exitosamente. UID: ${uid}`);
+
+    // Obtener companies de Odoo (res.company)
+    console.log('🏢 Obteniendo companies de Odoo...');
+    
+    // Buscar todas las companies
+    const companyIds = await objectClient.methodCall('execute_kw', [
+      connection.database_name,
+      uid,
+      connection.api_key,
+      'res.company',
+      'search',
+      [[]] // Sin filtros, obtener todas las companies
+    ]);
+
+    console.log(`📋 Encontradas ${companyIds.length} companies en Odoo`);
+
+    // Obtener detalles de las companies
+    const companies = await objectClient.methodCall('execute_kw', [
+      connection.database_name,
+      uid,
+      connection.api_key,
+      'res.company',
+      'read',
+      [companyIds],
+      {
+        'fields': [
+          'id', 'name', 'display_name', 'vat', 'country_id', 
+          'currency_id', 'email', 'phone', 'website', 'street',
+          'city', 'state_id', 'zip', 'partner_id'
+        ]
+      }
+    ]);
+
+    console.log(`✅ Obtenidos detalles de ${companies.length} companies`);
+
+    // Obtener companies existentes en Sapira para mostrar mapeos actuales
+    const { data: sapiraCompanies, error: sapiraError } = await supabaseClient
+      .from('companies')
+      .select('id, holding_name, legal_name, odoo_integration_id, holding_id')
+      .eq('holding_id', connection.holding_id);
+
+    if (sapiraError) {
+      console.error('Error obteniendo companies de Sapira:', sapiraError);
+    }
+
+    const result = {
+      odoo_companies: companies.map((company: any) => ({
+        id: company.id,
+        name: company.name,
+        display_name: company.display_name,
+        vat: company.vat,
+        country: Array.isArray(company.country_id) ? company.country_id[1] : null,
+        currency: Array.isArray(company.currency_id) ? company.currency_id[1] : null,
+        email: company.email,
+        phone: company.phone,
+        website: company.website,
+        address: [company.street, company.city, company.zip].filter(Boolean).join(', '),
+        state: Array.isArray(company.state_id) ? company.state_id[1] : null,
+        partner_id: company.partner_id
+      })),
+      sapira_companies: sapiraCompanies || [],
+      connection_info: {
+        id: connection.id,
+        server_url: connection.url,
+        database_name: connection.database_name,
+        holding_id: connection.holding_id
+      }
+    };
+
+    return new Response(
+      JSON.stringify(result),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+
+  } catch (error) {
+    console.error('❌ Error en get-odoo-companies:', error);
+    return new Response(
+      JSON.stringify({ 
+        error: 'Error interno del servidor',
+        details: error.message 
+      }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+});

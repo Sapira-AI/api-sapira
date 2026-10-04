@@ -1,0 +1,390 @@
+/**
+ * Sistema de detección de ambigüedad y generación de sugerencias contextuales
+ * para el Copiloto Sapira
+ */
+
+export interface AmbiguityResult {
+  isAmbiguous: boolean;
+  ambiguityType: 'keyword_only' | 'missing_context' | 'multiple_options' | 'none';
+  suggestions: string[];
+  clarificationQuestion: string;
+  confidence: number; // 0-1, donde 1 es muy ambiguo
+}
+
+export interface SuggestionContext {
+  keyword: string;
+  category: 'contracts' | 'invoices' | 'mrr' | 'clients' | 'reports' | 'general';
+  specificOptions: string[];
+  contextualPrompts: string[];
+}
+
+/**
+ * Detecta si una pregunta es ambigua y genera sugerencias contextuales
+ */
+export function detectAmbiguity(question: string): AmbiguityResult {
+  const q = question.toLowerCase().trim();
+  
+  // Preguntas muy cortas o solo keywords
+  if (q.length <= 10 || isOnlyKeywords(q)) {
+    const res = handleKeywordOnlyQuery(q);
+    return { ...res, suggestions: sanitizeSuggestions(res.suggestions) };
+  }
+
+  // Preguntas que mencionan múltiples conceptos sin especificar
+  const multipleConceptsResult = detectMultipleConcepts(q);
+  if (multipleConceptsResult.isAmbiguous) {
+    return {
+      ...multipleConceptsResult,
+      suggestions: sanitizeSuggestions(multipleConceptsResult.suggestions),
+    };
+  }
+
+  // Preguntas que necesitan más contexto
+  const missingContextResult = detectMissingContext(q);
+  if (missingContextResult.isAmbiguous) {
+    return {
+      ...missingContextResult,
+      suggestions: sanitizeSuggestions(missingContextResult.suggestions),
+    };
+  }
+
+  // No es ambigua
+  return {
+    isAmbiguous: false,
+    ambiguityType: 'none',
+    suggestions: [],
+    clarificationQuestion: '',
+    confidence: 0
+  };
+}
+
+function sanitizeSuggestions(suggestions: string[]): string[] {
+  const blocked = [
+    /\bdetalle\s+facturas\s+legacy\s+cliente\b/i,
+    /\bdame\s+arr\s+desde\s+el\s+mrr\b/i,
+    /\bsystem\s+currency\b/i,
+    /\bcontract\s+currency\b/i,
+    /\binvoice\s+currency\b/i,
+    /\bfactura\s+vencida\b/i,
+    /\bdeferred\b/i,
+    /\bunbilled\b/i,
+    /\brevenue\s+reconocido\b/i,
+    /\bbilled\b/i,
+    /\bacme\b/i,
+    /\bbuscalibre\b/i,
+  ];
+
+  return (suggestions || []).filter((s) => {
+    const v = String(s ?? '').trim();
+    if (!v) return false;
+    return !blocked.some((re) => re.test(v));
+  });
+}
+
+/**
+ * Maneja queries que son solo keywords o muy cortas
+ */
+function isOnlyKeywords(query: string): boolean {
+  const keywords = ['mrr', 'facturas', 'contratos', 'clientes', 'reportes', 'ingresos', 'revenue'];
+  const words = query.split(/\s+/).filter(w => w.length > 2);
+  
+  // Si tiene 1-2 palabras y alguna es keyword
+  if (words.length <= 2) {
+    return keywords.some(keyword => query.includes(keyword));
+  }
+  
+  return false;
+}
+
+function handleKeywordOnlyQuery(query: string): AmbiguityResult {
+  const contexts = getKeywordContexts();
+  
+  for (const context of contexts) {
+    if (query.includes(context.keyword)) {
+      return {
+        isAmbiguous: true,
+        ambiguityType: 'keyword_only',
+        suggestions: context.specificOptions,
+        clarificationQuestion: generateClarificationQuestion(context),
+        confidence: 0.9
+      };
+    }
+  }
+
+  // Keyword genérico no reconocido
+  return {
+    isAmbiguous: true,
+    ambiguityType: 'keyword_only',
+    suggestions: [
+      'Ver contratos activos',
+      'Ver facturas pendientes',
+      'Ver MRR este mes',
+      'Ver clientes por segmento'
+    ],
+    clarificationQuestion: '¿Qué información específica necesitas? Puedo ayudarte con:',
+    confidence: 0.8
+  };
+}
+
+/**
+ * Detecta preguntas que mencionan múltiples conceptos
+ */
+function detectMultipleConcepts(query: string): AmbiguityResult {
+  const concepts = {
+    'contratos': ['contrato', 'contratos'],
+    'facturas': ['factura', 'facturas', 'facturación'],
+    'mrr': ['mrr', 'ingresos recurrentes'],
+    'clientes': ['cliente', 'clientes'],
+    'monedas': ['usd', 'clp', 'clf', 'mxn', 'moneda', 'monedas']
+  };
+
+  const foundConcepts = [];
+  for (const [concept, keywords] of Object.entries(concepts)) {
+    if (keywords.some(keyword => query.includes(keyword))) {
+      foundConcepts.push(concept);
+    }
+  }
+
+  if (foundConcepts.length >= 2) {
+    const suggestions = generateMultiConceptSuggestions(foundConcepts, query);
+    return {
+      isAmbiguous: true,
+      ambiguityType: 'multiple_options',
+      suggestions,
+      clarificationQuestion: `Mencionas ${foundConcepts.join(' y ')}. ¿Te refieres a:`,
+      confidence: 0.7
+    };
+  }
+
+  return { isAmbiguous: false, ambiguityType: 'none', suggestions: [], clarificationQuestion: '', confidence: 0 };
+}
+
+/**
+ * Detecta preguntas que necesitan más contexto
+ */
+function detectMissingContext(query: string): AmbiguityResult {
+  const needsTimeContext = [
+    'cuánto', 'cuanto', 'total', 'suma', 'mostrar', 'ver'
+  ];
+
+  const needsFilterContext = [
+    'facturas', 'contratos', 'clientes'
+  ];
+
+  const hasTimeKeyword = needsTimeContext.some(keyword => query.includes(keyword));
+  const hasFilterKeyword = needsFilterContext.some(keyword => query.includes(keyword));
+  const hasTimeSpecified = hasTimeSpecification(query);
+  const hasFilterSpecified = hasFilterSpecification(query);
+
+  if (hasTimeKeyword && !hasTimeSpecified) {
+    return {
+      isAmbiguous: true,
+      ambiguityType: 'missing_context',
+      suggestions: [
+        'Este mes',
+        'Últimos 3 meses',
+        'Últimos 6 meses',
+        'Este año',
+        'Rango específico'
+      ],
+      clarificationQuestion: '¿Para qué período de tiempo?',
+      confidence: 0.6
+    };
+  }
+
+  if (hasFilterKeyword && !hasFilterSpecified) {
+    return {
+      isAmbiguous: true,
+      ambiguityType: 'missing_context',
+      suggestions: generateFilterSuggestions(query),
+      clarificationQuestion: '¿Qué filtros específicos necesitas?',
+      confidence: 0.5
+    };
+  }
+
+  return { isAmbiguous: false, ambiguityType: 'none', suggestions: [], clarificationQuestion: '', confidence: 0 };
+}
+
+/**
+ * Contextos predefinidos para keywords comunes
+ */
+function getKeywordContexts(): SuggestionContext[] {
+  return [
+    {
+      keyword: 'mrr',
+      category: 'mrr',
+      specificOptions: [
+        'MRR de este mes',
+        'MRR últimos 6 meses (serie)',
+        'MRR por compañía',
+        'MRR por moneda de contrato',
+        'MRR por segmento de cliente',
+        'MRR momentum (NEW, UPSELL, CHURN)',
+        'Comparar MRR vs mes anterior'
+      ],
+      contextualPrompts: [
+        '¿Quieres ver el MRR actual o histórico?',
+        '¿Necesitas desglose por compañía, cliente o producto?',
+        '¿En qué moneda prefieres verlo?'
+      ]
+    },
+    {
+      keyword: 'facturas',
+      category: 'invoices',
+      specificOptions: [
+        'Facturas por emitir',
+        'Facturas vencidas',
+        'Facturas pagadas este mes',
+        'Facturas por estado (todas)',
+        'Facturas por moneda',
+        'Facturas de un cliente específico',
+        'Resumen de facturación mensual'
+      ],
+      contextualPrompts: [
+        '¿Qué estado de facturas te interesa?',
+        '¿Necesitas filtrar por cliente o período?',
+        '¿Prefieres ver montos en moneda específica?'
+      ]
+    },
+    {
+      keyword: 'contratos',
+      category: 'contracts',
+      specificOptions: [
+        'Contratos activos',
+        'Contratos por renovar',
+        'Contratos por estado',
+        'Contratos por moneda',
+        'Contratos nuevos este mes',
+        'Contratos que expiran pronto',
+        'Valor total de contratos activos'
+      ],
+      contextualPrompts: [
+        '¿Qué estado de contratos necesitas?',
+        '¿Quieres filtrar por período o compañía?',
+        '¿Necesitas desglose por moneda de contrato?'
+      ]
+    },
+    {
+      keyword: 'clientes',
+      category: 'clients',
+      specificOptions: [
+        'Clientes por segmento',
+        'Clientes por mercado',
+        'Clientes activos vs inactivos',
+        'Nuevos clientes este mes',
+        'Clientes con mayor MRR',
+        'Clientes por país',
+        'Resumen de cartera de clientes'
+      ],
+      contextualPrompts: [
+        '¿Qué información de clientes necesitas?',
+        '¿Quieres agrupar por segmento, mercado o región?',
+        '¿Necesitas métricas financieras por cliente?'
+      ]
+    }
+  ];
+}
+
+function generateClarificationQuestion(context: SuggestionContext): string {
+  const baseQuestion = `Veo que preguntas sobre **${context.keyword}**. ¿Te refieres a:`;
+  return baseQuestion;
+}
+
+function generateMultiConceptSuggestions(concepts: string[], query: string): string[] {
+  const suggestions = [];
+  
+  if (concepts.includes('contratos') && concepts.includes('facturas')) {
+    suggestions.push(
+      'Contratos con facturas pendientes',
+      'Facturas generadas por contratos activos',
+      'Resumen de facturación por contrato'
+    );
+  }
+  
+  if (concepts.includes('mrr') && concepts.includes('clientes')) {
+    suggestions.push(
+      'MRR por cliente',
+      'Clientes con mayor MRR',
+      'Evolución de MRR por segmento de cliente'
+    );
+  }
+  
+  if (concepts.includes('facturas') && concepts.includes('monedas')) {
+    suggestions.push(
+      'Facturas por moneda',
+      'Resumen de facturación por divisa',
+      'Facturas en moneda específica'
+    );
+  }
+
+  // Sugerencias genéricas si no hay combinaciones específicas
+  if (suggestions.length === 0) {
+    suggestions.push(
+      `${concepts[0]} relacionados con ${concepts[1]}`,
+      `Resumen de ${concepts.join(' y ')}`,
+      `Análisis combinado de ${concepts.join(' y ')}`
+    );
+  }
+  
+  return suggestions;
+}
+
+function generateFilterSuggestions(query: string): string[] {
+  if (query.includes('facturas')) {
+    return [
+      'Por estado (emitidas, vencidas, pagadas)',
+      'Por moneda (USD, CLP, CLF, MXN)',
+      'Por cliente específico',
+      'Por período (este mes, últimos 3 meses)',
+      'Por compañía emisora'
+    ];
+  }
+  
+  if (query.includes('contratos')) {
+    return [
+      'Por estado (activos, firmados, en proceso)',
+      'Por moneda de contrato',
+      'Por fecha de renovación',
+      'Por segmento de cliente',
+      'Por compañía'
+    ];
+  }
+  
+  if (query.includes('clientes')) {
+    return [
+      'Por segmento (Enterprise, SMB, etc.)',
+      'Por mercado geográfico',
+      'Por estado (activo, inactivo)',
+      'Por industria',
+      'Por valor de MRR'
+    ];
+  }
+  
+  return [
+    'Por período de tiempo',
+    'Por moneda',
+    'Por estado',
+    'Por cliente o compañía'
+  ];
+}
+
+function hasTimeSpecification(query: string): boolean {
+  const timeKeywords = [
+    'este mes', 'mes actual', 'últimos', 'último', 'este año', 'año actual',
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    '2024', '2025', '2026', 'trimestre', 'semestre'
+  ];
+  
+  return timeKeywords.some(keyword => query.includes(keyword));
+}
+
+function hasFilterSpecification(query: string): boolean {
+  const filterKeywords = [
+    'activo', 'activos', 'inactivo', 'vencida', 'vencidas', 'pagada', 'pagadas',
+    'emitida', 'emitidas', 'usd', 'clp', 'clf', 'mxn', 'eur',
+    'enterprise', 'smb', 'chile', 'méxico', 'colombia', 'perú'
+  ];
+  
+  return filterKeywords.some(keyword => query.includes(keyword));
+}

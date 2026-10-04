@@ -1,0 +1,2081 @@
+/**
+  * Módulo de handlers de Live Data para rag-chat
+  * Extraído de index.ts para mejor modularidad
+  * Contiene toda la lógica de QA-01 a QA-12
+  */
+ 
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+ import { isLiveDataQuery } from "./intentRouter.ts";
+ import { type Widget, type LiveDataAudit } from "./widgets.ts";
+ import { type LiveDataResult, type LiveDataSource } from "./liveDataHandlers/types.ts";
+ import {
+   extractContractIdentifier,
+   extractGroupBySpec,
+   extractQuoteIdentifier,
+   extractSearchTerm,
+   monthStartStr,
+ } from "./utils.ts";
+ import { tryHandleKeywordExploreAndGateways } from "./liveDataHandlers/keywordExploreAndGateways.ts";
+ import { handleQa01MrrSeries } from "./liveDataHandlers/qa01_mrrSeries.ts";
+ import { handleQa02MrrByCompany } from "./liveDataHandlers/qa02_mrrByCompany.ts";
+ import { handleQa05RecognizedRevenue } from "./liveDataHandlers/qa05_recognizedRevenue.ts";
+ import { handleQa06DeferredUnbilledEom } from "./liveDataHandlers/qa06_deferredUnbilledEom.ts";
+ import { handleQa07BilledByProductMonth } from "./liveDataHandlers/qa07_billedByProductMonth.ts";
+ import { handleQa08OverdueInvoices } from "./liveDataHandlers/qa08_overdueInvoices.ts";
+ import { handleIntentMrrSnapshot } from "./liveDataHandlers/intent_mrrSnapshot.ts";
+ import { handleIntentCmrrSeries } from "./liveDataHandlers/intent_cmrrSeries.ts";
+ import { handleIntentInvoicesIssuedMonth } from "./liveDataHandlers/intent_invoicesIssuedMonth.ts";
+ import { handleIntentInvoicesToIssueList } from "./liveDataHandlers/intent_invoicesToIssueList.ts";
+ import { handleIntentMrrMomentumSeries } from "./liveDataHandlers/intent_mrrMomentumSeries.ts";
+ import { handleIntentMrrByContractCurrency } from "./liveDataHandlers/intent_mrrByContractCurrency.ts";
+ import { handleIntentLegacyInvoicesSeries } from "./liveDataHandlers/intent_legacyInvoicesSeries.ts";
+ import { handleIntentPaymentsSeries } from "./liveDataHandlers/intent_paymentsSeries.ts";
+ import { handleIntentRecognizedNonRecurringByClient } from "./liveDataHandlers/intent_recognizedNonRecurringByClient.ts";
+ import { handleIntentContractsExpiring } from "./liveDataHandlers/intent_contractsExpiring.ts";
+ import { handleIntentContractsNew } from "./liveDataHandlers/intent_contractsNew.ts";
+ import { handleIntentLegacyInvoicesByClient } from "./liveDataHandlers/intent_legacyInvoicesByClient.ts";
+ import { handleIntentMrrMomentumByProduct } from "./liveDataHandlers/intent_mrrMomentumByProduct.ts";
+ import { handleIntentMrrSeriesBySegment } from "./liveDataHandlers/intent_mrrSeriesBySegment.ts";
+ import { handleIntentRecognizedByProduct } from "./liveDataHandlers/intent_recognizedByProduct.ts";
+ import { handleIntentDeferredEomSnapshot } from "./liveDataHandlers/intent_deferredEomSnapshot.ts";
+ import { handleIntentUnbilledEomSnapshot } from "./liveDataHandlers/intent_unbilledEomSnapshot.ts";
+ import { handleIntentQuantityVariationAvg } from "./liveDataHandlers/intent_quantityVariationAvg.ts";
+ import { handleIntentQuantityVariationContract } from "./liveDataHandlers/intent_quantityVariationContract.ts";
+ import { handleContractsActiveByStatus } from "./liveDataHandlers/intent_contractsActiveByStatus.ts";
+ import { handleInvoicesByStatusAndCurrency } from "./liveDataHandlers/intent_invoicesByStatusAndCurrency.ts";
+ import {
+   handleQa10BookingToFirstInvoiceLeadTimeFlag,
+   handleQa10BookingToFirstInvoiceLeadTimeText,
+   isQa10BookingFacturaQuestion,
+ } from "./liveDataHandlers/qa10_bookingToFirstInvoiceLeadTime.ts";
+ import { handleQa09DaysToPay } from "./liveDataHandlers/qa09_daysToPay.ts";
+ import { handleQa04ChurnReasons } from "./liveDataHandlers/qa04_churnReasons.ts";
+ import { handleQa14ContractsSummaryByCurrency } from "./liveDataHandlers/qa14_contractsSummaryByCurrency.ts";
+ import { appendReportsMetrics } from "./liveDataHandlers/reportsMetrics.ts";
+ import { tryHandleDataGatewayBiAndGroupBy } from "./liveDataHandlers/dataGatewayBiAndGroupBy.ts";
+
+ export type { LiveDataResult, LiveDataSource };
+
+ export function formatMoney(amount: number, currency: string): string {
+   const ccy = String(currency ?? "").trim().toUpperCase();
+   if (!Number.isFinite(amount)) return `${amount} ${ccy}`;
+
+   const symbol = ccy === "EUR" ? "€" : (ccy === "USD" || ccy === "CLP" || ccy === "MXN" || ccy === "CLF") ? "$" : "";
+   const abs = Math.abs(amount);
+
+   const decimals = (ccy === "CLP" || ccy === "CLF") ? 0 : 2;
+
+   const compact = (value: number, suffix: string, div: number) => {
+     const n = value / div;
+     const formatted = new Intl.NumberFormat("es-CL", {
+       minimumFractionDigits: 0,
+       maximumFractionDigits: 2,
+     }).format(Number(n.toFixed(2)));
+     return `${symbol}${formatted}${suffix} ${ccy}`.trim();
+   };
+
+   if (abs >= 1_000_000_000) return compact(amount, "B", 1_000_000_000);
+   if (abs >= 1_000_000) return compact(amount, "M", 1_000_000);
+   if (abs >= 1_000) return compact(amount, "K", 1_000);
+
+   const formatted = new Intl.NumberFormat("es-CL", {
+     minimumFractionDigits: decimals,
+     maximumFractionDigits: decimals,
+   }).format(amount);
+
+   return `${symbol}${formatted} ${ccy}`.trim();
+ }
+ 
+ export async function tryHandleLiveData(
+  supabaseAuth: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  authHeader: string,
+  openaiApiKey: string,
+  question: string,
+): Promise<LiveDataResult> {
+  let flags = isLiveDataQuery(question);
+
+  async function resolveHoldingId(): Promise<string> {
+    // Multi-tenant: el holding debe venir del usuario autenticado (según su sesión/JWT).
+    // Preferimos get_current_user_holding_id(); fallback a funciones legacy si aplica.
+    const { data: currentHoldingId, error: currentHoldingErr } = await supabaseAuth.rpc(
+      "get_current_user_holding_id",
+    );
+    if (!currentHoldingErr && currentHoldingId) {
+      return String(currentHoldingId);
+    }
+
+    const { data: holdingIdLegacy, error: holdingIdLegacyErr } = await supabaseAuth.rpc("get_user_holding_id");
+    if (!holdingIdLegacyErr && holdingIdLegacy) {
+      return String(holdingIdLegacy);
+    }
+
+    const { data: holdingData, error: holdingDataErr } = await supabaseAuth.rpc("get_user_holding_data_robust");
+    if (!holdingDataErr && holdingData) {
+      const row = Array.isArray(holdingData) ? (holdingData[0] as any) : (holdingData as any);
+      if (row?.id) return String(row.id);
+    }
+
+    throw new Error(
+      `No se pudo resolver holding_id para el usuario autenticado (get_current_user_holding_id/get_user_holding_id/get_user_holding_data_robust). Motivo: ${currentHoldingErr?.message ?? holdingIdLegacyErr?.message ?? holdingDataErr?.message ?? "unknown"}`,
+    );
+  }
+
+  const qLower = question.toLowerCase();
+  const mentionsAny = (...terms: string[]) => terms.some((t) => qLower.includes(t));
+  const wantsSearch = /\b(buscar|encuentra|encontrar)\b/i.test(question);
+  const wantsList = /\b(listar|lista|mostrar|ver|dame|trae)\b/i.test(question);
+  const groupSpec = extractGroupBySpec(question);
+
+  let holdingId: string;
+  try {
+    holdingId = await resolveHoldingId();
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo: no se pudo determinar tu holding (multi-tenant). Motivo: ${e?.message ?? String(e)}`,
+      sources: [],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data",
+          columns: ["Detalle"],
+          rows: [["No se pudo resolver holding_id para el usuario autenticado."]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: [],
+        filters_applied: {},
+        holding_id: null,
+        data_completeness: "error",
+        timestamp: new Date().toISOString(),
+        error_type: "tenant_resolution",
+        error_reason: e?.message ?? String(e),
+      } as any,
+    };
+  }
+
+  const sqlFirstResource = (() => {
+    if (mentionsAny("cliente", "clientes")) return "clients";
+    if (mentionsAny("contacto", "contactos")) return "client_contacts";
+    if (mentionsAny("contrato", "contratos")) return "contracts";
+    if (mentionsAny("factura", "facturas")) return "invoices";
+    if (mentionsAny("empresa", "empresas", "compañ", "compani")) return "companies";
+    if (mentionsAny("entidad", "entidades", "entidad legal", "entidades legales")) return "client_entities";
+    if (mentionsAny("movim", "movimiento", "movimientos") && mentionsAny("banc", "banco")) return "bank_movements";
+    if (mentionsAny("referenc", "referencia", "referencias") && mentionsAny("factur", "facturación", "billing")) return "billing_references";
+    if (mentionsAny("cotiz", "cotización", "cotizaciones", "quote")) return "quotes";
+    return null;
+  })();
+
+  if (sqlFirstResource) {
+    if (sqlFirstResource === "clients") {
+      flags = {
+        ...flags,
+        gatewayClientsSearch: wantsSearch,
+        gatewayClientsList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "client_contacts") {
+      flags = {
+        ...flags,
+        gatewayContactsSearch: wantsSearch || wantsList || true,
+      };
+    }
+    if (sqlFirstResource === "contracts") {
+      flags = {
+        ...flags,
+        gatewayContractsSearch: wantsSearch || wantsList || true,
+      };
+    }
+    if (sqlFirstResource === "invoices") {
+      flags = {
+        ...flags,
+        gatewayInvoicesSearch: wantsSearch,
+        gatewayInvoicesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "companies") {
+      flags = {
+        ...flags,
+        gatewayCompaniesSearch: wantsSearch,
+        gatewayCompaniesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "client_entities") {
+      flags = {
+        ...flags,
+        gatewayClientEntitiesSearch: wantsSearch,
+        gatewayClientEntitiesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "bank_movements") {
+      flags = {
+        ...flags,
+        gatewayBankMovementsSearch: wantsSearch,
+        gatewayBankMovementsList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "billing_references") {
+      flags = {
+        ...flags,
+        gatewayBillingReferencesSearch: wantsSearch,
+        gatewayBillingReferencesList: !wantsSearch && (wantsList || true),
+      };
+    }
+    if (sqlFirstResource === "quotes") {
+      flags = {
+        ...flags,
+        gatewayQuotesSearch: wantsSearch,
+        gatewayQuotesList: !wantsSearch && (wantsList || true),
+      };
+    }
+  }
+
+  const shouldHandle =
+    flags.overdueInvoices ||
+    flags.invoicesThisWeek ||
+    flags.invoicesDueSoon ||
+    flags.activeContracts ||
+    flags.mrrVsPreviousMonth ||
+    flags.recognizedRevenueByClient ||
+    flags.reportsMetrics ||
+    flags.revenueRecognition ||
+    flags.pendingContracts ||
+    flags.contractReport ||
+    flags.quoteReport ||
+    flags.gatewayClientsList ||
+    flags.gatewayClientsSearch ||
+    flags.gatewayContactsSearch ||
+    flags.gatewayContractsSearch ||
+    flags.gatewayInvoicesList ||
+    flags.gatewayCompaniesList ||
+    flags.gatewayCompaniesSearch ||
+    flags.gatewayClientEntitiesList ||
+    flags.gatewayClientEntitiesSearch ||
+    flags.gatewayBankMovementsList ||
+    flags.gatewayBankMovementsSearch ||
+    flags.gatewayBillingReferencesList ||
+    flags.gatewayBillingReferencesSearch ||
+    flags.gatewayQuotesList ||
+    flags.gatewayQuotesSearch ||
+    flags.keywordExplore ||
+    // Nuevos intents específicos QA
+    flags.mrrSnapshot ||
+    flags.mrrSnapshotByCompany ||
+    flags.mrrSeries ||
+    flags.mrrSeriesBySegment ||
+    flags.mrrSeriesByClient ||
+    flags.cmrrSeries ||
+    flags.mrrMomentumSeries ||
+    flags.mrrMomentumByProduct ||
+    flags.mrrNewSeries ||
+    flags.upsellSeries ||
+    flags.churnSeries ||
+    flags.churnReasons ||
+    flags.recognizedSeries ||
+    flags.recognizedNonRecurringByClient ||
+    flags.recognizedByProduct ||
+    flags.deferredEomSnapshot ||
+    flags.deferredEomSeries ||
+    flags.unbilledEomSnapshot ||
+    flags.unbilledEomSeries ||
+    flags.deferredUnbilledEomSeries ||
+    flags.billedByProductMonth ||
+    flags.invoicesIssuedMonth ||
+    flags.invoicesToIssueList ||
+    flags.invoicesOverdueList ||
+    flags.paymentsSeries ||
+    flags.daysToPay ||
+    flags.bookingToFirstInvoiceLeadTime ||
+    flags.mrrSnapshotByCurrencyContract ||
+    flags.legacyInvoicesSeries ||
+    flags.contractsExpiring ||
+    flags.contractsNew ||
+    flags.legacyInvoicesByClient ||
+    flags.quantityVariationAvg ||
+    flags.quantityVariationContract ||
+    flags.contractsSummaryByCurrency;
+  if (!shouldHandle) {
+    return { 
+      handled: false, 
+      context: "", 
+      sources: [], 
+      widgets: [],
+      audit: {
+        currency_mode: 'system',
+        source_breakdown: [],
+        filters_applied: { holding_id: holdingId },
+        data_completeness: 'empty',
+        timestamp: new Date().toISOString(),
+        error_type: 'validation',
+        error_reason: 'No matching intent found for this query'
+      }
+    };
+  }
+
+  async function callDataGateway(body: Record<string, unknown>) {
+    const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/data-gateway`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as any;
+    if (!res.ok) {
+      throw new Error(`data-gateway error ${res.status}: ${json?.error ?? "unknown"}`);
+    }
+    return json;
+  }
+
+  function extractSearchTerm(q: string): string | null {
+    const cleanQ = q
+      .toLowerCase()
+      .replace(
+        /\b(buscar|encuentra|encontrar|ver|lista|listar|dame|trae|muéstrame|muestra|sobre|del|cliente|contrato|factura)\b/gi,
+        "",
+      )
+      .trim();
+
+    return cleanQ.length >= 2 ? cleanQ : q.trim();
+  }
+
+  function extractQuoteIdentifier(q: string): { id?: string; quote_number?: string } {
+    const uuidMatch = q.match(
+      /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/,
+    );
+    if (uuidMatch?.[0]) {
+      return { id: uuidMatch[0] };
+    }
+
+    const m = q.match(/cotizaci[oó]n\s*[:#]?\s*([A-Za-z0-9\-_/\.]{4,})/i);
+    if (m?.[1]) {
+      return { quote_number: m[1] };
+    }
+
+    return {};
+  }
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const endWeek = new Date(today);
+  endWeek.setDate(endWeek.getDate() + 7);
+  const endWeekStr = endWeek.toISOString().slice(0, 10);
+
+  const endSoon = new Date(today);
+  endSoon.setDate(endSoon.getDate() + 30);
+  const endSoonStr = endSoon.toISOString().slice(0, 10);
+
+  const currentMonthStr = `${today.toISOString().slice(0, 7)}-01`;
+  const prevMonthDate = new Date(today);
+  prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+  const previousMonthStr = `${prevMonthDate.toISOString().slice(0, 7)}-01`;
+
+  function extractTargetCurrency(q: string): string | null {
+    const qq = q.toLowerCase();
+    if (qq.includes("clp") || qq.includes("pesos chilen") || qq.includes("peso chileno")) return "CLP";
+    if (qq.includes("mxn") || qq.includes("pesos mexican") || qq.includes("peso mexicano")) return "MXN";
+    if (qq.includes("usd") || qq.includes("dÃƒÂ³lar") || qq.includes("dolar") || qq.includes("dÃƒÂ³lares") || qq.includes("dolares")) return "USD";
+    if (qq.includes("eur") || qq.includes("euro") || qq.includes("euros")) return "EUR";
+    return null;
+  }
+
+  const targetCurrency = extractTargetCurrency(question);
+
+  // === CASOS QA ESPECÍFICOS ===}
+
+  // QA-02: MRR Snapshot por Compañía (incluye legacy)
+  if (flags.mrrSnapshotByCompany) {
+    return await withOptionalFxConversion(
+      await handleQa02MrrByCompany({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        currentMonthStr,
+      }),
+    );
+  }
+
+  // QA-11: MRR por moneda de contrato (no mezclar)
+  if (flags.mrrSnapshotByCurrencyContract) {
+    return await withOptionalFxConversion(
+      await handleIntentMrrByContractCurrency({ supabaseAuth, holdingId }),
+    );
+  }
+
+  // QA-13: MRR Snapshot (este mes)
+  if (flags.mrrSnapshot) {
+    return await withOptionalFxConversion(
+      await handleIntentMrrSnapshot({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        currentMonthStr,
+      }),
+    );
+  }
+
+  // QA-14: CMRR serie (últimos N meses)
+  if (flags.cmrrSeries) {
+    return await withOptionalFxConversion(
+      await handleIntentCmrrSeries({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+  }
+
+  // INTENT: MRR serie por segmento
+  if (flags.mrrSeriesBySegment) {
+    const r = await withOptionalFxConversion(
+      await handleIntentMrrSeriesBySegment({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+    return await withOptionalFxCharts(r);
+  }
+
+  // QA-03: MRR Momentum NEW (movimientos)
+  if (flags.mrrMomentumSeries || flags.mrrNewSeries || flags.churnSeries) {
+    return await handleIntentMrrMomentumSeries({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // QA-01: MRR Serie 12 Meses (core: no caer a RAG + no hardcode 6)
+  if (flags.mrrSeries) {
+    const r = await withOptionalFxConversion(
+      await handleQa01MrrSeries({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+    return await withOptionalFxCharts(r);
+  }
+
+  // INTENT: MRR Momentum por producto
+  if (flags.mrrMomentumByProduct) {
+    return await handleIntentMrrMomentumByProduct({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // INTENT: Revenue NO recurrente por cliente
+  if (flags.recognizedNonRecurringByClient) {
+    return await withOptionalFxConversion(
+      await handleIntentRecognizedNonRecurringByClient({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+  }
+
+  // INTENT: Revenue reconocido por producto
+  if (flags.recognizedByProduct) {
+    const r = await withOptionalFxConversion(
+      await handleIntentRecognizedByProduct({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+    return await withOptionalFxCharts(r);
+  }
+
+  // QA-05: Revenue Reconocido (incluye no recurrente)
+  if (flags.recognizedSeries) {
+    const r = await withOptionalFxConversion(
+      await handleQa05RecognizedRevenue({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+    return await withOptionalFxCharts(r);
+  }
+
+  // INTENT: Deferred EOM snapshot
+  if (flags.deferredEomSnapshot) {
+    return await withOptionalFxConversion(
+      await handleIntentDeferredEomSnapshot({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        currentMonthStr,
+      }),
+    );
+  }
+
+  // INTENT: Unbilled EOM snapshot
+  if (flags.unbilledEomSnapshot) {
+    return await withOptionalFxConversion(
+      await handleIntentUnbilledEomSnapshot({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        currentMonthStr,
+      }),
+    );
+  }
+
+  // QA-06: Deferred y Unbilled EOM (combinado o individual)
+  if (flags.deferredUnbilledEomSeries || flags.deferredEomSeries || flags.unbilledEomSeries) {
+    return await handleQa06DeferredUnbilledEom({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+      flags,
+    });
+  }
+
+  // QA-07: FacturaciÃƒÂ³n por Producto Mes Actual (NO RSM) - Incluye Por Emitir
+  if (flags.billedByProductMonth) {
+    return await withOptionalFxConversion(
+      await handleQa07BilledByProductMonth({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        currentMonthStr,
+      }),
+    );
+  }
+
+  // INTENT: Facturas emitidas este mes
+  if (flags.invoicesIssuedMonth) {
+    return await handleIntentInvoicesIssuedMonth({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      currentMonthStr,
+    });
+  }
+
+  // INTENT: Facturas por emitir (lista)
+  if (flags.invoicesToIssueList) {
+    return await handleIntentInvoicesToIssueList({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+    });
+  }
+
+  // QA-08: Facturas Vencidas (Lista)
+  if (flags.invoicesOverdueList || flags.overdueInvoices) {
+    return await handleQa08OverdueInvoices({ supabaseAuth, holdingId });
+  }
+
+  // Pagos: serie por mes
+  if (flags.paymentsSeries) {
+    const r = await withOptionalFxConversion(
+      await handleIntentPaymentsSeries({
+        supabaseAuth: supabaseAuth as any,
+        holdingId,
+        question,
+      }),
+    );
+    return await withOptionalFxCharts(r);
+  }
+
+  // INTENT: Variación promedio de cantidades
+  if (flags.quantityVariationAvg) {
+    return await handleIntentQuantityVariationAvg({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // INTENT: Variaciones de cantidades por contrato
+  if (flags.quantityVariationContract) {
+    return await handleIntentQuantityVariationContract({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // Pagos: días promedio de pago (invoice_payments + invoices)
+  if (flags.daysToPay) {
+    return await handleQa09DaysToPay({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // QA-04: Razones de churn por segmento (contracts + clients), NO usar momentum CHURN
+  if (flags.churnReasons) {
+    return await handleQa04ChurnReasons({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // QA-14: Contratos por moneda (activos / negociación / por renovar / con facturas por emitir) + MRR/CMRR
+  if (flags.contractsSummaryByCurrency) {
+    return await handleQa14ContractsSummaryByCurrency({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+    });
+  }
+
+  // INTENT: Contratos por vencer
+  if (flags.contractsExpiring) {
+    return await handleIntentContractsExpiring({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+    });
+  }
+
+  // INTENT: Contratos nuevos este mes
+  if (flags.contractsNew) {
+    return await handleIntentContractsNew({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+    });
+  }
+
+  // INTENT: Contratos activos por estado
+  // INTENT: Detalle facturas legacy por cliente
+  if (flags.legacyInvoicesByClient) {
+    return await handleIntentLegacyInvoicesByClient({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  // QA-10: Lead Time Booking Ã¢â€ â€™ Primera Factura
+  if (flags.bookingToFirstInvoiceLeadTime) {
+    return await handleQa10BookingToFirstInvoiceLeadTimeFlag({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+    });
+  }
+
+  // QA-12: Legacy invoices histórico
+  if (flags.legacyInvoicesSeries) {
+    return await handleIntentLegacyInvoicesSeries({ supabaseAuth, holdingId });
+  }
+
+  // QA-10: Booking Ã¢â€ â€™ Primera Factura (Lead Time)
+  if (isQa10BookingFacturaQuestion(question)) {
+    return await handleQa10BookingToFirstInvoiceLeadTimeText({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+    });
+  }
+
+  const dg = await tryHandleDataGatewayBiAndGroupBy({
+    supabaseAuth: supabaseAuth as any,
+    holdingId,
+    question,
+    todayStr,
+    currentMonthStr,
+    targetCurrency,
+    groupSpec,
+    callDataGateway,
+  });
+  if (dg) return dg;
+
+  function parseCompactNumber(value: string): number | null {
+    const v = String(value).trim();
+    if (!v) return null;
+    const m = v.match(/(-?\d+(?:[\.,]\d+)?)(?:\s*)([kmb])?/i);
+    if (!m?.[1]) return null;
+    const base = Number(String(m[1]).replace(/,/g, "."));
+    if (Number.isNaN(base)) return null;
+    const suffix = (m[2] ?? "").toLowerCase();
+    const mult = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : suffix === "b" ? 1_000_000_000 : 1;
+    return base * mult;
+  }
+
+  function extractAmountAndCurrency(value: unknown): { amount: number; currency: string } | null {
+    const s = String(value ?? "").trim();
+    const m = s.match(/(-?\d+(?:[\.,]\d+)?\s*[kmb]?)(?:\s*)(USD|CLP|MXN|EUR|COP|PEN|UYU|ARS|BRL)/i);
+    if (!m?.[1] || !m?.[2]) return null;
+    const amount = parseCompactNumber(m[1]);
+    if (amount === null) return null;
+    return { amount, currency: String(m[2]).toUpperCase() };
+  }
+
+  function formatMoney(amount: number, currency: string): string {
+    const ccy = String(currency ?? '').trim().toUpperCase();
+    if (!Number.isFinite(amount)) return `${amount} ${ccy}`;
+
+    const symbol = ccy === 'EUR' ? '€' : (ccy === 'USD' || ccy === 'CLP' || ccy === 'MXN' || ccy === 'CLF') ? '$' : '';
+    const abs = Math.abs(amount);
+
+    const decimals = (ccy === 'CLP' || ccy === 'CLF') ? 0 : 2;
+
+    const compact = (value: number, suffix: string, div: number) => {
+      const n = value / div;
+      const formatted = new Intl.NumberFormat('es-CL', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(Number(n.toFixed(2)));
+      return `${symbol}${formatted}${suffix} ${ccy}`.trim();
+    };
+
+    if (abs >= 1_000_000_000) return compact(amount, 'B', 1_000_000_000);
+    if (abs >= 1_000_000) return compact(amount, 'M', 1_000_000);
+    if (abs >= 1_000) return compact(amount, 'K', 1_000);
+
+    const formatted = new Intl.NumberFormat('es-CL', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(amount);
+
+    return `${symbol}${formatted} ${ccy}`.trim();
+  }
+
+  async function withOptionalFxConversion(result: LiveDataResult): Promise<LiveDataResult> {
+    const target = targetCurrency;
+    if (!target) return result;
+    if (!result?.handled) return result;
+
+    const widgets = Array.isArray((result as any)?.widgets) ? ((result as any).widgets as any[]) : [];
+    const kpis = widgets.filter((w) => w?.type === "kpi" && typeof w?.value === "string");
+    if (kpis.length === 0) return result;
+
+    const referenceDate = (() => {
+      const a: any = (result as any)?.audit ?? {};
+      const raw = a?.range_to ?? a?.range_from ?? currentMonthStr ?? todayStr;
+      const s = String(raw);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+      if (/^\d{4}-\d{2}-01$/.test(s)) return s;
+      return todayStr;
+    })();
+
+    const convertedKpis: any[] = [];
+    for (const kpi of kpis) {
+      const parsed = extractAmountAndCurrency(kpi.value);
+      if (!parsed) continue;
+      if (parsed.currency === target) continue;
+
+      const { data, error } = await (supabaseAuth as any).rpc("convert_amount", {
+        p_holding_id: holdingId,
+        p_amount: parsed.amount,
+        p_from_currency: parsed.currency,
+        p_to_currency: target,
+        p_reference_date: referenceDate,
+        p_policy: null,
+      });
+      if (error || !data) continue;
+      const converted = (data as any)?.converted_amount;
+      if (typeof converted !== "number") continue;
+
+      convertedKpis.push({
+        type: "kpi",
+        title: `${String(kpi.title ?? "").trim()} (${target})`.trim(),
+        value: formatMoney(converted, target),
+      });
+    }
+
+    if (convertedKpis.length === 0) return result;
+    return {
+      ...(result as any),
+      widgets: [...widgets, ...convertedKpis],
+      audit: {
+        ...((result as any)?.audit ?? {}),
+        fx_target_currency: target,
+        fx_reference_date: referenceDate,
+      },
+    } as LiveDataResult;
+  }
+
+  function parseCurrencyFromText(v: string): string | null {
+    const m = String(v ?? "").match(/\b(USD|CLP|MXN|EUR|COP|PEN|UYU|ARS|BRL)\b/i);
+    return m?.[1] ? String(m[1]).toUpperCase() : null;
+  }
+
+  async function withOptionalFxCharts(result: LiveDataResult): Promise<LiveDataResult> {
+    const target = targetCurrency;
+    if (!target) return result;
+    if (!result?.handled) return result;
+
+    const widgets = Array.isArray((result as any)?.widgets) ? ((result as any).widgets as any[]) : [];
+    const auditRef = (result as any)?.audit ?? {};
+
+    const extraWidgets: any[] = [];
+
+    for (const w of widgets) {
+      if (w?.type !== "chart_line" && w?.type !== "chart_bar") continue;
+      if (!w?.xKey || !Array.isArray(w?.series) || !Array.isArray(w?.data)) continue;
+      if (w.series.length !== 1) continue;
+
+      const seriesKey = w.series[0]?.key;
+      if (typeof seriesKey !== "string" || !seriesKey) continue;
+
+      const baseCurrency = parseCurrencyFromText(String(w.title ?? "")) ?? parseCurrencyFromText(String(w.series[0]?.name ?? ""));
+      if (!baseCurrency) continue;
+      if (String(baseCurrency).toUpperCase() === String(target).toUpperCase()) continue;
+
+      const convertedData: Array<Record<string, string | number | null>> = [];
+      const conversions = await Promise.all(
+        (w.data as any[]).map(async (row: any) => {
+          const xVal = row?.[w.xKey];
+          const rawNum = row?.[seriesKey];
+          const value = typeof rawNum === "number" ? rawNum : rawNum ? Number(rawNum) : null;
+          if (value === null || !Number.isFinite(value)) {
+            return { xVal, converted: null };
+          }
+
+          const refDate = (() => {
+            const s = String(xVal ?? "");
+            if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+            const aRef = auditRef?.range_to ?? auditRef?.range_from;
+            const aa = String(aRef ?? "");
+            if (/^\d{4}-\d{2}-\d{2}$/.test(aa)) return aa;
+            return todayStr;
+          })();
+
+          const { data: fxData, error: fxErr } = await (supabaseAuth as any).rpc("convert_amount", {
+            p_holding_id: holdingId,
+            p_amount: Number(value),
+            p_from_currency: baseCurrency,
+            p_to_currency: target,
+            p_reference_date: refDate,
+            p_policy: null,
+          });
+          if (fxErr || !fxData) return { xVal, converted: null };
+          const json = fxData as any;
+          return { xVal, converted: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null };
+        }),
+      );
+
+      for (let i = 0; i < (w.data as any[]).length; i++) {
+        const origRow = (w.data as any[])[i];
+        const xVal = origRow?.[w.xKey];
+        const conv = conversions[i]?.converted;
+        convertedData.push({
+          ...origRow,
+          [seriesKey]: conv === null ? null : Number(Number(conv).toFixed(2)),
+          [w.xKey]: xVal,
+        });
+      }
+
+      extraWidgets.push({
+        ...w,
+        title: `${String(w.title ?? "")} (convertido a ${target})`,
+        series: [{ ...w.series[0], name: `${String(w.series[0]?.name ?? seriesKey)} (${target})` }],
+        data: convertedData,
+      });
+
+      // Tabla simple (xKey + value) para la serie convertida
+      extraWidgets.push({
+        type: "table",
+        title: `${String(w.title ?? "")} - tabla (convertido a ${target})`,
+        columns: [String(w.xKey), `${String(w.series[0]?.name ?? seriesKey)} (${target})`],
+        rows: convertedData.map((r) => [r?.[w.xKey] ?? null, r?.[seriesKey] ?? null]),
+      });
+    }
+
+    if (extraWidgets.length === 0) return result;
+    return {
+      ...(result as any),
+      widgets: [...widgets, ...extraWidgets],
+      audit: {
+        ...((result as any)?.audit ?? {}),
+        fx_target_currency: target,
+      },
+    } as LiveDataResult;
+  }
+
+  const contextLines: string[] = [];
+  const widgets: Widget[] = [];
+
+  function safeNum(v: unknown): number {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  async function convertSeriesIfNeeded(args: {
+    rows: Array<{ period_month: string; value: number; currency: string }>;
+    targetCurrency: string | null;
+    holdingId: string;
+  }): Promise<{
+    displayCurrency: string;
+    rows: Array<{ period_month: string; value: number; currency: string }>;
+    fxSources: string[];
+  }> {
+    const baseCurrency = args.rows.find((r) => r.currency)?.currency ?? "";
+    const target = args.targetCurrency ? String(args.targetCurrency).toUpperCase() : null;
+    const shouldConvert = !!target && !!baseCurrency && baseCurrency.toUpperCase() !== target;
+
+    if (!shouldConvert) {
+      return { displayCurrency: baseCurrency, rows: args.rows, fxSources: [] };
+    }
+
+    const convertedByMonth = new Map<string, { converted: number | null; source: string | null }>();
+    const conversions = await Promise.all(
+      args.rows.map(async (m) => {
+        const { data: fxData, error: fxErr } = await supabaseAuth.rpc("convert_amount", {
+          p_holding_id: args.holdingId,
+          p_amount: Number(m.value),
+          p_from_currency: baseCurrency,
+          p_to_currency: target,
+          p_reference_date: m.period_month,
+          p_policy: null,
+        });
+
+        if (fxErr) {
+          return { period_month: m.period_month, converted: null, source: `rpc_error: ${fxErr.message}` };
+        }
+        const json = fxData as any;
+        return {
+          period_month: m.period_month,
+          converted: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null,
+          source: json?.fx_source ? String(json.fx_source) : null,
+        };
+      }),
+    );
+
+    for (const c of conversions) convertedByMonth.set(c.period_month, { converted: c.converted, source: c.source });
+    const fxSources = Array.from(new Set(conversions.map((c) => c.source).filter((s): s is string => !!s)));
+
+    return {
+      displayCurrency: target,
+      fxSources,
+      rows: args.rows.map((m) => ({
+        ...m,
+        value: convertedByMonth.get(m.period_month)?.converted ?? 0,
+        currency: target,
+      })),
+    };
+  }
+
+  if (
+    flags.reportsMetrics &&
+    !flags.mrrSeries &&
+    !flags.mrrSnapshot &&
+    !flags.mrrSnapshotByCompany &&
+    !flags.churnReasons &&
+    !flags.cmrrSeries &&
+    !/\bcmrr\b/i.test(question)
+  ) {
+    const r = await appendReportsMetrics({
+      supabaseAuth: supabaseAuth as any,
+      holdingId,
+      question,
+      targetCurrency,
+    });
+    if (r.handled) {
+      contextLines.push(...r.contextLines);
+      widgets.push(...r.widgets);
+    }
+  }
+
+  if (flags.revenueRecognition) {
+    const { from, to } = (() => {
+      const qq = question.toLowerCase();
+      const m = qq.match(/(ÃƒÂºltimos|ultimos)\s+(\d{1,2})\s+mes/);
+      const months = m?.[2] ? Math.max(1, Math.min(24, Number(m[2]))) : 12;
+      const toDate = new Date(today);
+      const to = monthStartStr(toDate);
+      const fromDate = new Date(toDate);
+      fromDate.setMonth(fromDate.getMonth() - (months - 1));
+      const from = monthStartStr(fromDate);
+      return { from, to };
+    })();
+
+    const wantsDetail =
+      /detalle/i.test(question) ||
+      /por contrato/i.test(question) ||
+      /por producto/i.test(question) ||
+      /por cliente/i.test(question);
+    const wantsEntries = /asiento|contabl|debe|haber/i.test(question);
+
+    // 1) Serie de ingresos reconocidos (ÃƒÂºltimos 12 meses por default)
+    const { data: recognizedSeriesData, error: recognizedSeriesErr } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: from,
+      date_to: to,
+      metric: "recognized",
+      currency_mode: "system",
+      group_by: ["period_month"],
+      filters: { is_total_row: true },
+    });
+    if (recognizedSeriesErr) throw recognizedSeriesErr;
+
+    const recognizedSeries = (Array.isArray(recognizedSeriesData) ? recognizedSeriesData : [])
+      .map((r: any) => ({
+        period_month: String(r.period_month).slice(0, 10),
+        value: safeNum(r.value),
+        currency: r.currency ? String(r.currency) : "",
+      }))
+      .filter((r) => r.period_month)
+      .sort((a, b) => a.period_month.localeCompare(b.period_month));
+
+    const recognizedConverted = await convertSeriesIfNeeded({ rows: recognizedSeries, targetCurrency, holdingId });
+    if (recognizedConverted.fxSources.length) {
+      contextLines.push(
+        `ConversiÃƒÂ³n solicitada para Revenue (recognized): ${recognizedSeries.find((r) => r.currency)?.currency ?? ""} Ã¢â€ â€™ ${recognizedConverted.displayCurrency}. Fuentes FX: ${recognizedConverted.fxSources.slice(0, 5).join(", ")}.`,
+      );
+    }
+
+    const lastMonth = recognizedConverted.rows.length ? recognizedConverted.rows[recognizedConverted.rows.length - 1].period_month : to;
+    const recognizedLast = recognizedConverted.rows.length ? recognizedConverted.rows[recognizedConverted.rows.length - 1].value : 0;
+
+    widgets.push({
+      type: "kpi",
+      title: `Ingresos reconocidos (${String(lastMonth).slice(0, 7)})`,
+      value: `${recognizedLast.toFixed(2)} ${recognizedConverted.displayCurrency}`.trim(),
+    });
+
+    widgets.push({
+      type: "chart_line",
+      title: `Ingresos reconocidos ÃƒÂºltimos 12 meses (${recognizedConverted.displayCurrency || "system"})`,
+      xKey: "month",
+      series: [{ key: "recognized", name: "Reconocido", color: "#22C55E" }],
+      data: recognizedConverted.rows.map((r) => ({ month: r.period_month.slice(0, 7), recognized: Number(r.value.toFixed(2)) })),
+    });
+
+    // 2) Saldos actuales: diferido y por facturar (EOM)
+    const { data: deferredEomData, error: deferredEomErr } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: lastMonth,
+      date_to: lastMonth,
+      metric: "deferred_eom",
+      currency_mode: "system",
+      group_by: ["period_month"],
+      filters: { is_total_row: true },
+    });
+    if (deferredEomErr) throw deferredEomErr;
+    const deferredRow = Array.isArray(deferredEomData) ? deferredEomData[0] : null;
+    const deferredBase = {
+      period_month: lastMonth,
+      value: safeNum((deferredRow as any)?.value),
+      currency: (deferredRow as any)?.currency
+        ? String((deferredRow as any).currency)
+        : recognizedSeries.find((r) => r.currency)?.currency ?? "",
+    };
+    const deferredConverted = await convertSeriesIfNeeded({ rows: [deferredBase], targetCurrency, holdingId });
+
+    const { data: unbilledEomData, error: unbilledEomErr } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: lastMonth,
+      date_to: lastMonth,
+      metric: "unbilled_eom",
+      currency_mode: "system",
+      group_by: ["period_month"],
+      filters: { is_total_row: true },
+    });
+    if (unbilledEomErr) throw unbilledEomErr;
+    const unbilledRow = Array.isArray(unbilledEomData) ? unbilledEomData[0] : null;
+    const unbilledBase = {
+      period_month: lastMonth,
+      value: safeNum((unbilledRow as any)?.value),
+      currency: (unbilledRow as any)?.currency
+        ? String((unbilledRow as any).currency)
+        : recognizedSeries.find((r) => r.currency)?.currency ?? "",
+    };
+    const unbilledConverted = await convertSeriesIfNeeded({ rows: [unbilledBase], targetCurrency, holdingId });
+
+    widgets.push({
+      type: "kpi",
+      title: `Ingresos diferidos (saldo EOM ${String(lastMonth).slice(0, 7)})`,
+      value: `${(deferredConverted.rows[0]?.value ?? 0).toFixed(2)} ${deferredConverted.displayCurrency}`.trim(),
+    });
+    widgets.push({
+      type: "kpi",
+      title: `Ingresos por facturar (saldo EOM ${String(lastMonth).slice(0, 7)})`,
+      value: `${(unbilledConverted.rows[0]?.value ?? 0).toFixed(2)} ${unbilledConverted.displayCurrency}`.trim(),
+    });
+
+    // 3) Reporte detallado (agregado) por mes/compaÃƒÂ±ÃƒÂ­a/cliente/producto
+    if (wantsDetail && !/por contrato/i.test(question)) {
+      const { data: detailAggData, error: detailAggErr } = await supabaseAuth.rpc("rsm_metrics", {
+        date_from: from,
+        date_to: to,
+        metric: "recognized",
+        currency_mode: "system",
+        group_by: ["period_month", "company_id", "client_id", "product_name"],
+        filters: { is_total_row: false },
+      });
+      if (detailAggErr) throw detailAggErr;
+
+      const rows = (Array.isArray(detailAggData) ? detailAggData : [])
+        .map((r: any) => ({
+          period_month: r.period_month ? String(r.period_month).slice(0, 10) : null,
+          company_id: r.company_id ? String(r.company_id) : null,
+          client_id: r.client_id ? String(r.client_id) : null,
+          product_name: r.product_name ? String(r.product_name) : null,
+          value: safeNum(r.value),
+          currency: r.currency ? String(r.currency) : recognizedSeries.find((x) => x.currency)?.currency ?? "",
+        }))
+        .filter((r) => !!r.period_month)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 50);
+
+      // Enriquecer nombres (sin romper si faltan)
+      const companyIds = Array.from(new Set(rows.map((r) => r.company_id).filter((v): v is string => !!v))).slice(0, 100);
+      const clientIds = Array.from(new Set(rows.map((r) => r.client_id).filter((v): v is string => !!v))).slice(0, 200);
+
+      const companyNameById = new Map<string, string>();
+      if (companyIds.length) {
+        const { data: companiesData, error: companiesErr } = await supabaseAuth
+          .from("companies")
+          .select("id, name")
+          .eq("holding_id", holdingId)
+          .in("id", companyIds);
+        if (!companiesErr) {
+          for (const c of companiesData ?? []) companyNameById.set(String((c as any).id), String((c as any).name ?? "(sin nombre)"));
+        }
+      }
+
+      const clientNameById = new Map<string, string>();
+      if (clientIds.length) {
+        const { data: clientsData, error: clientsErr } = await supabaseAuth
+          .from("clients")
+          .select("id, name_commercial")
+          .eq("holding_id", holdingId)
+          .in("id", clientIds);
+        if (!clientsErr) {
+          for (const c of clientsData ?? []) clientNameById.set(String((c as any).id), String((c as any).name_commercial ?? "(sin nombre)"));
+        }
+      }
+
+      widgets.push({
+        type: "table",
+        title: `Reporte detallado (top 50) ingresos reconocidos ${from.slice(0, 7)}Ã¢â€ â€™${to.slice(0, 7)} (${recognizedConverted.displayCurrency || "system"})`,
+        columns: ["Mes", "CompaÃƒÂ±ÃƒÂ­a", "Cliente", "Producto", `Reconocido (${recognizedConverted.displayCurrency || ""})`],
+        rows: rows.map((r) => [
+          r.period_month ? String(r.period_month).slice(0, 7) : null,
+          r.company_id ? companyNameById.get(r.company_id) ?? r.company_id : null,
+          r.client_id ? clientNameById.get(r.client_id) ?? r.client_id : null,
+          r.product_name ?? null,
+          Number(r.value.toFixed(2)),
+        ]),
+      });
+    }
+
+    // 4) Detalle mensual granular por contrato/producto (revenue_schedule_monthly)
+    if (wantsDetail && /por contrato/i.test(question)) {
+      const { data: rsData, error: rsErr } = await supabaseAuth
+        .from("revenue_schedule_monthly")
+        .select(
+          `
+            period_month,
+            contract_id,
+            product_name,
+            contract_currency,
+            company_currency,
+            system_currency,
+            recognized_period_system_ccy,
+            billed_period_system_ccy,
+            deferred_balance_period_system_ccy,
+            deferred_balance_eom_system_ccy,
+            unbilled_balance_period_system_ccy,
+            contracts!inner(
+              id,
+              contract_number,
+              holding_id,
+              client_id,
+              company_id
+            )
+          `,
+        )
+        .eq("holding_id", holdingId)
+        .eq("contracts.holding_id", holdingId)
+        .gte("period_month", from)
+        .lte("period_month", to)
+        .eq("is_total_row", false)
+        .order("period_month", { ascending: false })
+        .limit(200);
+      if (rsErr) throw rsErr;
+
+      const rsRows = Array.isArray(rsData) ? rsData : [];
+
+      widgets.push({
+        type: "table",
+        title: `Detalle mensual (top 200) revenue_schedule_monthly ${from.slice(0, 7)}Ã¢â€ â€™${to.slice(0, 7)} (system currency${targetCurrency ? `, solicitado: ${targetCurrency}` : ""})`,
+        columns: [
+          "Mes",
+          "CompaÃƒÂ±ÃƒÂ­a",
+          "Contrato",
+          "Cliente",
+          "Producto",
+          "Moneda contrato",
+          "Moneda compaÃƒÂ±ÃƒÂ­a",
+          "Moneda sistema",
+          "Reconocido (P)",
+          "Facturado (P)",
+          "Diferido (P)",
+          "Diferido (EOM)",
+          "Por facturar (P)",
+        ],
+        rows: rsRows.map((r: any) => {
+          const ct = r.contracts as any;
+          return [
+            r.period_month ? String(r.period_month).slice(0, 7) : null,
+            ct?.company_id ?? null,
+            ct?.contract_number ?? ct?.id ?? null,
+            ct?.client_id ?? null,
+            r.product_name ?? null,
+            r.contract_currency ?? null,
+            r.company_currency ?? null,
+            r.system_currency ?? null,
+            safeNum(r.recognized_period_system_ccy).toFixed(2),
+            safeNum(r.billed_period_system_ccy).toFixed(2),
+            safeNum(r.deferred_balance_period_system_ccy).toFixed(2),
+            safeNum(r.deferred_balance_eom_system_ccy).toFixed(2),
+            safeNum(r.unbilled_balance_period_system_ccy).toFixed(2),
+          ];
+        }),
+      });
+
+      contextLines.push(
+        "Detalle por contrato se obtiene de revenue_schedule_monthly. Para mostrar nombres de compaÃƒÂ±ÃƒÂ­a/cliente en este detalle, el schema debe exponer los joins; si necesitas, lo enriquecemos en una iteraciÃƒÂ³n de ajuste durante el test.",
+      );
+    }
+
+    if (wantsEntries) {
+      contextLines.push(
+        "Asientos contables: el schema expone revenue_rules, pero no encontrÃƒÂ© en schema.sql una tabla de cuentas/asientos (ej. chart_of_accounts/journal_entries) para construir 'cÃƒÂ³digo/cuenta/debe/haber' audit-ready sin inventar. Puedo derivar montos (reconocido/diferido/por facturar) por compaÃƒÂ±ÃƒÂ­a y perÃƒÂ­odo, pero para cuentas contables necesito la estructura/configuraciÃƒÂ³n en DB.",
+      );
+    }
+
+    contextLines.push(
+      `Revenue/Reconocimiento calculado vÃƒÂ­a SQL (rsm_metrics + revenue_schedule_monthly) con holding_id=${holdingId}, perÃƒÂ­odo ${from.slice(0, 7)} Ã¢â€ â€™ ${to.slice(0, 7)}.`,
+    );
+  }
+
+  if (flags.quoteReport) {
+    const ident = extractQuoteIdentifier(question);
+    if (!ident.id && !ident.quote_number) {
+      contextLines.push("Para ver el detalle necesito el ID (uuid) o el nÃƒÂºmero de la cotizaciÃƒÂ³n. Ej: Detalle de la cotizaciÃƒÂ³n fbb60c3e-... o CotizaciÃƒÂ³n Q-123.");
+    } else {
+      let quoteId: string | null = null;
+      if (ident.id) {
+        quoteId = ident.id;
+      } else if (ident.quote_number) {
+        const searchRes = await callDataGateway({ resource: "quotes", action: "search", filters: { q: ident.quote_number }, limit: 5 });
+        const arr = Array.isArray(searchRes.data) ? searchRes.data : [];
+        const exact = arr.find((r: any) => String(r.quote_number ?? "").toLowerCase() === String(ident.quote_number ?? "").toLowerCase());
+        quoteId = (exact?.id as string | undefined) ?? (arr[0]?.id as string | undefined) ?? null;
+      }
+
+      if (!quoteId) {
+        contextLines.push("No encontrÃƒÂ© una cotizaciÃƒÂ³n con ese identificador en tu holding.");
+      } else {
+        const qRes = await callDataGateway({ resource: "quotes", action: "get", filters: { id: quoteId }, limit: 1 });
+        const qd = qRes.data as any;
+
+        const itemsRes = await callDataGateway({ resource: "quote_items", action: "list", filters: { quote_id: quoteId }, limit: 200 });
+        const items = Array.isArray(itemsRes.data) ? itemsRes.data : [];
+
+        const fromCurrency = (qd?.currency as string | null) ? String(qd.currency).toUpperCase() : null;
+        const target = targetCurrency;
+        const shouldConvert = !!target && !!fromCurrency && fromCurrency !== target && typeof qd?.total_amount === "number";
+        let fxInfo: { converted_amount: number | null; rate: number | null; fx_source: string | null } | null = null;
+        if (shouldConvert) {
+          const { data: fxData, error: fxErr } = await supabaseAuth.rpc("convert_amount", {
+            p_holding_id: holdingId,
+            p_amount: Number(qd.total_amount),
+            p_from_currency: fromCurrency,
+            p_to_currency: target,
+            p_reference_date: todayStr,
+            p_policy: null,
+          });
+          if (!fxErr) {
+            fxInfo = fxData as any;
+          } else {
+            fxInfo = { converted_amount: null, rate: null, fx_source: `rpc_error: ${fxErr.message}` };
+          }
+        }
+
+        widgets.push({
+          type: "table",
+          title: "Detalle de cotizaciÃƒÂ³n",
+          columns: ["Campo", "Valor"],
+          rows: [
+            ["NÃƒÂºmero", qd?.quote_number ?? null],
+            ["Cliente", qd?.clients?.name_commercial ?? qd?.client_id ?? null],
+            ["Contacto", qd?.client_contacts?.name ?? qd?.client_contact_id ?? null],
+            ["Email", qd?.client_contacts?.email ?? null],
+            ["Vendedor", qd?.sellers?.name ?? qd?.seller_id ?? null],
+            ["Etapa", qd?.quote_stages?.name ?? qd?.quote_stage_id ?? null],
+            ["Fecha creaciÃƒÂ³n", qd?.quote_date ?? null],
+            ["Fecha booking", qd?.booking_date ?? null],
+            ["Monto total", qd?.total_amount ?? null],
+            ["Moneda", qd?.currency ?? null],
+            ["TÃƒÂ©rminos pago", qd?.payment_terms ?? null],
+            ["Notas", qd?.notes ?? null],
+            ["Requiere multiempresa", qd?.requires_multicompany ?? null],
+            ["Requiere multimoneda", qd?.requires_multicurrency ?? null],
+            ["Requiere referencias", qd?.requires_references_for_billing ?? null],
+            ["Requiere doc contrato", qd?.requires_contract_document ?? null],
+            ["Origen CRM", qd?.salesforce_opportunity_id ? "Salesforce" : "Manual"],
+          ],
+        });
+
+        if (fxInfo && target) {
+          contextLines.push(
+            `ConversiÃƒÂ³n aplicada: ${String(qd?.total_amount ?? "")} ${fromCurrency} Ã¢â€ â€™ ${String(fxInfo?.converted_amount ?? "")} ${target}. FX rate: ${String(fxInfo?.rate ?? "")} | source: ${String(fxInfo?.fx_source ?? "")} | date: ${todayStr}.`,
+          );
+        }
+
+        const itemsTotal = items.reduce((sum: number, it: any) => sum + Number(it?.final_price ?? 0), 0);
+        widgets.push({ type: "kpi", title: "Items", value: String(items.length) });
+        widgets.push({ type: "kpi", title: "Suma final_price (items)", value: `${itemsTotal.toFixed(2)} ${String(fromCurrency ?? "")}`.trim() });
+
+        widgets.push({
+          type: "table",
+          title: `ÃƒÂtems de cotizaciÃƒÂ³n (top ${Math.min(items.length, 50)})`,
+          columns: [
+            "Producto",
+            "Tipo",
+            "Cantidad",
+            "Unidad",
+            "Precio unitario",
+            "DuraciÃƒÂ³n (meses)",
+            "Inicio",
+            "Fin",
+            "Recurrente",
+            "Precio",
+            "Descuento",
+            "Precio final",
+            "Moneda",
+            "Frecuencia",
+            "MÃƒÂ©todo",
+          ],
+          rows: items.slice(0, 50).map((it: any) => [
+            it.product_name ?? null,
+            it.item_type ?? null,
+            it.quantity ?? null,
+            it.unit_of_measure ?? null,
+            it.unit_price ?? null,
+            it.term_months ?? null,
+            it.start_date ?? null,
+            it.end_date ?? null,
+            typeof it.is_recurring === "boolean" ? (it.is_recurring ? "SÃƒÂ­" : "No") : null,
+            it.price ?? null,
+            it.discount_value ?? null,
+            it.final_price ?? null,
+            it.currency ?? null,
+            it.billing_frequency ?? null,
+            it.billing_method ?? null,
+            it.id ?? null,
+          ]),
+        });
+      }
+    }
+  }
+
+  const kwOrGw = await tryHandleKeywordExploreAndGateways({
+    supabaseAuth: supabaseAuth as any,
+    openaiApiKey,
+    holdingId,
+    question,
+    flags: flags as any,
+    todayStr,
+    targetCurrency,
+    callDataGateway,
+    extractSearchTerm,
+    contextLines,
+    widgets,
+  });
+  if (kwOrGw) return kwOrGw;
+
+  if (flags.activeContracts) {
+    const { count, error } = await supabaseAuth
+      .from("contracts")
+      .select("id", { count: "exact", head: true })
+      .eq("holding_id", holdingId)
+      .eq("status", "Activo");
+    if (error) throw error;
+    contextLines.push(`Contratos activos: ${count ?? 0}.`);
+
+    const { data: activeRows, error: activeErr } = await supabaseAuth
+      .from("contracts")
+      .select("id, contract_number, client_name_commercial, status, type, booking_date, contract_end_date, contract_currency")
+      .eq("holding_id", holdingId)
+      .eq("status", "Activo")
+      .order("created_at", { ascending: false })
+      .limit(25);
+    if (activeErr) throw activeErr;
+
+    const rows = Array.isArray(activeRows) ? activeRows : [];
+    widgets.push({
+      type: "table",
+      title: `Contratos activos (top ${rows.length})`,
+      columns: ["Contrato", "Cliente", "Status", "Tipo", "Moneda", "Booking", "Fin"],
+      rows: rows.map((c: any) => [
+        c.contract_number ?? null,
+        c.client_name_commercial ?? null,
+        c.status ?? null,
+        c.type ?? null,
+        c.contract_currency ?? null,
+        c.booking_date ?? null,
+        c.contract_end_date ?? null,
+      ]),
+    });
+  }
+
+  if (flags.contractReport) {
+    const ident = extractContractIdentifier(question);
+
+    if (!ident.id && !ident.contract_number) {
+      contextLines.push(
+        [
+          "Informe de contrato",
+          "Necesito que me indiques cuÃƒÂ¡l contrato.",
+          "",
+          "QuÃƒÂ© me puedes pasar:",
+          "1) El identificador interno del contrato",
+          "2) El nÃƒÂºmero de contrato (ej: Contrato CTR-2025-ABC123)",
+        ].join("\n"),
+      );
+    } else {
+      const { data: holdingData, error: holdingDataErr } = await supabaseAuth.rpc("get_user_holding_data_robust");
+      if (holdingDataErr) throw holdingDataErr;
+
+      const holdingInfo = Array.isArray(holdingData) ? (holdingData[0] as any) : (holdingData as any);
+
+      let contractQuery = supabaseAuth
+        .from("contracts")
+        .select(
+          `
+            id,
+            contract_number,
+            status,
+            type,
+            term,
+            booking_date,
+            contract_end_date,
+            notes,
+            is_legacy,
+            legacy_status,
+            legacy_reconciliation_pct,
+            contract_currency,
+            system_currency,
+            fx_rate_to_system,
+            total_value,
+            total_value_system_currency,
+            client_id,
+            company_id,
+            clients(
+              id,
+              name_commercial,
+              market,
+              segment,
+              industry
+            ),
+            companies(
+              id,
+              holding_id,
+              holding_name,
+              legal_name,
+              website,
+              email,
+              phone,
+              representative_name,
+              logo_url,
+              currency,
+              tax_id,
+              legal_address,
+              country
+            )
+          `,
+        )
+        .eq("holding_id", holdingId);
+
+      if (ident.id) {
+        contractQuery = contractQuery.eq("id", ident.id);
+      } else {
+        contractQuery = contractQuery.eq("contract_number", ident.contract_number as string);
+      }
+
+      const { data: contract, error: contractError } = await contractQuery.single();
+      if (contractError) throw contractError;
+
+      const clientId = (contract as any)?.client_id as string | null;
+      const company = (contract as any)?.companies as any;
+
+      const companyLogoUrl = (company?.logo_url as string | null) ?? null;
+      const holdingLogoUrl = (holdingInfo?.logo_url as string | null) ?? null;
+      const logoUrl = companyLogoUrl || holdingLogoUrl;
+
+      // Contactos asociados al cliente (top 10)
+      let contacts: any[] = [];
+      if (clientId) {
+        const { data: contactData, error: contactErr } = await supabaseAuth
+          .from("client_contacts")
+          .select("id, name, position, email, phone, contact_type")
+          .eq("holding_id", holdingId)
+          .eq("client_id", clientId)
+          .order("name", { ascending: true })
+          .limit(10);
+        if (contactErr) throw contactErr;
+        contacts = contactData || [];
+      }
+
+      // KPIs del contrato para el mes actual
+      const { data: revenueRows, error: revenueErr } = await supabaseAuth
+        .from("revenue_schedule_monthly")
+        .select(
+          `
+            period_month,
+            contract_id,
+            mrr_period_system_ccy,
+            recognized_period_system_ccy,
+            system_currency,
+            is_total_row,
+            contracts!inner(
+              holding_id
+            )
+          `,
+        )
+        .eq("contracts.holding_id", holdingId)
+        .eq("is_total_row", false)
+        .eq("contract_id", (contract as any).id)
+        .eq("period_month", currentMonthStr);
+
+      if (revenueErr) throw revenueErr;
+
+      const systemCurrency =
+        (revenueRows?.[0] as any)?.system_currency ??
+        ((contract as any)?.system_currency as string | null) ??
+        (company?.currency as string | null) ??
+        null;
+
+      const mrrCurrent = (revenueRows || []).reduce((sum: number, r: any) => sum + Number(r.mrr_period_system_ccy ?? 0), 0);
+      const recognizedCurrent = (revenueRows || []).reduce(
+        (sum: number, r: any) => sum + Number(r.recognized_period_system_ccy ?? 0),
+        0,
+      );
+
+      const contractNumber = (contract as any)?.contract_number ?? "(sin nÃƒÂºmero)";
+      const clientName =
+        (contract as any)?.clients?.name_commercial ??
+        (contract as any)?.client_name_commercial ??
+        "(sin cliente)";
+      const companyName = company?.legal_name ?? company?.holding_name ?? "(sin compaÃƒÂ±ÃƒÂ­a)";
+
+      contextLines.push(
+        [
+          "Informe de contrato",
+          `Contrato: ${contractNumber}`,
+          `Cliente: ${clientName}`,
+          `CompaÃƒÂ±ÃƒÂ­a: ${companyName}`,
+          "",
+          `Resumen:`,
+          `Estado: ${(contract as any)?.status ?? "(sin estado)"}`,
+          `Tipo: ${(contract as any)?.type ?? "(sin tipo)"}`,
+          `Booking date: ${(contract as any)?.booking_date ?? "(null)"}`,
+          `Fecha fin: ${(contract as any)?.contract_end_date ?? "(null)"}`,
+          "",
+          `KPIs del mes (${String(currentMonthStr).slice(0, 7)}):`,
+          `MRR (system): ${mrrCurrent.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+          `Ingresos reconocidos (system): ${recognizedCurrent.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+          "",
+          "Contactos del cliente:",
+          contacts.length === 0
+            ? "(no hay contactos registrados para este cliente)"
+            : contacts
+                .map(
+                  (c) =>
+                    `${c.name ?? "(sin nombre)"} | ${c.position ?? "(sin cargo)"} | ${c.contact_type ?? "(sin tipo)"} | ${c.email ?? "(sin email)"} | ${c.phone ?? "(sin telÃƒÂ©fono)"}`,
+                )
+                .join("\n"),
+          "",
+          "Notas:",
+          (contract as any)?.notes?.trim() ? String((contract as any).notes).trim() : "(sin notas)",
+        ].join("\n"),
+      );
+
+      if (logoUrl) {
+        widgets.push({ type: "image", title: "Logo", url: logoUrl, alt: companyName });
+      }
+
+      widgets.push({
+        type: "kpi",
+        title: `MRR (${String(currentMonthStr).slice(0, 7)})`,
+        value: `${mrrCurrent.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+      });
+      widgets.push({
+        type: "kpi",
+        title: `Ingresos reconocidos (${String(currentMonthStr).slice(0, 7)})`,
+        value: `${recognizedCurrent.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+      });
+
+      widgets.push({
+        type: "table",
+        title: "Ficha del contrato",
+        columns: ["Campo", "Valor"],
+        rows: [
+          ["Contrato", contractNumber],
+          ["Cliente", clientName],
+          ["CompaÃƒÂ±ÃƒÂ­a", companyName],
+          ["Estado", (contract as any)?.status ?? null],
+          ["Tipo", (contract as any)?.type ?? null],
+          ["TÃƒÂ©rmino", (contract as any)?.term ?? null],
+          ["Booking date", (contract as any)?.booking_date ?? null],
+          ["Fin", (contract as any)?.contract_end_date ?? null],
+          ["Moneda contrato", (contract as any)?.contract_currency ?? null],
+          ["Moneda sistema", systemCurrency ?? null],
+          ["TCV contrato", Number((contract as any)?.total_value ?? 0).toFixed(2)],
+          [
+            "TCV sistema",
+            `${Number((contract as any)?.total_value_system_currency ?? 0).toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+          ],
+          ["Legacy", String((contract as any)?.is_legacy ?? false)],
+          ["Legacy status", (contract as any)?.legacy_status ?? null],
+          [
+            "Legacy reconciliaciÃƒÂ³n %",
+            (contract as any)?.legacy_reconciliation_pct === null || (contract as any)?.legacy_reconciliation_pct === undefined
+              ? null
+              : String((contract as any)?.legacy_reconciliation_pct),
+          ],
+        ],
+      });
+
+      if (contacts.length > 0) {
+        widgets.push({
+          type: "table",
+          title: "Contactos del cliente (top 10)",
+          columns: ["Nombre", "Cargo", "Tipo", "Email", "TelÃƒÂ©fono"],
+          rows: contacts.map((c) => [
+            c.name ?? null,
+            c.position ?? null,
+            c.contact_type ?? null,
+            c.email ?? null,
+            c.phone ?? null,
+          ]),
+        });
+      }
+    }
+  }
+
+  if (flags.pendingContracts) {
+    const pendingStatuses = ["En revisiÃƒÂ³n", "Pendiente aprobaciÃƒÂ³n", "Aprobado"] as const;
+
+    const { data, error } = await supabaseAuth
+      .from("contracts")
+      .select(
+        `
+          id,
+          contract_number,
+          status,
+          booking_date,
+          contract_end_date,
+          created_at,
+          clients(
+            name_commercial
+          )
+        `,
+      )
+      .eq("holding_id", holdingId)
+      .in("status", [...pendingStatuses])
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    const countsByStatus = new Map<string, number>();
+    for (const s of pendingStatuses) countsByStatus.set(s, 0);
+
+    for (const row of data ?? []) {
+      const s = String((row as any).status ?? "(null)");
+      if (countsByStatus.has(s)) {
+        countsByStatus.set(s, (countsByStatus.get(s) || 0) + 1);
+      }
+    }
+
+    const totalPending = Array.from(countsByStatus.values()).reduce((sum, v) => sum + v, 0);
+
+    contextLines.push(
+      [
+        `Contratos pendientes (no Activo) encontrados: ${totalPending}.`,
+        `Por estado: ${Array.from(countsByStatus.entries())
+          .map(([s, c]) => `${s}=${c}`)
+          .join(", ")}.`,
+      ].join("\n"),
+    );
+
+    contextLines.push("Detalle (mÃƒÂ¡ximo 10, mÃƒÂ¡s recientes primero):");
+    if (!data || data.length === 0) {
+      contextLines.push("(sin resultados)");
+    } else {
+      for (const ct of data) {
+        const clientName = (ct as any)?.clients?.name_commercial ?? "(sin cliente)";
+        const contractNumber = (ct as any)?.contract_number ?? "(sin nÃƒÂºmero)";
+        const status = (ct as any)?.status ?? "(sin status)";
+        const bookingDate = (ct as any)?.booking_date ?? "(null)";
+        const endDate = (ct as any)?.contract_end_date ?? "(null)";
+        contextLines.push(
+          `${contractNumber} | ${clientName} | status: ${status} | booking_date: ${bookingDate} | contract_end_date: ${endDate}`,
+        );
+      }
+    }
+  }
+
+  if (flags.overdueInvoices) {
+    const { count, error } = await supabaseAuth
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("holding_id", holdingId)
+      .lt("due_date", todayStr)
+      .neq("status", "Pagada");
+    if (error) throw error;
+    contextLines.push(`Facturas vencidas (due_date < ${todayStr}, status != Pagada): ${count ?? 0}.`);
+  }
+
+  if (flags.invoicesDueSoon) {
+    const { data, error } = await supabaseAuth
+      .from("invoices")
+      .select("id, invoice_number, issue_date, due_date, status, total_invoice_currency, invoice_currency")
+      .eq("holding_id", holdingId)
+      .gte("due_date", todayStr)
+      .lte("due_date", endSoonStr)
+      .neq("status", "Pagada")
+      .order("due_date", { ascending: true })
+      .limit(25);
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+    contextLines.push(`Facturas por vencer (due_date ${todayStr} a ${endSoonStr}, mÃƒÂ¡ximo 50): ${rows.length}.`);
+
+    const shouldConvert =
+      !!targetCurrency &&
+      rows.length > 0 &&
+      rows.some((r: any) => (r as any).invoice_currency && String((r as any).invoice_currency).toUpperCase() !== targetCurrency);
+
+    let converted: Array<{
+      invoiceId: string;
+      convertedAmount: number | null;
+      fxRate: number | null;
+      fxSource: string | null;
+      fxReferenceDate: string | null;
+    }> = [];
+
+    if (shouldConvert) {
+      const conversions = await Promise.all(
+        rows.map(async (inv: any) => {
+          const invoiceId = String(inv.id ?? "");
+          const fromCurrency = (inv.invoice_currency as string | null) ? String(inv.invoice_currency).toUpperCase() : null;
+          const amount = inv.total_invoice_currency as number | null;
+          if (!invoiceId || !fromCurrency || amount === null || amount === undefined || !targetCurrency) {
+            return { invoiceId, convertedAmount: null, fxRate: null, fxSource: null, fxReferenceDate: null };
+          }
+          if (fromCurrency === targetCurrency) {
+            return {
+              invoiceId,
+              convertedAmount: Number(amount),
+              fxRate: 1,
+              fxSource: "same_currency",
+              fxReferenceDate: todayStr,
+            };
+          }
+
+          const referenceDate = (inv.issue_date as string | null) ?? todayStr;
+          const { data: fxData, error: fxErr } = await supabaseAuth.rpc("convert_amount", {
+            p_holding_id: holdingId,
+            p_amount: amount,
+            p_from_currency: fromCurrency,
+            p_to_currency: targetCurrency,
+            p_reference_date: referenceDate,
+            p_policy: null,
+          });
+          if (fxErr) {
+            return { invoiceId, convertedAmount: null, fxRate: null, fxSource: `rpc_error: ${fxErr.message}`, fxReferenceDate: null };
+          }
+
+          const json = fxData as any;
+          return {
+            invoiceId,
+            convertedAmount: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null,
+            fxRate: typeof json?.rate === "number" ? Number(json.rate) : null,
+            fxSource: json?.fx_source ? String(json.fx_source) : null,
+            fxReferenceDate: json?.fx_reference_date ? String(json.fx_reference_date) : null,
+          };
+        }),
+      );
+
+      converted = conversions;
+      const fxSummary = conversions
+        .map((c) => c.fxSource)
+        .filter((s): s is string => !!s);
+      const uniqueFxSources = Array.from(new Set(fxSummary)).slice(0, 5);
+      contextLines.push(
+        `ConversiÃƒÂ³n solicitada: ${targetCurrency}. Fuentes FX (top 5): ${uniqueFxSources.length ? uniqueFxSources.join(", ") : "(sin datos)"}.`,
+      );
+    }
+
+    const byInvoiceId = new Map(converted.map((c) => [c.invoiceId, c] as const));
+
+    widgets.push({
+      type: "table",
+      title: `Facturas por vencer (prÃƒÂ³x 30 dÃƒÂ­as) (top ${rows.length})`,
+      columns: shouldConvert
+        ? ["NÃ‚Â°", "EmisiÃƒÂ³n", "Vencimiento", "Status", "Monto", "Moneda", `Monto (${targetCurrency})`, "FX rate", "FX source"]
+        : ["NÃ‚Â°", "EmisiÃƒÂ³n", "Vencimiento", "Status", "Monto", "Moneda"],
+      rows: rows.map((inv: any) => {
+        const fx = byInvoiceId.get(String(inv.id ?? ""));
+        const base = [
+          inv.invoice_number ?? null,
+          inv.issue_date ?? null,
+          inv.due_date ?? null,
+          inv.status ?? null,
+          inv.total_invoice_currency ?? null,
+          inv.invoice_currency ?? null,
+        ];
+        if (!shouldConvert) return base;
+        return base.concat([
+          fx?.convertedAmount ?? null,
+          fx?.fxRate ?? null,
+          fx?.fxSource ?? null,
+        ]);
+      }),
+    });
+  }
+
+  if (flags.invoicesThisWeek) {
+    const { data, error } = await supabaseAuth
+      .from("invoices")
+      .select("invoice_number, due_date, status")
+      .eq("holding_id", holdingId)
+      .gte("due_date", todayStr)
+      .lte("due_date", endWeekStr)
+      .neq("status", "Pagada")
+      .order("due_date", { ascending: true })
+      .limit(10);
+    if (error) throw error;
+
+    contextLines.push(`Facturas que vencen esta semana (${todayStr} a ${endWeekStr}, mÃƒÂ¡ximo 10):`);
+    if (!data || data.length === 0) {
+      contextLines.push("(sin resultados)");
+    } else {
+      for (const inv of data) {
+        contextLines.push(`${(inv as any).invoice_number ?? "(sin nÃƒÂºmero)"} | due_date: ${inv.due_date ?? "(null)"} | status: ${inv.status ?? "(null)"}`);
+      }
+    }
+  }
+
+  if (flags.mrrVsPreviousMonth) {
+    // El dataset puede estar atrasado respecto a `now()`. Para evitar KPIs/grÃƒÂ¡ficos en 0,
+    // tomamos el ÃƒÂºltimo mes con data disponible para este holding.
+    const { data: lastMonthRow, error: lastMonthErr } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select(
+        `
+          period_month,
+          contracts!inner(
+            holding_id
+          )
+        `,
+      )
+      .eq("contracts.holding_id", holdingId)
+      .eq("is_total_row", false)
+      .order("period_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastMonthErr) throw lastMonthErr;
+
+    const effectiveCurrentMonthStr =
+      ((lastMonthRow as any)?.period_month as string | null) ?? currentMonthStr;
+
+    const effectiveCurrentMonthDate = new Date(effectiveCurrentMonthStr);
+    const effectivePreviousMonthDate = new Date(effectiveCurrentMonthDate);
+    effectivePreviousMonthDate.setMonth(effectivePreviousMonthDate.getMonth() - 1);
+    const effectivePreviousMonthStr = monthStartStr(effectivePreviousMonthDate);
+
+    const sixMonthsBack = new Date(effectiveCurrentMonthDate);
+    sixMonthsBack.setMonth(sixMonthsBack.getMonth() - 5);
+    const sixMonthsStartStr = monthStartStr(sixMonthsBack);
+
+    const { data, error } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select(
+        `
+          period_month,
+          contract_id,
+          mrr_period_system_ccy,
+          system_currency,
+          is_total_row,
+          contracts!inner(
+            holding_id
+          )
+        `,
+      )
+      .eq("contracts.holding_id", holdingId)
+      .eq("is_total_row", false)
+      .gte("period_month", sixMonthsStartStr)
+      .lte("period_month", effectiveCurrentMonthStr);
+
+    if (error) throw error;
+
+    const contractsCurrent = new Map<string, number>();
+    const contractsPrevious = new Map<string, number>();
+    let systemCurrency: string | null = null;
+
+    const byMonth = new Map<string, number>();
+
+    for (const row of data ?? []) {
+      const period = (row as any).period_month as string | null;
+      const contractId = (row as any).contract_id as string | null;
+      const mrr = Number((row as any).mrr_period_system_ccy ?? 0);
+      const ccy = (row as any).system_currency as string | null;
+      if (!systemCurrency && ccy) systemCurrency = ccy;
+      if (!period || !contractId) continue;
+
+      byMonth.set(period, (byMonth.get(period) || 0) + mrr);
+
+      if (period === effectiveCurrentMonthStr) {
+        contractsCurrent.set(contractId, (contractsCurrent.get(contractId) || 0) + mrr);
+      }
+      if (period === effectivePreviousMonthStr) {
+        contractsPrevious.set(contractId, (contractsPrevious.get(contractId) || 0) + mrr);
+      }
+    }
+
+    const currentMRR = Array.from(contractsCurrent.values()).reduce((sum, v) => sum + v, 0);
+    const previousMRR = Array.from(contractsPrevious.values()).reduce((sum, v) => sum + v, 0);
+    const delta = currentMRR - previousMRR;
+    const pct = previousMRR > 0 ? (delta / previousMRR) * 100 : null;
+
+    const pctText = pct === null ? "n/a" : `${pct.toFixed(2)}%`;
+
+    contextLines.push(
+      [
+        `MRR comparativo (system currency: ${systemCurrency ?? "(desconocida)"}):`,
+        `Mes actual (${effectiveCurrentMonthStr}): ${currentMRR.toFixed(2)}`,
+        `Mes anterior (${effectivePreviousMonthStr}): ${previousMRR.toFixed(2)}`,
+        `VariaciÃƒÂ³n: ${delta.toFixed(2)} (${pctText})`,
+      ].join("\n"),
+    );
+
+    widgets.push({
+      type: "kpi",
+      title: `MRR (mes ${String(effectiveCurrentMonthStr).slice(0, 7)})`,
+      value: `${currentMRR.toFixed(2)} ${systemCurrency ?? ""}`.trim(),
+      subtitle: `vs mes anterior: ${delta.toFixed(2)} (${pctText})`,
+    });
+
+    const chartData = Array.from(byMonth.entries())
+      .map(([period_month, mrr]) => ({ month: String(period_month).slice(0, 7), mrr: Number(mrr.toFixed(2)) }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    widgets.push({
+      type: "chart_line",
+      title: "MRR ÃƒÂºltimos 6 meses",
+      xKey: "month",
+      series: [{ key: "mrr", name: "MRR", color: "#8B5CF6" }],
+      data: chartData,
+    });
+  }
+
+  if (flags.recognizedRevenueByClient) {
+    const { data, error } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select(
+        `
+          period_month,
+          recognized_period_system_ccy,
+          system_currency,
+          is_total_row,
+          contracts!inner(
+            holding_id,
+            client_id,
+            clients!inner(
+              id,
+              name_commercial
+            )
+          )
+        `,
+      )
+      .eq("contracts.holding_id", holdingId)
+      .eq("is_total_row", false)
+      .eq("period_month", currentMonthStr);
+
+    if (error) throw error;
+
+    const byClient = new Map<string, { name: string; amount: number }>();
+    let systemCurrency: string | null = null;
+
+    for (const row of data ?? []) {
+      const ccy = (row as any).system_currency as string | null;
+      if (!systemCurrency && ccy) systemCurrency = ccy;
+
+      const contracts = (row as any).contracts as any;
+      const client = contracts?.clients;
+      const clientId = client?.id as string | undefined;
+      const clientName = (client?.name_commercial as string | undefined) ?? "(sin nombre)";
+      const recognized = Number((row as any).recognized_period_system_ccy ?? 0);
+      if (!clientId) continue;
+
+      const prev = byClient.get(clientId);
+      if (!prev) {
+        byClient.set(clientId, { name: clientName, amount: recognized });
+      } else {
+        prev.amount += recognized;
+      }
+    }
+
+    const top = Array.from(byClient.entries())
+      .map(([clientId, v]) => ({ clientId, ...v }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 10);
+
+    contextLines.push(
+      `Ingresos reconocidos por cliente (mes ${currentMonthStr}, system currency: ${systemCurrency ?? "(desconocida)"}, top 10):`,
+    );
+
+    if (top.length === 0) {
+      contextLines.push("(sin resultados)");
+    } else {
+      for (const r of top) {
+        contextLines.push(`${r.name} (${r.clientId}): ${r.amount.toFixed(2)}`);
+      }
+    }
+
+    widgets.push({
+      type: "chart_bar",
+      title: `Ingresos reconocidos por cliente (${String(currentMonthStr).slice(0, 7)})`,
+      xKey: "client",
+      series: [{ key: "recognized", name: `Reconocido (${systemCurrency ?? ""})`.trim(), color: "#0EA5E9" }],
+      data: top.map((r) => ({ client: r.name, recognized: Number(r.amount.toFixed(2)) })),
+    });
+  }
+
+  const context = contextLines.join("\n");
+
+  const fallbackAudit: LiveDataAudit = {
+    case_id: "LIVE_DATA_GENERIC",
+    currency_mode: "system",
+    source_breakdown: ["live_data"],
+    filters_applied: { holding_id: holdingId },
+    holding_id: holdingId,
+    data_completeness: (widgets?.length ?? 0) > 0 ? "complete" : "empty",
+    timestamp: new Date().toISOString(),
+  };
+
+  return {
+    handled: true,
+    context,
+    sources: [
+      {
+        id: "live_data",
+        similarity: 1,
+        metadata: {
+          source_type: "live_data",
+          holding_id: holdingId,
+          today: todayStr,
+          end_week: endWeekStr,
+          current_month: currentMonthStr,
+          previous_month: previousMonthStr,
+        },
+      },
+    ],
+    widgets,
+    audit: fallbackAudit,
+  };
+}

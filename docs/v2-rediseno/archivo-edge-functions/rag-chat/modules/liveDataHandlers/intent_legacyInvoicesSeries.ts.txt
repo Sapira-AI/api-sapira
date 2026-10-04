@@ -1,0 +1,11 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { handleQa12LegacyInvoicesSeries } from "./qa12_legacyInvoicesSeries.ts";
+
+export async function handleIntentLegacyInvoicesSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  return await handleQa12LegacyInvoicesSeries(params);
+}

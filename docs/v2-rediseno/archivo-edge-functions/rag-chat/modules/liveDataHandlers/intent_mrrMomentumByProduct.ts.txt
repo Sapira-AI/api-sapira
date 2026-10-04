@@ -1,0 +1,174 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+const MOMENTUM_VALUES = ["NEW", "REACTIVATION", "UPSELL", "CROSS-SELL", "DOWNSELL", "CHURN", "RENEWAL"] as const;
+
+type MomentumValue = (typeof MOMENTUM_VALUES)[number];
+
+function detectMomentumFilters(question: string): MomentumValue[] {
+  const q = question.toLowerCase();
+
+  if (q.includes("upsell")) return ["UPSELL"];
+  if (q.includes("cross-sell") || q.includes("cross sell")) return ["CROSS-SELL"];
+  if (q.includes("downsell")) return ["DOWNSELL"];
+  if (q.includes("churn")) return ["CHURN"];
+  if (q.includes("renewal") || q.includes("renovación") || q.includes("renovacion")) return ["RENEWAL"];
+  if (q.includes("reactivation") || q.includes("reactivación") || q.includes("reactivacion")) return ["REACTIVATION"];
+  if (q.includes("new") || q.includes("nuevo")) return ["NEW"];
+
+  return [...MOMENTUM_VALUES];
+}
+
+export async function handleIntentMrrMomentumByProduct(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  try {
+    const { fromMonth, toMonth } = parseMonthRange(question);
+    const toExclusiveDate = new Date(toMonth);
+    toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+    const toExclusive = monthStartStr(toExclusiveDate);
+
+    const momentumFilters = detectMomentumFilters(question);
+
+    const { data: raw, error } = await supabaseAuth
+      .from("revenue_schedule_monthly")
+      .select("product_name, momentum, period_month, mrr_period_system_ccy, system_currency")
+      .eq("holding_id", holdingId)
+      .gte("period_month", fromMonth)
+      .lt("period_month", toExclusive)
+      .not("product_name", "is", null)
+      .not("mrr_period_system_ccy", "is", null)
+      .limit(5000);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(raw) ? (raw as any[]) : [];
+
+    const filtered = rows.filter((r) => momentumFilters.includes(String(r?.momentum ?? "") as any));
+
+    if (filtered.length === 0) {
+      return {
+        handled: true,
+        context: `No hay datos de momentum para los filtros seleccionados en el rango ${fromMonth} a ${toMonth}.`,
+        sources: [
+          {
+            table: "revenue_schedule_monthly",
+            query_type: "mrr_momentum_by_product",
+            filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, momentum_in: momentumFilters },
+          },
+        ],
+        widgets: [
+          {
+            type: "table",
+            title: "MRR momentum por producto (sin datos)",
+            columns: ["Detalle"],
+            rows: [["No hay filas para ese rango/filtros."]],
+          },
+        ],
+        audit: {
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["revenue_schedule_monthly"],
+          filters_applied: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, momentum_in: momentumFilters },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as LiveDataAudit,
+      };
+    }
+
+    const systemCurrency =
+      typeof (filtered?.[0] as any)?.system_currency === "string" ? String((filtered[0] as any).system_currency) : null;
+
+    const byProduct = new Map<string, number>();
+    for (const r of filtered) {
+      const product = String(r?.product_name ?? "(sin producto)");
+      const val = typeof r?.mrr_period_system_ccy === "number" ? r.mrr_period_system_ccy : Number(r?.mrr_period_system_ccy ?? 0);
+      if (!Number.isFinite(val)) continue;
+      byProduct.set(product, (byProduct.get(product) || 0) + val);
+    }
+
+    const data = Array.from(byProduct.entries())
+      .map(([product, total]) => ({ product, total: Number(total.toFixed(2)) }))
+      .sort((a, b) => b.total - a.total);
+
+    const totalAll = data.reduce((acc, r) => acc + r.total, 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: "MRR momentum total",
+        value: `${totalAll.toFixed(2)}${systemCurrency ? ` ${systemCurrency}` : ""}`.trim(),
+      },
+      {
+        type: "chart_bar",
+        title: `MRR momentum por producto${systemCurrency ? ` (${systemCurrency})` : ""}`.trim(),
+        xKey: "product",
+        series: [{ key: "total", name: "MRR", color: "#22C55E" }],
+        data: data.slice(0, 20),
+      },
+      {
+        type: "table",
+        title: "Detalle por producto",
+        columns: ["Producto", `MRR momentum${systemCurrency ? ` (${systemCurrency})` : ""}`.trim()],
+        rows: data.slice(0, 50).map((r) => [r.product, r.total]),
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `MRR momentum por producto para el rango ${fromMonth} a ${toMonth}. Momentum: ${momentumFilters.join(", ")}.`,
+      sources: [
+        {
+          table: "revenue_schedule_monthly",
+          query_type: "mrr_momentum_by_product",
+          filters: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, momentum_in: momentumFilters },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId, period_month_from: fromMonth, period_month_to_exclusive: toExclusive, momentum_in: momentumFilters },
+        holding_id: holdingId,
+        data_completeness: "complete",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para MRR momentum por producto. Motivo: ${reason}`,
+      sources: [{ table: "revenue_schedule_monthly", query_type: "mrr_momentum_by_product", filters: { holding_id: holdingId } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - MRR momentum por producto",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

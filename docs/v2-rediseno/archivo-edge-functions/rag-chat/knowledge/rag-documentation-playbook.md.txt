@@ -1,0 +1,46 @@
+# Sapira Copilot – Playbook de RAG Documental (v1.0)
+
+## Objetivo
+Mantener reglas/definiciones del Copiloto como documentos versionados e indexados en `rag_documents`, para respuestas consistentes.
+
+---
+
+## 1) Qué se usa como RAG documental
+- definiciones (MRR, CMRR, revenue, billed, deferred, unbilled)
+- reglas de facturas y contratos
+- política de monedas y prohibición de sumar monedas distintas
+- reglas de presentación (no sumar MRR entre meses, ARR = MRR*12)
+- criterios de routing (números = live-data)
+
+---
+
+## 2) Qué NO debe depender de RAG
+- cálculos numéricos
+- series y rankings
+- listados operativos
+
+Eso debe ir por Live Data.
+
+---
+
+## 3) Estructura de docs en repo
+- docs/copilot/live-data-spec.md
+- docs/copilot/metrics-and-rules.md
+- docs/copilot/rag-documentation-playbook.md
+
+---
+
+## 4) Ingesta
+Indexar con rag-ingest:
+- source_type = copilot_rules
+- source_id = <filename>:v1
+- metadata: version, updated_at, scope=finance
+
+---
+
+## 5) Prompt de sistema (corto)
+Debe instruir:
+- Si pide números → usar live-data (y mostrar tabla/gráfico)
+- Si pide definiciones → usar docs (RAG)
+- No inventar números
+- Explicar moneda y rango siempre

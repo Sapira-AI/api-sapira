@@ -1,0 +1,226 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { extractContractIdentifier, monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleIntentQuantityVariationContract(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const ident = extractContractIdentifier(question);
+  const { fromMonth, toMonth, monthsBack } = parseMonthRange(question);
+
+  const toExclusiveDate = new Date(toMonth);
+  toExclusiveDate.setMonth(toExclusiveDate.getMonth() + 1);
+  const toExclusive = monthStartStr(toExclusiveDate);
+
+  try {
+    let contractId: string | null = null;
+
+    if (ident.id) {
+      contractId = ident.id;
+    } else if (ident.contract_number) {
+      const { data: cRow, error: cErr } = await supabaseAuth
+        .from("contracts")
+        .select("id")
+        .eq("holding_id", holdingId)
+        .eq("contract_number", ident.contract_number)
+        .maybeSingle();
+      if (cErr) throw cErr;
+      contractId = cRow?.id ? String(cRow.id) : null;
+    }
+
+    if (!contractId) {
+      return {
+        handled: true,
+        context: "INTENT: quantity_variation_contract. Necesito que indiques el contrato (UUID o contract_number). Ej: 'Variación contrato CT-2026-01 últimos 6 meses'.",
+        sources: [{ table: "contracts", query_type: "resolve_contract", filters: { holding_id: holdingId } }],
+        widgets: [
+          {
+            type: "table",
+            title: "Falta identificador de contrato",
+            columns: ["Detalle"],
+            rows: [["Incluye 'contrato: <UUID>' o 'contrato <CT-...>' para poder calcular variaciones."]],
+          },
+        ],
+        audit: {
+          case_id: "INTENT_quantity_variation_contract",
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["contracts"],
+          filters_applied: { holding_id: holdingId },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+          error_type: "validation",
+          error_reason: "Missing contract identifier",
+        } as any,
+      };
+    }
+
+    const { data: items, error: itemsErr } = await supabaseAuth
+      .from("contract_items")
+      .select("id, product_name, unit_price, quantity")
+      .eq("holding_id", holdingId)
+      .eq("contract_id", contractId)
+      .limit(20000);
+    if (itemsErr) throw itemsErr;
+
+    const itemRows = Array.isArray(items) ? (items as any[]) : [];
+    const baseByItem = new Map<string, { product_name: string; quantity: number | null }>();
+    const itemIds: string[] = [];
+    for (const it of itemRows) {
+      const id = String(it?.id ?? "");
+      if (!id) continue;
+      itemIds.push(id);
+      baseByItem.set(id, {
+        product_name: String(it?.product_name ?? "(sin producto)"),
+        quantity: typeof it?.quantity === "number" ? it.quantity : it?.quantity ? Number(it.quantity) : null,
+      });
+    }
+
+    if (itemIds.length === 0) {
+      return {
+        handled: true,
+        context: `INTENT: quantity_variation_contract. No encontré items para el contrato ${contractId}.`,
+        sources: [{ table: "contract_items", query_type: "list", filters: { holding_id: holdingId, contract_id: contractId } }],
+        widgets: [
+          {
+            type: "table",
+            title: "Sin items",
+            columns: ["Detalle"],
+            rows: [["El contrato no tiene contract_items asociados."]],
+          },
+        ],
+        audit: {
+          case_id: "INTENT_quantity_variation_contract",
+          range_from: fromMonth,
+          range_to: toMonth,
+          currency_mode: "system",
+          source_breakdown: ["contract_items"],
+          filters_applied: { holding_id: holdingId, contract_id: contractId },
+          holding_id: holdingId,
+          data_completeness: "empty",
+          timestamp: new Date().toISOString(),
+        } as any,
+      };
+    }
+
+    const { data: qtyRows, error: qtyErr } = await supabaseAuth
+      .from("quantities")
+      .select("contract_item_id, period, quantity")
+      .eq("holding_id", holdingId)
+      .in("contract_item_id", itemIds)
+      .gte("period", fromMonth)
+      .lt("period", toExclusive)
+      .limit(20000);
+    if (qtyErr) throw qtyErr;
+
+    const overrides = Array.isArray(qtyRows) ? (qtyRows as any[]) : [];
+    const overrideByItemPeriod = new Map<string, number | null>();
+    for (const r of overrides) {
+      const itemId = String(r?.contract_item_id ?? "");
+      const period = String(r?.period ?? "").slice(0, 10);
+      if (!itemId || !period) continue;
+      const q = typeof r?.quantity === "number" ? r.quantity : r?.quantity ? Number(r.quantity) : null;
+      overrideByItemPeriod.set(`${itemId}||${period}`, q);
+    }
+
+    const months: string[] = [];
+    const start = new Date(fromMonth);
+    for (let i = 0; i < monthsBack; i++) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i);
+      months.push(monthStartStr(d));
+    }
+
+    const series: Array<{ month: string; quantity: number }> = months.map((m) => {
+      const monthKey = m.slice(0, 7);
+      const totalQty = itemIds.reduce((acc, itemId) => {
+        const base = baseByItem.get(itemId);
+        const effective = overrideByItemPeriod.get(`${itemId}||${m}`);
+        const q = effective ?? base?.quantity ?? 0;
+        const num = typeof q === "number" ? q : q ? Number(q) : 0;
+        return acc + (Number.isFinite(num) ? num : 0);
+      }, 0);
+      return { month: monthKey, quantity: Number(totalQty.toFixed(6)) };
+    });
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_line",
+        title: "Cantidad total por mes (contrato)",
+        xKey: "month",
+        series: [{ key: "quantity", name: "Cantidad" }],
+        data: series,
+      },
+      {
+        type: "table",
+        title: "Detalle cantidad mensual",
+        columns: ["Mes", "Cantidad"],
+        rows: series.map((r) => [r.month, r.quantity]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_quantity_variation_contract",
+      range_from: fromMonth,
+      range_to: toMonth,
+      currency_mode: "system",
+      source_breakdown: ["quantities", "contract_items", "contracts"],
+      filters_applied: { holding_id: holdingId, contract_id: contractId, period_from: fromMonth, period_to_exclusive: toExclusive },
+      holding_id: holdingId,
+      data_completeness: series.some((r) => r.quantity !== 0) ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `INTENT: quantity_variation_contract. Serie de cantidad total por mes para contrato ${contractId}.`,
+      sources: [
+        { table: "contracts", query_type: "resolve_contract", filters: { holding_id: holdingId } },
+        { table: "contract_items", query_type: "list", filters: { holding_id: holdingId, contract_id: contractId } },
+        { table: "quantities", query_type: "series", filters: { holding_id: holdingId, contract_id: contractId, period_from: fromMonth, period_to_exclusive: toExclusive } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: quantity_variation_contract. No pude consultar variaciones para el contrato. Motivo: ${reason}`,
+      sources: [
+        { table: "contracts", query_type: "resolve_contract", filters: { holding_id: holdingId } },
+        { table: "contract_items", query_type: "list", filters: { holding_id: holdingId } },
+        { table: "quantities", query_type: "series", filters: { holding_id: holdingId } },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Variaciones por contrato",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_quantity_variation_contract",
+        range_from: fromMonth,
+        range_to: toMonth,
+        currency_mode: "system",
+        source_breakdown: ["quantities", "contract_items", "contracts"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}
