@@ -303,7 +303,8 @@ El `source_hash` se calcula sobre los valores **ya parseados**, así que un camb
 - **Clave natural del origen**: `(holding_id, sf_id, billing_date, product, coalesce(quote_line_id, ''))`. Se incluye `quote_line_id` porque `(sf_id, billing_date, product)` no siempre es único en el DWH.
 - **Clave natural del destino**: `(contract_item_id, period)`, el índice único `quantities_unique_item_period`.
 - **Solo inserción**: `quantities` **nunca se sobrescribe automáticamente**. Si ya existe un override con valores distintos, la fila queda en `conflict` y se genera una notificación con acción de reemplazo manual. Esto protege los overrides hechos a mano desde el front.
-- **`amount` no se escribe**: se llena por otro canal. Además, `trigger_rsm_on_quantity_change` hace `COALESCE(NEW.amount, unit_price * quantity)`, así que mandarlo pisaría el cálculo derivado.
+- **`amount` no se escribe**: el canal informa unitario × cantidad, que es lo que factura y devenga (un `amount` solo cuenta cuando faltan los dos).
+- **Devengo explícito**: desde el 04-10 no hay trigger de devengo en `quantities` (`RetiraTriggersDevengoQuantities`). Tras integrar, la fase 2 llama `revenue_schedule_rebuild(contrato, mes)` una vez por contrato desde el primer mes con una cantidad nueva, y el reemplazo manual (`replaceQuantityRecord`) lo llama para el contrato y mes del override; cada rebuild en su propia transacción con `sapira.writer = 'api'`. El INSERT/UPDATE de `quantities` sigue sin la marca para que corran los triggers que se conservan (holding, guard de factura emitida, líneas Por Emitir). Un fallo del rebuild en la fase 2 no tumba el batch (queda en el log con contrato y mes); en el reemplazo manual sube como error.
 - **`holding_id` y `contract_id` no se envían**: los deriva `trg_quantities_set_holding`.
 
 ### Precedencia de mapeo

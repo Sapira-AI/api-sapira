@@ -8,7 +8,15 @@ import {
 	localizeAccountName,
 } from '@/core/utils/account-mappings';
 
-import { type CurrencyContext, inactiveEmptyRowSql, MetricsDataService, realGapSql, SqlParams, unconvertedSql } from './metrics-data.service';
+import {
+	type CurrencyContext,
+	inactiveEmptyRowSql,
+	MetricsDataService,
+	notPendingCloseSql,
+	realGapSql,
+	SqlParams,
+	unconvertedSql,
+} from './metrics-data.service';
 import { addMonths, currentMonth, type Month, monthStart, resolveRange } from './metrics-period';
 import { balancesAt, forwardSchedule, indexByItem, type JournalAccount, journalMonths, type RevenueItemMonth, rollforward } from './revenue-balances';
 import { NOT_PENDING_RENEWAL, notPendingRenewalOf } from './rsm-momentum';
@@ -104,13 +112,18 @@ export class RevenueMetricsService {
 		return { rows: loaded.rows, unconverted: this.data.summarizeUnconverted({ revenueRows: loaded.unconvertedRows, currency }) };
 	}
 
-	private where(holdingId: string, filters: MetricsFiltersDto, params: SqlParams, from: Month, to: Month) {
+	/**
+	 * Condiciones comunes de una lectura del RSM en `currency`. En moneda de compañía, las filas de meses sin cerrar
+	 * (`pending_month_close`) no se leen: no tienen dato en esa moneda (no suman, no se muestran, no son "sin convertir").
+	 */
+	private where(holdingId: string, filters: MetricsFiltersDto, currency: CurrencyContext, params: SqlParams, from: Month, to: Month) {
 		return [
 			`r.holding_id = ${params.add(holdingId)}`,
 			`COALESCE(r.is_total_row, false) = false`,
 			NOT_PENDING_RENEWAL,
 			`r.period_month BETWEEN ${params.add(monthStart(from))}::date AND ${params.add(monthStart(to))}::date`,
 			`c.deleted_at IS NULL`,
+			...notPendingCloseSql(currency.mode),
 			...this.data.rsmFilters(
 				{
 					...filters,
@@ -210,7 +223,7 @@ export class RevenueMetricsService {
 	) {
 		const s = suffix(currency.mode);
 		const params = new SqlParams();
-		const where = this.where(holdingId, filters, params, from, to);
+		const where = this.where(holdingId, filters, currency, params, from, to);
 		const dim = DIMENSION_SQL[dimension];
 		const rows = await this.data.query(
 			`SELECT ${dim.key} AS key, ${dim.label} AS label, SUM(r.recognized_period${s}) AS value
@@ -270,7 +283,7 @@ export class RevenueMetricsService {
 	private async recurringVsMrr(holdingId: string, filters: MetricsFiltersDto, currency: CurrencyContext, month: Month) {
 		const s = suffix(currency.mode);
 		const params = new SqlParams();
-		const where = this.where(holdingId, filters, params, month, month);
+		const where = this.where(holdingId, filters, currency, params, month, month);
 		const [row] = await this.data.query(
 			`SELECT SUM(r.recognized_period${s}) FILTER (WHERE r.subscription_id IS NOT NULL OR COALESCE(ci.is_recurring, false)) AS recognized,
 				SUM(r.mrr_period_contracted${s}) AS mrr
@@ -324,6 +337,8 @@ export class RevenueMetricsService {
 			NOT_PENDING_RENEWAL,
 			`r.period_month > ${asOfDate}::date`,
 			`c.deleted_at IS NULL`,
+			// Moneda de compañía: los meses futuros sin cerrar no tienen dato en esa moneda (no se proyectan con otra tasa).
+			...notPendingCloseSql(currency.mode),
 			...this.data.rsmFilters(
 				{
 					...filters,
@@ -385,7 +400,7 @@ export class RevenueMetricsService {
 		const measure = query.measure ?? 'recognized';
 		const column = `r.${measure === 'billed' ? 'billed_period' : 'recognized_period'}${s}`;
 		const params = new SqlParams();
-		const where = this.where(holdingId, query, params, from, to);
+		const where = this.where(holdingId, query, currency, params, from, to);
 		const dim = DIMENSION_SQL[dimension];
 		const rows = await this.data.query(
 			`SELECT ${dim.key} AS key, ${dim.label} AS label, to_char(r.period_month, 'YYYY-MM') AS period, SUM(${column}) AS value
@@ -439,7 +454,7 @@ export class RevenueMetricsService {
 		const currency = await this.data.resolveCurrency(holdingId, query);
 		const s = suffix(currency.mode);
 		const build = (params: SqlParams) => {
-			const where = this.where(holdingId, query, params, from, to);
+			const where = this.where(holdingId, query, currency, params, from, to);
 
 			if (query.search) {
 				const p = params.add(`%${query.search.replace(/[%_]/g, '')}%`);
@@ -486,6 +501,8 @@ export class RevenueMetricsService {
 					r.unbilled_balance_eom_contract_ccy, r.unbilled_balance_eom_ccy, r.unbilled_balance_eom_system_ccy,
 					r.mrr_period_contracted_contract_ccy, r.mrr_period_contracted_ccy, r.mrr_period_contracted_system_ccy,
 					r.cmrr_period_contract_ccy, r.cmrr_period_ccy, r.cmrr_period_system_ccy,
+					r.recognized_cum_contract_ccy, r.recognized_cum_ccy, r.recognized_cum_system_ccy,
+					r.billed_cum_contract_ccy, r.billed_cum_ccy, r.billed_cum_system_ccy,
 					${openingColumns()},
 					r.fx_to_company_source, r.fx_to_system_source, r.calc_version,
 					r.recognized_period${s} AS recognized, r.billed_period${s} AS billed,
@@ -570,6 +587,9 @@ export class RevenueMetricsService {
 			deferred_change: money(row[`deferred_change${s}`]),
 			unbilled_opening: money(row[`unbilled_opening${s}`]),
 			unbilled_change: money(row[`unbilled_change${s}`]),
+			// Acumulados del ítem al cierre del mes (aditivo, 04-10): saldos, no se suman entre filas ni meses.
+			recognized_cum: money(row[`recognized_cum${s}`]),
+			billed_cum: money(row[`billed_cum${s}`]),
 		};
 	}
 

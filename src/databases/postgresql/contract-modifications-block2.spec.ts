@@ -298,6 +298,54 @@ describe('assets RSM: fixes 01-10 (U8, S5-16, U5)', () => {
 	});
 });
 
+describe('assets RSM: decisiones de Domi 04-10 (D2 + D3, rebuild-devengo-comparacion.md corrida final)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'revenue_schedule_rebuild_contract_ccy.sql'), 'utf8');
+	const flat = sql.replace(/\s+/g, ' ');
+
+	it('D2: override del período (quantities) = devengo del mes con la regla de la factura; sin override, el plan; MRR sin cambio', () => {
+		const active = flat.slice(flat.indexOf('v_in_active := true;'), flat.indexOf('v_in_active := false;'));
+
+		// Regla de sync_invoice_items_amounts_from_quantities: unitario × cantidad (el que falte, del ítem; solo monto → monto).
+		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NOT NULL THEN q.unit_price * q.quantity');
+		expect(active).toContain('WHEN q.amount IS NOT NULL AND q.unit_price IS NULL AND q.quantity IS NULL THEN q.amount');
+		expect(active).toContain('WHEN q.quantity IS NOT NULL AND q.unit_price IS NULL THEN v_item.unit_price * q.quantity');
+		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NULL THEN q.unit_price * v_item.quantity');
+		// × (1 − % de la línea del período, sin NC; sin línea, % del ítem).
+		expect(active).toContain("AND i.document_type IS DISTINCT FROM 'NC'");
+		expect(active).toContain("AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur");
+		expect(active).toContain("CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END");
+		expect(active).toContain('WHERE q.contract_item_id = v_item.id AND q.period = v_cur;');
+		expect(active).toContain('IF v_override_amount IS NOT NULL THEN v_recognized_period := ROUND(v_override_amount, 2); END IF;');
+		// Reemplaza el mensual ya prorrateado / pausado del mes (va después de la pausa) y solo en meses activos.
+		expect(active.indexOf('v_active_days := (LEAST(v_eom_of_cur')).toBeLessThan(active.indexOf('FROM quantities q'));
+		// El MRR sigue siendo el plan (el override no lo toca).
+		expect(flat).toContain('v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);');
+		expect(flat).not.toMatch(/v_mrr_contracted := [^;]*v_override_amount/);
+	});
+
+	it('D3: el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio; un rebuild parcial no cambia', () => {
+		const d3 = flat.slice(flat.indexOf('v_contract_start_date := LEAST('), flat.indexOf('-- B2-3 (§9.3.9)'));
+		expect(d3).toContain("SELECT MIN(DATE_TRUNC('month', i.issue_date)::date) FROM invoices i");
+		// Solo líneas de ítems del contrato (las que entran al facturado), facturas vigentes y emitidas.
+		expect(d3).toContain('JOIN contract_items ci ON ci.id = ii.contract_item_id WHERE ci.contract_id = p_contract_id');
+		expect(d3).toContain("AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')");
+		// Va después de la extensión hasta la última factura (FIX 1.2) y antes de calcular el primer período.
+		expect(flat.indexOf('v_contract_end_date := GREATEST(')).toBeLessThan(flat.indexOf('v_contract_start_date := LEAST('));
+		expect(flat.indexOf('v_contract_start_date := LEAST(')).toBeLessThan(flat.indexOf('v_first_period := DATE_TRUNC('));
+		// Rebuild parcial: el mes de inicio sigue siendo p_from_month (el GREATEST con el inicio no lo adelanta).
+		expect(flat).toContain('GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date)');
+		// En esos meses el ítem no está activo: la actividad sale del inicio del ítem, no del contrato (devengo 0, MRR 0).
+		expect(flat).toContain("v_item_start_month := DATE_TRUNC('month', v_item.start_date)::date;");
+	});
+
+	it('sin guard por estado: el rebuild procesa el contrato como está, también En revisión / Borrador (D1 descartada)', () => {
+		expect(flat).not.toContain('c.status');
+		expect(flat).not.toContain('v_contract.status');
+		expect(flat).not.toMatch(/'En revisión'|'Borrador'/);
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
 describe('asset RSM apply_pending_renewal_tail (D19 · S2-10, 01-10)', () => {
 	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'apply_pending_renewal_tail.sql'), 'utf8');
 	const flat = sql.replace(/\s+/g, ' ');

@@ -66,7 +66,13 @@ export class MetricsFiltersDto {
 	@IsOptional()
 	to?: string;
 
-	@ApiPropertyOptional({ enum: METRIC_CURRENCIES, default: 'system' })
+	@ApiPropertyOptional({
+		enum: METRIC_CURRENCIES,
+		default: 'system',
+		description:
+			'Moneda de lectura. Métricas (`mrr/*`, `clients/activity`, `churn`, `renewals`, `cohorts`, `bookings`) solo acepta `system` (400 con otra). ' +
+			'Ingresos (`revenue/*`) acepta las tres; en `company` las filas de meses sin cerrar (`pending_month_close`) no se leen.',
+	})
 	@IsIn(METRIC_CURRENCIES)
 	@IsOptional()
 	currency?: MetricCurrency;

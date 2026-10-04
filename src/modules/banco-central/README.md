@@ -272,7 +272,7 @@ POST /banco-central/exchange-rates/sync-historical
 
 **POST** `/banco-central/exchange-rates/calculate-monthly`
 
-Calcula los promedios mensuales (AVG, MIN, MAX) de tipos de cambio. Si no se especifica año/mes, calcula para todos los períodos disponibles.
+Calcula los promedios mensuales (AVG, MIN, MAX) de tipos de cambio con la regla de **Regla del promedio mensual** (abajo). Si no se especifica año/mes, calcula para todos los períodos disponibles. Un mes ya terminado queda cerrado aunque falten tasas diarias: para cerrar con control de cobertura, usar `close-month`.
 
 **Body Parameters:**
 
@@ -290,6 +290,14 @@ Content-Type: application/json
   "month": 1
 }
 ```
+
+#### 7 bis. Cierre mensual de la moneda de compañía (solo super admin)
+
+**POST** `/banco-central/exchange-rates/close-month` · body opcional `{ "month": "2026-09", "force": false }`
+
+Lo mismo que el proceso automático del día 1 (ver **Cierre mensual de la moneda de compañía** abajo). Sin `month` cierra el mes que
+terminó; `force: true` cierra los promedios de ese mes aunque sus tasas diarias estén incompletas. Devuelve los promedios cerrados, los
+incompletos y el resultado por holding (contratos recalculados, filas del mes que siguen sin moneda de compañía y sus pares).
 
 #### 8. Obtener Últimos Tipos de Cambio
 
@@ -416,11 +424,15 @@ banco-central/
 │   ├── exchange-rate-monthly-avg.entity.ts # Entidad para promedios mensuales
 │   └── indicador-economico.entity.ts   # Entidad para indicadores económicos
 ├── services/
-│   └── exchange-rates.service.ts       # Servicio para tipos de cambio
+│   ├── exchange-rates.service.ts       # Servicio para tipos de cambio
+│   └── fx-month-close.service.ts       # Cierre mensual de la moneda de compañía (promedio + devengo + aviso)
 ├── interfaces/
 │   └── banco-central.interface.ts      # Interfaces y enums
 ├── banco-central.controller.ts         # Controlador con 10 endpoints
 ├── banco-central.module.ts             # Módulo de NestJS
+├── fx-month-close.ts                   # Reglas puras del cierre mensual de la moneda de compañía
+├── monthly-average.ts                  # Regla del promedio mensual (fuentes, una tasa por día, días hábiles, cerrado)
+├── fx-month-close.scheduler.ts         # Cron del día 1 (10:00, reintentos días 2–5)
 ├── banco-central.service.ts            # Servicio para indicadores económicos
 └── README.md                           # Documentación
 ```
@@ -489,6 +501,64 @@ CREATE INDEX idx_monthly_avg_period ON exchange_rates_monthly_avg(year, month);
 ```
 
 **Nota**: Los triggers automáticos para calcular promedios mensuales fueron eliminados. Los promedios se calculan mediante el servicio `ExchangeRatesService`.
+
+## Cierre mensual de la moneda de compañía (decisión de Domi 04-10)
+
+**Regla del devengo** (`revenue_schedule_apply_fx_for_contract`): con política de promedio mensual, la **moneda de compañía** de una
+fila del devengo (MRR, devengado, diferido, facturado, CMRR: todas las columnas `_ccy`) solo se llena en meses de calendario **ya
+terminados** cuyo promedio en `exchange_rates_monthly_avg` está **cerrado**: recalculado después de terminar el mes (hora del holding) y
+armado con tasas diarias (`data_points > 1`). El mes en curso y los futuros quedan **sin convertir** (columnas NULL,
+`fx_to_company_source = 'pending_month_close'`, sin marcar `missing_fx_rate`); Ingresos y Métricas los tratan como "sin tipo de cambio".
+El contrato con política **fija** de compañía se llena siempre con su tasa. La **moneda de sistema** no cambia (tasa fija del holding,
+proyectada hacia adelante).
+
+**Proceso** (`FxMonthCloseScheduler` → `FxMonthCloseService`): día 1 a las 10:00 America/Santiago (después de la sincronización diaria
+de las 08:00 y sus reintentos), con reintentos los días 2 a 5 a la misma hora. `FX_MONTH_CLOSE_ENABLED=false` lo apaga.
+
+1. Para el mes terminado (y los terminados de los últimos 12 meses con promedio aún sin cerrar) revisa por par que las tasas diarias
+   estén completas: al menos `días hábiles − 3` tasas y la última a lo más 3 días antes del último día hábil (holgura por feriados).
+   Los pares completos se recalculan con `calculateMonthlyAverages` (eso los deja cerrados); los incompletos no se cierran y se
+   registran en el log.
+2. Por holding (try/catch) y por contrato (`withApiWriter`, contrato bloqueado): `revenue_schedule_apply_fx_for_contract` desde el
+   primer mes a recalcular, nunca antes del cierre de la compañía (`get_cutoff_date`). Recalcula meses terminados pendientes, meses en
+   curso o futuros que tenían moneda de compañía de la regla anterior y meses con tasa de sistema proyectada.
+3. Si quedan filas del mes terminado sin moneda de compañía (política promedio mensual), alerta por holding: tipo `fx_sync_failure`,
+   clave `fx-month-close:AAAA-MM`, "Falta el tipo de cambio promedio de <mes>"; si ya no quedan, la cierra.
+
+Idempotente: repetirlo deja el mismo resultado.
+
+**Regla del promedio mensual (corregida el 04-10, decisión de Domi; `monthly-average.ts`)** — la usan `calculateMonthlyAverages`, la
+cobertura del cierre (`FxMonthCloseService.coverage`) y la migración `1791500000000-LimpiaPromediosMensualesManuales`:
+
+1. **Todas las fuentes diarias**: Banco Central (`BANCOCENTRAL` y `BANCOCENTRALCHILE`, el sistema anterior hasta 10-10-2025) y Perú API
+   (`PERU_API`, USD/PEN). Antes se filtraba una sola fuente por par y los meses del cambio quedaban cortos (oct-2025: 14 de 23 días;
+   jul-2026 USD/PEN: 15 de 23). Las cargas manuales (`source_type = 'system'`, `exchangerate-api` del 02-01-2026) no son fuente diaria
+   y no entran (ARS/USD = 1.452,25, BRL/USD = 5,48, UYU/USD = 39,06 y GBP/USD = 0,743 están invertidas).
+2. **Una tasa por par y día**: la PK de `exchange_rates` ya lo garantiza; si hubiera más de una, gana la de mayor prioridad (Perú API
+   para USD/PEN → Banco Central → Banco Central del sistema anterior) y, a igual fuente, la más reciente. Nunca se promedian duplicados.
+3. **Solo días hábiles (lunes a viernes) para todas las monedas**, UF y USD/PEN incluidas (antes el viernes pesaba triple en esas dos).
+4. **Cerrado** = recalculado después de terminado el mes (`calculated_at` ≥ 1.º del mes siguiente, America/Santiago) y con
+   `data_points > 1` (`isMonthlyAverageClosed`). La sincronización diaria recalcula el mes en curso y lo deja abierto por construcción.
+   El endpoint `calculate-monthly` sobre un mes terminado lo deja cerrado aunque falten días: para cerrar con control de cobertura, usar
+   `close-month`.
+
+Impacto en la copia (prod 04-10), 2025-01 → 2026-09: 215 par-mes recalculados; cambio medio por par 0,005 % (CLF/CLP) a 0,059 % (USD/CLP),
+máximo 0,65 % (USD/PEN oct-2025, que pasa de 14 a 22 días); 15 meses cambian más de 0,1 %.
+
+**Limpieza** (`1791500000000`, con respaldo en `sapira_backups`): borra las 319 filas a mano (`data_points = 1` sin tasas diarias de una
+fuente diaria detrás, hasta dic-2027; en producción las mismas 319, verificado en lectura el 04-10) y recalcula ene-2025 → sep-2026 con
+la regla (cerrados). También borra (aprobado por Domi 04-10) las 76 filas
+de pares inversos sin ninguna tasa propia en `exchange_rates` y cuyo par directo sí tiene tasas diarias (CLP/USD, COP/USD, MXN/USD,
+PEN/USD ene-2025 → abr-2026 y EUR/USD 2025, calculadas el 14-04-2026; difieren hasta 1 % de 1 ÷ el promedio directo): los lectores
+usan la inversa de la fila directa. Total 395 filas, md5 `f491fa7fd2e695b3aba85d05ac45bd8b` (igual en producción). El recálculo no
+las vuelve a crear: solo arma par-mes con tasas diarias del mismo par.
+
+**Lo que sigue abierto:**
+
+- No hay fuente diaria para MXN → CLP ni EUR → CLP (no se calculan cruces vía USD): esos contratos quedan sin moneda de compañía.
+- Lenosoft (moneda de sistema CLP con política `monthly_avg`) convertía sus meses futuros con la proyección plana de CLF/CLP; sin esas
+  filas, nov-2026 → abr-2027 (6 filas del devengo, 858.711 CLP de MRR) quedan "Sin tipo de cambio" en moneda de sistema. La tasa
+  proyectada solo existe para `fixed_period`: decidir si se extiende al promedio mensual (último promedio cerrado).
 
 ## Autenticación
 

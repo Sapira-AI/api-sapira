@@ -41,7 +41,7 @@ export interface UnconvertedContract {
 	client_name: string | null;
 	source: 'contract' | 'subscription' | 'legacy';
 	months: Month[];
-	reason: 'item_fx_rate' | 'system_fx_rate' | 'company_fx_rate' | 'legacy_without_company_ccy';
+	reason: 'item_fx_rate' | 'system_fx_rate' | 'company_fx_rate';
 }
 
 export interface Unconverted {
@@ -66,6 +66,22 @@ export class SqlParams {
 /** Sufijo de columnas del RSM según la moneda (§0 regla dura 1: nunca `monthly_price` de ítems). */
 const suffix = (mode: MetricCurrency) => (mode === 'system' ? '_system_ccy' : mode === 'company' ? '_ccy' : '_contract_ccy');
 const fxSource = (mode: MetricCurrency) => (mode === 'system' ? 'r.fx_to_system_source' : mode === 'company' ? 'r.fx_to_company_source' : null);
+
+/**
+ * Mes sin cerrar en moneda de compañía (Domi 04-10, `revenue_schedule_apply_fx_for_contract`): con política de promedio mensual, el mes en
+ * curso, los futuros y el recién terminado sin promedio cerrado quedan con las columnas `*_ccy` NULL y `fx_to_company_source =
+ * 'pending_month_close'`. No es un hueco de datos: se convierte el día 1 cuando cierra el promedio.
+ */
+export const PENDING_MONTH_CLOSE = 'pending_month_close';
+
+/**
+ * Filtro de filas "sin dato" en moneda de compañía: las filas `pending_month_close` no existen en esa moneda, así que no se leen (no se
+ * muestran, no suman y no cuentan como sin convertir). Los demás meses del mismo ítem siguen. En sistema y contrato no filtra nada.
+ * Necesita el RSM con alias `r` (o el indicado).
+ */
+export function notPendingCloseSql(mode: MetricCurrency, alias = 'r'): string[] {
+	return mode === 'company' ? [`COALESCE(${alias}.fx_to_company_source, '') <> '${PENDING_MONTH_CLOSE}'`] : [];
+}
 
 /** Condición SQL de fila sin convertir para una columna del RSM. */
 export function unconvertedSql(mode: MetricCurrency, column: string): string {
@@ -224,7 +240,10 @@ export class MetricsDataService {
 		return where;
 	}
 
-	/** ¿El legacy entra a esta lectura? Solo en moneda de sistema o de contrato y si el filtro de origen lo incluye. */
+	/**
+	 * ¿El legacy entra a esta lectura? Si el filtro de origen lo incluye. Métricas (único lector de líneas de MRR) va siempre en moneda de
+	 * sistema; la salvaguarda de compañía queda por si otra lectura la pidiera (el legacy no tiene monto en moneda de compañía).
+	 */
 	legacyIncluded(filters: MetricsFiltersDto, currency: CurrencyContext) {
 		const sources = splitList(filters.source);
 
@@ -293,17 +312,13 @@ export class MetricsDataService {
 			});
 		}
 
-		let legacyCompanyRows = 0;
-
 		if (this.legacyIncluded(filters, currency)) {
 			for (const row of await this.loadLegacyRows(holdingId, filters, currency, from, to)) {
 				this.addLineMonth(lines, row, { value: num(row.value), valueContract: num(row.value_contract), pending: 0, momentum: null });
 			}
-		} else if (currency.mode === 'company' && (!splitList(filters.source).length || splitList(filters.source).includes('legacy'))) {
-			legacyCompanyRows = await this.countLegacyRows(holdingId, filters, from, to);
 		}
 
-		return { lines: [...lines.values()], itemFxMissing, legacyCompanyRows };
+		return { lines: [...lines.values()], itemFxMissing };
 	}
 
 	/**
@@ -450,22 +465,6 @@ export class MetricsDataService {
 		);
 	}
 
-	private async countLegacyRows(holdingId: string, filters: MetricsFiltersDto, from: Month, to: Month) {
-		const params = new SqlParams();
-		const where = [
-			`m.holding_id = ${params.add(holdingId)}`,
-			`COALESCE(m.is_recurring, false) = true`,
-			`m.period_month BETWEEN ${params.add(monthStart(from))}::date AND ${params.add(monthStart(to))}::date`,
-			...this.legacyFilters(filters, params),
-		];
-		const [row] = await this.query(
-			`SELECT COUNT(*) AS n FROM mrr_legacy m LEFT JOIN clients cl ON cl.id = m.client_id WHERE ${where.join(' AND ')}`,
-			params.values
-		);
-
-		return Number(row?.n ?? 0);
-	}
-
 	/**
 	 * Filas ítem × mes del devengo para Revenue (§1.7): reconocido y facturado del mes y los acumulados de un solo registro por ítem-mes
 	 * (la fila regular, no la CHURN de la cola, que repite el acumulado final, R4). Sin pendientes de renovar (acumulado 0).
@@ -481,6 +480,7 @@ export class MetricsDataService {
 			`r.period_month <= ${params.add(monthStart(to))}::date`,
 			...(from ? [`r.period_month >= ${params.add(monthStart(from))}::date`] : []),
 			`c.deleted_at IS NULL`,
+			...notPendingCloseSql(currency.mode),
 			...this.rsmFilters(
 				{
 					...filters,
@@ -551,13 +551,7 @@ export class MetricsDataService {
 	}
 
 	/** Resumen de lo que no entró a los totales, agrupado por contrato (§1.3). */
-	summarizeUnconverted(input: {
-		lines?: MrrLine[];
-		itemFxMissing?: Set<string>;
-		revenueRows?: Row[];
-		currency: CurrencyContext;
-		legacyCompanyRows?: number;
-	}): Unconverted {
+	summarizeUnconverted(input: { lines?: MrrLine[]; itemFxMissing?: Set<string>; revenueRows?: Row[]; currency: CurrencyContext }): Unconverted {
 		const contracts = new Map<string, UnconvertedContract>();
 		let rows = 0;
 		const items = new Set<string>();
@@ -598,18 +592,6 @@ export class MetricsDataService {
 			entry.months = [...new Set([...entry.months, String(row.period)])].sort();
 			contracts.set(id, entry);
 		}
-		if (input.legacyCompanyRows) {
-			rows += input.legacyCompanyRows;
-			contracts.set('legacy', {
-				contract_id: null,
-				contract_number: null,
-				client_name: null,
-				source: 'legacy',
-				months: [],
-				reason: 'legacy_without_company_ccy',
-			});
-		}
-
 		return { rows, items: items.size, contracts: [...contracts.values()] };
 	}
 

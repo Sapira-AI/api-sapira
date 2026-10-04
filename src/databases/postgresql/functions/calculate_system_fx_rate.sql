@@ -14,39 +14,16 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Handle fixed_period policy with inverse lookup
+  -- fixed_period: holding_fixed_fx_rate (directa → rate; inversa → 1/rate a 6 decimales: se divide). Después de la última tasa
+  -- registrada del par usa esa, proyectada (fuente holding_fixed_period[_inverse]_projected, decisión de Domi 04-10).
   IF v_policy = 'fixed_period' THEN
-    -- 1️⃣ Try direct rate (from_currency → to_currency)
-    SELECT hfpr.rate, 'holding_fixed_period', hfpr.period_start
+    SELECT
+      CASE WHEN h.is_inverse THEN ROUND(1.0 / h.rate, 6) ELSE h.rate END,
+      'holding_fixed_period' || CASE WHEN h.is_inverse THEN '_inverse' ELSE '' END || CASE WHEN h.projected THEN '_projected' ELSE '' END,
+      h.period_start
     INTO v_rate, v_source, v_ref_date
-    FROM holding_fx_period_rates hfpr
-    WHERE hfpr.holding_id = p_holding_id
-      AND hfpr.from_currency = p_from_currency
-      AND hfpr.to_currency = p_to_currency
-      AND p_period_date BETWEEN hfpr.period_start AND hfpr.period_end
-    ORDER BY hfpr.created_at DESC
-    LIMIT 1;
-    
-    -- 2️⃣ If not found, try inverse rate (to_currency → from_currency)
-    IF v_rate IS NULL THEN
-      SELECT 
-        CASE 
-          WHEN hfpr.rate > 0 THEN ROUND(1.0 / hfpr.rate, 6)
-          ELSE NULL 
-        END,
-        'holding_fixed_period_inverse',
-        hfpr.period_start
-      INTO v_rate, v_source, v_ref_date
-      FROM holding_fx_period_rates hfpr
-      WHERE hfpr.holding_id = p_holding_id
-        AND hfpr.from_currency = p_to_currency
-        AND hfpr.to_currency = p_from_currency
-        AND p_period_date BETWEEN hfpr.period_start AND hfpr.period_end
-      ORDER BY hfpr.created_at DESC
-      LIMIT 1;
-    END IF;
-    
-    -- 3️⃣ If still not found, mark as missing
+    FROM public.holding_fixed_fx_rate(p_holding_id, p_from_currency, p_to_currency, p_period_date) h;
+
     IF v_rate IS NULL THEN
       v_source := 'missing_holding_fx_rate';
     END IF;
@@ -98,6 +75,6 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public."calculate_system_fx_rate"(p_holding_id uuid, p_from_currency text, p_to_currency text, p_period_date date, p_policy text) IS 'Calcula FX para conversiones contract_currency → system_currency. 
-Para fixed_period usa holding_fx_period_rates (global del holding).
+Para fixed_period usa holding_fixed_fx_rate (holding_fx_period_rates; después de la última tasa del par, la última proyectada: fuente *_projected).
 Para monthly_avg usa exchange_rates_monthly_avg.
 Soporta búsqueda inversa automática.';

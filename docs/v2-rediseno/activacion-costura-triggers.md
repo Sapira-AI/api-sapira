@@ -150,7 +150,6 @@ DOTENV_CONFIG_PATH=.env.qa.db yarn postgres:assets --apply --target qa \
   --only functions/trg_audit_contract_changes.sql \
   --only functions/trigger_rsm_on_contract_item_change.sql \
   --only functions/trigger_rsm_on_invoice_change.sql \
-  --only functions/trigger_rsm_on_quantity_change.sql \
   --only functions/validate_fx_confirmation_before_firmado.sql
 # desplegar la API con el código de la costura
 # SOLO con OK de Domi (logs 30 días + llamadores del front viejo resueltos), DESPUÉS del asset de la función unificada:

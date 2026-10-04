@@ -140,6 +140,21 @@ switch (`lib/app-links.ts` en `front-sapira` redirige lo no migrado). Antes: aud
 del devengo. Después, tras un tiempo prudente de pruebas: drop y limpieza de los triggers y funciones que solo usa el
 front actual. **Regla (Domi, 02-10): no se arreglan cosas que solo afectan al front actual.** Pasos en
 [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) §5.
+Tipos de cambio, MRR histórico y monto en moneda de sistema de las facturas:
+[`docs/v2-rediseno/analisis-fx-y-mrr-historico.md`](docs/v2-rediseno/analisis-fx-y-mrr-historico.md). Qué función y trigger se
+mantiene, se retira o ya se retiró: [`docs/v2-rediseno/catalogo-funciones-y-triggers.md`](docs/v2-rediseno/catalogo-funciones-y-triggers.md).
+Rebuild del devengo y su procedimiento de aplicación: [`docs/v2-rediseno/rebuild-devengo-comparacion.md`](docs/v2-rediseno/rebuild-devengo-comparacion.md).
+
+**Diferencias por tipo de cambio: cálculo y dónde mostrarlas** 🔮 (abierto por Domi el 04-10, al reemplazar la regla "sin vueltas"
+del 01-10 por la regla por estado: Por Emitir desde la moneda de contrato, documento emitido desde la moneda de factura). Por definir:
+- **Realizada al cobro**: diferencia entre el monto en moneda de sistema (o de compañía) a la tasa de emisión y el cobrado a la tasa del
+  pago (`invoice_payments`, conciliación bancaria).
+- **No realizada al cierre**: revaluación de lo por cobrar al cierre de cada mes (tasa de cierre vs tasa de emisión), sin tocar la factura.
+- **Reportes**: dónde se ven (Facturación, Ingresos, Métricas, export contable) y en qué moneda.
+- **Facturas en moneda distinta a la de la compañía** (p. ej. contrato USD facturado en CLP por una compañía chilena): la diferencia entre
+  el devengo en moneda de contrato y lo facturado en moneda de factura.
+- **Líneas en moneda de sistema dentro de facturas en otra moneda** (p. ej. una línea USD de una factura CLP): hoy entran con su monto en
+  moneda de factura a la tasa del holding ("con vueltas"); decidir si se separa la diferencia contra su monto original.
 
 ## 🛤️ Los tres carriles (forma de trabajo: sesiones separadas y frescas por carril)
 

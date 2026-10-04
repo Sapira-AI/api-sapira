@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { CATEGORY_INFO, FORMULAS, KEY_LABELS, MOVEMENT_CATEGORIES } from './metrics-categories';
 import { type CurrencyContext, MetricsDataService, SqlParams } from './metrics-data.service';
@@ -55,6 +55,26 @@ export function renewalWindowSql(window: NonNullable<RenewalsDto['window']>, par
 export class MrrMetricsService {
 	constructor(private readonly data: MetricsDataService) {}
 
+	/**
+	 * Moneda de Métricas: siempre la de sistema (Domi 04-10, como el front viejo; no se mezclan monedas en el módulo). `currency` ausente
+	 * o `system` → sistema; `company`/`contract` → 400 claro. Ingresos (`RevenueMetricsService`) sigue con las tres monedas.
+	 */
+	private async currency(holdingId: string, filters: MetricsFiltersDto): Promise<CurrencyContext> {
+		if (filters.currency && filters.currency !== 'system') {
+			throw new BadRequestException({
+				message: 'Métricas se calcula solo en moneda de sistema',
+				errors: [
+					{
+						field: 'currency',
+						message: 'Métricas solo acepta currency=system. Para otras monedas, usa Ingresos o el detalle del contrato.',
+					},
+				],
+			});
+		}
+
+		return { mode: 'system', code: await this.data.systemCurrency(holdingId) };
+	}
+
 	/** Líneas convertidas del rango y lo que quedó fuera (§1.3). */
 	private async lines(holdingId: string, filters: MetricsFiltersDto, currency: CurrencyContext, basis: 'mrr' | 'cmrr', from: Month, to: Month) {
 		const loaded = await this.data.loadMrrLines(holdingId, filters, currency, basis, from, to);
@@ -66,7 +86,6 @@ export class MrrMetricsService {
 				lines: unconverted,
 				itemFxMissing: loaded.itemFxMissing,
 				currency,
-				legacyCompanyRows: loaded.legacyCompanyRows,
 			}),
 		};
 	}
@@ -88,7 +107,7 @@ export class MrrMetricsService {
 	/** KPIs del mes de corte con su valor anterior y sparkline de 12 meses (§3 `mrr/overview`). */
 	async overview(holdingId: string, query: MrrOverviewDto) {
 		const asOf = query.asOf ?? currentMonth();
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const from = addMonths(asOf, -13);
 		const prevMonth = addMonths(asOf, -1);
 		const [mrr, cmrr, asOfStamp, pending, fxProjected] = await Promise.all([
@@ -161,7 +180,7 @@ export class MrrMetricsService {
 	/** Movimientos de MRR por mes (alimentan el gráfico de movimientos, el puente y la tabla, §1.4). */
 	async movements(holdingId: string, query: MrrBasisDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const { lines, unconverted } = await this.lines(holdingId, query, currency, query.basis ?? 'mrr', addMonths(from, -1), to);
 		const waterfall = buildWaterfall(lines, months, { currency: currency.mode });
 		const current = currentMonth();
@@ -184,7 +203,7 @@ export class MrrMetricsService {
 	/** Detalle de los movimientos (drill-down): por ítem, contrato, cliente, segmento o mercado, paginado. */
 	async movementDetail(holdingId: string, query: MovementDetailDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const { lines, unconverted } = await this.lines(holdingId, query, currency, query.basis ?? 'mrr', addMonths(from, -1), to);
 		const categories = query.category?.split(',');
 		const keys = query.key?.split(',');
@@ -261,7 +280,7 @@ export class MrrMetricsService {
 	/** MRR por dimensión y mes, top N + "Otros", con el pendiente de renovar del último mes en columna aparte. */
 	async byDimension(holdingId: string, query: MrrDimensionDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const [{ lines, unconverted }, pendingTotal] = await Promise.all([
 			this.lines(holdingId, query, currency, query.basis ?? 'mrr', from, to),
 			this.data.loadPendingRenewal(holdingId, query, currency, [to]),
@@ -350,7 +369,7 @@ export class MrrMetricsService {
 	/** Clientes activos, nuevos, reactivados y perdidos por mes (historia completa para saber quién es nuevo). */
 	async clientActivity(holdingId: string, query: MetricsFiltersDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const start = await this.firstMonth(holdingId);
 		const historyStart = start < from ? start : addMonths(from, -1);
 		const { lines, unconverted } = await this.lines(holdingId, query, currency, 'mrr', historyStart, to);
@@ -361,7 +380,7 @@ export class MrrMetricsService {
 	/** Churn y contracción por mes, por motivo y detalle por cliente (§1.5). */
 	async churn(holdingId: string, query: ChurnDetailDto) {
 		const { from, to, months } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const { lines, unconverted } = await this.lines(holdingId, query, currency, 'mrr', addMonths(from, -1), to);
 		const movements = months.flatMap((month) => classifyMonth(lines, month, { currency: currency.mode }));
 		const reasons = await this.churnReasons(holdingId, [
@@ -452,8 +471,8 @@ export class MrrMetricsService {
 	 * (filas `PENDING_RENEWAL` del mes actual). MRR del último mes vigente del ítem en la moneda leída.
 	 */
 	async renewals(holdingId: string, query: RenewalsDto) {
-		const currency = await this.data.resolveCurrency(holdingId, query);
-		const s = currency.mode === 'system' ? '_system_ccy' : currency.mode === 'company' ? '_ccy' : '_contract_ccy';
+		const currency = await this.currency(holdingId, query);
+		const s = '_system_ccy';
 		const params = new SqlParams();
 		const holding = params.add(holdingId);
 		const window = query.window ?? '90';
@@ -534,7 +553,7 @@ export class MrrMetricsService {
 	/** Cohortes por primer mes (o trimestre) con MRR > 0 (§1.6). */
 	async cohorts(holdingId: string, query: CohortsDto) {
 		const { from, to } = resolveRange(query.from, query.to);
-		const currency = await this.data.resolveCurrency(holdingId, query);
+		const currency = await this.currency(holdingId, query);
 		const start = await this.firstMonth(holdingId);
 		const historyStart = start < from ? start : from;
 		const { lines, unconverted } = await this.lines(holdingId, query, currency, 'mrr', historyStart, to);

@@ -5,11 +5,15 @@ import { API_WRITER_SQL, setApiWriter, withApiWriter } from './api-writer';
 import {
 	classifyClientItem,
 	contractFxNeedsRefresh,
-	directSystemPart,
 	frequencyMultiplier,
+	INVOICE_FROM_INVOICE_CURRENCY_SQL,
+	INVOICE_HAS_INVOICE_AMOUNT_SQL,
+	INVOICE_HEADER_CURRENCY_SQL,
+	INVOICE_SYSTEM_SOURCE_CURRENCY_SQL,
 	invoiceTermsSql,
 	itemCategoriaSql,
 	latestContractEnd,
+	MIRROR_BY_INVOICE_SQL,
 	mirrorInvoiceSystemAmounts,
 	pgRound,
 	pricingFields,
@@ -35,6 +39,7 @@ const db = (handler: (sql: string, params: unknown[]) => unknown = () => undefin
 	return { runner: { query } as unknown as QueryRunner, query };
 };
 const sqls = (query: jest.Mock) => query.mock.calls.map(([sql]) => sql as string);
+const squashSql = (sql: string) => sql.replace(/\s+/g, ' ');
 
 describe('latestContractEnd: una sola regla para contract_end_date (decisión de Domi 01-10)', () => {
 	it('mayor fin de los recurrentes vivos; indefinido → null; sin vivos → undefined (se conserva el guardado)', () => {
@@ -274,15 +279,29 @@ describe('pricingFields: réplica de auto_calculate_pricing_fields + calculate_m
 	});
 });
 
-describe('refreshInvoiceSystemAmounts: auto_populate_invoice_fx_to_system con el sentido de la tasa por política (regla v2)', () => {
+describe('refreshInvoiceSystemAmounts: regla por estado → moneda de sistema, sentido de la tasa por política (regla v2, 04-10)', () => {
 	it('misma moneda → FX 1; monthly_avg (directa) multiplica; fixed_period (inversa del holding) divide; sin tasa → FX NULL; tasas cacheadas', async () => {
 		const invoices: Row[] = [
-			{ id: 'i-clp', contract_currency: 'USD', fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
-			{ id: 'i-mxn-1', contract_currency: 'MXN', fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
-			{ id: 'i-mxn-2', contract_currency: 'MXN', fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
-			{ id: 'i-clp-fijo', contract_currency: 'CLP', fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'fixed_period' },
-			{ id: 'i-eur', contract_currency: 'EUR', fx_date: '2026-11-01', system_currency: 'USD', fx_policy: 'fixed_period' },
-			{ id: 'i-sin-contrato', contract_currency: null, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
+			{ id: 'i-usd', source_currency: 'USD', from_invoice: true, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
+			{ id: 'i-mxn-1', source_currency: 'MXN', from_invoice: true, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
+			{ id: 'i-mxn-2', source_currency: 'MXN', from_invoice: true, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'monthly_avg' },
+			{
+				id: 'i-clp-fijo',
+				source_currency: 'CLP',
+				from_invoice: true,
+				fx_date: '2026-10-01',
+				system_currency: 'USD',
+				fx_policy: 'fixed_period',
+			},
+			{ id: 'i-eur', source_currency: 'EUR', from_invoice: true, fx_date: '2026-11-01', system_currency: 'USD', fx_policy: 'fixed_period' },
+			{
+				id: 'i-sin-moneda',
+				source_currency: null,
+				from_invoice: false,
+				fx_date: '2026-10-01',
+				system_currency: 'USD',
+				fx_policy: 'monthly_avg',
+			},
 		];
 		const { runner, query } = db((sql, params) => {
 			if (sql.includes('COALESCE(hs.system_currency')) return invoices;
@@ -297,26 +316,33 @@ describe('refreshInvoiceSystemAmounts: auto_populate_invoice_fx_to_system con el
 			return undefined;
 		});
 
-		await refreshInvoiceSystemAmounts(runner, 'h-1', ['i-clp', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur', 'i-sin-contrato', 'i-clp']);
+		await refreshInvoiceSystemAmounts(runner, 'h-1', ['i-usd', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur', 'i-sin-moneda', 'i-usd']);
 		const [select] = query.mock.calls;
 
-		expect(select[1]).toEqual([['i-clp', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur', 'i-sin-contrato'], 'h-1']);
+		expect(select[1]).toEqual([['i-usd', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur', 'i-sin-moneda'], 'h-1']);
 		expect(select[0]).toContain('COALESCE(i.issue_date, i.scheduled_at, i.original_issue_date, CURRENT_DATE)');
 		expect(select[0]).toContain(`COALESCE(hs.system_currency, 'USD')`);
+		expect(select[0]).toContain(`${INVOICE_SYSTEM_SOURCE_CURRENCY_SQL} AS source_currency, ${INVOICE_FROM_INVOICE_CURRENCY_SQL} AS from_invoice`);
+		// Sin líneas "sin vueltas" ni tasas ítem → contrato: la regla del 01-10 quedó reemplazada.
+		expect(select[0]).not.toContain('invoice_items');
+		expect(select[0]).not.toContain('contract_fx_period_rates');
 		const updates = query.mock.calls.filter(([sql]) => (sql as string).startsWith('UPDATE invoices'));
 
-		expect(updates.map(([, params]) => (params as unknown[])[0])).toEqual(['i-clp', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur']);
+		expect(updates.map(([, params]) => (params as unknown[])[0])).toEqual(['i-usd', 'i-mxn-1', 'i-mxn-2', 'i-clp-fijo', 'i-eur']);
+		// Factura en la moneda de sistema: el mismo neto facturado, sin convertir.
 		expect(updates[0][0]).toContain('fx_contract_to_system = 1.0');
-		expect(updates[0][0]).toContain(`total_system_currency = ROUND(amount_contract_currency * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)`);
+		expect(updates[0][0]).toContain('amount_system_currency = amount_invoice_currency');
+		expect(updates[0][0]).toContain(`total_system_currency = ROUND(amount_invoice_currency * (1 + ${TAX_RATE_PCT_SQL} / 100.0), 2)`);
 		expect(updates[1][0]).toContain(
-			'amount_system_currency = ROUND(CASE WHEN $5::boolean THEN amount_contract_currency / NULLIF($3::numeric, 0) ELSE amount_contract_currency * $3::numeric END, 2)'
+			'amount_system_currency = ROUND(CASE WHEN $5::boolean THEN amount_invoice_currency / NULLIF($3::numeric, 0) ELSE amount_invoice_currency * $3::numeric END, 2)'
 		);
+		expect(updates[1][0]).not.toContain('amount_contract_currency');
 		// monthly_avg → multiplica (divides = false); fixed_period → divide (divides = true). La tasa guardada es la del lookup.
 		expect(updates[1][1]).toEqual(['i-mxn-1', 'h-1', 0.0569, 'USD', false]);
 		expect(updates[3][1]).toEqual(['i-clp-fijo', 'h-1', 950, 'USD', true]);
 		expect(updates[4][0]).toContain('fx_contract_to_system = NULL');
 		expect(updates[4][0]).not.toContain('amount_system_currency');
-		// La tasa MXN → USD del mismo día se busca una vez.
+		// La tasa MXN → USD del mismo día se busca una vez; siempre desde la moneda de factura.
 		const lookups = query.mock.calls.filter(([sql]) => (sql as string).includes('calculate_system_fx_rate'));
 
 		expect(lookups.map(([, params]) => params)).toEqual([
@@ -326,70 +352,105 @@ describe('refreshInvoiceSystemAmounts: auto_populate_invoice_fx_to_system con el
 		]);
 	});
 
-	it('sin vueltas (01-10): líneas ya en moneda del sistema entran directo; solo el resto en moneda de contrato se convierte', async () => {
-		const itemRates = [{ from_currency: 'USD', to_currency: 'CLP', rate: 950, period_start: '2026-01-01', period_end: '2026-12-31' }];
+	it('regla por estado: documento con neto → moneda de factura; Por Emitir (o sin neto) → moneda de contrato del encabezado', () => {
+		// Neto 0 con monto en contrato ≠ 0 = aún sin valorizar en moneda de factura → encabezado.
+		expect(squashSql(INVOICE_HAS_INVOICE_AMOUNT_SQL)).toBe(
+			`(i.amount_invoice_currency IS NOT NULL AND NULLIF(TRIM(i.invoice_currency), '') IS NOT NULL AND (i.amount_invoice_currency <> 0 OR COALESCE(i.amount_contract_currency, 0) = 0))`
+		);
+		expect(INVOICE_FROM_INVOICE_CURRENCY_SQL).toBe(`(i.status IS DISTINCT FROM 'Por Emitir' AND ${INVOICE_HAS_INVOICE_AMOUNT_SQL})`);
+		expect(INVOICE_HEADER_CURRENCY_SQL).toBe(`UPPER(TRIM(COALESCE(NULLIF(TRIM(i.contract_currency), ''), c.contract_currency)))`);
+		expect(INVOICE_SYSTEM_SOURCE_CURRENCY_SQL).toBe(
+			`(CASE WHEN ${INVOICE_FROM_INVOICE_CURRENCY_SQL} THEN UPPER(TRIM(i.invoice_currency)) ELSE ${INVOICE_HEADER_CURRENCY_SQL} END)`
+		);
+	});
+
+	it('el trigger aplica la misma regla por estado que la API (Por Emitir → contrato; documento → factura; al emitir recalcula)', () => {
+		const trigger = fs.readFileSync(path.join(__dirname, '../../databases/postgresql/functions/auto_populate_invoice_fx_to_system.sql'), 'utf8');
+
+		expect(trigger).toContain(`IF NEW.status IS DISTINCT FROM 'Por Emitir'
+     AND NEW.amount_invoice_currency IS NOT NULL AND NULLIF(TRIM(NEW.invoice_currency), '') IS NOT NULL
+     AND (NEW.amount_invoice_currency <> 0 OR COALESCE(NEW.amount_contract_currency, 0) = 0) THEN`);
+		expect(trigger).toContain(
+			`SELECT UPPER(TRIM(COALESCE(NULLIF(TRIM(NEW.contract_currency), ''), c.contract_currency))) INTO v_contract_currency`
+		);
+		// BEFORE INSERT OR UPDATE: el UPDATE de estado de la emisión (envío al ERP / webhook, sin la marca) recalcula.
+		expect(
+			fs.readFileSync(path.join(__dirname, '../../databases/postgresql/triggers/trigger_auto_populate_invoice_fx_to_system.sql'), 'utf8')
+		).toContain('BEFORE INSERT OR UPDATE ON public.invoices');
+	});
+
+	it('documentos: contrato USD facturado en CLP y unificado multimoneda (ex F1): se convierte el neto en CLP con la tasa CLP → USD, sin líneas directas', async () => {
 		const invoices: Row[] = [
-			// Contrato CLP, sistema USD: línea USD 1.000 (ítem USD → 950.000 CLP en el encabezado) + línea CLP 95.000.
+			// FAC de un contrato USD que se cobra en CLP: neto 930.000 CLP (no los 1.000 USD del contrato).
 			{
-				id: 'i-mixta',
-				contract_currency: 'CLP',
-				fx_date: '2026-10-01',
+				id: 'i-usd-en-clp',
+				source_currency: 'CLP',
+				from_invoice: true,
+				fx_date: '2026-08-31',
 				system_currency: 'USD',
 				fx_policy: 'fixed_period',
-				amount_contract_currency: '1045000',
-				system_lines: [{ subtotal: '1000', period_start: '2026-10-01' }],
-				item_rates: itemRates,
 			},
-			// Todo en USD y sin tasa CLP → USD del holding: igual se completa (directo), FX NULL.
+			// FAC 027725 (CTR-2026-151, contrato USD): unificado USD 299 + CLF 6,6 → 549.352,90 CLP; la línea USD ya no entra directo.
 			{
-				id: 'i-solo-usd',
-				contract_currency: 'CLP',
-				fx_date: '2026-11-01',
+				id: 'i-unificada',
+				source_currency: 'CLP',
+				from_invoice: true,
+				fx_date: '2026-07-31',
 				system_currency: 'USD',
 				fx_policy: 'fixed_period',
-				amount_contract_currency: '475000',
-				system_lines: JSON.stringify([{ subtotal: 500, period_start: '2026-11-01' }]),
-				item_rates: itemRates,
+				amount_contract_currency: '549352.90',
 			},
 		];
 		const { runner, query } = db((sql, params) => {
 			if (sql.includes('COALESCE(hs.system_currency')) return invoices;
-			if (sql.includes('calculate_system_fx_rate')) return [{ rate: params[3] === '2026-10-01' ? '1000' : null }];
+			if (sql.includes('calculate_system_fx_rate')) return [{ rate: params[1] === 'CLP' ? '930' : null }];
 
 			return undefined;
 		});
 
-		await refreshInvoiceSystemAmounts(runner, 'h-1', ['i-mixta', 'i-solo-usd']);
+		await refreshInvoiceSystemAmounts(runner, 'h-1', ['i-usd-en-clp', 'i-unificada']);
 		const [select] = query.mock.calls;
 
-		expect(select[0]).toContain('UPPER(TRIM(ii.contract_currency)) <> UPPER(TRIM(c.contract_currency))');
-		expect(select[0]).toContain(`r.purpose = 'item'`);
+		expect(select[0]).toContain(`${INVOICE_FROM_INVOICE_CURRENCY_SQL} AS from_invoice`);
+		const lookups = query.mock.calls.filter(([sql]) => (sql as string).includes('calculate_system_fx_rate'));
+
+		expect(lookups.map(([, params]) => (params as unknown[])[1])).toEqual(['CLP', 'CLP']);
 		const updates = query.mock.calls.filter(([sql]) => (sql as string).startsWith('UPDATE invoices'));
 
-		// 1.000 USD directo + (1.045.000 − 1.000 × 950) = 95.000 CLP ÷ 1.000 = 95 USD → 1.095 (por el encabezado serían 1.045).
-		expect(updates[0][0]).toContain(
-			'amount_system_currency = ROUND($5::numeric + ROUND(CASE WHEN $7::boolean THEN $6::numeric / NULLIF($3::numeric, 0) ELSE $6::numeric * $3::numeric END, 2), 2)'
-		);
-		expect(updates[0][1]).toEqual(['i-mixta', 'h-1', 1000, 'USD', 1000, 95000, true]);
-		expect(updates[1][0]).toContain('amount_system_currency = ROUND($5::numeric + 0, 2)');
-		expect(updates[1][1]).toEqual(['i-solo-usd', 'h-1', null, 'USD', 500, 0, true]);
+		expect(updates.map(([, params]) => params)).toEqual([
+			['i-usd-en-clp', 'h-1', 930, 'USD', true],
+			['i-unificada', 'h-1', 930, 'USD', true],
+		]);
+		expect(updates.every(([sql]) => (sql as string).includes('amount_invoice_currency / NULLIF($3::numeric, 0)'))).toBe(true);
 	});
 
-	it('directSystemPart: sin líneas en moneda del sistema → null; tasa ítem → contrato por línea (inversa incluida)', () => {
-		expect(directSystemPart({ system_lines: [] }, 'CLP', 'USD', '2026-10-01')).toBeNull();
-		expect(
-			directSystemPart(
-				{
-					amount_contract_currency: 110500,
-					system_lines: [{ subtotal: 100.5, period_start: null }],
-					item_rates: [{ from_currency: 'CLP', to_currency: 'USD', rate: 0.001, period_start: '2026-01-01', period_end: '2026-12-31' }],
-				},
-				'CLP',
-				'USD',
-				'2026-10-01'
-			)
-			// 100,5 USD × (1 / 0,001) = 100.500 CLP; resto 110.500 − 100.500 = 10.000 CLP.
-		).toEqual({ subtotal: 100.5, rest_contract: 10000 });
+	it('Por Emitir: siempre desde la moneda de contrato del encabezado (también la unificada multimoneda en CLP), sin líneas directas', async () => {
+		const invoices: Row[] = [
+			// Contrato CLF que se factura en CLP, Por Emitir: el monto en CLF del encabezado con la tasa CLF → USD (aunque tenga neto en CLP).
+			{ id: 'pe-clf', source_currency: 'CLF', from_invoice: false, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'fixed_period' },
+			// Unificada multimoneda Por Emitir (CTR-2026-90-LuvEnv): encabezado en CLP → tasa CLP → USD (antes: CLF sobre un monto en CLP).
+			{ id: 'pe-mixta', source_currency: 'CLP', from_invoice: false, fx_date: '2026-10-01', system_currency: 'USD', fx_policy: 'fixed_period' },
+			// Contrato USD que se facturará en CLP: el encabezado en USD tal cual.
+			{ id: 'pe-usd', source_currency: 'USD', from_invoice: false, fx_date: '2026-11-01', system_currency: 'USD', fx_policy: 'fixed_period' },
+		];
+		const { runner, query } = db((sql, params) => {
+			if (sql.includes('COALESCE(hs.system_currency')) return invoices;
+			if (sql.includes('calculate_system_fx_rate')) return [{ rate: params[1] === 'CLF' ? '0.025' : '930' }];
+
+			return undefined;
+		});
+
+		await refreshInvoiceSystemAmounts(runner, 'h-1', ['pe-clf', 'pe-mixta', 'pe-usd']);
+		const updates = query.mock.calls.filter(([sql]) => (sql as string).startsWith('UPDATE invoices'));
+
+		expect(updates.map(([, params]) => params)).toEqual([
+			['pe-clf', 'h-1', 0.025, 'USD', true],
+			['pe-mixta', 'h-1', 930, 'USD', true],
+			['pe-usd', 'h-1', 'USD'],
+		]);
+		expect(updates[0][0]).toContain('amount_contract_currency / NULLIF($3::numeric, 0)');
+		expect(updates[0][0]).not.toContain('amount_invoice_currency');
+		expect(updates[2][0]).toContain('amount_system_currency = amount_contract_currency');
 	});
 
 	it('systemFxDivides: solo fixed_period divide (tabla del holding inversa); monthly_avg y sin política multiplican', () => {
@@ -409,7 +470,7 @@ describe('refreshInvoiceSystemAmounts: auto_populate_invoice_fx_to_system con el
 });
 
 describe('mirrorInvoiceSystemAmounts: NC espejo con la tasa de la original (regla v2, ROADMAP #10)', () => {
-	it('toma FX, moneda y tasa efectiva de la original (monto × sistema ÷ contrato de la original); sin montos en la original cae al refresh', async () => {
+	it('toma FX, moneda y tasa efectiva de la original (neto en moneda de factura × sistema ÷ neto de la original; respaldo: contrato); sin montos en la original cae al refresh', async () => {
 		const copied = db((sql) => (sql.startsWith('UPDATE invoices n') ? [{ id: 'nc-1' }] : undefined));
 
 		await mirrorInvoiceSystemAmounts(copied.runner, 'h-1', 'nc-1', 'inv-1');
@@ -417,8 +478,13 @@ describe('mirrorInvoiceSystemAmounts: NC espejo con la tasa de la original (regl
 		const [sql, params] = copied.query.mock.calls[0];
 
 		expect(sql).toContain('fx_contract_to_system = o.fx_contract_to_system, system_currency = o.system_currency');
-		expect(sql).toContain(
-			'amount_system_currency = ROUND(n.amount_contract_currency * o.amount_system_currency / o.amount_contract_currency, 2)'
+		// Tasa efectiva de la original sobre el neto en moneda de factura (misma moneda de factura); si no, sobre el monto en contrato.
+		// Tasa efectiva sobre el neto en moneda de factura solo si la original ya es documento (regla por estado, 04-10).
+		expect(squashSql(MIRROR_BY_INVOICE_SQL)).toBe(
+			`n.amount_invoice_currency IS NOT NULL AND COALESCE(o.amount_invoice_currency, 0) <> 0 AND o.status IS DISTINCT FROM 'Por Emitir' AND UPPER(TRIM(n.invoice_currency)) = UPPER(TRIM(o.invoice_currency))`
+		);
+		expect(squashSql(sql as string)).toContain(
+			`amount_system_currency = ROUND(CASE WHEN ${squashSql(MIRROR_BY_INVOICE_SQL)} THEN n.amount_invoice_currency * o.amount_system_currency / o.amount_invoice_currency ELSE n.amount_contract_currency * o.amount_system_currency / o.amount_contract_currency END, 2)`
 		);
 		expect(sql).toContain('(CASE WHEN n.tax_rate > 0 AND n.tax_rate <= 1 THEN n.tax_rate * 100 ELSE COALESCE(n.tax_rate, 0) END)');
 		expect(params).toEqual(['nc-1', 'inv-1', 'h-1']);

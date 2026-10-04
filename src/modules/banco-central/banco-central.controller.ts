@@ -6,13 +6,16 @@ import { SuperAdminOnlyRoute } from '@/guards/super-admin-only.guard';
 
 import { BancoCentralService } from './banco-central.service';
 import { CalculateMonthlyAvgDto, CalculateMonthlyAvgResponseDto } from './dtos/calculate-monthly-avg.dto';
+import { CloseFxMonthDto } from './dtos/close-fx-month.dto';
 import { ExchangeRateResponseDto, GetExchangeRatesDto, GetLatestExchangeRatesDto, MonthlyAvgResponseDto } from './dtos/get-exchange-rates.dto';
 import { GetSeriesDto } from './dtos/get-series.dto';
 import { SyncExchangeRatesDto, SyncExchangeRatesResponseDto } from './dtos/sync-exchange-rates.dto';
 import { SyncIndicatorsDto } from './dtos/sync-indicators.dto';
+import { type FxMonthCloseResult } from './fx-month-close';
 import { BancoCentralResponse, IndicadorEconomicoData } from './interfaces/banco-central.interface';
 import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
+import { FxMonthCloseService } from './services/fx-month-close.service';
 
 @ApiTags('Banco Central')
 @Controller('banco-central')
@@ -22,7 +25,8 @@ export class BancoCentralController {
 	constructor(
 		private readonly bancoCentralService: BancoCentralService,
 		private readonly exchangeRatesService: ExchangeRatesService,
-		private readonly notificationService: ExchangeRatesNotificationService
+		private readonly notificationService: ExchangeRatesNotificationService,
+		private readonly fxMonthClose: FxMonthCloseService
 	) {}
 
 	@Get('series')
@@ -320,6 +324,22 @@ export class BancoCentralController {
 	@HttpCode(HttpStatus.OK)
 	async calculateMonthlyAverages(@Body() dto: CalculateMonthlyAvgDto): Promise<CalculateMonthlyAvgResponseDto> {
 		return this.exchangeRatesService.calculateMonthlyAverages(dto);
+	}
+
+	@Post('exchange-rates/close-month')
+	@SuperAdminOnlyRoute()
+	@ApiOperation({
+		summary: 'Cierre mensual de la moneda de compañía (solo super admin)',
+		description:
+			'Lo mismo que el proceso automático del día 1: cierra el promedio mensual del mes terminado (si sus tasas diarias están completas, ' +
+			'o siempre con force) y completa la moneda de compañía del devengo de todos los holdings; recalcula la moneda de sistema de los ' +
+			'meses que tenían tasa proyectada. Nunca toca meses cerrados. Idempotente.',
+	})
+	@ApiBody({ type: CloseFxMonthDto, required: false })
+	@ApiResponse({ status: HttpStatus.OK, description: 'Resultado por holding' })
+	@HttpCode(HttpStatus.OK)
+	async closeFxMonth(@Body() dto: CloseFxMonthDto): Promise<FxMonthCloseResult> {
+		return this.fxMonthClose.run({ month: dto?.month, force: dto?.force === true });
 	}
 
 	@Get('exchange-rates/latest')
