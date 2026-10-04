@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 126,
+			"rows": 310,
 			"columns": [
 				{
 					"name": "id",
@@ -9438,7 +9438,7 @@
 		{
 			"name": "public.contract_lifecycle_events",
 			"rls_enabled": true,
-			"rows": 278,
+			"rows": 350,
 			"columns": [
 				{
 					"name": "id",
@@ -12090,7 +12090,7 @@
 		{
 			"name": "public.exchange_rates_monthly_avg",
 			"rls_enabled": true,
-			"rows": 737,
+			"rows": 342,
 			"columns": [
 				{
 					"name": "id",
@@ -14078,7 +14078,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 11897,
+			"rows": 11942,
 			"columns": [
 				{
 					"name": "id",
@@ -15797,7 +15797,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9863,
+			"rows": 9883,
 			"columns": [
 				{
 					"name": "id",
@@ -21966,7 +21966,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21093,
+			"rows": 21434,
 			"columns": [
 				{
 					"name": "id",
@@ -25279,7 +25279,7 @@
 		{
 			"name": "public.sapira_typeorm_migrations",
 			"rls_enabled": true,
-			"rows": 47,
+			"rows": 51,
 			"columns": [
 				{
 					"name": "id",
@@ -26223,7 +26223,7 @@
 		{
 			"name": "public.stripe_invoices_stg",
 			"rls_enabled": true,
-			"rows": 4768,
+			"rows": 4055,
 			"columns": [
 				{
 					"name": "id",
@@ -26480,7 +26480,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 490,
+			"rows": 581,
 			"columns": [
 				{
 					"name": "id",
