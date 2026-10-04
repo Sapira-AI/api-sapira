@@ -64,6 +64,8 @@ describe('Integraciones · HTTP (tenancy, permisos, validación)', () => {
 			return byTipo[tipo];
 		}),
 		actorOf: jest.fn((authId: string) => ({ authId, userId: 'user-1' })),
+		listRuns: jest.fn(async (holdingId: string, tipo: string, query: unknown) => service.adapter(tipo).listRuns(holdingId, query)),
+		getRun: jest.fn(async (holdingId: string, tipo: string, id: string) => service.adapter(tipo).getRun(holdingId, id)),
 		summary: fn({ data: [] }),
 		records: fn(),
 		importRecords: fn(),

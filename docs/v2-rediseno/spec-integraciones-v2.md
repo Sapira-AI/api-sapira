@@ -1,6 +1,6 @@
 # Spec · Integraciones v2 (interfaz)
 
-Estado: **aprobada por Domi el 03-10-2026** con los ajustes de §5. Bloque 4 de [`estado-v2-y-plan-switch.md`](./estado-v2-y-plan-switch.md).
+Estado: **aprobada por Domi el 03-10-2026** con los ajustes de §5. **Primera versión construida y cerrada el 03-10** (api v0.0.94+, front v0.1.62+); pendiente del módulo: claves de API de Sapira (A8) y documentación pública (A11). Bloque 4 de [`estado-v2-y-plan-switch.md`](./estado-v2-y-plan-switch.md).
 Alcance: la interfaz de Integraciones en el front nuevo (`/lab/integraciones`) y los endpoints de lectura y configuración
 que le faltan a api-sapira. La lógica de cada integración (cómo se sincroniza, qué se escribe en el ERP) la revisa Leon
 al final; aquí no se cambia.

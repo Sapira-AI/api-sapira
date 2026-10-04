@@ -9,6 +9,7 @@ import { BigQueryConnection } from '@/databases/postgresql/entities/integracione
 import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
 import { BigQueryModule } from '@/modules/bigquery/bigquery.module';
+import { ClientsModule } from '@/modules/clients/clients.module';
 import { InvoicesModule } from '@/modules/invoices/invoices.module';
 import { InvoiceSchedulerJob, InvoiceSchedulerJobSchema } from '@/modules/invoices/schemas/invoice-scheduler-job.schema';
 import { OdooModule } from '@/modules/odoo/odoo.module';
@@ -27,7 +28,7 @@ import { IntegrationsService } from './integrations.service';
 
 /**
  * Integraciones v2 (`docs/v2-rediseno/contrato-api-integraciones.md`): un adaptador por tipo que reutiliza los servicios de su módulo
- * (`OdooModule`, `SalesforceModule`, `StripeModule`, `BigQueryModule`, `InvoicesModule` para el envío al ERP). Los modelos de Mongo se
+ * (`OdooModule`, `SalesforceModule`, `StripeModule`, `BigQueryModule`, `InvoicesModule` para el envío al ERP, `ClientsModule` para vincular razones sociales con el ERP). Los modelos de Mongo se
  * registran de nuevo con el mismo esquema (Nest reutiliza el modelo ya compilado en la conexión). Los guards vienen de `GuardsModule`
  * (global); `DataSource` y `ConfigService` son globales.
  */
@@ -39,6 +40,7 @@ import { IntegrationsService } from './integrations.service';
 		StripeModule,
 		BigQueryModule,
 		InvoicesModule,
+		ClientsModule,
 		TypeOrmModule.forFeature([OdooConnection, SalesforceConnection, StripeConnection, BigQueryConnection, HoldingIntegrationSettings]),
 		MongooseModule.forFeature([
 			{ name: InvoiceSchedulerJob.name, schema: InvoiceSchedulerJobSchema },

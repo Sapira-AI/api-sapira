@@ -359,6 +359,61 @@ Copys de `translateErpError` (`erp-error-translation.ts`): los pasos que mandaba
 "Integraciones › ERP › Mapeos" (producto, impuestos, compañía) o "› Configuración" (conexión). El resto del mensaje sigue igual.
 `MAP_PRODUCT_STEP` de Contratos (módulo cerrado) sigue diciendo "Integraciones › Odoo" hasta el OK de Domi; el front lo pasa por `sinMarcas`.
 
+**Cambios en la sincronización de Salesforce (cuentas), OK de Domi 03-10.** Sí tocan lógica de integración, en
+`salesforce-sync-complete.service.ts` y `utils/salesforce-transformers.ts`, con tests:
+
+1. **Clasificación de cuentas (`classifyAccountStaging`).** Una cuenta con cliente existente pasa a `update` solo si hay un cambio que la
+   importación **aplica**. Antes, 22 cuentas de SimpliRoute quedaban en `update` para siempre: importar las dejaba en `processed` y la
+   siguiente clasificación las volvía a marcar. Las reglas:
+   - En la razón social, `legal_name`, `legal_address` y `country` con valor en Sapira no cuentan como cambio, porque
+     `createOrLinkClientEntity` los conserva.
+   - Los demás campos se comparan normalizados: sin mayúsculas, tildes ni espacios repetidos. El identificador tributario se compara con
+     `normalizeTaxId`.
+   - El `client_number` igual al id de la cuenta (el respaldo `client_number_fallback`) no cuenta como cambio si ya hay uno.
+   - Una sola función (`compareAccount` + `accountFieldChanges`) alimenta la clasificación y la vista de diferencias de Integraciones
+     (`GET /integrations/crm/records/account/:id/changes`).
+2. **Importación de cuentas** (`syncAccountFromData`, usada por `processAccountsStaging` y por la cuenta de cada oportunidad):
+   - El id de la cuenta del CRM, usado como `client_number` de respaldo, ya **no reemplaza** un número existente, ni del cliente ni de la
+     razón social. Solo completa uno vacío.
+   - `normalizeTaxId` quita el prefijo `RUT`, `RUT:` o `R.U.T.` cuando lo que sigue es un RUT chileno (7–8 dígitos + dígito verificador).
+     Así no recorta un RFC que empiece con esas letras. Se aplica al buscar la razón social y al guardar.
+   - Ese normalizador también lo usan `canonicalVat` (búsqueda de partner en Odoo) y `normalizeTaxIdsForHolding`.
+
+Resultado en prod (SimpliRoute, solo lectura): de las 22 cuentas `update`, 5 siguen con cambios reales (giro, nombre comercial, datos de
+una razón social sin completar) y 17 pasarán a `processed` en la próxima clasificación.
+
+**Cotizaciones del CRM protegidas, OK de Domi 03-10.** Toca lógica de integración en `salesforce-sync-complete.service.ts`
+(`syncQuote`, clasificación de oportunidades), `salesforce-typeorm.service.ts` (`manager` opcional), el worker de ejecuciones y
+`utils/crm-quote-snapshot.ts` (nuevo, puro), con tests. Migración `1791100000000-CrmQuoteSnapshot` **sin aplicar** (va antes del deploy:
+la entity ya declara las columnas).
+
+1. **Un solo lugar.** `syncQuote` es el único punto que crea o actualiza cotizaciones desde el CRM: lo usan la sincronización diaria,
+   `process_final`, `retry_full`, `POST /salesforce/staging/process`, `/salesforce/staging/opportunities/process*`, `/retry` y
+   `POST /salesforce/sync-complete`. Antes, todas las rutas manuales actualizaban una cotización existente si la clasificación la marcaba
+   `update` (comparación contra la cotización actual), **también con contrato**, y la devolvían a la etapa "Enviada" pisando sus notas.
+2. **Protegidas: nunca se actualizan.** Cotización con contrato vigente (`contracts.quote_id` o por `contract_items.quote_item_id`) o en una
+   etapa de tipo `contract_created` ("Procesada previamente"). La oportunidad queda `processed` con "La cotización ya tiene contrato: no se
+   actualiza" / "Procesada previamente: no se actualiza"; no se toca ni el cliente. Se revalida dentro de la transacción.
+3. **Cambio real = el CRM cambió desde la última importación.** `salesforce_opportunities_stg.last_imported_snapshot` guarda lo que llegó
+   del CRM al crear o actualizar la cotización (encabezado mapeado sin notas + dueño + cuenta + ítems resueltos), en la misma transacción.
+   La clasificación compara lo que llega con eso, no con la cotización: lo editado en Sapira se respeta mientras el CRM no cambie. Igual →
+   `processed` "Sin cambios"; distinto → `update` "Por revisar". Sin snapshot (cotizaciones de antes) → `processed` y lo que llegó queda
+   como base (`baseline: true`, `last_imported_at` NULL): es la única escritura de snapshot fuera de una importación.
+4. **Solo con confirmación por ids.** Una cotización existente se actualiza solo en una ejecución `process_final` con
+   `salesforce_sync_runs.confirmed_by` (`POST /integrations/crm/records/import` con `ids` + `confirm_updates: true`). Nunca en la diaria,
+   con `all` (ahora toma solo `create`), con `retry_full` ni por `/salesforce/*`: ahí la oportunidad sigue `update` y el ítem de la
+   ejecución termina `completed` con el aviso en `error_message`.
+5. **Al aplicar**: encabezado sin `quote_stage_id` ni `notes`, ítems (`createQuoteItems` con el `manager`), evento `UPDATED` en
+   `quote_events` (`actor_id` = quien confirmó, `reason` "Sincronización del CRM", `metadata.source = 'crm_sync'`, `changes` /
+   `item_changes` con antes/después como la edición manual, `crm_changes` con lo que cambió en el CRM) y snapshot nuevo: **una
+   transacción**. Crear también es una transacción (cotización, vínculo, ítems, snapshot); el conflicto de `createQuoteIfAbsent` la revierte.
+6. La diaria sigue siendo solo inserción, pero ahora clasifica las existentes con la misma regla (antes las marcaba "omitida").
+
+Encontrado en prod (SimpliRoute, solo lectura, 03-10): 401 cotizaciones del CRM; 144 con contrato (116 en "Contrato creado" y **28 en
+"Enviada"** con contrato, todas importadas desde el CRM después de crear el contrato: probablemente la importación les devolvió la etapa) y
+24 en "Contrato creado" sin contrato. `quote_events` tiene 1 fila en toda la base: no hay historial de ediciones. Las 28 no se reparan:
+quedan para la auditoría previa al switch (`estado-v2-y-plan-switch.md` §5).
+
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 
 Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancellation`, nace Por Emitir con referencia a su factura) se

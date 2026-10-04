@@ -22,10 +22,9 @@ import {
 
 import { IsIsoDate } from '@/modules/settings/settings-common';
 
-import { RECORD_STATUSES, RULE_OPERATORS } from '../integrations.types';
+import { MAPPING_STATUSES, RECORD_CHANGE_KINDS, RECORD_STATUSES, RULE_OPERATORS } from '../integrations.types';
 
-const RUN_STATUSES = ['running', 'completed', 'partial', 'failed', 'cancelled'] as const;
-const MAPPING_STATUSES = ['mapped', 'unmapped', 'suggested'] as const;
+const RUN_STATUSES = ['running', 'completed', 'partial', 'failed', 'cancelled', 'interrupted'] as const;
 
 const toList = ({ value }: { value: unknown }) =>
 	value === undefined || value === null || value === ''
@@ -97,6 +96,20 @@ export class RecordsQueryDto extends PageDto {
 	@IsIn(RECORD_STATUSES, { each: true, message: 'Estado inválido' })
 	status?: string[];
 
+	@ApiPropertyOptional({ type: [String], enum: RECORD_CHANGE_KINDS, description: 'new (crea uno nuevo) o update (cambia uno existente)' })
+	@IsOptional()
+	@Transform(toList)
+	@IsArray()
+	@IsIn(RECORD_CHANGE_KINDS, { each: true, message: 'change_kind debe ser new o update' })
+	change_kind?: string[];
+
+	@ApiPropertyOptional({ type: [String], description: 'Subestado del registro (p. ej. erp_draft, scheduled); a,b o repetido' })
+	@IsOptional()
+	@Transform(toList)
+	@IsArray()
+	@Matches(/^[a-z_]{1,40}$/, { each: true, message: 'detail_kind inválido' })
+	detail_kind?: string[];
+
 	@ApiPropertyOptional({ description: 'Nombre o id de la regla de exclusión' })
 	@IsOptional()
 	@IsString()
@@ -165,6 +178,14 @@ export class ImportRecordsDto {
 	@IsOptional()
 	@Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'period debe ser YYYY-MM' })
 	period?: string;
+
+	@ApiPropertyOptional({
+		description:
+			'CRM › oportunidades: confirma aplicar los cambios del CRM a cotizaciones existentes (solo con ids). Las que tienen contrato no se actualizan',
+	})
+	@IsOptional()
+	@IsBoolean()
+	confirm_updates?: boolean;
 }
 
 export class DiscardRecordsDto {
@@ -410,6 +431,16 @@ export class DeleteMappingQueryDto extends ConfirmQueryDto {
 	@MinLength(1)
 	@MaxLength(300)
 	external_id!: string;
+}
+
+export class MappingKeysDto {
+	@ApiProperty({ type: [String], description: 'keys de las filas del mapeo (§5.1)' })
+	@IsArray()
+	@ArrayMinSize(1)
+	@ArrayMaxSize(500)
+	@IsString({ each: true })
+	@MaxLength(300, { each: true })
+	keys!: string[];
 }
 
 export class AcceptSuggestionsDto {

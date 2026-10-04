@@ -80,6 +80,15 @@ export class SyncCompleteStats {
 
 	@ApiProperty({ description: 'Errores encontrados' })
 	errors: string[];
+
+	@ApiPropertyOptional({ description: 'Cotizaciones con contrato (o procesadas previamente) que no se actualizaron' })
+	quotesProtected?: number;
+
+	@ApiPropertyOptional({ description: 'Cotizaciones existentes con cambios del CRM que esperan confirmación' })
+	quotesPendingConfirmation?: number;
+
+	@ApiPropertyOptional({ description: 'Avisos que no son errores (cotización protegida o pendiente de confirmación)' })
+	notices?: string[];
 }
 
 export class SyncCompleteResponseDto {

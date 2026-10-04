@@ -22,6 +22,7 @@ import {
 	SalesforceSyncCompleteService,
 } from '@/modules/salesforce/services/salesforce-sync-complete.service';
 import { SalesforceSyncRunService } from '@/modules/salesforce/services/salesforce-sync-run.service';
+import { CRM_QUOTE_PROTECTION_MESSAGES } from '@/modules/salesforce/utils/crm-quote-snapshot';
 
 import {
 	Actor,
@@ -40,6 +41,8 @@ import {
 	ImportStarted,
 	IntegrationRun,
 	IntegrationRunDetail,
+	INTERRUPTED_MESSAGE,
+	isInterruptedJob,
 	MappingItem,
 	MappingRow,
 	MappingStatus,
@@ -49,8 +52,12 @@ import {
 	paginateArray,
 	Paginated,
 	parseRunId,
+	RecordChanges,
+	RecordFieldChange,
+	RecordHistoryOptions,
 	RecordSource,
 	Ref,
+	RunOccurrence,
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
@@ -58,6 +65,7 @@ import {
 	ScheduleInfo,
 	secretInfo,
 	sortRunsDesc,
+	stagingChangeKindSql,
 	stagingStatusSql,
 	suggestRef,
 	SyncStarted,
@@ -77,6 +85,11 @@ const RUN_KINDS: Record<string, { kind: string; label: string }> = {
 	retry_full: { kind: 'crm_retry', label: 'Traer e importar oportunidades' },
 };
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const isManualJob = (jobId: string) => jobId.startsWith('salesforce-holding-sync:') || jobId.includes(':manual:');
+const logStatus = (level: string | undefined): RunRecord['status'] => (level === 'error' ? 'error' : level === 'warning' ? 'skipped' : 'ok');
+const logMessage = (log: Pick<SalesforceSyncLog, 'errorMessage' | 'integrationNotes' | 'message'>) =>
+	log.errorMessage ?? log.integrationNotes ?? log.message ?? null;
+const itemStatus = (status: unknown): RunRecord['status'] => (status === 'completed' ? 'ok' : status === 'error' ? 'error' : 'skipped');
 
 export interface CrmConnectionInput {
 	auth_type: 'password' | 'client_credentials';
@@ -123,6 +136,53 @@ const OPPORTUNITY_COMPUTED_SQL = `jsonb_build_object(
 	'stage', s.raw_data->>'StageName',
 	'opportunity_type', s.raw_data->>'Type',
 	'payment_method', s.raw_data->>'Forma_de_pago__c')`;
+
+/** Nombres legibles de los campos de cliente y razón social que actualiza una cuenta del CRM. */
+export const ACCOUNT_FIELD_LABELS: Record<'client' | 'client_entity', Record<string, string>> = {
+	client: {
+		name_commercial: 'Nombre comercial',
+		client_number: 'Número de cliente',
+		industry: 'Industria',
+		segment: 'Segmento',
+		market: 'Mercado',
+		country: 'País',
+		country_code: 'País',
+		status: 'Estado',
+		client_since: 'Cliente desde',
+		notes: 'Notas',
+		custom_fields: 'Campos personalizados',
+		salesforce_account_id: 'Cuenta del CRM',
+	},
+	client_entity: {
+		legal_name: 'Razón social',
+		tax_id: 'Identificador tributario',
+		legal_address: 'Dirección legal',
+		country: 'País',
+		country_code: 'País',
+		economic_activity: 'Giro',
+		client_number: 'Número de cliente',
+		email: 'Correo',
+		phone: 'Teléfono',
+		payment_terms: 'Plazo de pago',
+	},
+};
+
+/** Campos que no se muestran como diferencia (vínculo técnico con el CRM). */
+const ACCOUNT_HIDDEN_FIELDS = ['salesforce_account_id'];
+
+/** Subestados de una oportunidad con cotización en Sapira (`detail_kind` → rótulo; los protegidos también son su `status_label`). */
+export const OPPORTUNITY_STATUS_LABELS = {
+	quote_with_contract: 'Cotización con contrato: no se actualiza',
+	quote_processed: 'Procesada previamente: no se actualiza',
+	crm_changed: 'Cambió en el CRM: requiere confirmación',
+} as const;
+
+/** Respaldo para un campo sin nombre en el diccionario: `snake_case` → "Snake case". */
+export const fieldLabel = (field: string) => {
+	const text = field.replace(/_/g, ' ').trim();
+
+	return text ? text.charAt(0).toUpperCase() + text.slice(1) : field;
+};
 
 @Injectable()
 export class CrmAdapter implements IntegrationAdapter {
@@ -285,20 +345,23 @@ export class CrmAdapter implements IntegrationAdapter {
 		if (!connection) throw new BadRequestException('La integración no está conectada');
 		if (connection.is_active === false) throw new BadRequestException('La integración está pausada');
 		const since = new Date(Date.now() - LEASE_MS);
-		const [running, [activeRun]] = await Promise.all([
+		const [runningJobs, [activeRun]] = await Promise.all([
 			this.schedulerJobs
-				.findOne({
+				.find({
 					status: 'running',
 					startedAt: { $gte: since },
 					$or: [{ jobId: /^salesforce-daily-sync:/ }, { jobId: new RegExp(`^salesforce-holding-sync:[^:]+:${escapeRegex(holdingId)}:`) }],
 				})
 				.lean()
-				.exec(),
+				.exec() as Promise<SalesforceSchedulerJob[]>,
 			this.dataSource.query(`SELECT id FROM salesforce_sync_runs WHERE holding_id = $1 AND status = ANY($2::text[]) LIMIT 1`, [
 				holdingId,
 				ACTIVE_RUN_STATUSES,
 			]) as Promise<Row[]>,
 		]);
+
+		// Un trabajo "en curso" huérfano (la API se reinició a mitad) no bloquea: se informa como Interrumpida.
+		const running = runningJobs.some((job) => !this.interrupted(job));
 
 		if (running || activeRun) throw new ConflictException('Ya hay una sincronización en curso');
 		const executionEnvironment = this.environment();
@@ -343,9 +406,18 @@ export class CrmAdapter implements IntegrationAdapter {
 		return { run_id: `crm-job:${jobId}`, status: 'running', message: 'Trayendo las oportunidades ganadas del CRM' };
 	}
 
+	/** Trabajo de Mongo en curso cuyo proceso ya no existe o que superó el lease. */
+	private interrupted(job: Pick<SalesforceSchedulerJob, 'startedAt' | 'executionEnvironment'>): boolean {
+		return isInterruptedJob(
+			{ startedAt: job.startedAt, environment: job.executionEnvironment },
+			{ leaseMs: LEASE_MS, environment: this.environment() }
+		);
+	}
+
 	private jobToRun(job: SalesforceSchedulerJob, holdingId: string, errors: number): IntegrationRun {
 		const result = (job.holdingResults ?? []).find((item) => item.holding_id === holdingId);
-		const manual = job.jobId.startsWith('salesforce-holding-sync:') || job.jobId.includes(':manual:');
+		const manual = isManualJob(job.jobId);
+		const interrupted = job.status === 'running' && this.interrupted(job);
 		const ok = (result?.quotesCreated ?? 0) + (result?.quotesUpdated ?? 0);
 		// Oportunidades revisadas sin cotización nueva ni cambio (ya existía, nada que hacer) = sin cambios, no fallo.
 		const totals = runTotals({ total: result?.opportunities ?? 0, ok, errors });
@@ -359,6 +431,7 @@ export class CrmAdapter implements IntegrationAdapter {
 			// `success: false` = falló la selección o algún lote (error de la corrida): "Falló" solo si no se procesó nada.
 			status: runStatusOf({
 				running: job.status === 'running',
+				interrupted,
 				failed: job.status === 'failed' || result?.success === false,
 				ok,
 				unchanged: totals.unchanged,
@@ -368,7 +441,7 @@ export class CrmAdapter implements IntegrationAdapter {
 			finished_at: job.completedAt ?? null,
 			duration_ms: durationMs(job.startedAt, job.completedAt),
 			totals,
-			error: result?.error ?? job.error ?? null,
+			error: interrupted ? INTERRUPTED_MESSAGE : (result?.error ?? job.error ?? null),
 			metrics: {
 				clients_created: result?.clientsCreated ?? 0,
 				clients_updated: result?.clientsUpdated ?? 0,
@@ -463,11 +536,12 @@ export class CrmAdapter implements IntegrationAdapter {
 					.exec()) as SalesforceSyncLog[];
 				const records: RunRecord[] = logs.map((log) => ({
 					object: 'opportunity',
+					record_key: log.salesforceOpportunityId ?? null,
 					label: log.salesforceOpportunityName ?? log.salesforceOpportunityId ?? 'Oportunidad',
 					sapira_id: null,
 					external_id: log.salesforceOpportunityId ?? null,
-					status: log.level === 'error' ? 'error' : log.level === 'warning' ? 'skipped' : 'ok',
-					message: log.errorMessage ?? log.integrationNotes ?? log.message ?? null,
+					status: logStatus(log.level),
+					message: logMessage(log),
 				}));
 				const run = this.jobToRun(job, holdingId, records.filter((record) => record.status === 'error').length);
 
@@ -491,10 +565,11 @@ export class CrmAdapter implements IntegrationAdapter {
 				)) as Row[];
 				const records: RunRecord[] = items.map((item) => ({
 					object: 'opportunity',
+					record_key: String(item.salesforce_opportunity_id),
 					label: String(item.salesforce_name ?? item.salesforce_opportunity_id),
 					sapira_id: (item.quote_id as string) ?? null,
 					external_id: String(item.salesforce_opportunity_id),
-					status: item.status === 'completed' ? 'ok' : item.status === 'error' ? 'error' : 'skipped',
+					status: itemStatus(item.status),
 					message: (item.error_message as string) ?? null,
 				}));
 
@@ -502,6 +577,55 @@ export class CrmAdapter implements IntegrationAdapter {
 			}
 		}
 		throw new NotFoundException('Corrida no encontrada');
+	}
+
+	/** Oportunidades por corrida: logs de las corridas diarias/manuales (Mongo) e ítems de `salesforce_sync_run_items`, una lectura cada una. */
+	async recordHistory(holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]> {
+		const until = options.until ?? new Date();
+		const params: unknown[] = [holdingId, options.since, until];
+		const keysFilter = options.keys ? ` AND it.salesforce_opportunity_id = ANY($${params.push(options.keys)}::text[])` : '';
+		const [logs, items] = await Promise.all([
+			this.syncLogs
+				.find(
+					{
+						holdingId,
+						stage: 'opportunity',
+						occurredAt: { $gte: options.since, $lte: until },
+						...(options.keys ? { salesforceOpportunityId: { $in: options.keys } } : {}),
+						...(options.errorsOnly ? { level: 'error' } : {}),
+					},
+					{ jobId: 1, level: 1, occurredAt: 1, salesforceOpportunityId: 1, errorMessage: 1, integrationNotes: 1, message: 1 }
+				)
+				.lean()
+				.exec() as Promise<SalesforceSyncLog[]>,
+			this.dataSource.query(
+				`SELECT r.id::text AS run_id, r.type, COALESCE(r.started_at, r.created_at) AS at, it.salesforce_opportunity_id, it.status, it.error_message
+				FROM salesforce_sync_run_items it JOIN salesforce_sync_runs r ON r.id = it.run_id
+				WHERE r.holding_id = $1 AND COALESCE(r.started_at, r.created_at) BETWEEN $2 AND $3${keysFilter}${options.errorsOnly ? ` AND it.status = 'error'` : ''}`,
+				params
+			) as Promise<Row[]>,
+		]);
+
+		return [
+			...logs.map((log) => ({
+				run_id: `crm-job:${log.jobId}`,
+				kind: isManualJob(log.jobId) ? 'crm_manual' : 'crm_daily',
+				at: log.occurredAt ?? null,
+				object: 'opportunity',
+				record_key: log.salesforceOpportunityId ?? null,
+				status: logStatus(log.level),
+				message: logMessage(log),
+			})),
+			...items.map((item) => ({
+				run_id: `crm-run:${item.run_id}`,
+				kind: (RUN_KINDS[String(item.type)] ?? { kind: 'crm_import' }).kind,
+				at: (item.at as Date) ?? null,
+				object: 'opportunity',
+				record_key: String(item.salesforce_opportunity_id),
+				status: itemStatus(item.status),
+				message: (item.error_message as string) ?? null,
+			})),
+		];
 	}
 
 	// ── Registros ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -516,14 +640,38 @@ export class CrmAdapter implements IntegrationAdapter {
 				importable: true,
 				importByIds: true,
 				computedFields: OPPORTUNITY_COMPUTED_FIELDS,
+				hasChangeKind: true,
+				hasSapiraLabel: true,
+				hasDetail: true,
+				hasStatusLabel: true,
+				// Cotizaciones protegidas (Domi 03-10): con contrato o procesada previamente nunca es "cambio a existente" ni se importa;
+				// `update` = el CRM cambió desde la última importación (snapshot) y espera confirmación.
 				sql: `SELECT s.salesforce_id AS record_key,
+						CASE WHEN q.protection IS NOT NULL THEN NULL ELSE ${stagingChangeKindSql('s.processing_status')} END AS change_kind,
 						concat_ws(' · ', COALESCE(s.salesforce_name, s.raw_data->>'Name'), s.raw_data->'Account'->>'Name') AS label,
-						q.id::text AS sapira_id, s.salesforce_id AS external_id,
-						${stagingStatusSql('s.processing_status')} AS status,
-						COALESCE(s.error_message, s.integration_notes) AS message, COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at,
-						to_jsonb(s.*) || ${OPPORTUNITY_COMPUTED_SQL} AS rule_row
+						q.id::text AS sapira_id, q.sapira_label, s.salesforce_id AS external_id,
+						CASE WHEN q.protection IS NOT NULL AND s.processing_status IN ('create','update','to_create','to_update') THEN 'imported'
+							ELSE ${stagingStatusSql('s.processing_status')} END AS status,
+						CASE q.protection WHEN 'contract' THEN '${CRM_QUOTE_PROTECTION_MESSAGES.contract}'
+							WHEN 'contract_created' THEN '${CRM_QUOTE_PROTECTION_MESSAGES.contract_created}'
+							ELSE COALESCE(s.error_message, s.integration_notes) END AS message,
+						COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at,
+						CASE WHEN q.protection = 'contract' THEN 'quote_with_contract' WHEN q.protection = 'contract_created' THEN 'quote_processed'
+							WHEN s.processing_status IN ('update','to_update') AND q.id IS NOT NULL THEN 'crm_changed' END AS detail_kind,
+						CASE WHEN q.protection = 'contract' THEN '${OPPORTUNITY_STATUS_LABELS.quote_with_contract}'
+							WHEN q.protection = 'contract_created' THEN '${OPPORTUNITY_STATUS_LABELS.quote_processed}'
+							WHEN s.processing_status IN ('update','to_update') AND q.id IS NOT NULL THEN '${OPPORTUNITY_STATUS_LABELS.crm_changed}' END AS detail_label,
+						CASE WHEN q.protection = 'contract' THEN '${OPPORTUNITY_STATUS_LABELS.quote_with_contract}'
+							WHEN q.protection = 'contract_created' THEN '${OPPORTUNITY_STATUS_LABELS.quote_processed}' END AS status_label,
+						to_jsonb(s.*) - 'last_imported_snapshot' || ${OPPORTUNITY_COMPUTED_SQL} AS rule_row
 					FROM salesforce_opportunities_stg s
-					LEFT JOIN LATERAL (SELECT id FROM quotes WHERE holding_id = s.holding_id AND salesforce_opportunity_id = s.salesforce_id LIMIT 1) q ON true
+					LEFT JOIN LATERAL (SELECT k.id, NULLIF(concat_ws(' · ', k.quote_number, cl.name_commercial), '') AS sapira_label,
+							CASE WHEN EXISTS (SELECT 1 FROM contracts c WHERE c.quote_id = k.id AND c.deleted_at IS NULL)
+								OR EXISTS (SELECT 1 FROM quote_items qi JOIN contract_items ci ON ci.quote_item_id = qi.id
+									JOIN contracts c ON c.id = ci.contract_id AND c.deleted_at IS NULL WHERE qi.quote_id = k.id) THEN 'contract'
+								WHEN qs.kind = 'contract_created' THEN 'contract_created' END AS protection
+						FROM quotes k LEFT JOIN clients cl ON cl.id = k.client_id LEFT JOIN quote_stages qs ON qs.id = k.quote_stage_id
+						WHERE k.holding_id = s.holding_id AND k.salesforce_opportunity_id = s.salesforce_id LIMIT 1) q ON true
 					WHERE s.holding_id = $1`,
 			},
 			{
@@ -533,26 +681,129 @@ export class CrmAdapter implements IntegrationAdapter {
 				direction: 'import',
 				importable: true,
 				importByIds: true,
+				hasChangeKind: true,
+				hasSapiraLabel: true,
 				sql: `SELECT s.salesforce_id AS record_key, COALESCE(s.salesforce_name, s.raw_data->>'Name') AS label,
-						NULL::text AS sapira_id, s.salesforce_id AS external_id,
-						${stagingStatusSql('s.processing_status')} AS status,
+						c.id::text AS sapira_id, c.name_commercial AS sapira_label, s.salesforce_id AS external_id,
+						${stagingStatusSql('s.processing_status')} AS status, ${stagingChangeKindSql('s.processing_status')} AS change_kind,
 						COALESCE(s.error_message, s.integration_notes) AS message, COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at, to_jsonb(s.*) AS rule_row
-					FROM salesforce_accounts_stg s WHERE s.holding_id = $1`,
+					FROM salesforce_accounts_stg s
+					LEFT JOIN LATERAL (SELECT id, name_commercial FROM clients WHERE holding_id = s.holding_id AND salesforce_account_id = s.salesforce_id LIMIT 1) c ON true
+					WHERE s.holding_id = $1`,
 			},
 		];
 	}
 
-	async importRecords(holdingId: string, request: ImportRequest, _actor: Actor, discarded: Set<string>): Promise<ImportStarted> {
+	/**
+	 * Diferencias de una cuenta: lo que llegó del CRM (mapeos de campos activos del holding) frente al cliente y la razón social actuales,
+	 * con la misma comparación que marca la cuenta como "cambio a existente". Solo cuentas; las oportunidades no tienen diferencias.
+	 */
+	async recordChanges(
+		holdingId: string,
+		object: string,
+		recordKey: string
+	): Promise<Omit<RecordChanges, 'object' | 'record_key'> | null | undefined> {
+		if (object === 'opportunity') return this.opportunityChanges(holdingId, recordKey);
+		if (object !== 'account') return undefined;
+		const preview = await this.syncComplete.previewAccountChanges(holdingId, recordKey);
+
+		if (!preview) return null;
+		const [row] = (await this.dataSource.query(
+			`SELECT COALESCE(salesforce_name, raw_data->>'Name') AS label FROM salesforce_accounts_stg WHERE holding_id = $1 AND salesforce_id = $2`,
+			[holdingId, recordKey]
+		)) as Row[];
+		const kind = (preview.processing_status ?? '').trim();
+		const changes: RecordFieldChange[] = preview.changes
+			// Campos técnicos (vínculo con el CRM) no son un cambio que la persona tenga que revisar.
+			.filter((change) => !ACCOUNT_HIDDEN_FIELDS.includes(change.field))
+			.map((change) => ({
+				field: `${change.target}.${change.field}`,
+				label: ACCOUNT_FIELD_LABELS[change.target][change.field] ?? fieldLabel(change.field),
+				target: change.target,
+				target_label: change.target === 'client' ? 'Cliente' : 'Razón social',
+				current: change.current,
+				incoming: change.incoming,
+				applies: change.applies,
+			}));
+
+		return {
+			label: (row?.label as string) ?? null,
+			change_kind: ['create', 'to_create'].includes(kind) ? 'new' : ['update', 'to_update'].includes(kind) ? 'update' : null,
+			sapira_id: preview.client_id,
+			sapira_label: preview.client_name,
+			available: true,
+			changes,
+			message: preview.client_id
+				? changes.length
+					? null
+					: 'Los datos del CRM coinciden con el cliente en Sapira'
+				: 'La cuenta todavía no es cliente en Sapira: importarla crea el cliente',
+		};
+	}
+
+	/**
+	 * Diferencias de una oportunidad (cotizaciones protegidas, Domi 03-10): lo que llegó del CRM en la última importación (`current`) frente
+	 * a lo que llega ahora (`incoming`). No se compara contra la cotización: lo editado en Sapira se respeta. `applies: false` si la
+	 * cotización está protegida (con contrato o procesada previamente).
+	 */
+	private async opportunityChanges(holdingId: string, recordKey: string): Promise<Omit<RecordChanges, 'object' | 'record_key'> | null> {
+		const preview = await this.syncComplete.previewOpportunityChanges(holdingId, recordKey);
+
+		if (!preview) return null;
+		const kind = (preview.processing_status ?? '').trim();
+		const changes: RecordFieldChange[] = preview.changes.map((change) => ({
+			field: change.field,
+			label: change.label,
+			target: change.scope,
+			target_label:
+				change.scope === 'quote'
+					? 'Cotización'
+					: `Ítem${change.item_label ? `: ${change.item_label}` : ''}${
+							change.item_action === 'added' ? ' (nuevo en el CRM)' : change.item_action === 'removed' ? ' (ya no está en el CRM)' : ''
+						}`,
+			current: change.before,
+			incoming: change.after,
+			applies: !preview.protection,
+		}));
+
+		return {
+			label: preview.label,
+			change_kind: preview.protection ? null : !preview.quote_id ? 'new' : ['update', 'to_update'].includes(kind) ? 'update' : null,
+			sapira_id: preview.quote_id,
+			sapira_label: preview.quote_label,
+			available: true,
+			changes,
+			message: !preview.quote_id
+				? 'La oportunidad todavía no tiene cotización en Sapira: importarla la crea'
+				: preview.protection
+					? CRM_QUOTE_PROTECTION_MESSAGES[preview.protection]
+					: !preview.has_snapshot
+						? 'Sin una importación anterior con qué comparar: la cotización no cambia'
+						: changes.length
+							? 'Cambios del CRM desde la última importación. Se aplican solo si confirmas la importación de este registro'
+							: 'Sin cambios en el CRM desde la última importación',
+		};
+	}
+
+	async importRecords(holdingId: string, request: ImportRequest, actor: Actor, discarded: Set<string>): Promise<ImportStarted> {
 		if (request.object === 'opportunity') {
-			const candidates = request.all
-				? await this.staging.getEligibleOpportunityIdsForProcessing(holdingId, ['create', 'update'])
-				: (request.ids ?? []);
+			// `all` solo importa lo nuevo: los cambios a cotizaciones existentes se confirman por ids (`confirm_updates`).
+			const candidates = request.all ? await this.staging.getEligibleOpportunityIdsForProcessing(holdingId, ['create']) : (request.ids ?? []);
 			const ids = candidates.filter((id) => !discarded.has(id));
 
 			if (!ids.length) throw new BadRequestException('No hay oportunidades para importar');
-			const run = await this.syncRuns.createRun(holdingId, 'process_final', ids);
+			if (request.confirm_updates && !actor.userId) {
+				throw validationException([{ field: 'confirm_updates', message: 'Tu usuario no puede confirmar cambios a cotizaciones' }]);
+			}
+			const confirmedBy = request.confirm_updates && !request.all ? actor.userId : null;
+			const run = await this.syncRuns.createRun(holdingId, 'process_final', ids, { confirmedBy });
 
-			return { run_id: `crm-run:${run.id}`, status: 'running', message: 'Importando las oportunidades a Sapira', accepted: ids.length };
+			return {
+				run_id: `crm-run:${run.id}`,
+				status: 'running',
+				message: confirmedBy ? 'Importando las oportunidades y aplicando los cambios confirmados' : 'Importando las oportunidades a Sapira',
+				accepted: ids.length,
+			};
 		}
 		if (request.object === 'account') {
 			const candidates = request.all
@@ -1008,16 +1259,19 @@ export class CrmAdapter implements IntegrationAdapter {
 		throw new NotFoundException('Mapeo no encontrado');
 	}
 
-	async pendingMapping(holdingId: string): Promise<number> {
+	async pendingMapping(holdingId: string, notApplicable: Record<string, string[]> = {}): Promise<number> {
 		const [products, types] = await Promise.all([this.getMapping(holdingId, 'products', {}), this.getMapping(holdingId, 'quote_types', {})]);
 		const [owners] = (await this.dataSource.query(
 			`SELECT count(DISTINCT o.raw_data->>'OwnerId') AS n FROM salesforce_opportunities_stg o
-			WHERE o.holding_id = $1 AND o.raw_data->>'OwnerId' IS NOT NULL
+			WHERE o.holding_id = $1 AND o.raw_data->>'OwnerId' IS NOT NULL AND o.raw_data->>'OwnerId' <> ALL($2::text[])
 				AND NOT EXISTS (SELECT 1 FROM sellers s WHERE s.holding_id = $1 AND s.crm_owner_id = o.raw_data->>'OwnerId')`,
-			[holdingId]
+			[holdingId, notApplicable.owners ?? []]
 		)) as Row[];
+		// Sin mapear = filas no mapeadas que no están marcadas "No aplica" (§5.6).
+		const unmapped = (view: MappingView, object: string) =>
+			view.data.filter((row) => row.status !== 'mapped' && !(notApplicable[object] ?? []).includes(row.key)).length;
 
-		return products.counts.total - products.counts.mapped + (types.counts.total - types.counts.mapped) + (Number(owners?.n) || 0);
+		return unmapped(products, 'products') + unmapped(types, 'quote_types') + (Number(owners?.n) || 0);
 	}
 
 	schedule(): ScheduleInfo {

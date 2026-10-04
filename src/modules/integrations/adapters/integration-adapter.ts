@@ -12,8 +12,11 @@ import type {
 	MappingStatus,
 	MappingView,
 	Paginated,
+	RecordChanges,
+	RecordHistoryOptions,
 	RecordSource,
 	Ref,
+	RunOccurrence,
 	RunsQuery,
 	ScheduleInfo,
 	SyncStarted,
@@ -48,8 +51,18 @@ export interface IntegrationAdapter {
 	sync(holdingId: string, actor: Actor, options: SyncOptions): Promise<SyncStarted>;
 	listRuns(holdingId: string, query: RunsQuery): Promise<Paginated<IntegrationRun>>;
 	getRun(holdingId: string, id: string): Promise<IntegrationRunDetail>;
+	/**
+	 * Registros procesados por las corridas entre `since` y `until` (errores que se repiten). Una lectura por fuente, reusando lo que
+	 * lee el historial; `run_id` y `record_key` son los mismos de `getRun`. Opcional: sin método, nada se informa como repetido.
+	 */
+	recordHistory?(holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]>;
 	recordSources(rules: IntegrationRules): RecordSource[];
 	importRecords(holdingId: string, request: ImportRequest, actor: Actor, discarded: Set<string>): Promise<ImportStarted>;
+	/**
+	 * Diferencias campo a campo de un registro (lo que llegó vs. lo que hay en Sapira). Opcional: sin método, o si devuelve `undefined` para
+	 * el objeto, el servicio responde `available: false`. `null` = el registro no existe.
+	 */
+	recordChanges?(holdingId: string, object: string, recordKey: string): Promise<Omit<RecordChanges, 'object' | 'record_key'> | null | undefined>;
 
 	// Mapeos
 	readonly mappingObjects: string[];
@@ -64,7 +77,8 @@ export interface IntegrationAdapter {
 	deleteMapping(holdingId: string, object: string, sapiraId: string, externalId: string, confirm: boolean): Promise<void>;
 
 	// Resumen y reglas
-	pendingMapping(holdingId: string): Promise<number>;
+	/** `notApplicable`: keys marcadas "No aplica" por objeto (§5.6); no cuentan como pendientes. */
+	pendingMapping(holdingId: string, notApplicable?: Record<string, string[]>): Promise<number>;
 	schedule(): ScheduleInfo;
 	readonly defaultRules: IntegrationRules;
 }

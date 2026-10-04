@@ -41,12 +41,17 @@
   "kind": "export_invoices",          // ver tabla §3.3
   "kind_label": "Envío de facturas al ERP",
   "trigger": "automatic",              // automatic | manual
-  "status": "completed",               // running | completed | partial | failed | cancelled
+  "status": "completed",               // running | completed | partial | failed | cancelled | interrupted (§3.2)
   "started_at": "2026-10-03T12:00:04.120Z", "finished_at": "2026-10-03T12:01:10.002Z", "duration_ms": 65882,
   "totals": { "total": 34, "ok": 0, "unchanged": 33, "errors": 1, "skipped": 33 }, // skipped = unchanged (nombre anterior)
   "error": null,                       // mensaje de la corrida si falló completa
-  "metrics": { }                       // propio de cada adaptador (p. ej. datos: periodos, filas nuevas/cambiadas)
+  "metrics": { },                      // propio de cada adaptador (p. ej. datos: periodos, filas nuevas/cambiadas)
+  // Solo en GET /runs (§3.2 bis): errores nuevos vs. que se repiten
+  "errors_new": 0, "errors_recurring": 1, "errors_recurring_since": "2026-09-23T11:35:38.335Z"
 }
+
+// ErrorRecurrence (§3.2 bis): el mismo error del mismo registro en varias corridas de los últimos 30 días; null = primera vez
+{ "first_seen_at": "2026-09-23T11:35:38.335Z", "runs_count": 9, "consecutive": true }
 
 // Record (estado de sincronización, A2)
 {
@@ -54,17 +59,54 @@
   "object": "customer", "object_label": "Cliente",
   "label": "Acme SpA",                  // nombre legible
   "sapira_id": "uuid | null", "external_id": "4512 | null",
+  "sapira_label": "Factura 10091 · CTR-2026-81 | null", // nombre legible del registro de Sapira (sapira_id sigue siendo el enlace)
+  "detail_kind": "erp_draft | null",    // subestado propio del objeto (hoy: erp · invoice)
+  "detail_label": "Borrador en el ERP | null",
   "status": "ready",                    // pending | ready | error | imported | synced | discarded | excluded_by_rule
   "excluded_rule": null,                // nombre de la regla cuando status = excluded_by_rule
   "status_label": "Listo para importar",
+  "change_kind": "update",              // new (crea uno nuevo) | update (cambia uno existente) | null (el adaptador no lo sabe)
   "message": "texto | null",            // motivo del error o nota
-  "last_sync_at": "2026-10-02T11:00:00Z"
+  "last_sync_at": "2026-10-02T11:00:00Z",
+  "recurrence": null                    // ErrorRecurrence si status = error y el mismo error ya salió en otra corrida (§3.2 bis)
 }
 ```
 
 Estados (`status`): `pending` "Pendiente" · `ready` "Listo para importar" · `error` "Con error" · `imported` "Importado" (llegó a Sapira) ·
 `synced` "Sincronizado" (salió de Sapira al sistema) · `discarded` "Descartado" (no se quiere importar; ajuste 3 de Domi) ·
 `excluded_by_rule` "Excluido por regla" (cumple una regla de exclusión, §6.5).
+
+`change_kind` (cambios a existentes, 03-10): qué haría importar el registro. `new` "Nuevo" = crea un registro en Sapira; `update`
+"Cambio a existente" = el registro ya existe en Sapira y la integración detectó datos distintos (importar los aplica, §3.4 bis);
+`null` = el adaptador no lo distingue. Sale de `processing_status` (`create`/`to_create` → `new`, `update`/`to_update` → `update`) en
+`crm · opportunity`, `crm · account`, `erp · erp_invoice`, `erp · customer` y `stripe · *`; `datos · consumption` y `erp · invoice` → `null`.
+Se informa en cualquier estado (p. ej. un descartado conserva su `change_kind`).
+**Cambios a existentes van a "Por revisar"** (ajuste de Domi 03-10, genérico para cualquier adaptador con `change_kind`): un registro
+listo con `change_kind = update` sale con `status: "pending"` y `status_label: "Cambios por revisar"` (no es "algo sin importar"), así
+que cuenta en `kpis.review` y no en `ready`. "Listos para importar" (`ready`) queda para lo nuevo (`change_kind = new` o sin `change_kind`).
+
+`sapira_label` (ERP legible, 03-10): cómo se llama en Sapira el registro de `sapira_id`, para no mostrar el uuid. Opcional por adaptador
+(`null` si no lo calcula): `erp · invoice` = tipo de documento + folio ("Factura 10091"; sin folio "Factura sin folio") · número de contrato
+· fecha de emisión solo si no tiene folio (p. ej. "Factura sin folio · CTR-2026-104 · 28-09-2026"); `erp · customer` = razón social
+vinculada; `crm · account` = nombre comercial del cliente; `crm · opportunity` = número de cotización · cliente ("COT-123 · Acme");
+`stripe · customer` = nombre comercial del cliente (`clients.stripe_customer_id`), `stripe · subscription` = "Suscripción · <cliente>"
+(`subscriptions.external_id`), `stripe · invoice` = folio · cliente (`invoices.stripe_id`). En `stripe · *` también se completa
+`sapira_id` (antes `null`). `search` también busca en `sapira_label`.
+
+`detail_kind` / `detail_label` (subestado, 03-10): precisan el `status` con el motivo; el texto para la persona va en `message`. Hoy solo en
+`erp · invoice` "Factura enviada", que muestra **solo lo ejecutado en la integración** (decisión de Domi 03-10): facturas que salieron al
+ERP (`odoo_invoice_id` o `sent_to_odoo_at`) o con un intento de envío fallido (alerta `invoice_odoo_failure` abierta). Las Por Emitir que
+nunca se intentaron enviar (contrato con envío manual, de meses anteriores, sin vínculo con el ERP, por enviar) **no** aparecen: se siguen
+en Facturación.
+
+| `detail_kind` | `status` | `detail_label` | `message` |
+|---|---|---|---|
+| `erp_issued` | `synced` | Emitida en el ERP | — (enviada y ya emitida) |
+| `erp_draft` | `pending` ("Por revisar") | Borrador en el ERP | "Enviada al ERP como borrador el DD-MM; aún no se emite allá" (enviada y en Sapira sigue Por Emitir; sin umbral de días) |
+| `send_error` | `error` | Error al enviar | el error del envío (alerta abierta) |
+
+`last_sync_at` = fecha de envío (`sent_to_odoo_at`; sin ella, la del intento fallido): el período de arriba (`from`/`to`) filtra por
+cuándo se envió o se intentó, p. ej. "Últimos 7 días" = enviadas en los últimos 7 días que quedaron en ese estado.
 Tabla de equivalencias por tabla intermedia en §4.
 
 ## 1. Resumen · `GET /integrations` (VIEW)
@@ -87,11 +129,13 @@ la lista y el 360 cuadran. `stripe`: `connected` = hay al menos una cuenta; agre
       "last_sync_status": "partial",                        // estado de la última corrida o null
       "last_error": { "message": "El ERP rechazó la factura 1234: …", "at": "2026-10-03T12:01:09Z" },
       "errors_7d": 3,                                       // obsoleto: registros con error dentro de corridas de 7 días (no es el KPI)
-      "failed_runs_7d": 2,                                  // corridas failed/partial en 7 días → "N sincronizaciones con error" (Historial)
+      "failed_runs_7d": 2,                                  // corridas failed/partial/interrupted en 7 días → "N sincronizaciones con error" (Historial)
       "pending_mapping": 4,                                 // ver tabla
       "records_from": "2026-09-26",                         // = `from` por defecto del 360 ("Últimos 7 días")
-      "records_kpis": { "synced": 20, "error": 0, "review": 0, "ready": 6 }, // = kpis de records?from=records_from
+      "records_kpis": { "synced": 20, "error": 0, "review": 2, "ready": 4, "ready_new": 4, "ready_update": 2 }, // = kpis de records?from=records_from; ready_update ⊂ review
       "records_with_error": 0,                              // = records_kpis.error
+      "recurring_errors": 0,                                // de esos, cuántos tienen el mismo error en más de una corrida (§3.2 bis)
+      "recurring_since": null,                              // first_seen_at del más antiguo de esos ("1 error que se repite hace 7 días")
       "pending_import": 6,                                  // = records_kpis.ready ("Listos para importar" del 360)
       "next_scheduled_at": "2026-10-04T12:00:00Z",          // null si el programado está apagado
       "href": "/lab/integraciones/erp"
@@ -102,7 +146,7 @@ la lista y el 360 cuadran. `stripe`: `connected` = hay al menos una cuenta; agre
 
 | Tipo | `direction` | `pending_mapping` | `next_scheduled_at` |
 |---|---|---|---|
-| `erp` | `both` (exporta facturas; importa clientes y facturas a revisión) | productos de Sapira sin mapeo usados en contratos activos + compañías con facturas sin compañía del ERP | envío diario de facturas (`INVOICE_SCHEDULER_HOUR`, hora del servidor) |
+| `erp` | `both` (exporta facturas; importa clientes y facturas a revisión) | productos de Sapira sin mapeo usados en contratos activos + compañías con facturas sin compañía del ERP + razones sociales con facturas por enviar sin cliente del ERP | envío diario de facturas (`INVOICE_SCHEDULER_HOUR`, hora del servidor) |
 | `crm` | `import` | productos del CRM vistos en oportunidades sin producto de Sapira + tipos de oportunidad sin tipo de cotización + dueños del CRM sin vendedor | 08:30 America/Santiago |
 | `stripe` | `import` | productos de Stripe usados en lo traído sin producto de Sapira (= "Sin mapear" de §5) | `STRIPE_SYNC_HOUR` |
 
@@ -209,9 +253,19 @@ ambas fechas inclusivas; en `datos` van las dos o ninguna, si no 400).
 
 Errores: `400 { message: 'La integración no está conectada' }` / `'La integración está pausada'`; `409` en curso.
 
+**Corrida interrumpida** (`status: 'interrupted'` "Interrumpida", `error: "La sincronización se interrumpió (la API se reinició). Vuelve a
+sincronizar."`): un trabajo que quedó `running` en la base pero ya no corre. Se decide **al leer** (sin escribir en la base) en la lista, el
+detalle, el resumen y el lock de `POST /sync` (una interrumpida **no** da 409):
+- CRM (`salesforce_scheduler_jobs`) y ERP (`invoice_scheduler_jobs`): `startedAt` más viejo que el lease (CRM 3 h, ERP 3 h) **o** del mismo
+  entorno de esta API e iniciado antes de que arrancara el proceso (la API se reinició a mitad: `nest --watch`, deploy). Supone una
+  instancia por entorno, como los crons. Un trabajo de otro entorno (p. ej. producción visto desde local) solo vence por el lease.
+- Stripe (`stripe_integration_logs`, `stripe_sync_jobs`): los registros no guardan el entorno → solo el lease (2 h).
+- Datos y ERP › importación: viven en memoria del proceso; con un reinicio desaparecen (no quedan colgadas).
+- CRM › ejecuciones (`salesforce_sync_runs`): las retoma el worker con su propio lease (`locked_until`); sin cambio.
+
 ### 3.2 `GET /integrations/:tipo/runs` (VIEW) · Historial (D8, A7)
 
-Query: `page`, `limit`, `status` (lista `a,b` o repetido: running\|completed\|partial\|failed\|cancelled; p. ej. `status=failed,partial`),
+Query: `page`, `limit`, `status` (lista `a,b` o repetido: running\|completed\|partial\|failed\|cancelled\|interrupted; p. ej. `status=failed,partial`),
 `kind`, `trigger`, `from`, `to`.
 
 **Estado y conteos (ajuste de Domi 03-10, todos los tipos)**: `totals.ok` = se creó o actualizó algo; `totals.unchanged` = procesado
@@ -224,10 +278,38 @@ errores (`success: false` de la corrida = corte); ejecuciones del CRM = ítems �
 Stripe importación = `stats.*.skipped`; datos = filas sin integrar ni error.
 → `{ data: Run[], total, currentPage, pages, limit }`, más nueva primero.
 
+### 3.2 bis Errores que se repiten (todos los tipos)
+
+Muchas veces no son muchos errores sino **el mismo error que se repite** día a día (caso real, CRM de SimpliRoute: "Productos Salesforce
+sin mapping activo: Bundle TMS-ADA…" en la oportunidad Maderas Gavilán, todas las corridas diarias del 23-09 al 02-10).
+
+- **Mismo error** = mismo registro (`object` + `record_key`, la misma clave de `GET …/records`) y mismo mensaje normalizado (minúsculas,
+  sin tildes, sin ids variables —uuids, ids del CRM/Stripe/Mongo: tokens de 8+ caracteres con algún dígito—, sin fechas ni números,
+  espacios colapsados). Ventana: últimos **30 días**.
+- `ErrorRecurrence = { first_seen_at, runs_count, consecutive } | null`: `runs_count` = corridas de la ventana (incluida la de referencia)
+  con ese error; `first_seen_at` = la primera; `consecutive` = ninguna corrida intermedia procesó el registro sin ese error (bien o con
+  otro error); una corrida que **no tocó** el registro no corta. `null` = primera vez (o sin historial): solo se informa desde 2 corridas.
+- **Lista** (`GET /runs`), por corrida: `errors_new` + `errors_recurring` (= `totals.errors`; errores sin detalle por registro cuentan como
+  nuevos) y `errors_recurring_since` (primera aparición del error repetido más antiguo; `null` sin repetidos). Repetido = la vez anterior
+  que se procesó ese registro (en cualquier corrida, en orden) tuvo el mismo error. Ej. Historial: "1 error (se repite desde el 23-09)".
+  Filtros y paginado los aplica el servicio sobre las corridas del adaptador + 2 lecturas del historial por página (errores de la
+  ventana y lo procesado de esos registros), sin N+1.
+- **Detalle** (`GET /runs/:id`): cada `RunRecord` trae `record_key` y, si `status = error`, `recurrence` (hasta el inicio de esa corrida);
+  cada grupo de `errors_summary` ("Qué falló") trae `recurrence` agregada: `{ first_seen_at (mín), runs_count (máx), consecutive (todos),
+  recurring_records }` o `null`. Una lectura del historial (solo los registros con error).
+- **Registros** (`GET …/records`): cada registro con `status = error` trae `recurrence` respecto de su error actual (`null` si no se repite
+  o si la última corrida lo procesó bien). Una lectura del historial por página. **Resumen**: `recurring_errors` + `recurring_since`.
+- Fuente del historial (`IntegrationAdapter.recordHistory`, lo mismo que lee cada historial): CRM = `salesforce_sync_logs` (stage
+  `opportunity`) + `salesforce_sync_run_items`; ERP = resultados de `invoice_scheduler_jobs`; Stripe = `stripe_integration_logs` (un
+  registro por objeto del lote: `record_key` = objeto) + `stripe_sync_jobs.errors` (los con error de la tabla intermedia son estado actual
+  y no entran); datos = `sapira_quantity_imports` (cada fila vive en su última carga, así que en la práctica no se repite). Si el historial
+  falla, nada se marca repetido y la vista responde igual.
+
 ### 3.3 `GET /integrations/:tipo/runs/:id` (VIEW)
 
 → `Run & { records: RunRecord[], errors_summary: [{ message, count }] }` con
-`RunRecord = { object, label, sapira_id, external_id, status: 'ok' | 'error' | 'skipped', message }`. 404 si no existe o es de otro holding.
+`RunRecord = { object, record_key, label, sapira_id, external_id, status: 'ok' | 'error' | 'skipped', message, recurrence }` y
+`errors_summary: [{ message, count, recurrence }]` (§3.2 bis). 404 si no existe o es de otro holding.
 
 | Tipo | `kind` | Fuente (sin tabla nueva) |
 |---|---|---|
@@ -243,7 +325,9 @@ Stripe importación = `stats.*.skipped`; datos = filas sin integrar ni error.
 ### 3.4 `GET /integrations/:tipo/records` (VIEW) · Estado de sincronización (A2, A4)
 
 Query: `object`, `status` (lista `a,b`; **sin `status` no vienen los `discarded` ni los `excluded_by_rule`**: se ven con
-`status=discarded` / `status=excluded_by_rule`, y `rule=<nombre>` filtra por regla), `from`, `to`
+`status=discarded` / `status=excluded_by_rule`, y `rule=<nombre>` filtra por regla), `change_kind` (lista `new,update`; se combina con
+`status`, p. ej. `status=pending&change_kind=update` = "Cambios a existentes"; no cambia los KPIs), `detail_kind` (lista, p. ej.
+`erp_draft`; se combina con `status`), `from`, `to`
 (fecha de última sincronización), `search` (nombre o id, ≤ 120), `page`, `limit`.
 Orden: primero lo **no importado** (`error` → `ready` → `pending`), después `imported`/`synced`/`discarded`; dentro de cada grupo, la
 última sincronización más nueva primero (ajuste 4: en el CRM se muestran arriba las oportunidades sin importar y abajo las importadas).
@@ -252,38 +336,118 @@ las facturas del ERP que nacieron en Sapira (`odoo_id` = `invoices.odoo_invoice_
 
 ```jsonc
 {
-  "kpis": { "synced": 120, "error": 3, "review": 3, "ready": 12, "pending": 15, "discarded": 4, "excluded_by_rule": 9 },
+  "kpis": { "synced": 120, "error": 3, "review": 7, "ready": 8, "ready_new": 8, "ready_update": 4, "pending": 15, "discarded": 4, "excluded_by_rule": 9 },
   "rules": [{ "id": "…", "name": "Suscripciones automáticas de Stripe", "count": 9 }],
+  "details": [{ "object": "invoice", "kind": "erp_draft", "label": "Borrador en el ERP", "status": "synced", "count": 214 }], // [] si ninguna fuente tiene subestado
   "objects": [{ "key": "customer", "label": "Cliente", "direction": "import", "count": 40 }],
   "data": [ Record ], "total": 138, "currentPage": 1, "pages": 7, "limit": 20
 }
 ```
 
 Cuatro grupos **disjuntos** (tarjetas del 360) y el `status` que filtra exactamente lo que cuenta cada uno (también con `object`,
-`account_id`, `from`/`to` y `search`): `synced` = `imported,synced` · `error` = `error` · `review` "Por revisar" = `pending` ·
-`ready` "Listos para importar" = `ready`. `synced + error + review + ready = total` sin `status`. `kpis.pending` (= `pending + ready`)
+`account_id`, `from`/`to` y `search`): `synced` = `imported,synced` · `error` = `error` · `review` "Por revisar / actualizar" =
+`pending` (incluye los cambios a existentes) · `ready` "Listos para importar" = `ready` (solo nuevos). `synced + error + review + ready = total` sin `status`. `kpis.pending` (= `pending + ready`)
 queda por compatibilidad; no usarlo en tarjetas. Descartados y excluidos no suman en los demás.
+`ready_new` = listos que crean algo nuevo (`≤ ready`: los listos sin `change_kind`, p. ej. consumos, no están), filtro
+`status=ready&change_kind=new`. `ready_update` = **desglose de `review`**: cambios a registros existentes (`≤ review`), filtro
+`status=pending&change_kind=update`. El nombre `ready_update` se conserva por compatibilidad.
 
 | Tipo | `object` | Tabla | `sapira_id` / `external_id` |
 |---|---|---|---|
-| `erp` | `invoice` "Factura enviada" (exporta) | `invoices` del holding (no canceladas, emitidas o por emitir) + alerta abierta `invoice_odoo_failure` como error | id de la factura / `odoo_invoice_id` |
+| `erp` | `invoice` "Factura enviada" (exporta) | `invoices` del holding no canceladas que salieron al ERP + las con alerta abierta `invoice_odoo_failure` (error); subestado en `detail_kind` | id de la factura / `odoo_invoice_id` |
 | `erp` | `erp_invoice` "Factura del ERP" | `odoo_invoices_stg` | — / `odoo_id` |
-| `erp` | `customer` "Cliente del ERP" | `odoo_partners_stg` | — / `odoo_id` |
+| `erp` | `customer` "Cliente del ERP" | `odoo_partners_stg` (se llena solo al traer facturas del ERP: cada extracción guarda los clientes de esas facturas) | razón social vinculada / `odoo_id` |
 | `crm` | `opportunity` "Oportunidad" | `salesforce_opportunities_stg` | cotización creada (`quotes.salesforce_opportunity_id`) / id del CRM |
-| `crm` | `account` "Cuenta" | `salesforce_accounts_stg` | — / id del CRM |
+| `crm` | `account` "Cuenta" | `salesforce_accounts_stg` | cliente vinculado (`clients.salesforce_account_id`) / id del CRM |
 | `stripe` | `customer` · `subscription` · `invoice` | `stripe_{customers,subscriptions,invoices}_stg` | — / id de Stripe (+ `account`) |
 | `datos` | `consumption` "Consumo" | `sapira_quantity_imports` (sin `no_quantity_data` ni `not_variable`; `pending` = `ready`, lo importa la integración) | `quantity_id` / `sf_id · product · billing_date` |
 
+**`crm · opportunity` con cotización en Sapira · cotizaciones protegidas (Domi 03-10).** Un cambio real es lo que llega ahora del CRM
+distinto de lo que llegó **la última vez que se importó** a Sapira (snapshot `salesforce_opportunities_stg.last_imported_snapshot`); no se
+compara contra la cotización actual, así que lo editado en Sapira se respeta mientras el CRM no cambie.
+
+| Caso | `status` | `status_label` | `change_kind` | `detail_kind` · `detail_label` | `message` |
+|---|---|---|---|---|---|
+| Cotización con contrato (`contracts.quote_id` o por `contract_items.quote_item_id`, contrato no eliminado) | `imported` | "Cotización con contrato: no se actualiza" | `null` | `quote_with_contract` · ídem | "La cotización ya tiene contrato: no se actualiza" |
+| Cotización en etapa de tipo `contract_created`, sin contrato | `imported` | "Procesada previamente: no se actualiza" | `null` | `quote_processed` · ídem | "Procesada previamente: no se actualiza" |
+| El CRM cambió desde la última importación | `pending` | "Cambios por revisar" | `update` | `crm_changed` · "Cambió en el CRM: requiere confirmación" | "Cambió en el CRM desde la última importación: …" |
+| Igual que en la última importación (aunque la cotización se haya editado en Sapira) | `imported` | "Importado" | `null` | — | "Sin cambios en el CRM desde la última importación" |
+| Sin snapshot (cotización anterior a la regla) | `imported` | "Importado" | `null` | — | "Sin cambios: no hay una importación anterior…" — lo que llegó pasa a ser la base |
+
+Las protegidas nunca se actualizan, ni con confirmación. Los cambios del CRM se aplican **solo** con `POST records/import` por `ids` y
+`confirm_updates: true` (§3.5); nunca en la sincronización diaria, con `all`, con "Traer e importar" (§6.4) ni por `/salesforce/*`.
+
+### 3.4 bis `GET /integrations/:tipo/records/:objeto/:recordKey/changes` (VIEW) · Diferencias (cambios a existentes)
+
+`recordKey` = el `external_id` del registro. Compara lo que llegó de la integración con lo que hay hoy en Sapira, campo a campo, y
+devuelve **solo los campos que difieren**. Solo lectura.
+
+```jsonc
+{
+  "object": "account", "record_key": "001…",
+  "label": "Acme",                          // nombre en la integración
+  "change_kind": "update",                  // como en Record
+  "sapira_id": "uuid | null", "sapira_label": "Acme | null", // cliente actual (null: todavía no existe → importar lo crea)
+  "available": true,                        // false: esta integración no calcula diferencias para el objeto (changes: [])
+  "changes": [
+    { "field": "client.industry", "label": "Industria", "target": "client", "target_label": "Cliente",
+      "current": "Retail", "incoming": "Logística", "applies": true },
+    { "field": "client_entity.legal_name", "label": "Razón social", "target": "client_entity", "target_label": "Razón social",
+      "current": "ACME SPA", "incoming": "Acme SpA", "applies": false }
+  ],
+  "message": "texto | null"                 // p. ej. "Los datos del CRM coinciden con el cliente en Sapira"
+}
+```
+
+- `field` = `<destino>.<campo>` (estable); `label` legible; `current`/`incoming` = valores tal cual (texto, número, booleano, fecha ISO o
+  `null`). `applies: false` = importar **no** pisa el valor actual (se muestra como informativo: "se conserva el de Sapira").
+- **`crm · account`** (único con diferencias hoy): `incoming` = `raw_data` de la cuenta pasado por los **mapeos de campos activos** del
+  holding (`salesforce_field_mappings`, el mismo motor que importa), contra el cliente (`clients`) y su razón social (`client_entities`:
+  la del identificador tributario o, si no hay, la del cliente). Es la **misma comparación** que marca la cuenta como `update`
+  (OK de Domi 03-10):
+  - Comparación normalizada: sin mayúsculas, tildes ni espacios repetidos; el identificador tributario sin prefijo `RUT`/`R.U.T.`.
+  - En la razón social, `legal_name`, `legal_address` y `country` con valor en Sapira **no cuentan como cambio** (importar los conserva).
+    Solo aparecen, con `applies: false`, si hay además algún cambio real; si no, `changes: []` y la cuenta no queda `update`.
+  - El número de cliente igual al id de la cuenta del CRM (respaldo) no reemplaza uno existente, así que no aparece.
+  - El resto (`tax_id`, `economic_activity`, `client_number` real) y todos los del cliente se aplican. No se listan campos técnicos
+    (`salesforce_account_id`).
+- **`crm · opportunity`** (cotizaciones protegidas, Domi 03-10): `current` = lo que llegó del CRM **en la última importación** (snapshot),
+  `incoming` = lo que llega ahora (mismos mapeos de campos y resolución de ítems que la importación). No compara contra la cotización.
+  - `field`: `quote.<campo>` (`target: 'quote'`, `target_label: 'Cotización'`) o `quote_item.<id del ítem en el CRM>.<campo>`
+    (`target: 'quote_item'`, `target_label: 'Ítem: <producto>'`, con " (nuevo en el CRM)" o " (ya no está en el CRM)" si el ítem llegó o
+    dejó de llegar). Campos del encabezado: los mapeados de la oportunidad (sin notas) + `crm_owner` "Dueño en el CRM (vendedor)" y
+    `crm_account_id` "Cuenta del CRM (cliente)". Ítems: producto, cantidad, precio, descuento, total, inicio, fin, plazo, frecuencia,
+    facturación, recurrente, moneda.
+  - `applies: false` en todos si la cotización está protegida (con contrato o procesada previamente); `change_kind: null`.
+  - `sapira_id`/`sapira_label` = la cotización (`COT-… · cliente`); `null` si todavía no existe (importar la crea, `change_kind: 'new'`).
+  - `message`: el motivo de protección, "Sin una importación anterior con qué comparar: la cotización no cambia" (sin snapshot,
+    `changes: []`), "Cambios del CRM desde la última importación. Se aplican solo si confirmas la importación de este registro" o
+    "Sin cambios en el CRM desde la última importación".
+  - **Doble confirmación en el front**: mostrar estas diferencias y pedir confirmar antes de enviar `confirm_updates: true`.
+- Otros objetos/tipos → `200 { available: false, changes: [], message }`.
+- **Aplicar cambios** = `POST records/import` (§3.5) con esos ids: `crm · account` corre `processAccountsStaging`, que actualiza el
+  cliente existente con los campos mapeados y completa/vincula su razón social (con las protecciones de arriba), y deja la cuenta en
+  `processed`. Respeta descartados y excluidos por regla.
+
+Errores: 400 objeto inválido para el tipo; 404 registro que no está en el holding.
+
 ### 3.5 `POST /integrations/:tipo/records/import` (EDIT) · Importar a Sapira (A4)
 
-Body `{ object: string, ids?: string[] (1–500, los `external_id`), all?: boolean, period?: 'YYYY-MM' }` (`ids` o `all: true`).
-→ `202 { run_id: string | null, status: 'running' | 'completed', message, accepted: number }`.
+Body `{ object: string, ids?: string[] (1–500, los `external_id`), all?: boolean, period?: 'YYYY-MM', confirm_updates?: boolean }`
+(`ids` o `all: true`). → `202 { run_id: string | null, status: 'running' | 'completed', message, accepted: number }`.
+
+`confirm_updates` (solo `crm · opportunity`, cotizaciones protegidas): `true` confirma aplicar los cambios del CRM a las cotizaciones
+existentes de esos `ids`. Solo con `ids` (400 `confirm_updates` con `all` o sin ids; 400 si el usuario no tiene fila en `users`). Queda
+en la ejecución (`salesforce_sync_runs.confirmed_by`). Sin él, una oportunidad con cotización existente se procesa sin tocarla y sigue
+"Por revisar" (el ítem de la corrida termina `ok` con el aviso "…se actualiza solo si confirmas…"). Las protegidas no se actualizan
+nunca (aviso "La cotización ya tiene contrato: no se actualiza"). Al aplicar: encabezado (sin cambiar etapa ni notas), ítems, evento
+`UPDATED` en el historial de la cotización y snapshot nuevo, en una sola transacción.
 
 | Tipo · objeto | Proceso existente | `ids` |
 |---|---|---|
 | `erp · customer` | `PartnersProcessorService.processPartners` con el mapeo de campos activo `res.partner` del holding (400 si no hay: "Falta configurar el mapeo de campos de clientes (Avanzado)") | sí |
 | `erp · erp_invoice` | `InvoiceProcessingService.startAsyncProcessing` (todas las listas) | no (`all`) |
-| `crm · opportunity` | ejecución `process_final` (`SalesforceSyncRunService.createRun`); con `all` toma las elegibles `create`/`update` | sí |
+| `crm · opportunity` | ejecución `process_final` (`SalesforceSyncRunService.createRun`); con `all` toma solo las nuevas (`create`); los cambios a cotizaciones existentes, por `ids` + `confirm_updates` | sí |
 | `crm · account` | `processAccountsStaging` | sí |
 | `stripe · *` | `StripeSyncService.syncAll` (clientes → suscripciones → facturas) | no (`all`) |
 | `datos · consumption` | `integrateSapiraQuantities({ retryFailed: true, range })`: `range` = el mes de `period`, o sin `period` todos los meses con consumos por importar o reintentables | no (`all` + `period` opcional) |
@@ -313,7 +477,8 @@ el almacén de datos la modificó. Las filas que llegan idénticas no actualizan
 
 | Valor en la tabla | `status` |
 |---|---|
-| `create`, `update`, `to_create`, `to_update` | `ready` |
+| `create`, `to_create` | `ready` |
+| `update`, `to_update` (cambio a un registro existente, `change_kind = update`) | `pending` ("Cambios por revisar") |
 | `processed`, `no_change`; datos `integrated` | `imported` |
 | `error`, `invalid`; datos `unmapped`, `currency_mismatch`, `blocked`, `ambiguous`, `conflict`, `changed_in_source` | `error` |
 | `pending`, `NULL`, otro | `pending` |
@@ -333,20 +498,23 @@ Las filas de un mapeo salen del lado que **origina** el dato:
 - **Importa a Sapira** (`stripe · products`, `crm · products`, `crm · quote_types`, `crm · owners`): `anchor: 'external'`, una fila por
   elemento del sistema que se usa (o ya mapeado) → a qué corresponde en Sapira. Lo de Sapira sin contraparte no aparece ni cuenta como
   sin mapear. `usage` = cuánto lo usa el sistema (suscripciones/invoices de Stripe, oportunidades del CRM).
-- **Exporta desde Sapira** (`erp · companies`, `erp · products`): `anchor: 'sapira'`, una fila por elemento de Sapira **que se usa en lo
-  que se envía** (compañías con facturas no canceladas o contratos activos; productos en contratos activos o en facturas por emitir o ya
-  enviadas) o ya mapeado. Lo que no se usa queda fuera de la vista. `usage` = facturas/contratos que dependen del mapeo.
+- **Exporta desde Sapira** (`erp · companies`, `erp · products`, `erp · customers`): `anchor: 'sapira'`, una fila por elemento de Sapira **que se usa en lo
+  que se envía** (productos en contratos activos o en facturas por emitir o ya enviadas; razones sociales que facturan) o ya mapeado. Lo
+  que no se usa queda fuera de la vista. **Excepción `erp · companies`**: todas las compañías del holding (son pocas); las que no facturan
+  ni tienen contratos activos van con `status: 'unused'` "Sin uso" (neutro, sin sugerencia, no cuentan como pendiente). `usage` =
+  facturas/contratos que dependen del mapeo.
 - `fields`: sin cambio.
 
 ### 5.1 `GET /integrations/:tipo/mappings/:objeto` (VIEW)
 
-Query: `status` (`mapped` \| `unmapped` \| `suggested`), `search`.
+Query: `status` (`mapped` \| `unmapped` \| `suggested` \| `unused` \| `not_applicable`), `search`. Sin `status` no vienen las
+`not_applicable` (§5.6).
 
 ```jsonc
 {
   "object": "products", "object_label": "Productos", "anchor": "sapira",
   "external_available": true, "external_error": null,   // false + mensaje si el sistema no respondió (las filas igual llegan, con ids)
-  "counts": { "total": 52, "mapped": 48, "unmapped": 3, "suggested": 1 },
+  "counts": { "total": 52, "mapped": 47, "unmapped": 3, "suggested": 1, "unused": 1, "not_applicable": 2 }, // total = sin not_applicable
   "data": [
     {
       "key": "6c1e…",
@@ -363,7 +531,8 @@ Query: `status` (`mapped` \| `unmapped` \| `suggested`), `search`.
 
 | Tipo · objeto | `anchor` | Lado Sapira | Lado sistema (opciones) | `usage` | `meta` del mapeo |
 |---|---|---|---|---|---|
-| `erp · companies` | sapira | `companies` del holding que facturan (o mapeadas) | compañías del ERP (en vivo) | `{ invoices_pending, invoices }` | `{ tax_rate }` |
+| `erp · companies` | sapira | **todas** las `companies` del holding (`unused` si no facturan ni tienen contratos activos) | compañías del ERP (en vivo) | `{ invoices_pending, invoices, contracts }` | `{ tax_rate }` |
+| `erp · customers` "Clientes" | sapira | `client_entities` del holding que facturan (facturas por emitir o enviadas, contratos activos) o ya vinculadas; `meta: { tax_id, country, client_name }` | clientes del ERP de `odoo_partners_stg` (`meta.vat`); con `search`, además los que encuentra el ERP por RUT o nombre (`meta.linked_entity` si otra razón social lo usa) | `{ invoices_pending, invoices, contracts }` | `{ candidates }` (sin vincular: cuántos clientes del ERP tienen ese RUT) |
 | `erp · products` | sapira | `products` del holding en uso (o mapeados) | productos del ERP (en vivo, activos) | `{ contracts, invoices_pending }` (contratos activos y facturas por enviar que lo usan: se bloquean sin mapeo) | `{ tax_ids: number[] }` |
 | `crm · products` | external | `products` del holding | productos del CRM vistos en oportunidades (`salesforce_line_items_stg`) + los ya mapeados | `{ opportunities, opportunities_waiting }` | — |
 | `crm · quote_types` | external | tipos de cotización de Sapira (`new_business`, `upsell`, …) | tipos de oportunidad vistos en el CRM + los ya mapeados | `{ opportunities }` | — |
@@ -377,7 +546,9 @@ transformación; la lógica que aplica el mapeo no cambia. `GET …/fields/optio
 catálogo en vivo).
 
 Sugerencias automáticas y deterministas: mismo código/SKU o nombre normalizado (sin mayúsculas, tildes ni signos); en `owners`, mismo
-correo o el correo técnico `sf_<id>@salesforce.local`; en `crm · quote_types`, la equivalencia de tipos de Cotizaciones (`normalizeQuoteType`).
+correo o el correo técnico `sf_<id>@salesforce.local`; en `crm · quote_types`, la equivalencia de tipos de Cotizaciones (`normalizeQuoteType`);
+en `erp · customers`, mismo RUT (sin puntos, guion ni ceros iniciales) que **un solo** cliente comercial activo de `odoo_partners_stg` que
+ninguna otra razón social usa (con un VAT genérico de exportación, además el mismo nombre) — no llama al ERP.
 
 ### 5.2 `GET /integrations/:tipo/mappings/:objeto/options` (VIEW)
 
@@ -389,7 +560,10 @@ Body `{ items: [{ sapira_id: string, external_id: string, meta?: object }] }` (1
 → mismo cuerpo que el GET. Errores: 400 (`items.N.sapira_id` no es del holding, `external_id` no existe en las opciones cuando se
 pueden consultar, `meta.tax_ids` inválido), 404 objeto.
 
-Reglas: ERP compañías y productos son 1:1 (reasignar limpia el anterior, como hoy); CRM productos N:1 (varios del CRM → uno de
+Reglas: ERP compañías y productos son 1:1 (reasignar limpia el anterior, como hoy); ERP `customers` 1:1 (= `client_entities.odoo_partner_id`)
+con las validaciones de "Vincular con el ERP" de la Razón social 360 (`ClientEntityErpService.link`: el cliente existe y está activo en el
+ERP, ninguna otra razón social lo usa): vincula una por una y las que fallan vuelven como 400 `items.N.external_id` con el motivo (las
+demás quedan vinculadas); CRM productos N:1 (varios del CRM → uno de
 Sapira); CRM `owners` 1:1 (`sellers.crm_owner_id` único por holding); Stripe N:N.
 
 ### 5.3 bis `POST /integrations/:tipo/mappings/:objeto/accept-suggestions` (EDIT)
@@ -402,7 +576,18 @@ después en la fila). Roadmap (bloque de agentes): asistente IA que tras el prim
 ### 5.4 `DELETE /integrations/:tipo/mappings/:objeto?sapira_id=&external_id=&confirm=true` (EDIT)
 
 Quita un mapeo. Productos y compañías del ERP con uso y sin `confirm=true` → `409 { message: 'Quitar este mapeo bloquea el envío al ERP', errors: [{ field: 'contracts', message: '7 contratos activos lo usan' }, { field: 'invoices_pending', message: '3 facturas por enviar' }] }`.
+`erp · customers` con facturas por enviar o contratos activos y sin `confirm=true` → `409 { message: 'Quitar este vínculo bloquea el envío al ERP', errors: [{ field: 'invoices_pending', … }, { field: 'contracts', … }] }`; con `confirm` desvincula (`ClientEntityErpService.unlink`).
 OK → `204`. 404 si el mapeo no existe.
+
+### 5.6 "No aplica" · `POST /integrations/:tipo/mappings/:objeto/not-applicable` · `POST …/restore` (EDIT)
+
+Cualquier tipo y objeto (`fields`: además super admin o Admin Técnico). Body `{ keys: string[] (1–500) }` = `key` de las filas (§5.1).
+Guarda en `holding_integration_settings.settings.mapping_not_applicable: { [objeto]: key[] }` (sin migración). `not-applicable`: 400
+`keys.N` si la fila no existe en la vista o está mapeada (primero se quita el mapeo). `restore` quita la marca (keys sin marca se
+ignoran). → `MappingView` (como el GET sin filtros).
+Efecto: la fila pasa a `status: 'not_applicable'` (sin sugerencia), sale de "Sin mapear", de `counts.total`, de `accept-suggestions` y de
+`pending_mapping` (§1); se ve con `status=not_applicable` (`counts.not_applicable`). Una fila marcada que luego se mapea vuelve a
+`mapped`. Caso de uso: razones sociales de Stripe (`cus_…`) en `erp · customers`, que no se envían al ERP.
 
 ### 5.5 `GET /integrations/erp/taxes` (VIEW)
 
@@ -525,7 +710,8 @@ Errores: 400 validación; 400 sin conexión; 502 `{ message: 'El CRM no respondi
 
 Body `{ opportunity_ids: string[] (1–200), mode?: 'full' | 'review' }` (`full` por defecto: revisión + Sapira, ejecución `retry_full`;
 `review`: solo a revisión, `update_staging`). → `202 { run_id: 'crm-run:<uuid>', status: 'running', message, accepted }`.
-409 si ya hay una ejecución de ese tipo en curso.
+409 si ya hay una ejecución de ese tipo en curso. Cotizaciones protegidas: `full` crea las nuevas pero **no actualiza** cotizaciones
+existentes (quedan "Por revisar" si el CRM cambió; se aplican con `records/import` por ids + `confirm_updates`, §3.5).
 
 ## 7. Vendedores del CRM (D7)
 
@@ -551,6 +737,7 @@ Body `{ opportunity_ids: string[] (1–200), mode?: 'full' | 'review' }` (`full`
 | I1 | `sellers.crm_owner_id text NULL` (comentario) + índice único parcial `sellers_holding_crm_owner_key (holding_id, crm_owner_id) WHERE crm_owner_id IS NOT NULL` | `migrations/1791000000000-IntegrationsV2.ts` |
 | I2 | **Sin tabla nueva**: `holding_integration_settings` (de Leon, `1790400000000`, ya en QA y producción; PK `(holding_id, integration)`) agrega `settings jsonb NOT NULL DEFAULT '{}'` y `updated_by uuid NULL`, y su CHECK `holding_integration_settings_integration_check` suma `'stripe'` (`odoo`, `salesforce`, `bigquery`, `stripe`). Tipo → `integration`: `erp` → `odoo`, `crm` → `salesforce`, `stripe` → `stripe`, `datos` → `bigquery`. Entity `base-tenancy/holding-integration-settings.entity.ts` | ídem |
 | I3 | Tabla `integration_record_discards` (`id uuid`, `holding_id`, `tipo`, `object`, `record_key text` (= `external_id`), `reason text NULL`, `discarded_by uuid NULL`, `created_at`; UNIQUE `(holding_id, tipo, object, record_key)`; FK holding ON DELETE CASCADE; RLS activada sin políticas) | ídem |
+| I4 | Cotizaciones protegidas: `salesforce_opportunities_stg.last_imported_snapshot jsonb NULL` (lo que llegó del CRM en la última importación: encabezado mapeado + ítems) + `last_imported_at timestamptz NULL`, y `salesforce_sync_runs.confirmed_by uuid NULL` (quién confirmó actualizar cotizaciones existentes). Con comentarios | `migrations/1791100000000-CrmQuoteSnapshot.ts` |
 
 Orden: migración → desplegar la API. `VIEW_INTEGRACIONES` / `EDIT_INTEGRACIONES` ya existen en `permissions` (QA) y en los roles: no hay seed.
 

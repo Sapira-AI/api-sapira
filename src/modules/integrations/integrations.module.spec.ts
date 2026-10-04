@@ -12,6 +12,7 @@ import { BigQueryConnection } from '@/databases/postgresql/entities/integracione
 import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 import { StripeConnection } from '@/databases/postgresql/entities/integraciones/stripe/stripe-connection.entity';
 import { BigQueryModule } from '@/modules/bigquery/bigquery.module';
+import { ClientsModule } from '@/modules/clients/clients.module';
 import { InvoicesModule } from '@/modules/invoices/invoices.module';
 import { InvoiceSchedulerJob } from '@/modules/invoices/schemas/invoice-scheduler-job.schema';
 import { OdooModule } from '@/modules/odoo/odoo.module';
@@ -38,7 +39,7 @@ describe('IntegrationsModule · cableado', () => {
 
 	it('toda dependencia de los adaptadores y el servicio se resuelve', () => {
 		const available = new Set<unknown>([
-			...[OdooModule, SalesforceModule, StripeModule, BigQueryModule, InvoicesModule].flatMap(exportsOf),
+			...[OdooModule, SalesforceModule, StripeModule, BigQueryModule, InvoicesModule, ClientsModule].flatMap(exportsOf),
 			DataSource,
 			ConfigService,
 			ErpAdapter,

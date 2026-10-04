@@ -28,7 +28,9 @@ import {
 	paginateArray,
 	Paginated,
 	parseRunId,
+	RecordHistoryOptions,
 	RecordSource,
+	RunOccurrence,
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
@@ -378,6 +380,7 @@ export class DatosAdapter implements IntegrationAdapter {
 
 					return {
 						object: 'consumption',
+						record_key: String(row.id),
 						label: [row.business_name, row.product].filter(Boolean).join(' · '),
 						sapira_id: (row.quantity_id as string) ?? null,
 						external_id: [row.sf_id, row.product, row.billing_date].filter(Boolean).join(' · '),
@@ -390,6 +393,34 @@ export class DatosAdapter implements IntegrationAdapter {
 			}
 		}
 		throw new NotFoundException('Corrida no encontrada');
+	}
+
+	/** Filas por carga (una fila vive en la carga de su último `synced_at`: el almacén reescribe la fila, así que no se repite). */
+	async recordHistory(holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]> {
+		const params: unknown[] = [holdingId, options.since, options.until ?? new Date()];
+		const filters = [
+			...(options.errorsOnly ? [`integration_status = ANY($${params.push(ERROR_STATUSES)}::text[])`] : []),
+			...(options.keys ? [`id::text = ANY($${params.push(options.keys)}::text[])`] : []),
+		];
+		const rows = (await this.dataSource.query(
+			`SELECT id::text AS id, date_trunc('hour', synced_at) AS bucket, synced_at, integration_status, integration_reason
+			FROM sapira_quantity_imports WHERE holding_id = $1 AND synced_at BETWEEN $2 AND $3${filters.map((filter) => ` AND ${filter}`).join('')}`,
+			params
+		)) as Row[];
+
+		return rows.map((row) => {
+			const status = String(row.integration_status);
+
+			return {
+				run_id: `datos-load:${new Date(row.bucket as string | Date).toISOString()}`,
+				kind: 'datos_load',
+				at: (row.synced_at as Date) ?? null,
+				object: 'consumption',
+				record_key: String(row.id),
+				status: status === 'integrated' ? 'ok' : ERROR_STATUSES.includes(status) ? 'error' : 'skipped',
+				message: (row.integration_reason as string) ?? REASON_LABELS[status] ?? null,
+			};
+		});
 	}
 
 	// ── Registros ───────────────────────────────────────────────────────────────────────────────────────────────────────────

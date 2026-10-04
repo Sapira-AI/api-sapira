@@ -460,7 +460,8 @@ describe('ERP · Sincronizar ahora (envío) e Importar facturas (servicios reale
 			{} as never,
 			scheduler,
 			jobs as never,
-			config as never
+			config as never,
+			{} as never
 		);
 
 		return { adapter, jobs, wheres };

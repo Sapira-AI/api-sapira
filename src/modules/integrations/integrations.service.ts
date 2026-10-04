@@ -15,26 +15,44 @@ import { IntegrationAdapter, IntegrationRules } from './adapters/integration-ada
 import { StripeAdapter } from './adapters/stripe.adapter';
 import {
 	Actor,
+	applyNotApplicable,
+	buildMappingView,
+	currentErrorRecurrence,
 	daysBetween,
 	DIRECTION_LABELS,
+	ErrorRecurrence,
 	escapeLike,
 	ExclusionRule,
+	filterRuns,
 	ImportRequest,
 	integrationHref,
 	IntegrationRecord,
+	IntegrationRun,
 	isIntegrationTipo,
 	lastMonthRange,
 	MappingStatus,
+	paginateArray,
 	paginated,
 	RECORD_STATUS_LABELS,
+	RecordChangeKind,
+	RecordChanges,
+	RecordHistoryOptions,
 	RecordSource,
 	RecordStatus,
+	RECURRENCE_WINDOW_DAYS,
 	RULE_OPERATOR_OPTIONS,
 	RULE_OPERATORS,
 	ruleConditionSql,
 	RuleField,
+	RunErrorDelta,
+	runErrorDeltas,
+	RunOccurrence,
+	RunsQuery,
+	sortRunsDesc,
 	SummaryRow,
 	TIPO_INFO,
+	UPDATE_STATUS_LABEL,
+	withRecurrence,
 } from './integrations.types';
 
 type Row = Record<string, unknown>;
@@ -57,6 +75,10 @@ export interface RecordsQuery {
 	/** Stripe: cuenta de origen. */
 	account_id?: string;
 	status?: string[];
+	/** `new` | `update`: solo registros que crean uno nuevo o cambian uno existente. */
+	change_kind?: string[];
+	/** Subestado del registro (`detail_kind`, p. ej. `erp_draft`). */
+	detail_kind?: string[];
 	rule?: string;
 	from?: string;
 	to?: string;
@@ -66,6 +88,11 @@ export interface RecordsQuery {
 }
 
 const HIDDEN_STATUSES: RecordStatus[] = ['discarded', 'excluded_by_rule'];
+const DAY_MS = 86_400_000;
+/** Todas las corridas que el adaptador tiene a mano (cada uno ya limita su ventana). */
+const ALL_RUNS = 100_000;
+/** Registros con error que se revisan para el resumen ("N errores que se repiten"). */
+const SUMMARY_RECURRENCE_LIMIT = 500;
 
 /**
  * Integraciones v2 (`docs/v2-rediseno/contrato-api-integraciones.md`): resumen, reglas por tipo, estado de sincronización genérico (A2) sobre
@@ -140,17 +167,18 @@ export class IntegrationsService {
 				return fallback;
 			}
 		};
-		const [connection, last, recent, pendingMapping, records] = await Promise.all([
+		const [connection, last, recent, pendingMapping, records, recurring] = await Promise.all([
 			adapter.getConnection(holdingId),
 			safe(() => adapter.listRuns(holdingId, { page: 1, limit: 1 }), null),
 			safe(() => adapter.listRuns(holdingId, { page: 1, limit: 100, from: sevenDaysAgo }), null),
-			safe(() => adapter.pendingMapping(holdingId), 0),
-			safe(() => this.records(holdingId, tipo, { from: recordsFrom, page: 1, limit: 1 }), null),
+			safe(async () => adapter.pendingMapping(holdingId, await this.notApplicableKeys(holdingId, tipo)), 0),
+			safe(() => this.records(holdingId, tipo, { from: recordsFrom, page: 1, limit: 1 }, { recurrence: false }), null),
+			safe(() => this.recurringErrors(holdingId, tipo, recordsFrom), { count: 0, since: null }),
 		]);
 		const kpis = records?.kpis ?? null;
-		const failedRuns = (recent?.data ?? []).filter((run) => run.status === 'failed' || run.status === 'partial');
+		const failedRuns = (recent?.data ?? []).filter((run) => ['failed', 'partial', 'interrupted'].includes(run.status));
 		const lastRun = last?.data[0] ?? null;
-		const lastError = recent?.data.find((run) => run.error || run.status === 'failed' || run.status === 'partial') ?? null;
+		const lastError = recent?.data.find((run) => run.error || ['failed', 'partial', 'interrupted'].includes(run.status)) ?? null;
 		const schedule = adapter.schedule();
 
 		return {
@@ -177,9 +205,18 @@ export class IntegrationsService {
 			pending_mapping: pendingMapping,
 			records_from: recordsFrom,
 			records_kpis: kpis
-				? { synced: kpis.synced, error: kpis.error, review: kpis.review, ready: kpis.ready }
-				: { synced: 0, error: 0, review: 0, ready: 0 },
+				? {
+						synced: kpis.synced,
+						error: kpis.error,
+						review: kpis.review,
+						ready: kpis.ready,
+						ready_new: kpis.ready_new,
+						ready_update: kpis.ready_update,
+					}
+				: { synced: 0, error: 0, review: 0, ready: 0, ready_new: 0, ready_update: 0 },
 			records_with_error: kpis?.error ?? 0,
+			recurring_errors: recurring.count,
+			recurring_since: recurring.since,
 			pending_import: kpis?.ready ?? 0,
 			next_scheduled_at: connection.connected && connection.active ? schedule.next_at : null,
 			href: integrationHref(tipo),
@@ -193,6 +230,35 @@ export class IntegrationsService {
 						})),
 					}
 				: {}),
+		};
+	}
+
+	/** Registros con error del período del resumen cuyo error ya se vio en otra corrida (una consulta + una lectura del historial). */
+	private async recurringErrors(holdingId: string, tipo: FullTipo, from: string): Promise<{ count: number; since: string | null }> {
+		const { sql, params } = await this.recordsCte(holdingId, tipo, { from });
+		const rows = (await this.dataSource.query(
+			`${sql} SELECT g.object, g.record_key, g.message FROM g WHERE g.status = 'error' ORDER BY g.last_sync_at DESC NULLS LAST LIMIT ${SUMMARY_RECURRENCE_LIMIT}`,
+			params
+		)) as Row[];
+
+		if (!rows.length) return { count: 0, since: null };
+		const history = await this.history(this.adapters[tipo], holdingId, {
+			since: new Date(Date.now() - RECURRENCE_WINDOW_DAYS * DAY_MS),
+			keys: [...new Set(rows.map((row) => String(row.record_key)))],
+		});
+		const found = rows
+			.map((row) =>
+				currentErrorRecurrence(history, {
+					object: String(row.object),
+					record_key: String(row.record_key),
+					message: (row.message as string) ?? null,
+				})
+			)
+			.filter((item): item is ErrorRecurrence => item !== null);
+
+		return {
+			count: found.length,
+			since: found.length ? found.map((item) => item.first_seen_at).sort()[0] : null,
 		};
 	}
 
@@ -385,7 +451,7 @@ export class IntegrationsService {
 	async getRules(holdingId: string, tipo: string) {
 		this.adapter(tipo);
 		const rules = await this.storedRules(holdingId, tipo as FullTipo);
-		const counts = rules.length ? (await this.records(holdingId, tipo, { page: 1, limit: 1 })).rules : [];
+		const counts = rules.length ? (await this.records(holdingId, tipo, { page: 1, limit: 1 }, { recurrence: false })).rules : [];
 
 		return { data: rules.map((rule) => ({ ...rule, matches: counts.find((count) => count.id === rule.id)?.count ?? 0 })) };
 	}
@@ -468,6 +534,74 @@ export class IntegrationsService {
 		return this.getRules(holdingId, tipo);
 	}
 
+	// ── Historial (corridas) y errores que se repiten ───────────────────────────────────────────────────────────────────────
+
+	/** Historial de registros del adaptador; si no lo tiene o falla, vacío (nada se informa como repetido, la vista no se cae). */
+	private async history(adapter: IntegrationAdapter, holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]> {
+		if (!adapter.recordHistory || (options.keys && !options.keys.length)) return [];
+		try {
+			return await adapter.recordHistory(holdingId, options);
+		} catch (error) {
+			this.logger.warn(`Historial de registros de ${adapter.tipo} no disponible (${holdingId}): ${(error as Error).message}`);
+
+			return [];
+		}
+	}
+
+	/**
+	 * Lista de corridas con `errors_new` / `errors_recurring` / `errors_recurring_since` (contra la vez anterior que se procesó el mismo
+	 * registro): las corridas del adaptador + dos lecturas del historial (errores de la ventana y lo procesado de esos registros).
+	 */
+	async listRuns(holdingId: string, tipo: string, query: RunsQuery) {
+		const adapter = this.adapter(tipo);
+		const all = (await adapter.listRuns(holdingId, { page: 1, limit: ALL_RUNS })).data;
+		const page = paginateArray(sortRunsDesc(filterRuns(all, query)), query.page, query.limit);
+		const starts = page.data.map((run) => new Date(run.started_at ?? 0).getTime()).filter((time) => time > 0);
+
+		if (!starts.length) return { ...page, data: page.data.map((run) => this.withDelta(run, null)) };
+		const since = new Date(Math.min(...starts) - RECURRENCE_WINDOW_DAYS * DAY_MS);
+		// 1) errores de la ventana; 2) todo lo procesado de esos registros (una corrida que lo procesó bien corta la cadena).
+		const errors = await this.history(adapter, holdingId, { since, errorsOnly: true });
+		const keys = [...new Set(errors.flatMap((item) => (item.record_key ? [item.record_key] : [])))];
+		const history = keys.length
+			? [...(await this.history(adapter, holdingId, { since, keys })), ...errors.filter((item) => !item.record_key)]
+			: errors;
+		const deltas = runErrorDeltas(
+			all.filter((run) => new Date(run.started_at ?? 0).getTime() >= since.getTime()),
+			history
+		);
+
+		return { ...page, data: page.data.map((run) => this.withDelta(run, deltas.get(run.id) ?? null)) };
+	}
+
+	private withDelta(run: IntegrationRun, delta: RunErrorDelta | null): IntegrationRun {
+		return {
+			...run,
+			errors_new: delta?.errors_new ?? run.totals.errors,
+			errors_recurring: delta?.errors_recurring ?? 0,
+			errors_recurring_since: delta?.errors_recurring_since ?? null,
+		};
+	}
+
+	/** Detalle con `recurrence` por error y por grupo de "Qué falló" (una lectura del historial de los registros con error). */
+	async getRun(holdingId: string, tipo: string, id: string) {
+		const adapter = this.adapter(tipo);
+		const detail = await adapter.getRun(holdingId, id);
+		const errors = detail.records.filter((record) => record.status === 'error');
+
+		if (!errors.length || !detail.started_at) return withRecurrence(detail, []);
+		const started = new Date(detail.started_at);
+		const keys = errors.every((record) => record.record_key) ? [...new Set(errors.map((record) => String(record.record_key)))] : undefined;
+		const history = await this.history(adapter, holdingId, {
+			since: new Date(started.getTime() - RECURRENCE_WINDOW_DAYS * DAY_MS),
+			until: started,
+			keys,
+			errorsOnly: !keys,
+		});
+
+		return withRecurrence(detail, history);
+	}
+
 	// ── Estado de sincronización (registros) ────────────────────────────────────────────────────────────────────────────────
 
 	/** CTE común: fuentes del tipo → regla que excluye → descarte → estado final, con los filtros base (objeto, fechas, búsqueda). */
@@ -505,28 +639,36 @@ export class IntegrationsService {
 		}
 		if (query.search?.trim()) {
 			params.push(`%${escapeLike(query.search.trim())}%`);
-			filters.push(`(f.label ILIKE $${params.length} OR f.external_id ILIKE $${params.length} OR f.sapira_id ILIKE $${params.length})`);
+			filters.push(
+				`(f.label ILIKE $${params.length} OR f.external_id ILIKE $${params.length} OR f.sapira_id ILIKE $${params.length} OR f.sapira_label ILIKE $${params.length})`
+			);
 		}
 		const union = sources
 			.map(
 				(source) =>
 					`SELECT '${source.object}'::text AS object, x.record_key, x.label, x.sapira_id, x.external_id, x.status, x.message, x.last_sync_at, x.rule_row, ${
 						source.hasAccount ? 'x.account_id, x.account_name' : 'NULL::text AS account_id, NULL::text AS account_name'
-					} FROM (${source.sql}) x`
+					}, ${source.hasChangeKind ? 'x.change_kind::text' : 'NULL::text'} AS change_kind, ${
+						source.hasSapiraLabel ? 'x.sapira_label::text' : 'NULL::text'
+					} AS sapira_label, ${source.hasDetail ? 'x.detail_kind::text, x.detail_label::text' : 'NULL::text AS detail_kind, NULL::text AS detail_label'}, ${
+						source.hasStatusLabel ? 'x.status_label::text' : 'NULL::text'
+					} AS status_label FROM (${source.sql}) x`
 			)
 			.join('\nUNION ALL\n');
 		const sql = `WITH r AS (${union}),
 			e AS (SELECT r.*, ${ruleCases.length ? `CASE ${ruleCases.join(' ')} END` : 'NULL::text'} AS excluded_rule FROM r),
 			f AS (SELECT e.object, e.record_key, e.label, e.sapira_id, e.external_id, e.status AS source_status, e.message, e.last_sync_at, e.excluded_rule,
-				e.account_id, e.account_name,
-				CASE WHEN d.id IS NOT NULL THEN 'discarded' WHEN e.excluded_rule IS NOT NULL THEN 'excluded_by_rule' ELSE e.status END AS status
+				e.account_id, e.account_name, e.change_kind, e.sapira_label, e.detail_kind, e.detail_label, e.status_label AS source_status_label,
+				CASE WHEN d.id IS NOT NULL THEN 'discarded' WHEN e.excluded_rule IS NOT NULL THEN 'excluded_by_rule'
+					WHEN e.status = 'ready' AND e.change_kind = 'update' THEN 'pending' ELSE e.status END AS status
 				FROM e LEFT JOIN integration_record_discards d ON d.holding_id = $1 AND d.tipo = $2 AND d.object = e.object AND d.record_key = e.record_key),
 			g AS (SELECT * FROM f ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''})`;
 
 		return { sql, params, sources, rules };
 	}
 
-	async records(holdingId: string, tipo: string, query: RecordsQuery) {
+	/** `options.recurrence: false` (resumen, reglas): sin leer el historial de corridas. */
+	async records(holdingId: string, tipo: string, query: RecordsQuery, options: { recurrence?: boolean } = {}) {
 		this.adapter(tipo);
 		const { sql, params, sources, rules } = await this.recordsCte(holdingId, tipo as FullTipo, query);
 		const statusParams = [...params];
@@ -541,9 +683,13 @@ export class IntegrationsService {
 
 			statusFilter += ` AND g.excluded_rule = $${statusParams.push(rule?.id ?? '__sin_regla__')}`;
 		}
+		if (query.change_kind?.length) statusFilter += ` AND g.change_kind = ANY($${statusParams.push(query.change_kind)}::text[])`;
+		if (query.detail_kind?.length) statusFilter += ` AND g.detail_kind = ANY($${statusParams.push(query.detail_kind)}::text[])`;
 		const pageParams = [...statusParams, query.limit, (query.page - 1) * query.limit];
 		const [statusCounts, objectCounts, ruleCounts, [{ total }], rows] = await Promise.all([
-			this.dataSource.query(`${sql} SELECT status, count(*)::int AS n FROM g GROUP BY status`, params) as Promise<Row[]>,
+			this.dataSource.query(`${sql} SELECT status, change_kind, count(*)::int AS n FROM g GROUP BY status, change_kind`, params) as Promise<
+				Row[]
+			>,
 			this.dataSource.query(
 				`${sql} SELECT object, count(*)::int AS n FROM g WHERE g.status <> ALL($${params.length + 1}::text[]) GROUP BY object`,
 				[...params, HIDDEN_STATUSES]
@@ -561,7 +707,18 @@ export class IntegrationsService {
 				pageParams
 			) as Promise<Row[]>,
 		]);
-		const count = (status: string) => Number(statusCounts.find((row) => row.status === status)?.n ?? 0);
+		// Subestados (ERP › factura enviada: borrador en el ERP, por enviar…) para las tarjetas y filtros del front.
+		const details = sources.some((source) => source.hasDetail)
+			? ((await this.dataSource.query(
+					`${sql} SELECT object, detail_kind, min(detail_label) AS detail_label, status, count(*)::int AS n FROM g
+					WHERE g.detail_kind IS NOT NULL GROUP BY object, detail_kind, status ORDER BY object, detail_kind`,
+					params
+				)) as Row[])
+			: [];
+		const count = (status: string, changeKind?: RecordChangeKind) =>
+			statusCounts
+				.filter((row) => row.status === status && (!changeKind || row.change_kind === changeKind))
+				.reduce((sum, row) => sum + (Number(row.n) || 0), 0);
 		const labels = new Map(sources.map((source) => [source.object, source.label]));
 		const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
 		const data: IntegrationRecord[] = rows.map((row) => ({
@@ -572,20 +729,55 @@ export class IntegrationsService {
 			sapira_id: (row.sapira_id as string) ?? null,
 			external_id: (row.external_id as string) ?? null,
 			status: row.status as RecordStatus,
-			status_label: RECORD_STATUS_LABELS[row.status as RecordStatus] ?? String(row.status),
+			status_label:
+				// Rótulo propio de la fuente, salvo que el registro esté descartado o excluido por una regla (manda ese estado).
+				row.source_status_label && !['discarded', 'excluded_by_rule'].includes(String(row.status))
+					? String(row.source_status_label)
+					: row.status === 'pending' && row.change_kind === 'update'
+						? UPDATE_STATUS_LABEL
+						: (RECORD_STATUS_LABELS[row.status as RecordStatus] ?? String(row.status)),
+			change_kind: (row.change_kind as RecordChangeKind) ?? null,
+			sapira_label: (row.sapira_label as string) ?? null,
+			detail_kind: (row.detail_kind as string) ?? null,
+			detail_label: (row.detail_label as string) ?? null,
 			excluded_rule: row.excluded_rule ? (ruleById.get(String(row.excluded_rule))?.name ?? null) : null,
 			account: row.account_id ? { id: String(row.account_id), name: (row.account_name as string) ?? null } : null,
 			message: (row.message as string) ?? null,
 			last_sync_at: (row.last_sync_at as Date) ?? null,
+			recurrence: null,
 		}));
+		const withError = data.filter((record) => record.status === 'error');
+
+		if (options.recurrence !== false && withError.length) {
+			const history = await this.history(this.adapters[tipo as FullTipo], holdingId, {
+				since: new Date(Date.now() - RECURRENCE_WINDOW_DAYS * DAY_MS),
+				keys: [...new Set(withError.map((record) => String(rows[data.indexOf(record)].record_key)))],
+			});
+
+			for (const record of withError) {
+				record.recurrence = currentErrorRecurrence(history, {
+					object: record.object,
+					record_key: String(rows[data.indexOf(record)].record_key),
+					message: record.message,
+				});
+			}
+		}
 
 		return {
 			kpis: {
 				synced: count('imported') + count('synced'),
 				error: count('error'),
-				/** Por revisar: pendientes que todavía no están listos (filtro `status=pending`). */
+				/**
+				 * Por revisar (filtro `status=pending`): pendientes que todavía no están listos y **cambios a registros existentes**
+				 * (`change_kind = update`, ajuste de Domi 03-10: no son "algo sin importar").
+				 */
 				review: count('pending'),
+				/** Listos para importar: lo que crea algo nuevo (o listos sin `change_kind`). */
 				ready: count('ready'),
+				/** Listos que crean un registro nuevo en Sapira (= `ready` menos los listos sin `change_kind`). */
+				ready_new: count('ready', 'new'),
+				/** Desglose de `review`: cambios a registros existentes (filtro `status=pending&change_kind=update`). */
+				ready_update: count('pending', 'update'),
 				/** Compatibilidad: `pending + ready` (se solapa con `ready`; las tarjetas usan `review`). */
 				pending: count('pending') + count('ready'),
 				discarded: count('discarded'),
@@ -599,6 +791,13 @@ export class IntegrationsService {
 				import_by_ids: source.importByIds,
 				count: Number(objectCounts.find((row) => row.object === source.object)?.n ?? 0),
 			})),
+			details: details.map((row) => ({
+				object: String(row.object),
+				kind: String(row.detail_kind),
+				label: (row.detail_label as string) ?? null,
+				status: row.status as RecordStatus,
+				count: Number(row.n) || 0,
+			})),
 			rules: ruleCounts.map((row) => ({
 				id: String(row.excluded_rule),
 				name: ruleById.get(String(row.excluded_rule))?.name ?? String(row.excluded_rule),
@@ -606,6 +805,31 @@ export class IntegrationsService {
 			})),
 			...paginated(data, Number(total) || 0, query.page, query.limit),
 		};
+	}
+
+	/** Diferencias de un registro (contrato §4.6): `available: false` si el adaptador no las calcula para ese objeto. */
+	async recordChanges(holdingId: string, tipo: string, object: string, recordKey: string): Promise<RecordChanges> {
+		const adapter = this.adapter(tipo);
+
+		this.sourceOf(tipo as FullTipo, object);
+		const result = adapter.recordChanges ? await adapter.recordChanges(holdingId, object, recordKey) : undefined;
+
+		if (result === null) throw new NotFoundException('Registro no encontrado');
+		if (result === undefined) {
+			return {
+				object,
+				record_key: recordKey,
+				label: null,
+				change_kind: null,
+				sapira_id: null,
+				sapira_label: null,
+				available: false,
+				changes: [],
+				message: 'Esta integración no muestra diferencias para este tipo de registro',
+			};
+		}
+
+		return { object, record_key: recordKey, ...result };
 	}
 
 	/** Claves de un objeto en ciertos estados finales (descartados, excluidos) o existentes (`statuses` vacío). */
@@ -660,6 +884,10 @@ export class IntegrationsService {
 		if (request.ids?.length && !source.importByIds) {
 			throw validationException([{ field: 'ids', message: 'Este objeto se importa completo (usa all)' }]);
 		}
+		// Cotizaciones protegidas: los cambios a registros existentes se confirman registro a registro, nunca con `all`.
+		if (request.confirm_updates && (request.all || !request.ids?.length)) {
+			throw validationException([{ field: 'confirm_updates', message: 'Confirma los cambios indicando los registros (no con all)' }]);
+		}
 		const skip = await this.recordKeys(holdingId, tipo as FullTipo, request.object, HIDDEN_STATUSES);
 
 		return adapter.importRecords(holdingId, request, actor, skip);
@@ -671,12 +899,86 @@ export class IntegrationsService {
 		if (!adapter.mappingObjects.includes(object)) throw new NotFoundException('Mapeo no encontrado');
 	}
 
+	/** Keys marcadas "No aplica" por objeto (`holding_integration_settings.settings.mapping_not_applicable`, §5.6). */
+	private async notApplicableKeys(holdingId: string, tipo: FullTipo): Promise<Record<string, string[]>> {
+		const stored = (await this.storedSettings(holdingId, tipo)).mapping_not_applicable;
+
+		if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+
+		return Object.fromEntries(
+			Object.entries(stored as Record<string, unknown>).map(([object, keys]) => [
+				object,
+				Array.isArray(keys) ? keys.filter((key): key is string => typeof key === 'string') : [],
+			])
+		);
+	}
+
+	/** Vista del adaptador sin filtrar + "No aplica" aplicado, y recién ahí el filtro y los conteos. */
 	async getMapping(holdingId: string, tipo: string, object: string, query: { status?: MappingStatus; search?: string }) {
 		const adapter = this.adapter(tipo);
 
 		this.assertMappingObject(adapter, object);
+		const [view, notApplicable] = await Promise.all([
+			adapter.getMapping(holdingId, object, {}),
+			this.notApplicableKeys(holdingId, tipo as FullTipo),
+		]);
+		const base = {
+			object: view.object,
+			object_label: view.object_label,
+			anchor: view.anchor,
+			external_available: view.external_available,
+			external_error: view.external_error,
+		};
 
-		return adapter.getMapping(holdingId, object, query);
+		return buildMappingView(base, applyNotApplicable(view.data, notApplicable[object] ?? []), query);
+	}
+
+	/**
+	 * "No aplica" (§5.6): marca filas de un mapeo (por `key`) para que no cuenten como sin mapear ni pendientes. Las keys deben existir en
+	 * la vista; una fila mapeada no se marca (primero se quita el mapeo).
+	 */
+	async markNotApplicable(holdingId: string, tipo: string, object: string, keys: string[], actor: Actor) {
+		const adapter = this.adapter(tipo);
+
+		this.assertMappingObject(adapter, object);
+		const view = await adapter.getMapping(holdingId, object, {});
+		const rows = new Map(view.data.map((row) => [row.key, row]));
+		const errors = keys.flatMap((key, index) => {
+			const row = rows.get(key);
+
+			if (!row) return [{ field: `keys.${index}`, message: 'La fila no existe en este mapeo' }];
+			if (row.status === 'mapped')
+				return [{ field: `keys.${index}`, message: 'Está mapeada: quita el mapeo antes de marcarla como No aplica' }];
+
+			return [];
+		});
+
+		if (errors.length) throw validationException(errors);
+		await this.writeNotApplicable(holdingId, tipo as FullTipo, object, (current) => [...new Set([...current, ...keys])], actor);
+
+		return this.getMapping(holdingId, tipo, object, {});
+	}
+
+	/** Quita la marca "No aplica" (keys que no estaban marcadas se ignoran). */
+	async restoreNotApplicable(holdingId: string, tipo: string, object: string, keys: string[], actor: Actor) {
+		const adapter = this.adapter(tipo);
+
+		this.assertMappingObject(adapter, object);
+		const remove = new Set(keys);
+
+		await this.writeNotApplicable(holdingId, tipo as FullTipo, object, (current) => current.filter((key) => !remove.has(key)), actor);
+
+		return this.getMapping(holdingId, tipo, object, {});
+	}
+
+	private async writeNotApplicable(holdingId: string, tipo: FullTipo, object: string, change: (current: string[]) => string[], actor: Actor) {
+		const stored = await this.storedSettings(holdingId, tipo);
+		const all = await this.notApplicableKeys(holdingId, tipo);
+		const next = change(all[object] ?? []);
+
+		if (next.length) all[object] = next;
+		else delete all[object];
+		await this.writeSettings(holdingId, tipo, { ...stored, mapping_not_applicable: all }, actor);
 	}
 
 	async mappingOptions(holdingId: string, tipo: string, object: string, side: 'sapira' | 'external', search?: string) {
@@ -699,7 +1001,7 @@ export class IntegrationsService {
 		this.assertMappingObject(adapter, object);
 		await adapter.putMapping(holdingId, object, items, actor);
 
-		return adapter.getMapping(holdingId, object, {});
+		return this.getMapping(holdingId, tipo, object, {});
 	}
 
 	async deleteMapping(holdingId: string, tipo: string, object: string, sapiraId: string, externalId: string, confirm: boolean) {
@@ -715,7 +1017,7 @@ export class IntegrationsService {
 
 		this.assertMappingObject(adapter, object);
 		if (object === 'fields') throw new BadRequestException('El mapeo de campos no tiene sugerencias');
-		const view = await adapter.getMapping(holdingId, object, { status: 'suggested' });
+		const view = await this.getMapping(holdingId, tipo, object, { status: 'suggested' });
 		const rows = view.data.filter((row) => row.suggestion && (!keys?.length || keys.includes(row.key)));
 		const items = rows
 			.map((row) =>
@@ -727,7 +1029,7 @@ export class IntegrationsService {
 
 		if (items.length) await adapter.putMapping(holdingId, object, items, actor);
 
-		return { accepted: items.length, view: await adapter.getMapping(holdingId, object, {}) };
+		return { accepted: items.length, view: await this.getMapping(holdingId, tipo, object, {}) };
 	}
 
 	// ── CRM: traer oportunidades (A5) ───────────────────────────────────────────────────────────────────────────────────────

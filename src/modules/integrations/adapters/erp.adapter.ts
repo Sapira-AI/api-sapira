@@ -7,6 +7,7 @@ import { DataSource, Repository } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
 import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
+import { ClientEntityErpService } from '@/modules/clients/client-entity-erp.service';
 import { InvoiceSchedulerService } from '@/modules/invoices/invoice-scheduler.service';
 import { InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from '@/modules/invoices/schemas/invoice-scheduler-job.schema';
 import { InvoiceProcessingService } from '@/modules/odoo/invoice-processing.service';
@@ -32,16 +33,21 @@ import {
 	ImportStarted,
 	IntegrationRun,
 	IntegrationRunDetail,
+	INTERRUPTED_MESSAGE,
+	isInterruptedJob,
 	MappingItem,
 	MappingRow,
 	MappingStatus,
 	MappingView,
 	nextDailyAt,
+	normalizeText,
 	paginateArray,
 	Paginated,
 	parseRunId,
+	RecordHistoryOptions,
 	RecordSource,
 	Ref,
+	RunOccurrence,
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
@@ -49,6 +55,7 @@ import {
 	ScheduleInfo,
 	secretInfo,
 	sortRunsDesc,
+	stagingChangeKindSql,
 	stagingStatusSql,
 	suggestRef,
 	SyncStarted,
@@ -61,6 +68,60 @@ type Row = Record<string, unknown>;
 
 /** Facturas por enviar al ERP (misma idea que la cola del envío: Por Emitir, activas, sin enviar). */
 const PENDING_SEND_SQL = `i.holding_id = $1 AND i.is_active = true AND i.status = 'Por Emitir' AND i.sent_to_odoo_at IS NULL`;
+/** Clave comparable de un RUT / ID tributario en SQL (como `vatKey` + sin ceros iniciales: Odoo puede devolverlo como número). */
+const vatKeySql = (expr: string) => `ltrim(upper(regexp_replace(COALESCE(${expr}, ''), '[^0-9A-Za-z]', '', 'g')), '0')`;
+/** Nombre comparable (VAT genérico de exportación: se exige también el mismo nombre, como `resolveAndLinkPartnerForEntity`). */
+const nameKeySql = (expr: string) => `lower(regexp_replace(COALESCE(${expr}, ''), '[^[:alnum:]]', '', 'g'))`;
+
+/**
+ * Razones sociales que facturan (facturas por emitir o enviadas, contratos activos) o ya vinculadas, con su cliente del ERP y la
+ * sugerencia por RUT leída de `odoo_partners_stg` (sin llamar al ERP): partners comerciales activos con el mismo RUT que ninguna otra
+ * razón social usa; con un VAT genérico de exportación, además el mismo nombre. `$1` = holding.
+ */
+export const CUSTOMERS_SQL = `WITH p AS (
+		SELECT s.odoo_id, COALESCE(s.raw_data->>'name', s.raw_data->>'display_name') AS name, s.raw_data->>'vat' AS vat,
+			s.raw_data->'country_id'->>1 AS country, ${vatKeySql("s.raw_data->>'vat'")} AS vat_key, ${nameKeySql("s.raw_data->>'name'")} AS name_key
+		FROM odoo_partners_stg s
+		WHERE s.holding_id = $1 AND jsonb_typeof(s.raw_data->'vat') IN ('string', 'number') AND COALESCE(s.raw_data->>'active', 'true') <> 'false'
+			AND COALESCE((s.raw_data->'commercial_partner_id'->>0)::int, s.odoo_id) = s.odoo_id
+	),
+	iv AS (
+		SELECT i.client_entity_id, count(*) FILTER (WHERE i.status = 'Por Emitir' AND i.sent_to_odoo_at IS NULL) AS invoices_pending, count(*) AS invoices
+		FROM invoices i
+		WHERE i.holding_id = $1 AND i.is_active = true AND i.status <> 'Cancelada' AND i.client_entity_id IS NOT NULL
+			AND (i.status = 'Por Emitir' OR i.sent_to_odoo_at IS NOT NULL OR i.odoo_invoice_id IS NOT NULL)
+		GROUP BY i.client_entity_id
+	),
+	cv AS (
+		SELECT ct.client_entity_id, count(*) AS contracts FROM contracts ct
+		WHERE ct.holding_id = $1 AND ct.status = 'Activo' AND ct.deleted_at IS NULL AND ct.client_entity_id IS NOT NULL GROUP BY ct.client_entity_id
+	),
+	e AS (
+		SELECT ce.id, ce.legal_name, ce.tax_id, COALESCE(ce.country_code, ce.country) AS country, ce.odoo_partner_id, c.name_commercial AS client_name,
+			${vatKeySql('ce.tax_id')} AS vat_key, ${nameKeySql('ce.legal_name')} AS name_key,
+			COALESCE(iv.invoices_pending, 0) AS invoices_pending, COALESCE(iv.invoices, 0) AS invoices, COALESCE(cv.contracts, 0) AS contracts
+		FROM client_entities ce
+		LEFT JOIN clients c ON c.id = ce.client_id
+		LEFT JOIN iv ON iv.client_entity_id = ce.id
+		LEFT JOIN cv ON cv.client_entity_id = ce.id
+		WHERE ce.holding_id = $1
+	)
+	SELECT e.*, lp.name AS partner_name, lp.vat AS partner_vat, sg.n AS suggestion_count, sg.id AS suggestion_id, sg.name AS suggestion_name,
+		sg.vat AS suggestion_vat
+	FROM e
+	LEFT JOIN LATERAL (SELECT COALESCE(s.raw_data->>'name', s.raw_data->>'display_name') AS name, s.raw_data->>'vat' AS vat FROM odoo_partners_stg s
+		WHERE s.holding_id = $1 AND s.odoo_id = e.odoo_partner_id LIMIT 1) lp ON e.odoo_partner_id IS NOT NULL
+	LEFT JOIN LATERAL (SELECT count(DISTINCT p.odoo_id) AS n, min(p.odoo_id) AS id, min(p.name) AS name, min(p.vat) AS vat FROM p
+		WHERE e.odoo_partner_id IS NULL AND length(e.vat_key) >= 5 AND p.vat_key = e.vat_key
+			AND (p.name_key = e.name_key OR NOT EXISTS (SELECT 1 FROM generic_export_vats g WHERE g.is_active = true AND ${vatKeySql('g.vat')} = e.vat_key))
+			AND NOT EXISTS (SELECT 1 FROM client_entities o WHERE o.holding_id = $1 AND o.odoo_partner_id = p.odoo_id)) sg ON true
+	WHERE e.odoo_partner_id IS NOT NULL OR e.invoices > 0 OR e.contracts > 0
+	ORDER BY lower(e.legal_name)`;
+
+/** Tipo de documento legible de una factura (`invoices.document_type`). */
+const DOCUMENT_LABEL_SQL = `(CASE i.document_type WHEN 'FACTURA' THEN 'Factura' WHEN 'FACTURA_EXPORTACION' THEN 'Factura de exportación'
+	WHEN 'NC' THEN 'Nota de crédito' WHEN 'ND' THEN 'Nota de débito' WHEN 'BOLETA' THEN 'Boleta' WHEN 'Invoice' THEN 'Invoice'
+	ELSE COALESCE(initcap(replace(lower(i.document_type), '_', ' ')), 'Factura') END)`;
 const LOCK_WINDOW_MS = 3 * 60 * 60 * 1000;
 const RUNS_WINDOW = 300;
 
@@ -81,7 +142,7 @@ export interface ErpConnectionInput {
 @Injectable()
 export class ErpAdapter implements IntegrationAdapter {
 	readonly tipo = 'erp' as const;
-	readonly mappingObjects = ['companies', 'products', 'fields'];
+	readonly mappingObjects = ['companies', 'products', 'customers', 'fields'];
 	readonly defaultRules: IntegrationRules = { exclude_sapira_invoices: true };
 	private readonly logger = new Logger(ErpAdapter.name);
 	private readonly fields: FieldsMappingHelper;
@@ -99,7 +160,8 @@ export class ErpAdapter implements IntegrationAdapter {
 		private readonly partnersProcessor: PartnersProcessorService,
 		private readonly invoiceScheduler: InvoiceSchedulerService,
 		@InjectModel(InvoiceSchedulerJob.name) private readonly schedulerJobs: Model<InvoiceSchedulerJobDocument>,
-		private readonly config: ConfigService
+		private readonly config: ConfigService,
+		private readonly entityErp: ClientEntityErpService
 	) {
 		this.fields = new FieldsMappingHelper(dataSource);
 	}
@@ -230,19 +292,30 @@ export class ErpAdapter implements IntegrationAdapter {
 
 		if (!connection) throw new BadRequestException('La integración no está conectada');
 		if (connection.is_active === false) throw new BadRequestException('La integración está pausada');
-		const running = await this.schedulerJobs
-			.findOne({
+		const active = (await this.schedulerJobs
+			.find({
 				status: { $in: ['pending', 'running'] },
 				holdingId: { $in: [holdingId, 'all'] },
 				startedAt: { $gte: new Date(Date.now() - LOCK_WINDOW_MS) },
 			})
 			.lean()
-			.exec();
+			.exec()) as InvoiceSchedulerJob[];
+		// Un envío "en curso" huérfano (la API se reinició a mitad) no bloquea: se informa como Interrumpida.
+		const running = active.some((job) => !this.interrupted(job));
 
 		if (running) throw new ConflictException('Ya hay una sincronización en curso');
 		const jobId = await this.invoiceScheduler.startSchedulerJob({ dryRun: false, holdingId, userId: actor.authId });
 
 		return { run_id: `erp-send:${jobId}`, status: 'running', message: 'Enviando las facturas pendientes al ERP' };
+	}
+
+	/** Envío en curso cuyo proceso ya no existe (mismo entorno, iniciado antes de este arranque) o que superó la ventana de bloqueo. */
+	private interrupted(job: Pick<InvoiceSchedulerJob, 'startedAt' | 'executionEnvironment'>): boolean {
+		const configured = process.env.NODE_ENV?.toLowerCase().trim();
+		// Mismo cálculo que `InvoiceSchedulerService.getExecutionEnvironment`.
+		const environment = configured === 'production' || configured === 'qa' ? configured : 'unknown';
+
+		return isInterruptedJob({ startedAt: job.startedAt, environment: job.executionEnvironment }, { leaseMs: LOCK_WINDOW_MS, environment });
 	}
 
 	private jobToRun(job: InvoiceSchedulerJob & { _id?: unknown }, holdingId: string): { run: IntegrationRun; records: RunRecord[] } {
@@ -251,6 +324,7 @@ export class ErpAdapter implements IntegrationAdapter {
 		);
 		const records: RunRecord[] = results.map((result) => ({
 			object: 'invoice',
+			record_key: (result.invoiceId as string) ?? null,
 			label: [result.invoiceNumber || 'Factura sin folio', result.clientName].filter(Boolean).join(' · '),
 			sapira_id: (result.invoiceId as string) ?? null,
 			external_id: result.odooInvoiceId ? String(result.odooInvoiceId) : null,
@@ -269,6 +343,7 @@ export class ErpAdapter implements IntegrationAdapter {
 				})
 			: runTotals({ total: progress.total ?? 0, ok: progress.sent ?? 0, errors: progress.errors ?? 0, unchanged: progress.skipped ?? 0 });
 		const running = job.status === 'pending' || job.status === 'running';
+		const interrupted = running && this.interrupted(job);
 
 		return {
 			run: {
@@ -277,12 +352,19 @@ export class ErpAdapter implements IntegrationAdapter {
 				kind: 'export_invoices',
 				kind_label: 'Envío de facturas al ERP',
 				trigger: job.executionSource === 'automatic' ? 'automatic' : 'manual',
-				status: runStatusOf({ running, failed: job.status === 'failed', ok: totals.ok, unchanged: totals.unchanged, errors: totals.errors }),
+				status: runStatusOf({
+					running,
+					interrupted,
+					failed: job.status === 'failed',
+					ok: totals.ok,
+					unchanged: totals.unchanged,
+					errors: totals.errors,
+				}),
 				started_at: job.startedAt ?? null,
 				finished_at: job.completedAt ?? null,
 				duration_ms: durationMs(job.startedAt, job.completedAt),
 				totals,
-				error: job.error ?? null,
+				error: interrupted ? INTERRUPTED_MESSAGE : (job.error ?? null),
 				metrics: { environment: job.executionEnvironment ?? 'unknown' },
 			},
 			records,
@@ -370,7 +452,75 @@ export class ErpAdapter implements IntegrationAdapter {
 		throw new NotFoundException('Corrida no encontrada');
 	}
 
+	/** Facturas por envío al ERP: los resultados vienen dentro de cada trabajo (una lectura). Las importaciones no guardan registros. */
+	async recordHistory(holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]> {
+		const jobs = (await this.schedulerJobs
+			.find(
+				{ ...this.jobsFilter(holdingId), startedAt: { $gte: options.since, $lte: options.until ?? new Date() } },
+				{ jobId: 1, holdingId: 1, startedAt: 1, executionSource: 1, 'result.results': 1 }
+			)
+			.lean()
+			.exec()) as InvoiceSchedulerJob[];
+		const keys = options.keys ? new Set(options.keys) : null;
+
+		return jobs.flatMap((job) => {
+			const { run, records } = this.jobToRun(job, holdingId);
+
+			return records
+				.filter((record) => (!options.errorsOnly || record.status === 'error') && (!keys || keys.has(record.record_key ?? '')))
+				.map((record) => ({
+					run_id: run.id,
+					kind: run.kind,
+					at: run.started_at,
+					object: record.object,
+					record_key: record.record_key ?? null,
+					status: record.status,
+					message: record.message,
+				}));
+		});
+	}
+
 	// ── Registros ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Factura enviada = lo **ejecutado** en la integración (decisión de Domi 03-10): facturas que salieron al ERP o cuyo envío falló. Las
+	 * Por Emitir que nunca se intentaron enviar se siguen en Facturación, no aquí. `last_sync_at` = fecha de envío (o del intento fallido),
+	 * así el período del Estado filtra por cuándo se envió. `sapira_label` legible ("Factura 10091 · CTR-2026-81"; sin folio, con la fecha
+	 * de emisión) y subestado (`detail_kind`) con el texto en `message`:
+	 * - `erp_issued` (synced): se envió y ya se emitió.
+	 * - `erp_draft` (pending, "Por revisar"): se envió y en Sapira sigue Por Emitir = borrador en el ERP que aún no se emite allá.
+	 * - `send_error` (error): intento de envío fallido (alerta `invoice_odoo_failure` abierta).
+	 */
+	private invoiceSourceSql(): string {
+		const sent = `(i.odoo_invoice_id IS NOT NULL OR i.sent_to_odoo_at IS NOT NULL)`;
+		// Zona del negocio (misma regla que el envío: `TZ` o America/Santiago); solo se acepta un nombre IANA.
+		const zone = /^[A-Za-z_]+(\/[A-Za-z_+-]+)*$/.test(process.env.TZ ?? '') ? process.env.TZ : 'America/Santiago';
+
+		return `SELECT x.record_key, x.label, x.sapira_label, x.sapira_id, x.external_id, x.last_sync_at, x.rule_row, x.detail_kind,
+				CASE x.detail_kind WHEN 'send_error' THEN 'error' WHEN 'erp_draft' THEN 'pending' ELSE 'synced' END AS status,
+				CASE x.detail_kind WHEN 'send_error' THEN 'Error al enviar' WHEN 'erp_draft' THEN 'Borrador en el ERP' ELSE 'Emitida en el ERP' END AS detail_label,
+				CASE x.detail_kind WHEN 'send_error' THEN x.error_message
+					WHEN 'erp_draft' THEN 'Enviada al ERP como borrador el ' || to_char(x.last_sync_at AT TIME ZONE '${zone}', 'DD-MM') || '; aún no se emite allá'
+					ELSE NULL END AS message
+			FROM (SELECT i.id::text AS record_key,
+					concat_ws(' · ', COALESCE(i.invoice_number, 'Factura sin folio'), ce.legal_name) AS label,
+					concat_ws(' · ',
+						${DOCUMENT_LABEL_SQL} || CASE WHEN i.invoice_number IS NOT NULL THEN ' ' || i.invoice_number ELSE ' sin folio' END,
+						ct.contract_number,
+						CASE WHEN i.invoice_number IS NULL THEN to_char(i.issue_date, 'DD-MM-YYYY') END) AS sapira_label,
+					i.id::text AS sapira_id, i.odoo_invoice_id::text AS external_id,
+					n.message AS error_message, COALESCE(i.sent_to_odoo_at, n.updated_at, i.created_at) AS last_sync_at, to_jsonb(i.*) AS rule_row,
+					CASE WHEN n.id IS NOT NULL THEN 'send_error'
+						WHEN ${sent} AND i.status = 'Por Emitir' THEN 'erp_draft'
+						ELSE 'erp_issued' END AS detail_kind
+				FROM invoices i
+				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
+				LEFT JOIN contracts ct ON ct.id = i.contract_id
+				LEFT JOIN LATERAL (SELECT an.id, an.message, an.updated_at FROM app_notifications an
+					WHERE an.holding_id = i.holding_id AND an.type = 'invoice_odoo_failure' AND an.status = 'open'
+						AND an.resource_type = 'invoice' AND an.resource_id = i.id ORDER BY an.updated_at DESC LIMIT 1) n ON true
+				WHERE i.holding_id = $1 AND i.is_active = true AND i.status <> 'Cancelada' AND (${sent} OR n.id IS NOT NULL)) x`;
+	}
 
 	recordSources(rules: IntegrationRules): RecordSource[] {
 		const excludeSapira = rules.exclude_sapira_invoices !== false;
@@ -383,19 +533,9 @@ export class ErpAdapter implements IntegrationAdapter {
 				direction: 'export',
 				importable: false,
 				importByIds: false,
-				sql: `SELECT i.id::text AS record_key,
-						concat_ws(' · ', COALESCE(i.invoice_number, 'Factura sin folio'), ce.legal_name) AS label,
-						i.id::text AS sapira_id, i.odoo_invoice_id::text AS external_id,
-						CASE WHEN n.id IS NOT NULL THEN 'error' WHEN i.odoo_invoice_id IS NOT NULL OR i.sent_to_odoo_at IS NOT NULL THEN 'synced' ELSE 'pending' END AS status,
-						n.message AS message, COALESCE(i.sent_to_odoo_at, n.updated_at, i.created_at) AS last_sync_at, to_jsonb(i.*) AS rule_row
-					FROM invoices i
-					LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
-					LEFT JOIN LATERAL (SELECT an.id, an.message, an.updated_at FROM app_notifications an
-						WHERE an.holding_id = i.holding_id AND an.type = 'invoice_odoo_failure' AND an.status = 'open'
-							AND an.resource_type = 'invoice' AND an.resource_id = i.id ORDER BY an.updated_at DESC LIMIT 1) n ON true
-					WHERE i.holding_id = $1 AND i.is_active = true AND i.status <> 'Cancelada'
-						AND (i.odoo_invoice_id IS NOT NULL OR i.sent_to_odoo_at IS NOT NULL OR n.id IS NOT NULL
-							OR (i.status = 'Por Emitir' AND i.issue_date <= current_date))`,
+				hasSapiraLabel: true,
+				hasDetail: true,
+				sql: this.invoiceSourceSql(),
 			},
 			{
 				object: 'erp_invoice',
@@ -404,10 +544,11 @@ export class ErpAdapter implements IntegrationAdapter {
 				direction: 'import',
 				importable: true,
 				importByIds: false,
+				hasChangeKind: true,
 				sql: `SELECT s.odoo_id::text AS record_key,
 						concat_ws(' · ', s.raw_data->>'name', s.raw_data->'partner_id'->>1) AS label,
 						NULL::text AS sapira_id, s.odoo_id::text AS external_id,
-						${stagingStatusSql('s.processing_status')} AS status,
+						${stagingStatusSql('s.processing_status')} AS status, ${stagingChangeKindSql('s.processing_status')} AS change_kind,
 						COALESCE(s.error_message, s.integration_notes) AS message, COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at, to_jsonb(s.*) AS rule_row
 					FROM odoo_invoices_stg s
 					WHERE s.holding_id = $1${
@@ -421,12 +562,14 @@ export class ErpAdapter implements IntegrationAdapter {
 				direction: 'import',
 				importable: true,
 				importByIds: true,
+				hasChangeKind: true,
+				hasSapiraLabel: true,
 				sql: `SELECT s.odoo_id::text AS record_key, COALESCE(s.raw_data->>'name', s.raw_data->>'display_name') AS label,
-						ce.id::text AS sapira_id, s.odoo_id::text AS external_id,
-						${stagingStatusSql('s.processing_status')} AS status,
+						ce.id::text AS sapira_id, ce.legal_name AS sapira_label, s.odoo_id::text AS external_id,
+						${stagingStatusSql('s.processing_status')} AS status, ${stagingChangeKindSql('s.processing_status')} AS change_kind,
 						COALESCE(s.error_message, s.integration_notes) AS message, COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at, to_jsonb(s.*) AS rule_row
 					FROM odoo_partners_stg s
-					LEFT JOIN LATERAL (SELECT c.id FROM client_entities c WHERE c.holding_id = s.holding_id AND c.odoo_partner_id = s.odoo_id LIMIT 1) ce ON true
+					LEFT JOIN LATERAL (SELECT c.id, c.legal_name FROM client_entities c WHERE c.holding_id = s.holding_id AND c.odoo_partner_id = s.odoo_id LIMIT 1) ce ON true
 					WHERE s.holding_id = $1`,
 			},
 		];
@@ -538,11 +681,9 @@ export class ErpAdapter implements IntegrationAdapter {
 				this.dataSource.query(
 					`SELECT c.id, c.legal_name, c.country, c.odoo_integration_id, c.tax_rate,
 						(SELECT count(*) FROM invoices i WHERE ${PENDING_SEND_SQL} AND i.company_id = c.id) AS invoices_pending,
-						(SELECT count(*) FROM invoices i WHERE i.holding_id = $1 AND i.company_id = c.id AND i.is_active = true AND i.status <> 'Cancelada') AS invoices
+						(SELECT count(*) FROM invoices i WHERE i.holding_id = $1 AND i.company_id = c.id AND i.is_active = true AND i.status <> 'Cancelada') AS invoices,
+						(SELECT count(*) FROM contracts ct WHERE ct.holding_id = $1 AND ct.company_id = c.id AND ct.status = 'Activo' AND ct.deleted_at IS NULL) AS contracts
 					FROM companies c WHERE c.holding_id = $1
-						AND (c.odoo_integration_id IS NOT NULL
-							OR EXISTS (SELECT 1 FROM invoices i WHERE i.holding_id = $1 AND i.company_id = c.id AND i.is_active = true AND i.status <> 'Cancelada')
-							OR EXISTS (SELECT 1 FROM contracts ct WHERE ct.holding_id = $1 AND ct.company_id = c.id AND ct.status = 'Activo'))
 					ORDER BY lower(c.legal_name)`,
 					[holdingId]
 				) as Promise<Row[]>,
@@ -552,15 +693,21 @@ export class ErpAdapter implements IntegrationAdapter {
 				const externalId =
 					company.odoo_integration_id === null || company.odoo_integration_id === undefined ? null : String(company.odoo_integration_id);
 				const sapira: Ref = { id: String(company.id), label: String(company.legal_name ?? ''), meta: { country: company.country ?? null } };
-				const suggestion = externalId ? null : suggestRef({ label: sapira.label }, refs);
+				// Todas las compañías del holding (Domi 03-10): las que no facturan ni tienen contratos activos van "Sin uso" (neutro).
+				const unused = !externalId && !Number(company.invoices) && !Number(company.contracts);
+				const suggestion = externalId || unused ? null : suggestRef({ label: sapira.label }, refs);
 
 				return {
 					key: sapira.id,
 					sapira,
 					external: externalId ? (byId.get(externalId) ?? { id: externalId, label: `Compañía ${externalId}`, meta: {} }) : null,
-					status: externalId ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
+					status: externalId ? 'mapped' : unused ? 'unused' : suggestion ? 'suggested' : 'unmapped',
 					suggestion,
-					usage: { invoices_pending: Number(company.invoices_pending) || 0, invoices: Number(company.invoices) || 0 },
+					usage: {
+						invoices_pending: Number(company.invoices_pending) || 0,
+						invoices: Number(company.invoices) || 0,
+						contracts: Number(company.contracts) || 0,
+					},
 					meta: { tax_rate: company.tax_rate === null || company.tax_rate === undefined ? null : Number(company.tax_rate) },
 				};
 			});
@@ -626,17 +773,104 @@ export class ErpAdapter implements IntegrationAdapter {
 				query
 			);
 		}
+		if (object === 'customers') return buildMappingView(this.customersBase(object), await this.customerRows(holdingId), query);
 		throw new NotFoundException('Mapeo no encontrado');
+	}
+
+	private customersBase(object: string) {
+		return { object, object_label: 'Clientes', anchor: 'sapira' as const, external_available: true, external_error: null };
+	}
+
+	/**
+	 * Razón social en Sapira → cliente del ERP (`client_entities.odoo_partner_id`, el mismo vínculo de "Vincular con el ERP" de la Razón
+	 * social 360). Sin vínculo la factura no se envía. El nombre del cliente del ERP y la sugerencia salen de `odoo_partners_stg`.
+	 */
+	private async customerRows(holdingId: string): Promise<MappingRow[]> {
+		const entities = (await this.dataSource.query(CUSTOMERS_SQL, [holdingId])) as Row[];
+
+		return entities.map((entity) => {
+			const partnerId = entity.odoo_partner_id === null || entity.odoo_partner_id === undefined ? null : String(entity.odoo_partner_id);
+			const candidates = Number(entity.suggestion_count) || 0;
+			const suggestion: Ref | null =
+				!partnerId && candidates === 1
+					? {
+							id: String(entity.suggestion_id),
+							label: String(entity.suggestion_name ?? `Cliente del ERP #${entity.suggestion_id}`),
+							meta: { vat: entity.suggestion_vat ?? null, match: 'tax_id' },
+						}
+					: null;
+
+			return {
+				key: String(entity.id),
+				sapira: {
+					id: String(entity.id),
+					label: String(entity.legal_name ?? ''),
+					meta: { tax_id: entity.tax_id ?? null, country: entity.country ?? null, client_name: entity.client_name ?? null },
+				},
+				external: partnerId
+					? {
+							id: partnerId,
+							label: String(entity.partner_name ?? `Cliente del ERP #${partnerId}`),
+							meta: { vat: entity.partner_vat ?? null },
+						}
+					: null,
+				status: partnerId ? 'mapped' : suggestion ? 'suggested' : 'unmapped',
+				suggestion,
+				usage: {
+					invoices_pending: Number(entity.invoices_pending) || 0,
+					invoices: Number(entity.invoices) || 0,
+					contracts: Number(entity.contracts) || 0,
+				},
+				meta: { candidates: partnerId ? null : candidates },
+			};
+		});
+	}
+
+	/** Clientes del ERP para el selector: los de `odoo_partners_stg` y, si se busca, también los que encuentra el ERP (RUT o nombre). */
+	private async customerOptions(holdingId: string, search?: string) {
+		const rows = (await this.dataSource.query(
+			`SELECT s.odoo_id, COALESCE(s.raw_data->>'name', s.raw_data->>'display_name') AS name, s.raw_data->>'vat' AS vat
+			FROM odoo_partners_stg s WHERE s.holding_id = $1 AND COALESCE(s.raw_data->>'active', 'true') <> 'false' ORDER BY 2`,
+			[holdingId]
+		)) as Row[];
+		const refs = new Map<string, Ref>(
+			rows.map((row) => [
+				String(row.odoo_id),
+				{ id: String(row.odoo_id), label: String(row.name ?? `Cliente del ERP #${row.odoo_id}`), meta: { vat: row.vat ?? null } },
+			])
+		);
+		const needle = search?.trim();
+		const byVat = needle ? normalizeText(needle).replace(/\s+/g, '') : '';
+		const local = [...refs.values()].filter(
+			(ref) =>
+				!needle ||
+				filterRefs([ref], needle).length > 0 ||
+				(byVat.length >= 5 && normalizeText(ref.meta.vat).replace(/\s+/g, '').includes(byVat))
+		);
+
+		if (!needle) return { data: local, available: true, error: null };
+		const remote = await this.entityErp.searchForNew(holdingId, needle);
+		const found = remote.candidates
+			.filter((candidate) => !refs.has(String(candidate.odoo_partner_id)))
+			.map((candidate) => ({
+				id: String(candidate.odoo_partner_id),
+				label: String(candidate.name ?? `Cliente del ERP #${candidate.odoo_partner_id}`),
+				meta: { vat: candidate.tax_id ?? null, linked_entity: candidate.linked_entity ?? null },
+			}));
+
+		return { data: [...local, ...found], available: true, error: remote.blockers[0]?.message ?? null };
 	}
 
 	async mappingOptions(holdingId: string, object: string, side: 'sapira' | 'external', search?: string) {
 		if (object === 'fields') return this.fields.erpOptions(holdingId, search);
+		if (object === 'customers' && side === 'external') return this.customerOptions(holdingId, search);
 		if (side === 'sapira') {
-			const table = object === 'companies' ? 'companies' : object === 'products' ? 'products' : null;
+			const table =
+				object === 'companies' ? 'companies' : object === 'products' ? 'products' : object === 'customers' ? 'client_entities' : null;
 
 			if (!table) throw new NotFoundException('Mapeo no encontrado');
 			const rows = (await this.dataSource.query(
-				`SELECT id, ${table === 'companies' ? 'legal_name' : 'name'} AS label FROM ${table} WHERE holding_id = $1 ORDER BY 2`,
+				`SELECT id, ${table === 'products' ? 'name' : 'legal_name'} AS label FROM ${table} WHERE holding_id = $1 ORDER BY 2`,
 				[holdingId]
 			)) as Row[];
 
@@ -661,7 +895,7 @@ export class ErpAdapter implements IntegrationAdapter {
 		return { data: filterRefs(refs, search), available: !error, error };
 	}
 
-	private async assertOwned(holdingId: string, table: 'companies' | 'products', ids: string[]) {
+	private async assertOwned(holdingId: string, table: 'companies' | 'products' | 'client_entities', ids: string[]) {
 		const rows = (await this.dataSource.query(`SELECT id::text AS id FROM ${table} WHERE holding_id = $1 AND id::text = ANY($2::text[])`, [
 			holdingId,
 			ids,
@@ -681,6 +915,7 @@ export class ErpAdapter implements IntegrationAdapter {
 
 		if (badExternal.length)
 			throw validationException(badExternal.map((entry) => ({ field: `items.${entry.index}.external_id`, message: 'Id del ERP inválido' })));
+		if (object === 'customers') return this.linkCustomers(holdingId, items);
 		if (object === 'companies') {
 			await this.assertOwned(
 				holdingId,
@@ -730,8 +965,56 @@ export class ErpAdapter implements IntegrationAdapter {
 		throw new NotFoundException('Mapeo no encontrado');
 	}
 
+	/**
+	 * Vincula razones sociales con clientes del ERP reutilizando `ClientEntityErpService.link` (las validaciones de la Razón social 360:
+	 * la razón social es del holding, el cliente existe y está activo en el ERP, ninguna otra razón social lo usa). Vincula una por una;
+	 * las que fallan vuelven como `items.<i>.external_id` (400) y las demás quedan vinculadas.
+	 */
+	private async linkCustomers(holdingId: string, items: MappingItem[]): Promise<void> {
+		await this.assertOwned(
+			holdingId,
+			'client_entities',
+			items.map((item) => item.sapira_id)
+		);
+		const seen = new Map<string, number>();
+		const duplicated = items.flatMap((item, index) => {
+			const first = seen.get(item.external_id);
+
+			seen.set(item.external_id, first ?? index);
+
+			return first === undefined ? [] : [{ field: `items.${index}.external_id`, message: 'Ese cliente del ERP ya va en otra fila' }];
+		});
+
+		if (duplicated.length) throw validationException(duplicated);
+		const errors: Array<{ field: string; message: string }> = [];
+
+		for (const [index, item] of items.entries()) {
+			try {
+				await this.entityErp.link(holdingId, item.sapira_id, Number(item.external_id));
+			} catch (error) {
+				errors.push({ field: `items.${index}.external_id`, message: errorText(error) });
+			}
+		}
+		if (errors.length) throw validationException(errors);
+	}
+
 	async deleteMapping(holdingId: string, object: string, sapiraId: string, externalId: string, confirm: boolean): Promise<void> {
 		if (object === 'fields') return this.fields.erpDelete(holdingId, sapiraId);
+		if (object === 'customers') {
+			const row = (await this.customerRows(holdingId)).find((item) => item.sapira?.id === sapiraId && item.external?.id === externalId);
+
+			if (!row) throw new NotFoundException('Mapeo no encontrado');
+			const impact: ImpactErrors = [];
+
+			if ((row.usage?.invoices_pending ?? 0) > 0)
+				impact.push({ field: 'invoices_pending', message: `${row.usage?.invoices_pending} facturas por enviar dejan de enviarse al ERP` });
+			if ((row.usage?.contracts ?? 0) > 0)
+				impact.push({ field: 'contracts', message: `${row.usage?.contracts} contratos activos facturan a esta razón social` });
+			if (impact.length && !confirm) throw new ConflictException({ message: 'Quitar este vínculo bloquea el envío al ERP', errors: impact });
+			await this.entityErp.unlink(holdingId, sapiraId);
+
+			return;
+		}
 		if (object !== 'companies' && object !== 'products') throw new NotFoundException('Mapeo no encontrado');
 		const view = await this.getMapping(holdingId, object, {}).catch(() => null);
 		const row = view?.data.find((item) => item.sapira?.id === sapiraId && item.external?.id === externalId);
@@ -788,15 +1071,17 @@ export class ErpAdapter implements IntegrationAdapter {
 		}
 	}
 
-	async pendingMapping(holdingId: string): Promise<number> {
+	async pendingMapping(holdingId: string, notApplicable: Record<string, string[]> = {}): Promise<number> {
 		const [row] = (await this.dataSource.query(
 			`SELECT
 				(SELECT count(DISTINCT ci.product_id) FROM contract_items ci JOIN contracts ct ON ct.id = ci.contract_id
-					WHERE ct.holding_id = $1 AND ct.status = 'Activo' AND ci.product_id IS NOT NULL
+					WHERE ct.holding_id = $1 AND ct.status = 'Activo' AND ci.product_id IS NOT NULL AND ci.product_id::text <> ALL($2::text[])
 						AND NOT EXISTS (SELECT 1 FROM odoo_product_mappings m WHERE m.holding_id = $1 AND m.sapira_product_id = ci.product_id))
 				+ (SELECT count(DISTINCT i.company_id) FROM invoices i JOIN companies c ON c.id = i.company_id
-					WHERE ${PENDING_SEND_SQL} AND c.odoo_integration_id IS NULL) AS pending`,
-			[holdingId]
+					WHERE ${PENDING_SEND_SQL} AND c.odoo_integration_id IS NULL AND c.id::text <> ALL($3::text[]))
+				+ (SELECT count(DISTINCT i.client_entity_id) FROM invoices i JOIN client_entities ce ON ce.id = i.client_entity_id
+					WHERE ${PENDING_SEND_SQL} AND ce.odoo_partner_id IS NULL AND ce.id::text <> ALL($4::text[])) AS pending`,
+			[holdingId, notApplicable.products ?? [], notApplicable.companies ?? [], notApplicable.customers ?? []]
 		)) as Row[];
 
 		return Number(row?.pending) || 0;

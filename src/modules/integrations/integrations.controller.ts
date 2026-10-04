@@ -34,6 +34,7 @@ import {
 	DiscardRecordsDto,
 	ErpConnectionDto,
 	ImportRecordsDto,
+	MappingKeysDto,
 	MappingOptionsQueryDto,
 	MappingQueryDto,
 	PutMappingDto,
@@ -199,17 +200,27 @@ export class IntegrationsController {
 
 	@Get(':tipo/runs')
 	runs(@HoldingId() holdingId: string, @Param('tipo') tipo: string, @Query() query: RunsQueryDto) {
-		return this.service.adapter(tipo).listRuns(holdingId, query);
+		return this.service.listRuns(holdingId, tipo, query);
 	}
 
 	@Get(':tipo/runs/:id')
 	run(@HoldingId() holdingId: string, @Param('tipo') tipo: string, @Param('id') id: string) {
-		return this.service.adapter(tipo).getRun(holdingId, id);
+		return this.service.getRun(holdingId, tipo, id);
 	}
 
 	@Get(':tipo/records')
 	records(@HoldingId() holdingId: string, @Param('tipo') tipo: string, @Query() query: RecordsQueryDto) {
 		return this.service.records(holdingId, tipo, query);
+	}
+
+	@Get(':tipo/records/:object/:recordKey/changes')
+	recordChanges(
+		@HoldingId() holdingId: string,
+		@Param('tipo') tipo: string,
+		@Param('object') object: string,
+		@Param('recordKey') recordKey: string
+	) {
+		return this.service.recordChanges(holdingId, tipo, object, recordKey);
 	}
 
 	@Post(':tipo/records/import')
@@ -309,6 +320,36 @@ export class IntegrationsController {
 		@Req() req: IntegrationsRequest
 	) {
 		return this.service.acceptSuggestions(holdingId, tipo, objeto, body?.keys, this.actor(req));
+	}
+
+	@Post(':tipo/mappings/:objeto/not-applicable')
+	@HttpCode(200)
+	@RequirePermission(EDIT)
+	async markNotApplicable(
+		@HoldingId() holdingId: string,
+		@Param('tipo') tipo: string,
+		@Param('objeto') objeto: string,
+		@Body() body: MappingKeysDto,
+		@Req() req: IntegrationsRequest
+	) {
+		if (objeto === 'fields') await this.service.assertFieldsEditor(holdingId, req.permissionContext);
+
+		return this.service.markNotApplicable(holdingId, tipo, objeto, body.keys, this.actor(req));
+	}
+
+	@Post(':tipo/mappings/:objeto/restore')
+	@HttpCode(200)
+	@RequirePermission(EDIT)
+	async restoreNotApplicable(
+		@HoldingId() holdingId: string,
+		@Param('tipo') tipo: string,
+		@Param('objeto') objeto: string,
+		@Body() body: MappingKeysDto,
+		@Req() req: IntegrationsRequest
+	) {
+		if (objeto === 'fields') await this.service.assertFieldsEditor(holdingId, req.permissionContext);
+
+		return this.service.restoreNotApplicable(holdingId, tipo, objeto, body.keys, this.actor(req));
 	}
 
 	@Delete(':tipo/mappings/:objeto')

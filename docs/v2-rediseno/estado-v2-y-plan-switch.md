@@ -29,8 +29,10 @@
 | **Ingresos** (ex Revenue) | Construido; Asientos sirve pero hay que afinarlo | Resumen, movimiento de saldos, reconocimiento futuro, detalle mensual con movimientos, asientos por cuenta con "Abrir por" dimensión, excepciones | [`spec-revenue-y-metricas.md`](./spec-revenue-y-metricas.md) |
 | **Métricas** | Construido | KPI, movimientos de MRR, retención, cohortes, renovaciones, bajas, bookings | [`spec-revenue-y-metricas.md`](./spec-revenue-y-metricas.md) |
 | **Precios** | Primera versión; falta una segunda vuelta | Modelos de precio v2 (+ pestaña Productos de Configuración) | [`spec-pricing-v2.md`](./spec-pricing-v2.md) |
-| **Configuración** | Construido y en producción (03-10; api v0.0.79–83, front v0.1.55–56). **Sin commit** (rama `domi`): gestión de usuarios con correos propios y Centro de ayuda. Pendientes en §3 y §4 | Árbol del holding; Holding 360 (resumen con usuarios y última actividad, monedas y tipo de cambio con tasas fijas y detalle de sincronización, catálogos en tarjetas con chips, vendedores, campos personalizados con lista/sí-no/fecha, comunicaciones con dominios y remitentes, preferencias: avisos de renovación internos, numeración de cotizaciones, zona horaria); Compañía 360 (documentos tributarios con impuesto, cierre de períodos que solo bloquea contratos e ítems, 5 cuentas contables, cuentas bancarias, documentos legales); usuarios y roles con matriz de permisos (Editar incluye Ver; roles por defecto no editables; Finanzas con acceso); Productos en Precios; país ISO en compañías y clientes; impuesto por documento tributario en toda la facturación; el documento solo cambia con la razón social; horizonte de ítems sin término fijo de 12 meses rodante. **Usuarios (sin commit):** invitar, reenviar, desactivar/reactivar (bloquea la cuenta en Auth si no le quedan holdings), eliminar solo invitaciones que nunca entraron; correos propios por Resend desde `noreply@aisapira.com` con plantillas versionadas en api-sapira (invitación y recuperar contraseña); `/auth/confirm` + `/bienvenida`; pantalla sin acceso; redirección abierta del callback corregida; migraciones M15 (`user_access_events`) y M16 (cierra el hueco crítico de `user_holdings`) **sin aplicar** | [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) · [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) · [`revision-seguridad-api.md`](./revision-seguridad-api.md) |
-| **Centro de ayuda** (`/ayuda`) | Construido, **sin commit** (03-10) | Reemplaza la vista técnica `/documentacion`. Publica Primeros pasos y Contratos; Clientes, Cotizaciones, Facturación, Ingresos y Métricas los escribe otra sesión. Hoy exige `VIEW_DOCUMENTACION`; al switch se abre a todos. Objetivo: dar de baja HelpKit y Notion | `front-sapira/docs/documentacion-funcional/` |
+| **Configuración** | Construido y en producción (03-10; api v0.0.79–83, front v0.1.55–56). Gestión de usuarios con correos propios commiteada y migrada (M15, M16). Pendientes en §3 y §4 | Árbol del holding; Holding 360 (resumen con usuarios y última actividad, monedas y tipo de cambio con tasas fijas y detalle de sincronización, catálogos en tarjetas con chips, vendedores, campos personalizados con lista/sí-no/fecha, comunicaciones con dominios y remitentes, preferencias: avisos de renovación internos, numeración de cotizaciones, zona horaria); Compañía 360 (documentos tributarios con impuesto, cierre de períodos que solo bloquea contratos e ítems, 5 cuentas contables, cuentas bancarias, documentos legales); usuarios y roles con matriz de permisos (Editar incluye Ver; roles por defecto no editables; Finanzas con acceso); Productos en Precios; país ISO en compañías y clientes; impuesto por documento tributario en toda la facturación; el documento solo cambia con la razón social; horizonte de ítems sin término fijo de 12 meses rodante. **Usuarios:** invitar, reenviar, desactivar/reactivar (bloquea la cuenta en Auth si no le quedan holdings), eliminar solo invitaciones que nunca entraron; correos propios por Resend desde `noreply@aisapira.com` con plantillas versionadas en api-sapira (invitación y recuperar contraseña); `/auth/confirm` + `/bienvenida`; pantalla sin acceso; redirección abierta del callback corregida; migraciones M15 (`user_access_events`) y M16 (cierra el hueco crítico de `user_holdings`) aplicadas; SII como pestaña de Compañía 360 (solo Chile) | [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) · [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) · [`revision-seguridad-api.md`](./revision-seguridad-api.md) |
+| **Notificaciones** | Cerrado (03-10) | Centro con Tareas (resumen por gravedad), Alertas (filtros, archivar, vista rápida con Qué pasó / Qué hacer) y Preferencias (Mis compañías, correo con 15 min de espera, resumen semanal); campana; menciones y referencias en notas del Cliente 360; Tareas pendientes en el Dashboard | [`spec-notificaciones-v2.md`](./spec-notificaciones-v2.md) · [`contrato-api-notificaciones.md`](./contrato-api-notificaciones.md) |
+| **Integraciones** | Primera versión cerrada (03-10) | Conectadas y En camino; 360 por integración: Estado (importados, con error, por revisar / actualizar, listos; nuevos vs cambios a existentes con diferencias; descartar; reglas de exclusión; errores que se repiten), Mapeos por origen (sugerencias, Sin uso, No aplica, campos, vendedores, clientes del ERP), Configuración (conexión enmascarada, cuentas de Stripe, reglas), Historial (resultados claros, reporte del ERP). Falta: claves de API de Sapira | [`spec-integraciones-v2.md`](./spec-integraciones-v2.md) · [`contrato-api-integraciones.md`](./contrato-api-integraciones.md) |
+| **Centro de ayuda** (`/ayuda`) | Construido y commiteado (03-10; front v0.1.60): todos los módulos, Novedades e Integraciones | Reemplaza la vista técnica `/documentacion`. Publica Primeros pasos y Contratos; Clientes, Cotizaciones, Facturación, Ingresos y Métricas los escribe otra sesión. Hoy exige `VIEW_DOCUMENTACION`; al switch se abre a todos. Objetivo: dar de baja HelpKit y Notion | `front-sapira/docs/documentacion-funcional/` |
 
 Convenciones de pantalla que valen para todos (referencia: lista de Contratos):
 
@@ -47,28 +49,35 @@ Convenciones de pantalla que valen para todos (referencia: lista de Contratos):
 
 En el orden conversado con Domi (actualizado 03-10):
 
-1. **Commit de usuarios + Centro de ayuda** (hoy sin commit en `domi`), con M15 y M16 por el flujo de la GUIA
-   (QA → producción, OK de Domi).
-2. **Configuración externa y prueba con alias en Hanka** (Domi/Leon):
-   - Supabase Auth, producción y QA: Redirect URLs `https://aisapira.com/auth/confirm`,
-     `https://qa.aisapira.com/auth/confirm` y `http://localhost:8081/auth/confirm`; Site URL `https://aisapira.com`;
-     Email OTP Expiration 86400; registro libre apagado.
-   - Variables de la API: `INVITE_LANDING_URL`, `INVITE_FROM`, `RESEND_API_KEY`; `INVITE_TEST_ALLOWLIST` solo en QA.
-   - Ojo: `www.aisapira.com` no responde (TLS); el dominio que se usa es `aisapira.com`.
-3. **Notificaciones**: página completa, tareas pendientes, alertas, resumen semanal; textos claros con la solución.
-4. **Integraciones** (interfaz): mapeos de producto (ya existe el formulario compartido
-   `front-sapira/app/(protected)/lab/integraciones/_shared/ProductMappingForm.tsx`), conexiones, panel de
-   vendedores, presupuestos (las tablas `budgets` / `budget_lines` ya existen). Lo toman Domi y Claude con foco en
-   la interfaz; la integración misma se revisa al final con Leon. Spec: [`spec-integraciones-v2.md`](./spec-integraciones-v2.md);
-   API (03-10, migración sin aplicar): [`contrato-api-integraciones.md`](./contrato-api-integraciones.md).
-5. **Automatizaciones** (agentes, Leon): catálogo de acciones y configuración por cliente y en lote
+Hecho al 03-10 (rama `domi`, migraciones aplicadas en QA y producción):
+
+- **Usuarios e invitaciones + Centro de ayuda** (api v0.0.86 aprox., front v0.1.57/0.1.60): M15 y M16 aplicadas.
+- **Notificaciones v2** (api v0.0.87–0.0.93, front v0.1.59–0.1.61): fases 1 y 2, cerrado.
+- **Integraciones v2, primera versión** (api v0.0.94–, front v0.1.62–): lista + 360 por integración (ERP, CRM,
+  Stripe, almacén de datos) con Estado, Mapeos, Configuración e Historial; rutas `/integrations/*` seguras; migración
+  IntegrationsV2. Spec [`spec-integraciones-v2.md`](./spec-integraciones-v2.md) · contrato
+  [`contrato-api-integraciones.md`](./contrato-api-integraciones.md) · lógica para Leon en
+  [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md) §14 · nota de merge de su rama
+  [`nota-leon-actualizar-rama-03-10.md`](./nota-leon-actualizar-rama-03-10.md).
+- **Mi perfil y menú de usuario** (en producción): avatares, contraseña, cerrar sesiones; SII como pestaña de Compañía
+  360 (Chile). Contrato [`contrato-api-mi-perfil.md`](./contrato-api-mi-perfil.md).
+
+Lo que sigue:
+
+1. **Configuración externa** (Domi/Leon): variables de correo de la API (`INVITE_LANDING_URL`, `INVITE_FROM`,
+   `RESEND_API_KEY`; `INVITE_TEST_ALLOWLIST` solo en QA) y despliegue de la API; "Secure password change" en Supabase
+   (producción y QA); Skew Protection en Vercel; prueba de invitación con alias en Hanka. `www.aisapira.com` no
+   responde (TLS): se usa `aisapira.com`.
+2. **Cierre de Integraciones**: claves de API de Sapira (Configuración › Desarrolladores, con revisión de Leon) y
+   documentación pública de la API. Merge de la rama `leon` con `qa` según la nota.
+3. **Automatizaciones** (agentes, Leon): catálogo de acciones y configuración por cliente y en lote
    ([`spec-agentes-ia.md`](./spec-agentes-ia.md)). Hoy los agentes del lab son demostración de diseño.
-6. **Precios**: segunda vuelta.
-7. **Reglas de reconocimiento de ingresos** (Domi, después de terminar los módulos): granularidad diaria/mensual por
+4. **Precios**: segunda vuelta.
+5. **Reglas de reconocimiento de ingresos** (Domi, después de terminar los módulos): granularidad diaria/mensual por
    compañía, no recurrentes, variables al cierre, cierre automático ([`spec-configuracion-v2.md`](./spec-configuracion-v2.md) §14 B).
-8. **Onboarding y datos históricos**: relacionar MRR histórico, crear contrato desde MRR histórico, importar
+6. **Onboarding y datos históricos**: relacionar MRR histórico, crear contrato desde MRR histórico, importar
    facturas (el botón "próximamente" de Facturación es el recordatorio).
-9. **Switch** (§5).
+7. **Switch** (§5).
 
 En paralelo, sin fecha en la secuencia:
 
@@ -84,7 +93,6 @@ En paralelo, sin fecha en la secuencia:
   - índices únicos: vendedor por correo, código de producto, cuenta bancaria;
   - archivos huérfanos en storage;
   - mapeo de condiciones de pago del CRM (Leon);
-  - SII dentro de la Compañía 360 (Leon).
 
 ## 4. Pendientes por decisión (no son olvidos)
 
@@ -106,6 +114,7 @@ En paralelo, sin fecha en la secuencia:
 | Bloqueo de producto sin mapeo en el envío al ERP | Cambia lo que hace hoy el envío automático (antes mandaba un producto por defecto): validar con Leon antes de desplegar | Leon + Domi |
 | Gestión de usuarios: invitaciones pendientes de SimpliRoute | Hay 4 invitaciones pendientes: hablarlo con el cliente antes del switch | Domi |
 | Retiro del flujo de usuarios del front actual | Al switch: revocar EXECUTE de `invite_user_safe`, `update_user_role_safe`, `delete_current_user` y `delete_user_complete`; borrar las edge functions `send-invitation` y `delete-user` (no rotar el secreto de Resend hasta migrar `send-proforma` y `send-collection`); eliminar el trigger `sync_user_on_login` (costura) y pasar a la API "Pendiente → Activo + last_access" | Domi |
+| Centro de ayuda y menú al switch | Dar `VIEW_DOCUMENTACION` a todos los roles (todos ven `/ayuda`) y retirar el enlace interino a `help.aisapira.com` del sidebar; retirar `/admin/empresas-sii` del sidebar (vive en Compañía 360 › Facturación electrónica); borrar la página vieja del reporte de integración del ERP (vive en Integraciones › ERP › Historial) | Domi |
 | Datos de Configuración a revisar antes del switch | 2 compañías de Lenosoft con impuesto 0.19 (decimal); países sin calce con ISO; industrias duplicadas inglés/español en SimpliRoute; usuario con `auth_id` huérfano en Hanka y cuenta auth huérfana de Lenosoft. Solo lectura hasta decidir | Domi |
 
 El resto de pendientes de integración está en [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md).
@@ -122,6 +131,17 @@ El resto de pendientes de integración está en [`cambios-integracion-para-leon.
    - Números de cotización duplicados anteriores al índice único.
    - El Dashboard suma el MRR histórico sin el corte y lo cuenta dos veces.
    - Datos de la demo (Hanka) con cabecera de factura distinta de sus líneas.
+   - 28 cotizaciones del CRM de SimpliRoute en "Enviada" que ya tienen contrato: la importación del CRM les devolvió la etapa
+     (antes de las cotizaciones protegidas, 03-10). No se reparan sin OK de Domi. Para listarlas (solo lectura):
+     ```sql
+     SELECT q.quote_number, q.salesforce_opportunity_id, s.name AS etapa, min(c.created_at) AS contrato_desde
+     FROM quotes q JOIN quote_stages s ON s.id = q.quote_stage_id
+     JOIN contracts c ON c.deleted_at IS NULL AND (c.quote_id = q.id OR EXISTS (SELECT 1 FROM contract_items ci
+       JOIN quote_items qi ON qi.id = ci.quote_item_id WHERE ci.contract_id = c.id AND qi.quote_id = q.id))
+     WHERE q.holding_id = '5652e95e-bb99-48f5-aa1c-13c8c2638fc6' AND q.salesforce_opportunity_id IS NOT NULL
+       AND q.deleted_at IS NULL AND s.kind = 'sent'
+     GROUP BY 1, 2, 3 ORDER BY 1;
+     ```
 3. **Rebuild completo del devengo por holding.** El devengo guardado es de fechas mezcladas (cada contrato se
    recalcula solo cuando algo lo toca) y las reglas aprobadas en v2 solo están aplicadas en los contratos
    recalculados desde entonces. Va primero en QA, con comparación antes/después por holding y mes para que Domi

@@ -30,6 +30,8 @@ import {
 	ImportStarted,
 	IntegrationRun,
 	IntegrationRunDetail,
+	INTERRUPTED_MESSAGE,
+	isInterruptedJob,
 	MappingItem,
 	MappingRow,
 	MappingStatus,
@@ -38,8 +40,10 @@ import {
 	paginateArray,
 	Paginated,
 	parseRunId,
+	RecordHistoryOptions,
 	RecordSource,
 	Ref,
+	RunOccurrence,
 	RunRecord,
 	RunsQuery,
 	runStatusOf,
@@ -47,6 +51,7 @@ import {
 	ScheduleInfo,
 	secretInfo,
 	sortRunsDesc,
+	stagingChangeKindSql,
 	stagingStatusSql,
 	suggestRef,
 	SyncStarted,
@@ -60,6 +65,38 @@ const LOCK_WINDOW_MS = 2 * 60 * 60 * 1000;
 const RUNS_WINDOW = 300;
 const STRIPE_API_VERSION = '2026-01-28.clover';
 const ENTITY_LABELS: Record<string, string> = { customers: 'Clientes', subscriptions: 'Suscripciones', invoices: 'Invoices' };
+
+/** Un lote de ingesta por objeto (`record_key` = el objeto: el error se repite "en la ingesta de clientes"). */
+function ingestRecord(log: StripeIntegrationLog): RunRecord {
+	const entity = String((log.metadata as Row | undefined)?.entity_type ?? log.target_table);
+
+	return {
+		object: entity,
+		record_key: entity,
+		label: `${ENTITY_LABELS[entity] ?? entity}: ${log.records_success ?? 0} de ${log.records_processed ?? 0}`,
+		sapira_id: null,
+		external_id: null,
+		status: (log.records_failed ?? 0) > 0 || log.status === 'failed' ? 'error' : 'ok',
+		message: log.error_details ? JSON.stringify(log.error_details).slice(0, 500) : null,
+	};
+}
+
+/** `errors` es `string[]` (mensajes de la corrida) en `StripeSyncService`; se aceptan también objetos por registro. */
+function importErrorRecords(row: Row): RunRecord[] {
+	return ((Array.isArray(row.errors) ? row.errors : []) as Array<Row | string>).map((error) =>
+		typeof error === 'string'
+			? { object: 'registro', record_key: null, label: 'Importación', sapira_id: null, external_id: null, status: 'error', message: error }
+			: {
+					object: String(error.entity ?? error.type ?? 'registro'),
+					record_key: (error.stripe_id as string) ?? (error.id as string) ?? null,
+					label: String(error.id ?? error.stripe_id ?? error.entity ?? 'Registro'),
+					sapira_id: null,
+					external_id: (error.stripe_id as string) ?? (error.id as string) ?? null,
+					status: 'error',
+					message: String(error.error ?? error.message ?? 'Error sin detalle'),
+				}
+	);
+}
 
 export interface StripeConnectionInput {
 	name: string;
@@ -301,6 +338,10 @@ export class StripeAdapter implements IntegrationAdapter {
 				? Math.max(...items.map((item) => new Date(item.completed_at as Date).getTime()))
 				: null;
 			const connectionId = items.find((item) => item.connection_id)?.connection_id ?? null;
+			const running = items.some((item) => item.status === 'running');
+			// Los logs no guardan el entorno: solo el lease (una ingesta "en curso" de más de LOCK_WINDOW_MS quedó huérfana).
+			const interrupted =
+				running && isInterruptedJob({ startedAt: Number.isFinite(started) ? new Date(started) : null }, { leaseMs: LOCK_WINDOW_MS });
 
 			return {
 				id: `stripe-ingest:${batch}`,
@@ -309,7 +350,8 @@ export class StripeAdapter implements IntegrationAdapter {
 				kind_label: 'Ingesta a revisión',
 				trigger: items.some((item) => item.user_id) ? 'manual' : 'automatic',
 				status: runStatusOf({
-					running: items.some((item) => item.status === 'running'),
+					running,
+					interrupted,
 					failed: items.every((item) => item.status === 'failed' || item.status === 'error'),
 					cancelled: items.some((item) => item.status === 'cancelled'),
 					ok,
@@ -319,7 +361,7 @@ export class StripeAdapter implements IntegrationAdapter {
 				finished_at: finished ? new Date(finished) : null,
 				duration_ms: finished && Number.isFinite(started) ? finished - started : null,
 				totals: runTotals({ ok, errors, unchanged: 0, total: items.reduce((sum, item) => sum + (item.records_processed ?? 0), 0) }),
-				error: null,
+				error: interrupted ? INTERRUPTED_MESSAGE : null,
 				metrics: {
 					account_id: connectionId,
 					account_name: connectionId ? (accounts.get(connectionId) ?? null) : null,
@@ -343,6 +385,7 @@ export class StripeAdapter implements IntegrationAdapter {
 		// Errores por registro (`stats.*.errors` + inválidos) y, si la corrida cayó entera, sus mensajes en `errors[]`.
 		const errors = Math.max(sum('errors') + sum('invalid'), Array.isArray(row.errors) ? (row.errors as unknown[]).length : 0);
 		const skipped = sum('skipped');
+		const interrupted = row.status === 'running' && isInterruptedJob({ startedAt: row.created_at as Date }, { leaseMs: LOCK_WINDOW_MS });
 
 		return {
 			id: `stripe-import:${row.id}`,
@@ -350,12 +393,12 @@ export class StripeAdapter implements IntegrationAdapter {
 			kind: 'stripe_import',
 			kind_label: 'Importación a Sapira',
 			trigger: 'manual',
-			status: runStatusOf({ running: row.status === 'running', failed: row.status === 'failed', ok, unchanged: skipped, errors }),
+			status: runStatusOf({ running: row.status === 'running', interrupted, failed: row.status === 'failed', ok, unchanged: skipped, errors }),
 			started_at: (row.created_at as Date) ?? null,
 			finished_at: (row.completed_at as Date) ?? null,
 			duration_ms: durationMs(row.created_at as Date, row.completed_at as Date),
 			totals: runTotals({ ok, errors, unchanged: skipped }),
-			error: (row.error_message as string) ?? null,
+			error: interrupted ? INTERRUPTED_MESSAGE : ((row.error_message as string) ?? null),
 			metrics: { progress: (row.progress as Row | null)?.overallProgress ?? null },
 		};
 	}
@@ -393,18 +436,7 @@ export class StripeAdapter implements IntegrationAdapter {
 
 			if (logs.length) {
 				const [run] = this.ingestRuns(logs, await this.accountNames(holdingId));
-				const records: RunRecord[] = logs.map((log) => {
-					const entity = String((log.metadata as Row | undefined)?.entity_type ?? log.target_table);
-
-					return {
-						object: entity,
-						label: `${ENTITY_LABELS[entity] ?? entity}: ${log.records_success ?? 0} de ${log.records_processed ?? 0}`,
-						sapira_id: null,
-						external_id: null,
-						status: (log.records_failed ?? 0) > 0 || log.status === 'failed' ? 'error' : 'ok',
-						message: log.error_details ? JSON.stringify(log.error_details).slice(0, 500) : null,
-					};
-				});
+				const records: RunRecord[] = logs.map((log) => ingestRecord(log));
 
 				return { ...run, records, errors_summary: errorsSummary(records) };
 			}
@@ -417,18 +449,7 @@ export class StripeAdapter implements IntegrationAdapter {
 
 			if (row) {
 				// `errors` es `string[]` (mensajes de la corrida) en `StripeSyncService`; se aceptan también objetos por registro.
-				const records: RunRecord[] = ((Array.isArray(row.errors) ? row.errors : []) as Array<Row | string>).map((error) =>
-					typeof error === 'string'
-						? { object: 'registro', label: 'Importación', sapira_id: null, external_id: null, status: 'error', message: error }
-						: {
-								object: String(error.entity ?? error.type ?? 'registro'),
-								label: String(error.id ?? error.stripe_id ?? error.entity ?? 'Registro'),
-								sapira_id: null,
-								external_id: (error.stripe_id as string) ?? (error.id as string) ?? null,
-								status: 'error',
-								message: String(error.error ?? error.message ?? 'Error sin detalle'),
-							}
-				);
+				const records: RunRecord[] = importErrorRecords(row);
 				// Registros que quedaron con error o inválidos en esta corrida (la tabla intermedia guarda el motivo).
 				const failed = (await this.dataSource.query(
 					`SELECT 'customer' AS object, stripe_id, processing_status, COALESCE(error_message, integration_notes) AS message FROM stripe_customers_stg
@@ -444,6 +465,7 @@ export class StripeAdapter implements IntegrationAdapter {
 				records.push(
 					...failed.map((item) => ({
 						object: String(item.object),
+						record_key: String(item.stripe_id),
 						label: String(item.stripe_id),
 						sapira_id: null,
 						external_id: String(item.stripe_id),
@@ -458,29 +480,99 @@ export class StripeAdapter implements IntegrationAdapter {
 		throw new NotFoundException('Corrida no encontrada');
 	}
 
+	/**
+	 * Ingestas (un registro por objeto de cada lote, Mongo) y errores de las importaciones (`stripe_sync_jobs.errors`), una lectura cada una.
+	 * Los registros con error de la tabla intermedia son estado actual (no por corrida) y no entran.
+	 */
+	async recordHistory(holdingId: string, options: RecordHistoryOptions): Promise<RunOccurrence[]> {
+		const until = options.until ?? new Date();
+		const keys = options.keys ? new Set(options.keys) : null;
+		const [logs, jobs] = await Promise.all([
+			this.logs
+				.find({ holding_id: holdingId, started_at: { $gte: options.since, $lte: until } })
+				.lean()
+				.exec() as Promise<StripeIntegrationLog[]>,
+			this.dataSource.query(
+				`SELECT id, created_at, errors FROM stripe_sync_jobs WHERE holding_id = $1 AND created_at BETWEEN $2 AND $3 AND (CASE WHEN jsonb_typeof(errors) = 'array' THEN jsonb_array_length(errors) ELSE 0 END) > 0`,
+				[holdingId, options.since, until]
+			) as Promise<Row[]>,
+		]);
+		const occurrences: RunOccurrence[] = [
+			...logs.map((log) => ({
+				run_id: `stripe-ingest:${String((log.metadata as Row | undefined)?.batch_id ?? log.batch_uuid)}`,
+				kind: 'stripe_ingest',
+				at: log.started_at ?? null,
+				...ingestRecord(log),
+			})),
+			...jobs.flatMap((row) =>
+				importErrorRecords(row).map((record) => ({
+					run_id: `stripe-import:${row.id}`,
+					kind: 'stripe_import',
+					at: (row.created_at as Date) ?? null,
+					...record,
+				}))
+			),
+		].map((item) => ({
+			run_id: item.run_id,
+			kind: item.kind,
+			at: item.at,
+			object: item.object,
+			record_key: item.record_key ?? null,
+			status: item.status,
+			message: item.message,
+		}));
+
+		return occurrences.filter((item) => (!options.errorsOnly || item.status === 'error') && (!keys || keys.has(item.record_key ?? '')));
+	}
+
 	// ── Registros ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 	recordSources(): RecordSource[] {
-		const source = (object: string, label: string, table: string, name: string): RecordSource => ({
+		/** `link`: LATERAL que trae `sid` / `slabel` del registro creado en Sapira ("En Sapira" legible, no el uuid). */
+		const source = (object: string, label: string, table: string, name: string, link: string): RecordSource => ({
 			object,
 			label,
 			table,
 			direction: 'import',
 			importable: true,
 			importByIds: false,
+			hasChangeKind: true,
+			hasSapiraLabel: true,
 			hasAccount: true,
-			sql: `SELECT s.stripe_id AS record_key, COALESCE(${name}, s.stripe_id) AS label, NULL::text AS sapira_id, s.stripe_id AS external_id,
-					${stagingStatusSql('s.processing_status')} AS status,
+			sql: `SELECT s.stripe_id AS record_key, COALESCE(${name}, s.stripe_id) AS label, l.sid AS sapira_id, l.slabel AS sapira_label,
+					s.stripe_id AS external_id,
+					${stagingStatusSql('s.processing_status')} AS status, ${stagingChangeKindSql('s.processing_status')} AS change_kind,
 					COALESCE(s.error_message, s.integration_notes) AS message, COALESCE(s.last_integrated_at, s.updated_at) AS last_sync_at,
 					to_jsonb(s.*) AS rule_row, s.connection_id::text AS account_id, c.name AS account_name
 				FROM ${table} s LEFT JOIN stripe_connections c ON c.id = s.connection_id
+				LEFT JOIN LATERAL (${link}) l ON true
 				WHERE s.holding_id = $1`,
 		});
 
 		return [
-			source('customer', 'Cliente', 'stripe_customers_stg', `COALESCE(s.raw_data->>'name', s.raw_data->>'email')`),
-			source('subscription', 'Suscripción', 'stripe_subscriptions_stg', `NULLIF(concat_ws(' · ', s.stripe_id, s.raw_data->>'status'), '')`),
-			source('invoice', 'Invoice', 'stripe_invoices_stg', `NULLIF(concat_ws(' · ', s.raw_data->>'number', s.raw_data->>'customer_name'), '')`),
+			source(
+				'customer',
+				'Cliente',
+				'stripe_customers_stg',
+				`COALESCE(s.raw_data->>'name', s.raw_data->>'email')`,
+				`SELECT k.id::text AS sid, k.name_commercial AS slabel FROM clients k WHERE k.holding_id = s.holding_id AND k.stripe_customer_id = s.stripe_id LIMIT 1`
+			),
+			source(
+				'subscription',
+				'Suscripción',
+				'stripe_subscriptions_stg',
+				`NULLIF(concat_ws(' · ', s.stripe_id, s.raw_data->>'status'), '')`,
+				`SELECT k.id::text AS sid, concat_ws(' · ', 'Suscripción', COALESCE(k.client_name_commercial, k.legal_client_name)) AS slabel
+					FROM subscriptions k WHERE k.holding_id = s.holding_id AND k.external_id = s.stripe_id LIMIT 1`
+			),
+			source(
+				'invoice',
+				'Invoice',
+				'stripe_invoices_stg',
+				`NULLIF(concat_ws(' · ', s.raw_data->>'number', s.raw_data->>'customer_name'), '')`,
+				`SELECT k.id::text AS sid, NULLIF(concat_ws(' · ', k.invoice_number, cl.name_commercial), '') AS slabel
+					FROM invoices k LEFT JOIN clients cl ON cl.id = k.client_id WHERE k.holding_id = s.holding_id AND k.stripe_id = s.stripe_id LIMIT 1`
+			),
 		];
 	}
 
@@ -686,7 +778,7 @@ export class StripeAdapter implements IntegrationAdapter {
 	}
 
 	/** Productos de Stripe usados en lo traído sin producto de Sapira (lo mismo que "Sin mapear" del mapeo, sin llamar a Stripe). */
-	async pendingMapping(holdingId: string): Promise<number> {
+	async pendingMapping(holdingId: string, notApplicable: Record<string, string[]> = {}): Promise<number> {
 		if (!(await this.all(holdingId)).length) return 0;
 		const [used, mappings] = await Promise.all([
 			this.usedProducts(holdingId),
@@ -696,7 +788,9 @@ export class StripeAdapter implements IntegrationAdapter {
 		]);
 		const mapped = new Set(mappings.map((row) => String(row.stripe_product_id)));
 
-		return used.filter((row) => !mapped.has(String(row.id))).length;
+		const skipped = new Set(notApplicable.products ?? []);
+
+		return used.filter((row) => !mapped.has(String(row.id)) && !skipped.has(String(row.id))).length;
 	}
 
 	schedule(): ScheduleInfo {
