@@ -1221,7 +1221,7 @@
  "app_notification_recipients": {
   "name": "public.app_notification_recipients",
   "rls_enabled": true,
-  "rows": 126,
+  "rows": 310,
   "columns": [
    {
     "name": "id",
