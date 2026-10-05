@@ -1,327 +1,135 @@
-# Módulo de Agentes - Sistema de Automatizaciones
+# Módulo de agentes (Automatizaciones)
 
-Este módulo implementa el sistema de automatizaciones para agentes de cobranza y proforma en NestJS.
+Automatiza dos envíos de correo por holding:
 
-## 📋 Descripción
+- **Proforma**: antes de emitir una factura que exige referencia (OC/HES), pide la referencia al contacto de tipo "Proforma"
+  del cliente.
+- **Cobranza**: recuerda facturas por vencer o vencidas al contacto de tipo "Cobranza", con niveles de recordatorio.
 
-El módulo de agentes permite automatizar el envío de emails para:
+Los correos salen por el módulo `emails` (SendGrid). Pantallas: `front-sapira` → `/lab/automatizaciones` (en laboratorio), la
+pestaña "Automatizaciones" del cliente y la lista de clientes; `front-sapira-vite` → `/automatizaciones` mientras conviven.
 
--   **Proforma**: Solicitud de referencias/órdenes de compra antes de emitir facturas
--   **Cobranza**: Recordatorios de pago para facturas vencidas con sistema de buckets
+Últimos cambios: [`docs/cambios/automatizaciones-permisos-y-envios.md`](../../../docs/cambios/automatizaciones-permisos-y-envios.md)
+y [`docs/cambios/automatizaciones-scheduler-y-tenancy.md`](../../../docs/cambios/automatizaciones-scheduler-y-tenancy.md).
 
-**Integración de emails**: Utiliza el módulo `emails` que envía correos electrónicos a través de **SendGrid**.
-
-## 🏗️ Arquitectura
-
-### Estructura de Archivos
+## Estructura
 
 ```
 agents/
-├── dtos/                           # Data Transfer Objects
-│   ├── approve-run.dto.ts
-│   ├── client-config.dto.ts
-│   ├── render-email.dto.ts
-│   └── run-agent.dto.ts
-├── interfaces/                     # Interfaces TypeScript
-│   ├── agent.interface.ts
-│   ├── email-sender.interface.ts
-│   └── run-response.interface.ts
-├── processors/                     # Procesadores de lógica de negocio
-│   ├── proforma.processor.ts
-│   └── collections.processor.ts
-├── helpers/                        # Utilidades
-│   └── template.helper.ts
-├── agents.controller.ts            # Controlador REST
-├── agents.service.ts               # Servicio principal
-├── agents.provider.ts              # Providers
-├── agents.module.ts                # Módulo NestJS
-└── README.md
+├── agents.controller.ts     # REST, guards de holding y permisos
+├── agents.service.ts        # ejecución, aprobación, configuración, lecturas
+├── agents.scheduler.ts      # cron cada minuto: ejecuta los agentes con auto_execute
+├── dtos/                    # class-validator (holding_id solo como campo deprecado del front viejo)
+├── helpers/
+│   ├── agent-config.helper.ts   # configuración efectiva por cliente y remitente efectivo
+│   └── template.helper.ts       # {{variable}}, moneda es-CL, días de atraso
+├── interfaces/
+└── processors/              # proforma y cobranza
 ```
 
-## 🔌 Endpoints API
-
-### 1. Ejecutar Agente
-
-```http
-POST /agents/:agentId/run
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "mode": "preview" | "execute"
-}
-```
-
-**Respuesta:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "run_id": "uuid",
-    "status": "queued",
-    "stats": {
-      "messages_created": 5,
-      "clients_processed": 3,
-      "clients_skipped": 1,
-      "errors": 0
-    },
-    "messages": [...]
-  }
-}
-```
-
-### 2. Aprobar Ejecución
-
-```http
-POST /agents/runs/:runId/approve
-Authorization: Bearer <token>
-```
-
-### 3. Obtener Configuración de Cliente
-
-```http
-GET /agents/client-configs/:clientId/:agentType
-Authorization: Bearer <token>
-```
-
-### 4. Actualizar Configuración de Cliente
-
-```http
-PUT /agents/client-configs/:clientId/:agentType
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "is_enabled": true,
-  "config_json": {
-    "days_before_issue": 15,
-    "email_sender_address_id": "uuid"
-  }
-}
-```
-
-### 5. Listar Configuraciones
-
-```http
-GET /agents/client-configs?agent_type=collections
-Authorization: Bearer <token>
-```
-
-### 6. Renderizar Email (Preview)
-
-```http
-POST /agents/render-email
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "agent_type": "proforma",
-  "template": "Estimado {{contact_name}}...",
-  "variables": {
-    "contact_name": "Juan Pérez"
-  }
-}
-```
-
-## 🔧 Componentes Principales
-
-### AgentsService
-
-Servicio principal que coordina la ejecución de agentes y gestiona configuraciones.
-
-**Métodos principales:**
-
--   `runAgent()` - Ejecuta un agente en modo preview o execute
--   `approveRun()` - Aprueba y envía mensajes de un run
--   `getClientConfig()` - Obtiene configuración personalizada por cliente
--   `updateClientConfig()` - Actualiza configuración de cliente
--   `listClientConfigs()` - Lista todas las configuraciones
--   `renderEmail()` - Renderiza plantilla de email
-
-### ProformaProcessor
-
-Procesa facturas que requieren referencias antes de emisión.
-
-**Lógica:**
-
-1. Busca facturas con `status = 'Por Emitir'` y `requires_references_for_billing = true`
-2. Filtra por rango de días configurado (`days_before_issue`)
-3. Verifica configuración por cliente (habilitado/deshabilitado)
-4. Genera mensajes para contactos del cliente
-5. Crea registros en `reference_requests`
-
-### CollectionsProcessor
-
-Procesa facturas vencidas con sistema de buckets.
-
-**Lógica:**
-
-1. Busca facturas con `status = 'Emitida'` y vencidas
-2. Clasifica en buckets según días de vencimiento:
-    - Bucket 1: 30+ días (configurable)
-    - Bucket 2: 60+ días (configurable)
-3. Verifica frecuencia de envío por bucket
-4. Genera tabla HTML con facturas vencidas
-5. Envía recordatorios según bucket
-
-## 🎨 Sistema de Plantillas
-
-Las plantillas usan sintaxis de variables con doble llave:
-
-```html
-<p>Estimado/a {{contact_name}},</p>
-<p>{{client_name}} tiene {{invoice_count}} facturas pendientes.</p>
-{{invoices_table}}
-```
-
-**Variables disponibles:**
-
-**Proforma:**
-
--   `client_name`
--   `contact_name`
--   `invoice_number`
--   `formatted_date`
-
-**Cobranza:**
-
--   `client_name`
--   `contact_name`
--   `invoice_count`
--   `total_amount`
--   `invoices_table` (HTML generado)
-
-## ⚙️ Configuración
-
-### Configuración Global (ai_agent_configs)
-
-```json
-{
-	"days_before_issue": 10,
-	"require_approval": true,
-	"email_subject_template": "Solicitud de referencia - {{client_name}}",
-	"email_body_template": "<p>...</p>"
-}
-```
-
-### Configuración por Cliente (client_agent_configs)
-
-```json
-{
-	"is_enabled": true,
-	"config_json": {
-		"days_before_issue": 15,
-		"email_sender_address_id": "uuid",
-		"custom_email_subject": "URGENTE: Referencia requerida",
-		"custom_email_body": "<p>...</p>"
-	}
-}
-```
-
-**Prioridad:** Configuración de cliente > Configuración global
-
-## 🔐 Autenticación
-
-Todos los endpoints requieren autenticación con Supabase JWT:
-
-```http
-Authorization: Bearer <supabase_jwt_token>
-```
-
-El `holding_id` se extrae automáticamente del token del usuario.
-
-## 📊 Base de Datos
-
-### Tablas Principales
-
-**ai_agents**
-
--   Definición de agentes (proforma, collections)
-
-**ai_agent_configs**
-
--   Configuración global por agente
-
-**ai_runs**
-
--   Ejecuciones de agentes
-
-**ai_messages**
-
--   Mensajes generados/enviados
-
-**client_agent_configs**
-
--   Configuración personalizada por cliente
-
-**reference_requests**
-
--   Solicitudes de referencias (proforma)
-
-## 🚀 Uso
-
-### Ejemplo: Ejecutar agente de proforma
-
-```typescript
-// Preview (sin enviar)
-const preview = await fetch('/agents/uuid/run', {
-	method: 'POST',
-	headers: {
-		Authorization: 'Bearer <token>',
-		'Content-Type': 'application/json',
-	},
-	body: JSON.stringify({ mode: 'preview' }),
-});
-
-// Ejecutar y enviar
-const execute = await fetch('/agents/uuid/run', {
-	method: 'POST',
-	headers: {
-		Authorization: 'Bearer <token>',
-		'Content-Type': 'application/json',
-	},
-	body: JSON.stringify({ mode: 'execute' }),
-});
-```
-
-### Ejemplo: Configurar cliente
-
-```typescript
-// Deshabilitar agente para un cliente
-await fetch('/agents/client-configs/client-uuid/collections', {
-	method: 'PUT',
-	headers: {
-		Authorization: 'Bearer <token>',
-		'Content-Type': 'application/json',
-	},
-	body: JSON.stringify({
-		is_enabled: false,
-	}),
-});
-```
-
-## 📝 Notas Importantes
-
-1. **Modo Preview**: No envía emails ni crea registros, solo genera vista previa
-2. **Modo Execute**: Crea registros y envía emails (si no requiere aprobación)
-3. **Frecuencia**: El sistema verifica frecuencia de envío para evitar spam
-4. **Configuración por Cliente**: Permite personalizar comportamiento por cliente
-5. **Email Sender**: Cada cliente puede tener su propio remitente configurado
-
-## 🔍 Testing
-
-Para probar el módulo:
+## Autorización
+
+`@UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)`. El holding sale de `x-holding-id` (400 sin
+header, 403 si el usuario no pertenece o si body/query traen otro). Cada consulta filtra por holding; un registro ajeno es 404.
+
+| Acción | Permiso |
+|---|---|
+| Leer (agentes, ejecuciones, mensajes, configuraciones, remitentes, resumen, render de plantilla) | `VIEW_AGENTES_IA` |
+| Ejecutar, aprobar, descartar, guardar programación o configuración, volver a la global | `EDIT_AGENTES_IA` |
+
+## Endpoints
+
+Todas las respuestas son `{ success: true, data }`.
+
+| Método y ruta | `data` |
+|---|---|
+| `GET /agents` | `[{ id, type, name, is_enabled, schedule, auto_execute, require_approval, created_at, updated_at }]` |
+| `PUT /agents/:agentId/config` — `{ schedule?, auto_execute?, require_approval? }` | fila de `ai_agents` |
+| `POST /agents/:agentId/run` — `{ mode: 'preview' \| 'execute' }` | `{ run_id, status, stats, messages[] }` |
+| `GET /agents/runs?page&limit&agent_id&type&status` | `{ data: Run[], total, currentPage, pages, limit }` (limit ≤ 100) |
+| `GET /agents/runs/:runId` | `Run` + `approver_name`, `message_count` |
+| `GET /agents/runs/:runId/messages` | `[{ id, direction, channel, to, subject, body, meta_json, created_at }]` |
+| `POST /agents/runs/:runId/approve` | `{ run_id, status: 'sent' \| 'error', messages_sent, messages_error, total_messages }` |
+| `POST /agents/runs/:runId/cancel` | `{ id, status: 'cancelled' }` |
+| `GET /agents/holding-config?agent_type` | configuración global (`source: 'global'`) o `null` |
+| `POST /agents/holding-config` — `{ agent_type, is_enabled, config_json }` | configuración global |
+| `GET /agents/client-config?client_id&agent_type` | la propia (`source: 'client'`), la global con `client_id`/`client_name`, o `null` |
+| `POST /agents/client-config` — `{ client_id, agent_type, is_enabled, config_json }` | configuración propia (upsert) |
+| `GET` / `PUT /agents/client-configs/:client_id/:agent_type` | igual que los dos anteriores |
+| `DELETE /agents/client-configs/:client_id/:agent_type` | 204 (vuelve a la global); 404 si no había propia |
+| `GET /agents/client-configs?agent_type` | configuraciones propias del holding, por nombre de cliente |
+| `GET /agents/client-configs/summary` | `{ proforma: { total, enabled }, collections: { total, enabled }, client_ids }` |
+| `GET /agents/email-senders` | remitentes activos del holding |
+| `POST /agents/render-email` — `{ agent_type, template, variables }` | `{ rendered_html, rendered_text }` |
+
+`Run` = `{ id, agent_id, agent_name, agent_type, status, started_at, ended_at, stats_json, error_message, approver_user_id, created_at }`.
+
+## Ciclo de una ejecución
+
+| Disparo | Resultado |
+|---|---|
+| `mode = 'preview'` | genera sin guardar mensajes; el run queda `cancelled` con `stats_json.mode = 'preview'` |
+| `mode = 'execute'` y `require_approval = true` | guarda los mensajes en `ai_messages`; run `queued` |
+| `mode = 'execute'` y `require_approval = false` | envía en el acto; run `sent` |
+| `approve` sobre un `queued` | `approved` (atómico, guarda `approver_user_id`) → envía → `sent`, o `error` si no salió ninguno. 409 si no está `queued` o no tiene mensajes |
+| `cancel` sobre un `queued` | `cancelled`; sus mensajes no cuentan para la frecuencia de cobranza. 409 si no está `queued` |
+
+El scheduler ejecuta cada minuto, en modo `execute`, los agentes con `is_enabled AND auto_execute AND schedule` cuyo cron
+coincide con la hora del servidor.
+
+## Configuración
+
+Hay dos niveles de encendido: el **agente** (`ai_agents.is_enabled`, sin él no se ejecuta) y la **configuración**
+(`client_agent_configs`), por cliente o global (`client_id IS NULL`).
+
+Para cada cliente se usa su fila propia. Si no tiene, se usa la global, y si tampoco existe, el cliente se omite. Si la fila
+que toca está deshabilitada, también se omite. Ver `resolveEffectiveConfig`.
+
+| Tipo | `config_json` |
+|---|---|
+| Proforma | `days_before_issue` (propia → global → `ai_agent_configs` → 10), `frequency_hours` (solo global), `custom_email_subject`, `custom_email_body`, `email_sender_address_id` |
+| Cobranza | `reminder_levels: [{ level, days_before_due?, days_overdue, frequency_hours, is_enabled?, custom_subject?, custom_body? }]`, `email_sender_address_id`. Sin niveles se usan 30 y 60 días cada 168 h |
+
+**Cobranza**:
+- Toma facturas `Emitida`/`Vencida`.
+- Una factura entra en un nivel si está a `days_before_due` o menos de vencer, o si su atraso es `days_overdue` o más.
+- Se envía **un correo por cliente** con el nivel más alto, al primer contacto "Cobranza".
+- No se repite el nivel antes de `frequency_hours`.
+
+**Proforma**:
+- Toma facturas `Por Emitir` con `requires_references_for_billing` y fecha dentro de `days_before_issue`.
+- No repite facturas que ya tienen `reference_requests`.
+- En `execute` registra la solicitud (`OC`, `requested`).
+
+**Remitente**: el `email_sender_address_id` de la configuración, si es del holding y está activo. Si no, el remitente activo
+del dominio por defecto del holding; en último caso, `noreply@sapira.cl` (`resolveEmailSender`).
+
+**Plantillas**: `{{variable}}`. Variables de proforma:
+- `client_name`, `contact_name`
+- `invoice_number`, `formatted_date`
+- `contract_number`, `holding_name`
+
+Variables de cobranza:
+- `client_name`, `contact_name`, `holding_name`
+- `invoice_count`, `total_amount`, `invoices_table`
+- `invoice_number`, `amount`, `due_date`, `days_overdue`
+
+## Tablas
+
+`ai_agents` (uno por tipo y holding, creados por el trigger `create_standard_agents_for_holding`), `ai_agent_configs`
+(configuración del agente, clave/valor), `ai_runs`, `ai_messages`, `client_agent_configs`, `email_sender_addresses`,
+`holding_email_sender_settings`, `reference_requests`. Entities en `src/databases/postgresql/entities/automatizaciones-ia/`.
+
+## Pruebas
 
 ```bash
-# Ejecutar tests unitarios
-yarn test agents
-
-# Ejecutar tests e2e
-yarn test:e2e agents
+yarn test src/modules/agents
 ```
 
-## 📚 Referencias
-
--   Documento de arquitectura: `ANALISIS_Y_PROPUESTA_REDISENO.md`
--   Configuración API: `docs/api-nestjs/API_CONFIGURATION_README.md`
+| Spec | Qué cubre |
+|---|---|
+| `agents.controller.spec.ts` | Tenancy (400/403/404), permisos VIEW/EDIT y validación |
+| `agents.service.spec.ts` | Ejecución, aprobación, descarte, tenencia por cliente, paginación y resumen |
+| `agents.scheduler.spec.ts` | Coincidencia del cron y aislamiento de fallos |
+| `processors/*.spec.ts` | Ventana de días por cliente, `reference_requests.holding_id`, remitente, niveles y frecuencia |
+| `helpers/agent-config.helper.spec.ts` | Configuración efectiva y remitente efectivo |

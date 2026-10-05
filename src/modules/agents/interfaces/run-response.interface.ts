@@ -1,6 +1,6 @@
 export interface RunResponse {
 	run_id: string;
-	status: 'queued' | 'approved' | 'sent';
+	status: 'queued' | 'approved' | 'sent' | 'cancelled';
 	stats: {
 		messages_created: number;
 		clients_processed: number;
