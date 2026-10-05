@@ -30,6 +30,7 @@ export const CONSOLIDATION_BLOCKERS = {
 	legacy_invoice: 'legacy_invoice',
 	no_contract: 'no_contract',
 	partial_billing_invoice: 'partial_billing_invoice',
+	/** @deprecated desde el 05-10 ya no se emite: el consumo abierto no bloquea (re-copia al unificado). Se conserva el código estable. */
 	open_consumption: 'open_consumption',
 	sent_to_erp_draft: 'sent_to_erp_draft',
 	single_contract: 'single_contract',
@@ -316,13 +317,9 @@ export function invoiceBlockers(invoice: ConsolidationInvoice): InvoiceBlocker[]
 			next_step: null,
 		});
 	}
-	if (invoice.open_lines > 0) {
-		blockers.push({
-			code: CONSOLIDATION_BLOCKERS.open_consumption,
-			message: `La factura ${name} tiene ${invoice.open_lines} ${invoice.open_lines === 1 ? 'línea' : 'líneas'} por consumo sin cerrar: el consumo recalcularía la factura de origen, no el consolidado`,
-			next_step: 'Registra el consumo del período antes de consolidar',
-		});
-	}
+	// Consumo abierto (`open_lines`, líneas pending/estimated) ya no bloquea (Domi 05-10): registrar o corregir un consumo de un origen
+	// recalcula el origen y re-copia sus líneas al unificado mientras siga Por Emitir (`ContractInvoiceConsolidationService.resyncFromOrigins`);
+	// emitido, el consumo va como complementaria o reemisión del unificado.
 	const erp = erpBlocker(invoice);
 
 	if (erp) blockers.push(erp);

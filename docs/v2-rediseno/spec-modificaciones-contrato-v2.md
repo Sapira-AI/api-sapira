@@ -436,6 +436,7 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 | Intención (texto en la UI) | Pregunta guía | Tipo API |
 |---|---|---|
 | Cambió el precio o la cantidad de un producto | ¿Qué producto? ¿Valores nuevos? | `item_change` |
+| Cambiar el modelo de precio (Domi 05-10) | ¿Qué producto? ¿Modelo nuevo (tramos, volumen, paquete, asiento o por consumo)? | `price_model_change` (9.3.11) |
 | Cambió cada cuánto se factura o el plazo | ¿Frecuencia / plazo nuevo? ¿Desde cuándo? | `item_change` con `billing_frequency`/`term_months` (9.3.7) |
 | Agregó un producto (incl. otra moneda o desde una cotización) | ¿Qué producto y para qué cuenta? (¿mismo ciclo del contrato o su propio día?) | `item_add` (+ `enable_multicurrency`) |
 | Corregir un dato mal cargado (F4, reemplaza "Cambia la cuenta de un producto") | ¿Qué producto? ¿Qué dato estaba mal? | `item_update` (ver 9.2.1) |
@@ -561,6 +562,32 @@ address?, email?, payment_terms? }`. Con `new_entity`, en la misma transacción:
 al cliente → la usa (aviso `entity_already_exists`); existe ligada a otro cliente → blocker `entity_belongs_to_other_client` (cambiar de cliente está
 fuera); no existe → `INSERT client_entities` + `client_entity_clients` (`is_primary = false`). El resto es el `change_entity` construido. Evento
 `ENTITY_CHANGED` con `metadata.entity_created`.
+
+**9.3.11 Cambiar el modelo de precio (`price_model_change`, Domi 05-10; construido, sin commit)**. Objetivo: que el holding pase un ítem de precio ×
+cantidad a tramos (u otro modelo) sin soporte. Body `{ items: [{ item_id, price: PriceSpecDto, quantity?, discount_value? }] }` (un ítem; `price`
+= el mismo del asistente: `standard | graduated | volume | package | seat`, cantidad fija o `metered` con métrica activa, tramos, gratis, mínimo,
+tope, `invoice_line_mode`; estándar fijo viaja con `unit_amount`). Estados: Activo y Por renovar. Mismo patrón que 9.3.7:
+- **Corte**: el ítem (y sus ajustes UPSELL/DOWNSELL vivos) termina el día antes del **próximo inicio de período desde la fecha efectiva** (aviso
+  `price_model_from_next_period` si no coincide) y nace un **RENEWAL** (`renews_item_id`) con un **precio propio del contrato nuevo**:
+  `prices.version` = la del anterior + 1 y `supersedes_price_id` = el anterior (el ítem original conserva su precio: lo ya facturado y los
+  períodos antes del corte no cambian).
+- **Por Emitir** desde el corte: se quitan las líneas del ítem y sus ajustes y el generador crea las del modelo nuevo (fusión F3; una fila por
+  tramo en `per_tier`). Los **consumos** registrados desde el corte pasan al RENEWAL (`move_consumption`) y esos períodos se tarifan con la
+  cantidad registrada. Con modelo nuevo de cantidad fija y correcciones de cantidad desde el corte: bloqueo `quantity_corrections_after_cut`.
+  Emitidas después del corte → `issued_after_effective_date`. Líneas editadas a mano se reemplazan (aviso `manual_edit_replaced`).
+- **MRR** = el nuevo monto base del plan: el modelo nuevo tarifado a la **cantidad base** (`quantity` del pedido o la del ítem) y mensualizado
+  (`pricedMonthlyEquivalent`, con el descuento %). Con tramos es el precio por tramos de esa cantidad (no el consumo de un mes): p. ej. 50
+  vehículos con tramos 1–40 a 35 y 41+ a 30 → 1.700. El RENEWAL guarda `renewal_base_unit_price` (mensual anterior ÷ cantidad del original) y el
+  RSM separa el delta como UPSELL/DOWNSELL (`apply_renewal_price_split`). Evento `UPSELL | DOWNSELL | RENEWAL` subtipo `price_model` con
+  `metadata.price_model { cut, model_before/after, quantity_type_before/after, base_quantity, monthly_before/after, supersedes_price_id,
+  consumption_periods }`. Descuento en monto fijo del ítem: no aplica a un modelo de precio (aviso `fixed_discount_dropped`).
+- **Devengo**: sigue lo facturado en los períodos con consumo (regla D2-c del rebuild, `spec-pricing-v2.md` §4.5); sin consumo, el plan.
+- Corrección de paso (05-10): `recompute_header` ya no cancela una Por Emitir que se quedó sin sus líneas viejas si recibe líneas del generador en el
+  mismo cambio (antes, el cambio de frecuencia 9.3.7 que reemplazaba todas las filas del período la dejaba `Cancelada`).
+- Front: intención **"Cambiar el modelo de precio"** en Modificar contrato (`ModeloPrecioForm`: producto, cantidad base, descuento y el editor
+  de precio del asistente con su vista previa en vivo `POST /contracts/price-preview`; luego vista previa y aplicar como cualquier cambio).
+- Verificación en la copia local (`rebuild-devengo-comparacion.md` §11.4): ítem por consumo de SimpliRoute → tramos → consumo → Por Emitir por
+  tramo y devengo = facturado.
 
 ### 9.4 Migración del bloque (una, `1790710000000-ContractModificationsBlock2`; entity a mano, commit antes de aplicar, `schema:status` + `schema:log` en QA)
 

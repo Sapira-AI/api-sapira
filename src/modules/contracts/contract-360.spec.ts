@@ -605,7 +605,49 @@ describe('buildConsumption', () => {
 		...overrides,
 	});
 
-	it('cruza consumos con la línea del período (gana la vigente), marca ítems medidos, períodos y pendientes; las quantities viejas van como legacy', () => {
+	it('período consolidado (Domi 05-10): muestra la copia del unificado Por Emitir y acepta consumo (lo recalcula el origen)', () => {
+		const result = buildConsumption({
+			today: TODAY,
+			entries: [],
+			items: [items[0]],
+			lines: [
+				line({
+					line_id: 'l-orig',
+					contract_item_id: 'it-1',
+					invoice_id: 'orig',
+					is_active: false,
+					consolidated_pending: true,
+					quantity_source: 'pending',
+				}),
+				line({
+					line_id: 'l-u',
+					contract_item_id: 'it-1',
+					invoice_id: 'u-1',
+					invoice_number: null,
+					invoice_type: 'Unificada',
+					unified_v2: true,
+					quantity_source: 'pending',
+				}),
+			],
+		});
+
+		expect(result.items[0].periods).toHaveLength(1);
+		expect(result.items[0].periods[0]).toMatchObject({ accepts_consumption: true, invoice: { id: 'u-1', status: 'Por Emitir' } });
+		// Unificado emitido: no acepta recálculo (complementaria o reemisión sobre él).
+		const issued = buildConsumption({
+			today: TODAY,
+			entries: [],
+			items: [items[0]],
+			lines: [
+				line({ line_id: 'l-orig', contract_item_id: 'it-1', invoice_id: 'orig', is_active: false, quantity_source: 'pending' }),
+				line({ line_id: 'l-u', contract_item_id: 'it-1', invoice_id: 'u-1', invoice_type: 'Unificada', unified_v2: true, status: 'Emitida' }),
+			],
+		});
+
+		expect(issued.items[0].periods[0]).toMatchObject({ accepts_consumption: false, invoice: { id: 'u-1', status: 'Emitida' } });
+	});
+
+	it('cruza consumos con la línea del período (gana la vigente), marca ítems medidos, períodos y pendientes; solo lee consumption_entries', () => {
 		const result = buildConsumption({
 			today: TODAY,
 			entries: [
@@ -650,7 +692,6 @@ describe('buildConsumption', () => {
 					],
 				},
 			],
-			quantities: [{ id: 'q1', contract_item_id: 'it-2', period: '2026-07-15', quantity: 5, unit_price: 2, amount: null, account: 'Cuenta B' }],
 			items,
 			lines: [
 				// Septiembre: la Por Emitir recalculada gana sobre la anulada del mismo período.
@@ -700,8 +741,9 @@ describe('buildConsumption', () => {
 		expect(result.uses_usage_pricing).toBe(true);
 		expect(result.rows.map((row) => [row.kind, row.item_id, row.period, row.quantity, row.amount, row.invoice?.id ?? null])).toEqual([
 			['entry', 'it-1', '2026-09-01', 1250, 100, 'sep'],
-			['legacy', 'it-2', '2026-07-01', 5, 10, 'sup'],
 		]);
+		// Una sola fuente (05-10): sin filas `legacy`; los overrides del front anterior llegan como entries (migración 1791600000000).
+		expect(result.rows.some((row) => (row as { kind: string }).kind === 'legacy')).toBe(false);
 		expect(result.rows[0]).toMatchObject({
 			revision: 2,
 			revisions_count: 2,
@@ -718,9 +760,7 @@ describe('buildConsumption', () => {
 			[2, 1250, 'Domi'],
 			[1, 1200, null],
 		]);
-		expect(result.rows[1]).not.toHaveProperty('revisions');
 		expect(result.rows[0].pricing_breakdown).toEqual([{ kind: 'tier', quantity: 1250, amount: 100, label: 'Tramo 1 (1+)' }]);
-		expect(result.rows[1]).toMatchObject({ source: 'legacy', account: 'Cuenta B', unit_price: 2 });
 		expect(result.items.map((item) => [item.item_id, item.uses_usage_pricing, item.metric?.code ?? null, item.periods.length])).toEqual([
 			['it-1', true, 'rutas', 3],
 			['it-2', false, null, 1],
@@ -759,11 +799,10 @@ describe('buildConsumption', () => {
 		]);
 	});
 
-	it('ítem estándar con la factura del período Por Emitir: se lista con uses_usage_pricing false y accepts_consumption true; nunca entra en pendientes', () => {
+	it('ítem de cantidad fija: se lista con uses_usage_pricing false pero no acepta consumo (Domi 05-10: se corrige con Editar factura); nunca entra en pendientes', () => {
 		const result = buildConsumption({
 			today: TODAY,
 			entries: [],
-			quantities: [],
 			items: [items[1]],
 			lines: [
 				line({ line_id: 'l-std-oct', contract_item_id: 'it-2', invoice_id: 'std-oct', quantity: 1, quantity_source: 'fixed', subtotal: 100 }),
@@ -786,13 +825,13 @@ describe('buildConsumption', () => {
 		expect(result.items[0]).toMatchObject({ item_id: 'it-2', uses_usage_pricing: false, price: null, metric: null });
 		expect(result.items[0].periods.map((period) => [period.period_start, period.accepts_consumption, period.quantity_source])).toEqual([
 			['2026-09-01', false, 'fixed'],
-			['2026-10-01', true, 'fixed'],
+			['2026-10-01', false, 'fixed'],
 		]);
 		expect(result.pending).toEqual([]);
 	});
 
 	it('sin ítems medidos: uses_usage_pricing false y sin pendientes', () => {
-		const result = buildConsumption({ today: TODAY, entries: [], quantities: [], items: [items[1]], lines: [] });
+		const result = buildConsumption({ today: TODAY, entries: [], items: [items[1]], lines: [] });
 
 		expect(result).toEqual({
 			uses_usage_pricing: false,
@@ -1264,7 +1303,6 @@ describe('groupConsumptionLines (per_tier, §3.8) y complementarias (§4.4)', ()
 		const result = buildConsumption({
 			today: '2026-12-01',
 			entries: [entry],
-			quantities: [],
 			items,
 			lines: [
 				{
@@ -1298,7 +1336,6 @@ describe('groupConsumptionLines (per_tier, §3.8) y complementarias (§4.4)', ()
 		const plain = buildConsumption({
 			today: '2026-12-01',
 			entries: [{ ...entry, invoice_id: null }],
-			quantities: [],
 			items,
 			lines: [
 				{
