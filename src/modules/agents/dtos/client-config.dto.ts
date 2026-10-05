@@ -1,13 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsObject, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateClientAgentConfigDto {
-	@ApiProperty({
-		description: 'ID del holding',
-		example: 'uuid',
-	})
+	/**
+	 * Compatibilidad con el front actual, que todavía lo manda: el holding sale de `HoldingScopeGuard`,
+	 * que rechaza (403) un valor distinto al de `x-holding-id`. El servicio lo ignora.
+	 */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
+	@IsOptional()
 	@IsUUID()
-	holding_id!: string;
+	holding_id?: string;
 
 	@ApiProperty({
 		description: 'ID del cliente',
@@ -66,12 +68,14 @@ export class UpdateClientAgentConfigDto {
 }
 
 export class CreateHoldingAgentConfigDto {
-	@ApiProperty({
-		description: 'ID del holding',
-		example: 'uuid',
-	})
+	/**
+	 * Compatibilidad con el front actual, que todavía lo manda: el holding sale de `HoldingScopeGuard`,
+	 * que rechaza (403) un valor distinto al de `x-holding-id`. El servicio lo ignora.
+	 */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
+	@IsOptional()
 	@IsUUID()
-	holding_id!: string;
+	holding_id?: string;
 
 	@ApiProperty({
 		description: 'Tipo de agente',

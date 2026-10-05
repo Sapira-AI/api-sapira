@@ -3,8 +3,9 @@ import { DataSource } from 'typeorm';
 
 import { OdooConnectionError, OdooPartnersService } from '@/modules/odoo/odoo-partners.service';
 
-import type { ClientDirectoryService } from './client-directory.service';
 import { ClientEntityErpService, looksLikeTaxId } from './client-entity-erp.service';
+
+import type { ClientDirectoryService } from './client-directory.service';
 
 const ENTITY = { id: 'e-1', legal_name: 'Tompetrol SpA', tax_id: '76.397.190-2', odoo_partner_id: null };
 const candidate = (id: number, match: 'tax_id' | 'name' | null, name = 'Tompetrol SpA') => ({

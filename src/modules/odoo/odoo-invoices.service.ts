@@ -6,7 +6,7 @@ import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-en
 import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 
 import { CreateDraftInvoiceDTO } from './dtos/odoo.dto';
-import { CreateDraftInvoiceResult, OdooConnectionConfig } from './interfaces/odoo.interface';
+import { CreateDraftInvoiceResult, OdooConnectionConfig, OdooInvoiceSyncFields } from './interfaces/odoo.interface';
 import { OdooProvider } from './odoo.provider';
 import { TaxMappingService } from './services/tax-mapping.service';
 
@@ -705,6 +705,66 @@ export class OdooInvoicesService {
 	/**
 	 * Obtiene la configuración de conexión de Odoo por holding_id
 	 */
+	/**
+	 * Lee de Odoo los campos que Sapira sincroniza de una factura, por `id` de Odoo.
+	 *
+	 * Es la lectura que necesita el backfill: cuando el aviso de vuelta no llega, Odoo sigue siendo
+	 * la fuente de verdad y se le pregunta directo. Lee en lotes porque `read` con 154 ids en una
+	 * sola llamada XML-RPC es un payload grande y un timeout único para todo.
+	 *
+	 * Devuelve solo las que Odoo conoce: un id que no existe se omite en silencio, y el llamador
+	 * detecta el faltante comparando contra lo que pidió.
+	 */
+	async readInvoicesForSync(holdingId: string, odooInvoiceIds: number[]): Promise<OdooInvoiceSyncFields[]> {
+		if (odooInvoiceIds.length === 0) return [];
+
+		const TAMANO_LOTE = 100;
+		const connection = await this.getOdooConnectionByHoldingId(holdingId);
+
+		const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+
+		const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+		if (!uid) {
+			throw new Error('Falló la autenticación con Odoo');
+		}
+
+		const facturas: OdooInvoiceSyncFields[] = [];
+
+		for (let inicio = 0; inicio < odooInvoiceIds.length; inicio += TAMANO_LOTE) {
+			const lote = odooInvoiceIds.slice(inicio, inicio + TAMANO_LOTE);
+
+			const leidas = await objectClient.methodCall('execute_kw', [
+				connection.database_name,
+				uid,
+				connection.api_key,
+				'account.move',
+				'read',
+				[lote],
+				{
+					fields: [
+						'id',
+						'name',
+						'state',
+						'payment_state',
+						'amount_tax',
+						'amount_total',
+						'amount_untaxed',
+						'invoice_date',
+						'x_sapira_invoice_id',
+					],
+				},
+			]);
+
+			facturas.push(...((leidas as OdooInvoiceSyncFields[]) ?? []));
+		}
+
+		this.logger.log(`Leídas ${facturas.length} de ${odooInvoiceIds.length} facturas de Odoo para el holding ${holdingId}`);
+
+		return facturas;
+	}
+
 	private async getOdooConnectionByHoldingId(holdingId: string): Promise<OdooConnectionConfig> {
 		try {
 			const dbConnection = await this.odooConnectionRepository.findOne({

@@ -50,47 +50,32 @@ export class InvoiceSchedulerScheduler {
 
 		this.isRunning = true;
 		const startTime = Date.now();
-		let jobId: string | null = null;
 
 		try {
 			this.logger.log('🚀 Iniciando envío automático de facturas a Odoo...');
 			this.appLogger.log('🚀 Iniciando envío automático de facturas a Odoo', 'system', 'InvoiceScheduler');
 
-			jobId = await this.invoiceSchedulerService.createSystemSchedulerJob({
-				dryRun: false,
-			});
+			const holdingIds = await this.invoiceSchedulerService.getHoldingIdsWithPendingInvoices();
 
-			this.logger.log(`📝 Job del sistema creado: ${jobId}`);
+			if (holdingIds.length === 0) {
+				this.logger.log('✓ No hay holdings con facturas pendientes: no se crea ninguna corrida');
+				this.appLogger.log('✓ Envío automático sin holdings pendientes', 'system', 'InvoiceScheduler');
+				return;
+			}
 
-			const result = await this.invoiceSchedulerService.processInvoicesToSend({
-				dryRun: false,
-			});
+			this.logger.log(`📋 ${holdingIds.length} holding(s) con facturas pendientes`);
 
-			await this.invoiceSchedulerService.updateSchedulerJobResult(jobId, result);
+			for (const holdingId of holdingIds) {
+				await this.runForHolding(holdingId);
+			}
 
 			const executionTime = Date.now() - startTime;
-			this.logger.log(
-				`✓ Envío completado en ${(executionTime / 1000).toFixed(2)}s - ` +
-					`Total: ${result.summary.total}, Enviadas: ${result.summary.sent}, ` +
-					`Errores: ${result.summary.errors}, Omitidas: ${result.summary.skipped}`
-			);
+			this.logger.log(`✓ Envío completado en ${(executionTime / 1000).toFixed(2)}s para ${holdingIds.length} holding(s)`);
 			this.appLogger.log(`✓ Envío de facturas a Odoo completado en ${(executionTime / 1000).toFixed(2)}s`, 'system', 'InvoiceScheduler', {
-				jobId,
+				holdings: holdingIds.length,
 				executionTimeMs: executionTime,
 				executionTimeSeconds: (executionTime / 1000).toFixed(2),
-				total: result.summary.total,
-				sent: result.summary.sent,
-				errors: result.summary.errors,
-				skipped: result.summary.skipped,
 			});
-
-			if (result.summary.errors > 0) {
-				this.logger.warn(`⚠️ Se encontraron ${result.summary.errors} errores durante el envío`);
-				this.appLogger.warn(`⚠️ Se encontraron ${result.summary.errors} errores durante el envío de facturas`, 'system', 'InvoiceScheduler', {
-					jobId,
-					errorCount: result.summary.errors,
-				});
-			}
 		} catch (error) {
 			this.logger.error('✗ Error crítico en envío automático:', error);
 			this.appLogger.error(
@@ -99,12 +84,52 @@ export class InvoiceSchedulerScheduler {
 				error?.stack || error?.message,
 				'InvoiceScheduler'
 			);
+		} finally {
+			this.isRunning = false;
+		}
+	}
+
+	/**
+	 * Una corrida por holding, individualizada: su propio job, su propio progreso y su propio correo de
+	 * errores. El `try/catch` es por holding a propósito — antes un fallo mataba el envío de todos.
+	 */
+	private async runForHolding(holdingId: string): Promise<void> {
+		let jobId: string | null = null;
+
+		try {
+			jobId = await this.invoiceSchedulerService.createSystemSchedulerJob({ dryRun: false, holdingId });
+
+			this.logger.log(`📝 Job del sistema creado para el holding ${holdingId}: ${jobId}`);
+
+			const result = await this.invoiceSchedulerService.processInvoicesToSend({ dryRun: false, holdingId });
+
+			await this.invoiceSchedulerService.updateSchedulerJobResult(jobId, result);
+
+			this.logger.log(
+				`✓ Holding ${holdingId} - Total: ${result.summary.total}, Enviadas: ${result.summary.sent}, ` +
+					`Errores: ${result.summary.errors}, Omitidas: ${result.summary.skipped}`
+			);
+
+			if (result.summary.errors > 0) {
+				this.logger.warn(`⚠️ Holding ${holdingId}: ${result.summary.errors} errores durante el envío`);
+				this.appLogger.warn(`⚠️ Se encontraron ${result.summary.errors} errores durante el envío de facturas`, 'system', 'InvoiceScheduler', {
+					jobId,
+					holdingId,
+					errorCount: result.summary.errors,
+				});
+			}
+		} catch (error) {
+			this.logger.error(`✗ Error en el envío automático del holding ${holdingId}:`, error);
+			this.appLogger.error(
+				`✗ Error en el envío automático de facturas a Odoo del holding ${holdingId}`,
+				'system',
+				error?.stack || error?.message,
+				'InvoiceScheduler'
+			);
 
 			if (jobId) {
 				await this.invoiceSchedulerService.updateSchedulerJobError(jobId, error);
 			}
-		} finally {
-			this.isRunning = false;
 		}
 	}
 }

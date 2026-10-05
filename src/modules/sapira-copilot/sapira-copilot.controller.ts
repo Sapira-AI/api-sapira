@@ -1,7 +1,9 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
+import { HoldingId } from '@/decorators/holding-id.decorator';
+import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
 import { ChatMessageDto } from './dtos/chat-message.dto';
 import { CreateSessionDto, UpdateSessionDto } from './dtos/create-session.dto';
@@ -9,8 +11,9 @@ import { SapiraCopilotService } from './sapira-copilot.service';
 
 @ApiTags('Sapira Copilot')
 @Controller('sapira-copilot')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, HoldingScopeGuard)
 @ApiBearerAuth()
+@ApiHeader({ name: 'x-holding-id', required: true, description: 'Holding activo (validado contra user_holdings)' })
 export class SapiraCopilotController {
 	constructor(private readonly sapiraCopilotService: SapiraCopilotService) {}
 
@@ -28,14 +31,14 @@ export class SapiraCopilotController {
 		description: 'Error al comunicarse con el copilot',
 	})
 	@HttpCode(HttpStatus.OK)
-	async sendMessage(@Body() dto: ChatMessageDto) {
+	async sendMessage(@Body() dto: ChatMessageDto, @HoldingId() holdingId: string) {
 		const context = {
 			session_id: dto.session_id, // Por ahora no se usa
 			messages: dto.history || [],
 			context: dto.context, // Por ahora no se usa
 		};
 
-		const result = await this.sapiraCopilotService.sendMessage(dto.message, dto.holding_id, context);
+		const result = await this.sapiraCopilotService.sendMessage(dto.message, holdingId, context);
 
 		return {
 			success: true,
@@ -57,8 +60,8 @@ export class SapiraCopilotController {
 		description: 'Error al crear la sesión',
 	})
 	@HttpCode(HttpStatus.CREATED)
-	async createSession(@Body() dto: CreateSessionDto) {
-		const session = await this.sapiraCopilotService.createSession(dto.name, dto.holding_id, dto.description);
+	async createSession(@Body() dto: CreateSessionDto, @HoldingId() holdingId: string) {
+		const session = await this.sapiraCopilotService.createSession(dto.name, holdingId, dto.description);
 
 		return {
 			success: true,
@@ -76,11 +79,7 @@ export class SapiraCopilotController {
 		description: 'Sesiones obtenidas exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async listSessions(@Query('holding_id') holdingId: string) {
-		if (!holdingId) {
-			throw new BadRequestException('El parámetro holding_id es obligatorio.');
-		}
-
+	async listSessions(@HoldingId() holdingId: string) {
 		const sessions = await this.sapiraCopilotService.listSessions(holdingId);
 
 		return {
@@ -103,11 +102,7 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async getSession(@Param('sessionId') sessionId: string, @Query('holding_id') holdingId: string) {
-		if (!holdingId) {
-			throw new BadRequestException('El parámetro holding_id es obligatorio.');
-		}
-
+	async getSession(@Param('sessionId') sessionId: string, @HoldingId() holdingId: string) {
 		const session = await this.sapiraCopilotService.getSessionById(sessionId, holdingId);
 
 		return {
@@ -130,8 +125,8 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async updateSession(@Param('sessionId') sessionId: string, @Body() dto: UpdateSessionDto) {
-		const session = await this.sapiraCopilotService.updateSession(sessionId, dto, dto.holding_id);
+	async updateSession(@Param('sessionId') sessionId: string, @Body() dto: UpdateSessionDto, @HoldingId() holdingId: string) {
+		const session = await this.sapiraCopilotService.updateSession(sessionId, dto, holdingId);
 
 		return {
 			success: true,
@@ -153,11 +148,7 @@ export class SapiraCopilotController {
 		description: 'Sesión no encontrada',
 	})
 	@HttpCode(HttpStatus.OK)
-	async deleteSession(@Param('sessionId') sessionId: string, @Query('holding_id') holdingId: string) {
-		if (!holdingId) {
-			throw new BadRequestException('El parámetro holding_id es obligatorio.');
-		}
-
+	async deleteSession(@Param('sessionId') sessionId: string, @HoldingId() holdingId: string) {
 		await this.sapiraCopilotService.deleteSession(sessionId, holdingId);
 
 		return {
