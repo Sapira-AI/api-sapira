@@ -40,7 +40,10 @@ describe('SiiController (tenancy)', () => {
 			providers: [
 				{ provide: SiiService, useValue: sii },
 				HoldingScopeGuard,
-				{ provide: UserHoldingsService, useValue: { isActiveMember: jest.fn(async (_authId: string, holdingId: string) => holdingId === HOLDING) } },
+				{
+					provide: UserHoldingsService,
+					useValue: { isActiveMember: jest.fn(async (_authId: string, holdingId: string) => holdingId === HOLDING) },
+				},
 			],
 		})
 			.overrideGuard(SupabaseAuthGuard)

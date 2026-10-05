@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
-import { getCorsOrigins } from './core/config/cors-origins';
+import { corsOriginsFaltante, getCorsOrigins } from './core/config/cors-origins';
 import { swaggerConfig } from './core/config/site.config';
 import { GlobalExceptionFilter } from './core/filters/global-exception.filter';
 import { flattenValidationErrors, validationException } from './core/utils/validation-errors';
@@ -102,8 +102,16 @@ async function bootstrap() {
 	});
 
 	// Configuración específica de CORS
+	const corsOrigins = getCorsOrigins();
+
+	if (corsOriginsFaltante()) {
+		nestLogger.warn(
+			`CORS_ORIGINS no está definida: CORS cae a FRONT_BASE_URL (${corsOrigins.join(', ')}). Declarala en este entorno.`
+		);
+	}
+
 	app.enableCors({
-		origin: getCorsOrigins(),
+		origin: corsOrigins,
 		methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 		allowedHeaders: [
 			'Origin',

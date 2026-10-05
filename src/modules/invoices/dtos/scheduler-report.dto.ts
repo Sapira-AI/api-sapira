@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBooleanString, IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsISO8601, IsOptional, Max, Min } from 'class-validator';
 
 export class SchedulerReportQueryDto {
 	@ApiPropertyOptional({ example: '2026-08-01', description: 'Fecha inicial inclusiva (YYYY-MM-DD)' })
@@ -27,11 +27,6 @@ export class SchedulerReportQueryDto {
 	@IsOptional()
 	@IsBooleanString()
 	dryRun?: string;
-
-	@ApiPropertyOptional({ description: 'Holding específico' })
-	@IsOptional()
-	@IsString()
-	holdingId?: string;
 
 	@ApiPropertyOptional({ default: 1 })
 	@IsOptional()

@@ -5,7 +5,7 @@ import { withApiWriter } from '@/modules/contracts/api-writer';
 import { OdooConnectionError, type OdooPartnerCandidate, OdooPartnersService } from '@/modules/odoo/odoo-partners.service';
 
 import { ClientDirectoryService, conflict, type CreateEntityInput, type EntityBlocker } from './client-directory.service';
-import { findEntitiesLinkedToPartners, type PartnerLinkedEntity, partnerAlreadyLinkedMessage } from './client-entity-writer';
+import { findEntitiesLinkedToPartners, partnerAlreadyLinkedMessage, type PartnerLinkedEntity } from './client-entity-writer';
 
 type Row = Record<string, unknown>;
 

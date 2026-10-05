@@ -1,11 +1,11 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
-import { GetSupabaseUser } from '@/decorators/supabase-user.decorator';
+import { HoldingId } from '@/decorators/holding-id.decorator';
+import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
 import { AgentsService } from './agents.service';
-import { ApproveRunDto } from './dtos/approve-run.dto';
 import { CreateClientAgentConfigDto, CreateHoldingAgentConfigDto, UpdateClientAgentConfigDto } from './dtos/client-config.dto';
 import { RenderEmailDto } from './dtos/render-email.dto';
 import { RunAgentDto } from './dtos/run-agent.dto';
@@ -13,8 +13,9 @@ import { UpdateAgentConfigDto } from './dtos/update-agent-config.dto';
 
 @ApiTags('Agents')
 @Controller('agents')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, HoldingScopeGuard)
 @ApiBearerAuth()
+@ApiHeader({ name: 'x-holding-id', required: true, description: 'Holding activo (validado contra user_holdings)' })
 export class AgentsController {
 	constructor(private readonly agentsService: AgentsService) {}
 
@@ -32,8 +33,7 @@ export class AgentsController {
 		description: 'Agente deshabilitado o configuración inválida',
 	})
 	@HttpCode(HttpStatus.OK)
-	async runAgent(@Param('agentId') agentId: string, @Body() dto: RunAgentDto, @GetSupabaseUser() user: any) {
-		const holdingId = dto.holding_id || user.holding_id;
+	async runAgent(@Param('agentId') agentId: string, @Body() dto: RunAgentDto, @HoldingId() holdingId: string) {
 		const result = await this.agentsService.runAgent(agentId, dto.mode, holdingId);
 
 		return {
@@ -56,11 +56,8 @@ export class AgentsController {
 		description: 'Run no está en estado queued',
 	})
 	@HttpCode(HttpStatus.OK)
-	async approveRun(@Param('runId') runId: string, @Body() dto: ApproveRunDto) {
-		console.log('approveRun - runId:', runId);
-		console.log('approveRun - dto:', dto);
-		console.log('approveRun - holding_id:', dto.holding_id);
-		const result = await this.agentsService.approveRun(runId, dto.holding_id);
+	async approveRun(@Param('runId') runId: string, @HoldingId() holdingId: string) {
+		const result = await this.agentsService.approveRun(runId, holdingId);
 
 		return {
 			success: true,
@@ -78,8 +75,8 @@ export class AgentsController {
 		description: 'Configuración creada/actualizada exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async createClientConfig(@Body() dto: CreateClientAgentConfigDto) {
-		const config = await this.agentsService.updateClientConfig(dto.client_id, dto.agent_type, dto.holding_id, {
+	async createClientConfig(@Body() dto: CreateClientAgentConfigDto, @HoldingId() holdingId: string) {
+		const config = await this.agentsService.updateClientConfig(dto.client_id, dto.agent_type, holdingId, {
 			is_enabled: dto.is_enabled,
 			config_json: dto.config_json,
 		});
@@ -100,11 +97,7 @@ export class AgentsController {
 		description: 'Configuración obtenida exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async getClientConfigByQuery(
-		@Query('client_id') clientId: string,
-		@Query('agent_type') agentType: string,
-		@Query('holding_id') holdingId: string
-	) {
+	async getClientConfigByQuery(@Query('client_id') clientId: string, @Query('agent_type') agentType: string, @HoldingId() holdingId: string) {
 		const config = await this.agentsService.getClientConfig(clientId, agentType, holdingId);
 
 		return {
@@ -123,7 +116,7 @@ export class AgentsController {
 		description: 'Configuración obtenida exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async getClientConfig(@Param('client_id') clientId: string, @Param('agent_type') agentType: string, @Query('holding_id') holdingId: string) {
+	async getClientConfig(@Param('client_id') clientId: string, @Param('agent_type') agentType: string, @HoldingId() holdingId: string) {
 		const config = await this.agentsService.getClientConfig(clientId, agentType, holdingId);
 
 		return {
@@ -146,7 +139,7 @@ export class AgentsController {
 		@Param('client_id') clientId: string,
 		@Param('agent_type') agentType: string,
 		@Body() dto: UpdateClientAgentConfigDto,
-		@Query('holding_id') holdingId: string
+		@HoldingId() holdingId: string
 	) {
 		const config = await this.agentsService.updateClientConfig(clientId, agentType, holdingId, dto);
 
@@ -166,7 +159,7 @@ export class AgentsController {
 		description: 'Configuraciones obtenidas exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async listClientConfigs(@Query('agent_type') agentType: string | undefined, @Query('holding_id') holdingId: string) {
+	async listClientConfigs(@Query('agent_type') agentType: string | undefined, @HoldingId() holdingId: string) {
 		const configs = await this.agentsService.listClientConfigs(holdingId, agentType);
 
 		return {
@@ -185,8 +178,8 @@ export class AgentsController {
 		description: 'Remitentes obtenidos exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async listEmailSenders(@Query('holdingId') holdingId: string, @GetSupabaseUser() user: any) {
-		const finalHoldingId = holdingId || user.holding_id;
+	async listEmailSenders(@HoldingId() holdingId: string) {
+		const finalHoldingId = holdingId;
 		const senders = await this.agentsService.listEmailSenders(finalHoldingId);
 
 		return {
@@ -225,7 +218,7 @@ export class AgentsController {
 		description: 'Configuración global obtenida exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async getHoldingConfig(@Query('holding_id') holdingId: string, @Query('agent_type') agentType: string) {
+	async getHoldingConfig(@HoldingId() holdingId: string, @Query('agent_type') agentType: string) {
 		const config = await this.agentsService.getHoldingConfig(holdingId, agentType);
 
 		return {
@@ -245,8 +238,8 @@ export class AgentsController {
 		description: 'Configuración global creada/actualizada exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async updateHoldingConfig(@Body() dto: CreateHoldingAgentConfigDto) {
-		const config = await this.agentsService.updateHoldingConfig(dto.holding_id, dto.agent_type, {
+	async updateHoldingConfig(@Body() dto: CreateHoldingAgentConfigDto, @HoldingId() holdingId: string) {
+		const config = await this.agentsService.updateHoldingConfig(holdingId, dto.agent_type, {
 			is_enabled: dto.is_enabled,
 			config_json: dto.config_json,
 		});
@@ -267,8 +260,7 @@ export class AgentsController {
 		description: 'Configuración actualizada exitosamente',
 	})
 	@HttpCode(HttpStatus.OK)
-	async updateAgentConfig(@Param('agentId') agentId: string, @Body() dto: UpdateAgentConfigDto, @GetSupabaseUser() user: any) {
-		const holdingId = user.holding_id;
+	async updateAgentConfig(@Param('agentId') agentId: string, @Body() dto: UpdateAgentConfigDto, @HoldingId() holdingId: string) {
 		const agent = await this.agentsService.updateAgentConfig(agentId, holdingId, dto);
 
 		return {
