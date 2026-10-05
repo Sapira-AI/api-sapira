@@ -15,6 +15,11 @@ import { NotificationsGateway } from './notifications.gateway';
 export const SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE = 'salesforce_staging_blocked';
 export const SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE = 'salesforce_sync_failure';
 export const INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE = 'invoice_odoo_failure';
+/**
+ * Tipos que administra el endpoint de suscripciones por rol. Agregar uno acá lo mete en ese mismo toggle,
+ * así que un dominio distinto necesita su propio endpoint: los tipos del canal BigQuery resuelven hoy sus
+ * destinatarios con `recipients.include_super_admins` desde `bigquery.service.ts`.
+ */
 const ROLE_SUBSCRIPTION_NOTIFICATION_TYPES = [
 	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
 	SALESFORCE_SYNC_FAILURE_NOTIFICATION_TYPE,

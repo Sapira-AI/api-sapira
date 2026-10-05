@@ -1157,6 +1157,9 @@ export class BigQueryService {
 		const afectaIntegracion = diffs.some((diff) => (QUANTITY_INTEGRATED_FIELDS as readonly string[]).includes(diff.field));
 
 		await this.notificationsService.createOrUpdate(holdingId, {
+			// Sin destinatarios la notificación nace con recipient_count = 0 y no la ve nadie, lo que dejaba
+			// inalcanzable el único camino de salida de `conflict` y `changed_in_source`: el reemplazo manual.
+			recipients: { include_super_admins: true },
 			source: 'bigquery',
 			type: QUANTITIES_DIFF_NOTIFICATION_TYPE,
 			severity: 'warning',
@@ -1255,6 +1258,7 @@ export class BigQueryService {
 			}
 
 			await this.notificationsService.createOrUpdate(holdingId, {
+				recipients: { include_super_admins: true },
 				source: 'bigquery',
 				type: aggregate.type,
 				severity: 'warning',

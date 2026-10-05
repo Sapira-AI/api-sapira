@@ -42,6 +42,7 @@ import { FiscalPositionsService } from './services/fiscal-positions.service';
 import { GenericVatsService } from './services/generic-vats.service';
 import { InvoiceTaxValidatorService } from './services/invoice-tax-validator.service';
 import { OdooIntegrationLogService } from './services/odoo-integration-log.service';
+import { OdooInvoiceBackfillService } from './services/odoo-invoice-backfill.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
 import { TaxMappingService } from './services/tax-mapping.service';
 
@@ -94,6 +95,7 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		GenericVatsService,
 		InvoiceProcessingService,
 		OdooIntegrationLogService,
+		OdooInvoiceBackfillService,
 	],
 	exports: [
 		OdooService,

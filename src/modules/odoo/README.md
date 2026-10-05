@@ -56,6 +56,35 @@ Este módulo implementa la sincronización de datos desde Odoo ERP hacia la apli
 -   `Chile` no requiere wizard adicional; se considera emitida con `action_post`.
 -   Para facturas de exportación de `México`, SAPIRA intenta enviar el impuesto de venta `0%` de la compañía en vez de dejar la línea sin impuestos.
 
+### 6. Diagnóstico de la pierna de vuelta (Odoo → Sapira)
+
+`GET /odoo/webhooks/diagnostico` (requiere `x-holding-id`). El aviso de Odoo es la **única** fuente
+del folio (`invoice_number`) y del avance a `Enviada`/`Pagada`: el scheduler escribe
+`odoo_invoice_id` y `status = 'Emitida'`, pero nunca el folio. El reporte cruza los avisos recibidos
+(`odoo_webhook_logs`), las actualizaciones aplicadas (`odoo_invoice_update_logs`) y las facturas sin
+folio (`invoices`), y resuelve en `veredicto` si hay que revisar Odoo (`sin_avisos`) o la API
+(`avisos_sin_efecto`). Devuelve además los `odoo_invoice_ids` del hueco, listos para un backfill.
+
+Contrato, cómo leer el veredicto, qué **no** puede decir y los pendientes que dejó a la vista:
+[`docs/cambios/diagnostico-pierna-de-vuelta-odoo.md`](../../../docs/cambios/diagnostico-pierna-de-vuelta-odoo.md).
+
+### 7. Backfill de folios desde Odoo
+
+`POST /odoo/webhooks/backfill` (requiere `x-holding-id`). Cuando el aviso de vuelta no llegó, recupera
+los datos preguntándole a Odoo por `odoo_invoice_id`, con la misma regla de estado que el webhook
+(`helpers/odoo-invoice-status.helper.ts`: solo `paid` → `Pagada`). **Corre en seco mientras no se
+mande `aplicar: true`**, y omite toda factura cuyo `x_sapira_invoice_id` en Odoo falte o no coincida
+con el id de Sapira.
+
+El alcance se elige con `campos`, y el default —`['folio','estado']`— es el único seguro de correr
+solo: `montos` y `fecha` obligan a reconstruir `revenue_schedule_monthly` a mano, porque
+`trg_rsm_on_invoice_change` sale en seco con la conexión de la API. Con `estados` se separan las
+facturas que sí se emitieron (`Emitida`) de las que nunca (`Por Emitir`, cuyo cambio de estado sí
+afecta revenue).
+
+Procedimiento, guardas y motivos de omisión:
+[`docs/cambios/backfill-folios-odoo.md`](../../../docs/cambios/backfill-folios-odoo.md).
+
 ## Estructura del Módulo
 
 ```

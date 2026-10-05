@@ -85,6 +85,9 @@ nuevo consume `api-sapira` vía BFF (cero `supabase.rpc()` directo), paridad fun
 - Controladores que faltan por migrar a esa regla: [`docs/v2-rediseno/inventario-tenancy-fase-2.md`](docs/v2-rediseno/inventario-tenancy-fase-2.md)
 - Plan del módulo Integraciones (el más grande, y el que cierra la Fase 2 de tenancy):
   [`docs/v2-rediseno/plan-migracion-integraciones.md`](docs/v2-rediseno/plan-migracion-integraciones.md)
+- **Roadmap de los cuatro frentes** (cantidades variables, automatizaciones de proforma y cobranza,
+  facturación electrónica e integraciones), con el estado verificado de cada uno y su plan por etapas:
+  [`docs/v2-rediseno/roadmap-cuatro-frentes.md`](docs/v2-rediseno/roadmap-cuatro-frentes.md) · 02-10-2026
 
 ### Fase 2 — Rediseño UI/UX por módulo 🔄 parcial · Domi
 

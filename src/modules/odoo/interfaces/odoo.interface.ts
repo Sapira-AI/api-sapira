@@ -318,3 +318,20 @@ export interface CreateDraftInvoiceResult {
 	amount_tax: number;
 	amount_total: number;
 }
+
+/**
+ * Campos de `account.move` que Sapira sincroniza desde Odoo. Es el contrato de
+ * `OdooInvoicesService.readInvoicesForSync`, el mismo conjunto que el aviso del webhook trae en su
+ * payload. Odoo devuelve `false` en vez de null para los campos vacíos.
+ */
+export interface OdooInvoiceSyncFields {
+	id: number;
+	name?: string | false;
+	state?: string | false;
+	payment_state?: string | false;
+	amount_tax?: number | false;
+	amount_total?: number | false;
+	amount_untaxed?: number | false;
+	invoice_date?: string | false;
+	x_sapira_invoice_id?: string | false;
+}

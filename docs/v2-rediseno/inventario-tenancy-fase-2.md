@@ -6,9 +6,10 @@
 
 ## Estado
 
-De 49 controladores, **9 usan `HoldingScopeGuard`**: Clientes (4) y Dashboard, migrados por Domi el 24-09; y SII,
+De 49 controladores, **10 usan `HoldingScopeGuard`**: Clientes (4) y Dashboard, migrados por Domi el 24-09; y SII,
 notificaciones, copiloto y `GET /invoices/scheduler/report`, migrados en la Fase 1 el 26-09 (ver
-[`docs/cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md`](../cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md)).
+[`docs/cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md`](../cambios/tenancy-fase-1-sii-reporte-notificaciones-copiloto.md)). Y `agents`, migrado el 04-10 al
+abrir el frente de automatizaciones.
 
 La Fase 1 cubrió **todo lo que el front nuevo consume**. Lo que queda lo llama únicamente la app actual
 (`front-sapira-vite`), así que no produce comportamiento incorrecto en `front-sapira`, pero sí deja el agujero de
@@ -26,7 +27,7 @@ super admin. Aplica a los 26 controladores de la tabla.
 
 | Ruta | Archivo | Cómo resuelve el holding hoy |
 |---|---|---|
-| `agents` | `agents/agents.controller.ts` | holding_id=12 (query y body) |
+| ~~`agents`~~ | `agents/agents.controller.ts` | ✅ **Migrado el 04-10-2026**: `HoldingScopeGuard` + `@HoldingId()` en los 10 endpoints; `holding_id` quedó opcional `deprecated` en sus DTO. Spec de tenancy en `agents.controller.spec.ts` |
 | `bigquery-connections` | `bigquery/bigquery-connection.controller.ts` | header=6 · holding_id=7 |
 | `bigquery` | `bigquery/bigquery.controller.ts` | header=9 · holding_id=1 |
 | `claude` | `claude/claude.controller.ts` | holding_id=3 |
@@ -68,7 +69,10 @@ llamadas, así que la mayoría pasa. Los dos problemas reales:
    `localStorage`).
 2. **403 por `holding_id` que no coincide con el header.** El guard compara query y body contra el header. Dos fuentes
    quedan desfasadas al cambiar de holding:
-   - **`agents`**: 8 endpoints usan `userHoldingId` de `HoldingContext`, que **no se actualiza** en
+   - ✅ **`agents`** (resuelto el 04-10): `setSelectedHoldingId` ahora también actualiza `userHoldingId`
+     (`front-sapira-vite/src/contexts/HoldingContext.tsx`), así que el `holding_id` del body y el header ya
+     no divergen al cambiar de holding. Era el prerequisito para ponerle el guard al controlador.
+   - **`agents`, el problema original**: 8 endpoints usaban `userHoldingId` de `HoldingContext`, que **no se actualizaba** en
      `setSelectedHoldingId`. Tras cambiar de holding, body y header difieren.
    - **`salesforce/mappings`**: los componentes de mapeo toman el holding de
      `supabase.rpc('get_current_user_holding_id')` una vez al montar; ese RPC lee `user_holdings.selected`, que solo

@@ -424,6 +424,76 @@ un stub de `auth.uid()` y `auth.users`.
 **6. Sin cobertura de vistas.** `invoices_with_net_amounts` e `invoice_items_consolidated` existen en
 producción y no tienen asset ni entity.
 
+**7. Los 4 triggers de RSM no se disparan para nada que escriba la API** — descubierto el
+2026-10-01 durante el backfill de folios de Odoo
+([`docs/cambios/backfill-folios-odoo.md`](../../../docs/cambios/backfill-folios-odoo.md)). **No
+resuelto**: es un cambio de esquema y se encontró en cierre de mes.
+
+Los cuatro arrancan con la misma guarda:
+
+```sql
+SELECT revenue_schedule_monthly_enabled INTO v_enabled
+FROM financial_settings
+WHERE holding_id = get_current_user_holding_id()
+LIMIT 1;
+
+IF NOT COALESCE(v_enabled, false) THEN
+  RETURN COALESCE(NEW, OLD);
+END IF;
+```
+
+Y `get_current_user_holding_id()` → `rls_user_holding_id()` filtra por `u.auth_id = auth.uid()`. **La
+API entra a Postgres con el rol `postgres` y sin claims de JWT**, así que `auth.uid()` es NULL, los
+dos subselects de `rls_user_holding_id()` no devuelven nada y la función devuelve NULL. Entonces
+`WHERE holding_id = NULL` **no matchea ninguna fila** —comparación con NULL, nunca `true`— sin
+importar qué contenga `financial_settings`, `v_enabled` queda NULL, y el trigger hace `RETURN` sin
+hacer nada. **Es determinista, no intermitente.**
+
+Medido en el corpus el 2026-10-01: **52 funciones** usan uno de los dos helpers; de ellas **4 son
+funciones de trigger**, y las 4 son las de RSM:
+
+| Tabla | Función de trigger | ¿La escribe la API? |
+|---|---|---|
+| `invoices` | `trigger_rsm_on_invoice_change()` | **Sí** — `invoice-scheduler.service.ts`, `invoices.service.ts`, `odoo-webhook.service.ts`, `odoo-invoice-backfill.service.ts`, `invoice-tax-validator.service.ts` |
+| `quantities` | `trigger_rsm_on_quantity_change()` | **Sí** — `bigquery.service.ts` (`INSERT INTO quantities`, `UPDATE quantities`) |
+| `quantities` | `restore_rsm_on_quantity_delete()` | **Sí** — mismo servicio |
+| `contract_items` | `trigger_rsm_on_contract_item_change()` | Hoy no se encontró escritor en la API |
+
+**La consecuencia:** `revenue_schedule_monthly` solo se recalcula cuando la escritura entra por
+PostgREST o por un `rpc()` con el JWT del front. Todo lo que escribe la API —el envío nocturno a
+Odoo, el aviso de vuelta del webhook, la importación de cantidades desde BigQuery— deja el
+cronograma de revenue con los números viejos, **en silencio**. Por eso el backfill de folios tiene
+`montos` y `fecha` fuera de su alcance por defecto: tocar `total_invoice_currency` o `issue_date`
+desde la API desalinea el cronograma sin avisar.
+
+**Un segundo defecto latente, incluso para las escrituras del front**: el flag que se consulta es el
+del holding **del usuario** (y encima el que tenga `selected = true`), no el del **registro** que se
+está modificando. Un usuario con acceso a dos holdings que edita una factura del holding B lee el
+flag del holding A.
+
+**Hacia dónde va el arreglo** (no decidido): el holding tiene que salir del registro
+—`NEW.holding_id` en `invoices` y `quantities`, y vía contrato en `contract_items`—, que es
+exactamente lo que manda el `CLAUDE.md`: «no uses `auth.uid()`/`rls_user_holding_id()` en SQL que
+llama la API: el holding sale del registro». Es un asset por función (`functions/`, se edita el mismo
+archivo y el runner re-aplica), no una migración. ⚠️ **Cambia comportamiento**: escrituras que hoy no
+hacen nada empezarían a reconstruir RSM, así que antes hay que medir cuántos holdings tienen
+`revenue_schedule_monthly_enabled = true` y correrlo en QA con un rebuild de control.
+
+Relacionado con el punto 5: es otra dependencia del esquema `auth`, pero acá el problema no es el
+bootstrap sino que en producción la función devuelve NULL para el consumidor principal.
+
+**Cómo se verifica** (solo lectura, en cualquier base):
+
+```sql
+-- Debe devolver NULL: es lo que ve la API en cada trigger.
+SELECT public.rls_user_holding_id() AS holding_que_ve_la_api;
+
+-- Holdings con RSM habilitado: el universo afectado por el arreglo.
+SELECT holding_id, revenue_schedule_monthly_enabled
+FROM financial_settings
+WHERE revenue_schedule_monthly_enabled = true;
+```
+
 ## 🚀 Uso en Módulos
 
 ### 1. Importar el módulo

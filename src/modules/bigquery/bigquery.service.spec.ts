@@ -377,6 +377,21 @@ describe('BigQueryService', () => {
 			expect(result.range).toEqual({ from: '2026-07-01', to: '2026-07-31' });
 		});
 
+		it('las notificaciones del canal llevan destinatarios: sin ellos nadie las ve', async () => {
+			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
+			quantityImportRepository.find.mockResolvedValue([buildImport({ quote_line_id: null, opportunity_id: null })]);
+			wireDataSource(dataSource, { candidates: [] });
+
+			await service.integrateSapiraQuantities('holding-1', { range: { from: '2026-07-01', to: '2026-07-31' } });
+
+			// Los tipos del canal no están en ROLE_SUBSCRIPTION_NOTIFICATION_TYPES, así que sin `recipients`
+			// explícitos la notificación nace con recipient_count = 0 y el reemplazo manual queda inalcanzable.
+			for (const [, dto] of notificationsService.createOrUpdate.mock.calls) {
+				expect(dto.recipients).toEqual({ include_super_admins: true });
+			}
+			expect(notificationsService.createOrUpdate).toHaveBeenCalled();
+		});
+
 		it('la clave de deduplicación de las agregadas lleva el rango, no el mes en curso', async () => {
 			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport({ quote_line_id: null, opportunity_id: null })]);

@@ -11,7 +11,7 @@ DECLARE
 BEGIN
   SELECT revenue_schedule_monthly_enabled INTO v_enabled
   FROM financial_settings
-  WHERE holding_id = get_current_user_holding_id()
+  WHERE holding_id = NEW.holding_id
   LIMIT 1;
 
   IF NOT COALESCE(v_enabled, false) THEN
@@ -57,4 +57,12 @@ está Activo y revenue_schedule_monthly_enabled = true en financial_settings.
 
 FIX 2026-04-28: ahora deriva amount = unit_price * quantity cuando NEW.amount
                 es NULL. Antes el trigger se saltaba todos los overrides
-                ingresados en formato Opción A (unit_price + quantity).';
+                ingresados en formato Opción A (unit_price + quantity).
+
+FIX 2026-10-04: el gate leía financial_settings por get_current_user_holding_id(), que depende de
+                auth.uid(). La API entra con rol privilegiado y SIN JWT de Supabase, así que auth.uid()
+                es NULL, no encontraba fila y el trigger retornaba en silencio: todo lo que escribía el
+                canal BigQuery -> quantities actualizaba invoice_items pero NO revenue_schedule_monthly,
+                descuadrando MRR reconocido contra facturado. Ahora el holding sale de la propia fila
+                (lo puebla antes quantities_set_holding_from_contract_item), que es correcto tanto para
+                la sesión de un usuario como para la API.';
