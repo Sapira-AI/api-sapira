@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-09-27 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-04 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -54,12 +54,18 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			price_entry_mode: true,
 			booking_date: true,
 			renewal_base_unit_price: true,
+			price_id: true,
+			billing_anchor_day: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
 			contract_items_contract_id_fkey: {
 				table: 'contracts',
 				onDelete: 'CASCADE',
+			},
+			contract_items_price_id_fkey: {
+				table: 'prices',
+				onDelete: 'NO ACTION',
 			},
 			contract_items_product_id_fkey: {
 				table: 'products',
@@ -89,6 +95,7 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		uniques: {},
 		checks: [
 			'chk_contract_items_price_entry_mode',
+			'contract_items_billing_anchor_day_check',
 			'contract_items_billing_frequency_check',
 			'contract_items_billing_method_check',
 			'contract_items_categoria_check',
@@ -124,6 +131,11 @@ export const CONTRATOS_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				columns: ['monthly_price'],
 				unique: false,
 				where: '(monthly_price IS NOT NULL) AND (is_recurring = true)',
+			},
+			idx_contract_items_price_id: {
+				columns: ['price_id'],
+				unique: false,
+				where: null,
 			},
 			idx_contract_items_quote_item_id: {
 				columns: ['quote_item_id'],

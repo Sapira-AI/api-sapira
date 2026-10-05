@@ -1,0 +1,551 @@
+/**
+ * Módulo de routing de intents para rag-chat
+ * Extraído de index.ts para mejor modularidad
+ */
+
+export interface LiveDataFlags {
+  // Intents existentes
+  overdueInvoices: boolean;
+  invoicesThisWeek: boolean;
+  invoicesDueSoon: boolean;
+  activeContracts: boolean;
+  mrrVsPreviousMonth: boolean;
+  recognizedRevenueByClient: boolean;
+  reportsMetrics: boolean;
+  revenueRecognition: boolean;
+  pendingContracts: boolean;
+  contractReport: boolean;
+  quoteReport: boolean;
+  gatewayClientsList: boolean;
+  gatewayClientsSearch: boolean;
+  gatewayContactsSearch: boolean;
+  gatewayContractsSearch: boolean;
+  gatewayInvoicesList: boolean;
+  gatewayInvoicesSearch: boolean;
+  gatewayCompaniesList: boolean;
+  gatewayCompaniesSearch: boolean;
+  gatewayClientEntitiesList: boolean;
+  gatewayClientEntitiesSearch: boolean;
+  gatewayBankMovementsList: boolean;
+  gatewayBankMovementsSearch: boolean;
+  gatewayBillingReferencesList: boolean;
+  gatewayBillingReferencesSearch: boolean;
+  gatewayQuotesList: boolean;
+  gatewayQuotesSearch: boolean;
+  keywordExplore: boolean;
+  mrrSnapshot: boolean;
+  mrrSnapshotByCompany: boolean;
+  mrrMomentumSeries: boolean;
+  mrrSeries: boolean;
+  mrrSeriesBySegment: boolean;
+  mrrSeriesByClient: boolean;
+  cmrrSeries: boolean;
+  mrrMomentumByProduct: boolean;
+  mrrNewSeries: boolean;
+  upsellSeries: boolean;
+  churnSeries: boolean;
+  recognizedSeries: boolean;
+  recognizedNonRecurringByClient: boolean;
+  recognizedByProduct: boolean;
+  deferredEomSnapshot: boolean;
+  deferredEomSeries: boolean;
+  unbilledEomSnapshot: boolean;
+  unbilledEomSeries: boolean;
+  deferredUnbilledEomSeries: boolean;
+  billedByProductMonth: boolean;
+  invoicesIssuedMonth: boolean;
+  invoicesToIssueList: boolean;
+  invoicesOverdueList: boolean;
+  paymentsSeries: boolean;
+  daysToPay: boolean;
+  bookingToFirstInvoiceLeadTime: boolean;
+  mrrSnapshotByCurrencyContract: boolean;
+  legacyInvoicesSeries: boolean;
+  legacyInvoicesByClient: boolean;
+  contractsExpiring: boolean;
+  contractsNew: boolean;
+  churnReasons: boolean;
+  mrrByContractCurrency: boolean;
+  quantityVariationAvg: boolean;
+  quantityVariationContract: boolean;
+  contractsSummaryByCurrency: boolean;
+}
+
+export function isLiveDataQuery(question: string): LiveDataFlags {
+  const q = question.toLowerCase();
+  return {
+    overdueInvoices: q.includes("factur") && (q.includes("vencid") || q.includes("atrasad")),
+    invoicesThisWeek: q.includes("factur") && (q.includes("esta semana") || q.includes("esta sem")),
+    invoicesDueSoon:
+      q.includes("factur") &&
+      (q.includes("vencen") || q.includes("por vencer") || q.includes("vencer")) &&
+      !q.includes("vencid") &&
+      !q.includes("atrasad"),
+    activeContracts: q.includes("contrat") && q.includes("activ"),
+    mrrVsPreviousMonth:
+      (q.includes("mrr") || (q.includes("ingres") && q.includes("recurrent"))) &&
+      (q.includes("mes pasado") || q.includes("mes anterior") || q.includes("compar")),
+    recognizedRevenueByClient:
+      (q.includes("ingres") || q.includes("revenue")) &&
+      (q.includes("reconoc") || q.includes("recognized")) &&
+      (q.includes("client") || q.includes("cliente")),
+    reportsMetrics:
+      (q.includes("mrr") ||
+       q.includes("arr") ||
+       q.includes("waterfall") ||
+       q.includes("retenci") ||
+       q.includes("ndr") ||
+       q.includes("quick ratio") ||
+       (q.includes("ratio") && q.includes("saas")) ||
+       (q.includes("métrica") || q.includes("metricas") || q.includes("métricas")) ||
+       (q.includes("reporte") && (q.includes("mrr") || q.includes("arr") || q.includes("retenci")))) &&
+      !q.includes("churn") && !q.includes("razón") && !q.includes("causas"),
+    revenueRecognition:
+      q.includes("revenue") ||
+      q.includes("reconoc") ||
+      q.includes("diferid") ||
+      q.includes("por factur") ||
+      q.includes("unbilled") ||
+      q.includes("deferred") ||
+      q.includes("asiento") ||
+      q.includes("contabl"),
+    pendingContracts:
+      q.includes("contrat") &&
+      (q.includes("pendient") || q.includes("revision") || q.includes("aprob")),
+    contractReport:
+      (q.includes("contrat") || q.includes("acuerdo")) &&
+      (q.includes("informe") || q.includes("reporte") || q.includes("ficha") || q.includes("resumen")),
+    quoteReport:
+      (q.includes("cotiz") || q.includes("cotización") || q.includes("cotizaciones") || q.includes("quote")) &&
+      (q.includes("detalle") || q.includes("ítem") || q.includes("item") || q.includes("items") || q.includes("ficha")),
+    gatewayClientsList:
+      (q.includes("cliente") || q.includes("clientes")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("ingres"),
+    gatewayClientsSearch:
+      (q.includes("cliente") || q.includes("clientes")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayContactsSearch:
+      (q.includes("contact") || q.includes("contactos")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar") || q.includes("listar") || q.includes("lista")),
+    gatewayContractsSearch:
+      (q.includes("contrat") || q.includes("contratos")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar") || q.includes("listar") || q.includes("lista")) &&
+      !q.includes("mrr") &&
+      !q.includes("reconoc"),
+    gatewayInvoicesList:
+      (q.includes("factur") || q.includes("facturas")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("esta semana") &&
+      !q.includes("vencid"),
+    gatewayInvoicesSearch:
+      (q.includes("factur") || q.includes("facturas")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayCompaniesList:
+      (q.includes("empresa") || q.includes("empresas") || q.includes("compañ") || q.includes("compani")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("buscar"),
+    gatewayCompaniesSearch:
+      (q.includes("empresa") || q.includes("empresas") || q.includes("compañ") || q.includes("compani")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayClientEntitiesList:
+      (q.includes("entidad") || q.includes("entidades") || q.includes("entidad legal") || q.includes("entidades legales")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("buscar"),
+    gatewayClientEntitiesSearch:
+      (q.includes("entidad") || q.includes("entidades") || q.includes("entidad legal") || q.includes("entidades legales")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayBankMovementsList:
+      (q.includes("movim") || q.includes("movimiento") || q.includes("movimientos")) &&
+      (q.includes("banc") || q.includes("banco")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("buscar"),
+    gatewayBankMovementsSearch:
+      (q.includes("movim") || q.includes("movimiento") || q.includes("movimientos")) &&
+      (q.includes("banc") || q.includes("banco")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayBillingReferencesList:
+      (q.includes("referenc") || q.includes("referencia") || q.includes("referencias")) &&
+      (q.includes("factur") || q.includes("billing") || q.includes("facturación")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver")) &&
+      !q.includes("buscar"),
+    gatewayBillingReferencesSearch:
+      (q.includes("referenc") || q.includes("referencia") || q.includes("referencias")) &&
+      (q.includes("factur") || q.includes("billing") || q.includes("facturación")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    gatewayQuotesList:
+      (q.includes("cotiz") || q.includes("cotización") || q.includes("cotizaciones") || q.includes("quote")) &&
+      (q.includes("listar") || q.includes("lista") || q.includes("mostrar") || q.includes("ver") || q.includes("resumen")) &&
+      !q.includes("buscar"),
+    gatewayQuotesSearch:
+      (q.includes("cotiz") || q.includes("cotización") || q.includes("cotizaciones") || q.includes("quote")) &&
+      (q.includes("buscar") || q.includes("encuentra") || q.includes("encontrar")),
+    keywordExplore:
+      q.trim().startsWith("keyword:") ||
+      q.trim().startsWith("palabra clave:") ||
+      q.trim().startsWith("explorar:") ||
+      q.trim().startsWith("explora:") ||
+      (q.trim().split(/\s+/).length === 1 && q.trim().length >= 3),
+    
+    // Nuevos intents específicos - MRR/CMRR
+    mrrSnapshot: 
+      /\bmrr\b/.test(q) && 
+      (q.includes("este mes") || q.includes("mes actual") || q.includes("actual")) &&
+      !q.includes("últimos") && !q.includes("serie") && !q.includes("histórico") &&
+      !q.includes("compañ") && !q.includes("empresa") && !q.includes("por compañ") &&
+      !q.includes("detalle") && !q.includes("desglose") && !q.includes("breakdown") &&
+      !q.includes("participación") && !q.includes("distribución"),
+    
+    mrrSnapshotByCompany:
+      (/\bmrr\b/.test(q) && q.includes("compañía")) ||
+      (/\bmrr\b/.test(q) && q.includes("empresa")) ||
+      (/\bmrr\b/.test(q) && q.includes("por compañ")) ||
+      (/\bmrr\b/.test(q) && q.includes("detalle")) ||
+      (/\bmrr\b/.test(q) && q.includes("desglose")) ||
+      (/\bmrr\b/.test(q) && q.includes("breakdown")) ||
+      (/\bmrr\b/.test(q) && q.includes("participación")) ||
+      (/\bmrr\b/.test(q) && q.includes("distribución")),
+    
+    mrrSeries:
+      /\bmrr\b/.test(q) && 
+      (q.includes("últimos") || q.includes("serie") || q.includes("histórico") || 
+       q.includes("evolución") || q.includes("tendencia") || /\d+\s*mes/i.test(q)) &&
+      !q.includes("new") && !q.includes("nuevo") && !q.includes("momentum") && !q.includes("movimientos"),
+    
+    mrrSeriesBySegment:
+      /\bmrr\b/.test(q) && 
+      (q.includes("por segmento") || q.includes("segmento")) &&
+      (q.includes("últimos") || q.includes("meses")),
+    
+    mrrSeriesByClient:
+      /\bmrr\b/.test(q) && 
+      (q.includes("por cliente") || q.includes("cliente")) &&
+      (q.includes("últimos") || q.includes("meses")),
+    
+    cmrrSeries:
+      /\bcmrr\b/.test(q) && 
+      (q.includes("últimos") || q.includes("serie") || q.includes("meses")),
+    
+    // QA-03: MRR momentum NEW (prioridad MÁXIMA - va antes que mrrSeries general)
+    mrrMomentumSeries:
+      (/\bmrr\b/.test(q) || q.includes("recurring")) &&
+      ((q.includes("new") || q.includes("nuevo")) ||
+       (q.includes("upsell")) ||
+       (q.includes("cross-sell") || q.includes("cross sell")) ||
+       (q.includes("renewal") || q.includes("renovación")) ||
+       (q.includes("churn")) ||
+       (q.includes("momentum") || q.includes("movimientos"))) &&
+      (q.includes("mes") || q.includes("últimos") || q.includes("serie")) &&
+      !q.includes("legacy"),
+    
+    mrrMomentumByProduct:
+      (/\bmrr\b/.test(q) || q.includes("recurring")) &&
+      (q.includes("por producto") || q.includes("producto")) &&
+      (q.includes("upsell") ||
+        q.includes("cross-sell") ||
+        q.includes("cross sell") ||
+        q.includes("downsell") ||
+        q.includes("churn") ||
+        q.includes("renewal") ||
+        q.includes("renovación") ||
+        q.includes("renovacion") ||
+        q.includes("reactivation") ||
+        q.includes("reactivación") ||
+        q.includes("reactivacion") ||
+        q.includes("momentum") ||
+        q.includes("movimientos")) &&
+      (q.includes("mes") || q.includes("últimos") || q.includes("serie")) &&
+      !q.includes("legacy"),
+    mrrNewSeries: false, // Placeholder
+    upsellSeries: false, // Placeholder
+    
+    churnSeries:
+      q.includes("churn") &&
+      (q.includes("últimos") || q.includes("meses") || q.includes("serie")),
+    
+    // Revenue/Recognized/Deferred/Unbilled
+    recognizedSeries:
+      (
+        (q.includes("revenue") && q.includes("reconoc")) ||
+        (q.includes("ingresos") && q.includes("reconoc")) ||
+        (q.includes("reconocido") && (q.includes("revenue") || q.includes("ingresos"))) ||
+        (q.includes("reconocidos") && (q.includes("revenue") || q.includes("ingresos"))) ||
+        (q.includes("reconocida") && (q.includes("revenue") || q.includes("ingresos"))) ||
+        (q.includes("reconocidas") && (q.includes("revenue") || q.includes("ingresos")))
+      ) &&
+      !(q.includes("por producto") || q.includes("producto")),
+    
+    recognizedNonRecurringByClient:
+      (q.includes("revenue") || q.includes("ingreso")) &&
+      q.includes("no recurrent") &&
+      (q.includes("por cliente") || q.includes("cliente")),
+    
+    recognizedByProduct:
+      (q.includes("revenue") && q.includes("reconoc")) &&
+      (q.includes("por producto") || q.includes("producto")),
+    
+    deferredEomSnapshot:
+      (q.includes("deferred") || q.includes("diferid")) &&
+      (q.includes("balance") || q.includes("saldo")) &&
+      !q.includes("últimos") && !q.includes("serie") && !q.includes("meses"),
+    
+    deferredEomSeries:
+      (q.includes("deferred") || q.includes("diferid")) &&
+      (q.includes("balance") || q.includes("saldo")) &&
+      (q.includes("últimos") || q.includes("serie") || q.includes("meses") || q.includes("fin de mes")),
+    
+    unbilledEomSnapshot:
+      (q.includes("unbilled") || q.includes("por factur")) &&
+      (q.includes("balance") || q.includes("saldo")) &&
+      !q.includes("últimos") && !q.includes("serie") && !q.includes("meses"),
+    
+    unbilledEomSeries:
+      (q.includes("unbilled") || q.includes("por factur")) &&
+      (q.includes("balance") || q.includes("saldo")) &&
+      (q.includes("últimos") || q.includes("serie") || q.includes("meses") || q.includes("fin de mes")),
+    
+    // QA-06 combinado: Deferred + Unbilled EOM series (super agresivo)
+    deferredUnbilledEomSeries:
+      q.includes("deferred") || q.includes("unbilled") || q.includes("diferid") || q.includes("por factur"),
+    
+    // Facturación específica - QA-07
+    billedByProductMonth:
+      (q.includes("facturación") || q.includes("billed") || q.includes("factur")) &&
+      (q.includes("por producto") || q.includes("producto")) &&
+      (q.includes("mes") || q.includes("actual")),
+    
+    invoicesIssuedMonth:
+      q.includes("factur") &&
+      (q.includes("emitid") || q.includes("issued")) &&
+      (q.includes("este mes") || q.includes("mes actual")),
+    
+    invoicesToIssueList:
+      q.includes("factur") &&
+      (q.includes("por emitir") || q.includes("to issue") || q.includes("programad")),
+    
+    // QA-08: Facturas vencidas
+    invoicesOverdueList:
+      (q.includes("factur") || q.includes("invoice")) &&
+      (q.includes("vencid") || q.includes("overdue") || q.includes("vencimiento") || q.includes("atrasad")),
+    
+    // QA-10: Lead Time Booking → Primera Factura (más específico primero)
+    bookingToFirstInvoiceLeadTime:
+      (q.includes("booking") || q.includes("contrat")) &&
+      (q.includes("primera") || q.includes("primer")) &&
+      (q.includes("factura") || q.includes("emit")) &&
+      !q.includes("serie") &&
+      !q.includes("pag") && !q.includes("cobr"), // Excluir pagos
+    
+    // QA-11: MRR por moneda de contrato
+    mrrSnapshotByCurrencyContract:
+      (/\bmrr\b/.test(q) || q.includes("recurring")) &&
+      (q.includes("moneda") || q.includes("currency")) &&
+      (q.includes("contrato") || q.includes("contract")) &&
+      !q.includes("sistema") && !q.includes("system"),
+    
+    // QA-12: Legacy invoices histórico
+    legacyInvoicesSeries:
+      (q.includes("legacy") || q.includes("histórico") || q.includes("historico")) &&
+      (q.includes("factur") || q.includes("invoice")) &&
+      (q.includes("mes") || q.includes("mensual") || q.includes("serie")) &&
+      !q.includes("actual"),
+    
+    // Pagos (excluir booking/primera/factura)
+    paymentsSeries:
+      (q.includes("pago") || q.includes("payment")) &&
+      (q.includes("por mes") || q.includes("serie") || q.includes("últimos")),
+
+    // Días promedio de pago / lead time de pago
+    daysToPay:
+      (
+        q.includes("días promedio de pago") ||
+        q.includes("dias promedio de pago") ||
+        q.includes("promedio de días") ||
+        q.includes("promedio de dias") ||
+        q.includes("lead time") ||
+        q.includes("tiempo de pago") ||
+        q.includes("día") ||
+        q.includes("dias") ||
+        q.includes("días") ||
+        q.includes("demor") ||
+        q.includes("demora")
+      ) &&
+      (q.includes("pagar") || q.includes("pago") || q.includes("payment") || q.includes("cobran") || q.includes("cobro")) &&
+      !q.includes("booking") &&
+      !q.includes("primera") &&
+      !q.includes("primer") &&
+      !q.includes("factura") &&
+      !q.includes("emit"),
+    
+    // Contratos específicos
+    contractsExpiring:
+      q.includes("contrat") &&
+      (q.includes("por vencer") || q.includes("vencen") || q.includes("expir")) &&
+      !q.includes("factur"),
+    
+    contractsNew:
+      q.includes("contrat") &&
+      (q.includes("nuevo") || q.includes("new")) &&
+      (q.includes("este mes") || q.includes("mes actual")),
+    
+    churnReasons:
+      (q.includes("churn") || q.includes("cancelac")) &&
+      (q.includes("razón") || q.includes("razon") || q.includes("razones") || 
+       q.includes("motivo") || q.includes("reason") || q.includes("causas") || q.includes("causa")) &&
+      (q.includes("segmento") || q.includes("segmentos") || q.includes("por segmento") || 
+       q.includes("desglose") || q.includes("desglosar") || q.includes("métricas") || q.includes("clientes")),
+    
+    // Legacy
+    legacyInvoicesByClient:
+      q.includes("factur") &&
+      (q.includes("legacy") || q.includes("históric")) &&
+      (q.includes("cliente") || q.includes("detalle")),
+    
+    // Variaciones
+    quantityVariationAvg:
+      (q.includes("variación") || q.includes("variacion") || q.includes("variation")) &&
+      (q.includes("cantidad") || q.includes("cantidades") || q.includes("quantity")) &&
+      (q.includes("promedio") || q.includes("average") || q.includes("avg")),
+    
+    quantityVariationContract:
+      (q.includes("variación") || q.includes("variation")) &&
+      (q.includes("contrat") || q.includes("contract")) &&
+      (q.includes("cantidad") || q.includes("quantity")),
+
+    contractsSummaryByCurrency:
+      (q.includes("contrat") || q.includes("contracts")) &&
+      (q.includes("cuánt") || q.includes("cuant") || q.includes("cantidad") || q.includes("total")) &&
+      (q.includes("moneda") || q.includes("currency") || q.includes("por moneda") || q.includes("separ")) &&
+      (
+        q.includes("activo") ||
+        q.includes("en negoci") ||
+        q.includes("en revis") ||
+        q.includes("en proceso") ||
+        q.includes("por renov") ||
+        q.includes("renovar") ||
+        q.includes("por emitir")
+      ),
+
+    // Alias para mrrByContractCurrency
+    mrrByContractCurrency:
+      (/\bmrr\b/.test(q) || q.includes("recurring")) &&
+      (q.includes("moneda") || q.includes("currency")) &&
+      (q.includes("contrato") || q.includes("contract")) &&
+      !q.includes("sistema") && !q.includes("system"),
+  };
+}
+
+/**
+ * Detecta si una consulta es conceptual (definiciones/reglas)
+ * Implementa routing según especificación técnica
+ */
+export function isConceptualQuery(question: string): boolean {
+  const q = question.toLowerCase();
+  
+  const conceptualPatterns = [
+    "qué es", "que es", "qué significa", "que significa",
+    "cómo se calcula", "como se calcula", "por qué", "por que",
+    "cuál es la diferencia", "cual es la diferencia",
+    "definición", "definicion", "concepto", "regla", "reglas",
+    "política", "politica", "criterio", "criterios",
+    "explica", "explicar", "diferencia entre"
+  ];
+  
+  return conceptualPatterns.some(pattern => q.includes(pattern));
+}
+
+/**
+ * Mejora la detección de consultas que requieren Live Data
+ * Implementa A3.1 y A3.3 de la guía de corrección
+ */
+export function shouldUseLiveData(question: string): boolean {
+  const q = question.toLowerCase();
+  
+  // Patrones de tiempo expandidos (A3.1)
+  const timePatterns = [
+    "últimos", "ultimo", "última", "ultima", "pasados", "anteriores",
+    "histórico", "historico", "tendencia", "evolución", "evolucion",
+    "comparar", "vs", "versus", "contra", "mes pasado", "mes anterior",
+    "año pasado", "año anterior", "trimestre", "semestre",
+    /últimos?\s+\d+\s+(mes|meses|año|años)/,
+    /\d+\s+(mes|meses|año|años)/,
+    "12 meses", "6 meses", "último año", "ultimo año",
+    "serie", "series", "waterfall", "momentum", "movimiento", "movimientos"
+  ];
+  
+  // Métricas expandidas que siempre requieren Live Data (A3.1)
+  const metricsPatterns = [
+    "mrr", "cmrr", "arr", "revenue", "recognized", "reconoc", "billed", 
+    "deferred", "diferid", "unbilled", "por factur", "facturación", 
+    "facturacion", "ingresos", "ventas", "churn", "retention", 
+    "retención", "retencion", "upsell", "downsell", "cross-sell",
+    "new", "nuevo", "expansion", "expansión", "ndr", "quick ratio",
+    "waterfall", "momentum", "booking", "contracted", "contratado",
+    "variación", "variacion", "cantidad", "cantidades", "quantity", "quantities"
+  ];
+  
+  // Operaciones expandidas que requieren datos en vivo (A3.1)
+  const operationPatterns = [
+    "mostrar", "listar", "lista", "ver", "cuánto", "cuanto", "total",
+    "suma", "ranking", "top", "mayor", "menor", "máximo", "maximo",
+    "mínimo", "minimo", "promedio", "media", "por cliente", "por producto",
+    "por segmento", "por mercado", "por compañía", "por compania",
+    "por industry", "por industria", "por país", "por pais", "por moneda",
+    "agrupar", "separar", "dividir", "distribuir", "desglosar",
+    "dame", "trae", "muestra", "muéstrame", "buscar", "encontrar"
+  ];
+  
+  // Estados/listados operativos (A3.1)
+  const operationalPatterns = [
+    "vencid", "atrasad", "por emitir", "emitid", "pagad", "cancelad",
+    "activ", "pendient", "por vencer", "expir", "nuevo", "new"
+  ];
+  
+  // Verificar patrones
+  const hasTimePattern = timePatterns.some(pattern => {
+    if (typeof pattern === 'string') {
+      return q.includes(pattern);
+    } else {
+      return pattern.test(q);
+    }
+  });
+  
+  const hasMetrics = metricsPatterns.some(metric => q.includes(metric));
+  const hasOperations = operationPatterns.some(op => q.includes(op));
+  const hasOperational = operationalPatterns.some(op => q.includes(op));
+
+  // Si la pregunta es conceptual (definición/reglas) y NO está pidiendo números/listados,
+  // NO forzamos Live Data aunque mencione una métrica.
+  const isConceptual = isConceptualQuery(question);
+  if (isConceptual) {
+    const hasNumericAsk =
+      hasTimePattern ||
+      hasOperations ||
+      hasOperational ||
+      /\b(cu[aá]nto|cu[aá]l|total|suma|monto|importe|valor|cuenta|n[uú]mero|serie|tendencia|hist[oó]rico)\b/i.test(q);
+
+    if (!hasNumericAsk) {
+      return false;
+    }
+  }
+  
+  // Regla de oro (A3.3): Si pide números/series/listados → Live Data
+  if (hasMetrics) {
+    return true; // Cualquier mención de métrica va a Live Data
+  }
+  
+  if (hasTimePattern && hasOperations) {
+    return true; // Tiempo + operaciones = Live Data
+  }
+  
+  if (hasOperational) {
+    return true; // Estados operativos = Live Data
+  }
+  
+  // Patrones específicos de comparación/análisis
+  if (q.includes("compar") || q.includes("vs") || q.includes("versus")) {
+    return true;
+  }
+  
+  return false;
+}

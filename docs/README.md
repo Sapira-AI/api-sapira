@@ -11,6 +11,7 @@ Esta guia define donde documentar cambios backend y como mantener la base de pru
 | [`v2-rediseno/`](./v2-rediseno/) | Todo el material del rediseño: specs, estudios, matriz de scope de migración e inventario rpc | Por spec o sesión de planificación |
 | [`cambios/`](./cambios/) | Documentación funcional de cambios puntuales de backend | Con cada cambio (regla de abajo) |
 | [`guards/`](./guards/) | Referencia técnica de guards transversales | Al tocar el guard |
+| [`reglas-desarrollo/`](./reglas-desarrollo/) | Reglas de desarrollo transversales: [lógica en la API, triggers solo invariantes](./reglas-desarrollo/logica-en-api-triggers.md) | Al cambiar una convención |
 | [`archivo/`](./archivo/) | Bitácoras de sesiones terminadas, por semestre, con índice | Solo se agrega, nunca se edita |
 
 La documentación canónica del esquema **no está acá**: vive en `src/databases/postgresql/`

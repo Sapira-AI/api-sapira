@@ -1,3 +1,11 @@
+-- ⚠️ PENDIENTE DE OK DE DOMI (Notificaciones v2, 03-10): al final crea las suscripciones por defecto de notificaciones del holding
+-- nuevo (mismas filas que seed/007-notification-default-subscriptions.sql + seed/008 (fase 2: month_close_pending), espejo de
+-- defaultSubscriptions() del catálogo). Fase 2 (03-10): suma month_close_pending → volver a aplicar la función.
+-- ⚠️ PENDIENTE DE REVISIÓN DE DOMI (Configuración v2, 02-10): M4 agrega CLOSE_PERIODS a Administrador y Finanzas y M9
+-- marca is_default = true en los 10 roles. Aplicar DESPUÉS de la migración RolesIsDefault1790800000000 y del seed
+-- seed/004-close-periods-permission.sql. Sin esos dos, el INSERT falla (columna is_default) o no asigna CLOSE_PERIODS.
+-- 03-10 (decisión de Domi): Finanzas recibe VIEW_CONFIGURACION (holdings existentes: seed/005-finanzas-view-configuracion.sql)
+-- y se quita ADMIN_FULL_ACCESS de Administrador y Admin Técnico (no existe en el catálogo `permissions`: el filtro lo ignoraba).
 CREATE OR REPLACE FUNCTION public.create_default_roles_for_holding()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -15,54 +23,54 @@ DECLARE
   v_admin_tecnico_role_id UUID;
 BEGIN
   -- Insertar los 10 roles por defecto asociados al nuevo holding y capturar sus IDs
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW())
+    ('Administrador', 'Acceso completo al sistema', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW())
+    ('Invitado', 'Acceso mínimo, solo vistas generales', NEW.id, NOW(), true)
   RETURNING id INTO v_invitado_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW())
+    ('Ventas', 'Lectura de módulos comerciales', NEW.id, NOW(), true)
   RETURNING id INTO v_ventas_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Operaciones', 'Gestión operativa', NEW.id, NOW())
+    ('Operaciones', 'Gestión operativa', NEW.id, NOW(), true)
   RETURNING id INTO v_operaciones_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW())
+    ('Revenue Ops', 'Lectura de revenue y contratos', NEW.id, NOW(), true)
   RETURNING id INTO v_revenue_ops_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('BI', 'Análisis de datos', NEW.id, NOW())
+    ('BI', 'Análisis de datos', NEW.id, NOW(), true)
   RETURNING id INTO v_bi_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW())
+    ('Facturación y Cobranza', 'Gestión de facturación y cobranzas', NEW.id, NOW(), true)
   RETURNING id INTO v_facturacion_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW())
+    ('Finanzas', 'Control financiero completo sin configuración', NEW.id, NOW(), true)
   RETURNING id INTO v_finanzas_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW())
+    ('Admin de Negocio', 'Administración funcional de negocio', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_negocio_role_id;
 
-  INSERT INTO roles (name, description, holding_id, created_at)
+  INSERT INTO roles (name, description, holding_id, created_at, is_default)
   VALUES
-    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW())
+    ('Admin Técnico', 'Administración técnica (IA, integraciones)', NEW.id, NOW(), true)
   RETURNING id INTO v_admin_tecnico_role_id;
 
   -- Insertar permisos para Administrador (todos los permisos)
@@ -80,7 +88,7 @@ BEGIN
     'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',
     'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',
     'VIEW_CONFIGURACION', 'EDIT_CONFIGURACION',
-    'ADMIN_FULL_ACCESS'
+    'CLOSE_PERIODS'
   );
 
   -- Insertar permisos para Invitado
@@ -142,7 +150,8 @@ BEGIN
     'EDIT_COTIZACIONES', 'VIEW_COTIZACIONES', 'EDIT_CONTRATOS',
     'VIEW_CONTRATOS', 'VIEW_FACTURACION', 'EDIT_FACTURACION',
     'VIEW_REVENUE', 'EDIT_REVENUE', 'VIEW_REPORTES',
-    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'
+    'VIEW_AGENTES_IA', 'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES',
+    'CLOSE_PERIODS', 'VIEW_CONFIGURACION'
   );
 
   -- Insertar permisos para Admin de Negocio
@@ -165,8 +174,28 @@ BEGIN
     'EDIT_DASHBOARD', 'VIEW_DASHBOARD', 'VIEW_CLIENTES',
     'VIEW_COTIZACIONES', 'VIEW_CONTRATOS', 'VIEW_FACTURACION',
     'VIEW_REVENUE', 'VIEW_REPORTES', 'VIEW_AGENTES_IA', 'EDIT_AGENTES_IA',
-    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES', 'ADMIN_FULL_ACCESS'
+    'VIEW_INTEGRACIONES', 'EDIT_INTEGRACIONES'
   );
+
+  -- Notificaciones v2 (N3): suscripciones por defecto por rol del holding nuevo (role_id NULL = super admins).
+  INSERT INTO notification_role_subscriptions (holding_id, role_id, notification_type)
+  SELECT NEW.id, d.role_id, d.notification_type
+  FROM (VALUES
+    (v_admin_role_id, 'invoice_odoo_failure'), (v_finanzas_role_id, 'invoice_odoo_failure'), (v_facturacion_role_id, 'invoice_odoo_failure'),
+    (v_admin_role_id, 'salesforce_staging_blocked'), (v_ventas_role_id, 'salesforce_staging_blocked'), (v_operaciones_role_id, 'salesforce_staging_blocked'),
+    (v_admin_role_id, 'salesforce_sync_failure'), (v_admin_tecnico_role_id, 'salesforce_sync_failure'), (NULL::uuid, 'salesforce_sync_failure'),
+    (v_admin_role_id, 'contract_renewal_proposed'), (v_finanzas_role_id, 'contract_renewal_proposed'),
+    (v_admin_role_id, 'contract_renewal_reminder'), (v_finanzas_role_id, 'contract_renewal_reminder'),
+    (v_admin_role_id, 'contract_scheduled_change_due'), (v_finanzas_role_id, 'contract_scheduled_change_due'),
+    (v_admin_role_id, 'bigquery_quantities_diff'), (v_finanzas_role_id, 'bigquery_quantities_diff'), (v_facturacion_role_id, 'bigquery_quantities_diff'),
+    (v_admin_role_id, 'bigquery_quantities_unmapped'), (v_finanzas_role_id, 'bigquery_quantities_unmapped'), (v_facturacion_role_id, 'bigquery_quantities_unmapped'),
+    (v_admin_role_id, 'bigquery_quantities_blocked'), (v_finanzas_role_id, 'bigquery_quantities_blocked'), (v_facturacion_role_id, 'bigquery_quantities_blocked'),
+    (v_admin_role_id, 'bigquery_quantities_currency_mismatch'), (v_finanzas_role_id, 'bigquery_quantities_currency_mismatch'),
+    (v_facturacion_role_id, 'bigquery_quantities_currency_mismatch'),
+    (v_admin_role_id, 'fx_sync_failure'), (v_admin_tecnico_role_id, 'fx_sync_failure'), (NULL::uuid, 'fx_sync_failure'),
+    (NULL::uuid, 'invoice_fx_fallback'), (NULL::uuid, 'invoice_fx_missing'), (NULL::uuid, 'scheduler_error_summary'),
+    (v_admin_role_id, 'month_close_pending'), (v_finanzas_role_id, 'month_close_pending'), (v_facturacion_role_id, 'month_close_pending')
+  ) AS d(role_id, notification_type);
 
   RETURN NEW;
 END;

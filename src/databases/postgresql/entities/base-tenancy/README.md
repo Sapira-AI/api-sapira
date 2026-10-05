@@ -1,7 +1,7 @@
-# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-09-27)
+# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-10-04)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
 
@@ -9,10 +9,10 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_status_check` |
+| `users` (28) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_avatar_one_kind_check`<br>CHECK `users_status_check` |
 | `user_holdings` (38) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `user_holdings_pkey` |
 | `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `company_holdings_pkey` |
-| `companies` (22) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |
+| `companies` (24) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |
 | `master_data` (244) | `src/databases/postgresql/entities/base-tenancy/master-data.entity.ts` · `MasterData` | ⚠️ difiere de prod | — | — | — | nombre de PK `master_data_pkey`<br>CHECK `master_data_category_check` |
 | `currencies` (10) | `src/databases/postgresql/entities/base-tenancy/currency.entity.ts` · `Currency` | ⚠️ difiere de prod | — | — | — | nombre de PK `currencies_pkey` |
 
@@ -20,12 +20,12 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `roles` (50, RLS on) | `role.entity.ts` · `Role` | 5 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
-| `permissions` (22, RLS on) | `permission.entity.ts` · `Permission` | 3 | `permissions_pkey` (id) | `permissions_code_key` | — | — | — | — | 3 |
+| `roles` (70, RLS on) | `role.entity.ts` · `Role` | 6 | `roles_pkey` (id) | `roles_name_holding_id_key` | — | `fk_roles_holding_id` → company_holdings (CASCADE) | `idx_roles_holding_id` | — | 5 |
+| `permissions` (23, RLS on) | `permission.entity.ts` · `Permission` | 3 | `permissions_pkey` (id) | `permissions_code_key` | — | — | — | — | 3 |
 | `role_permissions` (637, RLS on) | `role-permission.entity.ts` · `RolePermission` | 3 | `role_permissions_pkey` (role_id, permission_id) | — | — | `fk_role_permissions_holding_id` → company_holdings (CASCADE)<br>`role_permissions_permission_id_fkey` → permissions<br>`role_permissions_role_id_fkey` → roles | `idx_role_permissions_holding_id`, `idx_role_permissions_permission_id`, `idx_role_permissions_role_id` | — | 5 |
 | `financial_settings` (4, RLS on) | `financial-settings.entity.ts` · `FinancialSettings` | 8 | `financial_settings_pkey` (id) | `financial_settings_holding_id_key` | — | — | — | trg_financial_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `holding_settings` (5, RLS on) | `holding-settings.entity.ts` · `HoldingSettings` | 6 | `holding_settings_pkey` (holding_id) | — | `holding_settings_fx_system_policy_check` | `holding_settings_holding_id_fkey` → company_holdings (CASCADE) | — | trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
-| `custom_field_definitions` (16, RLS on) | `custom-field-definition.entity.ts` · `CustomFieldDefinition` | 11 | `custom_field_definitions_pkey` (id) | `unique_field_per_entity` | `custom_field_definitions_field_type_check`, `valid_entity_type` | `custom_field_definitions_created_by_fkey` → users<br>`custom_field_definitions_holding_id_fkey` → company_holdings (CASCADE) | `idx_custom_field_defs_active` (parcial), `idx_custom_field_defs_holding_entity`, `idx_custom_field_defs_order` | — | 4 |
+| `holding_settings` (5, RLS on) | `holding-settings.entity.ts` · `HoldingSettings` | 14 | `holding_settings_pkey` (holding_id) | — | `holding_settings_auto_renewal_notice_days_check`, `holding_settings_fx_system_policy_check`, `holding_settings_quote_number_prefix_check`, `holding_settings_quote_number_width_check`, `holding_settings_quote_numbering_mode_check`, `holding_settings_renewal_overdue_every_days_check`, `holding_settings_renewal_reminder_days_check`, `holding_settings_timezone_check` | `holding_settings_holding_id_fkey` → company_holdings (CASCADE) | — | trg_holding_settings_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `custom_field_definitions` (16, RLS on) | `custom-field-definition.entity.ts` · `CustomFieldDefinition` | 12 | `custom_field_definitions_pkey` (id) | `unique_field_per_entity` | `custom_field_definitions_field_type_check`, `custom_field_definitions_options_check`, `valid_entity_type` | `custom_field_definitions_created_by_fkey` → users<br>`custom_field_definitions_holding_id_fkey` → company_holdings (CASCADE) | `idx_custom_field_defs_active` (parcial), `idx_custom_field_defs_holding_entity`, `idx_custom_field_defs_order` | — | 4 |
 | `user_view_preferences` (9, RLS on) | `user-view-preference.entity.ts` · `UserViewPreference` | 9 | `user_view_preferences_pkey` (id) | `user_view_preferences_user_id_entity_type_view_name_key` | — | `user_view_preferences_user_id_fkey` → users (CASCADE) | `idx_user_view_prefs_one_default_per_entity` (UNIQUE, parcial), `idx_user_view_prefs_user_entity` | user_view_preferences_updated_at · BEFORE UPDATE FOR EACH ROW → update_user_view_preferences_updated_at() | 4 |
 | `claude_skills` (2, RLS on) | `claude-skill.entity.ts` · `ClaudeSkill` | 8 | `claude_skills_pkey` (id) | `claude_skills_name_holding_id_key` | — | `claude_skills_holding_id_fkey` → company_holdings (CASCADE) | `idx_claude_skills_holding_id`, `idx_claude_skills_is_active`, `idx_claude_skills_name` | — | 0 |
 
@@ -35,7 +35,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 
 ## C · Columnas exactas de cada espejo (8 tablas)
 
-<details><summary><code>roles</code> → <code>role.entity.ts</code> · 5 columnas</summary>
+<details><summary><code>roles</code> → <code>role.entity.ts</code> · 6 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -44,6 +44,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `description` | text | sí | — |  |
 | `created_at` | timestamp without time zone | sí | now() |  |
 | `holding_id` | uuid | sí | — |  |
+| `is_default` | boolean | no | false | Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7) |
 
 </details>
 <details><summary><code>permissions</code> → <code>permission.entity.ts</code> · 3 columnas</summary>
@@ -78,7 +79,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `revenue_schedule_monthly_enabled` | boolean | no | false |  |
 
 </details>
-<details><summary><code>holding_settings</code> → <code>holding-settings.entity.ts</code> · 6 columnas</summary>
+<details><summary><code>holding_settings</code> → <code>holding-settings.entity.ts</code> · 14 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -88,9 +89,17 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 | `fx_system_policy` | text | sí | 'monthly_avg'::text | Política FX para conversión a moneda de sistema: fixed_period o monthly_avg |
 | `currencies_in_use` | text[] | sí | ARRAY[]::text[] | Monedas utilizadas en el holding |
+| `auto_renewal_notice_days` | smallint | no | 30 | Días de aviso previo de la propuesta de renovación automática (S2-3; default 30) |
+| `timezone` | text | no | 'America/Santiago'::text | Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago) |
+| `renewal_reminder_days` | smallint[] | no | '{15,7,0}'::smallint[] | Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0) |
+| `renewal_overdue_every_days` | smallint | no | 7 | Vencido sin decisión: un recordatorio cada N días (default 7) |
+| `quote_numbering_mode` | text | no | 'prefixed'::text | Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual |
+| `quote_number_prefix` | text | no | 'COT'::text |  |
+| `quote_number_include_year` | boolean | no | true |  |
+| `quote_number_width` | smallint | no | 4 |  |
 
 </details>
-<details><summary><code>custom_field_definitions</code> → <code>custom-field-definition.entity.ts</code> · 11 columnas</summary>
+<details><summary><code>custom_field_definitions</code> → <code>custom-field-definition.entity.ts</code> · 12 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -99,12 +108,13 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `entity_type` | text | no | — |  |
 | `field_name` | text | no | — | Identificador único del campo en snake_case (ej: proyecto_cliente) |
 | `field_label` | text | no | — | Label visible para el usuario (ej: Proyecto del Cliente) |
-| `field_type` | text | no | — | Tipo de dato: text o number |
+| `field_type` | text | no | — | Tipo de dato: text, number, select, boolean o date |
 | `is_required` | boolean | no | false |  |
 | `is_active` | boolean | no | true | Permite ocultar campos sin eliminarlos |
 | `display_order` | integer | no | 0 | Orden de visualización en formularios |
 | `created_at` | timestamp with time zone | no | now() |  |
 | `created_by` | uuid | sí | — |  |
+| `options` | jsonb | sí | — | Opciones de un campo select: [{ value, label }]. NULL en los otros tipos |
 
 </details>
 <details><summary><code>user_view_preferences</code> → <code>user-view-preference.entity.ts</code> · 9 columnas</summary>

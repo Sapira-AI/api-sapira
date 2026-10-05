@@ -1,0 +1,137 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentInvoicesToIssueList(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  try {
+    const pageSize = 1000;
+    const invoices: any[] = [];
+    for (let offset = 0; offset < 200000; offset += pageSize) {
+      const { data: rows, error } = await supabaseAuth
+        .from("invoices")
+        .select(
+          `
+          invoice_number,
+          status,
+          scheduled_at,
+          issue_date,
+          due_date,
+          total_system_currency,
+          total_invoice_currency,
+          invoice_currency,
+          client_id,
+          clients(name_commercial)
+        `,
+        )
+        .eq("holding_id", holdingId)
+        .eq("status", "Por Emitir")
+        .order("scheduled_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) throw error;
+      const batch = Array.isArray(rows) ? rows : [];
+      invoices.push(...batch);
+      if (batch.length < pageSize) break;
+    }
+
+    const totalSystem = invoices.reduce((sum: number, inv: any) => {
+      const v = typeof inv?.total_system_currency === "number"
+        ? inv.total_system_currency
+        : inv?.total_system_currency
+          ? Number(inv.total_system_currency)
+          : 0;
+      return sum + (Number.isFinite(v) ? v : 0);
+    }, 0);
+
+    const tableRows = invoices.map((inv: any) => {
+      const clientName = inv?.clients?.name_commercial ?? null;
+      return [
+        inv?.invoice_number ?? null,
+        clientName,
+        inv?.scheduled_at ?? null,
+        inv?.due_date ?? null,
+        inv?.total_system_currency ?? null,
+        inv?.invoice_currency ?? null,
+        inv?.total_invoice_currency ?? null,
+      ] as Array<string | number | null>;
+    });
+
+    const widgets: Widget[] = [
+      { type: "kpi", title: "Facturas por emitir", value: String(invoices.length) },
+      { type: "kpi", title: "Total por emitir (system currency)", value: totalSystem.toFixed(2) },
+      {
+        type: "table",
+        title: "Facturas por emitir",
+        columns: [
+          "Factura",
+          "Cliente",
+          "Programada",
+          "Vencimiento",
+          "Total (system)",
+          "Moneda factura",
+          "Total (factura)",
+        ],
+        rows: tableRows,
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_invoices_to_issue_list",
+      range_from: null,
+      range_to: null,
+      currency_mode: "system",
+      source_breakdown: ["invoices", "clients"],
+      filters_applied: { holding_id: holdingId, status: "Por Emitir", pagination: { page_size: pageSize, max_rows_guard: 200000 } },
+      holding_id: holdingId,
+      data_completeness: invoices.length > 0 ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: invoices.length
+        ? `INTENT: invoices_to_issue_list. Listado de facturas por emitir (sin límite fijo; paginación automática).`
+        : "INTENT: invoices_to_issue_list. No encontré facturas por emitir para tu holding.",
+      sources: [
+        { table: "invoices", query_type: "select", filters: { holding_id: holdingId, status: "Por Emitir" } },
+        { table: "clients", query_type: "join", filters: {} },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: invoices_to_issue_list. No pude consultar facturas por emitir en vivo. Motivo: ${reason}`,
+      sources: [{ table: "invoices", query_type: "select", filters: { holding_id: holdingId, status: "Por Emitir" } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Facturas por emitir",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_invoices_to_issue_list",
+        range_from: null,
+        range_to: null,
+        currency_mode: "system",
+        source_breakdown: ["invoices"],
+        filters_applied: { holding_id: holdingId, status: "Por Emitir" },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

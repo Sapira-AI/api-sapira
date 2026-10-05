@@ -1,0 +1,226 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import type { LiveDataResult, LiveDataAudit } from "../liveDataHandlers.ts";
+import { formatMoney } from "../liveDataHandlers.ts";
+
+/**
+ * Handler para mostrar contratos activos/pendientes por estado
+ * Soporta filtros por estado, moneda de contrato, y compañía
+ */
+export async function handleContractsActiveByStatus(
+  supabase: SupabaseClient,
+  question: string,
+  holdingId: string
+): Promise<LiveDataResult> {
+  const audit: LiveDataAudit = {
+    holding_id: holdingId,
+    source_breakdown: ["contracts"],
+    filters_applied: {},
+    data_completeness: "complete",
+    timestamp: new Date().toISOString(),
+    currency_mode: "contract"
+  };
+
+  try {
+    // Detectar filtros de la pregunta
+    const statusFilter = detectStatusFilter(question);
+    const currencyFilter = detectCurrencyFilter(question);
+    const companyFilter = detectCompanyFilter(question);
+
+    // Construir query base
+    let query = supabase
+      .from('contracts')
+      .select(`
+        id,
+        contract_number,
+        status,
+        contract_currency,
+        total_value,
+        booking_date,
+        contract_end_date,
+        churn_date,
+        client_id,
+        company_id,
+        clients!inner(name_commercial, segment, market),
+        companies!inner(legal_name)
+      `)
+      .eq('holding_id', holdingId)
+      .not('status', 'eq', 'Cancelado');
+
+    // Aplicar filtros
+    if (statusFilter.length > 0) {
+      query = query.in('status', statusFilter);
+      audit.filters_applied.status = statusFilter;
+    }
+
+    if (currencyFilter) {
+      query = query.eq('contract_currency', currencyFilter);
+      audit.filters_applied.currency = currencyFilter;
+    }
+
+    if (companyFilter) {
+      query = query.eq('company_id', companyFilter);
+      audit.filters_applied.company_id = companyFilter;
+    }
+
+    // Ordenar por fecha de booking descendente
+    query = query.order('booking_date', { ascending: false });
+
+    const { data: contracts, error } = await query;
+
+    if (error) {
+      throw new Error(`Error consultando contratos: ${error.message}`);
+    }
+
+    if (!contracts || contracts.length === 0) {
+      return {
+        handled: true,
+        answer: "No se encontraron contratos con los criterios especificados.",
+        widgets: [],
+        sources: [{ table: "contracts", query_type: "status_filter", filters: audit.filters_applied }],
+        audit
+      };
+    }
+
+    // Agrupar por estado para estadísticas
+    const statusStats = contracts.reduce((acc, contract) => {
+      const status = contract.status || 'Sin estado';
+      if (!acc[status]) {
+        acc[status] = { count: 0, total_value: 0, currencies: new Set() };
+      }
+      acc[status].count++;
+      acc[status].total_value += contract.total_value || 0;
+      acc[status].currencies.add(contract.contract_currency);
+      return acc;
+    }, {} as Record<string, { count: number; total_value: number; currencies: Set<string> }>);
+
+    // Crear widgets
+    const widgets = [];
+
+    // KPI: Total de contratos
+    widgets.push({
+      type: 'kpi',
+      title: 'Total Contratos',
+      value: contracts.length.toString(),
+      subtitle: `Estados: ${Object.keys(statusStats).join(', ')}`
+    });
+
+    // KPI: Valor total (si hay una moneda dominante)
+    const currencies = [...new Set(contracts.map(c => c.contract_currency))];
+    if (currencies.length === 1) {
+      const totalValue = contracts.reduce((sum, c) => sum + (c.total_value || 0), 0);
+      widgets.push({
+        type: 'kpi',
+        title: `Valor Total (${currencies[0]})`,
+        value: formatMoney(totalValue, currencies[0]),
+        subtitle: `En ${currencies[0]}`
+      });
+    }
+
+    // Tabla principal de contratos
+    const tableData = contracts.map(contract => ({
+      'Número': contract.contract_number || 'N/A',
+      'Cliente': contract.clients?.name_commercial || 'N/A',
+      'Compañía': contract.companies?.legal_name || 'N/A',
+      'Estado': contract.status || 'N/A',
+      'Moneda': contract.contract_currency || 'N/A',
+      'Valor Total': contract.total_value ? formatMoney(contract.total_value, contract.contract_currency || 'USD') : 'N/A',
+      'Fecha Booking': contract.booking_date || 'N/A',
+      'Fecha Fin': contract.contract_end_date || 'N/A',
+      'Segmento': contract.clients?.segment || 'N/A',
+      'Mercado': contract.clients?.market || 'N/A'
+    }));
+
+    widgets.push({
+      type: 'table',
+      title: 'Detalle de Contratos',
+      columns: ['Número', 'Cliente', 'Compañía', 'Estado', 'Moneda', 'Valor Total', 'Fecha Booking', 'Fecha Fin', 'Segmento', 'Mercado'],
+      rows: tableData.map(row => Object.values(row))
+    });
+
+    // Tabla de resumen por estado
+    const statusSummary = Object.entries(statusStats).map(([status, stats]) => [
+      status,
+      stats.count.toString(),
+      `${stats.total_value.toLocaleString()} (${[...stats.currencies].join(', ')})`
+    ]);
+
+    widgets.push({
+      type: 'table',
+      title: 'Resumen por Estado',
+      columns: ['Estado', 'Cantidad', 'Valor Total'],
+      rows: statusSummary
+    });
+
+    audit.data_completeness = "complete";
+    
+    return {
+      handled: true,
+      answer: `Se encontraron ${contracts.length} contratos con los criterios especificados.`,
+      widgets,
+      sources: [{ table: "contracts", query_type: "status_filter", filters: audit.filters_applied }],
+      audit
+    };
+
+  } catch (error) {
+    audit.error_type = "database";
+    audit.error_reason = error instanceof Error ? error.message : "Error desconocido";
+    
+    return {
+      handled: true,
+      answer: `Error al consultar contratos: ${audit.error_reason}`,
+      widgets: [],
+      sources: [{ table: "contracts", query_type: "status_filter", filters: audit.filters_applied }],
+      audit
+    };
+  }
+}
+
+function detectStatusFilter(question: string): string[] {
+  const q = question.toLowerCase();
+  const statuses: string[] = [];
+
+  if (q.includes('activo') || q.includes('activos')) {
+    statuses.push('Activo');
+  }
+  if (q.includes('firmado') || q.includes('firmados')) {
+    statuses.push('Firmado');
+  }
+  if (q.includes('proceso') || q.includes('en proceso')) {
+    statuses.push('En proceso');
+  }
+  if (q.includes('revisión') || q.includes('en revisión')) {
+    statuses.push('En revisión');
+  }
+  if (q.includes('expirado') || q.includes('expirados')) {
+    statuses.push('Expirado');
+  }
+  if (q.includes('pendiente') || q.includes('pendientes')) {
+    // "Pendientes" puede referirse a varios estados no activos
+    statuses.push('En revisión', 'En proceso', 'Firmado');
+  }
+
+  // Si no se detecta estado específico, mostrar activos por defecto
+  if (statuses.length === 0 && (q.includes('contrato') || q.includes('contratos'))) {
+    statuses.push('Activo', 'Firmado');
+  }
+
+  return statuses;
+}
+
+function detectCurrencyFilter(question: string): string | null {
+  const q = question.toLowerCase();
+  
+  if (q.includes('usd') || q.includes('dólar') || q.includes('dolar')) return 'USD';
+  if (q.includes('clp') || q.includes('peso') || q.includes('pesos chilenos')) return 'CLP';
+  if (q.includes('clf') || q.includes('uf') || q.includes('unidad de fomento')) return 'CLF';
+  if (q.includes('mxn') || q.includes('peso mexicano') || q.includes('pesos mexicanos')) return 'MXN';
+  if (q.includes('eur') || q.includes('euro') || q.includes('euros')) return 'EUR';
+  
+  return null;
+}
+
+function detectCompanyFilter(question: string): string | null {
+  // Aquí podrías implementar detección de compañías específicas
+  // Por ahora retornamos null para mostrar todas las compañías
+  return null;
+}

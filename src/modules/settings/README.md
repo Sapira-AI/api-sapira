@@ -1,0 +1,97 @@
+# Módulo `settings` (Administración, antes Configuración v2)
+
+API del módulo Administración (antes Configuración) del front nuevo (`/administracion`). Spec: `docs/v2-rediseno/spec-configuracion-v2.md` (manda
+"Decisiones v3"). **Contrato de endpoints** (shapes, permisos y mensajes 4xx): `docs/v2-rediseno/contrato-api-configuracion.md`.
+Productos (pestaña de Precios) vive en `src/modules/products` con el mismo patrón.
+
+## Piezas
+
+| Archivo                                                                                   | Qué hace                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings-holding.*`                                                                      | Holding 360: datos y logo (sin renombrar), resumen (`users_count`, `last_activity_at`), preferencias (`holding_settings`, con `locked`), tasas fijas por período, estado de la sincronización FX y su detalle diario/mensual (ronda 3), árbol holding → compañías |
+| `settings-catalogs.*`                                                                     | Vendedores, motivos de baja y datos maestros (`item_types`, `units_of_measure`, `markets`, `segments`, `industries`; condiciones de pago salió el 03-10) con uso total y desglosado; tipos de negocio y de contacto (solo lectura)                                |
+| `settings-custom-fields.*`                                                                | Definiciones de campos personalizados (D13) con conteo de valores (agrupado por entidad en la lista); tipos `text`, `number`, `select` (con `options` y `option_usage`), `boolean`, `date`                                                                        |
+| `settings-tax-documents.*`                                                                | Documentos tributarios del país de la compañía con su tasa y la tasa efectiva del motor (`resolveTaxRate`), solo lectura                                                                                                                                          |
+| `settings-communications.*`                                                               | Dominios y remitentes de correo del holding (SendGrid vía `EmailsService`) y correo de prueba, con holding validado                                                                                                                                               |
+| `settings-companies.*`                                                                    | Compañía 360: datos, 5 cuentas contables, cuentas bancarias; controlador también de documentos y períodos                                                                                                                                                         |
+| `company-legal-documents.service.ts`                                                      | Documentos legales con subida por URL firmada (bucket privado `company-files`)                                                                                                                                                                                    |
+| `accounting-periods.service.ts`                                                           | Cerrar/reabrir períodos en transacción propia (replica `close_period_until`/`reopen_period_from` con el usuario de la sesión)                                                                                                                                     |
+| `settings-users.service.ts`, `settings-roles.service.ts`, `settings-access.controller.ts` | Usuarios del holding, cambio de rol, catálogo de permisos, roles (D7) y alertas por rol                                                                                                                                                                           |
+| `settings-user-access.service.ts`                                                         | Acciones de acceso (contrato §10): invitar, reenviar invitación, desactivar/reactivar y eliminar invitación; auditoría en `user_access_events`. Usa `src/auth/accounts/` (`SupabaseAdminService`, `AuthMailer`) |
+| `settings-admins.ts`                                                                      | Regla "el holding no queda sin nadie que edite la configuración" (simula cambio de rol, de permisos o la salida de un miembro)                                                                                                                                                                                                  |
+| `permissions-catalog.ts`                                                                  | Matriz módulo × Ver/Editar, permisos especiales e internos                                                                                                                                                                                                        |
+| `settings-storage.service.ts`                                                             | Storage con clave de servicio: logos (público `company-logos`) y archivos (privado `company-files`)                                                                                                                                                               |
+| `countries.controller.ts`                                                                 | `GET /catalog/countries` (global, solo sesión)                                                                                                                                                                                                                    |
+| `settings-db-errors.ts`                                                                   | Interceptor de todos los controladores de Configuración y de Productos: traduce errores esperables de Postgres a 4xx con `message` (nunca 500 sin mensaje)                                                                                                        |
+| `src/core/utils/holding-preferences.ts`                                                   | Preferencias operativas del holding con defaults (zona horaria, escalera de recordatorios, numeración de cotizaciones) para jobs y módulos                                                                                                             |
+| `src/core/utils/account-mappings.ts`                                                      | Las 5 cuentas (columnas, etiquetas, nombres por defecto en español) y el criterio único "cuentas completas" (árbol, Compañía 360 e Ingresos)                                                                                                                      |
+| `fake-db.testing-spec.ts`                                                                 | Base falsa para los specs (fuera del build)                                                                                                                                                                                                                       |
+
+## Reglas
+
+-   Todo controlador: `SupabaseAuthGuard` → `HoldingScopeGuard` → `RequirePermissionGuard` (`src/guards/`), con `VIEW_CONFIGURACION` en la
+    clase y `EDIT_CONFIGURACION` (o `CLOSE_PERIODS`) en cada escritura. `settings-controllers.spec.ts` lo hace cumplir.
+-   Recursos por id: siempre `WHERE id = $1 AND holding_id = $2` (o por la compañía del holding cuando la tabla no tiene `holding_id`,
+    como `company_account_mappings`) → 404 si no es del holding.
+-   Borrar solo si no se usa (409 con la sugerencia de desactivar/archivar).
+-   Lógica en la API: los triggers (`validate_holding_fx_period_rates`, validadores de período, `sync_contracts_company_currency`) quedan como
+    invariantes. Cambiar la moneda de una compañía con contratos o facturas se bloquea (409) para que el trigger no reescriba
+    `contracts.company_currency`.
+-   Cambiar la moneda de consolidación **o la política de tipo de cambio** del holding con contratos → 409 (cambiarían todas las
+    métricas históricas; Domi 02-10 y 03-10). El GET de preferencias trae `locked` y `locked_reason` para mostrarlas de solo lectura.
+-   Tasas fijas por período (`fixed_period`): crear, editar o borrar una tasa recalcula **en la misma transacción v2** el devengo
+    (`revenue_schedule_apply_fx_for_contract`, sin rebuild) y los montos en moneda del sistema de las facturas (no NC; las NC espejo copian
+    la de su original) cuya moneda de conversión es la otra moneda del par (regla por estado, 04-10: Por Emitir desde la moneda de contrato del
+    encabezado; emitidas y demás estados desde la moneda de factura, y sin neto en ella, el encabezado), desde el primer mes del período tocado y nunca antes del cierre de cada compañía
+    (`contracts/holding-fx-recalc.ts`). La respuesta de crear/editar trae `recalculated` (`from_month`, `contracts`, `invoices`).
+    Sin tasa registrada para un mes **posterior al mes en curso** (y a la última del par), el devengo y las facturas usan la última,
+    **proyectada** (`holding_fixed_fx_rate`, fuente `*_projected`, decisión de Domi 04-10); al registrar la del período, esa pasa a
+    proyectarse. Solo hacia adelante: un mes pasado o el actual sin tasa no se proyecta, queda "Sin tipo de cambio"
+    (`missing_fx_rate`) porque es un error de datos. El mes en curso es el del "hoy" del holding (`holding_settings.timezone`, default
+    America/Santiago), no `CURRENT_DATE` de la base (UTC). Las filas ya calculadas con tasa proyectada conservan esa tasa hasta el
+    siguiente recálculo (registrar la tasa del mes lo dispara; un rebuild o `apply_fx` también).
+-   El holding **no se renombra** (`name` en el PATCH → 400 "El nombre del holding no se puede cambiar").
+-   Cuenta bancaria con cartolas cargadas: no cambia moneda ni número (409).
+-   Cierre de períodos: solo meses terminados (hasta el último día del mes anterior a hoy, hora Chile → si no, 409); la compañía se bloquea
+    con `FOR NO KEY UPDATE`. El cierre protege contratos e ítems; pagos, facturas y consumos se registran o mueven en meses cerrados.
+-   **Editar incluye Ver** (`PermissionsService.allows`: `EDIT_X` satisface `VIEW_X`); al crear/editar/duplicar un rol se agrega `VIEW_X`
+    por cada `EDIT_X`. Duplicar copia solo códigos otorgables (`isGrantable`).
+-   Fechas puras con `@IsIsoDate` (rechaza `2026-02-30` con 400). Mensajes de validación en español de negocio, sin nombres de columnas.
+-   Logos: PNG, JPG o WEBP, máx. 2 MB (SVG fuera); el bucket `company-logos` lo hace cumplir con la migración `1790810000000` (sin aplicar).
+-   Ninguna tabla de estas tiene triggers gateados por la costura `sapira.writer`: no se fija.
+
+## Ronda 3 (03-10)
+
+Contrato §8 y spec §13. Migraciones nuevas sin aplicar: M11 `1790820000000-TaxDocumentTypesTaxRate`, M12 `1790830000000-CustomFieldTypes`,
+M13 `1790840000000-ClientsCountryCode` y el seed `006-tax-document-types-tax-rate.sql`; van **antes** del código. `SettingsModule` importa
+`EmailsModule`. Las rutas viejas `/emails/*` no se tocan (se cierran en el bloque de seguridad).
+
+## Ronda 4 (03-10)
+
+Contrato §9 y spec §15. Preferencias del holding que ya funcionan (`GET/PATCH /settings/holding/preferences`): zona horaria, escalera de recordatorios de vencimiento y numeración de cotizaciones (con vista previa del próximo número).
+Lectura única para todos los módulos en `src/core/utils/holding-preferences.ts` (`loadHoldingPreferences`, `holdingTimezone`,
+`quoteNumberFormat`, `nextQuoteNumber`): lee la fila con `to_jsonb`, así que sin la migración M14 `1790850000000-HoldingSettingsPreferencesV4`
+(sin aplicar) todo cae a los defaults de antes; solo el PATCH de preferencias necesita M14. La entity `holding-settings.entity.ts` se
+actualiza con `schema:snapshot` después de aplicar en producción (como M12).
+
+## Usuarios: acceso (03-10)
+
+Contrato §10 y spec §16. `POST /settings/users/invitations`, `POST /settings/users/:id/invitation/resend`, `PATCH /settings/users/:id/access`,
+`DELETE /settings/users/:id`, todo con `EDIT_CONFIGURACION`; el actor siempre de la sesión. Supabase Auth admin y el correo viven en
+`src/auth/accounts/` (`AuthAccountsModule`, compartido con `POST /auth/password-recovery`): `SupabaseAdminService` (`generateLink`, ban,
+`deleteUser`) y `AuthMailer` (Resend con plantillas de la marca en `email-templates/`). Invitar: 20/min por actor (`INVITE_THROTTLE`,
+tracker por `sub` del JWT). Reenviar: 60 s entre envíos y 5 en 24 h contados en `user_access_events`. Variables: `SUPABASE_SERVICE_ROLE_KEY`,
+`RESEND_API_KEY`, `INVITE_LANDING_URL` (obligatoria), `INVITE_FROM`, `EMAIL_LOGO_URL`, `INVITE_TEST_ALLOWLIST` (solo QA). Requiere la
+migración **M15** aplicada antes de desplegar; **M16** cierra la escritura de `user_holdings` desde el navegador.
+
+## Despliegue
+
+M2, M3, M7, M8, M9 y el seed 004 están **aplicados en QA y producción el 02-10**. Pendientes (sin aplicar, con OK de Domi): migración
+`1790810000000-CompanyLogosBucketLimits`, seed `005-finanzas-view-configuracion.sql` y la función `create_default_roles_for_holding`
+(is_default, CLOSE_PERIODS, VIEW_CONFIGURACION para Finanzas, sin ADMIN_FULL_ACCESS); usuarios: M15 `1790860000000-UserAccessEvents`,
+M16 `1790870000000-UserHoldingsReadOnlyForClients` y el grant `grants/040-user-holdings-read-only.sql`. Detalle en el contrato §11.
+
+## Tests
+
+`npx jest src/modules/settings src/modules/products src/guards src/auth/accounts src/core/utils/holding-preferences.spec.ts src/databases/postgresql/configuracion-v2.spec.ts` (ronda 3: `settings-ronda3.spec.ts`; ronda 4: `settings-holding.service.spec.ts`, `settings.http.spec.ts`, `holding-preferences.spec.ts`; usuarios: `settings-user-access.service.spec.ts`, `src/auth/accounts/auth-mailer.spec.ts` con Auth y Resend mockeados) — HTTP con guards reales (`settings.http.spec.ts`), guarda estática de
+permisos por ruta y DI (`settings-controllers.spec.ts`) y un spec por servicio.

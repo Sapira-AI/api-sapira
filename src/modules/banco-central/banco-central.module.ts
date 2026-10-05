@@ -8,14 +8,17 @@ import { ExchangeRateMonthlyAvgEntity } from '@/databases/postgresql/entities/fx
 import { ExchangeRateEntity } from '@/databases/postgresql/entities/fx/exchange-rate.entity';
 import { IndicadorEconomicoEntity } from '@/databases/postgresql/entities/fx/indicador-economico.entity';
 import { EmailsModule } from '@/modules/emails/emails.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { BancoCentralController } from './banco-central.controller';
 import { BancoCentralService } from './banco-central.service';
 import { ExchangeRatesScheduler } from './exchange-rates.scheduler';
+import { FxMonthCloseScheduler } from './fx-month-close.scheduler';
 import { PeruApiController } from './peru-api.controller';
 import { BancoCentralSchemaService } from './services/banco-central-schema.service';
 import { ExchangeRatesNotificationService } from './services/exchange-rates-notification.service';
 import { ExchangeRatesService } from './services/exchange-rates.service';
+import { FxMonthCloseService } from './services/fx-month-close.service';
 
 @Module({
 	imports: [
@@ -23,9 +26,18 @@ import { ExchangeRatesService } from './services/exchange-rates.service';
 		ConfigModule,
 		AuthModule,
 		EmailsModule,
+		NotificationsModule,
 	],
 	controllers: [BancoCentralController, PeruApiController],
-	providers: [BancoCentralService, BancoCentralSchemaService, ExchangeRatesService, ExchangeRatesNotificationService, ExchangeRatesScheduler],
+	providers: [
+		BancoCentralService,
+		BancoCentralSchemaService,
+		ExchangeRatesService,
+		ExchangeRatesNotificationService,
+		ExchangeRatesScheduler,
+		FxMonthCloseService,
+		FxMonthCloseScheduler,
+	],
 	exports: [BancoCentralService, ExchangeRatesService],
 })
 export class BancoCentralModule {}

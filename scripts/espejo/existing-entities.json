@@ -15,6 +15,21 @@
   "file": "src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity"
  },
+ "billable_metrics": {
+  "class": "BillableMetric",
+  "file": "src/databases/postgresql/entities/contratos/billable-metric.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/billable-metric.entity"
+ },
+ "budget_lines": {
+  "class": "BudgetLine",
+  "file": "src/databases/postgresql/entities/revenue/budget-line.entity.ts",
+  "import": "@/databases/postgresql/entities/revenue/budget-line.entity"
+ },
+ "budgets": {
+  "class": "Budget",
+  "file": "src/databases/postgresql/entities/revenue/budget.entity.ts",
+  "import": "@/databases/postgresql/entities/revenue/budget.entity"
+ },
  "client_activity_notes": {
   "class": "ClientActivityNote",
   "file": "src/databases/postgresql/entities/clientes/client-activity-note.entity.ts",
@@ -50,10 +65,35 @@
   "file": "src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/company-holding.entity"
  },
+ "consumption_entries": {
+  "class": "ConsumptionEntry",
+  "file": "src/databases/postgresql/entities/contratos/consumption-entry.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/consumption-entry.entity"
+ },
+ "consumption_entry_revisions": {
+  "class": "ConsumptionEntryRevision",
+  "file": "src/databases/postgresql/entities/contratos/consumption-entry-revision.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/consumption-entry-revision.entity"
+ },
+ "contract_item_pauses": {
+  "class": "ContractItemPause",
+  "file": "src/databases/postgresql/entities/contratos/contract-item-pause.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/contract-item-pause.entity"
+ },
+ "contract_scheduled_changes": {
+  "class": "ContractScheduledChange",
+  "file": "src/databases/postgresql/entities/contratos/contract-scheduled-change.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/contract-scheduled-change.entity"
+ },
  "contracts": {
   "class": "Contract",
   "file": "src/databases/postgresql/entities/contratos/contract.entity.ts",
   "import": "@/databases/postgresql/entities/contratos/contract.entity"
+ },
+ "countries": {
+  "class": "Country",
+  "file": "src/databases/postgresql/entities/base-tenancy/country.entity.ts",
+  "import": "@/databases/postgresql/entities/base-tenancy/country.entity"
  },
  "currencies": {
   "class": "Currency",
@@ -90,6 +130,11 @@
   "file": "src/databases/postgresql/entities/fx/indicador-economico.entity.ts",
   "import": "@/databases/postgresql/entities/fx/indicador-economico.entity"
  },
+ "integration_record_discards": {
+  "class": "IntegrationRecordDiscard",
+  "file": "src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts",
+  "import": "@/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity"
+ },
  "invoice_items": {
   "class": "InvoiceItem",
   "file": "src/databases/postgresql/entities/facturacion/invoice-item.entity.ts",
@@ -109,6 +154,11 @@
   "class": "MasterData",
   "file": "src/databases/postgresql/entities/base-tenancy/master-data.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/master-data.entity"
+ },
+ "notification_email_log": {
+  "class": "NotificationEmailLog",
+  "file": "src/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity.ts",
+  "import": "@/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity"
  },
  "notification_role_subscriptions": {
   "class": "NotificationRoleSubscription",
@@ -140,10 +190,20 @@
   "file": "src/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity"
  },
+ "prices": {
+  "class": "Price",
+  "file": "src/databases/postgresql/entities/contratos/price.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/price.entity"
+ },
  "products": {
   "class": "Product",
   "file": "src/databases/postgresql/entities/cotizaciones-catalogo/products.entity.ts",
   "import": "@/databases/postgresql/entities/cotizaciones-catalogo/products.entity"
+ },
+ "quote_events": {
+  "class": "QuoteEvent",
+  "file": "src/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity.ts",
+  "import": "@/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity"
  },
  "quote_items": {
   "class": "QuoteItem",
@@ -275,10 +335,25 @@
   "file": "src/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity"
  },
+ "tax_document_types": {
+  "class": "TaxDocumentType",
+  "file": "src/databases/postgresql/entities/contratos/tax-document-type.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/tax-document-type.entity"
+ },
+ "user_access_events": {
+  "class": "UserAccessEvent",
+  "file": "src/databases/postgresql/entities/base-tenancy/user-access-event.entity.ts",
+  "import": "@/databases/postgresql/entities/base-tenancy/user-access-event.entity"
+ },
  "user_holdings": {
   "class": "UserHolding",
   "file": "src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/user-holding.entity"
+ },
+ "user_notification_preferences": {
+  "class": "UserNotificationPreference",
+  "file": "src/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity.ts",
+  "import": "@/databases/postgresql/entities/automatizaciones-ia/user-notification-preference.entity"
  },
  "users": {
   "class": "User",

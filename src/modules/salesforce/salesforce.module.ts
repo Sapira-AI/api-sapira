@@ -112,6 +112,14 @@ import { SalesforceTypeOrmService } from './services/salesforce-typeorm.service'
 		SalesforceScheduler,
 		EncryptionService,
 	],
-	exports: [SalesforceService, SalesforceMappingService],
+	exports: [
+		SalesforceService,
+		SalesforceMappingService,
+		// Integraciones v2 (guardar credenciales, corrida por holding, ejecuciones y revisión).
+		SalesforceAuthService,
+		SalesforceSyncCompleteService,
+		SalesforceSyncRunService,
+		SalesforceStagingService,
+	],
 })
 export class SalesforceModule {}

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
@@ -13,6 +13,7 @@ import { InvoiceItem } from '@/databases/postgresql/entities/facturacion/invoice
 import { InvoiceReference } from '@/databases/postgresql/entities/facturacion/invoice-reference.entity';
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
+import { pairKey, type PairLine, upperCode, valuateLinesByPair } from '@/modules/contracts/multicurrency';
 import { INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ExchangeRatesService } from '../banco-central/services/exchange-rates.service';
@@ -24,8 +25,10 @@ import { TaxMappingService } from '../odoo/services/tax-mapping.service';
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
+import { erpErrorSentence, translateErpError } from './erp-error-translation';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
+import { type LastSendAttempt, lastSendAttemptOf } from './last-send-attempt';
 import { InvoiceOdooSendLog, InvoiceOdooSendLogDocument } from './schemas/invoice-odoo-send-log.schema';
 import { ExecutionEnvironment, ExecutionSource, InvoiceSchedulerJob, InvoiceSchedulerJobDocument } from './schemas/invoice-scheduler-job.schema';
 
@@ -36,6 +39,19 @@ interface InvoiceWithRelations extends Invoice {
 	contract?: Contract;
 	references?: InvoiceReference[];
 }
+
+/**
+ * Notas de crédito / débito: las NC de v2 nacen con el estado de su factura (decisión 01-10; las previas nacieron Por Emitir) y el envío a
+ * Odoo como `out_refund` todavía no existe (integración de Leon). Hasta entonces no salen por el envío automático ni por el manual (`docs/v2-rediseno/cambios-integracion-para-leon.md`).
+ */
+export const NON_SENDABLE_DOCUMENT_TYPES = ['NC', 'ND'] as const;
+
+export const CREDIT_NOTE_SEND_PENDING = 'credit_note_send_pending';
+/** Línea que viajaría al ERP sin producto de Odoo resoluble (mismo código que el bloqueo del 360 y de la cola de Facturación). */
+export const PRODUCT_WITHOUT_ERP_MAPPING = 'product_without_erp_mapping';
+
+export const isNonSendableDocumentType = (documentType: string | null | undefined): boolean =>
+	(NON_SENDABLE_DOCUMENT_TYPES as readonly string[]).includes((documentType ?? '').trim().toUpperCase());
 
 interface ProcessOptions {
 	dryRun: boolean;
@@ -195,6 +211,9 @@ export class InvoiceSchedulerService {
 			.andWhere('inv.issue_date <= :businessToday', { businessToday })
 			.andWhere('inv.sent_to_odoo_at IS NULL')
 			.andWhere('inv.is_active = true')
+			.andWhere('(inv.document_type IS NULL OR inv.document_type NOT IN (:...nonSendableDocumentTypes))', {
+				nonSendableDocumentTypes: [...NON_SENDABLE_DOCUMENT_TYPES],
+			})
 			.andWhere("TO_CHAR(inv.issue_date, 'YYYY-MM') = :businessCurrentMonth", { businessCurrentMonth })
 			.andWhere('cle.odoo_partner_id IS NOT NULL')
 			.andWhere('com.odoo_integration_id IS NOT NULL')
@@ -261,6 +280,27 @@ export class InvoiceSchedulerService {
 		return invoices as InvoiceWithRelations[];
 	}
 
+	/**
+	 * Envío puntual de UNA factura por id (Contrato 360 › "Enviar al ERP ahora", `contract-invoices.service.ts`): carga la factura con
+	 * sus relaciones y reutiliza `sendInvoiceToOdoo`. No aplica la regla del mes en curso de `getInvoicesToSend`; los bloqueos de negocio
+	 * los corre quien llama.
+	 */
+	async sendInvoiceById(invoiceId: string, dryRun: boolean, schedulerSource: 'manual' | 'automatic' = 'manual'): Promise<InvoiceResultDto> {
+		const invoice = await this.getInvoiceWithRelations(invoiceId);
+
+		if (isNonSendableDocumentType(invoice.document_type)) {
+			throw new ConflictException({
+				message:
+					'El envío de notas de crédito y débito al ERP todavía no está disponible: se emitirán cuando exista la emisión de NC en Odoo',
+				code: CREDIT_NOTE_SEND_PENDING,
+				invoice_id: invoice.id,
+				document_type: invoice.document_type,
+			});
+		}
+
+		return await this.sendInvoiceToOdoo(invoice, dryRun, schedulerSource);
+	}
+
 	async sendInvoiceToOdoo(
 		invoice: InvoiceWithRelations,
 		dryRun: boolean,
@@ -291,6 +331,7 @@ export class InvoiceSchedulerService {
 				this.logger.warn(`⚠️ Factura ${invoice.id} omitida: ${validation.error}`);
 
 				// Registrar log de factura omitida
+				result.errorType = 'validation';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -304,12 +345,25 @@ export class InvoiceSchedulerService {
 					errorType: 'validation',
 					errorDetails: { validation_error: validation.error },
 				});
+				if (!dryRun) {
+					await this.createOdooFailureNotification({
+						invoice,
+						stage: 'create_draft',
+						title: `Factura ${invoice.invoice_number || 'SIN-NUMERO'} omitida por validación`,
+						message: validation.error,
+						errorType: 'validation',
+						errorMessage: validation.error,
+						schedulerSource,
+					});
+				}
 
 				return result;
 			}
 
-			// NUEVO: Calcular montos si hay conversión de moneda
-			if (invoice.contract_currency !== invoice.invoice_currency) {
+			// NUEVO: Calcular montos si hay conversión de moneda (o, en multimoneda, si alguna línea convierte con su par: MM4)
+			const convertsByPair = InvoiceSchedulerService.convertsByPair(invoice);
+
+			if (invoice.contract_currency !== invoice.invoice_currency || convertsByPair) {
 				try {
 					await this.calculateInvoiceAmountsAtIssue(invoice);
 
@@ -322,6 +376,7 @@ export class InvoiceSchedulerService {
 					this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: ${error.message}`);
 
 					// Registrar log de error en tipo de cambio
+					result.errorType = 'exchange_rate';
 					await this.createOdooSendLog({
 						holdingId: invoice.holding_id,
 						operation: 'create_draft',
@@ -341,13 +396,14 @@ export class InvoiceSchedulerService {
 			}
 
 			// Validar que montos estén calculados
-			if (!invoice.amount_invoice_currency && invoice.contract_currency !== invoice.invoice_currency) {
+			if (!invoice.amount_invoice_currency && (invoice.contract_currency !== invoice.invoice_currency || convertsByPair)) {
 				result.status = 'skipped';
 				result.error = 'Montos no calculados en moneda de facturación';
 				result.details = 'La factura requiere conversión de moneda pero los montos no están calculados';
 				this.logger.error(`✗ Factura ${invoice.invoice_number} omitida: montos no calculados`);
 
 				// Registrar log de montos no calculados
+				result.errorType = 'amount_calculation';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -394,6 +450,48 @@ export class InvoiceSchedulerService {
 				this.logger.warn(`   ✗ company es NULL - no se puede asignar nombre`);
 			}
 
+			// Producto sin mapeo al ERP: antes viajaba en silencio como producto 1 de Odoo; ahora la factura se omite con error y aviso.
+			const unmappedProducts = await this.findUnmappedProducts(invoice);
+
+			if (unmappedProducts.length) {
+				const errorMessage = `Productos sin mapeo a Odoo: ${unmappedProducts.join(', ')}`;
+
+				result.status = 'skipped';
+				result.error = errorMessage;
+				result.details = 'La factura no se envía: mapea el producto en Integraciones › Odoo y vuelve a procesarla';
+				this.logger.warn(`⚠️ Factura ${invoice.invoice_number || invoice.id} omitida: ${errorMessage}`);
+
+				result.errorType = PRODUCT_WITHOUT_ERP_MAPPING;
+				await this.createOdooSendLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'skipped',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: result.clientName,
+					companyName: result.companyName,
+					invoiceCurrency: invoice.invoice_currency,
+					errorMessage,
+					errorType: PRODUCT_WITHOUT_ERP_MAPPING,
+					errorDetails: { unmapped_products: unmappedProducts },
+				});
+
+				if (!dryRun) {
+					await this.createOdooFailureNotification({
+						invoice,
+						stage: 'product_mapping',
+						title: `Factura ${invoice.invoice_number || 'SIN-NUMERO'} sin enviar: producto sin mapeo a Odoo`,
+						message: `${errorMessage}. La factura no se envió al ERP.`,
+						errorType: PRODUCT_WITHOUT_ERP_MAPPING,
+						errorMessage,
+						schedulerSource,
+						errorDetails: { unmapped_products: unmappedProducts },
+					});
+				}
+
+				return result;
+			}
+
 			const odooInvoiceData = await this.mapInvoiceToOdooFormat(invoice);
 
 			// 🔍 VALIDAR TAXES ANTES DE ENVIAR
@@ -428,6 +526,7 @@ export class InvoiceSchedulerService {
 						);
 
 						// Registrar log de error de taxes
+						result.errorType = 'tax_validation';
 						await this.createOdooSendLog({
 							holdingId: invoice.holding_id,
 							operation: 'create_draft',
@@ -446,6 +545,18 @@ export class InvoiceSchedulerService {
 								tax_validations: validation.tax_validations,
 							},
 						});
+
+						if (!dryRun) {
+							await this.createOdooFailureNotification({
+								invoice,
+								stage: 'create_draft',
+								title: `Taxes incompatibles en la factura ${invoice.invoice_number || 'SIN-NUMERO'}`,
+								message: `${result.error}: ${result.details}`,
+								errorType: 'tax_validation',
+								errorMessage: `${result.error}: ${result.details}`,
+								schedulerSource,
+							});
+						}
 
 						return result;
 					}
@@ -665,6 +776,7 @@ export class InvoiceSchedulerService {
 											result.error = customerSendErrorDetails.message;
 											result.details = `Factura emitida en Odoo (ID: ${odooResponse.invoice_id}) pero no se pudo enviar al cliente: ${customerSendErrorDetails.message}`;
 
+											result.errorType = 'customer_email_delivery';
 											await this.createOdooSendLog({
 												holdingId: invoice.holding_id,
 												operation: 'send_invoice_to_customer',
@@ -708,6 +820,7 @@ export class InvoiceSchedulerService {
 								result.details = `Factura publicada en Odoo (ID: ${odooResponse.invoice_id}) pero falló emisión electrónica: ${emitError.message}`;
 
 								// Registrar log de error en emisión electrónica
+								result.errorType = 'emit_electronic_exception';
 								await this.createOdooSendLog({
 									holdingId: invoice.holding_id,
 									operation: 'emit_electronic_invoice',
@@ -746,6 +859,7 @@ export class InvoiceSchedulerService {
 							this.logger.warn(`⚠️ Factura ${invoice.invoice_number} creada pero no se pudo emitir: ${postResponse.message}`);
 
 							// Registrar log de error en emisión
+							result.errorType = 'odoo_post_failed';
 							await this.createOdooSendLog({
 								holdingId: invoice.holding_id,
 								operation: 'post_invoice',
@@ -782,6 +896,7 @@ export class InvoiceSchedulerService {
 						this.logger.error(`✗ Error al emitir factura ${invoice.invoice_number}:`, postError);
 
 						// Registrar log de excepción en emisión
+						result.errorType = 'odoo_post_exception';
 						await this.createOdooSendLog({
 							holdingId: invoice.holding_id,
 							operation: 'post_invoice',
@@ -822,6 +937,7 @@ export class InvoiceSchedulerService {
 				this.logger.error(`✗ Error al enviar factura ${invoice.invoice_number}: ${result.error}`);
 
 				// Registrar log de error al crear factura
+				result.errorType = 'odoo_rejection';
 				await this.createOdooSendLog({
 					holdingId: invoice.holding_id,
 					operation: 'create_draft',
@@ -837,6 +953,16 @@ export class InvoiceSchedulerService {
 					errorType: 'odoo_rejection',
 					durationMs,
 				});
+				await this.createOdooFailureNotification({
+					invoice,
+					stage: 'create_draft',
+					title: `Error al crear la factura ${invoice.invoice_number || 'SIN-NUMERO'} en Odoo`,
+					message: result.error,
+					errorType: 'odoo_rejection',
+					errorMessage: result.error,
+					schedulerSource,
+					responseData: odooResponse,
+				});
 			}
 		} catch (error) {
 			result.status = 'error';
@@ -844,6 +970,7 @@ export class InvoiceSchedulerService {
 			this.logger.error(`✗ Excepción al procesar factura ${invoice.invoice_number}:`, error);
 
 			// Registrar log de excepción general
+			result.errorType = 'unexpected_exception';
 			await this.createOdooSendLog({
 				holdingId: invoice.holding_id,
 				operation: 'create_draft',
@@ -860,9 +987,36 @@ export class InvoiceSchedulerService {
 					error_type: error.constructor.name,
 				},
 			});
+			if (!dryRun) {
+				await this.createOdooFailureNotification({
+					invoice,
+					stage: 'create_draft',
+					title: `Excepción al enviar la factura ${invoice.invoice_number || 'SIN-NUMERO'} a Odoo`,
+					message: result.error,
+					errorType: 'unexpected_exception',
+					errorMessage: result.error,
+					schedulerSource,
+					errorDetails: { stack: error.stack },
+				});
+			}
+		}
+
+		// Notificaciones v2: la factura llegó al ERP → se cierran sus avisos de falla abiertos (todas las etapas y errores).
+		if (!dryRun && result.status === 'sent') {
+			await this.resolveOdooFailureNotifications(invoice);
 		}
 
 		return result;
+	}
+
+	/** Cierre automático de `invoice_odoo_failure` de una factura enviada bien. Un fallo aquí no afecta el envío. */
+	private async resolveOdooFailureNotifications(invoice: InvoiceWithRelations): Promise<void> {
+		try {
+			await this.notificationsService.resolveOpen(invoice.holding_id, { type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, resourceId: invoice.id });
+			await this.invoiceNotificationService.resolveMissingExchangeRate(invoice.holding_id, invoice.id);
+		} catch (error) {
+			this.logger.warn(`No se pudieron cerrar los avisos de envío de la factura ${invoice.id}: ${(error as Error).message}`);
+		}
 	}
 
 	async mapInvoiceToOdooFormat(invoice: InvoiceWithRelations): Promise<CreateDraftInvoiceDTO> {
@@ -893,7 +1047,27 @@ export class InvoiceSchedulerService {
 
 		const normalizedCountry = this.normalizeCountryName(invoice.company?.country);
 
-		for (const item of invoice.items || []) {
+		/**
+		 * Líneas en cero (Contratos v2, Facturas en el 360 · etapa 4 — cambio puntual de Domi/Claude, avisado a Leon): una línea con
+		 * cantidad 0 (consumo informado en cero o línea dejada en cero al editar) se conserva en Sapira para trazabilidad, pero NO viaja al
+		 * ERP ni aparece en el documento. Solo se omiten si la factura tiene al menos una línea con cantidad distinta de cero: una factura
+		 * con todas sus líneas en cero se envía igual que antes (v2 no las deja Por Emitir: pasan a Cancelada "sin cobro").
+		 */
+		/**
+		 * Líneas internas (Contratos v2 · etapa 6, facturación parcial por OC): las líneas con `visible_line_id` son la asignación interna por
+		 * ítem y período de una única línea visible del documento; solo la visible viaja al ERP. También cambio puntual avisado a Leon
+		 * (`docs/v2-rediseno/cambios-integracion-para-leon.md`).
+		 */
+		const allItems = invoice.items || [];
+		const itemsToSend = InvoiceSchedulerService.itemsSentToErp(invoice);
+
+		if (itemsToSend.length < allItems.length) {
+			this.logger.log(
+				`🧹 Factura ${invoice.invoice_number || invoice.id}: ${allItems.length - itemsToSend.length} línea(s) no se envían al ERP (en cero o internas de una línea visible)`
+			);
+		}
+
+		for (const item of itemsToSend) {
 			let odooProductId = 1;
 			const itemLabel = item.description || 'Producto/Servicio';
 			this.logger.log(`🧾 Iniciando cálculo de impuestos para item ${item.id} (${itemLabel})`);
@@ -906,9 +1080,14 @@ export class InvoiceSchedulerService {
 					`   - client_fiscal_position_id: ${invoice.clientEntity?.odoo_fiscal_position_id || 'SIN POSICION FISCAL'}`
 			);
 
-			// Obtener mapeo del producto
+			// Obtener mapeo del producto. Sin mapeo NO se envía el producto 1 (Contratos v2, cambio puntual avisado a Leon):
+			// `sendInvoiceToOdoo` ya rechazó la factura con `product_without_erp_mapping`; esto es la defensa si se llama directo.
 			if (item.product_id) {
 				const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
+
+				if (mappingInfo.odooProductId === null) {
+					throw new Error(`${PRODUCT_WITHOUT_ERP_MAPPING}: el producto ${item.product_id} no está mapeado a un producto de Odoo`);
+				}
 				odooProductId = mappingInfo.odooProductId;
 
 				this.logger.debug(
@@ -1219,19 +1398,43 @@ export class InvoiceSchedulerService {
 		exchangeRate?: number;
 		fallbackDate?: Date;
 	}> {
-		// FX FIJO: si el contrato tiene política 'fixed' y la factura ya trae un
-		// fx_contract_to_invoice válido (persistido por el front), respetamos ese
-		// tipo de cambio y NO recalculamos spot contra Banco Central.
-		if (invoice.contract?.fx_invoice_policy === 'fixed' && invoice.fx_contract_to_invoice != null && Number(invoice.fx_contract_to_invoice) > 0) {
+		// MULTIMONEDA (MM4, spec-multimoneda §4 "Envío al ERP"; cambio puntual avisado a Leon en `cambios-integracion-para-leon.md` §4):
+		// una tasa por par (moneda de la línea → factura), nunca una sola tasa del encabezado. Facturas de una sola moneda: rama de siempre.
+		if (InvoiceSchedulerService.requiresPairValuation(invoice)) {
+			return this.calculatePairAmountsAtIssue(invoice);
+		}
+
+		// U12/B3 (spec facturas §3.2, mapa F5/S6-2): con política fija del contrato y sin tasa en la factura (`fx_contract_to_invoice`
+		// NULL), el envío se detiene y avisa (omitida, `exchange_rate`); nunca sale a spot en silencio. La tasa por factura vive en
+		// `fx_contract_to_invoice` (valor = fija confirmada desde el Contrato 360; NULL = spot pendiente).
+		const fxPolicy = invoice.contract?.fx_invoice_policy ?? null;
+		const fixedRate = invoice.fx_contract_to_invoice;
+
+		if (fxPolicy === 'fixed' && !(fixedRate != null && Number(fixedRate) > 0)) {
+			throw new Error(
+				`La factura ${invoice.invoice_number || invoice.id} usa tipo de cambio fijo (política del contrato) y no tiene tasa: ` +
+					`confírmala desde el contrato antes de enviarla.`
+			);
+		}
+
+		// FX FIJO POR FACTURA (Contratos v2, decisión de Domi 01-10, avisada a Leon en `docs/v2-rediseno/cambios-integracion-para-leon.md`):
+		// una tasa fijada explícitamente en la factura desde el 360 (`invoice_items.fx_rate_source` = 'manual' o 'net_exact': tasa por
+		// factura, neto exacto o facturación por OC) se respeta aunque la política del contrato sea spot. Una tasa "pegada" por datos
+		// heredados (sin ese origen) sigue recalculándose a spot como antes.
+		const explicitlyFixed = (invoice.items || []).some((item) =>
+			['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? ''))
+		);
+
+		if ((fxPolicy === 'fixed' || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
 			this.logger.log(
 				`💱 FX fijo aplicado para factura ${invoice.invoice_number}: ` +
-					`${invoice.contract_currency}/${invoice.invoice_currency} = ${invoice.fx_contract_to_invoice} ` +
-					`(política 'fixed' — sin consultar Banco Central)`
+					`${invoice.contract_currency}/${invoice.invoice_currency} = ${fixedRate} ` +
+					`(${fxPolicy === 'fixed' ? "política 'fixed'" : 'tasa fijada en la factura'} — sin consultar Banco Central)`
 			);
 			return {
 				success: true,
 				usedFallback: false,
-				exchangeRate: Number(invoice.fx_contract_to_invoice),
+				exchangeRate: Number(fixedRate),
 			};
 		}
 
@@ -1325,6 +1528,181 @@ export class InvoiceSchedulerService {
 			);
 		}
 	}
+
+	/**
+	 * ¿La factura se valoriza por par al emitir (MM4)? Sí si el contrato tiene `requires_multicurrency_billing`, si sus líneas vienen en dos o
+	 * más monedas, o si alguna línea está en una moneda distinta del `contract_currency` del encabezado (p. ej. un consolidado). Una factura
+	 * de una sola moneda (la del encabezado) sigue por la rama de siempre, con los mismos números y campos.
+	 */
+	static requiresPairValuation(invoice: InvoiceWithRelations): boolean {
+		const header = upperCode(invoice.contract_currency);
+		const currencies = new Set((invoice.items || []).map((item) => upperCode(item.contract_currency) || header));
+
+		return (
+			Boolean(invoice.contract?.requires_multicurrency_billing) ||
+			currencies.size > 1 ||
+			[...currencies].some((currency) => currency !== header)
+		);
+	}
+
+	/** Valorización por par con al menos una línea que convierte (moneda de la línea ≠ moneda de factura). */
+	static convertsByPair(invoice: InvoiceWithRelations): boolean {
+		const header = upperCode(invoice.contract_currency);
+		const target = upperCode(invoice.invoice_currency);
+
+		return (
+			InvoiceSchedulerService.requiresPairValuation(invoice) &&
+			(invoice.items || []).some((item) => (upperCode(item.contract_currency) || header) !== target)
+		);
+	}
+
+	/**
+	 * MM4 · valorización por par al emitir (spec-multimoneda §4, decisión de Domi 01-10: al ERP va siempre la moneda de la factura y la
+	 * conversión es directa moneda de la línea → factura, sin pasar por la moneda del contrato). Por cada par presente:
+	 * - misma moneda que la factura → tasa 1 (la línea no se toca si ya tiene sus montos en moneda de factura);
+	 * - línea ya fijada (`fx_rate_source` contract / manual / net_exact / manual_unify con tasa) → conserva su tasa;
+	 * - si no, spot del día de emisión de ESE par (`getExchangeRateWithFallback`); con política fija nunca se sale a spot en silencio.
+	 * Si falta la tasa de cualquier par no escribe nada y no envía (`fx_rate_missing` con el par). Escribe cada línea (unitario, subtotal,
+	 * IVA, total en moneda de factura, tasa, origen y fecha) y el encabezado = Σ líneas; `fx_contract_to_invoice` del encabezado = la tasa
+	 * del único par que convierte, NULL con dos o más. `amount_contract_currency` no se recalcula (tasa pactada ítem → contrato).
+	 */
+	private async calculatePairAmountsAtIssue(invoice: InvoiceWithRelations): Promise<{
+		success: boolean;
+		usedFallback: boolean;
+		exchangeRate?: number;
+		fallbackDate?: Date;
+	}> {
+		const label = invoice.invoice_number || invoice.id;
+		const header = upperCode(invoice.contract_currency);
+		const target = upperCode(invoice.invoice_currency);
+		const items = invoice.items || [];
+		const currencyOf = (item: InvoiceItem) => upperCode(item.contract_currency) || header;
+		const keptRate = (item: InvoiceItem) =>
+			InvoiceSchedulerService.KEPT_FX_SOURCES.has(String(item.fx_rate_source ?? '')) && Number(item.fx_contract_to_invoice) > 0
+				? Number(item.fx_contract_to_invoice)
+				: null;
+		const fixedPolicy = invoice.contract?.fx_invoice_policy === 'fixed';
+		const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
+		const spot = new Map<string, { rate: number; rate_date: Date; is_fallback: boolean }>();
+		const missing: string[] = [];
+
+		// 1) Tasas: primero se resuelven todos los pares; si falta alguno no se escribe nada (nunca un documento medio valorizado).
+		for (const currency of [...new Set(items.filter((item) => currencyOf(item) !== target && keptRate(item) === null).map(currencyOf))]) {
+			if (fixedPolicy) {
+				missing.push(pairKey(currency, target));
+				continue;
+			}
+			try {
+				const result = await this.exchangeRatesService.getExchangeRateWithFallback(currency, target, invoice.issue_date);
+
+				if (!(Number(result?.rate) > 0)) throw new Error('sin tasa');
+				spot.set(currency, { rate: Number(result.rate), rate_date: result.rate_date, is_fallback: Boolean(result.is_fallback) });
+			} catch {
+				missing.push(pairKey(currency, target));
+				await this.invoiceNotificationService.sendMissingExchangeRateNotification(invoice, issueDate, currency, target);
+			}
+		}
+		if (missing.length) {
+			const issueDateStr = Number.isNaN(issueDate.getTime()) ? String(invoice.issue_date) : issueDate.toISOString().split('T')[0];
+			const pairs = missing.map((pair) => pair.replace('>', ' → ')).join(', ');
+			const error = new Error(
+				fixedPolicy
+					? `fx_rate_missing: la factura ${label} usa tipo de cambio fijo y no tiene tasa para ${pairs}: confírmala desde el contrato antes de enviarla.`
+					: `fx_rate_missing: no hay tipo de cambio disponible para ${pairs} en fecha ${issueDateStr}. Se ha enviado notificación por correo electrónico.`
+			) as Error & { code?: string; pairs?: string[] };
+
+			error.code = 'fx_rate_missing';
+			error.pairs = missing;
+			throw error;
+		}
+
+		// 2) Valorización por línea con la convención del motor (residuo por par a la línea mayor, IVA por línea en moneda de factura).
+		const taxed = items.some((item) => Number(item.tax_amount_contract_currency || 0) !== 0);
+		const rawTaxRate = Number(invoice.tax_rate || 0);
+		const taxRate = taxed ? (rawTaxRate > 0 && rawTaxRate <= 1 ? rawTaxRate * 100 : rawTaxRate) : 0;
+		const byId = new Map(items.map((item) => [item.id, item]));
+		const valuation = valuateLinesByPair(
+			items.map(
+				(item): PairLine => ({
+					id: item.id,
+					currency: currencyOf(item),
+					unit_price: Number(item.unit_price_contract_currency || 0),
+					subtotal: Number(item.subtotal_contract_currency || 0),
+					tax_amount: Number(item.tax_amount_contract_currency || 0),
+					period_start: '',
+				})
+			),
+			target,
+			(line) => keptRate(byId.get(line.id)!) ?? spot.get(line.currency)?.rate ?? null,
+			taxRate
+		);
+
+		// 3) Escritura: líneas y encabezado = Σ líneas.
+		for (const line of valuation.lines) {
+			const item = byId.get(line.id)!;
+
+			if (line.currency === target) {
+				if (item.subtotal_invoice_currency !== null && item.subtotal_invoice_currency !== undefined) continue;
+				await this.invoiceItemRepository.update(item.id, {
+					unit_price_invoice_currency: line.unit_price,
+					subtotal_invoice_currency: line.subtotal,
+					tax_amount_invoice_currency: line.tax,
+					total_invoice_currency: line.total,
+					fx_contract_to_invoice: 1,
+				});
+				continue;
+			}
+			const spotRate = keptRate(item) === null ? spot.get(line.currency) : undefined;
+
+			await this.invoiceItemRepository.update(item.id, {
+				unit_price_invoice_currency: line.unit_price,
+				subtotal_invoice_currency: line.subtotal,
+				tax_amount_invoice_currency: line.tax,
+				total_invoice_currency: line.total,
+				fx_contract_to_invoice: line.fx,
+				...(spotRate ? { fx_rate_source: 'spot', fx_rate_date: spotRate.rate_date ?? issueDate } : {}),
+			});
+		}
+		const amountInvoiceCurrency = valuation.invoice!.subtotal;
+		const vatInvoiceCurrency = valuation.invoice!.tax;
+		const totalInvoiceCurrency = valuation.invoice!.total;
+
+		await this.invoiceRepository.update(invoice.id, {
+			amount_invoice_currency: amountInvoiceCurrency,
+			vat: vatInvoiceCurrency,
+			total_invoice_currency: totalInvoiceCurrency,
+			fx_contract_to_invoice: valuation.fx,
+		});
+
+		for (const [currency, used] of spot) {
+			if (!used.is_fallback) continue;
+			this.logger.warn(
+				`Tipo de cambio fallback usado para factura ${invoice.invoice_number}: ${currency}/${target} = ${used.rate} (fecha: ${used.rate_date})`
+			);
+			await this.invoiceNotificationService.sendExchangeRateFallbackNotification(invoice, {
+				rate: used.rate,
+				requestedDate: issueDate,
+				usedDate: used.rate_date,
+				fromCurrency: currency,
+				toCurrency: target,
+			});
+		}
+		this.logger.log(
+			`✓ Montos por par calculados para factura ${invoice.invoice_number}: ${target} ${amountInvoiceCurrency.toFixed(2)} ` +
+				`(pares: ${valuation.pairs.join(', ') || 'ninguno'}; FX encabezado: ${valuation.fx ?? 'por línea'})`
+		);
+		const fallback = [...spot.values()].find((used) => used.is_fallback);
+
+		return {
+			success: true,
+			usedFallback: Boolean(fallback),
+			exchangeRate: valuation.fx ?? undefined,
+			fallbackDate: fallback?.rate_date,
+		};
+	}
+
+	/** Orígenes de una tasa ya fijada en la línea que el envío respeta (fija del contrato, por factura, neto exacto, manual de la unificación). */
+	private static readonly KEPT_FX_SOURCES: ReadonlySet<string> = new Set(['contract', 'manual', 'net_exact', 'manual_unify']);
 
 	private async getInvoiceWithRelations(invoiceId: string): Promise<InvoiceWithRelations> {
 		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });
@@ -1422,8 +1800,8 @@ export class InvoiceSchedulerService {
 		sapiraProductId: string,
 		holdingId: string
 	): Promise<{
-		odooProductId: number;
-		source: 'mapping' | 'product_table' | 'default';
+		odooProductId: number | null;
+		source: 'mapping' | 'product_table' | 'missing';
 	}> {
 		try {
 			// 1. Buscar en odoo_product_mappings
@@ -1456,19 +1834,54 @@ export class InvoiceSchedulerService {
 				};
 			}
 
-			// 3. Sin mapeo: usar default
-			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo - usando default odoo_product_id=1`);
+			// 3. Sin mapeo: ya NO se usa el producto 1 por defecto (Contratos v2, cambio puntual avisado a Leon): quien llama rechaza la
+			// factura con `product_without_erp_mapping`.
+			this.logger.warn(`Producto ${sapiraProductId}: Sin mapeo a Odoo - la factura no se envía`);
 			return {
-				odooProductId: 1,
-				source: 'default',
+				odooProductId: null,
+				source: 'missing',
 			};
 		} catch (error) {
+			// Un error de lectura tampoco cae al producto 1: se propaga y la factura queda en error.
 			this.logger.error(`Error obteniendo mapeo de producto ${sapiraProductId}:`, error);
-			return {
-				odooProductId: 1,
-				source: 'default',
-			};
+			throw error;
 		}
+	}
+
+	/**
+	 * Líneas que viajan al ERP (mismo criterio de `mapInvoiceToOdooFormat`): las visibles (`visible_line_id` NULL) con cantidad ≠ 0; si
+	 * todas las visibles están en 0, todas las visibles. Lo replica `UNMAPPED_PRODUCTS_SQL` (`contracts/contract-360.ts`) para los bloqueos.
+	 */
+	static itemsSentToErp<T extends { quantity?: unknown; visible_line_id?: unknown }>(invoice: { items?: T[] }): T[] {
+		const isZeroQuantity = (item: T) => Number(item.quantity) === 0;
+		const isInternal = (item: T) => item.visible_line_id !== null && item.visible_line_id !== undefined;
+		const externalItems = (invoice.items || []).filter((item) => !isInternal(item));
+
+		return externalItems.some((item) => !isZeroQuantity(item)) ? externalItems.filter((item) => !isZeroQuantity(item)) : externalItems;
+	}
+
+	/**
+	 * Productos de las líneas que viajarían al ERP sin producto de Odoo resoluble (`odoo_product_mappings` del holding ∪
+	 * `products.odoo_product_id`) y líneas sin producto. Antes caían en silencio al producto 1 de Odoo; ahora la factura se rechaza.
+	 */
+	async findUnmappedProducts(invoice: InvoiceWithRelations): Promise<string[]> {
+		const missing = new Set<string>();
+
+		for (const item of InvoiceSchedulerService.itemsSentToErp(invoice)) {
+			if (!item.product_id) {
+				missing.add(`línea sin producto${item.description ? ` (${item.description})` : ''}`);
+				continue;
+			}
+			const mappingInfo = await this.getProductMappingInfo(item.product_id, invoice.holding_id);
+
+			if (mappingInfo.odooProductId === null) {
+				const product = await this.productRepository.findOne({ where: { id: item.product_id } });
+
+				missing.add(product?.name?.trim() || item.product_id);
+			}
+		}
+
+		return [...missing];
 	}
 
 	private mapTaxCodeToOdooIds(taxCode: string): number[] {
@@ -1711,9 +2124,14 @@ export class InvoiceSchedulerService {
 		return await log.save();
 	}
 
+	/**
+	 * Notificación de fallo del envío al ERP. El texto que ve la usuaria sale de `translateErpError` (Contratos v2, cambio puntual avisado
+	 * a Leon §9): título "No se pudo enviar la factura <folio> de <cliente>", cuerpo = qué pasó + paso siguiente; el detalle técnico
+	 * (`title`/`message`/`errorMessage` de quien llama) queda en `metadata` (`technical_title`, `technical_message`, `error_message`).
+	 */
 	private async createOdooFailureNotification(params: {
 		invoice: InvoiceWithRelations;
-		stage: 'post_invoice' | 'emit_electronic_invoice' | 'send_invoice_to_customer';
+		stage: 'create_draft' | 'post_invoice' | 'emit_electronic_invoice' | 'send_invoice_to_customer' | 'product_mapping';
 		title: string;
 		message: string;
 		errorType: string;
@@ -1729,6 +2147,9 @@ export class InvoiceSchedulerService {
 		}
 
 		try {
+			const translation = translateErpError(params.errorMessage, params.errorType);
+			const folio = params.invoice.invoice_number || 'sin folio';
+			const client = params.invoice.clientEntity?.legal_name?.trim() || 'cliente sin razón social';
 			const metadata = {
 				source: 'invoice_scheduler',
 				scheduler_source: params.schedulerSource,
@@ -1738,6 +2159,14 @@ export class InvoiceSchedulerService {
 				failure_stage: params.stage,
 				error_type: params.errorType,
 				error_message: params.errorMessage,
+				technical_title: params.title,
+				technical_message: params.message,
+				erp_error: {
+					category: translation.category,
+					message: translation.message,
+					next_step: translation.next_step,
+					action: translation.action,
+				},
 				country: params.invoice.company?.country || null,
 				client_name: params.invoice.clientEntity?.legal_name || null,
 				company_name: params.invoice.company?.legal_name || null,
@@ -1749,9 +2178,9 @@ export class InvoiceSchedulerService {
 				source: 'invoices',
 				type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE,
 				severity: 'error',
-				title: params.title,
-				message: params.message,
-				recommendation: 'Revisa la configuración tributaria de la factura y vuelve a procesarla.',
+				title: `No se pudo enviar la factura ${folio} de ${client}`,
+				message: erpErrorSentence(translation),
+				recommendation: translation.next_step,
 				action_type: 'open_contract',
 				action_payload: { contract_id: params.invoice.contract_id },
 				resource_type: 'invoice',
@@ -1764,6 +2193,25 @@ export class InvoiceSchedulerService {
 			});
 		} catch (error) {
 			this.logger.error(`❌ Error creando notificación para factura ${params.invoice.invoice_number || params.invoice.id}:`, error);
+		}
+	}
+
+	/**
+	 * Último intento de envío al ERP de una factura (el log `invoice_odoo_send_logs`, donde el scheduler ya guarda cada intento, manual o
+	 * automático), traducido con `translateErpError`. null si nunca se intentó o si el log no responde (no bloquea el detalle).
+	 */
+	async lastSendAttempt(invoiceId: string, holdingId: string): Promise<LastSendAttempt | null> {
+		try {
+			const log = (await this.invoiceOdooSendLogModel
+				.findOne({ invoice_id: invoiceId, holding_id: holdingId })
+				.sort({ createdAt: -1 })
+				.lean()
+				.exec()) as (InvoiceOdooSendLog & { createdAt?: Date }) | null;
+
+			return log ? lastSendAttemptOf(log) : null;
+		} catch (error) {
+			this.logger.warn(`No se pudo leer el último intento de envío de la factura ${invoiceId}: ${(error as Error).message}`);
+			return null;
 		}
 	}
 
@@ -2254,7 +2702,8 @@ export class InvoiceSchedulerService {
 		startedAt: Date;
 		result: ProcessInvoicesResponseDto;
 	}): Promise<void> {
-		if (params.dryRun || params.result.summary.errors === 0) return;
+		// Sin errores igual se llama: cierra la alerta del día (Notificaciones v2 fase 2).
+		if (params.dryRun) return;
 
 		const errors = new Map<string, number>();
 		for (const result of params.result.results) {

@@ -138,6 +138,28 @@
      "updatable"
     ],
     "comment": "sent | failed (según respuesta de Resend)"
+   },
+   {
+    "name": "avatar_preset",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Avatar elegido de la lista fija de Mi perfil (preset-01…preset-12); NULL = iniciales o foto"
+   },
+   {
+    "name": "avatar_path",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ruta de la foto de perfil en el bucket user-avatars (users/<id>/<uuid>.<ext>)"
    }
   ],
   "primary_keys": [
@@ -222,6 +244,28 @@
     ]
    },
    {
+    "name": "billable_metrics_created_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billable_metrics_updated_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "billing_references_created_by_fkey",
     "source_table": "public.billing_references",
     "source_columns": [
@@ -270,6 +314,50 @@
     "source_table": "public.client_entity_clients",
     "source_columns": [
      "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "company_legal_documents_uploaded_by_fkey",
+    "source_table": "public.company_legal_documents",
+    "source_columns": [
+     "uploaded_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_created_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_updated_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_changed_by_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "changed_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -508,6 +596,17 @@
     ]
    },
    {
+    "name": "notification_email_log_user_id_fkey",
+    "source_table": "public.notification_email_log",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "odoo_connections_user_id_fkey",
     "source_table": "public.odoo_connections",
     "source_columns": [
@@ -523,6 +622,28 @@
     "source_table": "public.period_guard_warnings",
     "source_columns": [
      "triggered_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_created_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_updated_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "updated_by"
     ],
     "target_table": "public.users",
     "target_columns": [
@@ -552,8 +673,52 @@
     ]
    },
    {
+    "name": "quote_events_actor_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "actor_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "salesforce_connections_user_id_fkey",
     "source_table": "public.salesforce_connections",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_access_events_actor_user_id_fkey",
+    "source_table": "public.user_access_events",
+    "source_columns": [
+     "actor_user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_access_events_user_id_fkey",
+    "source_table": "public.user_access_events",
+    "source_columns": [
+     "user_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_notification_preferences_user_id_fkey",
+    "source_table": "public.user_notification_preferences",
     "source_columns": [
      "user_id"
     ],
@@ -600,7 +765,7 @@
  "roles": {
   "name": "public.roles",
   "rls_enabled": true,
-  "rows": 50,
+  "rows": 70,
   "columns": [
    {
     "name": "id",
@@ -651,6 +816,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "is_default",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Rol creado por create_default_roles_for_holding: no se edita ni se elimina desde Configuración (D7)"
    }
   ],
   "primary_keys": [
@@ -706,7 +882,7 @@
  "permissions": {
   "name": "public.permissions",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 23,
   "columns": [
    {
     "name": "id",
@@ -1062,8 +1238,41 @@
     ]
    },
    {
+    "name": "billable_metrics_holding_id_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "billing_references_holding_id_fkey",
     "source_table": "public.billing_references",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budget_lines_holding_id_fkey",
+    "source_table": "public.budget_lines",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "budgets_holding_id_fkey",
+    "source_table": "public.budgets",
     "source_columns": [
      "holding_id"
     ],
@@ -1139,6 +1348,28 @@
     ]
    },
    {
+    "name": "consumption_entries_holding_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_holding_id_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_amendment_items_holding_id_fkey",
     "source_table": "public.contract_amendment_items",
     "source_columns": [
@@ -1183,6 +1414,17 @@
     ]
    },
    {
+    "name": "contract_item_pauses_holding_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_lifecycle_events_holding_id_fkey",
     "source_table": "public.contract_lifecycle_events",
     "source_columns": [
@@ -1196,6 +1438,17 @@
    {
     "name": "contract_notifications_holding_id_fkey",
     "source_table": "public.contract_notifications",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_holding_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
     "source_columns": [
      "holding_id"
     ],
@@ -1535,6 +1788,17 @@
     ]
    },
    {
+    "name": "integration_record_discards_holding_id_fkey",
+    "source_table": "public.integration_record_discards",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "invoice_items_holding_id_fkey",
     "source_table": "public.invoice_items",
     "source_columns": [
@@ -1614,6 +1878,17 @@
    {
     "name": "mrr_legacy_holding_id_fkey",
     "source_table": "public.mrr_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "notification_email_log_holding_id_fkey",
+    "source_table": "public.notification_email_log",
     "source_columns": [
      "holding_id"
     ],
@@ -1711,6 +1986,17 @@
     ]
    },
    {
+    "name": "prices_holding_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "products_holding_id_fkey",
     "source_table": "public.products",
     "source_columns": [
@@ -1724,6 +2010,17 @@
    {
     "name": "quantities_holding_id_fkey",
     "source_table": "public.quantities",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_holding_id_fkey",
+    "source_table": "public.quote_events",
     "source_columns": [
      "holding_id"
     ],
@@ -1876,8 +2173,30 @@
     ]
    },
    {
+    "name": "user_access_events_holding_id_fkey",
+    "source_table": "public.user_access_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "user_holdings_holding_id_fkey",
     "source_table": "public.user_holdings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "user_notification_preferences_holding_id_fkey",
+    "source_table": "public.user_notification_preferences",
     "source_columns": [
      "holding_id"
     ],
@@ -1902,7 +2221,7 @@
  "companies": {
   "name": "public.companies",
   "rls_enabled": true,
-  "rows": 22,
+  "rows": 24,
   "columns": [
    {
     "name": "id",
@@ -2139,6 +2458,28 @@
      "updatable"
     ],
     "comment": "ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)"
+   },
+   {
+    "name": "fx_company_policy",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'monthly_avg'::text",
+    "comment": "Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre"
+   },
+   {
+    "name": "country_code",
+    "data_type": "character",
+    "format": "bpchar",
+    "type": "character(2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español"
    }
   ],
   "primary_keys": [
@@ -2179,6 +2520,17 @@
     ]
    },
    {
+    "name": "app_notifications_company_id_fkey",
+    "source_table": "public.app_notifications",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "bank_movements_company_id_fkey",
     "source_table": "public.bank_movements",
     "source_columns": [
@@ -2187,6 +2539,17 @@
     "target_table": "public.companies",
     "target_columns": [
      "id"
+    ]
+   },
+   {
+    "name": "companies_country_code_fkey",
+    "source_table": "public.companies",
+    "source_columns": [
+     "country_code"
+    ],
+    "target_table": "public.countries",
+    "target_columns": [
+     "code"
     ]
    },
    {
@@ -2727,6 +3090,91 @@
     ],
     "default_value": "ARRAY[]::text[]",
     "comment": "Monedas utilizadas en el holding"
+   },
+   {
+    "name": "auto_renewal_notice_days",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "30",
+    "comment": "Días de aviso previo de la propuesta de renovación automática (S2-3; default 30)"
+   },
+   {
+    "name": "timezone",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'America/Santiago'::text",
+    "comment": "Zona horaria IANA del holding: define su fecha de hoy (default America/Santiago)"
+   },
+   {
+    "name": "renewal_reminder_days",
+    "data_type": "ARRAY",
+    "format": "_int2",
+    "type": "smallint[]",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{15,7,0}'::smallint[]",
+    "comment": "Escalera de recordatorios de vencimiento: días antes del fin, de mayor a menor (default 15,7,0)"
+   },
+   {
+    "name": "renewal_overdue_every_days",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "7",
+    "comment": "Vencido sin decisión: un recordatorio cada N días (default 7)"
+   },
+   {
+    "name": "quote_numbering_mode",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'prefixed'::text",
+    "comment": "Numeración de cotizaciones creadas en Sapira: prefixed (prefijo-año-correlativo), sequential o manual"
+   },
+   {
+    "name": "quote_number_prefix",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'COT'::text"
+   },
+   {
+    "name": "quote_number_include_year",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "quote_number_width",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "4"
    }
   ],
   "primary_keys": [
@@ -2807,7 +3255,7 @@
     "options": [
      "updatable"
     ],
-    "comment": "Tipo de dato: text o number"
+    "comment": "Tipo de dato: text, number, select, boolean o date"
    },
    {
     "name": "is_required",
@@ -2860,6 +3308,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "options",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Opciones de un campo select: [{ value, label }]. NULL en los otros tipos"
    }
   ],
   "primary_keys": [

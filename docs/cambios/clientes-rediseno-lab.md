@@ -141,6 +141,37 @@ Al revés (código antes que migración), TypeORM seleccionaría una columna ine
 ¿Conviene un registro en `REGISTRO-ALINEACION.md` al aplicarla? ¿Quién propaga la regla al generador de facturas
 (api o RPC de `sapira-ai`)?
 
+## Desasignar razón social y eliminar cliente: bloqueos (02-10, sin commit)
+
+Se reutilizan los endpoints existentes (sin rutas nuevas, sin migraciones). Ambos los usa también la app actual (`sapira-ai`,
+`ClientsService.unassignEntity` / `remove`): para ella el único cambio son los 409 nuevos.
+
+- **`DELETE /clients/:id/entities/:entityId`** (`ClientsService.unassignEntity`): valida el holding; 409 `entity_client_in_use`
+  ("No se puede desasignar: tiene 2 contratos y 5 facturas con este cliente.", con `usage`) si ese cliente tiene contratos,
+  facturas, facturas históricas o suscripciones con esa razón social (las cotizaciones se ligan al cliente, no a la razón social).
+  Borra el vínculo con `withApiWriter`; si era la principal, promueve la siguiente más antigua del cliente (regla de
+  `deleteEntity`). No toca `client_entities.client_id` (heredada), igual que assign. Antes no bloqueaba ni promovía.
+- **`DELETE /clients/:id`** (`ClientsService.remove`, ahora con `holdingId` y `ParseUUIDPipe`): 409 `client_in_use` con conteos si
+  tiene contratos, facturas, facturas históricas, MRR histórico, suscripciones o cotizaciones (FK sin cascada, o con cascada que
+  borraría datos). 409 `client_owns_entities` si hay razones sociales con `client_entities.client_id` = ese cliente: esa FK heredada es
+  `ON DELETE CASCADE` y las borraría. **Decisión pendiente de Domi** (qué hacer con esas razones sociales). Sin bloqueos, borra con
+  `withApiWriter`; la cascada de la base se lleva contactos, documentos, notas, configuración de agentes y vínculos
+  `client_entity_clients` (esas razones sociales quedan sin cliente). Un 23503 inesperado se responde como `client_in_use`.
+- Tests: `client-remove-unassign.spec.ts`.
+
+## Facturas con contrato, orden de la actividad y suscripciones por razón social (02-10, sin commit)
+
+- `contract_id` en `GET /clients/:id/invoices`, `GET /clients/:id/receivables` y `GET /client-entities/:id/invoices`: el front abre la
+  vista rápida de la factura (vive en el Contrato 360) y enlaza el N° de contrato.
+- `GET /clients/:id/activity`: cada evento trae `occurred_on` (día en `America/Santiago`, o la fecha propia en las fuentes sin hora:
+  emisión de factura, fecha de pago, cotización sin `created_at`), `all_day` y `ref.contract_id` (facturas). Antes las fechas sin hora
+  se casteaban a medianoche UTC (el día anterior en Chile) y quedaban mezcladas con eventos de otro día. Orden: día desc → con hora
+  antes que solo fecha → hora desc → tipo → id.
+- `GET /clients/:id/activity` (03-10): cada nota trae `author_avatar` y cada mención resuelta `mentions[].avatar` (forma de Mi perfil §3;
+  detalle en `docs/v2-rediseno/contrato-api-notificaciones.md` §8.7).
+- `GET /contracts/subscriptions?entityId=` (`src/modules/contracts`, fuera de `clients`): filtro por razón social para la sección
+  Suscripciones del Razón social 360. Test en `contract-subscriptions-entity.spec.ts`.
+
 ## Tests
 
 `clients.service.spec`, `client-metrics.service.spec` (incluye facturas), `client-entity-metrics.service.spec`,

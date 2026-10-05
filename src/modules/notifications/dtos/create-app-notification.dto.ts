@@ -17,6 +17,11 @@ class NotificationRecipientsDto {
 	@IsOptional()
 	@IsBoolean()
 	include_super_admins?: boolean;
+
+	/** Todos los miembros activos del holding (novedades del sistema). */
+	@IsOptional()
+	@IsBoolean()
+	all_members?: boolean;
 }
 
 export class CreateAppNotificationDto {
@@ -69,6 +74,18 @@ export class CreateAppNotificationDto {
 	@IsOptional()
 	@IsUUID('4')
 	resource_id?: string;
+
+	/** Compañía de la alerta ("Mis compañías", contrato §8.1). Si no viene, el servicio la deriva del recurso (factura, contrato). */
+	@IsOptional()
+	@IsUUID('all')
+	company_id?: string;
+
+	/**
+	 * Escalón del aviso (p. ej. días al vencimiento de una renovación). Si cambia en `createOrUpdate`, la alerta vuelve a "sin leer" para
+	 * todos (igual que si sube la gravedad). Se guarda en `metadata.escalation_step`.
+	 */
+	@IsOptional()
+	escalation_step?: string | number;
 
 	@IsOptional()
 	@ValidateNested()

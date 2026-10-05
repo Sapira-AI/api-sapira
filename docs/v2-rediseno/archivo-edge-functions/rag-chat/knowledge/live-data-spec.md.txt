@@ -1,0 +1,39 @@
+# Sapira Copilot – Live Data Specification (v1.0)
+
+## Objetivo
+Definir de forma **precisa y no ambigua**:
+- qué preguntas del Copiloto deben resolverse con **Live Data**
+- desde **qué tablas y campos**
+- bajo **qué reglas de negocio**
+- y cómo deben presentarse las respuestas
+
+Este documento es la **fuente de verdad** para:
+- el router de intents en `rag-chat` 
+- las queries SQL / RPCs
+- evitar respuestas inventadas, incompletas o incorrectas
+
+---
+
+## 1. Principios Generales
+
+### 1.1 Live Data es obligatorio para métricas
+Cualquier pregunta que implique:
+- montos
+- métricas (MRR, CMRR, Revenue, Facturación, etc.)
+- comparaciones temporales
+- cohortes
+- rankings o desagregaciones
+
+👉 **DEBE resolverse con Live Data (SQL)**  
+👉 **Nunca** con RAG documental.
+
+El RAG documental **solo explica conceptos**, no calcula.
+
+---
+
+### 1.2 Multi-tenant (regla dura)
+Toda consulta debe estar filtrada por:
+
+```sql
+holding_id = get_current_user_holding_id()
+```

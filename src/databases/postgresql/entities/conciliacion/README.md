@@ -1,7 +1,7 @@
-# Módulo 9 · Conciliación y pagos — 3 tablas de prod (2026-09-27)
+# Módulo 9 · Conciliación y pagos — 3 tablas de prod (2026-10-04)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/conciliacion.{pgmeta,catalog}.json`); metadata real de las entities existentes en `conciliacion.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/conciliacion.{pgmeta,catalog}.json`); metadata real de las entities existentes en `conciliacion.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (0) — no se tocaron ni se duplicaron
 
@@ -11,7 +11,7 @@ Ninguna: todas las tablas de este módulo carecían de entity.
 
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `bank_movements` (158, RLS on) | `bank-movement.entity.ts` · `BankMovement` | 19 | `bank_movements_pkey` (id) | — | `bank_movements_match_confidence_check`, `bank_movements_status_check` | `bank_movements_batch_id_fkey` → bank_upload_batches (CASCADE)<br>`bank_movements_company_id_fkey` → companies<br>`bank_movements_reconciled_by_fkey` → users<br>`bank_movements_reconciled_invoice_id_fkey` → invoices<br>`bank_movements_suggested_invoice_id_fkey` → invoices<br>`fk_bank_movements_holding_id` → company_holdings (CASCADE) | `idx_bank_movements_batch_id`, `idx_bank_movements_holding_date`, `idx_bank_movements_holding_id`, `idx_bank_movements_reconciled_invoice`, `idx_bank_movements_status` | — | 4 |
+| `bank_movements` (167, RLS on) | `bank-movement.entity.ts` · `BankMovement` | 20 | `bank_movements_pkey` (id) | — | `bank_movements_match_confidence_check`, `bank_movements_status_check` | `bank_movements_batch_id_fkey` → bank_upload_batches (CASCADE)<br>`bank_movements_company_id_fkey` → companies<br>`bank_movements_reconciled_by_fkey` → users<br>`bank_movements_reconciled_invoice_id_fkey` → invoices<br>`bank_movements_suggested_invoice_id_fkey` → invoices<br>`fk_bank_movements_holding_id` → company_holdings (CASCADE) | `idx_bank_movements_batch_id`, `idx_bank_movements_holding_date`, `idx_bank_movements_holding_id`, `idx_bank_movements_reconciled_invoice`, `idx_bank_movements_status`, `uq_bank_movements_fingerprint` (expresión, no declarado) | — | 4 |
 | `bank_upload_batches` (10, RLS on) | `bank-upload-batch.entity.ts` · `BankUploadBatch` | 11 | `bank_upload_batches_pkey` (id) | — | `bank_upload_batches_status_check` | `bank_upload_batches_bank_account_id_fkey` → company_bank_accounts<br>`bank_upload_batches_uploaded_by_fkey` → users | — | — | 4 |
 | `bank_column_mappings` (0, RLS on) | `bank-column-mapping.entity.ts` · `BankColumnMapping` | 7 | `bank_column_mappings_pkey` (id) | — | — | — | — | — | 4 |
 
@@ -21,7 +21,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 
 ## C · Columnas exactas de cada espejo (3 tablas)
 
-<details><summary><code>bank_movements</code> → <code>bank-movement.entity.ts</code> · 19 columnas</summary>
+<details><summary><code>bank_movements</code> → <code>bank-movement.entity.ts</code> · 20 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -44,6 +44,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `match_confidence` | text | sí | — |  |
 | `match_score` | numeric | sí | — |  |
 | `original_row_data` | jsonb | sí | — |  |
+| `ignore_reason` | text | sí | — |  |
 
 </details>
 <details><summary><code>bank_upload_batches</code> → <code>bank-upload-batch.entity.ts</code> · 11 columnas</summary>

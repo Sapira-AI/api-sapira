@@ -50,6 +50,17 @@ export class SalesforceSyncRun {
 	@Column({ type: 'text', nullable: true })
 	error_message?: string | null;
 
+	/**
+	 * Cotizaciones protegidas (`1791100000000-CrmQuoteSnapshot`): usuario (`public.users.id`) que confirmó aplicar los cambios del CRM a
+	 * cotizaciones existentes. NULL: la ejecución solo crea cotizaciones nuevas.
+	 */
+	@Column({
+		type: 'uuid',
+		nullable: true,
+		comment: 'Usuario (public.users.id) que confirmó actualizar cotizaciones existentes con los cambios del CRM. NULL: solo crea',
+	})
+	confirmed_by?: string | null;
+
 	@Column({ type: 'timestamp', default: () => 'now()' })
 	created_at!: Date;
 

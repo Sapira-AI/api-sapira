@@ -119,10 +119,10 @@ El runner `postgres:assets` aplica los `.sql` en ocho fases, en este orden, con 
 | `types/` | Extensiones, enums y secuencias sueltas. Van primero porque una columna puede referenciarlas. | 11 |
 | `functions/` | Una función por archivo, `CREATE OR REPLACE`. | 301 |
 | `special-index/` | Índices que TypeORM **no puede** declarar con `@Index`: método no btree (`gin`, `ivfflat`) u orden explícito (`DESC`, `NULLS`). Los parciales sí se declaran con `@Index({ where })` y **no** van acá. | 41 |
-| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 121 |
-| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 387 |
+| `triggers/` | `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`. | 122 |
+| `rls/` | Una policy por archivo. **No activan RLS**, solo la declaran. | 393 |
 | `grants/` | Permisos por rol. Sin ellos, un entorno nuevo tiene tablas correctas e inaccesibles. | 2 |
-| `seed/` | Datos semilla idempotentes. | 2 |
+| `seed/` | Datos semilla idempotentes. | 3 |
 | `cron/` | Jobs de pg_cron (`cron.schedule`, upsert por nombre). Van últimos: un job no debe dispararse antes de que existan sus funciones y datos. | 3 |
 
 > **Qué es un asset y qué es una entity.** Si TypeORM lo puede declarar —tabla, columna, PK, FK, UNIQUE, CHECK, índice simple o parcial— lo declara la entity y se aplica con una migración revisada. Todo lo demás es un asset. **No hay fase `tables/`**: ninguna tabla se define como asset.
@@ -294,7 +294,9 @@ tabla, sus 2 policies, 7 índices y 3 FKs.
 - ✅ **`cleanup_duplicate_pending_records`: eliminada.** No hacía falta auditarla: borra
   `WHERE processing_status = 'pending'` sobre una tabla cuyo CHECK no admite ese valor (verificado:
   0 filas con él). Era un **no-op estructural** — no podía borrar nada y nunca pudo.
-- 🟡 **`cleanup_duplicate_partners_by_vat`: en ventana de observación.** Sí borra filas de forma
+- ✅ **`cleanup_duplicate_partners_by_vat`: eliminada el 2026-10-04** con `1791400000000-RetiraFuncionesSinUso`
+  (ventana cerrada sin reclamos; se borró también `grants/010-cleanup-functions-execute.sql`; definición y permisos en
+  `docs/v2-rediseno/archivo-funciones/2026-10-04-sin-uso.sql.txt`). Historial: sí borra filas de forma
   irreversible y sin log, y su `EXECUTE` estaba concedido a **PUBLIC** —o sea invocable con la anon
   key—, porque es el default de `CREATE FUNCTION`. Se revocó con
   `grants/010-cleanup-functions-execute.sql`; ahora solo `postgres` y `service_role`. **El REVOKE es
@@ -396,8 +398,8 @@ Al analizar la cadena completa aparecieron dos cosas que cambian el diagnóstico
   de `triggers/`** — que es exactamente el bootstrap del espejo. La anomalía era más peligrosa
   replicada que en el original.
 - **`'pending'` es vocabulario muerto.** Ningún trigger lo emite y sus lectores no funcionan:
-  `get_invoice_staging_stats` devuelve siempre 0 en `pending_invoices`/`pending_lines` y no tiene
-  callers; `cleanup_duplicate_pending_records` es no-op; `process_partner_staging_to_client_entities`
+  `get_invoice_staging_stats` devolvía siempre 0 en `pending_invoices`/`pending_lines` y no tenía
+  callers (retirada el 2026-10-04, `RetiraFuncionesSinUso`); `cleanup_duplicate_pending_records` es no-op; `process_partner_staging_to_client_entities`
   y `process_partner_staging_with_transformations` filtran `= 'pending'` sobre partners que solo
   producen create/update/processed/error, así que no procesan nada. `InvoiceProcessingService` ya
   redefinió "pending" como `create | update`.

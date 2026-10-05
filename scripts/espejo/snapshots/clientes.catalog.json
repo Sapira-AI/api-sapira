@@ -65,8 +65,19 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
+   {
+    "name": "clients_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
+   },
    {
     "name": "clients_holding_id_fkey",
     "type": "f",
@@ -92,6 +103,14 @@
     "name": "idx_clients_client_number",
     "cols": [
      "client_number"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_clients_country_code",
+    "cols": [
+     "country_code"
     ],
     "unique": false,
     "where": null
@@ -191,7 +210,11 @@
   "comment": null,
   "rls": true,
   "rls_forced": false,
-  "columns": {},
+  "columns": {
+   "country_code": {
+    "length": 2
+   }
+  },
   "constraints": [
    {
     "name": "client_entities_client_id_fkey",
@@ -199,6 +222,13 @@
     "ondelete": "c",
     "onupdate": "a",
     "def": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "client_entities_country_code_fkey",
+    "type": "f",
+    "ondelete": "r",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (country_code) REFERENCES countries(code) ON DELETE RESTRICT"
    },
    {
     "name": "client_entities_payment_terms_check",
@@ -225,6 +255,14 @@
     "name": "idx_client_entities_client_number",
     "cols": [
      "client_number"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_client_entities_country_code",
+    "cols": [
+     "country_code"
     ],
     "unique": false,
     "where": null
@@ -576,6 +614,13 @@
     ],
     "unique": false,
     "where": null
+   },
+   {
+    "name": "client_activity_notes_mentions_idx",
+    "cols": null,
+    "unique": false,
+    "where": null,
+    "expr": "CREATE INDEX client_activity_notes_mentions_idx ON public.client_activity_notes USING gin (mentioned_user_ids)"
    }
   ],
   "triggers": [
@@ -685,6 +730,13 @@
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "company_legal_documents_uploaded_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL"
    }
   ],
   "indexes": [],
@@ -913,7 +965,17 @@
     ]
    }
   ],
-  "indexes": [],
+  "indexes": [
+   {
+    "name": "sellers_holding_crm_owner_key",
+    "cols": [
+     "holding_id",
+     "crm_owner_id"
+    ],
+    "unique": true,
+    "where": "crm_owner_id IS NOT NULL"
+   }
+  ],
   "triggers": [],
   "policies": [
    "Users can delete sellers from their holding (DELETE, public)",

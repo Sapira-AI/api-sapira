@@ -5,6 +5,7 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 @Unique('app_notification_recipients_notification_id_user_id_key', ['notification_id', 'user_id'])
 @Index('app_notification_recipients_user_unread_idx', { synchronize: false })
+@Index('app_notification_recipients_user_archived_idx', ['user_id', 'archived_at'])
 @Entity('app_notification_recipients')
 export class AppNotificationRecipient {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'app_notification_recipients_pkey' })
@@ -21,6 +22,10 @@ export class AppNotificationRecipient {
 
 	@Column({ type: 'timestamp with time zone', nullable: true })
 	read_at?: Date | null;
+
+	/** Archivada por este usuario (Notificaciones v2, N1 `1790880000000-NotificationRecipientsArchivedAt`): no cambia la alerta para los demás. */
+	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'Archivada por este usuario (no cambia la alerta para los demás)' })
+	archived_at?: Date | null;
 
 	@CreateDateColumn({ type: 'timestamp with time zone', default: () => 'now()' })
 	created_at!: Date;

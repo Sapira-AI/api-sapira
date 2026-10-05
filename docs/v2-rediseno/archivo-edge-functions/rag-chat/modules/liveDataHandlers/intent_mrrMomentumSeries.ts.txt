@@ -1,0 +1,12 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { handleQa03MrrMomentumSeries } from "./qa03_mrrMomentum.ts";
+
+export async function handleIntentMrrMomentumSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  return await handleQa03MrrMomentumSeries(params);
+}

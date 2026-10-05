@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-09-27 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-04 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -73,6 +73,7 @@ export const FX_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			created_by: true,
 			created_at: true,
 			updated_at: true,
+			purpose: false,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -86,10 +87,15 @@ export const FX_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			},
 		},
 		uniques: {},
-		checks: ['contract_fx_period_rates_check', 'contract_fx_period_rates_rate_check'],
+		checks: ['contract_fx_period_rates_check', 'contract_fx_period_rates_purpose_check', 'contract_fx_period_rates_rate_check'],
 		indexes: {
 			idx_contract_fx_rates_contract_id: {
 				columns: ['contract_id'],
+				unique: false,
+				where: null,
+			},
+			idx_contract_fx_rates_contract_purpose: {
+				columns: ['contract_id', 'purpose'],
 				unique: false,
 				where: null,
 			},

@@ -1,0 +1,172 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+function monthMinusOne(monthStart: string): string {
+  const d = new Date(monthStart);
+  d.setMonth(d.getMonth() - 1);
+  return monthStartStr(d);
+}
+
+export async function handleIntentQuantityVariationAvg(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { toMonth } = parseMonthRange(question);
+  const current = toMonth;
+  const previous = monthMinusOne(current);
+
+  try {
+    const { data: contractItems, error: ciErr } = await supabaseAuth
+      .from("contract_items")
+      .select("id, product_name, unit_price, quantity")
+      .eq("holding_id", holdingId)
+      .limit(20000);
+    if (ciErr) throw ciErr;
+
+    const itemRows = Array.isArray(contractItems) ? (contractItems as any[]) : [];
+    const baseByItem = new Map<string, { product_name: string; unit_price: number | null; quantity: number | null }>();
+    for (const it of itemRows) {
+      const id = String(it?.id ?? "");
+      if (!id) continue;
+      baseByItem.set(id, {
+        product_name: String(it?.product_name ?? "(sin producto)"),
+        unit_price: typeof it?.unit_price === "number" ? it.unit_price : it?.unit_price ? Number(it.unit_price) : null,
+        quantity: typeof it?.quantity === "number" ? it.quantity : it?.quantity ? Number(it.quantity) : null,
+      });
+    }
+
+    const { data: qtyRows, error: qErr } = await supabaseAuth
+      .from("quantities")
+      .select("contract_item_id, period, unit_price, quantity")
+      .eq("holding_id", holdingId)
+      .in("period", [previous, current])
+      .limit(20000);
+    if (qErr) throw qErr;
+
+    const overrides = Array.isArray(qtyRows) ? (qtyRows as any[]) : [];
+    const overrideByItemPeriod = new Map<string, { unit_price: number | null; quantity: number | null }>();
+    for (const r of overrides) {
+      const itemId = String(r?.contract_item_id ?? "");
+      const period = String(r?.period ?? "").slice(0, 10);
+      if (!itemId || !period) continue;
+      overrideByItemPeriod.set(`${itemId}||${period}`, {
+        unit_price: typeof r?.unit_price === "number" ? r.unit_price : r?.unit_price ? Number(r.unit_price) : null,
+        quantity: typeof r?.quantity === "number" ? r.quantity : r?.quantity ? Number(r.quantity) : null,
+      });
+    }
+
+    const detail: Array<{
+      product_name: string;
+      contract_item_id: string;
+      previous_qty: number | null;
+      current_qty: number | null;
+      delta_qty: number | null;
+      pct_change: number | null;
+    }> = [];
+
+    for (const [itemId, base] of baseByItem.entries()) {
+      const prevOv = overrideByItemPeriod.get(`${itemId}||${previous}`);
+      const currOv = overrideByItemPeriod.get(`${itemId}||${current}`);
+
+      const prevQty = (prevOv?.quantity ?? base.quantity);
+      const currQty = (currOv?.quantity ?? base.quantity);
+
+      if (prevQty === null || currQty === null) continue;
+
+      const delta = currQty - prevQty;
+      const pct = prevQty !== 0 ? (delta / prevQty) * 100 : null;
+
+      detail.push({
+        product_name: base.product_name,
+        contract_item_id: itemId,
+        previous_qty: prevQty,
+        current_qty: currQty,
+        delta_qty: Number(delta.toFixed(6)),
+        pct_change: pct === null ? null : Number(pct.toFixed(2)),
+      });
+    }
+
+    const validPct = detail.map((d) => d.pct_change).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    const avgPct = validPct.length ? validPct.reduce((a, b) => a + b, 0) / validPct.length : 0;
+
+    const topChanged = detail
+      .slice()
+      .sort((a, b) => Math.abs((b.pct_change ?? 0)) - Math.abs((a.pct_change ?? 0)))
+      .slice(0, 50);
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: "Variación promedio de cantidades",
+        value: `${avgPct.toFixed(2)}%`,
+        subtitle: `Comparación ${previous.slice(0, 7)} → ${current.slice(0, 7)} (items con cantidad base/override)`
+      },
+      {
+        type: "table",
+        title: "Detalle variación por item (top 50)",
+        columns: ["Producto", "Item", `Qty ${previous.slice(0, 7)}`, `Qty ${current.slice(0, 7)}`, "Delta", "%"],
+        rows: topChanged.map((r) => [r.product_name, r.contract_item_id, r.previous_qty, r.current_qty, r.delta_qty, r.pct_change]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "INTENT_quantity_variation_avg",
+      range_from: previous,
+      range_to: current,
+      currency_mode: "system",
+      source_breakdown: ["quantities", "contract_items"],
+      filters_applied: { holding_id: holdingId, periods: [previous, current] },
+      holding_id: holdingId,
+      data_completeness: detail.length ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: `INTENT: quantity_variation_avg. Variación promedio de cantidades (comparación mensual).`,
+      sources: [
+        { table: "quantities", query_type: "quantity_variation_avg", filters: { holding_id: holdingId, periods: [previous, current] } },
+        { table: "contract_items", query_type: "base_quantity", filters: { holding_id: holdingId } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `INTENT: quantity_variation_avg. No pude consultar variación de cantidades. Motivo: ${reason}`,
+      sources: [
+        { table: "quantities", query_type: "quantity_variation_avg", filters: { holding_id: holdingId } },
+        { table: "contract_items", query_type: "base_quantity", filters: { holding_id: holdingId } },
+      ],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Variación promedio de cantidades",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        case_id: "INTENT_quantity_variation_avg",
+        range_from: previous,
+        range_to: current,
+        currency_mode: "system",
+        source_breakdown: ["quantities", "contract_items"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as any,
+    };
+  }
+}

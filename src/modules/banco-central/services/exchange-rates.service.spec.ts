@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import { MONTHLY_AVG_BY_PAIR_SQL } from '../monthly-average';
+
 import { ExchangeRatesService } from './exchange-rates.service';
 
 jest.mock('axios');
@@ -188,5 +190,51 @@ describe('ExchangeRatesService', () => {
 			failedCurrencyPairs: ['USD/PEN'],
 			stats: { errors: 1 },
 		});
+	});
+
+	it('calculateMonthlyAverages: regla compartida (todas las fuentes diarias, días hábiles), upsert con calculated_at = now() y onlyPairs', async () => {
+		const exchangeRateRepository = {
+			query: jest.fn().mockResolvedValue([
+				{
+					from_currency: 'USD',
+					to_currency: 'CLP',
+					year: 2026,
+					month: 9,
+					avg_rate: '950',
+					min_rate: '940',
+					max_rate: '960',
+					data_points: 21,
+				},
+				{
+					from_currency: 'EUR',
+					to_currency: 'USD',
+					year: 2026,
+					month: 9,
+					avg_rate: '1.17',
+					min_rate: '1.1',
+					max_rate: '1.2',
+					data_points: 21,
+				},
+			]),
+		};
+		const monthlyAvgRepository = { query: jest.fn().mockResolvedValue([{ inserted: false }]) };
+		const service = new ExchangeRatesService(
+			exchangeRateRepository as any,
+			monthlyAvgRepository as any,
+			{} as any,
+			{ ensureSchema: jest.fn() } as any
+		);
+
+		const result = await service.calculateMonthlyAverages({ year: 2026, month: 9 }, [{ from_currency: 'USD', to_currency: 'CLP' }]);
+
+		expect(exchangeRateRepository.query).toHaveBeenCalledWith(MONTHLY_AVG_BY_PAIR_SQL, ['2026-09-01', '2026-10-01']);
+		expect(result.stats).toEqual({ periodsProcessed: 1, currencyPairsProcessed: 1, recordsCreated: 0, recordsUpdated: 1 });
+		expect(monthlyAvgRepository.query).toHaveBeenCalledTimes(1);
+		const [sql, params] = monthlyAvgRepository.query.mock.calls[0];
+
+		expect(sql).toContain('ON CONFLICT (from_currency, to_currency, year, month) DO UPDATE');
+		expect(sql).toContain('calculated_at = EXCLUDED.calculated_at');
+		expect(sql).toContain('VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())');
+		expect(params).toEqual(['USD', 'CLP', 2026, 9, '950', '940', '960', 21]);
 	});
 });

@@ -51,6 +51,24 @@ export class SalesforceOpportunitiesStg {
 	@Column({ type: 'timestamptz', nullable: true })
 	last_integrated_at?: Date | null;
 
+	/**
+	 * Cotizaciones protegidas (`1791100000000-CrmQuoteSnapshot`): lo que llegó del CRM la última vez que la oportunidad se importó a
+	 * Sapira (encabezado mapeado + ítems, `utils/crm-quote-snapshot.ts`). Un cambio real es lo que llega ahora distinto de esto.
+	 */
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment: 'Lo que llegó del CRM en la última importación a Sapira (encabezado mapeado + ítems). Base para detectar cambios reales del CRM',
+	})
+	last_imported_snapshot?: Record<string, any> | null;
+
+	@Column({
+		type: 'timestamptz',
+		nullable: true,
+		comment: 'Cuándo se guardó last_imported_snapshot al crear o actualizar la cotización (NULL: base tomada al traer, sin importar)',
+	})
+	last_imported_at?: Date | null;
+
 	@Column({ type: 'timestamptz', nullable: true, default: () => 'now()' })
 	created_at!: Date;
 

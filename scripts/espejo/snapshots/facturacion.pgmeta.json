@@ -507,7 +507,7 @@
     "options": [
      "updatable"
     ],
-    "default_value": "true"
+    "default_value": "false"
    },
    {
     "name": "email_from",
@@ -728,7 +728,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 11636,
+  "rows": 11942,
   "columns": [
    {
     "name": "id",
@@ -1089,6 +1089,50 @@
      "updatable"
     ],
     "comment": "ID del impuesto de Odoo (account.tax) que se aplicará a esta línea de factura. Se asigna automáticamente desde la compañía emisora al enviar a Odoo."
+   },
+   {
+    "name": "pricing_breakdown",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: sublíneas del desglose {kind: free|tier|package|seat|discount|minimum|cap, quantity, amount, label…} tal como las produjo el motor; la línea sigue siendo una"
+   },
+   {
+    "name": "quantity_source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: fixed | consumption | estimated | pending (pending = línea metered sin consumo informado) | manual (editada a mano en la Por Emitir: consumos, modificaciones y plantillas no la reescriben)"
+   },
+   {
+    "name": "description_locked",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "true = descripción escrita a mano: ninguna regeneración (plantilla, consumos, modificaciones) la toca hasta volver a la plantilla"
+   },
+   {
+    "name": "visible_line_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "línea interna ligada a la línea visible del documento; NULL = línea normal"
    }
   ],
   "primary_keys": [
@@ -1190,6 +1234,17 @@
      "subscription_item_id"
     ],
     "target_table": "public.subscription_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_items_visible_line_id_fkey",
+    "source_table": "public.invoice_items",
+    "source_columns": [
+     "visible_line_id"
+    ],
+    "target_table": "public.invoice_items",
     "target_columns": [
      "id"
     ]
@@ -1322,6 +1377,36 @@
     "data_type": "uuid",
     "format": "uuid",
     "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "original_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "fx_rate",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "settlement_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
     "options": [
      "nullable",
      "updatable"
@@ -1860,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 9689,
+  "rows": 9883,
   "columns": [
    {
     "name": "id",
@@ -2497,7 +2582,7 @@
      "nullable",
      "updatable"
     ],
-    "comment": "Solo NC discount: devengo del descuento en RSM (impact_month = mes de la NC; defer_forward = meses restantes del ítem). NULL en facturas y NC de anulación/churn."
+    "comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
    }
   ],
   "primary_keys": [
@@ -2520,6 +2605,17 @@
     "source_table": "public.bank_movements",
     "source_columns": [
      "suggested_invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_invoice_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "invoice_id"
     ],
     "target_table": "public.invoices",
     "target_columns": [
@@ -2751,7 +2847,7 @@
  "overdue_check_log": {
   "name": "public.overdue_check_log",
   "rls_enabled": true,
-  "rows": 51,
+  "rows": 107,
   "columns": [
    {
     "name": "id",
@@ -3024,7 +3120,7 @@
  "quantities": {
   "name": "public.quantities",
   "rls_enabled": true,
-  "rows": 252,
+  "rows": 311,
   "columns": [
    {
     "name": "id",

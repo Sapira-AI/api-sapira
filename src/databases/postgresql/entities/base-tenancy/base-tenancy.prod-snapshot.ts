@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-09-27 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-04 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -19,6 +19,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			description: true,
 			created_at: true,
 			holding_id: true,
+			is_default: false,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -121,6 +122,14 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			updated_at: false,
 			fx_system_policy: true,
 			currencies_in_use: true,
+			auto_renewal_notice_days: false,
+			timezone: false,
+			renewal_reminder_days: false,
+			renewal_overdue_every_days: false,
+			quote_numbering_mode: false,
+			quote_number_prefix: false,
+			quote_number_include_year: false,
+			quote_number_width: false,
 		},
 		primary: ['holding_id'],
 		foreignKeys: {
@@ -130,7 +139,16 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			},
 		},
 		uniques: {},
-		checks: ['holding_settings_fx_system_policy_check'],
+		checks: [
+			'holding_settings_auto_renewal_notice_days_check',
+			'holding_settings_fx_system_policy_check',
+			'holding_settings_quote_number_prefix_check',
+			'holding_settings_quote_number_width_check',
+			'holding_settings_quote_numbering_mode_check',
+			'holding_settings_renewal_overdue_every_days_check',
+			'holding_settings_renewal_reminder_days_check',
+			'holding_settings_timezone_check',
+		],
 		indexes: {},
 	},
 	custom_field_definitions: {
@@ -146,6 +164,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			display_order: false,
 			created_at: false,
 			created_by: true,
+			options: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -161,7 +180,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		uniques: {
 			unique_field_per_entity: ['holding_id', 'entity_type', 'field_name'],
 		},
-		checks: ['custom_field_definitions_field_type_check', 'valid_entity_type'],
+		checks: ['custom_field_definitions_field_type_check', 'custom_field_definitions_options_check', 'valid_entity_type'],
 		indexes: {
 			idx_custom_field_defs_active: {
 				columns: ['holding_id', 'entity_type', 'is_active'],

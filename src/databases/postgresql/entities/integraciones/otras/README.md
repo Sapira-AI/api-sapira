@@ -1,9 +1,9 @@
-# Módulo 10 · Integraciones — otras — 3 tablas de prod (2026-09-27)
+# Módulo 10 · Integraciones — otras — 4 tablas de prod (2026-10-04)
 
 > Convención y reglas: `../../README.md`. Rarezas verificadas: `../../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-otras.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-otras.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/integraciones-otras.{pgmeta,catalog}.json`); metadata real de las entities existentes en `integraciones-otras.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
-## A · Tablas que YA tenían entity en el repo (2) — no se tocaron ni se duplicaron
+## A · Tablas que YA tenían entity en el repo (3) — no se tocaron ni se duplicaron
 
 Estas entities están **prendidas en producción** exactamente como estaban (`database.module.ts` las carga por el glob `src/**/*.entity.ts` y sus módulos las registran en `forFeature`). "Estado vs prod" = diff entre lo que la entity declara hoy (metadata TypeORM real) y la DB en vivo; es el insumo para completarlas en el paso 3 con Leon.
 
@@ -11,6 +11,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 |---|---|---|---|---|---|---|
 | `bigquery_connections` (1) | `src/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity.ts` · `BigQueryConnection` | ⚠️ difiere de prod | — | — | — | nombre de PK `bigquery_connections_pkey` |
 | `field_mappings` (4) | `src/databases/postgresql/entities/integraciones/otras/field-mapping.entity.ts` · `FieldMapping` | ⚠️ difiere de prod | — | — | — | nombre de PK `field_mappings_pkey`<br>CHECK `field_mappings_mapping_type_check` |
+| `integration_record_discards` (1) | `src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts` · `IntegrationRecordDiscard` | ⚠️ difiere de prod | — | — | — | nombre de PK `integration_record_discards_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (1): 1 promovidas, 0 apagadas
 

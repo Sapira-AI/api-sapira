@@ -207,7 +207,7 @@
    {
     "name": "invoice_adjustments_type_check",
     "type": "c",
-    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
+    "expr": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])"
    }
   ],
   "indexes": [
@@ -690,7 +690,12 @@
    {
     "name": "invoice_items_quantity_check",
     "type": "c",
-    "expr": "quantity > (0)::numeric"
+    "expr": "quantity >= (0)::numeric"
+   },
+   {
+    "name": "invoice_items_quantity_source_check",
+    "type": "c",
+    "expr": "(quantity_source IS NULL) OR (quantity_source = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text]))"
    },
    {
     "name": "invoice_items_subscription_item_id_fkey",
@@ -698,6 +703,13 @@
     "ondelete": "a",
     "onupdate": "a",
     "def": "FOREIGN KEY (subscription_item_id) REFERENCES subscription_items(id)"
+   },
+   {
+    "name": "invoice_items_visible_line_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (visible_line_id) REFERENCES invoice_items(id) ON DELETE SET NULL"
    }
   ],
   "indexes": [
@@ -772,6 +784,14 @@
     ],
     "unique": false,
     "where": "subscription_item_id IS NOT NULL"
+   },
+   {
+    "name": "idx_invoice_items_visible_line_id",
+    "cols": [
+     "visible_line_id"
+    ],
+    "unique": false,
+    "where": "visible_line_id IS NOT NULL"
    }
   ],
   "triggers": [
@@ -861,11 +881,21 @@
     "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
    },
    {
+    "name": "invoice_payments_original_check",
+    "type": "c",
+    "expr": "((original_amount IS NULL) = (fx_rate IS NULL)) AND ((original_amount IS NULL) OR (bank_movement_id IS NOT NULL))"
+   },
+   {
     "name": "invoice_payments_pkey",
     "type": "p",
     "cols": [
      "id"
     ]
+   },
+   {
+    "name": "invoice_payments_settlement_reason_check",
+    "type": "c",
+    "expr": "(settlement_reason IS NULL) OR (settlement_reason = ANY (ARRAY['bank_fee'::text, 'withholding'::text, 'fx_difference'::text, 'rounding'::text, 'other'::text]))"
    }
   ],
   "indexes": [
@@ -1381,7 +1411,7 @@
    {
     "name": "invoices_nc_revenue_treatment_check",
     "type": "c",
-    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))"
+    "expr": "(nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))"
    },
    {
     "name": "invoices_payment_method_check",
@@ -1876,8 +1906,6 @@
   "triggers": [
    "trg_quantities_set_holding · BEFORE INSERT FOR EACH ROW → quantities_set_holding_from_contract_item()",
    "trg_restore_invoice_items_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_invoice_items_amounts_on_quantity_delete()",
-   "trg_restore_rsm_on_quantity_delete · AFTER DELETE FOR EACH ROW → restore_rsm_on_quantity_delete()",
-   "trg_rsm_on_quantity_change · AFTER INSERT OR UPDATE FOR EACH ROW → trigger_rsm_on_quantity_change()",
    "trg_sync_invoice_items_from_quantities · AFTER INSERT OR UPDATE FOR EACH ROW → sync_invoice_items_amounts_from_quantities()",
    "trg_validate_quantity_invoice_status · BEFORE INSERT OR DELETE OR UPDATE FOR EACH ROW → validate_invoice_status_for_quantity_change()"
   ],

@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
-import { EmailsService } from '@/modules/emails/emails.service';
+import type { CreateAppNotificationDto } from '@/modules/notifications/dtos/create-app-notification.dto';
+import { NotificationEmailService } from '@/modules/notifications/notification-email.service';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import type { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
 import type { ExecutionEnvironment, ExecutionSource } from './schemas/invoice-scheduler-job.schema';
@@ -15,266 +17,109 @@ interface ExchangeRateInfo {
 	toCurrency: string;
 }
 
+export const INVOICE_FX_FALLBACK_NOTIFICATION_TYPE = 'invoice_fx_fallback';
+export const INVOICE_FX_MISSING_NOTIFICATION_TYPE = 'invoice_fx_missing';
+export const SCHEDULER_ERROR_SUMMARY_NOTIFICATION_TYPE = 'scheduler_error_summary';
+
+const day = (value: Date | string | null | undefined): string => {
+	if (!value) return 'sin fecha';
+	if (value instanceof Date) return Number.isNaN(value.getTime()) ? 'sin fecha' : value.toISOString().slice(0, 10);
+
+	return String(value).slice(0, 10);
+};
+
+/**
+ * Correos internos de facturación (Notificaciones v2 fase 2, contrato §8.5) **como alertas del catálogo**: factura emitida con tasa de
+ * respaldo (`invoice_fx_fallback`), factura no emitida por falta de tasa (`invoice_fx_missing`) y resumen de errores del scheduler
+ * (`scheduler_error_summary`). Destinatarios: suscripciones del tipo (super admins por defecto); el correo sale por el canal nuevo (Resend +
+ * plantilla de marca, texto escapado). **Respaldo**: si la alerta no tiene destinatarios (semilla sin aplicar), el mismo correo de marca va a
+ * `INVOICE_ADMIN_EMAILS`. Nunca lanza: un aviso que falla no detiene la emisión.
+ */
 @Injectable()
 export class InvoiceNotificationService {
 	private readonly logger = new Logger(InvoiceNotificationService.name);
-	private readonly adminEmails: string[];
+	private readonly fallbackEmails: string[];
 
 	constructor(
-		private readonly emailsService: EmailsService,
+		private readonly notifications: NotificationsService,
+		private readonly emails: NotificationEmailService,
 		private readonly configService: ConfigService
 	) {
 		const emailsConfig = this.configService.get<string>('INVOICE_ADMIN_EMAILS');
-		this.adminEmails = emailsConfig ? emailsConfig.split(',').map((e) => e.trim()) : [];
-
-		if (this.adminEmails.length === 0) {
-			this.logger.warn('⚠️ INVOICE_ADMIN_EMAILS no configurado. No se enviarán notificaciones de facturas.');
-		}
+		this.fallbackEmails = emailsConfig
+			? emailsConfig
+					.split(',')
+					.map((e) => e.trim())
+					.filter(Boolean)
+			: [];
 	}
 
-	private getNodeEnvironment(): string {
-		return this.configService.get<string>('NODE_ENV') || 'development';
-	}
+	async sendExchangeRateFallbackNotification(invoice: Invoice, info: ExchangeRateInfo): Promise<void> {
+		const folio = invoice.invoice_number || 'sin número';
 
-	async sendExchangeRateFallbackNotification(invoice: Invoice, exchangeRateInfo: ExchangeRateInfo): Promise<void> {
-		if (this.adminEmails.length === 0) {
-			this.logger.warn('No hay emails configurados para notificaciones de facturas');
-			return;
-		}
-
-		const nodeEnvironment = this.getNodeEnvironment();
-
-		// Convertir fechas a string de forma segura
-		const requestedDateStr = this.dateToString(exchangeRateInfo.requestedDate);
-		const usedDateStr = this.dateToString(exchangeRateInfo.usedDate);
-
-		const subject = `⚠️ [${nodeEnvironment}] Factura Emitida con Tipo de Cambio Fallback - ${invoice.invoice_number || invoice.id}`;
-
-		const html = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="UTF-8">
-				<style>
-					body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-					.container { max-width: 600px; margin: 0 auto; padding: 20px; }
-					.header { background-color: #ff9800; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
-					.content { background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; }
-					.warning-box { background-color: #fff3cd; border-left: 4px solid #ff9800; padding: 15px; margin: 15px 0; }
-					.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
-					.label { font-weight: bold; color: #495057; }
-					.value { color: #ff9800; font-weight: bold; }
-					.footer { background-color: #e9ecef; padding: 15px; border-radius: 0 0 5px 5px; font-size: 12px; color: #6c757d; }
-				</style>
-			</head>
-			<body>
-				<div class="container">
-					<div class="header">
-						<h2 style="margin: 0;">⚠️ Tipo de Cambio Fallback Utilizado</h2>
-					</div>
-					<div class="content">
-						<p>Se ha emitido una factura utilizando un tipo de cambio de un día anterior debido a que no estaba disponible el tipo de cambio para la fecha de emisión solicitada.</p>
-						<p><span class="label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
-						
-						<div class="warning-box">
-							<h3 style="margin-top: 0; color: #ff9800;">Información de la Factura</h3>
-							<div class="info-row">
-								<span class="label">Número de Factura:</span>
-								<span class="value">${invoice.invoice_number || invoice.id}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">ID de Factura:</span>
-								<span>${invoice.id}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Fecha de Emisión:</span>
-								<span>${this.dateToString(invoice.issue_date)}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Monto Contrato:</span>
-								<span>${exchangeRateInfo.fromCurrency} ${this.formatCurrency(Number(invoice.amount_contract_currency))}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Monto Factura:</span>
-								<span>${exchangeRateInfo.toCurrency} ${this.formatCurrency(Number(invoice.amount_invoice_currency))}</span>
-							</div>
-						</div>
-
-						<div class="warning-box" style="background-color: #fff; border-left-color: #dc3545;">
-							<h3 style="margin-top: 0; color: #dc3545;">Tipo de Cambio Utilizado</h3>
-							<div class="info-row">
-								<span class="label">Conversión:</span>
-								<span class="value">${exchangeRateInfo.fromCurrency} → ${exchangeRateInfo.toCurrency}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Fecha Solicitada:</span>
-								<span style="color: #dc3545; font-weight: bold;">${requestedDateStr}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Fecha Utilizada (Fallback):</span>
-								<span style="color: #ff9800; font-weight: bold;">${usedDateStr}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Tipo de Cambio:</span>
-								<span class="value">${exchangeRateInfo.rate.toFixed(6)}</span>
-							</div>
-						</div>
-
-						<p><strong>⚠️ Nota Importante:</strong></p>
-						<ul>
-							<li>No había tipo de cambio disponible para la fecha de emisión (${requestedDateStr})</li>
-							<li>Se utilizó el tipo de cambio del día hábil anterior más cercano (${usedDateStr})</li>
-							<li>La factura fue emitida exitosamente con este tipo de cambio</li>
-							<li>Revise si el tipo de cambio utilizado es aceptable para esta transacción</li>
-						</ul>
-					</div>
-					<div class="footer">
-						<p>Este es un mensaje automático del Sistema Sapira - Módulo de Facturación</p>
-						<p>Si tiene alguna pregunta, contacte al administrador del sistema.</p>
-					</div>
-				</div>
-			</body>
-			</html>
-		`;
-
-		try {
-			await this.emailsService.sendSystemEmail(this.adminEmails, subject, html);
-			this.logger.log(
-				`✓ Notificación de tipo de cambio fallback enviada a ${this.adminEmails.join(', ')} para factura ${invoice.invoice_number || invoice.id}`
-			);
-		} catch (error) {
-			this.logger.error(`Error enviando notificación de tipo de cambio fallback para factura ${invoice.invoice_number || invoice.id}:`, error);
-		}
+		await this.notify(invoice.holding_id, {
+			source: 'invoices',
+			type: INVOICE_FX_FALLBACK_NOTIFICATION_TYPE,
+			severity: 'warning',
+			title: `Factura ${folio} emitida con tasa de respaldo (${info.fromCurrency}/${info.toCurrency})`,
+			message:
+				`No había tipo de cambio ${info.fromCurrency}/${info.toCurrency} para el ${day(info.requestedDate)}: la factura ${folio} se ` +
+				`valorizó con el último disponible, del ${day(info.usedDate)} (${info.rate}).`,
+			recommendation: 'Revisa la factura y, si la diferencia importa, ajústala.',
+			action_type: 'open_invoice',
+			action_payload: { invoice_id: invoice.id, contract_id: invoice.contract_id ?? null },
+			resource_type: 'invoice',
+			resource_id: invoice.id,
+			...(invoice.company_id ? { company_id: invoice.company_id } : {}),
+			metadata: {
+				invoice_number: invoice.invoice_number ?? null,
+				pair: `${info.fromCurrency}/${info.toCurrency}`,
+				rate: info.rate,
+				requested_date: day(info.requestedDate),
+				used_date: day(info.usedDate),
+			},
+			deduplication_key: `invoice-fx-fallback:${invoice.id}:${info.fromCurrency}>${info.toCurrency}`,
+		});
 	}
 
 	async sendMissingExchangeRateNotification(invoice: Invoice, requestedDate: Date, fromCurrency: string, toCurrency: string): Promise<void> {
-		if (this.adminEmails.length === 0) {
-			this.logger.warn('No hay emails configurados para notificaciones de facturas');
-			return;
-		}
+		const folio = invoice.invoice_number || 'sin número';
 
-		const nodeEnvironment = this.getNodeEnvironment();
-		const requestedDateStr = requestedDate.toISOString().split('T')[0];
+		await this.notify(invoice.holding_id, {
+			source: 'invoices',
+			type: INVOICE_FX_MISSING_NOTIFICATION_TYPE,
+			severity: 'error',
+			title: `Factura ${folio} no emitida: falta el tipo de cambio ${fromCurrency}/${toCurrency}`,
+			message: `No hay tipo de cambio ${fromCurrency}/${toCurrency} para el ${day(requestedDate)} ni uno anterior que sirva de respaldo.`,
+			recommendation: 'Registra la tasa (o fija una en la factura) y vuelve a emitirla.',
+			action_type: 'open_invoice',
+			action_payload: { invoice_id: invoice.id, contract_id: invoice.contract_id ?? null },
+			resource_type: 'invoice',
+			resource_id: invoice.id,
+			...(invoice.company_id ? { company_id: invoice.company_id } : {}),
+			metadata: { invoice_number: invoice.invoice_number ?? null, pair: `${fromCurrency}/${toCurrency}`, requested_date: day(requestedDate) },
+			deduplication_key: `invoice-fx-missing:${invoice.id}:${fromCurrency}>${toCurrency}`,
+		});
+	}
 
-		const subject = `🚨 [${nodeEnvironment}] Factura NO Emitida - Tipo de Cambio No Disponible - ${invoice.invoice_number || invoice.id}`;
-
-		const html = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="UTF-8">
-				<style>
-					body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-					.container { max-width: 600px; margin: 0 auto; padding: 20px; }
-					.header { background-color: #dc3545; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
-					.content { background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; }
-					.error-box { background-color: #fff; border-left: 4px solid #dc3545; padding: 15px; margin: 15px 0; }
-					.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
-					.label { font-weight: bold; color: #495057; }
-					.value { color: #dc3545; font-weight: bold; }
-					.action-box { background-color: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin: 15px 0; }
-					.footer { background-color: #e9ecef; padding: 15px; border-radius: 0 0 5px 5px; font-size: 12px; color: #6c757d; }
-				</style>
-			</head>
-			<body>
-				<div class="container">
-					<div class="header">
-						<h2 style="margin: 0;">🚨 Factura NO Emitida - Tipo de Cambio No Disponible</h2>
-					</div>
-					<div class="content">
-						<p><strong>ATENCIÓN:</strong> No se pudo emitir la siguiente factura debido a que no hay tipo de cambio disponible para la fecha de emisión.</p>
-						<p><span class="label">Entorno (NODE_ENV):</span> ${nodeEnvironment}</p>
-						
-						<div class="error-box">
-							<h3 style="margin-top: 0; color: #dc3545;">Información de la Factura</h3>
-							<div class="info-row">
-								<span class="label">Número de Factura:</span>
-								<span class="value">${invoice.invoice_number || invoice.id}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">ID de Factura:</span>
-								<span>${invoice.id}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Fecha de Emisión:</span>
-								<span>${this.dateToString(invoice.issue_date)}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Cliente:</span>
-								<span>${invoice.client_entity_id || 'N/A'}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Monto Contrato:</span>
-								<span>${fromCurrency} ${this.formatCurrency(Number(invoice.amount_contract_currency))}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Estado:</span>
-								<span style="color: #dc3545; font-weight: bold;">Por Emitir (Bloqueada)</span>
-							</div>
-						</div>
-
-						<div class="error-box">
-							<h3 style="margin-top: 0; color: #dc3545;">Tipo de Cambio Requerido</h3>
-							<div class="info-row">
-								<span class="label">Conversión Requerida:</span>
-								<span class="value">${fromCurrency} → ${toCurrency}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Fecha Solicitada:</span>
-								<span class="value">${requestedDateStr}</span>
-							</div>
-							<div class="info-row">
-								<span class="label">Estado:</span>
-								<span style="color: #dc3545; font-weight: bold;">NO DISPONIBLE</span>
-							</div>
-						</div>
-
-						<div class="action-box">
-							<h3 style="margin-top: 0; color: #0c5460;">⚡ Acción Requerida</h3>
-							<p><strong>Para emitir esta factura, debe realizar una de las siguientes acciones:</strong></p>
-							<ol>
-								<li><strong>Opción 1:</strong> Ingresar manualmente el tipo de cambio ${fromCurrency}/${toCurrency} para la fecha ${requestedDateStr} en el sistema</li>
-								<li><strong>Opción 2:</strong> Esperar a que el sistema sincronice automáticamente el tipo de cambio (si está disponible en la fuente de datos)</li>
-								<li><strong>Opción 3:</strong> Cambiar la fecha de emisión de la factura a una fecha donde el tipo de cambio esté disponible</li>
-							</ol>
-							<p><strong>Una vez resuelto, el scheduler intentará emitir la factura automáticamente en la próxima ejecución.</strong></p>
-						</div>
-
-						<p><strong>🔍 Detalles Técnicos:</strong></p>
-						<ul>
-							<li>El sistema buscó el tipo de cambio para la fecha de emisión (${requestedDateStr})</li>
-							<li>No se encontró tipo de cambio exacto ni fallback del día anterior</li>
-							<li>La factura permanece en estado "Por Emitir" hasta que se resuelva</li>
-							<li>No se envió a Odoo para evitar errores de facturación</li>
-						</ul>
-					</div>
-					<div class="footer">
-						<p>Este es un mensaje automático del Sistema Sapira - Módulo de Facturación</p>
-						<p>Para más información, revise los logs del sistema o contacte al administrador.</p>
-					</div>
-				</div>
-			</body>
-			</html>
-		`;
-
+	/** Cierra "no emitida por falta de tasa" cuando la factura ya se envió bien. */
+	async resolveMissingExchangeRate(holdingId: string, invoiceId: string): Promise<void> {
 		try {
-			await this.emailsService.sendSystemEmail(this.adminEmails, subject, html);
-			this.logger.log(
-				`✓ Notificación de tipo de cambio no disponible enviada a ${this.adminEmails.join(', ')} para factura ${invoice.invoice_number || invoice.id}`
-			);
+			await this.notifications.resolveOpen(holdingId, { type: INVOICE_FX_MISSING_NOTIFICATION_TYPE, resourceId: invoiceId });
 		} catch (error) {
-			this.logger.error(
-				`Error enviando notificación de tipo de cambio no disponible para factura ${invoice.invoice_number || invoice.id}:`,
-				error
+			this.logger.warn(
+				`No se pudo cerrar el aviso de tasa faltante de ${invoiceId}: ${error instanceof Error ? error.message : String(error)}`
 			);
 		}
 	}
 
+	/**
+	 * Resumen de la corrida real del scheduler: con errores crea (o actualiza) la alerta del día del holding; sin errores cierra la abierta.
+	 * Las corridas de prueba (`dryRun`) no avisan.
+	 */
 	async sendSchedulerErrorSummary(params: {
 		jobId: string;
 		holdingId: string;
-		/** Nombre del holding; va en el asunto para distinguir los correos de una misma noche. */
-		holdingName?: string;
 		dryRun: boolean;
 		executionSource: ExecutionSource;
 		executionEnvironment: ExecutionEnvironment;
@@ -282,87 +127,72 @@ export class InvoiceNotificationService {
 		result: ProcessInvoicesResponseDto;
 		distinctErrors: Array<{ message: string; count: number }>;
 	}): Promise<void> {
-		if (params.dryRun || params.result.summary.errors === 0 || this.adminEmails.length === 0) return;
+		if (params.dryRun) return;
+		if (params.result.summary.errors === 0) {
+			try {
+				await this.notifications.resolveOpen(params.holdingId, { type: SCHEDULER_ERROR_SUMMARY_NOTIFICATION_TYPE });
+			} catch (error) {
+				this.logger.warn(`No se pudo cerrar el resumen de errores del holding ${params.holdingId}: ${String(error)}`);
+			}
+			return;
+		}
+		const { summary } = params.result;
+		const top = [...params.distinctErrors].sort((a, b) => b.count - a.count).slice(0, 5);
 
-		const nodeEnvironment = this.getNodeEnvironment();
-		// Con una corrida por holding llegan varios correos la misma noche: sin el holding en el asunto
-		// el cliente de correo los agrupa como si fueran uno solo.
-		const holdingLabel = params.holdingName || (params.holdingId === 'all' ? 'todos los holdings' : params.holdingId);
-		const subject = `🚨 [${nodeEnvironment}] Integración de facturas con errores — ${holdingLabel}`;
-		const errorRows = params.distinctErrors
-			.map(
-				(error) =>
-					`<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${this.escapeHtml(error.message)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center;">${error.count}</td></tr>`
-			)
-			.join('');
-		const completedAt = params.result.executedAt;
-		const html = `
-			<!DOCTYPE html>
-			<html lang="es">
-			<head><meta charset="UTF-8"></head>
-			<body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;">
-				<div style="max-width:700px;margin:0 auto;padding:20px;">
-					<div style="background:#b91c1c;color:white;padding:18px;border-radius:6px 6px 0 0;">
-						<h2 style="margin:0;">Integración de facturas finalizada con errores</h2>
-					</div>
-					<div style="border:1px solid #e5e7eb;padding:20px;">
-						<p>La ejecución real de integración de facturas terminó con errores.</p>
-						<table style="width:100%;border-collapse:collapse;margin:16px 0;">
-							<tr><td><strong>Entorno (NODE_ENV)</strong></td><td>${this.escapeHtml(nodeEnvironment)}</td></tr>
-							<tr><td><strong>Origen</strong></td><td>${params.executionSource === 'automatic' ? 'Automática' : 'Manual'}</td></tr>
-							<tr><td><strong>Holding</strong></td><td>${this.escapeHtml(params.holdingId)}</td></tr>
-							<tr><td><strong>Inicio</strong></td><td>${params.startedAt.toISOString()}</td></tr>
-							<tr><td><strong>Finalización</strong></td><td>${completedAt.toISOString()}</td></tr>
-							<tr><td><strong>ID de ejecución</strong></td><td>${this.escapeHtml(params.jobId)}</td></tr>
-						</table>
-						<div style="display:flex;gap:12px;margin:18px 0;">
-							<div style="padding:10px;background:#f3f4f6;"><strong>Total:</strong> ${params.result.summary.total}</div>
-							<div style="padding:10px;background:#dcfce7;"><strong>Enviadas:</strong> ${params.result.summary.sent}</div>
-							<div style="padding:10px;background:#fee2e2;"><strong>Errores:</strong> ${params.result.summary.errors}</div>
-							<div style="padding:10px;background:#f3f4f6;"><strong>Omitidas:</strong> ${params.result.summary.skipped}</div>
-						</div>
-						<h3>Errores distintos</h3>
-						<table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;">
-							<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;">Error</th><th style="padding:8px;">Facturas</th></tr></thead>
-							<tbody>${errorRows}</tbody>
-						</table>
-					</div>
-				</div>
-			</body>
-			</html>
-		`;
+		await this.notify(params.holdingId, {
+			source: 'invoices',
+			type: SCHEDULER_ERROR_SUMMARY_NOTIFICATION_TYPE,
+			severity: 'error',
+			title: `La emisión ${params.executionSource === 'automatic' ? 'automática' : 'manual'} terminó con ${summary.errors} ${
+				summary.errors === 1 ? 'factura con error' : 'facturas con error'
+			}`,
+			message:
+				`De ${summary.total} facturas: ${summary.sent} enviadas, ${summary.errors} con error y ${summary.skipped} omitidas. ` +
+				(top.length ? `Errores más frecuentes: ${top.map((error) => `${error.message} (${error.count})`).join('; ')}.` : ''),
+			recommendation: 'Revisa las facturas con error en la cola Por Emitir.',
+			action_type: 'open_billing_queue',
+			action_payload: { href: '/facturacion?estado=Por+Emitir&grupo=blocked&periodo=todo' },
+			metadata: {
+				job_id: params.jobId,
+				execution_source: params.executionSource,
+				execution_environment: params.executionEnvironment,
+				started_at: params.startedAt.toISOString(),
+				finished_at:
+					params.result.executedAt instanceof Date ? params.result.executedAt.toISOString() : String(params.result.executedAt ?? ''),
+				summary,
+				distinct_errors: params.distinctErrors.slice(0, 20),
+			},
+			// Una por holding y día: las corridas siguientes la actualizan (el correo no se repite salvo que escale).
+			deduplication_key: `scheduler-errors:${params.holdingId}:${day(params.startedAt)}`,
+		});
+	}
 
+	/** Crea o actualiza la alerta; sin destinatarios, respaldo por correo a `INVOICE_ADMIN_EMAILS`. Nunca lanza. */
+	private async notify(holdingId: string, dto: CreateAppNotificationDto): Promise<void> {
 		try {
-			await this.emailsService.sendSystemEmail(this.adminEmails, subject, html);
-			this.logger.log(`✓ Resumen de errores del scheduler enviado a ${this.adminEmails.join(', ')} para job ${params.jobId}`);
+			const result = await this.notifications.createOrUpdate(holdingId, dto);
+
+			if (!result.notification && this.fallbackEmails.length) {
+				await this.emails.sendAlertToAddresses(
+					this.fallbackEmails,
+					{
+						id: dto.deduplication_key ?? dto.type,
+						holding_id: holdingId,
+						type: dto.type,
+						severity: dto.severity ?? 'error',
+						title: dto.title,
+						message: dto.message,
+						recommendation: dto.recommendation ?? null,
+						company_id: dto.company_id ?? null,
+						metadata: dto.metadata ?? {},
+					},
+					`fallback:${dto.deduplication_key ?? dto.type}`
+				);
+			}
 		} catch (error) {
-			this.logger.error(`Error enviando resumen de errores del scheduler ${params.jobId}:`, error);
+			this.logger.error(
+				`No se pudo crear el aviso ${dto.type} (holding ${holdingId}): ${error instanceof Error ? error.message : String(error)}`
+			);
 		}
-	}
-
-	private formatCurrency(value: number): string {
-		return new Intl.NumberFormat('es-CL', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2,
-		}).format(value);
-	}
-
-	private dateToString(date: Date | string | undefined | null): string {
-		if (!date) return 'N/A';
-
-		if (typeof date === 'string') {
-			// Si ya es string, asumimos formato YYYY-MM-DD o ISO
-			return date.split('T')[0];
-		}
-
-		if (date instanceof Date) {
-			return date.toISOString().split('T')[0];
-		}
-
-		return 'N/A';
-	}
-
-	private escapeHtml(value: string): string {
-		return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character]);
 	}
 }

@@ -13,10 +13,12 @@ import { Contract } from '@/databases/postgresql/entities/contratos/contract.ent
 @Entity('contract_fx_period_rates')
 @Check('contract_fx_period_rates_check', 'period_end > period_start')
 @Check('contract_fx_period_rates_rate_check', 'rate > (0)::numeric')
+@Check('contract_fx_period_rates_purpose_check', `purpose = ANY (ARRAY['company'::text, 'invoice'::text, 'item'::text])`)
 @Index('idx_contract_fx_rates_contract_id', ['contract_id'])
 @Index('idx_contract_fx_rates_currencies', ['from_currency', 'to_currency'])
 @Index('idx_contract_fx_rates_holding_contract', ['holding_id', 'contract_id'])
 @Index('idx_contract_fx_rates_period', ['period_start', 'period_end'])
+@Index('idx_contract_fx_rates_contract_purpose', ['contract_id', 'purpose'])
 export class ContractFxPeriodRate {
 	@PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'contract_fx_period_rates_pkey' })
 	id: string;
@@ -33,8 +35,23 @@ export class ContractFxPeriodRate {
 	@Column({ type: 'text', nullable: false })
 	to_currency: string;
 
+	/** Regla única (v2): "1 [from_currency] = rate [to_currency]". v2 escribe siempre contrato → otra moneda. */
 	@Column({ type: 'numeric', precision: 15, scale: 6, nullable: false })
 	rate: number;
+
+	/**
+	 * Para qué es la tasa fija: `company` (devengo en moneda de la compañía, política `fixed_period`), `invoice` (tipo de
+	 * cambio fijo de facturación, por par moneda del ítem → factura) o `item` (tasa fija pactada moneda del ítem → contrato para
+	 * MRR, TCV y devengo de contratos multimoneda, migración 1790700000000). Default `company`: el front viejo inserta sin este campo.
+	 */
+	@Column({
+		type: 'text',
+		nullable: false,
+		default: 'company',
+		comment:
+			'Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period), invoice (tipo de cambio de facturación por par moneda del ítem → factura, fx_invoice_policy = fixed) o item (tasa fija pactada moneda del ítem → contrato para MRR, TCV y devengo de contratos multimoneda). Regla: 1 [from_currency] = rate [to_currency]',
+	})
+	purpose: 'company' | 'invoice' | 'item';
 
 	@Column({ type: 'date', nullable: false })
 	period_start: Date;

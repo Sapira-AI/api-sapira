@@ -573,6 +573,72 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "billing_anchor_day": {
+    "type": "smallint",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "payment_terms": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "document_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deleted_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_document_type_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "invoice_description_template": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -589,12 +655,27 @@
     "unique": false,
     "where": null
    },
+   "idx_contracts_tax_document_type_id": {
+    "columns": [
+     "tax_document_type_id"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_contracts_sf_opp": {
     "columns": [
      "salesforce_opportunity_id"
     ],
     "unique": false,
     "where": "(salesforce_opportunity_id IS NOT NULL)"
+   },
+   "contracts_holding_number_unique": {
+    "columns": [
+     "holding_id",
+     "contract_number"
+    ],
+    "unique": true,
+    "where": "(deleted_at IS NULL)"
    },
    "idx_contracts_holding_id": {
     "columns": [
@@ -663,9 +744,28 @@
    {
     "name": "contracts_fx_company_policy_check",
     "expression": "((fx_company_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])))"
+   },
+   {
+    "name": "contracts_payment_terms_check",
+    "expression": "(payment_terms IS NULL) OR CASE (payment_terms ->> 'kind'::text) WHEN 'net'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'end_of_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'days'::text)) = 'number'::text) THEN ((((payment_terms ->> 'days'::text))::numeric >= (0)::numeric) AND (((payment_terms ->> 'days'::text))::numeric <= (365)::numeric)) ELSE false END WHEN 'day_of_next_month'::text THEN CASE WHEN (jsonb_typeof((payment_terms -> 'day'::text)) = 'number'::text) THEN ((((payment_terms ->> 'day'::text))::numeric >= (1)::numeric) AND (((payment_terms ->> 'day'::text))::numeric <= (31)::numeric)) ELSE false END ELSE false END"
+   },
+   {
+    "name": "contracts_document_type_check",
+    "expression": "((document_type IS NULL) OR (document_type = ANY (ARRAY['FACTURA'::text, 'FACTURA_EXPORTACION'::text])))"
+   },
+   {
+    "name": "contracts_billing_anchor_day_check",
+    "expression": "((billing_anchor_day >= 1) AND (billing_anchor_day <= 31))"
    }
   ],
   "foreignKeys": {
+   "contracts_tax_document_type_id_fkey": {
+    "columns": [
+     "tax_document_type_id"
+    ],
+    "table": "tax_document_types",
+    "onDelete": "NO ACTION"
+   },
    "contracts_churn_reason_id_fkey": {
     "columns": [
      "churn_reason_id"
@@ -1173,6 +1273,28 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "price_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "billing_anchor_day": {
+    "type": "smallint",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -1203,6 +1325,13 @@
    "idx_contract_items_quote_item_id": {
     "columns": [
      "quote_item_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_items_price_id": {
+    "columns": [
+     "price_id"
     ],
     "unique": false,
     "where": null
@@ -1258,6 +1387,10 @@
    }
   },
   "checks": [
+   {
+    "name": "contract_items_billing_anchor_day_check",
+    "expression": "\"billing_anchor_day\" IS NULL OR (\"billing_anchor_day\" >= 1 AND \"billing_anchor_day\" <= 31)"
+   },
    {
     "name": "contract_items_discount_type_check",
     "expression": "discount_type = ANY (ARRAY['Monto fijo'::text, 'Porcentaje'::text])"
@@ -1328,6 +1461,13 @@
     ],
     "table": "company_holdings",
     "onDelete": "CASCADE"
+   },
+   "contract_items_price_id_fkey": {
+    "columns": [
+     "price_id"
+    ],
+    "table": "prices",
+    "onDelete": "NO ACTION"
    }
   }
  },
@@ -4066,5 +4206,2006 @@
   },
   "checks": [],
   "foreignKeys": {}
+ },
+ "tax_document_types": {
+  "class": "TaxDocumentType",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country_code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "kind": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_electronic": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "sort": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "active": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description_max_chars": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tax_rate": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "tax_document_types_country_code_code_key": [
+    "country_code",
+    "code"
+   ]
+  },
+  "indices": {
+   "idx_tax_document_types_country_active": {
+    "columns": [
+     "country_code",
+     "active"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "tax_document_types_kind_check",
+    "expression": "\"kind\" = ANY (ARRAY['invoice'::text, 'export_invoice'::text, 'credit_note'::text, 'debit_note'::text, 'receipt'::text])"
+   },
+   {
+    "name": "tax_document_types_tax_rate_check",
+    "expression": "\"tax_rate\" IS NULL OR (\"tax_rate\" >= 0 AND \"tax_rate\" <= 100)"
+   }
+  ],
+  "foreignKeys": {}
+ },
+ "billable_metrics": {
+  "class": "BillableMetric",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "code": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "aggregation": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unit": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source_kind": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "manual",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source_config": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{}'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "active",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "archived_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "billable_metrics_holding_id_code_key": [
+    "holding_id",
+    "code"
+   ]
+  },
+  "indices": {
+   "idx_billable_metrics_holding_status": {
+    "columns": [
+     "holding_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "billable_metrics_status_check",
+    "expression": "\"status\" = ANY (ARRAY['active'::text, 'archived'::text])"
+   },
+   {
+    "name": "billable_metrics_source_kind_check",
+    "expression": "\"source_kind\" = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])"
+   },
+   {
+    "name": "billable_metrics_aggregation_check",
+    "expression": "\"aggregation\" = ANY (ARRAY['sum'::text, 'count'::text, 'max'::text, 'min'::text, 'last'::text, 'unique_count'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "billable_metrics_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "billable_metrics_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   },
+   "billable_metrics_updated_by_fkey": {
+    "columns": [
+     "updated_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "prices": {
+  "class": "Price",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "owner": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "product_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "name": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "currency": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "model": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "billable_metric_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "unit_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "tiers": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "package_size": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "package_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "seat_minimum_quantity": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "free_units": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "minimum_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "cap_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "invoice_line_mode": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "single",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "charge_flat_when_free": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "active",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "version": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "supersedes_price_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "list_price_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "published_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "archived_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_prices_quote_id": {
+    "columns": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": "owner = 'quote'"
+   },
+   "idx_prices_billable_metric_id": {
+    "columns": [
+     "billable_metric_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_prices_contract_id": {
+    "columns": [
+     "contract_id"
+    ],
+    "unique": false,
+    "where": "owner = 'contract'"
+   },
+   "idx_prices_holding_product_status": {
+    "columns": [
+     "holding_id",
+     "product_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "prices_invoice_line_mode_check",
+    "expression": "\"invoice_line_mode\" = ANY (ARRAY['single'::text, 'per_tier'::text])"
+   },
+   {
+    "name": "prices_cap_minimum_check",
+    "expression": "\"cap_amount\" IS NULL OR \"minimum_amount\" IS NULL OR \"cap_amount\" >= \"minimum_amount\""
+   },
+   {
+    "name": "prices_metered_metric_check",
+    "expression": "\"quantity_type\" = 'fixed' OR \"billable_metric_id\" IS NOT NULL"
+   },
+   {
+    "name": "prices_contract_owner_check",
+    "expression": "(\"owner\" = 'contract' AND \"contract_id\" IS NOT NULL AND \"quote_id\" IS NULL) OR (\"owner\" = 'catalog' AND \"contract_id\" IS NULL AND \"quote_id\" IS NULL) OR (\"owner\" = 'quote' AND \"quote_id\" IS NOT NULL AND \"contract_id\" IS NULL)"
+   },
+   {
+    "name": "prices_status_check",
+    "expression": "\"status\" = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])"
+   },
+   {
+    "name": "prices_quantity_type_check",
+    "expression": "\"quantity_type\" = ANY (ARRAY['fixed'::text, 'metered'::text])"
+   },
+   {
+    "name": "prices_model_check",
+    "expression": "\"model\" = ANY (ARRAY['standard'::text, 'graduated'::text, 'volume'::text, 'package'::text, 'seat'::text])"
+   },
+   {
+    "name": "prices_owner_check",
+    "expression": "\"owner\" = ANY (ARRAY['catalog'::text, 'contract'::text, 'quote'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "prices_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "prices_product_id_fkey": {
+    "columns": [
+     "product_id"
+    ],
+    "table": "products",
+    "onDelete": "NO ACTION"
+   },
+   "prices_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "prices_quote_id_fkey": {
+    "columns": [
+     "quote_id"
+    ],
+    "table": "quotes",
+    "onDelete": "CASCADE"
+   },
+   "prices_billable_metric_id_fkey": {
+    "columns": [
+     "billable_metric_id"
+    ],
+    "table": "billable_metrics",
+    "onDelete": "NO ACTION"
+   },
+   "prices_supersedes_price_id_fkey": {
+    "columns": [
+     "supersedes_price_id"
+    ],
+    "table": "prices",
+    "onDelete": "NO ACTION"
+   },
+   "prices_list_price_id_fkey": {
+    "columns": [
+     "list_price_id"
+    ],
+    "table": "prices",
+    "onDelete": "NO ACTION"
+   },
+   "prices_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   },
+   "prices_updated_by_fkey": {
+    "columns": [
+     "updated_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "consumption_entries": {
+  "class": "ConsumptionEntry",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_item_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_start": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "period_end": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "amount_override": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "apply_item_discount": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "account": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_estimated": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "manual",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "idempotency_key": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "revision": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "correction_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "invoice_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "consumption_entries_contract_item_id_period_start_key": [
+    "contract_item_id",
+    "period_start"
+   ]
+  },
+  "indices": {
+   "idx_consumption_entries_invoice_id": {
+    "columns": [
+     "invoice_id"
+    ],
+    "unique": false,
+    "where": "invoice_id IS NOT NULL"
+   },
+   "idx_consumption_entries_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_consumption_entries_contract_period": {
+    "columns": [
+     "contract_id",
+     "period_start"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_consumption_entries_idempotency": {
+    "columns": [
+     "holding_id",
+     "idempotency_key"
+    ],
+    "unique": true,
+    "where": "idempotency_key IS NOT NULL"
+   }
+  },
+  "checks": [
+   {
+    "name": "consumption_entries_source_check",
+    "expression": "\"source\" = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])"
+   },
+   {
+    "name": "consumption_entries_period_check",
+    "expression": "\"period_end\" >= \"period_start\""
+   },
+   {
+    "name": "consumption_entries_quantity_check",
+    "expression": "\"quantity\" >= 0"
+   }
+  ],
+  "foreignKeys": {
+   "consumption_entries_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "consumption_entries_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "consumption_entries_contract_item_id_fkey": {
+    "columns": [
+     "contract_item_id"
+    ],
+    "table": "contract_items",
+    "onDelete": "CASCADE"
+   },
+   "consumption_entries_invoice_id_fkey": {
+    "columns": [
+     "invoice_id"
+    ],
+    "table": "invoices",
+    "onDelete": "SET NULL"
+   },
+   "consumption_entries_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   },
+   "consumption_entries_updated_by_fkey": {
+    "columns": [
+     "updated_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "consumption_entry_revisions": {
+  "class": "ConsumptionEntryRevision",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entry_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "revision": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "amount_override": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 2,
+    "array": false
+   },
+   "apply_item_discount": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "source": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "changed_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "changed_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "consumption_entry_revisions_entry_id_revision_key": [
+    "entry_id",
+    "revision"
+   ]
+  },
+  "indices": {
+   "idx_consumption_entry_revisions_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "consumption_entry_revisions_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "consumption_entry_revisions_entry_id_fkey": {
+    "columns": [
+     "entry_id"
+    ],
+    "table": "consumption_entries",
+    "onDelete": "CASCADE"
+   },
+   "consumption_entry_revisions_changed_by_fkey": {
+    "columns": [
+     "changed_by"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
+   }
+  }
+ },
+ "contract_scheduled_changes": {
+  "class": "ContractScheduledChange",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_item_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "group_key": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "parent_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "trigger": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "effective_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "anchor_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "interval_months": {
+    "type": "smallint",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "next_effective_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "kind": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "value": {
+    "type": "numeric",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "index_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "index_base_date": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "index_base_value": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "index_lag_months": {
+    "type": "smallint",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": 1,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "rounding": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "unit_2",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "scheduled",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status_changed_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "applied_event_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "applied_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "applied_value": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
+   "origin": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{\"type\":\"manual\"}'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "notes": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_contract_scheduled_changes_item": {
+    "columns": [
+     "contract_item_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_scheduled_changes_holding_status_next": {
+    "columns": [
+     "holding_id",
+     "status",
+     "next_effective_date"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_contract_scheduled_changes_contract_status": {
+    "columns": [
+     "contract_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "contract_scheduled_changes_index_check",
+    "expression": "\"kind\" <> 'index' OR (\"index_code\" IS NOT NULL AND \"index_base_value\" IS NOT NULL)"
+   },
+   {
+    "name": "contract_scheduled_changes_every_n_months_check",
+    "expression": "\"trigger\" <> 'every_n_months' OR (\"anchor_date\" IS NOT NULL AND \"interval_months\" IS NOT NULL)"
+   },
+   {
+    "name": "contract_scheduled_changes_on_date_check",
+    "expression": "\"trigger\" <> 'on_date' OR \"effective_date\" IS NOT NULL"
+   },
+   {
+    "name": "contract_scheduled_changes_interval_months_check",
+    "expression": "\"interval_months\" IS NULL OR \"interval_months\" > 0"
+   },
+   {
+    "name": "contract_scheduled_changes_status_check",
+    "expression": "\"status\" = ANY (ARRAY['scheduled'::text, 'applied'::text, 'skipped'::text, 'cancelled'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_rounding_check",
+    "expression": "\"rounding\" = ANY (ARRAY['none'::text, 'unit_2'::text, 'unit_0'::text, 'monthly_0'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_kind_check",
+    "expression": "\"kind\" = ANY (ARRAY['percent_uplift'::text, 'index'::text, 'new_unit_price'::text, 'quantity'::text, 'term'::text, 'billing_frequency'::text])"
+   },
+   {
+    "name": "contract_scheduled_changes_trigger_check",
+    "expression": "\"trigger\" = ANY (ARRAY['on_renewal'::text, 'on_date'::text, 'every_n_months'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "contract_scheduled_changes_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "contract_scheduled_changes_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "contract_scheduled_changes_contract_item_id_fkey": {
+    "columns": [
+     "contract_item_id"
+    ],
+    "table": "contract_items",
+    "onDelete": "CASCADE"
+   },
+   "contract_scheduled_changes_parent_id_fkey": {
+    "columns": [
+     "parent_id"
+    ],
+    "table": "contract_scheduled_changes",
+    "onDelete": "CASCADE"
+   },
+   "contract_scheduled_changes_applied_event_id_fkey": {
+    "columns": [
+     "applied_event_id"
+    ],
+    "table": "contract_lifecycle_events",
+    "onDelete": "SET NULL"
+   }
+  }
+ },
+ "contract_item_pauses": {
+  "class": "ContractItemPause",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "contract_item_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "pause_start": {
+    "type": "date",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "pause_end": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "extend_term": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "scheduled",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "pause_event_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "resume_event_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_contract_item_pauses_item_status": {
+    "columns": [
+     "contract_item_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "contract_item_pauses_dates_check",
+    "expression": "\"pause_end\" IS NULL OR \"pause_end\" >= \"pause_start\""
+   },
+   {
+    "name": "contract_item_pauses_status_check",
+    "expression": "\"status\" = ANY (ARRAY['scheduled'::text, 'active'::text, 'ended'::text, 'cancelled'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "contract_item_pauses_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "contract_item_pauses_contract_id_fkey": {
+    "columns": [
+     "contract_id"
+    ],
+    "table": "contracts",
+    "onDelete": "CASCADE"
+   },
+   "contract_item_pauses_contract_item_id_fkey": {
+    "columns": [
+     "contract_item_id"
+    ],
+    "table": "contract_items",
+    "onDelete": "CASCADE"
+   },
+   "contract_item_pauses_pause_event_id_fkey": {
+    "columns": [
+     "pause_event_id"
+    ],
+    "table": "contract_lifecycle_events",
+    "onDelete": "SET NULL"
+   },
+   "contract_item_pauses_resume_event_id_fkey": {
+    "columns": [
+     "resume_event_id"
+    ],
+    "table": "contract_lifecycle_events",
+    "onDelete": "SET NULL"
+   }
+  }
  }
 }

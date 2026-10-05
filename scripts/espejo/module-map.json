@@ -43,6 +43,7 @@
   "quotes",
   "quote_items",
   "quote_stages",
+  "quote_events",
   "quote_attachments",
   "products"
  ],
@@ -63,7 +64,14 @@
   "contract_notifications",
   "contract_billing_splits",
   "contract_invoices",
-  "churn_reasons"
+  "churn_reasons",
+  "tax_document_types",
+  "billable_metrics",
+  "prices",
+  "consumption_entries",
+  "consumption_entry_revisions",
+  "contract_scheduled_changes",
+  "contract_item_pauses"
  ],
  "facturacion": [
   "billing_references",
@@ -89,7 +97,9 @@
   "revenue_rules",
   "mrr_adjustments",
   "accounting_period_cutoff",
-  "accounting_period_events"
+  "accounting_period_events",
+  "budgets",
+  "budget_lines"
  ],
  "legacy": [
   "invoices_legacy",
@@ -136,7 +146,8 @@
  "integraciones/otras": [
   "bigquery_connections",
   "field_mappings",
-  "integration_configs"
+  "integration_configs",
+  "integration_record_discards"
  ],
  "automatizaciones-ia": [
   "ai_agents",

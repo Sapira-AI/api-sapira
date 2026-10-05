@@ -2,8 +2,8 @@ import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typ
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
-/** Integraciones que tienen un proceso automático que se puede apagar por holding. */
-export const HOLDING_INTEGRATIONS = ['odoo', 'salesforce', 'bigquery'] as const;
+/** Integraciones que tienen un proceso automático que se puede apagar por holding (`stripe` lo agrega `1791000000000-IntegrationsV2`). */
+export const HOLDING_INTEGRATIONS = ['odoo', 'salesforce', 'bigquery', 'stripe'] as const;
 export type HoldingIntegration = (typeof HOLDING_INTEGRATIONS)[number];
 
 /**
@@ -24,11 +24,15 @@ export type HoldingIntegration = (typeof HOLDING_INTEGRATIONS)[number];
  *
  * Solo la usa la API: RLS activo con una única policy para `service_role`; sin grants al Data API.
  * Tabla nueva creada por `migrations/1790400000000-CreateHoldingIntegrationSettings.ts`.
+ *
+ * Integraciones v2 (`migrations/1791000000000-IntegrationsV2.ts`, rama `domi`) la reutiliza como **tabla única de ajustes por
+ * integración**: agrega `settings` (reglas del tipo: etapas del CRM, filtros del ERP, reglas de exclusión) y `updated_by`, y suma
+ * `stripe` al CHECK. Tipo de Integraciones v2 → `integration`: erp → odoo, crm → salesforce, stripe → stripe, datos → bigquery.
  */
 @Entity('holding_integration_settings', {
-	comment: 'Habilitación de la integración automática (cron) de cada servicio, por holding. Fila ausente = habilitado.',
+	comment: 'Ajustes de cada integración por holding: habilitación de la corrida automática (cron; fila ausente = habilitado) y reglas (settings).',
 })
-@Check('holding_integration_settings_integration_check', `integration IN ('odoo', 'salesforce', 'bigquery')`)
+@Check('holding_integration_settings_integration_check', `integration IN ('odoo', 'salesforce', 'bigquery', 'stripe')`)
 export class HoldingIntegrationSettings {
 	@PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'holding_integration_settings_pkey' })
 	holding_id: string;
@@ -38,6 +42,16 @@ export class HoldingIntegrationSettings {
 
 	@Column({ type: 'boolean', default: true, comment: 'false apaga la corrida automática de esa integración para el holding' })
 	auto_enabled: boolean;
+
+	@Column({
+		type: 'jsonb',
+		default: {},
+		comment: 'Reglas de la integración para el holding (claves según el contrato de Integraciones v2 §6.1 y §6.5). {} = valores por defecto',
+	})
+	settings: Record<string, unknown>;
+
+	@Column({ type: 'uuid', nullable: true, comment: 'Usuario (public.users.id) que cambió los ajustes por última vez' })
+	updated_by: string | null;
 
 	@Column({ type: 'timestamp with time zone', default: () => 'now()' })
 	created_at: Date;

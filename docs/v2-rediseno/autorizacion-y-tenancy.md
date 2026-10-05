@@ -103,6 +103,51 @@ Desde el 30-10 las tablas nuevas de `public` no quedan expuestas automáticament
 afecta tablas existentes ni a la API (no usa el Data API). Regla: una tabla nueva **solo** recibe grants si el front viejo
 la lee, en la misma migración o en `grants/`; **nunca a `anon`**. Lo que solo usa la API queda cerrado.
 
+## Permisos por rol y super admin
+
+> Agregado el 02-10-2026 con el módulo Configuración ([`spec-configuracion-v2.md`](./spec-configuracion-v2.md) §10). **Hoy solo lo usan
+> los módulos nuevos `settings`, `products` y `catalog`**: las rutas existentes de la [revisión de seguridad](./revision-seguridad-api.md)
+> se cierran en un bloque aparte, con OK de Domi y coordinado con Leon.
+
+Cadena (sin migración): `users` → `user_holdings` (pertenencia activa) → `users.role_id` → `roles` **del holding activo** →
+`role_permissions` → `permissions`. `users.is_super_admin` salta todo.
+
+| Pieza | Archivo | Qué valida | Respuesta |
+|---|---|---|---|
+| `@RequirePermission(...codes)` + `RequirePermissionGuard` | `src/guards/require-permission.guard.ts` | Super admin pasa; `ALL_PERMISSIONS` cubre todo salvo los internos (`VIEW_LAB`, `VIEW_DOCUMENTACION`); el rol debe ser del holding activo y tener **alguno** de los códigos; **Editar incluye Ver** (`EDIT_X` satisface `VIEW_X`, 03-10) | 403 `No tienes permiso para <acción> · pídeselo a un administrador` |
+| `@SuperAdminOnly()` + `SuperAdminOnlyGuard` | `src/guards/super-admin-only.guard.ts` | `users.is_super_admin` (no mira el holding) | 403 `Solo un super admin de Sapira puede hacer esto` |
+| `PermissionsService` | `src/guards/permissions.service.ts` | `context(authId, holdingId)` (usuario, rol del holding, códigos), `assert(...)`, `isSuperAdmin(authId)` y `PermissionsService.allows(ctx, codes)` para reglas dentro del servicio | — |
+
+Los tres se proveen en `GuardsModule` (global): no hay que importarlos en cada módulo.
+
+```ts
+@Controller('settings/companies')
+@UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@RequirePermission('VIEW_CONFIGURACION')              // lectura por defecto del controlador
+export class SettingsCompaniesController {
+  @Patch(':id')
+  @RequirePermission('EDIT_CONFIGURACION')            // la ruta manda sobre el controlador
+  update(@Param('id', ParseUUIDPipe) id: string, @HoldingId() holdingId: string, @Body() body: UpdateCompanyDto) { … }
+}
+
+@Controller('admin/fx')
+@UseGuards(SupabaseAuthGuard, SuperAdminOnlyGuard)
+@SuperAdminOnly()                                      // operación de plataforma, sin holding
+export class FxAdminController { … }
+```
+
+Reglas:
+- Orden fijo: `SupabaseAuthGuard` → `HoldingScopeGuard` → `RequirePermissionGuard` (usa `request.holdingId`). El guard deja el contexto en
+  `request.permissionContext` para que el servicio firme la acción (quién cerró un período, quién creó un rol) sin otra consulta.
+- Lectura = `VIEW_<MÓDULO>`, escritura = `EDIT_<MÓDULO>`; acciones especiales con código propio (`CLOSE_PERIODS`). Precios usa
+  `VIEW/EDIT_CONTRATOS`; Ingresos y Métricas, `VIEW/EDIT_REVENUE`.
+- Un código nuevo se agrega al catálogo con un seed (`GUIA-CAMBIOS-DE-ESQUEMA.md` → "Agregar un permiso al catálogo") y su frase de 403
+  en `src/guards/permission-codes.ts`.
+- Tests obligatorios además de los del holding: "sin el código → 403", "con `ALL_PERMISSIONS` → pasa", "rol de otro holding → 403",
+  "super admin → pasa".
+- `BillingPermissionGuard` (Facturación y Presupuestos) valida con `PermissionsService` desde el 04-10: mismas reglas que
+  `@RequirePermission` (comodín, Editar incluye Ver, rol del holding activo, super admin). Detalle: `cambios-integracion-para-leon.md` §15.
+
 ## Limpieza de la base (dos niveles)
 - **Ahora**: la regla aplica a la API y al front nuevo. En la base solo se retira lo que el front viejo no usa
   (`inventario-rpc-front-viejo.md` tiene la lista de "no borrar"), con doble confirmación.

@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
+import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * Entity de `public.company_legal_documents` — generado desde prod en vivo (`hklompkypzqtglprfobu`, MCP Supabase, 2026-08-22). 1 filas · RLS on.
@@ -34,6 +35,28 @@ export class CompanyLegalDocument {
 
 	@Column({ type: 'uuid', nullable: false })
 	holding_id: string;
+
+	@Column({ type: 'text', nullable: true, comment: 'Bucket de Storage (privado) del archivo; NULL en documentos antiguos con file_url' })
+	storage_bucket?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Ruta del objeto: <holding_id>/<company_id>/legal/<id>/<archivo>' })
+	storage_path?: string | null;
+
+	@Column({ type: 'text', nullable: true })
+	file_name?: string | null;
+
+	@Column({ type: 'text', nullable: true })
+	mime_type?: string | null;
+
+	@Column({ type: 'bigint', nullable: true })
+	file_size?: string | null;
+
+	@Column({ type: 'uuid', nullable: true, comment: 'users.id de quien lo subió' })
+	uploaded_by?: string | null;
+
+	@ManyToOne(() => User, { onDelete: 'SET NULL' })
+	@JoinColumn({ name: 'uploaded_by', referencedColumnName: 'id', foreignKeyConstraintName: 'company_legal_documents_uploaded_by_fkey' })
+	uploadedBy?: User; // entity existente (no se duplica)
 
 	@ManyToOne(() => Company, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'company_id', referencedColumnName: 'id', foreignKeyConstraintName: 'company_legal_documents_company_id_fkey' })

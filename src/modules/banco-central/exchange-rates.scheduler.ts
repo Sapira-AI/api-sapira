@@ -87,7 +87,8 @@ export class ExchangeRatesScheduler {
 				}
 			);
 
-			await this.notificationService.sendSyncSuccessReport(result, executionTime);
+			// Notificaciones v2 fase 2: cierra las alertas de falla abiertas (el reporte de éxito ya no va por correo).
+			await this.notificationService.sendSyncSuccessReport();
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			this.logger.error(`✗ Error en sincronización automática después de ${(executionTime / 1000).toFixed(2)}s:`, error);

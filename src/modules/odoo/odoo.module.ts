@@ -105,6 +105,10 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		FiscalPositionsService,
 		TaxMappingService,
 		DocumentTypeMappingService,
+		// Integraciones v2 (importar desde las tablas intermedias y probar la conexión).
+		InvoiceProcessingService,
+		PartnersProcessorService,
+		OdooProvider,
 	],
 })
 export class OdooModule {}

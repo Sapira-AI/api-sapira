@@ -134,6 +134,17 @@
     "scale": null,
     "array": false
    },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "client_number": {
     "type": "text",
     "nullable": true,
@@ -208,6 +219,13 @@
     "unique": false,
     "where": "(salesforce_account_id IS NOT NULL)"
    },
+   "idx_clients_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_clients_holding_id": {
     "columns": [
      "holding_id"
@@ -230,6 +248,13 @@
    }
   ],
   "foreignKeys": {
+   "clients_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "clients_holding_id_fkey": {
     "columns": [
      "holding_id"
@@ -304,6 +329,17 @@
     "generated": null,
     "default": null,
     "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
     "precision": null,
     "scale": null,
     "array": false
@@ -425,6 +461,13 @@
     "unique": true,
     "where": "(odoo_partner_id IS NOT NULL)"
    },
+   "idx_client_entities_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_client_entities_holding_id": {
     "columns": [
      "holding_id"
@@ -447,6 +490,13 @@
    }
   ],
   "foreignKeys": {
+   "client_entities_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "fk_client_entities_holding_id": {
     "columns": [
      "holding_id"
@@ -902,6 +952,28 @@
     "scale": null,
     "array": false
    },
+   "mentioned_user_ids": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{}'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": true
+   },
+   "references": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": [],
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamp with time zone",
     "nullable": false,
@@ -938,6 +1010,11 @@
   },
   "uniques": {},
   "indices": {
+   "client_activity_notes_mentions_idx": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
    "client_activity_notes_client_idx": {
     "columns": [
      "client_id",
@@ -1256,12 +1333,85 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "storage_bucket": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "storage_path": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "mime_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "file_size": {
+    "type": "bigint",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "uploaded_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {},
   "checks": [],
   "foreignKeys": {
+   "company_legal_documents_uploaded_by_fkey": {
+    "columns": [
+     "uploaded_by"
+    ],
+    "table": "users",
+    "onDelete": "SET NULL"
+   },
    "company_legal_documents_company_id_fkey": {
     "columns": [
      "company_id"
@@ -1624,6 +1774,72 @@
     "scale": null,
     "array": false
    },
+   "receivable_account_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "receivable_account_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_difference_account_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_difference_account_name": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_receivable_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_fx_difference_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamp with time zone",
     "nullable": true,
@@ -1751,10 +1967,30 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "crm_owner_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
-  "indices": {},
+  "indices": {
+   "sellers_holding_crm_owner_key": {
+    "columns": [
+     "holding_id",
+     "crm_owner_id"
+    ],
+    "unique": true,
+    "where": "(crm_owner_id IS NOT NULL)"
+   }
+  },
   "checks": [],
   "foreignKeys": {
    "fk_sellers_holding_id": {

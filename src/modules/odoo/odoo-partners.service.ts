@@ -8,7 +8,6 @@ import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-en
 import { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-partners-stg.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
-import { normalizeTaxId } from '@/modules/salesforce/utils/salesforce-transformers';
 
 import { ProcessPartnersDto, ProcessPartnersResponseDto } from './dtos/process-partners.dto';
 import { ResolveMissingOdooPartnersDto, ResolveMissingOdooPartnersResponseDto } from './dtos/resolve-missing-odoo-partners.dto';
@@ -19,7 +18,53 @@ import { OdooProvider } from './odoo.provider';
 import { FieldMappingService } from './services/field-mapping.service';
 import { GenericVatsService } from './services/generic-vats.service';
 import { PartnersProcessorService } from './services/partners-processor.service';
+import { canonicalVat, many2oneId, many2oneName, vatMatches, vatSearchVariants, withoutChildContacts } from './utils/partner-vat.util';
 import { areValuesEqual, normalizeValue } from './utils/value-comparison.util';
+
+/** La conexión Odoo del holding no está disponible: sin conexión activa o credenciales que no autentican. */
+export class OdooConnectionError extends Error {
+	constructor(
+		readonly reason: 'no_connection' | 'auth_failed',
+		message: string
+	) {
+		super(message);
+	}
+}
+
+/** Partner de Odoo propuesto para vincular una razón social (`findPartnerCandidates` / `findActivePartner`). */
+export interface OdooPartnerCandidate {
+	odoo_partner_id: number;
+	name: string | null;
+	tax_id: string | null;
+	country: string | null;
+	is_company: boolean;
+	/** Contacto hijo de otra empresa (nombre del padre). */
+	parent_name: string | null;
+	/** Correo y dirección del partner (prellenan "Traer desde ERP" en Clientes; `null` si Odoo no los tiene). */
+	email: string | null;
+	address: string | null;
+	/** Por qué coincidió (`null` cuando se leyó por id). */
+	match: 'tax_id' | 'name' | null;
+}
+
+/** Dirección legible del partner: la completa de Odoo o, si no viene, armada con calle, comuna, región, zip y país. */
+const partnerAddress = (partner: OdooPartner): string | null =>
+	partner.contact_address_complete ||
+	[partner.street, partner.street2, partner.city, partner.state_id?.[1], partner.zip, partner.country_id?.[1]].filter(Boolean).join(', ') ||
+	null;
+
+const toCandidate = (partner: OdooPartner, match: OdooPartnerCandidate['match']): OdooPartnerCandidate => ({
+	odoo_partner_id: partner.id,
+	name: partner.name || partner.display_name || null,
+	// Un vat numérico (parser XML-RPC) se muestra como texto; Odoo devuelve `false` cuando no hay.
+	tax_id: partner.vat === null || partner.vat === undefined || (partner.vat as unknown) === false ? null : String(partner.vat),
+	country: many2oneName(partner.country_id),
+	is_company: partner.is_company === true,
+	parent_name: many2oneId(partner.parent_id) === null ? null : many2oneName(partner.parent_id),
+	email: partner.email || null,
+	address: partnerAddress(partner),
+	match,
+});
 
 @Injectable()
 export class OdooPartnersService {
@@ -49,7 +94,8 @@ export class OdooPartnersService {
 	}
 
 	async resolveAndLinkPartnerByTaxId(holdingId: string, taxId: string, legalName?: string): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
-		const normalizedTaxId = normalizeTaxId(taxId);
+		// `canonicalVat` = `normalizeTaxId` + guiones tipográficos → `-` + mayúsculas (cambios-integracion-para-leon.md).
+		const normalizedTaxId = canonicalVat(taxId);
 		if (!normalizedTaxId) {
 			return {
 				status: 'not_found',
@@ -73,7 +119,7 @@ export class OdooPartnersService {
 		});
 		const matchingEntities = entities.filter(
 			(entity) =>
-				normalizeTaxId(entity.tax_id) === normalizedTaxId &&
+				canonicalVat(entity.tax_id) === normalizedTaxId &&
 				(!isGenericExportVat || this.normalizeLegalName(entity.legal_name) === this.normalizeLegalName(legalName))
 		);
 
@@ -101,7 +147,7 @@ export class OdooPartnersService {
 		entity: Pick<ClientEntity, 'id' | 'tax_id' | 'legal_name' | 'odoo_partner_id'>,
 		includePartnerData = false
 	): Promise<ResolveOdooPartnerByTaxIdResponseDto> {
-		const normalizedTaxId = normalizeTaxId(entity.tax_id);
+		const normalizedTaxId = canonicalVat(entity.tax_id);
 		if (!normalizedTaxId) {
 			return {
 				status: 'not_found',
@@ -194,7 +240,7 @@ export class OdooPartnersService {
 			where: { holding_id: holdingId },
 			select: ['id', 'tax_id', 'legal_name', 'odoo_partner_id'],
 		});
-		const taxIds = [...new Set(entities.map((entity) => normalizeTaxId(entity.tax_id)).filter(Boolean))];
+		const taxIds = [...new Set(entities.map((entity) => canonicalVat(entity.tax_id)).filter((taxId): taxId is string => Boolean(taxId)))];
 		const partnersByTaxId = await this.searchPartnersByTaxIds(holdingId, taxIds);
 		const examples: ResolveMissingOdooPartnersResponseDto['examples'] = [];
 		let wouldUpdate = 0;
@@ -203,7 +249,7 @@ export class OdooPartnersService {
 		let unresolved = 0;
 
 		for (const entity of entities) {
-			const taxId = normalizeTaxId(entity.tax_id);
+			const taxId = canonicalVat(entity.tax_id);
 			let result: ResolveMissingOdooPartnersResponseDto['examples'][number];
 
 			if (!taxId) {
@@ -450,64 +496,150 @@ export class OdooPartnersService {
 		]);
 	}
 
+	/**
+	 * Partners activos con ese identificador. Odoo compara `vat` carácter a carácter, así que se busca con las variantes de
+	 * formato (`vatSearchVariants`: con/sin puntos y guion) y se filtra por `vatMatches`; los contactos hijos de una empresa
+	 * (heredan su vat) se descartan cuando la empresa también aparece. Ver `docs/v2-rediseno/cambios-integracion-para-leon.md`.
+	 */
 	private async searchPartnersByTaxId(holdingId: string, taxId: string): Promise<OdooPartner[]> {
+		const session = await this.openSession(holdingId);
+		const partners = await session.searchRead(
+			[
+				['vat', 'in', vatSearchVariants(taxId)],
+				['active', '=', true],
+			],
+			20
+		);
+
+		return withoutChildContacts(partners.filter((partner) => vatMatches(partner.vat, taxId)));
+	}
+
+	/** Campos de `res.partner` que leen las búsquedas por vat, nombre e id. */
+	private static readonly SEARCH_FIELDS = [
+		'id',
+		'name',
+		'display_name',
+		'vat',
+		'active',
+		'email',
+		'phone',
+		'mobile',
+		'street',
+		'street2',
+		'city',
+		'zip',
+		'state_id',
+		'country_id',
+		'contact_address_complete',
+		'parent_id',
+		'is_company',
+	];
+
+	/**
+	 * Conexión activa del holding autenticada, con un `search_read` sobre `res.partner`. Lanza `OdooConnectionError` si no
+	 * hay conexión activa o no autentica (el que llama decide cómo explicarlo; antes era un `Error` genérico → 500).
+	 */
+	private async openSession(holdingId: string) {
 		const activeConnection = await this.odooConnectionRepository.findOne({
 			where: { holding_id: holdingId, is_active: true },
 		});
 		if (!activeConnection) {
-			throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
+			throw new OdooConnectionError('no_connection', `No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
 		}
 
-		const connection: OdooConnectionConfig = {
-			id: activeConnection.id,
-			url: activeConnection.url,
-			database_name: activeConnection.database_name,
-			username: activeConnection.username || '',
-			api_key: activeConnection.api_key,
-			holding_id: activeConnection.holding_id,
-		};
-		const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
-		const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
-		const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+		const commonClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/object`);
+		const uid = await commonClient.methodCall('authenticate', [
+			activeConnection.database_name,
+			activeConnection.username || '',
+			activeConnection.api_key,
+			{},
+		]);
 		if (!uid) {
-			throw new Error(`No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
+			throw new OdooConnectionError('auth_failed', `No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
 		}
 
-		const partners = await objectClient.methodCall('execute_kw', [
-			connection.database_name,
-			uid,
-			connection.api_key,
-			'res.partner',
-			'search_read',
-			[
+		return {
+			searchRead: async (domain: unknown[], limit: number): Promise<OdooPartner[]> => {
+				const partners = await objectClient.methodCall('execute_kw', [
+					activeConnection.database_name,
+					uid,
+					activeConnection.api_key,
+					'res.partner',
+					'search_read',
+					[domain],
+					{ fields: OdooPartnersService.SEARCH_FIELDS, limit },
+				]);
+
+				return Array.isArray(partners) ? (partners as OdooPartner[]) : [];
+			},
+		};
+	}
+
+	/**
+	 * Candidatos para vincular una razón social (solo lectura, no escribe en Sapira): por identificador tributario y/o por
+	 * nombre (`ilike`, solo empresas y contactos sin padre). Cada candidato dice por qué coincidió.
+	 */
+	async findPartnerCandidates(
+		holdingId: string,
+		{ taxId, name }: { taxId?: string | null; name?: string | null }
+	): Promise<OdooPartnerCandidate[]> {
+		const session = await this.openSession(holdingId);
+		const found = new Map<number, OdooPartnerCandidate>();
+		const canonical = canonicalVat(taxId);
+
+		if (canonical) {
+			const partners = await session.searchRead(
 				[
-					['vat', '=', taxId],
+					['vat', 'in', vatSearchVariants(taxId)],
 					['active', '=', true],
 				],
-			],
-			{
-				fields: [
-					'id',
-					'name',
-					'display_name',
-					'vat',
-					'active',
-					'email',
-					'phone',
-					'mobile',
-					'street',
-					'street2',
-					'city',
-					'zip',
-					'state_id',
-					'country_id',
-					'contact_address_complete',
-				],
-				limit: 20,
-			},
-		]);
+				20
+			);
 
-		return (Array.isArray(partners) ? partners : []).filter((partner) => normalizeTaxId(partner.vat) === taxId);
+			for (const partner of withoutChildContacts(partners.filter((row) => vatMatches(row.vat, canonical))))
+				found.set(partner.id, toCandidate(partner, 'tax_id'));
+		}
+		const term = name?.trim();
+
+		if (term) {
+			const partners = await session.searchRead(
+				[
+					['name', 'ilike', term],
+					['parent_id', '=', false],
+					['active', '=', true],
+				],
+				20
+			);
+
+			for (const partner of partners) if (!found.has(partner.id)) found.set(partner.id, toCandidate(partner, 'name'));
+		}
+
+		return [...found.values()];
+	}
+
+	/**
+	 * ¿El holding tiene una conexión de ERP activa? Solo lee `odoo_connections` (no llama al ERP): sirve para habilitar "Traer
+	 * desde ERP" antes de buscar. `name` es el nombre que se le dio a la conexión (para nombrar el sistema sin escribirlo a mano).
+	 */
+	async connectionStatus(holdingId: string): Promise<{ connected: boolean; name: string | null }> {
+		const connection = await this.odooConnectionRepository.findOne({ where: { holding_id: holdingId, is_active: true } });
+
+		return { connected: Boolean(connection), name: connection?.name?.trim() || null };
+	}
+
+	/** Partner activo por id en la conexión del holding (`null` si no existe o está archivado). Solo lectura. */
+	async findActivePartner(holdingId: string, partnerId: number): Promise<OdooPartnerCandidate | null> {
+		const session = await this.openSession(holdingId);
+		const [partner] = await session.searchRead(
+			[
+				['id', '=', partnerId],
+				['active', '=', true],
+			],
+			1
+		);
+
+		return partner ? toCandidate(partner, null) : null;
 	}
 
 	private async searchPartnerById(holdingId: string, partnerId: number): Promise<OdooPartner | null> {
@@ -568,65 +700,37 @@ export class OdooPartnersService {
 	}
 
 	private toPartnerData(partner: OdooPartner): ResolveOdooPartnerByTaxIdResponseDto['partnerData'] {
-		const legalAddress =
-			partner.contact_address_complete ||
-			[partner.street, partner.street2, partner.city, partner.state_id?.[1], partner.zip, partner.country_id?.[1]].filter(Boolean).join(', ') ||
-			null;
-
 		return {
 			legal_name: partner.name || partner.display_name || null,
-			legal_address: legalAddress,
+			legal_address: partnerAddress(partner),
 			email: partner.email || null,
 			phone: partner.phone || partner.mobile || null,
 		};
 	}
 
+	/** Variante en lote de `searchPartnersByTaxId` (`resolveMissingPartners`): mismas variantes de formato y mismo filtro. */
 	private async searchPartnersByTaxIds(holdingId: string, taxIds: string[]): Promise<Map<string, OdooPartner[]>> {
 		const partnersByTaxId = new Map<string, OdooPartner[]>();
 		if (!taxIds.length) {
 			return partnersByTaxId;
 		}
 
-		const activeConnection = await this.odooConnectionRepository.findOne({
-			where: { holding_id: holdingId, is_active: true },
-		});
-		if (!activeConnection) {
-			throw new Error(`No se encontró una conexión activa de Odoo para el holding ${holdingId}`);
-		}
-
-		const commonClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/common`);
-		const objectClient = this.odooProvider.createXmlRpcClient(`${activeConnection.url}/xmlrpc/2/object`);
-		const uid = await commonClient.methodCall('authenticate', [
-			activeConnection.database_name,
-			activeConnection.username || '',
-			activeConnection.api_key,
-			{},
-		]);
-		if (!uid) {
-			throw new Error(`No fue posible autenticar la conexión Odoo del holding ${holdingId}`);
-		}
+		const session = await this.openSession(holdingId);
 
 		for (let start = 0; start < taxIds.length; start += 100) {
 			const batch = taxIds.slice(start, start + 100);
-			const partners = await objectClient.methodCall('execute_kw', [
-				activeConnection.database_name,
-				uid,
-				activeConnection.api_key,
-				'res.partner',
-				'search_read',
+			const variants = [...new Set(batch.flatMap((taxId) => vatSearchVariants(taxId)))];
+			const partners = await session.searchRead(
 				[
-					[
-						['vat', 'in', batch],
-						['active', '=', true],
-					],
+					['vat', 'in', variants],
+					['active', '=', true],
 				],
-				{ fields: ['id', 'name', 'display_name', 'vat', 'active'] },
-			]);
+				0
+			);
 
-			for (const partner of Array.isArray(partners) ? partners : []) {
-				const normalizedTaxId = normalizeTaxId(partner.vat);
-				if (!normalizedTaxId || !batch.includes(normalizedTaxId)) continue;
-				partnersByTaxId.set(normalizedTaxId, [...(partnersByTaxId.get(normalizedTaxId) || []), partner]);
+			for (const taxId of batch) {
+				const matches = withoutChildContacts(partners.filter((partner) => vatMatches(partner.vat, taxId)));
+				if (matches.length) partnersByTaxId.set(taxId, matches);
 			}
 		}
 

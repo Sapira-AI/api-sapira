@@ -1,7 +1,7 @@
-# Módulo 2 · FX y datos económicos — 7 tablas de prod (2026-09-27)
+# Módulo 2 · FX y datos económicos — 7 tablas de prod (2026-10-04)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/fx.{pgmeta,catalog}.json`); metadata real de las entities existentes en `fx.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/fx.{pgmeta,catalog}.json`); metadata real de las entities existentes en `fx.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (4) — no se tocaron ni se duplicaron
 
@@ -10,7 +10,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
 | `exchange_rates` (8284) | `src/databases/postgresql/entities/fx/exchange-rate.entity.ts` · `ExchangeRateEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_pkey`<br>índice con expresión `idx_exchange_rates_lookup` |
-| `exchange_rates_monthly_avg` (730) | `src/databases/postgresql/entities/fx/exchange-rate-monthly-avg.entity.ts` · `ExchangeRateMonthlyAvgEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_monthly_avg_pkey` |
+| `exchange_rates_monthly_avg` (342) | `src/databases/postgresql/entities/fx/exchange-rate-monthly-avg.entity.ts` · `ExchangeRateMonthlyAvgEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `exchange_rates_monthly_avg_pkey` |
 | `indicadores_economicos` (34) | `src/databases/postgresql/entities/fx/indicador-economico.entity.ts` · `IndicadorEconomicoEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `indicadores_economicos_pkey` |
 | `generic_export_vats` (8) | `src/databases/postgresql/entities/fx/generic-export-vat.entity.ts` · `GenericExportVat` | ⚠️ difiere de prod | — | — | — | nombre de PK `generic_export_vats_pkey` |
 
@@ -19,7 +19,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
 | `holding_fx_period_rates` (63, RLS on) | `holding-fx-period-rate.entity.ts` · `HoldingFxPeriodRate` | 11 | `holding_fx_period_rates_pkey` (id) | `holding_fx_period_rates_unique_period` | `holding_fx_period_rates_period_check`, `holding_fx_period_rates_rate_check` | `holding_fx_period_rates_created_by_fkey` → users<br>`holding_fx_period_rates_holding_id_fkey` → company_holdings (CASCADE) | `idx_holding_fx_period_rates_currencies`, `idx_holding_fx_period_rates_holding`, `idx_holding_fx_period_rates_period` | update_holding_fx_period_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column()<br>validate_holding_fx_period_rates_trigger · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_holding_fx_period_rates() | 4 |
-| `contract_fx_period_rates` (6, RLS on) | `contract-fx-period-rate.entity.ts` · `ContractFxPeriodRate` | 12 | `contract_fx_period_rates_pkey` (id) | — | `contract_fx_period_rates_check`, `contract_fx_period_rates_rate_check` | `contract_fx_period_rates_contract_id_fkey` → contracts (CASCADE)<br>`fk_contract_fx_period_rates_holding_id` → company_holdings (CASCADE) | `idx_contract_fx_rates_contract_id`, `idx_contract_fx_rates_currencies`, `idx_contract_fx_rates_holding_contract`, `idx_contract_fx_rates_period` | trg_contract_fx_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
+| `contract_fx_period_rates` (6, RLS on) | `contract-fx-period-rate.entity.ts` · `ContractFxPeriodRate` | 13 | `contract_fx_period_rates_pkey` (id) | — | `contract_fx_period_rates_check`, `contract_fx_period_rates_purpose_check`, `contract_fx_period_rates_rate_check` | `contract_fx_period_rates_contract_id_fkey` → contracts (CASCADE)<br>`fk_contract_fx_period_rates_holding_id` → company_holdings (CASCADE) | `idx_contract_fx_rates_contract_id`, `idx_contract_fx_rates_contract_purpose`, `idx_contract_fx_rates_currencies`, `idx_contract_fx_rates_holding_contract`, `idx_contract_fx_rates_period` | trg_contract_fx_rates_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 4 |
 | `fx_api_sync_log` (3, RLS on) | `fx-api-sync-log.entity.ts` · `FxApiSyncLog` | 10 | `fx_api_sync_log_pkey` (id) | — | `fx_api_sync_log_status_check` | `fx_api_sync_log_holding_id_fkey` → company_holdings | — | — | 2 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/fx.catalog.json` (`policies_detail`) para el paso 4.
@@ -45,7 +45,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `updated_at` | timestamp with time zone | no | now() |  |
 
 </details>
-<details><summary><code>contract_fx_period_rates</code> → <code>contract-fx-period-rate.entity.ts</code> · 12 columnas</summary>
+<details><summary><code>contract_fx_period_rates</code> → <code>contract-fx-period-rate.entity.ts</code> · 13 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -61,6 +61,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `created_by` | uuid | sí | — |  |
 | `created_at` | timestamp with time zone | sí | now() |  |
 | `updated_at` | timestamp with time zone | sí | now() |  |
+| `purpose` | text | no | 'company'::text | Uso de la tasa fija: company (devengo en moneda de la compañía, fx_company_policy = fixed_period), invoice (tipo de cambio de facturación por par moneda del ítem → factura, fx_invoice_policy = fixed) o item (tasa fija pactada moneda del ítem → contrato para MRR, TCV y devengo de contratos multimoneda). Regla: 1 [from_currency] = rate [to_currency] |
 
 </details>
 <details><summary><code>fx_api_sync_log</code> → <code>fx-api-sync-log.entity.ts</code> · 10 columnas</summary>

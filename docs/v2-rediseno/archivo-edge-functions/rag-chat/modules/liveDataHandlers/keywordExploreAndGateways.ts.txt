@@ -1,0 +1,696 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+import { createEmbedding } from "../openai.ts";
+import { type Widget } from "../widgets.ts";
+import { type LiveDataResult } from "./types.ts";
+import { extractContractIdentifier } from "../utils.ts";
+
+export async function tryHandleKeywordExploreAndGateways(args: {
+  supabaseAuth: ReturnType<typeof createClient>;
+  openaiApiKey: string;
+  holdingId: string;
+  question: string;
+  flags: Record<string, boolean>;
+  todayStr: string;
+  targetCurrency: string | null;
+  callDataGateway: (body: Record<string, unknown>) => Promise<any>;
+  extractSearchTerm: (q: string) => string | null;
+  contextLines: string[];
+  widgets: Widget[];
+}): Promise<LiveDataResult | null> {
+  const {
+    supabaseAuth,
+    openaiApiKey,
+    holdingId,
+    question,
+    flags,
+    todayStr,
+    targetCurrency,
+    callDataGateway,
+    extractSearchTerm,
+    contextLines,
+    widgets,
+  } = args;
+
+  function extractKeywordExploreTerm(q: string): string | null {
+    const m = q.match(/\b(?:keyword\s*[:=]|explorar\s*[:=]|buscar\s*[:=])\s*([^\n;]{2,})/i);
+    if (m?.[1]) return m[1].trim();
+    const cleaned = q
+      .replace(/\b(explorar|keyword|buscar|encuentra|encontrar|dame|trae|mu[eé]strame|muestra)\b/gi, "")
+      .trim();
+    return cleaned.length >= 2 ? cleaned : null;
+  }
+
+  if ((flags as any).keywordExplore) {
+    const term = extractKeywordExploreTerm(question);
+    if (!term) {
+      contextLines.push("Para explorar necesito una palabra o frase corta. Ejemplo: keyword: contrato, explorar: Wayne");
+    } else {
+      // 1) Buscar en recursos de negocio vía data-gateway
+      const [clientsRes, contractsRes, contactsRes] = await Promise.all([
+        callDataGateway({ resource: "clients", action: "search", filters: { q: term }, limit: 10 }).catch((e) => ({ success: false, error: String(e) })),
+        callDataGateway({ resource: "contracts", action: "search", filters: { q: term }, limit: 10 }).catch((e) => ({ success: false, error: String(e) })),
+        callDataGateway({ resource: "client_contacts", action: "search", filters: { q: term }, limit: 10 }).catch((e) => ({ success: false, error: String(e) })),
+      ]);
+
+      const clients = Array.isArray((clientsRes as any).data) ? (clientsRes as any).data : [];
+      const contracts = Array.isArray((contractsRes as any).data) ? (contractsRes as any).data : [];
+      const contacts = Array.isArray((contactsRes as any).data) ? (contactsRes as any).data : [];
+
+      // 2) Buscar en documentos (RAG) usando embeddings
+      // Nota: RLS + la función rag_match_documents ya debería limitar por holding del usuario.
+      const queryEmbedding = await createEmbedding(openaiApiKey, term);
+      const { data: docMatches, error: docErr } = await (supabaseAuth as any).rpc("rag_match_documents", {
+        query_embedding: queryEmbedding,
+        match_count: 5,
+        match_threshold: 0.65,
+      });
+      if (docErr) throw docErr;
+
+      contextLines.push(`Exploración por palabra clave: ${term}`);
+      contextLines.push("");
+
+      contextLines.push(`Resultados en base de datos:`);
+      contextLines.push(`Clientes: ${clients.length} (top 10)`);
+      for (const c of clients) {
+        contextLines.push(`${(c as any).name_commercial ?? "(sin nombre)"}`);
+      }
+      contextLines.push(`Contratos: ${contracts.length} (top 10)`);
+      for (const c of contracts) {
+        contextLines.push(`${(c as any).contract_number ?? "(sin número)"} | ${(c as any).client_name_commercial ?? "(sin cliente)"} | status: ${(c as any).status ?? "(sin status)"}`);
+      }
+      contextLines.push(`Contactos: ${contacts.length} (top 10)`);
+      for (const c of contacts) {
+        contextLines.push(`${(c as any).name ?? "(sin nombre)"} | ${(c as any).position ?? "(sin cargo)"} | ${(c as any).email ?? "(sin email)"}`);
+      }
+
+      widgets.push({
+        type: "table",
+        title: `Exploración DB - Clientes (${term})`,
+        columns: ["Nombre", "Industria", "Segmento", "Estado"],
+        rows: clients.map((c: any) => [c.name_commercial ?? null, c.industry ?? null, c.segment ?? null, c.status ?? null]),
+      });
+      widgets.push({
+        type: "table",
+        title: `Exploración DB - Contratos (${term})`,
+        columns: ["Contrato", "Cliente", "Status", "Tipo", "Booking", "Fin"],
+        rows: contracts.map((c: any) => [
+          c.contract_number ?? null,
+          c.client_name_commercial ?? null,
+          c.status ?? null,
+          c.type ?? null,
+          c.booking_date ?? null,
+          c.contract_end_date ?? null,
+        ]),
+      });
+      widgets.push({
+        type: "table",
+        title: `Exploración DB - Contactos (${term})`,
+        columns: ["Nombre", "Cargo", "Tipo", "Email", "Teléfono"],
+        rows: contacts.map((c: any) => [c.name ?? null, c.position ?? null, c.contact_type ?? null, c.email ?? null, c.phone ?? null]),
+      });
+
+      const docs = Array.isArray(docMatches) ? docMatches : [];
+      contextLines.push("");
+      contextLines.push(`Resultados en documentos (top 5): ${docs.length}`);
+      for (const m of docs) {
+        const title = (m as any)?.metadata?.title ? String((m as any).metadata.title) : "(sin título)";
+        const srcType = (m as any)?.metadata?.source_type ? String((m as any).metadata.source_type) : "doc";
+        const sim = typeof (m as any)?.similarity === "number" ? Number((m as any).similarity).toFixed(3) : "";
+        contextLines.push(`Documento: ${title} | tipo: ${srcType} | similitud: ${sim}`);
+      }
+
+      widgets.push({
+        type: "table",
+        title: `Exploración Docs (${term})`,
+        columns: ["Título", "Tipo", "Similitud"],
+        rows: docs.map((m: any) => [
+          m?.metadata?.title ? String(m.metadata.title) : null,
+          m?.metadata?.source_type ? String(m.metadata.source_type) : null,
+          typeof m?.similarity === "number" ? Number(m.similarity.toFixed(3)) : null,
+        ]),
+      });
+
+      return {
+        handled: true,
+        context: contextLines.join("\n"),
+        sources: [
+          { id: "data_gateway", similarity: 1, metadata: { source_type: "data_gateway", term } },
+          ...docs.map((m: any) => ({ id: String(m.id), similarity: Number(m.similarity ?? 0), metadata: m.metadata })),
+        ],
+        widgets,
+      };
+    }
+  }
+
+  if ((flags as any).gatewayClientsList) {
+    const gw = await callDataGateway({ resource: "clients", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Clientes: ${rows.length} (máximo 25).`);
+    for (const c of rows) {
+      contextLines.push(`${(c as any).name_commercial ?? "(sin nombre)"}`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: "Clientes",
+      columns: ["Nombre", "Industria", "Segmento", "Estado"],
+      rows: rows.map((c: any) => [c.name_commercial ?? null, c.industry ?? null, c.segment ?? null, c.status ?? null]),
+    });
+  }
+
+  if ((flags as any).gatewayCompaniesList || (flags as any).gatewayCompaniesSearch) {
+    const term = (flags as any).gatewayCompaniesSearch ? (extractSearchTerm(question) ?? question) : null;
+    const gw = term
+      ? await callDataGateway({ resource: "companies", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "companies", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Empresas${term ? ` (búsqueda: ${term})` : ""}: ${rows.length} (máximo 25).`);
+
+    widgets.push({
+      type: "table",
+      title: term ? `Empresas (búsqueda: ${term})` : "Empresas",
+      columns: ["Nombre", "País", "Moneda", "Tax ID"],
+      rows: rows.map((c: any) => [c.legal_name ?? c.holding_name ?? null, c.country ?? null, c.currency ?? null, c.tax_id ?? null]),
+    });
+  }
+
+  if ((flags as any).gatewayClientEntitiesList || (flags as any).gatewayClientEntitiesSearch) {
+    const term = (flags as any).gatewayClientEntitiesSearch ? (extractSearchTerm(question) ?? question) : null;
+    const gw = term
+      ? await callDataGateway({ resource: "client_entities", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "client_entities", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Entidades legales${term ? ` (búsqueda: ${term})` : ""}: ${rows.length} (máximo 25).`);
+
+    widgets.push({
+      type: "table",
+      title: term ? `Entidades legales (búsqueda: ${term})` : "Entidades legales",
+      columns: ["Razón social", "Tax ID", "País", "Email", "Teléfono", "Cliente"],
+      rows: rows.map((e: any) => [e.legal_name ?? null, e.tax_id ?? null, e.country ?? null, e.email ?? null, e.phone ?? null, e.client_id ?? null]),
+    });
+  }
+
+  if ((flags as any).gatewayBankMovementsList || (flags as any).gatewayBankMovementsSearch) {
+    const term = (flags as any).gatewayBankMovementsSearch ? (extractSearchTerm(question) ?? question) : null;
+    const gw = term
+      ? await callDataGateway({ resource: "bank_movements", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "bank_movements", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Movimientos bancarios${term ? ` (búsqueda: ${term})` : ""}: ${rows.length} (máximo 25).`);
+
+    widgets.push({
+      type: "table",
+      title: term ? `Movimientos bancarios (búsqueda: ${term})` : "Movimientos bancarios",
+      columns: ["Fecha", "Descripción", "Monto", "Moneda", "Status", "Banco", "Cuenta", "Factura sugerida"],
+      rows: rows.map((m: any) => [
+        m.movement_date ?? null,
+        m.description ?? null,
+        m.amount ?? null,
+        m.currency ?? null,
+        m.status ?? null,
+        m.bank_name ?? null,
+        m.bank_account ?? null,
+        m.suggested_invoice_id ?? null,
+      ]),
+    });
+  }
+
+  if ((flags as any).gatewayBillingReferencesList || (flags as any).gatewayBillingReferencesSearch) {
+    const term = (flags as any).gatewayBillingReferencesSearch ? (extractSearchTerm(question) ?? question) : null;
+
+    // Soportar: "por contrato <UUID o número>"
+    let contractId: string | null = null;
+    if (!term && /\bpor\s+contrato\b/i.test(question)) {
+      const ident = extractContractIdentifier(question);
+      if (ident.id) {
+        contractId = ident.id;
+      } else if (ident.contract_number) {
+        const { data: contractRow, error: contractErr } = await (supabaseAuth as any)
+          .from("contracts")
+          .select("id")
+          .eq("holding_id", holdingId)
+          .eq("contract_number", ident.contract_number)
+          .maybeSingle();
+        if (contractErr) throw contractErr;
+        contractId = (contractRow as any)?.id ?? null;
+      }
+    }
+
+    const gw = term
+      ? await callDataGateway({ resource: "billing_references", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({
+          resource: "billing_references",
+          action: "list",
+          filters: contractId ? { contract_id: contractId } : undefined,
+          limit: 25,
+        });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(
+      `Referencias de facturación${contractId ? " (por contrato)" : term ? ` (búsqueda: ${term})` : ""}: ${rows.length} (máximo 25).`,
+    );
+
+    widgets.push({
+      type: "table",
+      title: contractId
+        ? "Referencias de facturación (por contrato)"
+        : term
+          ? `Referencias de facturación (búsqueda: ${term})`
+          : "Referencias de facturación",
+      columns: ["Tipo", "Código", "Emisor", "Vigente desde", "Vigente hasta", "Status", "Contrato"],
+      rows: rows.map((r: any) => [
+        r.reference_type ?? null,
+        r.reference_code ?? null,
+        r.issuer ?? null,
+        r.valid_from ?? null,
+        r.valid_to ?? null,
+        r.status ?? null,
+        r.contract_id ?? null,
+      ]),
+    });
+  }
+
+  if ((flags as any).gatewayQuotesList || (flags as any).gatewayQuotesSearch) {
+    const term = (flags as any).gatewayQuotesSearch ? (extractSearchTerm(question) ?? question) : null;
+    const gw = term
+      ? await callDataGateway({ resource: "quotes", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "quotes", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Cotizaciones${term ? ` (búsqueda: ${term})` : ""}: ${rows.length} (máximo 25).`);
+
+    // KPIs por etapa (inferidos desde quote_stages.name)
+    const stageNames = rows.map((r: any) => String(r?.quote_stages?.name ?? "").toLowerCase());
+    const countTotal = rows.length;
+    const countPending = stageNames.filter((n: string) => n.includes("proces") || n.includes("pend") || n.includes("borr") || n.includes("draft")).length;
+    const countSent = stageNames.filter((n: string) => n.includes("envi") || n.includes("send")).length;
+    const countSigned = stageNames.filter((n: string) => n.includes("firm") || n.includes("acept") || n.includes("ganad") || n.includes("won")).length;
+    const convRate = countTotal > 0 ? (countSigned / countTotal) * 100 : 0;
+
+    widgets.push({ type: "kpi", title: "Total cotizaciones (resultado)", value: String(countTotal) });
+    widgets.push({ type: "kpi", title: "Pendientes (resultado)", value: String(countPending) });
+    widgets.push({ type: "kpi", title: "Enviadas (resultado)", value: String(countSent) });
+    widgets.push({
+      type: "kpi",
+      title: "Firmadas (resultado)",
+      value: String(countSigned),
+      subtitle: `Tasa conversión: ${convRate.toFixed(2)}%`,
+    });
+
+    // Multidivisa opcional (por cotización)
+    const shouldConvert =
+      !!targetCurrency && rows.some((r: any) => (r?.currency ? String(r.currency).toUpperCase() !== targetCurrency : false));
+    const fxById = new Map<string, { converted: number | null; rate: number | null; source: string | null }>();
+    if (shouldConvert && targetCurrency) {
+      const conv = await Promise.all(
+        rows.map(async (r: any) => {
+          const id = String(r?.id ?? "");
+          const from = r?.currency ? String(r.currency).toUpperCase() : null;
+          const amount = typeof r?.total_amount === "number" ? Number(r.total_amount) : null;
+          if (!id || !from || amount === null) return { id, converted: null, rate: null, source: null };
+          if (from === targetCurrency) return { id, converted: amount, rate: 1, source: "same_currency" };
+          const { data: fxData, error: fxErr } = await (supabaseAuth as any).rpc("convert_amount", {
+            p_holding_id: holdingId,
+            p_amount: amount,
+            p_from_currency: from,
+            p_to_currency: targetCurrency,
+            p_reference_date: todayStr,
+            p_policy: null,
+          });
+          if (fxErr) return { id, converted: null, rate: null, source: `rpc_error: ${fxErr.message}` };
+          const json = fxData as any;
+          return {
+            id,
+            converted: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null,
+            rate: typeof json?.rate === "number" ? Number(json.rate) : null,
+            source: json?.fx_source ? String(json.fx_source) : null,
+          };
+        }),
+      );
+      for (const c of conv) fxById.set(c.id, { converted: c.converted, rate: c.rate, source: c.source });
+      const sources = conv.map((c) => c.source).filter((s): s is string => !!s);
+      const uniq = Array.from(new Set(sources)).slice(0, 5);
+      contextLines.push(`Conversión solicitada: ${targetCurrency}. Fuente FX (top 5): ${uniq.length ? uniq.join(", ") : "(sin datos)"}.`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: term ? `Cotizaciones (búsqueda: ${term})` : "Cotizaciones",
+      columns: shouldConvert
+        ? [
+            "Número",
+            "Cliente",
+            "Vendedor",
+            "Fecha",
+            "Booking",
+            "Tipo",
+            "Monto",
+            "Moneda",
+            `Monto (${targetCurrency})`,
+            "FX rate",
+            "FX source",
+            "Etapa",
+            "Origen CRM",
+          ]
+        : ["Número", "Cliente", "Vendedor", "Fecha", "Booking", "Tipo", "Monto", "Moneda", "Etapa", "Origen CRM"],
+      rows: rows.map((qq: any) => {
+        const fx = fxById.get(String(qq?.id ?? ""));
+        const base = [
+          qq.quote_number ?? null,
+          qq.clients?.name_commercial ?? qq.client_id ?? null,
+          qq.sellers?.name ?? qq.seller_id ?? null,
+          qq.quote_date ?? null,
+          qq.booking_date ?? null,
+          qq.quote_type ?? null,
+          qq.total_amount ?? null,
+          qq.currency ?? null,
+        ];
+        if (shouldConvert && targetCurrency) {
+          return base.concat([
+            fx?.converted ?? null,
+            fx?.rate ?? null,
+            fx?.source ?? null,
+            qq.quote_stages?.name ?? qq.quote_stage_id ?? null,
+            qq.salesforce_opportunity_id ? "Salesforce" : "Manual",
+          ]);
+        }
+        return base.concat([
+          qq.quote_stages?.name ?? qq.quote_stage_id ?? null,
+          qq.salesforce_opportunity_id ? "Salesforce" : "Manual",
+        ]);
+      }),
+    });
+  }
+
+  if ((flags as any).gatewayClientsSearch) {
+    const term = extractSearchTerm(question) ?? question;
+    const gw = await callDataGateway({ resource: "clients", action: "search", filters: { q: term }, limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Clientes encontrados para "${term}": ${rows.length} (máximo 25).`);
+    for (const c of rows) {
+      contextLines.push(`${(c as any).name_commercial ?? "(sin nombre)"}`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: `Clientes (búsqueda: ${term})`,
+      columns: ["Nombre", "Industria", "Segmento", "Estado"],
+      rows: rows.map((c: any) => [c.name_commercial ?? null, c.industry ?? null, c.segment ?? null, c.status ?? null]),
+    });
+
+    if (rows.length === 0) {
+      const fallback = await callDataGateway({ resource: "clients", action: "list", limit: 50 });
+      const fallbackRows = Array.isArray(fallback.data) ? fallback.data : [];
+      const names = fallbackRows.map((c: any) => String(c.name_commercial ?? "")).filter(Boolean);
+      contextLines.push(`FALLBACK_SIMILAR_RECORDS: ${names.slice(0, 50).join(" | ")}`);
+    }
+  }
+
+  if ((flags as any).gatewayContactsSearch) {
+    const term = extractSearchTerm(question);
+    const gw = term
+      ? await callDataGateway({ resource: "client_contacts", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "client_contacts", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Contactos: ${rows.length} (máximo 25).`);
+    for (const c of rows) {
+      contextLines.push(`${(c as any).name ?? "(sin nombre)"} | ${(c as any).position ?? "(sin cargo)"} | ${(c as any).email ?? "(sin email)"}`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: term ? `Contactos (búsqueda: ${term})` : "Contactos",
+      columns: ["Nombre", "Cargo", "Tipo", "Email", "Teléfono"],
+      rows: rows.map((c: any) => [c.name ?? null, c.position ?? null, c.contact_type ?? null, c.email ?? null, c.phone ?? null]),
+    });
+
+    // Encadenamiento: si no hay contactos por nombre, intenta por cliente y luego lista contactos por client_id
+    if (term && rows.length === 0) {
+      const clientsGw = await callDataGateway({ resource: "clients", action: "search", filters: { q: term }, limit: 5 });
+      const clients = Array.isArray(clientsGw.data) ? clientsGw.data : [];
+      const best = clients[0];
+      if (best?.id) {
+        const byClient = await callDataGateway({ resource: "client_contacts", action: "list", filters: { client_id: best.id }, limit: 25 });
+        const rel = Array.isArray(byClient.data) ? byClient.data : [];
+        if (rel.length > 0) {
+          contextLines.push(
+            `Encontré el cliente "${best.name_commercial ?? "(sin nombre)"}" que coincide con tu búsqueda y traje sus contactos.`,
+          );
+          widgets.push({
+            type: "table",
+            title: `Contactos de ${best.name_commercial ?? "cliente"}`,
+            columns: ["Nombre", "Cargo", "Tipo", "Email", "Teléfono"],
+            rows: rel.map((c: any) => [c.name ?? null, c.position ?? null, c.contact_type ?? null, c.email ?? null, c.phone ?? null]),
+          });
+        } else {
+          const fallback = await callDataGateway({ resource: "clients", action: "list", limit: 50 });
+          const fallbackRows = Array.isArray(fallback.data) ? fallback.data : [];
+          const names = fallbackRows.map((c: any) => String(c.name_commercial ?? "")).filter(Boolean);
+          contextLines.push(`FALLBACK_SIMILAR_RECORDS: ${names.slice(0, 50).join(" | ")}`);
+        }
+      }
+    }
+  }
+
+  if ((flags as any).gatewayContractsSearch) {
+    const term = extractSearchTerm(question);
+    const gw = term
+      ? await callDataGateway({ resource: "contracts", action: "search", filters: { q: term }, limit: 25 })
+      : await callDataGateway({ resource: "contracts", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+
+    // KPIs
+    const totalContracts = rows.length;
+    const activeContracts = rows.filter((c: any) => String(c.status ?? "").toLowerCase() === "activo").length;
+    const legacyContracts = rows.filter((c: any) => Boolean((c as any).is_legacy) || Boolean((c as any).from_bulk_import)).length;
+    const byStatus = new Map<string, number>();
+    for (const c of rows) {
+      const s = String((c as any).status ?? "(sin status)");
+      byStatus.set(s, (byStatus.get(s) || 0) + 1);
+    }
+
+    widgets.push({ type: "kpi", title: "Contratos (resultado)", value: String(totalContracts) });
+    widgets.push({ type: "kpi", title: "Activos (resultado)", value: String(activeContracts) });
+    widgets.push({ type: "kpi", title: "Legacy/importados (resultado)", value: String(legacyContracts) });
+
+    contextLines.push(
+      `Por status: ${Array.from(byStatus.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([s, n]) => `${s}=${n}`)
+        .join(", ")}.`,
+    );
+
+    // Workflow summary (current_step_id -> workflow_steps.name)
+    const stepIds = Array.from(
+      new Set(
+        rows
+          .map((c: any) => (c as any).current_step_id)
+          .filter((id: any) => typeof id === "string" && id.length > 0),
+      ),
+    );
+
+    if (stepIds.length > 0) {
+      const { data: steps, error: stepsErr } = await (supabaseAuth as any)
+        .from("workflow_steps")
+        .select("id, name, order_index")
+        .eq("holding_id", holdingId)
+        .in("id", stepIds);
+      if (stepsErr) throw stepsErr;
+
+      const stepNameById = new Map<string, string>();
+      for (const s of steps ?? []) {
+        stepNameById.set((s as any).id, (s as any).name ?? "(sin nombre)");
+      }
+
+      const byStep = new Map<string, number>();
+      for (const c of rows) {
+        const id = (c as any).current_step_id as string | null;
+        if (!id) continue;
+        const name = stepNameById.get(id) ?? id;
+        byStep.set(name, (byStep.get(name) || 0) + 1);
+      }
+
+      const stepRows = Array.from(byStep.entries()).sort((a, b) => b[1] - a[1]);
+      if (stepRows.length > 0) {
+        contextLines.push(
+          `Workflow (por step actual): ${stepRows
+            .slice(0, 10)
+            .map(([name, n]) => `${name}=${n}`)
+            .join(", ")}.`,
+        );
+        widgets.push({
+          type: "table",
+          title: "Workflow: contratos por step (top 10)",
+          columns: ["Step", "Cantidad"],
+          rows: stepRows.slice(0, 10).map(([name, n]) => [name, n]),
+        });
+      }
+    }
+
+    // Optional currency conversion (system -> target)
+    const shouldConvert =
+      !!targetCurrency &&
+      rows.length > 0 &&
+      rows.some((c: any) => (c as any).system_currency && String((c as any).system_currency).toUpperCase() !== targetCurrency);
+
+    let converted: Array<{
+      contractId: string;
+      convertedAmount: number | null;
+      fxRate: number | null;
+      fxSource: string | null;
+    }> = [];
+
+    if (shouldConvert) {
+      const conversions = await Promise.all(
+        rows.map(async (c: any) => {
+          const contractId = String(c.id ?? "");
+          const fromCurrency = (c.system_currency as string | null) ? String(c.system_currency).toUpperCase() : null;
+          const amount = typeof c.total_value_system_currency === "number" ? (c.total_value_system_currency as number) : null;
+          if (!contractId || !fromCurrency || amount === null || amount === undefined || !targetCurrency) {
+            return { contractId, convertedAmount: null, fxRate: null, fxSource: null };
+          }
+          if (fromCurrency === targetCurrency) {
+            return { contractId, convertedAmount: Number(amount), fxRate: 1, fxSource: "same_currency" };
+          }
+
+          const referenceDate = todayStr;
+          const { data: fxData, error: fxErr } = await (supabaseAuth as any).rpc("convert_amount", {
+            p_holding_id: holdingId,
+            p_amount: amount,
+            p_from_currency: fromCurrency,
+            p_to_currency: targetCurrency,
+            p_reference_date: referenceDate,
+            p_policy: null,
+          });
+          if (fxErr) {
+            return { contractId, convertedAmount: null, fxRate: null, fxSource: `rpc_error: ${fxErr.message}` };
+          }
+
+          const json = fxData as any;
+          return {
+            contractId,
+            convertedAmount: typeof json?.converted_amount === "number" ? Number(json.converted_amount) : null,
+            fxRate: typeof json?.rate === "number" ? Number(json.rate) : null,
+            fxSource: json?.fx_source ? String(json.fx_source) : null,
+          };
+        }),
+      );
+      converted = conversions;
+      const fxSummary = conversions.map((c) => c.fxSource).filter((s): s is string => !!s);
+      const uniqueFxSources = Array.from(new Set(fxSummary)).slice(0, 5);
+      contextLines.push(
+        `Conversión solicitada: ${targetCurrency}. Fuente FX (top 5): ${uniqueFxSources.length ? uniqueFxSources.join(", ") : "(sin datos)"}.`,
+      );
+    }
+
+    const byContractId = new Map(converted.map((c) => [c.contractId, c] as const));
+
+    contextLines.push(`Contratos: ${rows.length} (máximo 25).`);
+    for (const c of rows) {
+      contextLines.push(`${(c as any).contract_number ?? "(sin número)"} | ${(c as any).client_name_commercial ?? "(sin cliente)"} | status: ${(c as any).status ?? "(sin status)"}`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: term ? `Contratos (búsqueda: ${term})` : "Contratos",
+      columns: shouldConvert
+        ? [
+            "Contrato",
+            "Cliente",
+            "Status",
+            "Tipo",
+            "Booking",
+            "Fin",
+            "Legacy",
+            "TCV",
+            "Moneda",
+            "TCV Sistema",
+            "Moneda Sistema",
+            `TCV (${targetCurrency})`,
+            "FX rate",
+            "FX source",
+          ]
+        : [
+            "Contrato",
+            "Cliente",
+            "Status",
+            "Tipo",
+            "Booking",
+            "Fin",
+            "Legacy",
+            "TCV",
+            "Moneda",
+            "TCV Sistema",
+            "Moneda Sistema",
+            "FX a sistema",
+            "Step",
+          ],
+      rows: rows.map((c: any) => {
+        const fx = byContractId.get(String(c.id ?? ""));
+        const baseLegacy = Boolean(c.is_legacy) || Boolean(c.from_bulk_import) ? "Sí" : "No";
+        const baseStep = c.current_step_id ?? (String(c.status ?? "").toLowerCase() === "activo" ? "(completado)" : null);
+        const common = [
+          c.contract_number ?? null,
+          c.client_name_commercial ?? null,
+          c.status ?? null,
+          c.type ?? null,
+          c.booking_date ?? null,
+          c.contract_end_date ?? null,
+          baseLegacy,
+          c.total_value ?? null,
+          c.contract_currency ?? null,
+          c.total_value_system_currency ?? null,
+          c.system_currency ?? null,
+        ];
+        if (shouldConvert) {
+          return common.concat([fx?.convertedAmount ?? null, fx?.fxRate ?? null, fx?.fxSource ?? null]);
+        }
+        return common.concat([c.fx_rate_to_system ?? null, baseStep]);
+      }),
+    });
+  }
+
+  if ((flags as any).gatewayInvoicesSearch) {
+    const term = extractSearchTerm(question) ?? question;
+    const gw = await callDataGateway({ resource: "invoices", action: "search", filters: { q: term }, limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Facturas encontradas para "${term}": ${rows.length} (máximo 25).`);
+
+    widgets.push({
+      type: "table",
+      title: `Facturas (búsqueda: ${term})`,
+      columns: ["N°", "Emisión", "Vencimiento", "Status", "Monto", "Moneda"],
+      rows: rows.map((inv: any) => [
+        inv.invoice_number ?? null,
+        inv.issue_date ?? null,
+        inv.due_date ?? null,
+        inv.status ?? null,
+        inv.total_invoice_currency ?? null,
+        inv.invoice_currency ?? null,
+      ]),
+    });
+  }
+
+  if ((flags as any).gatewayInvoicesList) {
+    const gw = await callDataGateway({ resource: "invoices", action: "list", limit: 25 });
+    const rows = Array.isArray(gw.data) ? gw.data : [];
+    contextLines.push(`Facturas: ${rows.length} (máximo 25).`);
+    for (const inv of rows) {
+      contextLines.push(`${(inv as any).invoice_number ?? "(sin número)"} | due_date: ${(inv as any).due_date ?? "(null)"} | status: ${(inv as any).status ?? "(null)"}`);
+    }
+
+    widgets.push({
+      type: "table",
+      title: "Facturas",
+      columns: ["N°", "Emisión", "Vencimiento", "Status", "Monto", "Moneda"],
+      rows: rows.map((inv: any) => [
+        inv.invoice_number ?? null,
+        inv.issue_date ?? null,
+        inv.due_date ?? null,
+        inv.status ?? null,
+        inv.total_invoice_currency ?? null,
+        inv.invoice_currency ?? null,
+      ]),
+    });
+  }
+
+  return null;
+}

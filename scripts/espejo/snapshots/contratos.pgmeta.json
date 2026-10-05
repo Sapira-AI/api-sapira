@@ -2,7 +2,7 @@
  "contracts": {
   "name": "public.contracts",
   "rls_enabled": true,
-  "rows": 696,
+  "rows": 699,
   "columns": [
    {
     "name": "id",
@@ -557,6 +557,72 @@
      "updatable"
     ],
     "comment": "Términos y condiciones que se incluirán en el campo narration de las facturas generadas por este contrato. Acepta HTML para formato enriquecido."
+   },
+   {
+    "name": "billing_anchor_day",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Día de ciclo de facturación (1-31): los períodos parten ese día de cada mes (el último día si el mes es más corto). NULL = contratos anteriores a v2: se deriva del día del MIN(start_date) de los ítems recurrentes"
+   },
+   {
+    "name": "payment_terms",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Condición de pago del contrato (misma forma que client_entities.payment_terms): {kind: net|end_of_month, days} o {kind: day_of_next_month, day}. Default al crear: la de la razón social. NULL = sin condición propia"
+   },
+   {
+    "name": "document_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tipo de documento que emite el contrato: FACTURA o FACTURA_EXPORTACION (de él se deriva invoices.export_type). Sugerido por país emisor vs receptor. NULL = contratos anteriores a v2"
+   },
+   {
+    "name": "deleted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Borrado lógico (solo borradores En revisión sin facturas, con evento DELETED). NULL = vigente"
+   },
+   {
+    "name": "tax_document_type_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Documento tributario del catálogo tax_document_types que emite el contrato (33, 34, 110, 01, CFDI-I…). document_type es su familia derivada (kind export_invoice → FACTURA_EXPORTACION, resto → FACTURA). NULL = contratos anteriores al catálogo"
+   },
+   {
+    "name": "invoice_description_template",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa"
    }
   ],
   "primary_keys": [
@@ -566,6 +632,17 @@
    {
     "name": "billing_references_contract_id_fkey",
     "source_table": "public.billing_references",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_contract_id_fkey",
+    "source_table": "public.consumption_entries",
     "source_columns": [
      "contract_id"
     ],
@@ -619,6 +696,17 @@
     ]
    },
    {
+    "name": "contract_item_pauses_contract_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_items_contract_id_fkey",
     "source_table": "public.contract_items",
     "source_columns": [
@@ -643,6 +731,17 @@
    {
     "name": "contract_notifications_contract_id_fkey",
     "source_table": "public.contract_notifications",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_contract_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
     "source_columns": [
      "contract_id"
     ],
@@ -735,6 +834,17 @@
      "renewed_to_contract_id"
     ],
     "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contracts_tax_document_type_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "tax_document_type_id"
+    ],
+    "target_table": "public.tax_document_types",
     "target_columns": [
      "id"
     ]
@@ -861,6 +971,17 @@
     ]
    },
    {
+    "name": "prices_contract_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "quantities_contract_id_fkey",
     "source_table": "public.quantities",
     "source_columns": [
@@ -887,7 +1008,7 @@
  "contract_items": {
   "name": "public.contract_items",
   "rls_enabled": true,
-  "rows": 1182,
+  "rows": 1201,
   "columns": [
    {
     "name": "id",
@@ -1311,12 +1432,45 @@
      "updatable"
     ],
     "comment": "Precio unitario efectivo ANTES de la renovación (mismo price_entry_mode y escala que unit_price). Solo poblado en items con categoria=RENEWAL cuando la renovación cambió el precio. Usado por apply_renewal_price_split() al final de revenue_schedule_rebuild_contract_ccy para emitir filas RSM RENEWAL (precio base) + UPSELL/DOWNSELL (delta) en el mes efectivo, solo en columnas *_contract_ccy. revenue_schedule_apply_fx_for_contract completa system/company."
+   },
+   {
+    "name": "price_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo (unit_price mensual × cantidad × meses)"
+   },
+   {
+    "name": "billing_anchor_day",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ciclo propio del ítem (1–31): sus períodos parten ese día, sin tramo prorrateado, y emite en su propia fecha. NULL = ciclo del contrato (contracts.billing_anchor_day)"
    }
   ],
   "primary_keys": [
    "id"
   ],
   "foreign_key_constraints": [
+   {
+    "name": "consumption_entries_contract_item_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
    {
     "name": "contract_amendment_items_new_item_id_fkey",
     "source_table": "public.contract_amendment_items",
@@ -1340,12 +1494,34 @@
     ]
    },
    {
+    "name": "contract_item_pauses_contract_item_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_items_contract_id_fkey",
     "source_table": "public.contract_items",
     "source_columns": [
      "contract_id"
     ],
     "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_items_price_id_fkey",
+    "source_table": "public.contract_items",
+    "source_columns": [
+     "price_id"
+    ],
+    "target_table": "public.prices",
     "target_columns": [
      "id"
     ]
@@ -1399,6 +1575,17 @@
     "source_table": "public.contract_items",
     "source_columns": [
      "renews_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_contract_item_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "contract_item_id"
     ],
     "target_table": "public.contract_items",
     "target_columns": [
@@ -1823,7 +2010,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 278,
+  "rows": 350,
   "columns": [
    {
     "name": "id",
@@ -2069,6 +2256,28 @@
   ],
   "foreign_key_constraints": [
    {
+    "name": "contract_item_pauses_pause_event_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "pause_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_resume_event_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "resume_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "contract_lifecycle_events_contract_id_fkey",
     "source_table": "public.contract_lifecycle_events",
     "source_columns": [
@@ -2086,6 +2295,17 @@
      "holding_id"
     ],
     "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_applied_event_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "applied_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
     "target_columns": [
      "id"
     ]
@@ -3888,6 +4108,1840 @@
      "churn_reason_id"
     ],
     "target_table": "public.churn_reasons",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "tax_document_types": {
+  "name": "public.tax_document_types",
+  "rls_enabled": true,
+  "rows": 17,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "country_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "País ISO-2 del documento, o * para el comodín genérico"
+   },
+   {
+    "name": "code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Código oficial del documento en su país (33, 01, CFDI-I, FE…) o genérico (FACTURA)"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Nombre en español neutro"
+   },
+   {
+    "name": "kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Familia fiscal: invoice, export_invoice, credit_note, debit_note o receipt"
+   },
+   {
+    "name": "is_electronic",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false"
+   },
+   {
+    "name": "sort",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'0'::smallint",
+    "comment": "Orden de presentación dentro del país"
+   },
+   {
+    "name": "active",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "description_max_chars",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Largo máximo de la descripción de una línea en el documento (SII NmbItem = 80). NULL = sin límite"
+   },
+   {
+    "name": "tax_rate",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tasa de impuesto del documento en porcentaje (19 = 19 %). NULL = usa la tasa de la compañía"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "contracts_tax_document_type_id_fkey",
+    "source_table": "public.contracts",
+    "source_columns": [
+     "tax_document_type_id"
+    ],
+    "target_table": "public.tax_document_types",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "billable_metrics": {
+  "name": "public.billable_metrics",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Slug estable para API y DWH, único por holding"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Lo que ve la usuaria (\"Rutas completadas\")"
+   },
+   {
+    "name": "description",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "aggregation",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "sum, count, max, min, last o unique_count"
+   },
+   {
+    "name": "unit",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Unidad en singular para glosa y UI (\"ruta\", \"usuario\", \"GB\")"
+   },
+   {
+    "name": "source_kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'manual'::text",
+    "comment": "manual, csv, dwh o api"
+   },
+   {
+    "name": "source_config",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Para dwh: referencia a la consulta/tabla de BigQuery; para el resto {}"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'active'::text",
+    "comment": "active o archived; una métrica con precios activos no se archiva"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "updated_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "archived_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "billable_metrics_created_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billable_metrics_holding_id_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "billable_metrics_updated_by_fkey",
+    "source_table": "public.billable_metrics",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_billable_metric_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "billable_metric_id"
+    ],
+    "target_table": "public.billable_metrics",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "prices": {
+  "name": "public.prices",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "owner",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "catalog, contract o quote. Etapa 1 escribe contract (precio inline del ítem); Cotizaciones v2 escribe quote"
+   },
+   {
+    "name": "product_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "comment": "El ítem exige producto (S1-12)"
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "NOT NULL si owner = contract, NULL si catalog (CHECK)"
+   },
+   {
+    "name": "name",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Etiqueta (\"Tramos LatAm — UF\"); para contract default = nombre del producto"
+   },
+   {
+    "name": "currency",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Moneda del contrato (S1-2); en catálogo, la del precio"
+   },
+   {
+    "name": "model",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "standard, graduated, volume, package o seat"
+   },
+   {
+    "name": "quantity_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "fixed o metered; metered exige billable_metric_id"
+   },
+   {
+    "name": "billable_metric_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "unit_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "standard y seat: precio por unidad del período (no mensual)"
+   },
+   {
+    "name": "tiers",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "graduated/volume: [{from, to, per_unit_amount, flat_amount}]"
+   },
+   {
+    "name": "package_size",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "package: bloque de N unidades"
+   },
+   {
+    "name": "package_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "package: precio del bloque"
+   },
+   {
+    "name": "seat_minimum_quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'0'::numeric",
+    "comment": "seat: asientos mínimos cobrados"
+   },
+   {
+    "name": "free_units",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'0'::numeric",
+    "comment": "Unidades gratis por período"
+   },
+   {
+    "name": "minimum_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Mínimo comprometido por período con true-up; NULL = sin mínimo"
+   },
+   {
+    "name": "cap_amount",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tope máximo por período; NULL = sin tope"
+   },
+   {
+    "name": "invoice_line_mode",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'single'::text",
+    "comment": "Presentación en la factura (spec §3.8): single = una línea con el detalle en la glosa; per_tier = una línea por tramo más ajustes"
+   },
+   {
+    "name": "charge_flat_when_free",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "graduated/volume: cobrar el cargo fijo del tramo aunque todo el consumo caiga en unidades gratis (spec §3.5, pregunta 5)"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'active'::text",
+    "comment": "draft, active o archived; contract nace active"
+   },
+   {
+    "name": "version",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "1",
+    "comment": "Sube con cada supersedes_price_id"
+   },
+   {
+    "name": "supersedes_price_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Versión anterior"
+   },
+   {
+    "name": "list_price_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "En owner = contract, el precio de catálogo del que salió (etapa 3). NULL en precios inline"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Catálogo: nota interna de la versión (qué cambió, para quién aplica)"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "updated_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "published_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "archived_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "quote_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cotizaciones v2: NOT NULL si owner = quote (precio inline del ítem de cotización), NULL si no (CHECK)"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "contract_items_price_id_fkey",
+    "source_table": "public.contract_items",
+    "source_columns": [
+     "price_id"
+    ],
+    "target_table": "public.prices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_billable_metric_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "billable_metric_id"
+    ],
+    "target_table": "public.billable_metrics",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_contract_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_created_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_holding_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_list_price_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "list_price_id"
+    ],
+    "target_table": "public.prices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_product_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_quote_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_supersedes_price_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "supersedes_price_id"
+    ],
+    "target_table": "public.prices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_updated_by_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_items_price_id_fkey",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "price_id"
+    ],
+    "target_table": "public.prices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "consumption_entries": {
+  "name": "public.consumption_entries",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "period_start",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Inicio del período de servicio de la línea que alimenta (= invoice_items.billing_period_start)"
+   },
+   {
+    "name": "period_end",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Fin del período de servicio de la línea (= invoice_items.billing_period_end)"
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "updatable"
+    ],
+    "comment": "0 = sin consumo: la línea queda en 0 (nunca cobra la cantidad base)"
+   },
+   {
+    "name": "amount_override",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Monto final informado por el cliente; si viene, la línea usa este monto y quantity queda informativa"
+   },
+   {
+    "name": "apply_item_discount",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "El descuento del ítem se aplica sobre el consumo (S7-9)"
+   },
+   {
+    "name": "account",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuenta del período si difiere de la del ítem"
+   },
+   {
+    "name": "is_estimated",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "true = fila estimada al cierre; se reemplaza al llegar el real"
+   },
+   {
+    "name": "source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'manual'::text",
+    "comment": "manual, csv, dwh o api"
+   },
+   {
+    "name": "idempotency_key",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "El DWH y la API reenvían sin duplicar (único por holding)"
+   },
+   {
+    "name": "revision",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "1",
+    "comment": "Sube en cada corrección"
+   },
+   {
+    "name": "correction_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo obligatorio desde la revisión 2"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Factura que lleva este consumo: la Por Emitir recalculada, la complementaria (consumo adicional) o la reemitida (spec §4.4). NULL si el período solo tenía facturas anuladas"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "updated_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "consumption_entries_contract_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_contract_item_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_created_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_holding_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_invoice_id_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entries_updated_by_fkey",
+    "source_table": "public.consumption_entries",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_entry_id_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "entry_id"
+    ],
+    "target_table": "public.consumption_entries",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "consumption_entry_revisions": {
+  "name": "public.consumption_entry_revisions",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "entry_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "revision",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "quantity",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "amount_override",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,2)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "apply_item_discount",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true"
+   },
+   {
+    "name": "source",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo de la corrección (obligatorio desde la revisión 2)"
+   },
+   {
+    "name": "changed_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "changed_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "consumption_entry_revisions_changed_by_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "changed_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_entry_id_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "entry_id"
+    ],
+    "target_table": "public.consumption_entries",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "consumption_entry_revisions_holding_id_fkey",
+    "source_table": "public.consumption_entry_revisions",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "contract_scheduled_changes": {
+  "name": "public.contract_scheduled_changes",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ítem al que aplica; NULL = alcance contrato (todos los recurrentes vigentes al aplicar)"
+   },
+   {
+    "name": "group_key",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "parent_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "every_n_months: cada aplicación es una fila hija applied; la madre sigue scheduled con next_effective_date"
+   },
+   {
+    "name": "trigger",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "effective_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "anchor_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "interval_months",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "next_effective_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "value",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Según kind: % (percent_uplift; index = puntos sobre el índice), precio en moneda del ítem, cantidad o meses (term, billing_frequency)"
+   },
+   {
+    "name": "index_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "index_base_date",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "index_base_value",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "index_lag_months",
+    "data_type": "smallint",
+    "format": "int2",
+    "type": "smallint",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "1"
+   },
+   {
+    "name": "rounding",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "'unit_2'::text"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'scheduled'::text"
+   },
+   {
+    "name": "status_reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "status_changed_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "applied_event_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Evento (contract_lifecycle_events) del cambio que materializó el pacto"
+   },
+   {
+    "name": "applied_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "applied_value",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Valor efectivamente usado (índice real o valor editado en el acto)"
+   },
+   {
+    "name": "origin",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{\"type\": \"manual\"}'::jsonb"
+   },
+   {
+    "name": "notes",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "contract_scheduled_changes_applied_event_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "applied_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_contract_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_contract_item_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_holding_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_scheduled_changes_parent_id_fkey",
+    "source_table": "public.contract_scheduled_changes",
+    "source_columns": [
+     "parent_id"
+    ],
+    "target_table": "public.contract_scheduled_changes",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "contract_item_pauses": {
+  "name": "public.contract_item_pauses",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "contract_item_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "pause_start",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "pause_end",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "extend_term",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Al reanudar, el fin del ítem se corre en los días pausados"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'scheduled'::text"
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "pause_event_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "resume_event_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "contract_item_pauses_contract_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "contract_id"
+    ],
+    "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_contract_item_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "contract_item_id"
+    ],
+    "target_table": "public.contract_items",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_holding_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_pause_event_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "pause_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "contract_item_pauses_resume_event_id_fkey",
+    "source_table": "public.contract_item_pauses",
+    "source_columns": [
+     "resume_event_id"
+    ],
+    "target_table": "public.contract_lifecycle_events",
     "target_columns": [
      "id"
     ]

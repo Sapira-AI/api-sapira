@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { EntityManager, ILike, Repository } from 'typeorm';
 
 import { MasterData } from '@/databases/postgresql/entities/base-tenancy/master-data.entity';
 import { ClientContact } from '@/databases/postgresql/entities/clientes/client-contact.entity';
@@ -96,10 +96,11 @@ export class SalesforceTypeOrmService {
 		salesforceObjectType: string,
 		salesforceObjectId: string,
 		sapiraTableName: string,
-		sapiraRecordId: string
+		sapiraRecordId: string,
+		manager?: EntityManager
 	): Promise<void> {
 		try {
-			await this.objectMappingRepository.save({
+			await (manager ? manager.getRepository(SalesforceObjectMapping) : this.objectMappingRepository).save({
 				holding_id: holdingId,
 				salesforce_object_type: salesforceObjectType,
 				salesforce_object_id: salesforceObjectId,
@@ -134,9 +135,11 @@ export class SalesforceTypeOrmService {
 		}
 	}
 
-	async upsertQuote(quoteData: any): Promise<string> {
+	/** `manager`: dentro de la transacción de la importación (cotizaciones protegidas). */
+	async upsertQuote(quoteData: any, manager?: EntityManager): Promise<string> {
+		const quoteRepository = manager ? manager.getRepository(Quote) : this.quoteRepository;
 		try {
-			const existing = await this.quoteRepository.findOne({
+			const existing = await quoteRepository.findOne({
 				where: {
 					holding_id: quoteData.holding_id,
 					salesforce_opportunity_id: quoteData.salesforce_opportunity_id,
@@ -144,11 +147,11 @@ export class SalesforceTypeOrmService {
 			});
 
 			if (existing) {
-				await this.quoteRepository.update(existing.id, quoteData);
+				await quoteRepository.update(existing.id, quoteData);
 				return existing.id;
 			}
 
-			const quote = await this.quoteRepository.save(quoteData);
+			const quote = await quoteRepository.save(quoteData);
 			return quote.id;
 		} catch (error: any) {
 			this.logger.error(`Error upserting quote: ${error.message}`);
@@ -159,11 +162,11 @@ export class SalesforceTypeOrmService {
 	/**
 	 * Inserta una cotización sin modificar una existente. El índice único de la
 	 * base protege corridas concurrentes; un conflicto se interpreta como que
-	 * otro proceso ya la integró.
+	 * otro proceso ya la integró. Dentro de una transacción (`manager`) el conflicto la deja abortada: quien llama debe revertirla.
 	 */
-	async createQuoteIfAbsent(quoteData: any): Promise<string | null> {
+	async createQuoteIfAbsent(quoteData: any, manager?: EntityManager): Promise<string | null> {
 		try {
-			const quote = await this.quoteRepository.save(quoteData);
+			const quote = await (manager ? manager.getRepository(Quote) : this.quoteRepository).save(quoteData);
 			return quote.id;
 		} catch (error: any) {
 			if (error?.code === '23505') {
@@ -183,12 +186,13 @@ export class SalesforceTypeOrmService {
 		}
 	}
 
-	async createQuoteItems(items: any[]): Promise<void> {
+	async createQuoteItems(items: any[], manager?: EntityManager): Promise<void> {
 		if (items.length === 0) return;
+		const quoteItemRepository = manager ? manager.getRepository(QuoteItem) : this.quoteItemRepository;
 
 		try {
 			const quoteId = items[0].quote_id;
-			const existingItems = await this.quoteItemRepository.find({
+			const existingItems = await quoteItemRepository.find({
 				where: { quote_id: quoteId },
 			});
 			const buildItemKey = (item: { quote_item_number?: string | null; salesforce_line_item_id?: string | null }) =>
@@ -207,7 +211,7 @@ export class SalesforceTypeOrmService {
 				return existing ? { ...existing, ...item, id: existing.id } : item;
 			});
 
-			await this.quoteItemRepository.save(itemsToSave);
+			await quoteItemRepository.save(itemsToSave);
 
 			const incomingKeys = new Set(items.map((item) => buildItemKey(item)).filter(Boolean));
 			const itemsToRemove = existingItems.filter((item) => {
@@ -217,7 +221,7 @@ export class SalesforceTypeOrmService {
 
 			if (itemsToRemove.length > 0) {
 				const removalIds = itemsToRemove.map((item) => item.id);
-				const linkedRows: Array<{ id: string; quote_item_number: string | null }> = await this.quoteItemRepository.query(
+				const linkedRows: Array<{ id: string; quote_item_number: string | null }> = await quoteItemRepository.query(
 					`
 						SELECT qi.id, qi.quote_item_number
 						FROM quote_items qi
@@ -235,7 +239,7 @@ export class SalesforceTypeOrmService {
 					throw new Error(`No se pueden eliminar quote_items vinculados a contract_items. Items afectados: ${linkedIdentifiers}`);
 				}
 
-				await this.quoteItemRepository.delete(removalIds);
+				await quoteItemRepository.delete(removalIds);
 			}
 
 			this.logger.log(`✅ ${itemsToSave.length} quote items sincronizados exitosamente`);

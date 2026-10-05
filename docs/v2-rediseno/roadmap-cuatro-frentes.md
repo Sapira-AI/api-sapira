@@ -102,9 +102,15 @@ Medido el 04-10 ✔: `rls_user_holding_id()` devuelve `NULL` para la API, y **cu
 arreglo hace que cada escritura de la API empiece a reconstruir sus cronogramas de revenue, que es
 justamente lo que hay que hacer, pero no sin control.
 
-**Estado**: las dos funciones de `quantities` están corregidas en el corpus y **sin aplicar** a ninguna base.
-Las dos de `invoices` y `contract_items` ni se tocaron: son el grueso del impacto y van en el mismo lote
-coordinado.
+**Resuelto el 05-10 (merge de `qa`), por otro camino**: la migración `1791300000000-RetiraTriggersDevengoQuantities`
+—aplicada en producción— **retiró el mecanismo completo** de triggers RSM sobre overrides de `quantities`, porque
+ahora la sincronización del DWH recalcula el devengo. Las dos funciones de `quantities` ya no existen, así que mi
+arreglo del gate (que nunca se aplicó a ninguna base) quedó obsoleto y sus assets se borraron.
+
+**Sigue abierto** el mismo defecto en los otros dos triggers: `trigger_rsm_on_invoice_change` —que la API escribe
+desde cinco servicios— y `trigger_rsm_on_contract_item_change`. Son el grueso del impacto, siguen con el gate por
+sesión y van en el lote coordinado que pide `src/databases/postgresql/README.md` punto 7 (medir el universo y correr
+un rebuild de control en QA antes de tocarlos).
 
 ### 🔴 ✔ Las notificaciones del canal no tienen destinatarios
 
@@ -116,6 +122,16 @@ de Salesforce y el de Odoo). Como los destinatarios salen de ahí y `listForAuth
 El efecto es más grave de lo que parece: el botón "Reemplazar con datos de BigQuery"
 (`NotificacionDetalle.tsx`) es **la única salida** de los estados `conflict` y `changed_in_source`, y hoy es
 inalcanzable. Esos registros quedan atascados para siempre.
+
+**Resuelto el 05-10 (merge de `qa`), por diseño y no por parche**: el catálogo nuevo
+(`notifications/notification-catalog.ts`) declara los cuatro tipos con `subscribable: true`,
+`default_roles: DATA_WAREHOUSE_ROLES` y el `action_type: 'replace_quantity_record'`, y la semilla
+`seed/007-notification-default-subscriptions.sql` los siembra en `notification_role_subscriptions`. Verificado en
+producción el 05-10: la semilla está aplicada y hay **84 suscripciones activas en los 7 holdings**. Los
+destinatarios los resuelve `resolveRecipients` desde esas filas, así que el productor ya no pasa `recipients`.
+Mi parche en `bigquery.service.ts` (`recipients: { include_super_admins: true }`) se retiró: mandaba a los super
+admins en vez de a los roles configurados. Su test pasó a verificar la garantía nueva — que cada tipo que emite el
+canal esté en el catálogo como `subscribable` y tenga suscripción por defecto.
 
 ### 🔴 ✔ La tabla del DWH está hardcodeada — no es "falta un filtro", es una definición
 
@@ -173,7 +189,7 @@ no tiene absolutamente nada de esto.
 | # | Etapa | Entregable verificable |
 |---|---|---|
 | 1.0 | **Averiguar por qué la ingesta no trae filas.** Correr `POST /bigquery/quantities/ingest` con un rango que sepamos que tiene datos en el DWH y leer el resultado | Saber si el problema es el rango, los permisos o algo que falla en silencio |
-| 1.1 | ✅ **Hecho el 04-10**: gate del RSM por `NEW.holding_id`/`OLD.holding_id` y destinatarios en las notificaciones del canal | Pendiente de aplicar los dos assets y de una corrida real |
+| 1.1 | ✅ **Cerrado el 05-10 por el merge de `qa`**, no por mi arreglo: los triggers RSM del canal se retiraron (`1791300000000`) y los destinatarios los da el catálogo de notificaciones + `seed/007` | Verificado en prod: migración aplicada y 84 suscripciones en 7 holdings |
 | 1.1b | Decidir qué es `sapira_base` (por cliente o compartida) y sacar la tabla del código si corresponde | Una segunda conexión no lee el warehouse de la primera |
 | 1.2 | `amount` coherente tras el reemplazo + columna de origen en `quantities` | Un override reemplazado deja el RSM correcto |
 | 1.3 | Tenancy del módulo: `HoldingScopeGuard` + `@HoldingId()` en `bigquery.controller.ts` y `bigquery-connection.controller.ts`, con sus tests | Los tres casos obligatorios en verde |
@@ -186,16 +202,16 @@ no tiene absolutamente nada de esto.
 Leon decidió documentar lo que falta y seguir con automatizaciones. Esto es lo que queda, para retomarlo
 sin volver a investigar.
 
-### Hecho y sin aplicar
+### Nada quedó pendiente de aplicar
 
-Las dos funciones de RSM de `quantities` (`trigger_rsm_on_quantity_change`, `restore_rsm_on_quantity_delete`)
-toman el holding de la fila en vez de `auth.uid()`. **Están en el corpus y no se aplicaron a ninguna base.**
-`schema:status` las va a reportar como REAPLICAR hasta que se apliquen.
+El merge de `qa` del 05-10 resolvió los dos ítems que estaban en esta lista, y ninguno por el camino que yo había
+tomado:
 
-### Hecho y aplicable
-
-Las notificaciones del canal llevan destinatarios (`include_super_admins`), con su test. Es código, no
-esquema: viaja con el despliegue y no necesita nada en la base.
+- **Gate del RSM del canal**: sus dos funciones ya no existen. `1791300000000-RetiraTriggersDevengoQuantities`
+  retiró el mecanismo (la sync del DWH recalcula el devengo) y los assets se borraron. Mi corrección nunca llegó a
+  ninguna base y no hace falta.
+- **Destinatarios de las notificaciones del canal**: los resuelve el catálogo (`subscribable: true` +
+  `default_roles`) con `seed/007` ya aplicada en producción. Mi parche `include_super_admins` se retiró.
 
 ### Lo que bloquea, y a quién le toca
 
@@ -468,11 +484,11 @@ los otros tres.
 
 Ninguno pasa de unas horas, y sin ellos las etapas siguientes no se pueden probar de punta a punta:
 
-1. ✅ Gate del RSM por `NEW.holding_id` / `OLD.holding_id` (frente 1) — **hecho 04-10**, pendiente de aplicar.
-2. ✅ Destinatarios en las notificaciones del canal (frente 1) — **hecho 04-10**. No se agregaron a
-   `ROLE_SUBSCRIPTION_NOTIFICATION_TYPES` a propósito: ese constante alimenta el endpoint de suscripciones de
-   Salesforce y habría metido las alertas de cantidades en ese mismo toggle. Administrarlas por rol necesita
-   su propio endpoint (etapa 1.5).
+1. ✅ Gate del RSM del canal — **cerrado 05-10 por el merge de `qa`**: los dos triggers se retiraron. Sigue
+   abierto en `trigger_rsm_on_invoice_change` y `trigger_rsm_on_contract_item_change`, que son el grueso.
+2. ✅ Destinatarios en las notificaciones del canal — **cerrado 05-10 por el merge de `qa`**: el catálogo nuevo
+   los declara `subscribable` con `default_roles`, y `seed/007` los siembra (verificado en prod). El toggle por
+   rol ya existe en Configuración › Roles, así que la etapa 1.5 no necesita un endpoint propio.
 3. ⚠️ La tabla del DWH hardcodeada **no es un bug con arreglo obvio**: es la definición de si el canal es
    por cliente o compartido (frente 1).
 4. ✅ Argumentos invertidos en `agents.scheduler.ts` + tipar la consulta (frente 2) — **hecho 04-10**.

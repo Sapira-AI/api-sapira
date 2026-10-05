@@ -13,7 +13,15 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
  */
 @Entity({ name: 'custom_field_definitions', comment: 'Definiciones de campos personalizados creados por usuarios a nivel de holding' })
 @Unique('unique_field_per_entity', ['holding_id', 'entity_type', 'field_name'])
-@Check('custom_field_definitions_field_type_check', "field_type = ANY (ARRAY['text'::text, 'number'::text])")
+// Configuración v2 ronda 3 (migración 1790830000000-CustomFieldTypes): tipos select/boolean/date y opciones de lista.
+@Check(
+	'custom_field_definitions_field_type_check',
+	"field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])"
+)
+@Check(
+	'custom_field_definitions_options_check',
+	"(field_type = 'select') = (options IS NOT NULL AND jsonb_typeof(options) = 'array' AND jsonb_array_length(options) > 0)"
+)
 @Check(
 	'valid_entity_type',
 	"entity_type = ANY (ARRAY['client'::text, 'contract'::text, 'contract_item'::text, 'quote'::text, 'quote_item'::text, 'invoice'::text, 'invoice_item'::text])"
@@ -42,6 +50,10 @@ export class CustomFieldDefinition {
 	/** Tipo de dato: text o number */
 	@Column({ type: 'text', comment: 'Tipo de dato: text o number', nullable: false })
 	field_type: string;
+
+	/** Opciones de un campo `select`: [{ value, label }]; NULL en los demás tipos. */
+	@Column({ type: 'jsonb', nullable: true })
+	options?: Array<{ value: string; label: string }> | null;
 
 	@Column({ type: 'boolean', nullable: false, default: false })
 	is_required: boolean;

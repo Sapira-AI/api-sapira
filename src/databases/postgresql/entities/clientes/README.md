@@ -1,7 +1,7 @@
-# Módulo 3 · Clientes — 12 tablas de prod (2026-09-27)
+# Módulo 3 · Clientes — 12 tablas de prod (2026-10-04)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-09-27 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
 
@@ -9,12 +9,12 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `clients` (1772) | `src/databases/postgresql/entities/clientes/client.entity.ts` · `Client` | ⚠️ difiere de prod | — | — | — | nombre de PK `clients_pkey`<br>CHECK `clients_status_check`<br>índice con expresión `idx_clients_custom_fields` |
-| `client_entities` (1516) | `src/databases/postgresql/entities/clientes/client-entity.entity.ts` · `ClientEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entities_pkey` |
+| `clients` (1816) | `src/databases/postgresql/entities/clientes/client.entity.ts` · `Client` | ⚠️ difiere de prod | — | — | — | nombre de PK `clients_pkey`<br>CHECK `clients_status_check`<br>índice con expresión `idx_clients_custom_fields` |
+| `client_entities` (1553) | `src/databases/postgresql/entities/clientes/client-entity.entity.ts` · `ClientEntity` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entities_pkey` |
 | `client_entity_clients` (1512) | `src/databases/postgresql/entities/clientes/client-entity-client.entity.ts` · `ClientEntityClient` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_entity_clients_pkey` |
 | `client_contacts` (262) | `src/databases/postgresql/entities/clientes/client-contact.entity.ts` · `ClientContact` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_contacts_pkey` |
-| `client_activity_notes` (0) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check` |
-| `sellers` (38) | `src/databases/postgresql/entities/clientes/seller.entity.ts` · `Seller` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `sellers_pkey` |
+| `client_activity_notes` (0) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check`<br>índice con expresión `client_activity_notes_mentions_idx` |
+| `sellers` (39) | `src/databases/postgresql/entities/clientes/seller.entity.ts` · `Seller` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `sellers_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (6): 6 promovidas, 0 apagadas
 
@@ -22,10 +22,10 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 |---|---|---|---|---|---|---|---|---|---|
 | `contact_preferences` (0, RLS on) | `contact-preference.entity.ts` · `ContactPreference` | 8 | `contact_preferences_pkey` (id) | `contact_preferences_holding_id_client_id_contact_id_key` | — | — | `contact_preferences_holding_idx` | update_contact_preferences_updated_at · BEFORE UPDATE FOR EACH ROW → update_updated_at_column() | 2 |
 | `client_documents` (8, RLS on) | `client-document.entity.ts` · `ClientDocument` | 13 | `client_documents_pkey` (id) | — | — | `client_documents_client_entity_id_fkey` → client_entities (SET NULL)<br>`client_documents_client_id_fkey` → clients (CASCADE)<br>`client_documents_uploaded_by_fkey` → users (SET NULL)<br>`fk_client_documents_holding_id` → company_holdings (CASCADE) | `idx_client_documents_holding_id` | — | 1 |
-| `company_legal_documents` (1, RLS on) | `company-legal-document.entity.ts` · `CompanyLegalDocument` | 8 | `company_legal_documents_pkey` (id) | — | — | `company_legal_documents_company_id_fkey` → companies (CASCADE) | — | — | 1 |
+| `company_legal_documents` (1, RLS on) | `company-legal-document.entity.ts` · `CompanyLegalDocument` | 14 | `company_legal_documents_pkey` (id) | — | — | `company_legal_documents_company_id_fkey` → companies (CASCADE)<br>`company_legal_documents_uploaded_by_fkey` → users (SET NULL) | — | — | 1 |
 | `client_entity_tax_id_normalization_conflicts` (65, RLS on) | `client-entity-tax-id-normalization-conflict.entity.ts` · `ClientEntityTaxIdNormalizationConflict` | 9 | `client_entity_tax_id_normalization_conflicts_pkey` (id) | `client_entity_tax_id_normaliz_migration_name_client_entity__key` | — | — | — | — | 0 |
 | `company_bank_accounts` (9, RLS on) | `company-bank-account.entity.ts` · `CompanyBankAccount` | 9 | `company_bank_accounts_pkey` (id) | — | — | `company_bank_accounts_company_id_fkey` → companies (CASCADE) | — | — | 4 |
-| `company_account_mappings` (0, RLS on) | `company-account-mapping.entity.ts` · `CompanyAccountMapping` | 13 | `company_account_mappings_pkey` (id) | `unique_company_mapping` | — | `company_account_mappings_company_id_fkey` → companies (CASCADE) | `idx_company_account_mappings_company` | — | 4 |
+| `company_account_mappings` (0, RLS on) | `company-account-mapping.entity.ts` · `CompanyAccountMapping` | 19 | `company_account_mappings_pkey` (id) | `unique_company_mapping` | — | `company_account_mappings_company_id_fkey` → companies (CASCADE) | `idx_company_account_mappings_company` | — | 4 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/clientes.catalog.json` (`policies_detail`) para el paso 4.
 
@@ -66,7 +66,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `deleted_at` | timestamp with time zone | sí | — | Borrado lógico desde el front nuevo |
 
 </details>
-<details><summary><code>company_legal_documents</code> → <code>company-legal-document.entity.ts</code> · 8 columnas</summary>
+<details><summary><code>company_legal_documents</code> → <code>company-legal-document.entity.ts</code> · 14 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -78,6 +78,12 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `file_url` | text | sí | — |  |
 | `created_at` | timestamp without time zone | sí | now() |  |
 | `holding_id` | uuid | no | — |  |
+| `storage_bucket` | text | sí | — | Bucket de Storage (privado) del archivo; NULL en documentos antiguos con file_url |
+| `storage_path` | text | sí | — | Ruta del objeto: <holding_id>/<company_id>/legal/<id>/<archivo> |
+| `file_name` | text | sí | — |  |
+| `mime_type` | text | sí | — |  |
+| `file_size` | bigint | sí | — |  |
+| `uploaded_by` | uuid | sí | — | users.id de quien lo subió |
 
 </details>
 <details><summary><code>client_entity_tax_id_normalization_conflicts</code> → <code>client-entity-tax-id-normalization-conflict.entity.ts</code> · 9 columnas</summary>
@@ -110,7 +116,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | no | — |  |
 
 </details>
-<details><summary><code>company_account_mappings</code> → <code>company-account-mapping.entity.ts</code> · 13 columnas</summary>
+<details><summary><code>company_account_mappings</code> → <code>company-account-mapping.entity.ts</code> · 19 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -127,6 +133,12 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `external_deferred_code` | text | sí | — |  |
 | `created_at` | timestamp with time zone | sí | now() |  |
 | `updated_at` | timestamp with time zone | sí | now() |  |
+| `receivable_account_code` | text | sí | — | Código de la cuenta Cuentas por cobrar (asiento de facturación) |
+| `receivable_account_name` | text | sí | — | Nombre de la cuenta Cuentas por cobrar |
+| `fx_difference_account_code` | text | sí | — | Código de la cuenta Diferencia de cambio |
+| `fx_difference_account_name` | text | sí | — | Nombre de la cuenta Diferencia de cambio |
+| `external_receivable_code` | text | sí | — | Código de Cuentas por cobrar en el ERP |
+| `external_fx_difference_code` | text | sí | — | Código de Diferencia de cambio en el ERP |
 
 </details>
 

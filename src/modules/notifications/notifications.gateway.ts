@@ -48,7 +48,17 @@ export class NotificationsGateway implements OnGatewayConnection {
 		});
 	}
 
+	/** Un error al conectar (p. ej. la base no responde) rechaza ese socket; nunca tumba el proceso. */
 	async handleConnection(client: Socket) {
+		try {
+			await this.connect(client);
+		} catch (error) {
+			this.logger.error(`No se pudo conectar el socket ${client.id}: ${error instanceof Error ? error.message : String(error)}`);
+			this.rejectConnection(client, 'No se pudo conectar a notificaciones');
+		}
+	}
+
+	private async connect(client: Socket) {
 		const token = this.getAccessToken(client);
 		if (!token) {
 			return this.rejectConnection(client, 'Token de acceso requerido');
@@ -62,6 +72,10 @@ export class NotificationsGateway implements OnGatewayConnection {
 		const user = await this.userRepository.findOne({ where: { auth_id: data.user.id } });
 		if (!user) {
 			return this.rejectConnection(client, 'Usuario autenticado no encontrado');
+		}
+		// Sin ninguna membresía activa no recibe nada (#21). Por holding, el servicio solo emite a miembros activos del holding de la notificación.
+		if (!(await this.hasActiveMembership(user.id))) {
+			return this.rejectConnection(client, 'No tienes acceso a ningún holding activo');
 		}
 
 		await client.join(this.userRoom(user.id));
@@ -86,11 +100,23 @@ export class NotificationsGateway implements OnGatewayConnection {
 		this.server.to(this.userRoom(userId)).emit(NOTIFICATION_EVENTS.read, payload);
 	}
 
-	/** Avisa a los destinatarios que una notificación abierta cambió de contenido o quedó resuelta. */
+	/**
+	 * Avisa a los destinatarios que una notificación cambió (contenido, escalamiento, resuelta, leída/archivada en otra pestaña). `notificationId
+	 * = '*'` = cambiaron varias (marcar todas, archivar): el front recarga. Quien llama ya filtró a los miembros activos del holding.
+	 */
 	emitNotificationUpdated(recipientUserIds: string[], payload: { holdingId: string; notificationId: string }) {
 		for (const userId of new Set(recipientUserIds)) {
 			this.server.to(this.userRoom(userId)).emit(NOTIFICATION_EVENTS.updated, payload);
 		}
+	}
+
+	private async hasActiveMembership(userId: string): Promise<boolean> {
+		const manager = this.userRepository.manager;
+
+		if (!manager?.query) return true;
+		const rows = (await manager.query(`SELECT 1 FROM user_holdings WHERE user_id = $1 AND is_active = true LIMIT 1`, [userId])) as unknown[];
+
+		return rows.length > 0;
 	}
 
 	private rejectConnection(client: Socket, message: string) {

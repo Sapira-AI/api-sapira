@@ -369,7 +369,7 @@
   "checks": [
    {
     "name": "invoice_adjustments_type_check",
-    "expression": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])"
+    "expression": "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])"
    }
   ],
   "foreignKeys": {
@@ -572,7 +572,7 @@
     "nullable": false,
     "primary": false,
     "generated": null,
-    "default": true,
+    "default": false,
     "length": null,
     "precision": null,
     "scale": null,
@@ -1046,6 +1046,50 @@
     "scale": null,
     "array": false
    },
+   "pricing_breakdown": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quantity_source": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "description_locked": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "visible_line_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "invoice_currency": {
     "type": "text",
     "nullable": true,
@@ -1248,6 +1292,13 @@
     "unique": false,
     "where": "(subscription_item_id IS NOT NULL)"
    },
+   "idx_invoice_items_visible_line_id": {
+    "columns": [
+     "visible_line_id"
+    ],
+    "unique": false,
+    "where": "visible_line_id IS NOT NULL"
+   },
    "idx_invoice_items_status": {
     "columns": [
      "status"
@@ -1301,8 +1352,12 @@
   },
   "checks": [
    {
+    "name": "invoice_items_quantity_source_check",
+    "expression": "((\"quantity_source\" IS NULL) OR (\"quantity_source\" = ANY (ARRAY['fixed'::text, 'consumption'::text, 'estimated'::text, 'pending'::text, 'manual'::text])))"
+   },
+   {
     "name": "invoice_items_quantity_check",
-    "expression": "((quantity > (0)::numeric))"
+    "expression": "((quantity >= (0)::numeric))"
    },
    {
     "name": "invoice_items_discount_pct_check",
@@ -1364,6 +1419,13 @@
      "legacy_match_id"
     ],
     "table": "invoice_items_legacy_match",
+    "onDelete": "SET NULL"
+   },
+   "invoice_items_visible_line_id_fkey": {
+    "columns": [
+     "visible_line_id"
+    ],
+    "table": "invoice_items",
     "onDelete": "SET NULL"
    },
    "invoice_items_subscription_item_id_fkey": {
@@ -1520,6 +1582,39 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "original_amount": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_rate": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "settlement_reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -1540,7 +1635,16 @@
     "where": null
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "invoice_payments_original_check",
+    "expression": "(((original_amount IS NULL) = (fx_rate IS NULL)) AND ((original_amount IS NULL) OR (bank_movement_id IS NOT NULL)))"
+   },
+   {
+    "name": "invoice_payments_settlement_reason_check",
+    "expression": "((settlement_reason IS NULL) OR (settlement_reason = ANY (ARRAY['bank_fee'::text, 'withholding'::text, 'fx_difference'::text, 'rounding'::text, 'other'::text])))"
+   }
+  ],
   "foreignKeys": {
    "invoice_payments_bank_movement_id_fkey": {
     "columns": [
@@ -2888,7 +2992,7 @@
    },
    {
     "name": "invoices_nc_revenue_treatment_check",
-    "expression": "(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text]))))"
+    "expression": "(((nc_revenue_treatment IS NULL) OR (nc_revenue_treatment = ANY (ARRAY['impact_month'::text, 'defer_forward'::text, 'service_period'::text]))))"
    },
    {
     "name": "invoices_invoice_type_check",

@@ -82,4 +82,86 @@ describe('ClientsService', () => {
 		expect(where.id.getSql('"Client"."id"')).toContain('cl.holding_id = :lifecycleHolding');
 		expect(where.id.objectLiteralParameters).toEqual({ lifecycleHolding: 'h-1', lifecycle: 'churned' });
 	});
+
+	describe('ronda 3 de Configuración: país ISO y listas del holding', () => {
+		const db = () => {
+			const { service, clientRepository } = buildService();
+			const repo = clientRepository as unknown as Record<string, jest.Mock>;
+
+			repo.query.mockImplementation(async (sql: string) => {
+				if (sql.includes('FROM countries WHERE code')) return [{ code: 'CL', name_es: 'Chile' }];
+				if (sql.includes('FROM countries'))
+					return [
+						{ code: 'CL', name_es: 'Chile', name_en: 'Chile' },
+						{ code: 'US', name_es: 'Estados Unidos', name_en: 'United States' },
+					];
+				if (sql.includes('FROM master_data'))
+					return [
+						{ category: 'markets', value: 'Latam' },
+						{ category: 'segments', value: 'SMB' },
+					];
+
+				return [];
+			});
+			repo.create = jest.fn((value: unknown) => value);
+			repo.save = jest.fn(async (value: unknown) => value);
+			repo.findOne = jest.fn();
+
+			return { service, repo };
+		};
+
+		it('alta: country_code manda y escribe el nombre en español; texto con alias → código', async () => {
+			const { service } = db();
+
+			await expect(service.create({ name_commercial: 'A', country_code: 'cl' } as never, 'h-1')).resolves.toMatchObject({
+				country: 'Chile',
+				country_code: 'CL',
+				holding_id: 'h-1',
+			});
+			await expect(service.create({ name_commercial: 'B', country: 'EEUU' } as never, 'h-1')).resolves.toMatchObject({
+				country: 'EEUU',
+				country_code: 'US',
+			});
+			await expect(service.create({ name_commercial: 'C', country: 'Atlántida' } as never, 'h-1')).resolves.toMatchObject({
+				country: 'Atlántida',
+				country_code: null,
+			});
+		});
+
+		it('mercado/segmento/industria: 400 si no está activo en la lista; el mismo valor viejo se conserva; vacío lo borra', async () => {
+			const { service, repo } = db();
+
+			await expect(service.create({ name_commercial: 'A', market: 'Latam', segment: 'SMB' } as never, 'h-1')).resolves.toMatchObject({
+				market: 'Latam',
+			});
+			await expect(service.create({ name_commercial: 'A', industry: 'Minería' } as never, 'h-1')).rejects.toThrow(
+				'La industria "Minería" no está en la lista del holding (Configuración › Catálogos)'
+			);
+			repo.findOne.mockResolvedValue({ id: 'c-1', holding_id: 'h-1', market: 'Viejo', segment: null });
+			await expect(service.update('c-1', { market: 'Viejo', segment: '' } as never, 'h-1')).resolves.toMatchObject({
+				market: 'Viejo',
+				segment: null,
+			});
+			await expect(service.update('c-1', { market: 'Otro' } as never, 'h-1')).rejects.toThrow('El mercado "Otro" no está en la lista');
+		});
+
+		it('país ISO inexistente → 400', async () => {
+			const { service, repo } = db();
+
+			repo.query.mockResolvedValueOnce([]);
+			await expect(service.create({ name_commercial: 'A', country_code: 'XX' } as never, 'h-1')).rejects.toThrow('País no reconocido: XX');
+		});
+
+		it('form-options: mercados, segmentos e industrias activos del holding', async () => {
+			const { service } = db();
+
+			// `renewal_notice_days` (ronda 4): ventana del aviso "vence pronto" del Cliente 360 (= auto_renewal_notice_days, default 30).
+			await expect(service.getFormOptions('h-1')).resolves.toEqual({
+				markets: ['Latam'],
+				segments: ['SMB'],
+				industries: [],
+				renewal_notice_days: 30,
+			});
+		});
+	});
 });

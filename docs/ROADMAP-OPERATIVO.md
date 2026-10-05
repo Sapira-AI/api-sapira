@@ -7,7 +7,7 @@
 
 # 🗺️ Roadmap de desarrollo Sapira — backlog unificado
 
-> **Actualizado:** 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
+> **Actualizado:** 2026-10-05 (premisa del borrado de funciones y edge function `rag-chat` muerta) · 2026-10-03 ("Resuelto en v2" suma Configuración y usuarios) · 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
 > Estructura: **✅ Desplegado y probado** · **🟡 Terminado, en validación de producción** · **🔴 Pendientes** ordenados de rápido a complejo (⚡ tandas rápidas → 🔨 medios → 🏗️ complejos) + **carril León (api-sapira)** · **🟣 Estratégico** (se trabaja en la versión nueva del sistema, no aquí).
 > Convención: al cerrar un ítem, moverlo a "Desplegado" con commit/migración. Este doc es la fuente de verdad del orden; el detalle técnico vive en los docs/memorias referenciados.
 > Todo ítem de esta versión fue **verificado contra el estado real** (código del repo, api-sapira y funciones vivas en Supabase prod) el 24-08 — no es solo consolidación de memorias.
@@ -41,6 +41,52 @@
 | V7 | **Tab Cuentas por Cobrar (AR v1)** + calendario de cobros | QA visual final | Cifras validadas vs SQL (TiMining 306K) |
 | V8 | **Multiselect filtros en prod** | Validar 2 min en prod (`97e4039`); si falla, reabrir investigación | Solo fallaba en producción |
 | V9 | **MRR legacy link/merge** + verificación de imports SF nuevos (sesión B junction) | Un caso real en prod y cerrar | `e90e224` |
+
+---
+
+## 🟢 Resuelto en v2 (front nuevo) — no se arregla en el front actual
+
+> **Regla acordada (Domi, 02-10):** no se invierte tiempo en fixes que solo afectan al front actual. Lo que ya está
+> resuelto en la versión nueva llega a las usuarias con el switch. Después del switch, tras un tiempo prudente de
+> pruebas, se hace el drop y la limpieza de los triggers y funciones que ya no se usan. Estado completo del avance y
+> plan del switch: `api-sapira/docs/v2-rediseno/estado-v2-y-plan-switch.md`.
+> Marcado el 02-10 (y el 03-10 con Configuración) con lo construido en el laboratorio de `front-sapira`. **Resuelto** = construido y revisado por Domi
+> en el lab; **Parcial** = cubierto en parte o por confirmar al revisar el módulo. Los ítems que no aparecen aquí no se
+> evaluaron: siguen como están abajo.
+
+| Ítem de este backlog | Estado en v2 | Dónde quedó |
+|---|---|---|
+| Alerta de duplicado al crear razón social + eliminar razón social sin referencias (15–16 sep) | ✅ Resuelto en v2 | Clientes: "Crear igual" si el identificador ya existe; Eliminar con verificación de uso (360 de la razón social y en lote) |
+| Medios #1 · Fallos silenciosos → bloqueos explicativos (sin partner, producto sin mapeo, resultado del vínculo) | ✅ Resuelto en v2 | Contratos y Facturación: bloqueos con motivo y solución; el producto sin mapeo ya no se envía con producto por defecto (validar con Leon antes de desplegar). Clientes: "Vincular con ERP" muestra siempre el resultado |
+| Carril León · Resolver el partner del ERP al crear razones sociales | ✅ Resuelto en v2 | Clientes: "Traer desde ERP" (la razón social nace vinculada) y búsqueda tolerante a puntos, guion y cero inicial |
+| Medios #10 · Gestión de razones sociales desde su pestaña | ✅ Resuelto en v2 | Clientes: lista de razones sociales con alta, vista rápida, 360, asignar/desasignar cliente y acciones en lote |
+| Medios #12 · Renegociación (cantidad + precio, frecuencia, plazo) | ✅ Resuelto en v2 | Contratos: "Modificar contrato" por intención |
+| Medios #13 · Cambiar la razón social de un contrato activo, con historial | ✅ Resuelto en v2 | Contratos: Modificar facturación |
+| Complejos #1 · Grupo Modificaciones (upsell/cross-sell/downsell, plazo, ciclo, clasificación, cotización → contrato) | ✅ Resuelto en v2 | Contratos: modificaciones v2 (`spec-modificaciones-contrato-v2.md`, `cobertura-contratos-v2.md`) |
+| Complejos #3 · Guard raíz del trigger standardize | ✅ Resuelto de raíz en v2 | La API escribe los campos derivados y los triggers heredados no corren para ella (`sapira.writer = 'api'`); se eliminan después del switch |
+| Complejos #7 · Vista previa antes de persistir | ✅ Resuelto en v2 | Contratos: "Lo que vas a hacer" y facturas afectadas como vista previa real |
+| Complejos #8 · Propagación a los datos del contrato (fecha de término, total) | ✅ Resuelto en v2 | `contract_end_date` = término del último ítem vigente; la API recalcula los derivados |
+| Complejos #9 · Pausa / reactivación | ✅ Resuelto en v2 (a nivel contrato) | Contratos: Pausar, Reanudar y Reactivar. Pausa solo de facturación: deseada, no construida |
+| Tanda 3 #1 · Churn con fecha de registro en vez de la efectiva | ✅ Resuelto en v2 | `booking_date` solo para CMRR; devengo, facturación y MRR desde la fecha efectiva; baja prorrateada |
+| Estratégico #25 · Contratos indefinidos + ajustes planificados | ✅ Resuelto en v2 | Ítem indefinido, pactos (cambios futuros, también en el alta) y propuestas de renovación |
+| Medios #7 · Correlativo de contratos | 🟡 Parcial | Índice único en producción (migración `1790720000000`); confirmar el generador secuencial al revisar el alta |
+| Medios #5 · Visibilidad del tipo de cambio | 🟡 Parcial | Multimoneda v2: par y tipo de cambio en vista previa y vista rápida. El backfill de facturas antiguas no se hizo |
+| Medios #11 · Términos de pago por cliente / razón social | 🟡 Parcial | Condiciones de pago estructuradas en la razón social y en la cotización; confirmar el caso SAT MX |
+| Medios #4 · Editar ítem de cotización no recalcula precios | 🟡 Parcial | Cotizaciones v2 recalcula y alinea el total al guardar; confirmar en la revisión del módulo |
+| Complejos #5 · Descuento con tratamiento de NC | 🟡 Parcial | NC de descuento con tratamiento de devengo desde la factura; el caso "Por Emitir" por confirmar |
+| Complejos #6 · Sesión RSM | 🟡 Parcial | Reglas aprobadas en v2 (mensual = precio mensual, baja prorrateada, sin tipo de cambio = vacío); falta el rebuild completo por holding, previo al switch |
+| Complejos #4 · Matriz fiscal / tipo de documento | 🟡 Parcial | Documento tributario en el alta del contrato; la matriz por país sigue pendiente |
+| Mensajes ilegibles (CFDI, import) | 🟡 Parcial | Errores del envío al ERP traducidos a lenguaje claro con la solución; los de importación siguen en el carril León |
+| Estratégico #20 · Modelos de precio por tramos | 🟡 Parcial | Precios v2, primera versión; falta la segunda vuelta |
+| Tanda 2 · Tax rate de compañías (pantalla Razones Sociales: decimal vs entero, "1900%") | ✅ Resuelto en v2 | Configuración: el impuesto vive en el documento tributario de cada compañía y la facturación lo toma de ahí. Quedan 2 compañías de Lenosoft con 0.19 por revisar en la auditoría de datos |
+| Gestión de usuarios · invitación sin validar | ✅ Resuelto en v2 (sin commit al 03-10) | Configuración › Usuarios: invitar y reenviar desde la API, con validación y `/auth/confirm` + `/bienvenida` |
+| Gestión de usuarios · desactivar usuarios (no existía) | ✅ Resuelto en v2 (sin commit al 03-10) | Desactivar/reactivar por holding (bloquea la cuenta en Auth si no le quedan holdings); eliminar solo invitaciones que nunca entraron |
+| Correos de Supabase sin formato (invitación, recuperar contraseña) | ✅ Resuelto en v2 (sin commit al 03-10) | Correos propios por Resend desde `noreply@aisapira.com`, plantillas versionadas en api-sapira. Falta configurar Supabase Auth y variables de la API |
+| Cierre de períodos que bloqueaba pagos | ✅ Resuelto en v2 | Compañía 360: el cierre solo bloquea contratos e ítems; pagos y cobranza siguen operando |
+| Redirección abierta en el callback de auth | ✅ Resuelto en v2 (sin commit al 03-10) | `front-sapira` `app/auth/callback` solo acepta destinos internos |
+| Medios #6 · Productos: recurrencia y gestión | 🟡 Parcial | Pestaña Productos en Precios (archivar en vez de eliminar); falta mostrar archivados en los selectores de Contratos, Cotizaciones y Precios |
+| Documentación interna / Help Center | 🟡 Parcial (sin commit al 03-10) | Centro de ayuda `/ayuda` reemplaza `/documentacion`; al switch se abre a todos y se dan de baja HelpKit y Notion |
+| Medios #9 Panel de vendedores · Complejos #10 Notificaciones | ⏳ Módulos por construir en v2 | Integraciones y Notificaciones (vendedores ya se administran en Configuración) |
 
 ---
 
@@ -79,6 +125,11 @@ Migración `20260828120318_tanda1_fixes_facturacion` (reemplazo quirúrgico con 
 - Pendiente de decisión: revisar si el resto de módulos del front nuevo necesita el mismo barrido de "diseñado para super admin" (selector de holding, otros reportes).
 - 💡 **Idea para más adelante (Domi 21-09): foto de perfil / avatar de usuario** — hoy el perfil muestra iniciales; permitir subir una foto (o elegir un avatar) que se use en la tarjeta del sidebar, el menú y el modal Mi Perfil de ambos fronts. No es para ahora.
 - ✅ **Reestructurar desbloqueado como auto-servicio (casos Fernanda 17/18-09, aplicado QA+prod 21-09 vía régimen nuevo de api-sapira)** — dos fixes en assets: (1) `check_contract_item_continuity` valida con overrides de Cantidades Variables (misma fórmula del header del front / fix Turboboy `04b7c44` que había quedado solo en front) — destapaba Farmacias Eos CTR-2026-218 (delta −588,51) y STG CTR-2026-38 (delta +3.554,56), verificado delta 0 contra los ítems reales; (2) `invoice_reschedule_items` ya no aplana las líneas a `1 × total`: escribe `cantidad del ítem × (subtotal ÷ cantidad)` en los 3 caminos (update, mover, insert post-standardize) — era el origen del `1×1.000` de CEFA S08540 y habría colapsado el 140×16 de STG al separar. Test e2e en QA (3 caminos + regresión + caso roto sigue detectando). ⏳ Pendiente: validación Fernanda → commit de los 2 assets en api-sapira rama domi. Data CEFA reparada por MCP (5 líneas a 25×40, residuo del bug ya corregido). 🔍 Para sesión de cuadre: barrido de líneas `1 × total` residuales en otros contratos reestructurados históricamente (detectables como `ii.quantity=1` con `ci.quantity>1` en PEs; ojo con falsos positivos de ítems por monto).
+
+### 🔴 Nuevos 05-10 (merge de `qa` en `api-sapira`, revisión del borrado de funciones)
+
+- **Corregir la premisa del borrado de funciones.** La migración `1791400000000-RetiraFuncionesSinUso` (62 funciones, 64 firmas, aplicada en prod el 04-10) se justifica en que *"el front viejo quedó bloqueado el 04-10 y no hay vuelta atrás a él"*. **Eso no es así:** está congelado pero sigue en uso hasta que el front nuevo cubra toda su funcionalidad (Leon, 05-10). Esta vez no rompió nada —los cuatro llamadores que quedaban (`rsm_metrics`, `convert_amount`, `rag_match_documents`, `get_user_holding_data_robust`) viven en la edge function `rag-chat`, que está retirada: el front viejo ya usa `POST /sapira-copilot/chat`—, pero la verificación enumeró **solo tres** edge functions por nombre (`check-overdue-invoices`, `send-proforma`, `send-collection`) y `rag-chat` no estaba en la lista. Corregir la justificación en `api-sapira/docs/v2-rediseno/catalogo-funciones-y-triggers.md` para que el próximo borrado no se apoye en una premisa falsa, y agregar "barrer **todas** las edge functions con fuente" al procedimiento.
+- **Borrar la edge function muerta `rag-chat`** (`front-sapira-vite/supabase/functions/rag-chat/`). El front viejo ya no la invoca. Su código mantiene llamadas `.rpc()` a cuatro funciones que ya no existen en producción, y es exactamente lo que confundió la revisión del punto anterior. Mientras siga en el repo, cualquier barrido de "quién llama a esta función" va a dar falsos positivos.
 
 ### ⚡ Tanda 3 — Fixes SQL semana 29–31 ago · PRÓXIMA (antes que la Tanda 2: corrompe data activamente)
 

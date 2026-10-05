@@ -11,7 +11,11 @@ import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.ent
  * Policies (4): tenant_isolation_delete_invoice_adjustments (DELETE, public); tenant_isolation_insert_invoice_adjustments (INSERT, public); tenant_isolation_select_invoice_adjustments (SELECT, public); tenant_isolation_update_invoice_adjustments (UPDATE, public).
  */
 @Entity('invoice_adjustments')
-@Check('invoice_adjustments_type_check', "type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text])")
+// Facturas en el 360 · etapa 4 (migración 1790680000000): motivo del desvío contra el plan de una Por Emitir editada; se agrega `correction`.
+@Check(
+	'invoice_adjustments_type_check',
+	"type = ANY (ARRAY['discount'::text, 'downsell'::text, 'upsell'::text, 'reagenda'::text, 'correction'::text])"
+)
 @Index('idx_invoice_adjustments_holding_id', ['holding_id'])
 @Index('idx_invoice_adjustments_invoice_id', ['invoice_id'])
 @Index('idx_invoice_adjustments_type', ['type'])

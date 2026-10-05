@@ -1,5 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
+import { defaultSubscriptions, notificationCatalogEntry } from '@/modules/notifications/notification-catalog';
+
 import { BigQueryService } from './bigquery.service';
 
 describe('BigQueryService', () => {
@@ -24,7 +26,16 @@ describe('BigQueryService', () => {
 			createOrUpdate: jest.fn(),
 			resolveByDeduplicationKey: jest.fn(),
 		};
-		const dataSource = { query: jest.fn().mockResolvedValue([]) };
+		// Transacción del recálculo de devengo (`withApiWriter`): registra cada sentencia en orden.
+		const runner = {
+			connect: jest.fn(),
+			startTransaction: jest.fn(),
+			commitTransaction: jest.fn(),
+			rollbackTransaction: jest.fn(),
+			release: jest.fn(),
+			query: jest.fn().mockResolvedValue([]),
+		};
+		const dataSource = { query: jest.fn().mockResolvedValue([]), createQueryRunner: jest.fn(() => runner) };
 
 		const service = new BigQueryService(
 			stripeCustomerRepository as any,
@@ -41,8 +52,12 @@ describe('BigQueryService', () => {
 			quantityImportRepository,
 			notificationsService,
 			dataSource,
+			runner,
 		};
 	};
+
+	const REBUILD_SQL = `SELECT revenue_schedule_rebuild($1::uuid, date_trunc('month', $2::date)::date)`;
+	const rebuildCalls = (runner: { query: jest.Mock }) => runner.query.mock.calls.filter(([sql]) => sql === REBUILD_SQL);
 
 	describe('executeQuery', () => {
 		it('resuelve el cliente por holding y mapea filas, total y esquema', async () => {
@@ -377,19 +392,26 @@ describe('BigQueryService', () => {
 			expect(result.range).toEqual({ from: '2026-07-01', to: '2026-07-31' });
 		});
 
-		it('las notificaciones del canal llevan destinatarios: sin ellos nadie las ve', async () => {
+		it('los tipos del canal tienen destinatarios por catálogo: sin ellos nadie las ve', async () => {
 			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport({ quote_line_id: null, opportunity_id: null })]);
 			wireDataSource(dataSource, { candidates: [] });
 
 			await service.integrateSapiraQuantities('holding-1', { range: { from: '2026-07-01', to: '2026-07-31' } });
 
-			// Los tipos del canal no están en ROLE_SUBSCRIPTION_NOTIFICATION_TYPES, así que sin `recipients`
-			// explícitos la notificación nace con recipient_count = 0 y el reemplazo manual queda inalcanzable.
-			for (const [, dto] of notificationsService.createOrUpdate.mock.calls) {
-				expect(dto.recipients).toEqual({ include_super_admins: true });
-			}
+			// El productor no pasa `recipients`: los resuelve `notification_role_subscriptions`, que la semilla
+			// `007-notification-default-subscriptions.sql` llena desde `defaultSubscriptions()`. Si un tipo del canal
+			// quedara fuera del catálogo o sin suscripción por defecto, nacería con recipient_count = 0 y el reemplazo
+			// manual —única salida de `conflict` y `changed_in_source`— sería inalcanzable.
+			const sembrados = new Set(defaultSubscriptions().map((subscription) => subscription.type));
+
 			expect(notificationsService.createOrUpdate).toHaveBeenCalled();
+
+			for (const [, dto] of notificationsService.createOrUpdate.mock.calls) {
+				expect(dto.recipients).toBeUndefined();
+				expect(notificationCatalogEntry(dto.type)?.subscribable).toBe(true);
+				expect(sembrados.has(dto.type)).toBe(true);
+			}
 		});
 
 		it('la clave de deduplicación de las agregadas lleva el rango, no el mes en curso', async () => {
@@ -617,7 +639,7 @@ describe('BigQueryService', () => {
 
 			const insertCall = dataSource.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO quantities'));
 			expect(insertCall).toBeDefined();
-			// amount lo llena otro canal y ganaría al COALESCE del trigger de RSM;
+			// amount no lo escribe el canal automático (cuenta unitario × cantidad);
 			// holding_id lo deriva trg_quantities_set_holding.
 			expect(insertCall[0]).not.toMatch(/\bamount\b/);
 			expect(insertCall[0]).not.toMatch(/\bholding_id\b/);
@@ -802,6 +824,66 @@ describe('BigQueryService', () => {
 			expect(unmappedNotifications[0][1].metadata.count).toBe(3);
 		});
 
+		describe('devengo sin los triggers de quantities (retirados el 04-10)', () => {
+			it('recalcula el devengo del contrato desde el mes integrado, en una transacción con sapira.writer = api', async () => {
+				const { service, quantityImportRepository, dataSource, runner } = buildService();
+				quantityImportRepository.find.mockResolvedValue([buildImport()]);
+				wireDataSource(dataSource, { candidates: [buildCandidate()] });
+
+				await service.integrateSapiraQuantities('holding-1');
+
+				expect(runner.startTransaction).toHaveBeenCalledTimes(1);
+				expect(runner.query.mock.calls.map(([sql]) => sql)).toEqual([`SELECT set_config('sapira.writer', 'api', true)`, REBUILD_SQL]);
+				expect(rebuildCalls(runner)[0][1]).toEqual([CONTRACT_ID, '2026-08-01']);
+				expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
+				// El INSERT de quantities va sin la marca: los triggers que se conservan (holding, factura emitida, líneas Por Emitir) corren.
+				expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('sapira.writer'))).toBe(false);
+			});
+
+			it('recalcula una vez por contrato, desde el primer mes con cantidad nueva', async () => {
+				const { service, quantityImportRepository, dataSource, runner } = buildService();
+				const otroItem = '33333333-3333-4333-8333-333333333333';
+				quantityImportRepository.find.mockResolvedValue([
+					buildImport({ id: 'import-1', period: '2026-08-01' }),
+					buildImport({ id: 'import-2', sf_id: 'sf-2', quote_line_id: 'QLI-2', period: '2026-07-01' }),
+				]);
+				wireDataSource(dataSource, { candidates: [buildCandidate(), buildCandidate({ id: otroItem, quote_item_number: 'QLI-2' })] });
+
+				await service.integrateSapiraQuantities('holding-1');
+
+				expect(rebuildCalls(runner).map(([, params]) => params)).toEqual([[CONTRACT_ID, '2026-07-01']]);
+			});
+
+			it('no recalcula si no insertó nada (override idéntico, conflicto o bloqueada)', async () => {
+				const { service, quantityImportRepository, dataSource, runner } = buildService();
+				quantityImportRepository.find.mockResolvedValue([buildImport()]);
+				wireDataSource(dataSource, {
+					candidates: [buildCandidate()],
+					onInsert: () => Promise.reject(new Error('la factura FAC-1 está en estado "Emitida"')),
+				});
+
+				const result = await service.integrateSapiraQuantities('holding-1');
+
+				expect(result).toMatchObject({ blocked: 1, integrated: 0 });
+				expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
+				expect(rebuildCalls(runner)).toHaveLength(0);
+			});
+
+			it('un fallo del recálculo no tumba la integración: revierte esa transacción y registra el error', async () => {
+				const { service, quantityImportRepository, dataSource, runner } = buildService();
+				quantityImportRepository.find.mockResolvedValue([buildImport()]);
+				wireDataSource(dataSource, { candidates: [buildCandidate()] });
+				runner.query.mockImplementation((sql: string) => (sql === REBUILD_SQL ? Promise.reject(new Error('boom')) : Promise.resolve([])));
+				const errorSpy = jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
+
+				const result = await service.integrateSapiraQuantities('holding-1');
+
+				expect(result).toMatchObject({ integrated: 1 });
+				expect(runner.rollbackTransaction).toHaveBeenCalledTimes(1);
+				expect(errorSpy.mock.calls[0][0]).toContain(CONTRACT_ID);
+			});
+		});
+
 		it('con retryFailed incluye los estados recuperables además de pending', async () => {
 			const { service, quantityImportRepository } = buildService();
 			quantityImportRepository.find.mockResolvedValue([]);
@@ -834,6 +916,41 @@ describe('BigQueryService', () => {
 			expect(updateCall[1]).toEqual(['quantity-1', 'holding-1', 0.07, 20000, null, null]);
 			expect(quantityImportRepository.save.mock.calls[0][0].integration_status).toBe('integrated');
 			expect(notificationsService.resolveByDeduplicationKey).toHaveBeenCalled();
+		});
+
+		it('recalcula el devengo del contrato desde el mes del override (contrato del ítem), con sapira.writer = api', async () => {
+			const { service, quantityImportRepository, dataSource, runner } = buildService();
+			wireDataSource(dataSource, {
+				existingQuantities: {
+					'quantity-1|holding-1': [{ id: 'quantity-1', unit_price: '0.05', quantity: '1', contract_id: CONTRACT_ID, period: '2026-08-01' }],
+				},
+			});
+			quantityImportRepository.find.mockResolvedValue([]);
+
+			await service.replaceQuantityRecord('holding-1', 'quantity-1', { unit_price: 0.07, quantity: 20000 } as any);
+
+			const select = dataSource.query.mock.calls.find(([sql]) => sql.includes('FROM quantities'));
+			expect(select[0]).toContain('JOIN contract_items ci ON ci.id = q.contract_item_id');
+			expect(runner.query.mock.calls[0][0]).toBe(`SELECT set_config('sapira.writer', 'api', true)`);
+			expect(rebuildCalls(runner).map(([, params]) => params)).toEqual([[CONTRACT_ID, '2026-08-01']]);
+			// El recálculo va después del UPDATE.
+			const updateOrder =
+				dataSource.query.mock.invocationCallOrder[dataSource.query.mock.calls.findIndex(([sql]) => sql.includes('UPDATE quantities'))];
+			expect(runner.query.mock.invocationCallOrder[1]).toBeGreaterThan(updateOrder);
+		});
+
+		it('si el recálculo falla, el error sube (repetir el reemplazo es idempotente)', async () => {
+			const { service, quantityImportRepository, dataSource, runner } = buildService();
+			wireDataSource(dataSource, {
+				existingQuantities: {
+					'quantity-1|holding-1': [{ id: 'quantity-1', unit_price: '0.05', quantity: '1', contract_id: CONTRACT_ID, period: '2026-08-01' }],
+				},
+			});
+			quantityImportRepository.find.mockResolvedValue([]);
+			runner.query.mockImplementation((sql: string) => (sql === REBUILD_SQL ? Promise.reject(new Error('boom')) : Promise.resolve([])));
+
+			await expect(service.replaceQuantityRecord('holding-1', 'quantity-1', { unit_price: 0.07 } as any)).rejects.toThrow('boom');
+			expect(runner.rollbackTransaction).toHaveBeenCalledTimes(1);
 		});
 
 		it('lanza NotFoundException cuando el override no pertenece al holding', async () => {

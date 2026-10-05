@@ -1,0 +1,116 @@
+// Respaldo de la edge function `agents-webhook` (Supabase producción hklompkypzqtglprfobu), versión 11,
+// actualizada 2026-01-05, sha ezbr d912cfc5ec077c764f1295aafbe6148d99f38922537de92c8397b142c8f7d265.
+// No tenía fuente en ningún repo. Se apagó el 03-10-2026 (OK de Domi) reemplazándola por un stub que responde 410:
+// escribía con service role y no validaba el token ("en un entorno real, validaríamos el token").
+// Cuando Automatizaciones (agentes) se construya en la API, se rehace con autenticación real; no se reactiva esta.
+
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
+};
+
+const handler = async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Missing Supabase environment variables");
+      return new Response(JSON.stringify({ error: "Server configuration error" }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const url = new URL(req.url);
+    const params = url.searchParams;
+    if (url.pathname.includes("/upload")) {
+      return await handleFileUpload(req, params, supabase);
+    } else {
+      return await handleCallback(req, supabase);
+    }
+  } catch (error) {
+    console.error("Error in agents-webhook function:", error);
+    return new Response(JSON.stringify({ error: "Internal server error", details: error?.message ?? String(error) }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+};
+
+// Manejar subida de archivos (referencias)
+async function handleFileUpload(req, params, supabase) {
+  const runId = params.get("run_id");
+  const invoiceId = params.get("invoice_id");
+  const contractId = params.get("contract_id");
+  const token = params.get("token");
+  if (!runId || !contractId || !token) {
+    return new Response(JSON.stringify({ error: "Missing required parameters" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+  // Verificar token (en un entorno real, validaríamos el token)
+  // Por ahora, asumimos que el token es válido
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file");
+    const note = formData.get("note") || "";
+    const referenceType = formData.get("reference_type") || "OC";
+    if (!file) {
+      return new Response(JSON.stringify({ error: "No file uploaded" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    const { data: run, error: runError } = await supabase.from("ai_runs").select(`
+        id,
+        ai_agents!inner(holding_id)
+      `).eq("id", runId).single();
+    if (runError || !run) {
+      console.error("Run not found", runError);
+      return new Response(JSON.stringify({ error: "Run not found" }), { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    const holdingId = run.ai_agents.holding_id;
+    const fileName = `${holdingId}/${contractId}/${Date.now()}_${file.name}`;
+    const { data: storageData, error: storageError } = await supabase.storage.from("reference_files").upload(fileName, file, { contentType: file.type, upsert: false });
+    if (storageError) {
+      console.error("Error uploading file", storageError);
+      return new Response(JSON.stringify({ error: "Error uploading file" }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+    const { data: publicUrl } = supabase.storage.from("reference_files").getPublicUrl(fileName);
+    const { data: existingRequest, error: findError } = await supabase.from("reference_requests").select("id").eq("contract_id", contractId).eq(invoiceId ? "invoice_id" : "id", invoiceId || "IS NOT NULL").single();
+    let referenceRequestId;
+    if (!findError && existingRequest) {
+      const { data: updatedRequest, error: updateError } = await supabase.from("reference_requests").update({ status: "received", file_url: publicUrl.publicUrl, note, received_at: new Date().toISOString() }).eq("id", existingRequest.id).select().single();
+      if (updateError) {
+        console.error("Error updating reference request", updateError);
+        return new Response(JSON.stringify({ error: "Error updating reference request" }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+      }
+      referenceRequestId = updatedRequest.id;
+    } else {
+      const { data: newRequest, error: insertError } = await supabase.from("reference_requests").insert({ holding_id: holdingId, contract_id: contractId, invoice_id: invoiceId || null, reference_type: referenceType, status: "received", file_url: publicUrl.publicUrl, note, received_at: new Date().toISOString() }).select().single();
+      if (insertError) {
+        console.error("Error creating reference request", insertError);
+        return new Response(JSON.stringify({ error: "Error creating reference request" }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+      }
+      referenceRequestId = newRequest.id;
+    }
+    await supabase.from("ai_messages").insert({ run_id: runId, direction: "in", channel: "webhook", to: null, subject: `Referencia recibida: ${referenceType}`, body: note, meta_json: { reference_request_id: referenceRequestId, contract_id: contractId, invoice_id: invoiceId, file_url: publicUrl.publicUrl, file_name: file.name, file_type: file.type, reference_type: referenceType } });
+    return new Response(JSON.stringify({ success: true, reference_id: referenceRequestId, file_url: publicUrl.publicUrl }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  } catch (error) {
+    console.error("Error processing file upload", error);
+    return new Response(JSON.stringify({ error: "Error processing file upload", details: error?.message ?? String(error) }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+}
+
+// Manejar callbacks (email, CRM)
+async function handleCallback(req, supabase) {
+  const body = await req.json();
+  const { type, message_id, event, data } = body;
+  if (!type || !message_id) {
+    return new Response(JSON.stringify({ error: "Invalid callback payload" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+  const { data: message, error: messageError } = await supabase.from("ai_messages").select("*").eq("meta_json->message_id", message_id).single();
+  if (messageError || !message) {
+    console.error("Message not found for message_id", message_id, messageError);
+    return new Response(JSON.stringify({ error: "Message not found" }), { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+  await supabase.from("ai_messages").update({ meta_json: { ...message.meta_json, events: [...(message.meta_json.events || []), { type, event, timestamp: new Date().toISOString(), data }] } }).eq("id", message.id);
+  return new Response(JSON.stringify({ success: true, message_id, event_recorded: true }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+}
+
+serve(handler);

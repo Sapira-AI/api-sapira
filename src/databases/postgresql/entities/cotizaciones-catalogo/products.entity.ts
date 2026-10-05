@@ -1,4 +1,4 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
@@ -7,6 +7,7 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 @Index('idx_products_product_code', ['product_code'])
 @Index('idx_products_salesforce_product_id', ['salesforce_product_id'])
 @Index('idx_products_stripe_product_id', ['stripe_product_id'], { where: `(stripe_product_id IS NOT NULL)` })
+@Check('products_status_check', `status = ANY (ARRAY['active'::text, 'archived'::text])`)
 @Entity('products')
 export class Product {
 	@PrimaryGeneratedColumn('uuid')
@@ -46,6 +47,14 @@ export class Product {
 	// Campo para mapear con Stripe
 	@Column({ type: 'text', nullable: true, comment: 'ID del producto en Stripe para mapeo (ej: "prod_ABC123")' })
 	stripe_product_id?: string;
+
+	@Column({
+		type: 'text',
+		nullable: false,
+		default: 'active',
+		comment: 'active | archived. Archivado = no se ofrece en altas nuevas; se conserva su historial',
+	})
+	status!: 'active' | 'archived';
 
 	@ManyToOne(() => CompanyHolding)
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'products_holding_id_fkey' })

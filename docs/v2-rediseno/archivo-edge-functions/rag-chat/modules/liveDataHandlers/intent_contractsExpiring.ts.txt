@@ -1,0 +1,120 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+
+export async function handleIntentContractsExpiring(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId } = params;
+
+  try {
+    const today = new Date();
+    const fromDate = today.toISOString().slice(0, 10);
+
+    const endSoon = new Date(today);
+    endSoon.setDate(endSoon.getDate() + 30);
+    const toDate = endSoon.toISOString().slice(0, 10);
+
+    const { data: rows, error } = await supabaseAuth
+      .from("contracts")
+      .select(
+        "contract_number, client_name_commercial, status, contract_end_date, contract_currency, total_value_system_currency, system_currency",
+      )
+      .eq("holding_id", holdingId)
+      .in("status", ["Activo", "Firmado"])
+      .not("contract_end_date", "is", null)
+      .gte("contract_end_date", fromDate)
+      .lte("contract_end_date", toDate)
+      .order("contract_end_date", { ascending: true })
+      .limit(500);
+
+    if (error) throw error;
+
+    const data = Array.isArray(rows) ? (rows as any[]) : [];
+
+    const systemCurrency =
+      typeof (data?.[0] as any)?.system_currency === "string" ? String((data[0] as any).system_currency) : null;
+
+    const widgets: Widget[] = [
+      {
+        type: "kpi",
+        title: "Contratos por vencer (30 días)",
+        value: String(data.length),
+      },
+      {
+        type: "table",
+        title: "Contratos por vencer",
+        columns: [
+          "Contrato",
+          "Cliente",
+          "Estado",
+          "Vence",
+          "Moneda contrato",
+          `Total (system)${systemCurrency ? ` ${systemCurrency}` : ""}`.trim(),
+        ],
+        rows: data.map((r) => [
+          r?.contract_number ?? null,
+          r?.client_name_commercial ?? null,
+          r?.status ?? null,
+          r?.contract_end_date ?? null,
+          r?.contract_currency ?? null,
+          typeof r?.total_value_system_currency === "number"
+            ? Number(r.total_value_system_currency.toFixed(2))
+            : r?.total_value_system_currency
+              ? Number(r.total_value_system_currency)
+              : null,
+        ]),
+      },
+    ];
+
+    return {
+      handled: true,
+      context: `Contratos con contract_end_date entre ${fromDate} y ${toDate} (status Activo/Firmado).`,
+      sources: [
+        {
+          table: "contracts",
+          query_type: "contracts_expiring",
+          filters: { holding_id: holdingId, status_in: ["Activo", "Firmado"], contract_end_date_from: fromDate, contract_end_date_to: toDate },
+        },
+      ],
+      widgets,
+      audit: {
+        range_from: fromDate,
+        range_to: toDate,
+        currency_mode: "system",
+        source_breakdown: ["contracts"],
+        filters_applied: { holding_id: holdingId, status_in: ["Activo", "Firmado"], contract_end_date_from: fromDate, contract_end_date_to: toDate },
+        holding_id: holdingId,
+        data_completeness: data.length > 0 ? "complete" : "empty",
+        timestamp: new Date().toISOString(),
+      } as LiveDataAudit,
+    };
+  } catch (e: any) {
+    const reason = e?.message ?? String(e);
+    return {
+      handled: true,
+      context: `No pude consultar datos en vivo para contratos por vencer. Motivo: ${reason}`,
+      sources: [{ table: "contracts", query_type: "contracts_expiring", filters: { holding_id: holdingId } }],
+      widgets: [
+        {
+          type: "table",
+          title: "Error Live Data - Contratos por vencer",
+          columns: ["Detalle"],
+          rows: [[reason]],
+        },
+      ],
+      audit: {
+        currency_mode: "system",
+        source_breakdown: ["contracts"],
+        filters_applied: { holding_id: holdingId },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: reason,
+      } as LiveDataAudit,
+    };
+  }
+}

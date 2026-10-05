@@ -110,7 +110,7 @@
    {
     "name": "bank_movements_status_check",
     "type": "c",
-    "expr": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text])"
+    "expr": "status = ANY (ARRAY['Pendiente'::text, 'Conciliado'::text, 'Ignorado'::text])"
    },
    {
     "name": "bank_movements_suggested_invoice_id_fkey",
@@ -168,6 +168,13 @@
     ],
     "unique": false,
     "where": null
+   },
+   {
+    "name": "uq_bank_movements_fingerprint",
+    "cols": null,
+    "unique": true,
+    "where": "(original_row_data ->> 'fingerprint'::text) IS NOT NULL",
+    "expr": "CREATE UNIQUE INDEX uq_bank_movements_fingerprint ON public.bank_movements USING btree (holding_id, ((original_row_data ->> 'fingerprint'::text))) WHERE ((original_row_data ->> 'fingerprint'::text) IS NOT NULL)"
    }
   ],
   "triggers": [],

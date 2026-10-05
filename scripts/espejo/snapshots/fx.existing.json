@@ -535,6 +535,17 @@
     "scale": 6,
     "array": false
    },
+   "purpose": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "company",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "period_start": {
     "type": "date",
     "nullable": false,
@@ -604,6 +615,14 @@
   },
   "uniques": {},
   "indices": {
+   "idx_contract_fx_rates_contract_purpose": {
+    "columns": [
+     "contract_id",
+     "purpose"
+    ],
+    "unique": false,
+    "where": null
+   },
    "idx_contract_fx_rates_period": {
     "columns": [
      "period_start",
@@ -637,6 +656,10 @@
    }
   },
   "checks": [
+   {
+    "name": "contract_fx_period_rates_purpose_check",
+    "expression": "purpose = ANY (ARRAY['company'::text, 'invoice'::text, 'item'::text])"
+   },
    {
     "name": "contract_fx_period_rates_rate_check",
     "expression": "rate > (0)::numeric"

@@ -81,11 +81,11 @@ El módulo `agents` **no tenía ninguno**. Ahora:
 - `agents.controller.spec.ts` (8): los tres casos obligatorios de tenancy más el `holding_id` deprecado que
   coincide, el que no coincide (body y query), y que las consultas de configuración también usen el header.
 
-`yarn jest` → 82 suites, 1031 tests en verde.
+`yarn jest` → 82 suites, 1031 tests en verde cuando se escribió esto. Tras el merge de `qa` del 05-10 (que trae la fase 2 de notificaciones y el módulo `integrations`): **214 suites, 3301 tests**, también en verde.
 
 ## Lo que sigue en este frente
 
 Del roadmap, lo que no depende de decisiones: cerrar el puente entre "factura vencida" y el primer correo de
-cobranza (el cron ya corre y marca vencidas, pero nada dispara el aviso). Lo que sí depende: elegir entre las
-edge functions y los processors, y un solo proveedor de correo. Y `deal_validation` sigue ofreciéndose en la
+cobranza (el cron ya corre y marca vencidas, pero nada dispara el aviso). **La decisión del proveedor ya se tomó
+(Leon, 04-10): solo API — processors y SendGrid, y las edge functions se retiran.** Y `deal_validation` sigue ofreciéndose en la
 UI sin processor: hoy un agente de ese tipo se crea, se "ejecuta" y no hace nada.

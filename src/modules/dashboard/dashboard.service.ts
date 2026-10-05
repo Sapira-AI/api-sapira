@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { loadFxProjected } from '@/modules/metrics/fx-projected';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+import { TasksService } from '@/modules/tasks/tasks.service';
 
 type NumericRow = Record<string, string | number | null>;
 
@@ -9,20 +11,26 @@ type NumericRow = Record<string, string | number | null>;
 export class DashboardService {
 	constructor(
 		private readonly dataSource: DataSource,
-		private readonly holdingMetrics: HoldingMetricsService
+		private readonly holdingMetrics: HoldingMetricsService,
+		private readonly tasksService: TasksService
 	) {}
 
 	/** KPIs y tareas del holding activo (validado por `HoldingScopeGuard`). */
 	async getHome(holdingId: string, asOf = new Date()): Promise<Record<string, unknown>> {
 		const date = asOf.toISOString().slice(0, 10);
 
-		// MRR y clientes activos: una sola definición compartida con Clientes (HoldingMetricsService).
-		const [metrics, recognizedRevenue, invoices, tasks] = await Promise.all([
-			this.holdingMetrics.monthMetrics(holdingId, date),
+		// MRR y clientes activos: definición compartida con Clientes (HoldingMetricsService), con el corte U14 del legacy (sin doble conteo).
+		// Tareas: la misma función que el centro de notificaciones (TasksService).
+		// fx_projected: monedas del MRR del mes convertidas con tasa fija proyectada (sin tasa registrada del holding para el mes).
+		const month = `${date.slice(0, 7)}-01`;
+		const [metrics, recognizedRevenue, invoices, holdingTasks, fxProjected] = await Promise.all([
+			this.holdingMetrics.monthMetrics(holdingId, date, { legacyCut: true }),
 			this.getRecognizedRevenue(holdingId, date),
 			this.getInvoiceSummary(holdingId, date),
-			this.getTasks(holdingId, date),
+			this.tasksService.forHolding(holdingId, date),
+			loadFxProjected(this.dataSource, holdingId, month, month),
 		]);
+		const countOf = (key: string) => holdingTasks.tasks.find((task) => task.key === key)?.count ?? 0;
 		const mrr = { value: metrics.mrr.value, trend: metrics.mrr.trend, currency: metrics.currency };
 		const activeClients = { value: metrics.activeClients.value, trend: metrics.activeClients.trend };
 		// Todos los montos están en moneda del sistema: la del holding, no USD fijo.
@@ -38,13 +46,16 @@ export class DashboardService {
 				recognized_revenue: recognizedRevenue,
 				pending_invoices: invoices.toIssue,
 			},
+			fx_projected: fxProjected,
+			// Claves de siempre (front actual) + `items`: las tareas con algo por hacer, con enlace (refresh de Tareas pendientes, fase 2).
 			tasks: {
-				overdue_invoices: invoices.overdue.count,
-				expired_contracts: tasks.expiredContracts,
-				contracts_to_renew_30: tasks.renew30,
-				contracts_to_renew_90: tasks.renew90,
+				overdue_invoices: countOf('invoices_overdue'),
+				expired_contracts: holdingTasks.dashboard.expired_contracts,
+				contracts_to_renew_30: holdingTasks.dashboard.renew_30,
+				contracts_to_renew_90: holdingTasks.dashboard.renew_90,
 				invoices_to_emit: invoices.toIssue.count,
-				items_starting_this_month: tasks.startsThisMonth,
+				items_starting_this_month: countOf('service_starts_this_month'),
+				items: holdingTasks.tasks.filter((task) => task.count > 0),
 			},
 		};
 	}
@@ -75,34 +86,6 @@ export class DashboardService {
 		return {
 			toIssue: { count: Number(row.to_issue_count || 0), amount: Number(row.to_issue_amount || 0), currency: 'USD' },
 			overdue: { count: Number(row.overdue_count || 0) },
-		};
-	}
-
-	private async getTasks(holdingId: string, asOf: string) {
-		const rows = await this.dataSource.query<NumericRow[]>(
-			`SELECT
-				COUNT(DISTINCT c.id) FILTER (WHERE c.status = 'Activo' AND c.contract_end_date >= $2::date AND c.contract_end_date <= $2::date + interval '30 days') AS renew_30,
-				COUNT(DISTINCT c.id) FILTER (WHERE c.status = 'Activo' AND c.contract_end_date >= $2::date AND c.contract_end_date <= $2::date + interval '90 days') AS renew_90,
-				COUNT(DISTINCT c.id) FILTER (WHERE c.status = 'Activo' AND EXISTS (
-					SELECT 1 FROM contract_items ci
-					WHERE ci.contract_id = c.id AND ci.is_recurring = true AND ci.churn_date IS NULL
-					GROUP BY ci.contract_id HAVING MAX(ci.end_date) < $2::date
-				)) AS expired_contracts,
-				COUNT(DISTINCT ci.id) FILTER (WHERE ci.categoria IN ('NEW', 'UPSELL', 'CROSS-SELL')
-					AND ci.start_date >= date_trunc('month', $2::date)
-					AND ci.start_date < date_trunc('month', $2::date) + interval '1 month'
-					AND ci.churn_date IS NULL) AS starts_this_month
-			 FROM contracts c
-			 LEFT JOIN contract_items ci ON ci.contract_id = c.id
-			 WHERE c.holding_id = $1`,
-			[holdingId, asOf]
-		);
-		const row = rows[0] || {};
-		return {
-			expiredContracts: Number(row.expired_contracts || 0),
-			renew30: Number(row.renew_30 || 0),
-			renew90: Number(row.renew_90 || 0),
-			startsThisMonth: Number(row.starts_this_month || 0),
 		};
 	}
 }

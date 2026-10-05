@@ -1,9 +1,21 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
+import { Country } from '@/databases/postgresql/entities/base-tenancy/country.entity';
 
+/**
+ * Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo `monthly_avg`. **Un FX fijo se
+ * define solo por contrato** (`contract_fx_period_rates.purpose = 'company'`): esta lista nunca crece a `fixed_period`.
+ * La política de la compañía se editará en Configuración del holding → configuración de las compañías cuando ese
+ * módulo migre (no ahora).
+ */
+export const COMPANY_FX_POLICIES = ['monthly_avg'] as const;
+export type CompanyFxPolicy = (typeof COMPANY_FX_POLICIES)[number];
+
+@Index('idx_companies_country_code', ['country_code'])
 @Index('idx_companies_odoo_integration_id', ['odoo_integration_id'])
 @Index('unique_odoo_integration_id_per_holding', ['odoo_integration_id', 'holding_id'], { unique: true, where: `(odoo_integration_id IS NOT NULL)` })
+@Check('companies_fx_company_policy_check', `fx_company_policy = ANY (ARRAY['monthly_avg'::text])`)
 @Entity('companies')
 export class Company {
 	@PrimaryGeneratedColumn('uuid')
@@ -20,6 +32,14 @@ export class Company {
 
 	@Column({ type: 'text', nullable: true })
 	country?: string;
+
+	@Column({
+		type: 'character',
+		length: 2,
+		nullable: true,
+		comment: 'País ISO 3166-1 alfa-2 (FK countries). La API escribe también companies.country con el nombre en español',
+	})
+	country_code?: string | null;
 
 	@Column({ type: 'text', nullable: true })
 	currency?: string;
@@ -52,6 +72,15 @@ export class Company {
 			'Tasa de impuesto de la empresa en formato PORCENTAJE (19 para 19%, 21 para 21%).\nEjemplos por país: Chile = 19, Perú = 18, Colombia = 19, México = 16.\nNOTA: El estándar es PORCENTAJE, NO decimal. Al crear una factura, este valor\nse copia a invoices.tax_rate mediante el trigger auto_populate_invoice_tax_rate.',
 	})
 	tax_rate?: number;
+
+	@Column({
+		type: 'text',
+		nullable: false,
+		default: 'monthly_avg',
+		comment:
+			'Política por defecto de la compañía para el devengo de contratos en otra moneda; hoy solo monthly_avg. Un FX fijo se define solo por contrato (contract_fx_period_rates, purpose = company). Se editará en Configuración del holding → configuración de las compañías cuando ese módulo migre',
+	})
+	fx_company_policy!: CompanyFxPolicy;
 
 	@Column({ type: 'text', nullable: true })
 	logo_url?: string;
@@ -92,6 +121,10 @@ export class Company {
 
 	@Column({ type: 'integer', nullable: true, comment: 'ID del tax de ReteIVA configurado en Odoo para esta compañía (Colombia)' })
 	odoo_reteiva_tax_id?: number;
+
+	@ManyToOne(() => Country, { onDelete: 'RESTRICT' })
+	@JoinColumn({ name: 'country_code', referencedColumnName: 'code', foreignKeyConstraintName: 'companies_country_code_fkey' })
+	countryRef?: Country;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'SET NULL' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'companies_holding_fk' })

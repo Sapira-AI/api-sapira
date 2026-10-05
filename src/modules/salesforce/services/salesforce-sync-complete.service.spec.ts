@@ -2,6 +2,8 @@ jest.mock('@/logger/app-logger.service', () => ({
 	AppLoggerService: class AppLoggerService {},
 }));
 
+import { buildCrmQuoteSnapshot } from '../utils/crm-quote-snapshot';
+
 import { DAILY_SYNC_WINDOW_DAYS, SalesforceSyncCompleteService } from './salesforce-sync-complete.service';
 
 describe('SalesforceSyncCompleteService', () => {
@@ -23,8 +25,24 @@ describe('SalesforceSyncCompleteService', () => {
 			create: jest.fn(),
 			save: jest.fn(),
 		};
+		// Transacción de la importación (cotizaciones protegidas): repos por entity + `query` para protección y evento.
+		const txRepos = {
+			quote: { findOne: jest.fn().mockResolvedValue(null), update: jest.fn() },
+			quoteItem: { find: jest.fn().mockResolvedValue([]) },
+			stg: { update: jest.fn() },
+		};
+		const txManager = {
+			query: jest.fn().mockResolvedValue([]),
+			getRepository: jest.fn((entity: { name: string }) =>
+				entity.name === 'Quote' ? txRepos.quote : entity.name === 'QuoteItem' ? txRepos.quoteItem : txRepos.stg
+			),
+		};
 		const quoteRepository = {
 			findOne: jest.fn(),
+			manager: {
+				query: jest.fn().mockResolvedValue([]),
+				transaction: jest.fn(async (work: (manager: unknown) => unknown) => work(txManager)),
+			},
 		};
 		const quoteItemRepository = {};
 		const accountsStgRepository = {
@@ -34,6 +52,7 @@ describe('SalesforceSyncCompleteService', () => {
 		};
 		const opportunitiesStgRepository = {
 			find: jest.fn(),
+			findOne: jest.fn(),
 			update: jest.fn(),
 		};
 		const lineItemsStgRepository = {
@@ -58,6 +77,13 @@ describe('SalesforceSyncCompleteService', () => {
 			updateClientEntityClient: jest.fn(),
 			createClientEntityClient: jest.fn(),
 			getSalesforceProductMapping: jest.fn().mockResolvedValue(null),
+			getQuoteStageByName: jest.fn().mockResolvedValue('stage-sent'),
+			getFirstQuoteStage: jest.fn(),
+			getSellerByEmail: jest.fn(),
+			getSellerByName: jest.fn(),
+			createSeller: jest.fn(),
+			getPrincipalContact: jest.fn().mockResolvedValue('contact-1'),
+			upsertQuote: jest.fn().mockResolvedValue('quote-new'),
 		};
 		const fieldMappingEngine = {
 			buildMappedRecord: jest.fn(),
@@ -82,6 +108,7 @@ describe('SalesforceSyncCompleteService', () => {
 		const notificationsService = {
 			createOrUpdate: jest.fn(),
 			resolveByDeduplicationKey: jest.fn(),
+			resolveOpen: jest.fn().mockResolvedValue(0),
 		};
 		const syncLogService = {
 			record: jest.fn(),
@@ -110,6 +137,8 @@ describe('SalesforceSyncCompleteService', () => {
 
 		return {
 			service,
+			txRepos,
+			txManager,
 			syncLogService,
 			connectionRepository,
 			clientRepository,
@@ -151,7 +180,7 @@ describe('SalesforceSyncCompleteService', () => {
 	};
 
 	it('en la sincronización diaria consulta treinta días de CloseDate y procesa solo staging create', async () => {
-		const { service, opportunitiesStgRepository } = buildService();
+		const { service, opportunitiesStgRepository, notificationsService } = buildService();
 		opportunitiesStgRepository.find.mockResolvedValue([]);
 		jest.spyOn(service as any, 'fetchDailyTargetOpportunityIds').mockResolvedValue(['opp-1']);
 		const { processAccounts, classifyOpportunities, processOpportunities } = stubDailyRun(service);
@@ -166,7 +195,8 @@ describe('SalesforceSyncCompleteService', () => {
 		expect(processOpportunities).toHaveBeenCalledWith('holding-1', 'batch-1', expect.any(Object), {
 			processingStatuses: ['create'],
 			insertOnly: true,
-		});
+		}); // Notificaciones v2: la corrida buena cierra el aviso de falla de sincronización del holding.
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { type: 'salesforce_sync_failure' });
 	});
 
 	it('consulta CloseDate y las etapas ganadoras sin usar LastModifiedDate', async () => {
@@ -222,10 +252,15 @@ describe('SalesforceSyncCompleteService', () => {
 			expect.objectContaining({
 				type: 'salesforce_sync_failure',
 				severity: 'error',
-				message: 'Salesforce request timeout',
+				title: 'Falló la sincronización con el CRM',
+				// Mensaje de negocio; el error técnico queda en metadata.
+				message: 'Una parte de la sincronización automática de hoy falló: algunas oportunidades ganadas no llegaron a Sapira.',
+				metadata: expect.objectContaining({ error_message: 'Salesforce request timeout' }),
 				deduplication_key: 'salesforce:daily-sync:holding-1:staging',
 			})
 		);
+		// Con un lote fallido la corrida no es buena: el aviso no se cierra.
+		expect(notificationsService.resolveOpen).not.toHaveBeenCalled();
 	});
 
 	it('registra en la bitácora el detalle de cada oportunidad del lote, incluido el motivo del bloqueo', async () => {
@@ -318,23 +353,30 @@ describe('SalesforceSyncCompleteService', () => {
 		);
 	});
 
-	it('omite una cotización existente antes de procesar cliente o ítems', async () => {
-		const { service, opportunitiesStgRepository, lineItemsStgRepository, quoteRepository, typeormService, clientRepository } = buildService();
+	it('omite una cotización existente antes de procesar cliente o ítems (sin snapshot: Sin cambios y queda la base)', async () => {
+		const { service, opportunitiesStgRepository, lineItemsStgRepository, quoteRepository, typeormService, clientRepository, fieldMappingEngine } =
+			buildService();
 		opportunitiesStgRepository.find.mockResolvedValue([
 			{
 				id: 'opp-stg-1',
+				holding_id: 'holding-1',
 				salesforce_id: 'opp-1',
 				raw_data: { Id: 'opp-1', AccountId: 'account-1' },
 			},
 		]);
 		typeormService.getObjectMapping.mockResolvedValue('quote-1');
 		quoteRepository.findOne.mockResolvedValue({ id: 'quote-1' });
+		fieldMappingEngine.buildMappedRecord.mockResolvedValue({ currency: 'USD', total_amount: 100 });
 
 		await (service as any).classifyOpportunityStaging('holding-1', 'batch-1', { insertOnly: true });
 
 		expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
 			'opp-stg-1',
-			expect.objectContaining({ processing_status: 'processed', integration_notes: expect.stringContaining('omitida') })
+			expect.objectContaining({
+				processing_status: 'processed',
+				integration_notes: expect.stringContaining('no hay una importación anterior'),
+				last_imported_snapshot: expect.objectContaining({ baseline: true, header: expect.objectContaining({ total_amount: 100 }) }),
+			})
 		);
 		expect(lineItemsStgRepository.update).toHaveBeenCalledWith(
 			expect.objectContaining({ holding_id: 'holding-1', salesforce_opportunity_id: 'opp-1' }),
@@ -402,6 +444,150 @@ describe('SalesforceSyncCompleteService', () => {
 				processing_status: expect.not.stringMatching(/^error$/),
 			})
 		);
+	});
+
+	it('diferencias de una cuenta: solo los campos que difieren y marca lo que importar no pisa (solo lectura)', async () => {
+		const { service, accountsStgRepository, clientRepository, clientEntityRepository, fieldMappingEngine, typeormService } = buildService();
+		accountsStgRepository.findOne.mockResolvedValue({
+			id: 'staging-1',
+			salesforce_id: 'account-1',
+			processing_status: 'update',
+			raw_data: { Id: 'account-1', Name: 'Acme' },
+		});
+		fieldMappingEngine.buildMappedRecord
+			.mockResolvedValueOnce({ client_number: 'C-1', name_commercial: 'Acme', industry: 'Logística' })
+			.mockResolvedValueOnce({ legal_name: 'Acme S.A.', economic_activity: 'Transporte', legal_address: '' });
+		typeormService.getObjectMapping.mockResolvedValue('client-1');
+		clientRepository.findOne.mockResolvedValue({ id: 'client-1', client_number: 'C-1', name_commercial: 'Acme', industry: 'Retail' });
+		clientEntityRepository.findOne.mockResolvedValue({ id: 'entity-1', legal_name: 'Acme SpA', economic_activity: null });
+
+		const preview = await service.previewAccountChanges('holding-1', 'account-1');
+
+		expect(preview).toEqual({
+			salesforce_id: 'account-1',
+			processing_status: 'update',
+			client_id: 'client-1',
+			client_name: 'Acme',
+			client_entity_id: 'entity-1',
+			changes: [
+				{ target: 'client', field: 'industry', current: 'Retail', incoming: 'Logística', applies: true },
+				{ target: 'client_entity', field: 'legal_name', current: 'Acme SpA', incoming: 'Acme S.A.', applies: false },
+				{ target: 'client_entity', field: 'economic_activity', current: null, incoming: 'Transporte', applies: true },
+			],
+		});
+		expect(accountsStgRepository.update).not.toHaveBeenCalled();
+		expect(clientRepository.update).not.toHaveBeenCalled();
+		expect(clientEntityRepository.update).not.toHaveBeenCalled();
+	});
+
+	describe('clasificación de cuentas: solo cuenta lo que la importación aplica', () => {
+		const classify = async (
+			client: Record<string, unknown>,
+			entity: Record<string, unknown>,
+			incoming: [Record<string, unknown>, Record<string, unknown>]
+		) => {
+			const ctx = buildService();
+			ctx.accountsStgRepository.find.mockResolvedValue([{ id: 'staging-1', raw_data: { Id: '0015w00002o1zT2AAI', Name: 'Kolife' } }]);
+			ctx.fieldMappingEngine.buildMappedRecord.mockResolvedValueOnce(incoming[0]).mockResolvedValueOnce(incoming[1]);
+			ctx.typeormService.getObjectMapping.mockResolvedValue('client-1');
+			ctx.clientRepository.findOne.mockResolvedValue({ id: 'client-1', ...client });
+			ctx.clientEntityRepository.findOne.mockResolvedValue({ id: 'entity-1', ...entity });
+			await (ctx.service as any).classifyAccountStaging('holding-1', 'batch-1');
+
+			return ctx.accountsStgRepository.update.mock.calls[0]?.[1]?.processing_status;
+		};
+
+		it('razón social, dirección y país protegidos con valor no son cambio (CHANDRA vs Chandra, Mexico vs México)', async () => {
+			await expect(
+				classify(
+					{ client_number: '15323', name_commercial: 'Roly Mexico' },
+					{ legal_name: 'CHANDRA', legal_address: 'CALLE LA MESA 1012, Puebla', country: 'Mexico' },
+					[
+						{ client_number: '15323', name_commercial: 'Roly Mexico' },
+						{ legal_name: 'Chandra', legal_address: 'Cholula, Puebla, México', country: 'México' },
+					]
+				)
+			).resolves.toBe('processed');
+		});
+
+		it('el id de la cuenta como número de cliente (respaldo) no reemplaza uno existente; RUT con prefijo = mismo RUT', async () => {
+			await expect(
+				classify({ client_number: '15323' }, { client_number: '15323', tax_id: '76771924-8', legal_name: 'KOLIFE SPA' }, [
+					{ client_number: '0015w00002o1zT2AAI' },
+					{ client_number: '0015w00002o1zT2AAI', tax_id: 'RUT76771924-8', legal_name: 'Kolife SpA' },
+				])
+			).resolves.toBe('processed');
+		});
+
+		it('mayúsculas, tildes y espacios no son cambio; un valor distinto sí', async () => {
+			await expect(
+				classify({ client_number: 'C-1', industry: 'Logística' }, {}, [{ client_number: 'C-1', industry: '  LOGISTICA ' }, {}])
+			).resolves.toBe('processed');
+			await expect(
+				classify({ client_number: 'C-1', industry: 'Retail' }, {}, [{ client_number: 'C-1', industry: 'Logística' }, {}])
+			).resolves.toBe('update');
+		});
+	});
+
+	it('diferencias: si solo difieren campos protegidos, no hay cambios que mostrar', async () => {
+		const { service, accountsStgRepository, clientRepository, clientEntityRepository, fieldMappingEngine, typeormService } = buildService();
+		accountsStgRepository.findOne.mockResolvedValue({ id: 's', salesforce_id: 'a-1', processing_status: 'update', raw_data: { Id: 'a-1' } });
+		fieldMappingEngine.buildMappedRecord.mockResolvedValueOnce({ client_number: 'C-1' }).mockResolvedValueOnce({ legal_name: 'Acme S.A.' });
+		typeormService.getObjectMapping.mockResolvedValue('client-1');
+		clientRepository.findOne.mockResolvedValue({ id: 'client-1', client_number: 'C-1' });
+		clientEntityRepository.findOne.mockResolvedValue({ id: 'entity-1', legal_name: 'Acme SpA' });
+
+		await expect(service.previewAccountChanges('holding-1', 'a-1')).resolves.toEqual(expect.objectContaining({ changes: [] }));
+	});
+
+	it('importar una cuenta existente no reemplaza el número de cliente por el id de la cuenta (cliente ni razón social)', async () => {
+		const { service, clientRepository, clientEntityRepository, fieldMappingEngine, typeormService } = buildService();
+		const account = { Id: '0015w00002o1zT2AAI', Name: 'Kolife' };
+		fieldMappingEngine.buildMappedRecord
+			.mockResolvedValueOnce({ client_number: account.Id, name_commercial: 'Kolife' })
+			.mockResolvedValueOnce({ client_number: account.Id, tax_id: 'RUT76771924-8', legal_name: 'Kolife SpA' });
+		typeormService.getObjectMapping.mockResolvedValue('client-1');
+		clientRepository.findOne.mockResolvedValue({ id: 'client-1', client_number: '15323' });
+		typeormService.resolveClientEntitiesByTaxId.mockResolvedValue({
+			entities: [{ id: 'entity-1', client_number: '15323', tax_id: '76771924-8', legal_name: 'KOLIFE SPA' }],
+		});
+
+		await (service as any).syncAccountFromData(account, 'holding-1', (service as any).createEmptyStats());
+
+		expect(clientRepository.update).toHaveBeenCalledWith(
+			{ id: 'client-1', holding_id: 'holding-1' },
+			expect.not.objectContaining({ client_number: expect.anything() })
+		);
+		// Busca y guarda el RUT sin el prefijo; conserva número y razón social existentes.
+		expect(typeormService.resolveClientEntitiesByTaxId).toHaveBeenCalledWith('holding-1', '76771924-8');
+		expect(clientEntityRepository.update).toHaveBeenCalledWith(
+			'entity-1',
+			expect.objectContaining({ client_number: '15323', tax_id: '76771924-8', legal_name: 'KOLIFE SPA' })
+		);
+	});
+
+	it('el respaldo sí completa un número de cliente vacío', async () => {
+		const { service, clientRepository, clientEntityRepository, fieldMappingEngine, typeormService } = buildService();
+		const account = { Id: '001X', Name: 'Nuevo número' };
+		clientEntityRepository.findOne.mockResolvedValue({ id: 'entity-1', legal_name: 'Nuevo número' });
+		fieldMappingEngine.buildMappedRecord.mockResolvedValueOnce({ client_number: '001X' }).mockResolvedValueOnce({});
+		typeormService.getObjectMapping.mockResolvedValue('client-1');
+		clientRepository.findOne.mockResolvedValue({ id: 'client-1', client_number: null });
+
+		await (service as any).syncAccountFromData(account, 'holding-1', (service as any).createEmptyStats());
+
+		expect(clientRepository.update).toHaveBeenCalledWith(
+			{ id: 'client-1', holding_id: 'holding-1' },
+			expect.objectContaining({ client_number: '001X' })
+		);
+	});
+
+	it('diferencias de una cuenta que no está en el staging del holding → null', async () => {
+		const { service, accountsStgRepository } = buildService();
+		accountsStgRepository.findOne.mockResolvedValue(null);
+
+		await expect(service.previewAccountChanges('holding-1', 'otra')).resolves.toBeNull();
+		expect(accountsStgRepository.findOne).toHaveBeenCalledWith({ where: { holding_id: 'holding-1', salesforce_id: 'otra' } });
 	});
 
 	it('no marca actualización cuando los campos vacíos de Salesforce ya tienen valor en la entidad final', async () => {
@@ -1028,6 +1214,212 @@ describe('SalesforceSyncCompleteService', () => {
 
 		expect(typeormService.updateClientContact).toHaveBeenCalledWith('contact-1', {
 			phone: '+56 9 1234 5678',
+		});
+	});
+	describe('cotizaciones protegidas (Domi 03-10)', () => {
+		const HEADER = { currency: 'USD', total_amount: 100, quote_number: 'COT-1' };
+		const stored = (header: Record<string, unknown> = HEADER) =>
+			buildCrmQuoteSnapshot({ header, owner: null, accountId: 'account-1', items: [] });
+		const stagingRecord = (overrides: Record<string, unknown> = {}) => ({
+			id: 'opp-stg-1',
+			holding_id: 'holding-1',
+			salesforce_id: 'opp-1',
+			processing_status: 'update',
+			raw_data: { Id: 'opp-1', Name: 'Renovación', AccountId: 'account-1', OpportunityLineItems: { records: [] } },
+			last_imported_snapshot: stored(),
+			...overrides,
+		});
+		const setup = (
+			options: { protection?: Record<string, unknown>; mapped?: Record<string, unknown>; record?: Record<string, unknown> } = {}
+		) => {
+			const built = buildService();
+			const protectionRow = { stage_id: 'stage-sent-1', stage_kind: 'sent', has_contract: false, ...(options.protection ?? {}) };
+
+			built.typeormService.getObjectMapping.mockResolvedValue('quote-1');
+			built.quoteRepository.findOne.mockResolvedValue({ id: 'quote-1' });
+			built.quoteRepository.manager.query.mockResolvedValue([protectionRow]);
+			built.txManager.query.mockImplementation(async (sql: string) => (sql.includes('INSERT INTO quote_events') ? [] : [protectionRow]));
+			built.fieldMappingEngine.buildMappedRecord.mockResolvedValue({ ...HEADER, ...(options.mapped ?? {}) });
+			built.opportunitiesStgRepository.find.mockResolvedValue([stagingRecord(options.record)]);
+			const ensureClient = jest.spyOn(built.service as any, 'ensureOpportunityClientReady').mockResolvedValue('client-1');
+
+			return { ...built, ensureClient };
+		};
+
+		it('clasifica: con contrato → importada "ya tiene contrato" (aunque el CRM cambie), sin tocar la base', async () => {
+			const { service, opportunitiesStgRepository } = setup({ protection: { has_contract: true }, mapped: { total_amount: 999 } });
+
+			await (service as any).classifyOpportunityStaging('holding-1', 'batch-1');
+
+			expect(opportunitiesStgRepository.update).toHaveBeenCalledWith('opp-stg-1', {
+				processing_status: 'processed',
+				integration_notes: 'La cotización ya tiene contrato: no se actualiza',
+				error_message: null,
+			});
+		});
+
+		it('clasifica: etapa contract_created sin contrato → "Procesada previamente"', async () => {
+			const { service, opportunitiesStgRepository } = setup({ protection: { stage_kind: 'contract_created' }, mapped: { total_amount: 999 } });
+
+			await (service as any).classifyOpportunityStaging('holding-1', 'batch-1');
+
+			expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'processed', integration_notes: 'Procesada previamente: no se actualiza' })
+			);
+		});
+
+		it('clasifica: CRM igual a la última importación → Sin cambios (se respeta lo editado en Sapira); distinto → Por revisar', async () => {
+			const same = setup();
+			await (same.service as any).classifyOpportunityStaging('holding-1', 'batch-1');
+			expect(same.opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'processed', integration_notes: 'Sin cambios en el CRM desde la última importación' })
+			);
+
+			const changed = setup({ mapped: { total_amount: 120 } });
+			await (changed.service as any).classifyOpportunityStaging('holding-1', 'batch-1', { insertOnly: true });
+			expect(changed.opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'update', integration_notes: expect.stringContaining('Cambió en el CRM') })
+			);
+			expect(changed.quoteRepository.manager.transaction).not.toHaveBeenCalled();
+		});
+
+		it('importar sin confirmación: la cotización existente no se toca y sigue Por revisar', async () => {
+			const { service, opportunitiesStgRepository, quoteRepository, ensureClient } = setup({ mapped: { total_amount: 120 } });
+
+			const stats = await service.processOpportunitiesStaging('holding-1', ['opp-1']);
+
+			expect(quoteRepository.manager.transaction).not.toHaveBeenCalled();
+			expect(ensureClient).not.toHaveBeenCalled();
+			expect(stats.quotesPendingConfirmation).toBe(1);
+			expect(stats.errors).toEqual([]);
+			expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'update', integration_notes: expect.stringContaining('solo si confirmas') })
+			);
+		});
+
+		it('importar con confirmación una cotización con contrato: nunca se actualiza', async () => {
+			const { service, opportunitiesStgRepository, quoteRepository, ensureClient } = setup({
+				protection: { has_contract: true },
+				mapped: { total_amount: 120 },
+			});
+
+			const stats = await service.processOpportunitiesStaging('holding-1', ['opp-1'], { confirmedBy: 'user-1' });
+
+			expect(quoteRepository.manager.transaction).not.toHaveBeenCalled();
+			expect(ensureClient).not.toHaveBeenCalled();
+			expect(stats.quotesProtected).toBe(1);
+			expect(stats.notices).toEqual(['Oportunidad opp-1: La cotización ya tiene contrato: no se actualiza']);
+			expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'processed', integration_notes: 'La cotización ya tiene contrato: no se actualiza' })
+			);
+		});
+
+		it('con confirmación y cambios del CRM: actualiza sin etapa ni notas, deja el evento UPDATED y el snapshot en la misma transacción', async () => {
+			const { service, txRepos, txManager, typeormService, opportunitiesStgRepository } = setup({ mapped: { total_amount: 120 } });
+			txRepos.quote.findOne.mockResolvedValue({
+				id: 'quote-1',
+				client_id: 'client-1',
+				client_contact_id: 'contact-1',
+				quote_number: 'COT-1',
+				total_amount: '100',
+				currency: 'USD',
+				notes: 'editada',
+				quote_stage_id: 'x',
+			});
+
+			const stats = await service.processOpportunitiesStaging('holding-1', ['opp-1'], { confirmedBy: 'user-1' });
+
+			expect(stats.errors).toEqual([]);
+			expect(stats.quotesUpdated).toBe(1);
+			const [where, update] = txRepos.quote.update.mock.calls[0];
+			expect(where).toEqual({ id: 'quote-1', holding_id: 'holding-1' });
+			expect(update).toEqual(expect.objectContaining({ total_amount: 120, client_id: 'client-1' }));
+			expect(update).not.toHaveProperty('quote_stage_id');
+			expect(update).not.toHaveProperty('notes');
+			expect(typeormService.createQuoteItems).toHaveBeenCalledWith([], txManager);
+
+			const eventCall = txManager.query.mock.calls.find(([sql]: [string]) => sql.includes('INSERT INTO quote_events'));
+			expect(eventCall).toBeDefined();
+			const params = eventCall[1];
+			expect(params.slice(0, 6)).toEqual(['holding-1', 'quote-1', 'stage-sent-1', 'sent', 'user-1', 'Sincronización del CRM']);
+			const metadata = JSON.parse(params[6]);
+			expect(metadata).toEqual(
+				expect.objectContaining({
+					source: 'crm_sync',
+					author_label: 'Sincronización del CRM',
+					confirmed_by: 'user-1',
+					salesforce_opportunity_id: 'opp-1',
+					total_amount: { from: 100, to: 120 },
+				})
+			);
+			expect(metadata.changes).toEqual([expect.objectContaining({ field: 'total_amount', before: 100, after: 120 })]);
+			expect(metadata.crm_changes).toEqual([expect.objectContaining({ field: 'quote.total_amount', before: 100, after: 120 })]);
+			expect(txRepos.stg.update).toHaveBeenCalledWith('opp-stg-1', {
+				last_imported_snapshot: expect.objectContaining({ header: expect.objectContaining({ total_amount: 120 }) }),
+				last_imported_at: expect.any(Date),
+			});
+			expect(opportunitiesStgRepository.update).toHaveBeenCalledWith(
+				'opp-stg-1',
+				expect.objectContaining({ processing_status: 'processed', last_integrated_at: expect.any(Date) })
+			);
+		});
+
+		it('con confirmación pero sin cambios desde la última importación: no aplica nada', async () => {
+			const { service, quoteRepository } = setup();
+
+			const stats = await service.processOpportunitiesStaging('holding-1', ['opp-1'], { confirmedBy: 'user-1' });
+
+			expect(quoteRepository.manager.transaction).not.toHaveBeenCalled();
+			expect(stats.quotesUpdated).toBe(0);
+		});
+
+		it('la confirmación no vale sin ids (procesar todo)', async () => {
+			const { service, quoteRepository } = setup({ mapped: { total_amount: 120 } });
+
+			const stats = await service.processOpportunitiesStaging('holding-1', undefined, { confirmedBy: 'user-1' });
+
+			expect(quoteRepository.manager.transaction).not.toHaveBeenCalled();
+			expect(stats.quotesPendingConfirmation).toBe(1);
+		});
+
+		it('crear: cotización, vínculo, ítems y snapshot en una transacción', async () => {
+			const { service, typeormService, txManager, txRepos, quoteRepository } = setup({
+				record: { processing_status: 'create', last_imported_snapshot: null },
+			});
+			typeormService.getObjectMapping.mockResolvedValue(null);
+			quoteRepository.findOne.mockResolvedValue(null);
+
+			const stats = await service.processOpportunitiesStaging('holding-1', ['opp-1']);
+
+			expect(stats.quotesCreated).toBe(1);
+			expect(typeormService.upsertQuote).toHaveBeenCalledWith(expect.objectContaining({ quote_stage_id: 'stage-sent' }), txManager);
+			expect(typeormService.createObjectMapping).toHaveBeenCalledWith('holding-1', 'Opportunity', 'opp-1', 'quotes', 'quote-new', txManager);
+			expect(txRepos.stg.update).toHaveBeenCalledWith('opp-stg-1', {
+				last_imported_snapshot: expect.objectContaining({ version: 1 }),
+				last_imported_at: expect.any(Date),
+			});
+		});
+
+		it('diferencias de una oportunidad: CRM en la última importación → ahora', async () => {
+			const { service, opportunitiesStgRepository, quoteRepository } = setup({ mapped: { total_amount: 120 } });
+			opportunitiesStgRepository.findOne.mockResolvedValue(stagingRecord());
+			quoteRepository.manager.query.mockImplementation(async (sql: string) =>
+				sql.includes('AS label') ? [{ label: 'COT-1 · Acme' }] : [{ stage_kind: 'sent', has_contract: false }]
+			);
+
+			const preview = await service.previewOpportunityChanges('holding-1', 'opp-1');
+
+			expect(preview).toEqual(
+				expect.objectContaining({ quote_id: 'quote-1', quote_label: 'COT-1 · Acme', protection: null, has_snapshot: true })
+			);
+			expect(preview?.changes).toEqual([expect.objectContaining({ field: 'quote.total_amount', before: 100, after: 120 })]);
+			opportunitiesStgRepository.findOne.mockResolvedValue(null);
+			await expect(service.previewOpportunityChanges('holding-1', 'nope')).resolves.toBeNull();
 		});
 	});
 });

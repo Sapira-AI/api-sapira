@@ -2,7 +2,7 @@
  "quotes": {
   "name": "public.quotes",
   "rls_enabled": true,
-  "rows": 411,
+  "rows": 424,
   "columns": [
    {
     "name": "id",
@@ -211,6 +211,40 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "valid_until",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "v2 (Q-A2): válida hasta; NULL = sin vencimiento. Estado mostrado \"Vencida\" si kind draft/sent y < hoy"
+   },
+   {
+    "name": "deleted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "v2 (Q-A5): borrado lógico. El sync de Salesforce ignora las borradas"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "default_value": "now()",
+    "comment": "v2: trigger quotes_set_updated_at"
    }
   ],
   "primary_keys": [
@@ -251,8 +285,30 @@
     ]
    },
    {
+    "name": "prices_quote_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "quote_attachments_quote_id_fkey",
     "source_table": "public.quote_attachments",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_quote_id_fkey",
+    "source_table": "public.quote_events",
     "source_columns": [
      "quote_id"
     ],
@@ -310,7 +366,7 @@
  "quote_items": {
   "name": "public.quote_items",
   "rls_enabled": true,
-  "rows": 460,
+  "rows": 510,
   "columns": [
    {
     "name": "id",
@@ -663,6 +719,17 @@
     ],
     "default_value": "'monthly'::text",
     "comment": "Indica cual campo es fuente de verdad: monthly (unit_price) o annual (annual_unit_price). Default: monthly."
+   },
+   {
+    "name": "price_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Pricing v2: modelo de precio del ítem (prices). NULL = standard fijo"
    }
   ],
   "primary_keys": [
@@ -687,6 +754,17 @@
      "holding_id"
     ],
     "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_items_price_id_fkey",
+    "source_table": "public.quote_items",
+    "source_columns": [
+     "price_id"
+    ],
+    "target_table": "public.prices",
     "target_columns": [
      "id"
     ]
@@ -718,7 +796,7 @@
  "quote_stages": {
   "name": "public.quote_stages",
   "rls_enabled": true,
-  "rows": 37,
+  "rows": 43,
   "columns": [
    {
     "name": "id",
@@ -808,6 +886,17 @@
      "updatable"
     ],
     "default_value": "now()"
+   },
+   {
+    "name": "kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "v2 (Q-A1): kind de sistema draft | sent | signed | lost | contract_created. NULL cuenta como draft. Backfill por nombre en la migración QuotesV2"
    }
   ],
   "primary_keys": [
@@ -826,12 +915,226 @@
     ]
    },
    {
+    "name": "quote_events_from_stage_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "from_stage_id"
+    ],
+    "target_table": "public.quote_stages",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_to_stage_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "to_stage_id"
+    ],
+    "target_table": "public.quote_stages",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "quote_stages_holding_id_fkey",
     "source_table": "public.quote_stages",
     "source_columns": [
      "holding_id"
     ],
     "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "quote_events": {
+  "name": "public.quote_events",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "quote_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "CREATED, UPDATED, SENT, SIGNED, LOST, REOPENED, STAGE_CHANGED, DUPLICATED_FROM, CONTRACT_CREATED, APPLIED_TO_CONTRACT o DELETED"
+   },
+   {
+    "name": "from_stage_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Etapa antes (NULL al crear)"
+   },
+   {
+    "name": "to_stage_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Etapa después (NULL al borrar)"
+   },
+   {
+    "name": "from_kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "kind de la etapa antes"
+   },
+   {
+    "name": "to_kind",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "kind de la etapa después"
+   },
+   {
+    "name": "actor_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "users.id que ejecutó la acción (NULL si lo hizo un proceso)"
+   },
+   {
+    "name": "reason",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo (obligatorio al marcar perdida)"
+   },
+   {
+    "name": "metadata",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Antes/después, ítems tocados, contrato vinculado, número de cotización…"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "quote_events_actor_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "actor_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_from_stage_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "from_stage_id"
+    ],
+    "target_table": "public.quote_stages",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_holding_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_quote_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "quote_id"
+    ],
+    "target_table": "public.quotes",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "quote_events_to_stage_id_fkey",
+    "source_table": "public.quote_events",
+    "source_columns": [
+     "to_stage_id"
+    ],
+    "target_table": "public.quote_stages",
     "target_columns": [
      "id"
     ]
@@ -1111,6 +1414,17 @@
      "updatable"
     ],
     "comment": "ID del producto en Stripe para mapeo (ej: \"prod_ABC123\")"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'active'::text",
+    "comment": "active | archived. Archivado = no se ofrece en altas nuevas; se conserva su historial"
    }
   ],
   "primary_keys": [
@@ -1155,6 +1469,17 @@
     "source_table": "public.odoo_product_mappings",
     "source_columns": [
      "sapira_product_id"
+    ],
+    "target_table": "public.products",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "prices_product_id_fkey",
+    "source_table": "public.prices",
+    "source_columns": [
+     "product_id"
     ],
     "target_table": "public.products",
     "target_columns": [

@@ -1,0 +1,130 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.5";
+
+import { type LiveDataResult } from "./types.ts";
+import { type LiveDataAudit, type Widget } from "../widgets.ts";
+import { monthStartStr, parseMonthRange } from "../utils.ts";
+
+export async function handleQa01MrrSeries(params: {
+  supabaseAuth: SupabaseClient;
+  holdingId: string;
+  question: string;
+}): Promise<LiveDataResult> {
+  const { supabaseAuth, holdingId, question } = params;
+
+  const { fromMonth: dateFrom, toMonth: dateTo, monthsBack } = parseMonthRange(question);
+
+  try {
+    const { data: rsmData, error: rsmError } = await supabaseAuth.rpc("rsm_metrics", {
+      date_from: dateFrom,
+      date_to: dateTo,
+      metric: "mrr",
+      currency_mode: "system",
+      group_by: ["period_month"],
+      filters: {},
+    });
+    if (rsmError) throw rsmError;
+
+    const { data: legacyData, error: legacyError } = await supabaseAuth
+      .from("mrr_legacy")
+      .select("period_month, mrr_legacy_system_currency")
+      .eq("holding_id", holdingId)
+      .eq("is_recurring", true)
+      .gte("period_month", dateFrom)
+      .lte("period_month", dateTo)
+      .order("period_month");
+    if (legacyError) throw legacyError;
+
+    const rsmRows = Array.isArray(rsmData) ? (rsmData as any[]) : [];
+
+    const monthlyMrr = new Map<string, number>();
+    const currency = (rsmRows[0] as any)?.currency || "USD";
+
+    rsmRows.forEach((r: any) => {
+      const monthKey = monthStartStr(new Date(String(r.period_month)));
+      monthlyMrr.set(monthKey, (monthlyMrr.get(monthKey) || 0) + (r.value || 0));
+    });
+
+    (legacyData || []).forEach((r: any) => {
+      const monthKey = monthStartStr(new Date(String(r.period_month)));
+      monthlyMrr.set(monthKey, (monthlyMrr.get(monthKey) || 0) + (r.mrr_legacy_system_currency || 0));
+    });
+
+    const seriesData: Array<{ month: string; mrr: number }> = [];
+    const startMonth = new Date(dateFrom);
+    for (let i = 0; i < monthsBack; i++) {
+      const month = new Date(startMonth);
+      month.setMonth(month.getMonth() + i);
+      const monthKey = monthStartStr(month);
+      seriesData.push({
+        month: monthKey.slice(0, 7),
+        mrr: monthlyMrr.get(monthKey) || 0,
+      });
+    }
+
+    const hasAnyValue = seriesData.some((r) => typeof r.mrr === "number" && r.mrr !== 0);
+
+    const widgets: Widget[] = [
+      {
+        type: "chart_line",
+        title: `MRR últimos ${monthsBack} meses (${currency})`,
+        xKey: "month",
+        series: [{ key: "mrr", name: "MRR", color: "#3B82F6" }],
+        data: seriesData,
+      },
+      {
+        type: "table",
+        title: "Detalle MRR por mes",
+        columns: ["Mes", `MRR (${currency})`],
+        rows: seriesData.map((r) => [r.month, Number(r.mrr.toFixed(2))]),
+      },
+    ];
+
+    const audit: LiveDataAudit = {
+      case_id: "QA-01",
+      range_from: dateFrom,
+      range_to: dateTo,
+      currency_mode: "system",
+      source_breakdown: ["revenue_schedule_monthly", "mrr_legacy"],
+      filters_applied: { holding_id: holdingId, is_recurring: true },
+      holding_id: holdingId,
+      data_completeness: hasAnyValue ? "complete" : "empty",
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      handled: true,
+      context: hasAnyValue
+        ? `HANDLER: QA-01. MRR serie desde ${dateFrom} hasta ${dateTo}. Incluye datos RSM y Legacy.`
+        : `HANDLER: QA-01. No encontré datos de MRR para tu holding en el rango ${dateFrom}→${dateTo}.`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_series", filters: { date_from: dateFrom, date_to: dateTo } },
+        { table: "mrr_legacy", query_type: "mrr_series", filters: { is_recurring: true, date_from: dateFrom, date_to: dateTo } },
+      ],
+      widgets,
+      audit,
+    };
+  } catch (e: any) {
+    return {
+      handled: true,
+      context: `HANDLER: QA-01. No pude consultar MRR en vivo (error en Live Data). Motivo: ${e?.message ?? String(e)}`,
+      sources: [
+        { table: "revenue_schedule_monthly", query_type: "mrr_series", filters: { date_from: dateFrom, date_to: dateTo } },
+        { table: "mrr_legacy", query_type: "mrr_series", filters: { is_recurring: true, date_from: dateFrom, date_to: dateTo } },
+      ],
+      widgets: [],
+      audit: {
+        case_id: "QA-01",
+        range_from: dateFrom,
+        range_to: dateTo,
+        currency_mode: "system",
+        source_breakdown: ["revenue_schedule_monthly", "mrr_legacy"],
+        filters_applied: { holding_id: holdingId, is_recurring: true },
+        holding_id: holdingId,
+        data_completeness: "empty",
+        timestamp: new Date().toISOString(),
+        error_type: "live_data",
+        error_reason: e?.message ?? String(e),
+      } as any,
+    };
+  }
+}

@@ -1,0 +1,378 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { DataSource, EntityMetadata, QueryRunner } from 'typeorm';
+
+import { HoldingSettings } from './entities/base-tenancy/holding-settings.entity';
+import { ContractItemPause } from './entities/contratos/contract-item-pause.entity';
+import { ContractItem } from './entities/contratos/contract-item.entity';
+import { ContractScheduledChange } from './entities/contratos/contract-scheduled-change.entity';
+import * as espejoExistentes from './entities/espejo.existing';
+import * as espejoTodos from './entities/espejo.index';
+import { RevenueScheduleMonthly } from './entities/revenue/revenue-schedule-monthly.entity';
+import { ContractModificationsBlock21790710000000 } from './migrations/1790710000000-ContractModificationsBlock2';
+
+/**
+ * Bloque Modificaciones B2 (`docs/v2-rediseno/spec-modificaciones-contrato-v2.md` §9.4 #1–#5): migración escrita a mano, entities, policies
+ * y triggers como assets, y el cambio mínimo del asset del devengo (§9.3.9). Sin conexión: texto de la migración y metadata en memoria.
+ */
+const migrationSql = async (direction: 'up' | 'down', counts = { rsm: 0, pacts: 0, pauses: 0, own_cycle: 0 }) => {
+	const statements: string[] = [];
+	const runner = {
+		query: jest.fn(async (sql: string) => {
+			statements.push(sql);
+
+			return sql.includes('COUNT(*)') ? [counts] : [];
+		}),
+	} as unknown as QueryRunner;
+
+	await new ContractModificationsBlock21790710000000()[direction](runner);
+
+	return statements;
+};
+
+describe('migración 1790710000000-ContractModificationsBlock2', () => {
+	it('up: crea contract_scheduled_changes con sus CHECK, FKs e índices y activa RLS', async () => {
+		const sql = (await migrationSql('up')).join('\n');
+
+		expect(sql).toContain('CREATE TABLE "contract_scheduled_changes"');
+		expect(sql).toContain(`"origin" jsonb NOT NULL DEFAULT '{"type":"manual"}'`);
+		expect(sql).toContain(`"value" numeric(18,6) NOT NULL`);
+		for (const constraint of [
+			'contract_scheduled_changes_trigger_check',
+			'contract_scheduled_changes_kind_check',
+			'contract_scheduled_changes_rounding_check',
+			'contract_scheduled_changes_status_check',
+			'contract_scheduled_changes_interval_months_check',
+			'contract_scheduled_changes_on_date_check',
+			'contract_scheduled_changes_every_n_months_check',
+			'contract_scheduled_changes_index_check',
+			'contract_scheduled_changes_holding_id_fkey',
+			'contract_scheduled_changes_contract_id_fkey',
+			'contract_scheduled_changes_contract_item_id_fkey',
+			'contract_scheduled_changes_parent_id_fkey',
+			'contract_scheduled_changes_applied_event_id_fkey',
+		])
+			expect(sql).toContain(`"${constraint}"`);
+		expect(sql).toContain(`CHECK ("trigger" <> 'every_n_months' OR ("anchor_date" IS NOT NULL AND "interval_months" IS NOT NULL))`);
+		expect(sql).toContain(`REFERENCES "contract_lifecycle_events"("id") ON DELETE SET NULL`);
+		expect(sql).toContain(`ON "contract_scheduled_changes" ("holding_id", "status", "next_effective_date")`);
+		expect(sql).toContain('ALTER TABLE "contract_scheduled_changes" ENABLE ROW LEVEL SECURITY');
+	});
+
+	it('up: contract_item_pauses, billing_anchor_day 1–31, aviso de renovación 1–180 (default 30) y momentum PAUSE/RESUME', async () => {
+		const sql = (await migrationSql('up')).join('\n');
+
+		expect(sql).toContain('CREATE TABLE "contract_item_pauses"');
+		expect(sql).toContain(`CONSTRAINT "contract_item_pauses_dates_check" CHECK ("pause_end" IS NULL OR "pause_end" >= "pause_start")`);
+		expect(sql).toContain('ALTER TABLE "contract_item_pauses" ENABLE ROW LEVEL SECURITY');
+		expect(sql).toContain('ALTER TABLE "contract_items" ADD "billing_anchor_day" smallint');
+		expect(sql).toContain(
+			`"contract_items_billing_anchor_day_check" CHECK ("billing_anchor_day" IS NULL OR ("billing_anchor_day" >= 1 AND "billing_anchor_day" <= 31))`
+		);
+		expect(sql).toContain('ALTER TABLE "holding_settings" ADD "auto_renewal_notice_days" smallint NOT NULL DEFAULT 30');
+		expect(sql).toContain(`CHECK ("auto_renewal_notice_days" >= 1 AND "auto_renewal_notice_days" <= 180)`);
+		expect(sql).toContain(`'PENDING_RENEWAL'::text, 'PAUSE'::text, 'RESUME'::text]`);
+		// Sin cambios en contracts ni en invoices (§9.4).
+		expect(sql).not.toMatch(/ALTER TABLE "(contracts|invoices)"/);
+	});
+
+	it('down: se niega con datos que el esquema viejo no admite; sin ellos revierte todo en orden inverso', async () => {
+		await expect(migrationSql('down', { rsm: 0, pacts: 2, pauses: 0, own_cycle: 0 })).rejects.toThrow('2 pactos');
+		const sql = await migrationSql('down');
+
+		expect(sql.slice(1).map((statement) => statement.split(' ').slice(0, 4).join(' '))).toEqual([
+			'ALTER TABLE "revenue_schedule_monthly" DROP',
+			'ALTER TABLE "revenue_schedule_monthly" ADD',
+			'ALTER TABLE "holding_settings" DROP',
+			'ALTER TABLE "holding_settings" DROP',
+			'ALTER TABLE "contract_items" DROP',
+			'ALTER TABLE "contract_items" DROP',
+			'DROP TABLE "contract_item_pauses"',
+			'DROP TABLE "contract_scheduled_changes"',
+		]);
+		expect(sql[2]).not.toContain('PAUSE');
+	});
+});
+
+describe('entities del bloque B2', () => {
+	const dataSource = new DataSource({ type: 'postgres', entities: [...Object.values(espejoTodos), ...Object.values(espejoExistentes)] });
+	const meta = (target: unknown) => dataSource.entityMetadatas.find((entry) => entry.target === target) as EntityMetadata;
+
+	beforeAll(async () => {
+		await (dataSource as unknown as { buildMetadatas: () => Promise<void> }).buildMetadatas();
+	});
+
+	it('ContractScheduledChange declara columnas, CHECK, índices y FKs con los nombres de la migración', () => {
+		const metadata = meta(ContractScheduledChange);
+
+		expect(dataSource.isInitialized).toBe(false);
+		expect(Object.fromEntries(metadata.columns.map((column) => [column.databaseName, column.isNullable]))).toEqual({
+			id: false,
+			holding_id: false,
+			contract_id: false,
+			contract_item_id: true,
+			group_key: true,
+			parent_id: true,
+			trigger: false,
+			effective_date: true,
+			anchor_date: true,
+			interval_months: true,
+			next_effective_date: true,
+			kind: false,
+			value: false,
+			index_code: true,
+			index_base_date: true,
+			index_base_value: true,
+			index_lag_months: true,
+			rounding: true,
+			status: false,
+			status_reason: true,
+			status_changed_by: true,
+			applied_event_id: true,
+			applied_at: true,
+			applied_value: true,
+			origin: false,
+			notes: true,
+			created_by: true,
+			created_at: false,
+			updated_at: false,
+		});
+		expect(metadata.checks.map((check) => check.name).sort()).toEqual(
+			[
+				'contract_scheduled_changes_every_n_months_check',
+				'contract_scheduled_changes_index_check',
+				'contract_scheduled_changes_interval_months_check',
+				'contract_scheduled_changes_kind_check',
+				'contract_scheduled_changes_on_date_check',
+				'contract_scheduled_changes_rounding_check',
+				'contract_scheduled_changes_status_check',
+				'contract_scheduled_changes_trigger_check',
+			].sort()
+		);
+		expect(Object.fromEntries(metadata.foreignKeys.map((fk) => [fk.name, [fk.referencedEntityMetadata.tableName, fk.onDelete]]))).toEqual({
+			contract_scheduled_changes_holding_id_fkey: ['company_holdings', 'CASCADE'],
+			contract_scheduled_changes_contract_id_fkey: ['contracts', 'CASCADE'],
+			contract_scheduled_changes_contract_item_id_fkey: ['contract_items', 'CASCADE'],
+			contract_scheduled_changes_parent_id_fkey: ['contract_scheduled_changes', 'CASCADE'],
+			contract_scheduled_changes_applied_event_id_fkey: ['contract_lifecycle_events', 'SET NULL'],
+		});
+		expect(metadata.indices.map((index) => index.name).sort()).toEqual([
+			'idx_contract_scheduled_changes_contract_status',
+			'idx_contract_scheduled_changes_holding_status_next',
+			'idx_contract_scheduled_changes_item',
+		]);
+	});
+
+	it('ContractItemPause, contract_items.billing_anchor_day, holding_settings.auto_renewal_notice_days y momentum PAUSE/RESUME', () => {
+		const pause = meta(ContractItemPause);
+
+		expect(pause.tableName).toBe('contract_item_pauses');
+		expect(pause.columns.find((column) => column.databaseName === 'pause_end')?.isNullable).toBe(true);
+		expect(pause.columns.find((column) => column.databaseName === 'contract_item_id')?.isNullable).toBe(false);
+		expect(pause.checks.map((check) => check.name).sort()).toEqual(['contract_item_pauses_dates_check', 'contract_item_pauses_status_check']);
+		const item = meta(ContractItem);
+
+		expect(item.columns.find((column) => column.databaseName === 'billing_anchor_day')).toMatchObject({ isNullable: true, type: 'smallint' });
+		expect(item.checks.map((check) => check.name)).toContain('contract_items_billing_anchor_day_check');
+		const settings = meta(HoldingSettings).columns.find((column) => column.databaseName === 'auto_renewal_notice_days');
+
+		expect(settings).toMatchObject({ isNullable: false, default: 30 });
+		expect(meta(RevenueScheduleMonthly).checks.find((check) => check.name === 'revenue_schedule_monthly_momentum_check')?.expression).toContain(
+			`'PAUSE'::text, 'RESUME'::text`
+		);
+	});
+});
+
+describe('assets del bloque B2', () => {
+	const read = (...segments: string[]) => fs.readFileSync(path.join(__dirname, ...segments), 'utf8');
+
+	it('4 policies por tabla nueva, como las de contract_fx_period_rates, y el trigger de updated_at', () => {
+		for (const table of ['contract_scheduled_changes', 'contract_item_pauses']) {
+			for (const [operation, clause] of [
+				['select', 'USING'],
+				['insert', 'WITH CHECK'],
+				['update', 'USING'],
+				['delete', 'USING'],
+			]) {
+				const sql = read('rls', `tenant_isolation_${operation}_${table}.sql`);
+
+				expect(sql).toContain(`CREATE POLICY "tenant_isolation_${operation}_${table}"`);
+				expect(sql).toContain(`FOR ${operation.toUpperCase()}`);
+				expect(sql).toContain(`${clause} (((holding_id = get_current_user_holding_id()) AND (contract_id IN ( SELECT contracts.id`);
+			}
+			expect(read('triggers', `trg_${table}_updated_at.sql`)).toContain(
+				`CREATE TRIGGER trg_${table}_updated_at BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();`
+			);
+		}
+	});
+
+	it('revenue_schedule_rebuild_contract_ccy (§9.3.9): día de ciclo por ítem y sin prorrateo del primer mes en ciclo propio', () => {
+		const sql = read('functions', 'revenue_schedule_rebuild_contract_ccy.sql');
+
+		expect(sql).toContain('SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,');
+		expect(sql).toContain(
+			'SELECT COALESCE(v_contract.billing_anchor_day, EXTRACT(DAY FROM MIN(ci.start_date))::int) INTO v_contract_billing_day'
+		);
+		expect(sql).toContain('AND ci.billing_anchor_day IS NULL;');
+		expect(sql).toContain('v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);');
+		expect(sql).toContain(
+			"AND v_item.billing_anchor_day IS NULL\n           AND COALESCE(v_item.categoria, '') IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN"
+		);
+		// Formato del generador: la función cierra con `$function$;` y su COMMENT.
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+	it('revenue_schedule_rebuild_contract_ccy (§9.3.3, B2-5): pausas → devengo por días, MRR 0, CMRR con fin conocido y momentum PAUSE/RESUME', () => {
+		const sql = read('functions', 'revenue_schedule_rebuild_contract_ccy.sql');
+
+		// Devengo: días pausados del mes sobre los días activos del ítem (mes completo pausado → 0).
+		expect(sql).toContain('FROM contract_item_pauses p');
+		expect(sql).toContain("WHERE p.contract_item_id = v_item.id AND p.status <> 'cancelled'");
+		expect(sql).toContain('v_active_days := (LEAST(v_eom_of_cur, v_item.end_date) - GREATEST(v_cur, v_item.start_date)) + 1;');
+		expect(sql).toContain(
+			'v_recognized_period := ROUND(v_recognized_period * GREATEST(v_active_days - v_paused_days, 0)::numeric / v_active_days, 2);'
+		);
+		// MRR 0 con fin de mes pausado; CMRR solo se apaga si la pausa es abierta.
+		expect(sql).toContain(
+			'IF v_paused_eom AND v_is_recurring THEN\n        v_mrr_contracted := 0;\n        IF v_paused_open_eom THEN v_cmrr := 0; END IF;'
+		);
+		// Momentum explícito (NULL = lo asigna trg_assign_momentum, como hasta hoy).
+		expect(sql).toContain("v_momentum := 'PAUSE';");
+		expect(sql).toContain("v_momentum := 'RESUME';");
+		expect(sql).toContain("AND DATE_TRUNC('month', p.pause_end + 1)::date = v_cur");
+		expect(sql).toContain('        momentum\n      ) VALUES (');
+		expect(sql).toContain('v_momentum  -- B2-5: PAUSE / RESUME; NULL = trg_assign_momentum');
+		// B2-3 intacto.
+		expect(sql).toContain('v_billing_day := COALESCE(v_item.billing_anchor_day, v_contract_billing_day);');
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('assets RSM: fixes 01-10 (U8, S5-16, U5)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'revenue_schedule_rebuild_contract_ccy.sql'), 'utf8');
+	const itemLoop = sql.slice(sql.indexOf('FOR v_item IN SELECT * FROM contract_items'), sql.indexOf('WHILE v_cur <= v_last_period LOOP'));
+
+	it('U8: el rebuild parcial carga el devengo acumulado y los saldos de la última fila previa del ítem (no reinicia en 0)', () => {
+		// Mes de inicio normalizado al día 1: DELETE, primer período, cola y split usan el mismo mes.
+		expect(sql).toContain("v_from_month date := DATE_TRUNC('month', p_from_month)::date;");
+		expect(sql).toContain('AND period_month >= v_from_month');
+		expect(sql).toContain('GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date)');
+		expect(sql).not.toMatch(/period_month >= p_from_month|v_tail_period >= p_from_month/);
+		// Rebuild completo: igual que antes (todo en 0, facturado previo de las facturas).
+		expect(itemLoop).toContain('v_recognized_cum := 0; v_billed_cum := v_billed_cum_initial;');
+		// Parcial: última fila del ítem antes del primer mes, sin la cola PENDING_RENEWAL ni el delta del split de renovación.
+		const partial = itemLoop.slice(itemLoop.indexOf('IF v_from_month IS NOT NULL THEN'));
+
+		expect(partial).toContain('AND r.contract_item_id = v_item.id');
+		expect(partial).toContain('AND r.period_month < v_first_period');
+		expect(partial).toContain("AND COALESCE(r.momentum, '') <> 'PENDING_RENEWAL'");
+		expect(partial).toContain('ORDER BY r.period_month DESC, (r.recognized_cum_contract_ccy IS NULL),');
+		// En moneda del ítem: columna directa (sin vueltas), misma moneda tal cual, si no contrato ÷ tasa item del mes de esa fila.
+		expect(partial).toContain('CASE WHEN v_company_direct = 1 THEN v_prev.recognized_cum_ccy END,');
+		expect(partial).toContain('CASE WHEN v_system_direct = 1 THEN v_prev.recognized_cum_system_ccy END,');
+		expect(partial).toContain('CASE WHEN v_item_ccy = UPPER(TRIM(v_contract.contract_currency)) THEN v_prev.recognized_cum_contract_ccy END,');
+		expect(partial).toContain('ROUND(v_prev.recognized_cum_contract_ccy / NULLIF(public.contract_item_fx_rate(p_contract_id, v_item_ccy');
+		// Saldos al cierre del mes previo desde los acumulados (misma fórmula que cada _eom del loop).
+		expect(partial).toContain('v_deferred_balance_eom := GREATEST(v_billed_cum - v_recognized_cum, 0);');
+		expect(partial).toContain('v_unbilled_balance_eom := GREATEST(v_recognized_cum - v_billed_cum, 0);');
+		// La carga ocurre antes del loop de meses (el primer mes ya parte del acumulado).
+		expect(itemLoop.indexOf('v_recognized_cum := 0;')).toBeLessThan(itemLoop.indexOf('IF v_from_month IS NOT NULL THEN'));
+	});
+
+	it('S5-16 (D7): el mensual es monthly_price (final ÷ plazo solo de respaldo) y la fracción del mes se aplica una vez', () => {
+		// monthly_price manda; final ÷ plazo solo si no hay monthly_price (pago único). Datos malos del legado se corrigen en el dato.
+		expect(sql).toContain('v_monthly_revenue := COALESCE(v_item.monthly_price, ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2));');
+		expect(sql).not.toContain('v_monthly_revenue := ROUND(COALESCE(v_item.final_price, 0) / v_item.term_months, 2);');
+		// Un solo prorrateo: mensual × días vivos / días del mes.
+		expect(sql.match(/v_proration_days::numeric \/ v_days_in_month/g)).toHaveLength(1);
+		expect(sql).toContain('v_recognized_period := ROUND(v_monthly_revenue * v_proration_days::numeric / v_days_in_month, 2);');
+	});
+
+	it('U5: CHURN y REACTIVATION prorratean el primer mes por días vivos como UPSELL / CROSS-SELL / DOWNSELL', () => {
+		expect(sql).toContain("IN ('UPSELL', 'CROSS-SELL', 'DOWNSELL', 'CHURN', 'REACTIVATION') THEN");
+		expect(sql).toContain('v_proration_days := v_days_in_month - EXTRACT(DAY FROM v_item.start_date)::int + 1;');
+		// B2-3 y B2-5 intactos: ciclo propio no prorratea y las pausas siguen después del prorrateo.
+		expect(sql).toContain('AND v_item.billing_anchor_day IS NULL');
+		expect(sql.indexOf("'CHURN', 'REACTIVATION') THEN")).toBeLessThan(sql.indexOf('v_active_days := (LEAST(v_eom_of_cur'));
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('assets RSM: decisiones de Domi 04-10 (D2 + D3, rebuild-devengo-comparacion.md corrida final)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'revenue_schedule_rebuild_contract_ccy.sql'), 'utf8');
+	const flat = sql.replace(/\s+/g, ' ');
+
+	it('D2: override del período (quantities) = devengo del mes con la regla de la factura; sin override, el plan; MRR sin cambio', () => {
+		const active = flat.slice(flat.indexOf('v_in_active := true;'), flat.indexOf('v_in_active := false;'));
+
+		// Regla de sync_invoice_items_amounts_from_quantities: unitario × cantidad (el que falte, del ítem; solo monto → monto).
+		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NOT NULL THEN q.unit_price * q.quantity');
+		expect(active).toContain('WHEN q.amount IS NOT NULL AND q.unit_price IS NULL AND q.quantity IS NULL THEN q.amount');
+		expect(active).toContain('WHEN q.quantity IS NOT NULL AND q.unit_price IS NULL THEN v_item.unit_price * q.quantity');
+		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NULL THEN q.unit_price * v_item.quantity');
+		// × (1 − % de la línea del período, sin NC; sin línea, % del ítem).
+		expect(active).toContain("AND i.document_type IS DISTINCT FROM 'NC'");
+		expect(active).toContain("AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur");
+		expect(active).toContain("CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END");
+		expect(active).toContain('WHERE q.contract_item_id = v_item.id AND q.period = v_cur;');
+		expect(active).toContain('IF v_override_amount IS NOT NULL THEN v_recognized_period := ROUND(v_override_amount, 2); END IF;');
+		// Reemplaza el mensual ya prorrateado / pausado del mes (va después de la pausa) y solo en meses activos.
+		expect(active.indexOf('v_active_days := (LEAST(v_eom_of_cur')).toBeLessThan(active.indexOf('FROM quantities q'));
+		// El MRR sigue siendo el plan (el override no lo toca).
+		expect(flat).toContain('v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);');
+		expect(flat).not.toMatch(/v_mrr_contracted := [^;]*v_override_amount/);
+	});
+
+	it('D3: el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio; un rebuild parcial no cambia', () => {
+		const d3 = flat.slice(flat.indexOf('v_contract_start_date := LEAST('), flat.indexOf('-- B2-3 (§9.3.9)'));
+		expect(d3).toContain("SELECT MIN(DATE_TRUNC('month', i.issue_date)::date) FROM invoices i");
+		// Solo líneas de ítems del contrato (las que entran al facturado), facturas vigentes y emitidas.
+		expect(d3).toContain('JOIN contract_items ci ON ci.id = ii.contract_item_id WHERE ci.contract_id = p_contract_id');
+		expect(d3).toContain("AND i.is_active = true AND i.status IN ('Emitida', 'Enviada', 'Pagada', 'Vencida')");
+		// Va después de la extensión hasta la última factura (FIX 1.2) y antes de calcular el primer período.
+		expect(flat.indexOf('v_contract_end_date := GREATEST(')).toBeLessThan(flat.indexOf('v_contract_start_date := LEAST('));
+		expect(flat.indexOf('v_contract_start_date := LEAST(')).toBeLessThan(flat.indexOf('v_first_period := DATE_TRUNC('));
+		// Rebuild parcial: el mes de inicio sigue siendo p_from_month (el GREATEST con el inicio no lo adelanta).
+		expect(flat).toContain('GREATEST(COALESCE(v_from_month, v_contract_start_date), v_contract_start_date)');
+		// En esos meses el ítem no está activo: la actividad sale del inicio del ítem, no del contrato (devengo 0, MRR 0).
+		expect(flat).toContain("v_item_start_month := DATE_TRUNC('month', v_item.start_date)::date;");
+	});
+
+	it('sin guard por estado: el rebuild procesa el contrato como está, también En revisión / Borrador (D1 descartada)', () => {
+		expect(flat).not.toContain('c.status');
+		expect(flat).not.toContain('v_contract.status');
+		expect(flat).not.toMatch(/'En revisión'|'Borrador'/);
+		expect(sql).toMatch(/END;\n\$function\$;\n\nCOMMENT ON FUNCTION/);
+	});
+});
+
+describe('asset RSM apply_pending_renewal_tail (D19 · S2-10, 01-10)', () => {
+	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'apply_pending_renewal_tail.sql'), 'utf8');
+	const flat = sql.replace(/\s+/g, ' ');
+
+	it('contratos Cancelado o nunca activados: sin cola y se borran las filas PENDING_RENEWAL que quedaran', () => {
+		expect(flat).toContain('c.contract_currency, c.status,');
+		expect(flat).toContain("IF v_contract.status IN ('Cancelado', 'Borrador', 'En revisión') THEN");
+		expect(flat).toContain("DELETE FROM public.revenue_schedule_monthly WHERE contract_id = p_contract_id AND momentum = 'PENDING_RENEWAL';");
+		// El corte va antes del recorrido de ítems.
+		expect(flat.indexOf("'contract_not_eligible'")).toBeLessThan(flat.indexOf('FOR v_item IN'));
+	});
+
+	it('ítems con churn, renovados o espejos de baja siguen fuera', () => {
+		expect(flat).toContain('AND ci.churn_date IS NULL');
+		expect(flat).toContain('AND ci.renewed_by_item_id IS NULL');
+		expect(flat).toContain("NOT IN ('DOWNSELL', 'CHURN')");
+	});
+
+	it('meses con pausa activa o programada del ítem (abierta o que cubre el fin del mes) no suman cola', () => {
+		expect(flat).toContain('FROM public.contract_item_pauses pz WHERE pz.contract_item_id = v_item.id');
+		expect(flat).toContain("AND pz.status IN ('active', 'scheduled')");
+		expect(flat).toContain('AND pz.pause_start <= v_month_end AND (pz.pause_end IS NULL OR pz.pause_end >= v_month_end)');
+		// La pausa se revisa antes del INSERT del mes y salta al mes siguiente.
+		const loop = flat.slice(flat.indexOf('WHILE v_cur <= v_end_period LOOP'));
+
+		expect(loop.indexOf('contract_item_pauses')).toBeLessThan(loop.indexOf('INSERT INTO public.revenue_schedule_monthly'));
+		expect(loop).toContain('CONTINUE;');
+		expect(flat).toContain("'v1.3-pending-renewal-eligible-unpaused'");
+	});
+});

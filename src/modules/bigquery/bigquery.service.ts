@@ -12,6 +12,7 @@ import {
 } from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
 import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity';
+import { withApiWriter } from '@/modules/contracts/api-writer';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ListQuantityImportsDto } from './dtos/list-quantity-imports.dto';
@@ -928,6 +929,9 @@ export class BigQueryService {
 			resolved.push({ importRow, candidate });
 		}
 
+		// Devengo: contrato → primer mes con una cantidad nueva. Se recalcula al final del batch (ver rebuildRevenueAfterQuantities).
+		const revenueFrom = new Map<string, string>();
+
 		// Deduplicar por la clave natural de quantities: dos filas del DWH que apunten al mismo
 		// (contract_item_id, period) con valores distintos no se integran.
 		const byTarget = new Map<string, Array<{ importRow: SapiraQuantityImport; candidate: ContractItemCandidate }>>();
@@ -961,7 +965,7 @@ export class BigQueryService {
 
 			// Duplicados idénticos: se integra el primero y los demás quedan apuntando a la misma fila.
 			const [first, ...rest] = bucket;
-			const outcome = await this.integrateSingleQuantity(holdingId, first.importRow);
+			const outcome = await this.integrateSingleQuantity(holdingId, first.importRow, revenueFrom);
 			this.countImportOutcome(result, outcome.status);
 
 			for (const duplicate of rest) {
@@ -970,6 +974,8 @@ export class BigQueryService {
 				this.countImportOutcome(result, outcome.status);
 			}
 		}
+
+		await this.rebuildRevenueAfterQuantities(revenueFrom);
 
 		await this.notifyQuantitiesAggregates(holdingId, result, resolvedRange);
 
@@ -989,10 +995,14 @@ export class BigQueryService {
 	 * Cada INSERT va aislado en su propio try/catch porque
 	 * `trg_validate_quantity_invoice_status` lanza excepción cuando la factura activa del período
 	 * no está en "Por Emitir": sin esto, una sola factura emitida tumbaría el batch completo.
+	 *
+	 * Si inserta, anota en `revenueFrom` el contrato y el mes para recalcular su devengo al final del batch (el trigger
+	 * `trg_rsm_on_quantity_change` que lo hacía se retiró el 04-10).
 	 */
 	private async integrateSingleQuantity(
 		holdingId: string,
-		importRow: SapiraQuantityImport
+		importRow: SapiraQuantityImport,
+		revenueFrom: Map<string, string>
 	): Promise<{ status: QuantityImportStatus; reason: string | null; quantityId: string | null }> {
 		const contractItemId = importRow.resolved_contract_item_id as string;
 
@@ -1008,8 +1018,8 @@ export class BigQueryService {
 		}
 
 		try {
-			// No se mandan holding_id (lo deriva trg_quantities_set_holding) ni amount (se llena
-			// por otro lado y ganaría al COALESCE del trigger de RSM).
+			// No se mandan holding_id (lo deriva trg_quantities_set_holding) ni amount: el canal automático
+			// informa unitario × cantidad, que es lo que factura y devenga (un amount solo cuenta sin ellos).
 			const inserted: Array<{ id: string }> = await this.dataSource.query(
 				`INSERT INTO quantities (contract_item_id, contract_id, period, unit_price, quantity,
 				                         unit_of_measure, account, salesforce_opportunity_id,
@@ -1049,6 +1059,7 @@ export class BigQueryService {
 
 			importRow.quantity_id = inserted[0].id;
 			importRow.integrated_at = new Date();
+			this.trackRevenueFrom(revenueFrom, importRow.resolved_contract_id, importRow.period);
 			await this.markImport(importRow, 'integrated', null);
 			await this.notificationsService.resolveByDeduplicationKey(holdingId, this.quantityDiffDedupKey(holdingId, importRow));
 
@@ -1059,6 +1070,46 @@ export class BigQueryService {
 			await this.markImport(importRow, 'blocked', reason);
 
 			return { status: 'blocked', reason, quantityId: null };
+		}
+	}
+
+	/** Anota el primer mes tocado de cada contrato (los períodos son `YYYY-MM-01`: el orden de texto es el cronológico). */
+	private trackRevenueFrom(revenueFrom: Map<string, string>, contractId: string | null, period: string): void {
+		if (!contractId || !period) return;
+		const current = revenueFrom.get(contractId);
+		if (!current || period < current) revenueFrom.set(contractId, period);
+	}
+
+	/**
+	 * Devengo (`revenue_schedule_monthly`) de un contrato desde el mes de la cantidad tocada. Lo hacían los triggers del front
+	 * viejo `trg_rsm_on_quantity_change` / `trg_restore_rsm_on_quantity_delete`, retirados el 04-10 (Domi): la API lo recalcula
+	 * explícito, como en todo camino v2 (`docs/reglas-desarrollo/logica-en-api-triggers.md`). El rebuild devenga el override del
+	 * período con la regla de la factura (D2, `revenue_schedule_rebuild_contract_ccy`).
+	 *
+	 * Va en su propia transacción con `sapira.writer = 'api'`, después del INSERT/UPDATE de `quantities`: esa escritura sigue sin
+	 * la marca para que corran los triggers de `quantities` que se conservan (holding, guard de factura emitida y sincronización
+	 * de líneas Por Emitir), que el rebuild lee.
+	 */
+	private async rebuildRevenueSchedule(contractId: string, fromPeriod: string): Promise<void> {
+		await withApiWriter(this.dataSource, (runner) =>
+			runner.query(`SELECT revenue_schedule_rebuild($1::uuid, date_trunc('month', $2::date)::date)`, [contractId, fromPeriod])
+		);
+	}
+
+	/**
+	 * Recalcula el devengo de cada contrato con cantidades nuevas del batch, una vez por contrato desde su primer mes tocado. Un
+	 * fallo no tumba la integración (las cantidades ya quedaron guardadas): se registra como error con el contrato y el mes para
+	 * repetir el recálculo.
+	 */
+	private async rebuildRevenueAfterQuantities(revenueFrom: Map<string, string>): Promise<void> {
+		for (const [contractId, fromPeriod] of revenueFrom) {
+			try {
+				await this.rebuildRevenueSchedule(contractId, fromPeriod);
+			} catch (error) {
+				this.logger.error(
+					`No se pudo recalcular el devengo del contrato ${contractId} desde ${fromPeriod} tras integrar cantidades: ${error?.message ?? error}`
+				);
+			}
 		}
 	}
 
@@ -1157,21 +1208,18 @@ export class BigQueryService {
 		const afectaIntegracion = diffs.some((diff) => (QUANTITY_INTEGRATED_FIELDS as readonly string[]).includes(diff.field));
 
 		await this.notificationsService.createOrUpdate(holdingId, {
-			// Sin destinatarios la notificación nace con recipient_count = 0 y no la ve nadie, lo que dejaba
-			// inalcanzable el único camino de salida de `conflict` y `changed_in_source`: el reemplazo manual.
-			recipients: { include_super_admins: true },
 			source: 'bigquery',
 			type: QUANTITIES_DIFF_NOTIFICATION_TYPE,
 			severity: 'warning',
-			title: `Diferencias en cantidad variable (${importRow.business_name || importRow.sf_id})`,
+			title: `Consumo distinto en el almacén de datos (${importRow.business_name || importRow.product || 'cliente'})`,
 			message: current
-				? `La cantidad variable de ${importRow.product} para el período ${importRow.period} difiere entre el DWH y el ` +
-					'override ya registrado en Sapira. No se sobrescribió automáticamente.'
-				: `El DWH modificó ${importRow.product} (${importRow.period}) después de haberse integrado. ` +
-					`${afectaIntegracion ? 'El cambio afecta valores ya propagados a Sapira.' : 'El cambio no afecta los valores propagados a Sapira.'}`,
+				? `El consumo de ${importRow.product} del período ${importRow.period} en el almacén de datos es distinto del que ya está ` +
+					'registrado en Sapira. No lo sobrescribimos.'
+				: `El almacén de datos cambió el consumo de ${importRow.product} (${importRow.period}) después de integrarlo. ` +
+					`${afectaIntegracion ? 'El cambio afecta valores que ya están en Sapira.' : 'El cambio no afecta los valores que ya están en Sapira.'}`,
 			recommendation: afectaIntegracion
-				? 'Revisa las diferencias y usa "Reemplazar con datos de BigQuery" si el valor del DWH es el correcto.'
-				: 'Revisa las diferencias. Si el cambio del DWH es esperado, reemplaza para dejar constancia y cerrar el aviso.',
+				? 'Compara los valores y usa "Reemplazar cantidades" si el dato del almacén de datos es el correcto.'
+				: 'Compara los valores. Si el cambio es esperado, reemplaza para dejar constancia y cerrar el aviso.',
 			action_type: REPLACE_QUANTITY_RECORD_ACTION,
 			action_payload: {
 				quantity_id: importRow.quantity_id,
@@ -1215,37 +1263,35 @@ export class BigQueryService {
 	 * `resolveByDeduplicationKey` sobre la alerta vigente del mes en curso y la cerraría en silencio.
 	 */
 	private async notifyQuantitiesAggregates(holdingId: string, result: QuantitiesIntegrationResult, range: QuantitiesDateRange): Promise<void> {
-		const ventana = `${range.from} a ${range.to}`;
+		const ventana = `el ${range.from} y el ${range.to}`;
 
 		const aggregates: Array<{ type: string; count: number; title: string; message: string; recommendation: string }> = [
 			{
 				type: QUANTITIES_UNMAPPED_NOTIFICATION_TYPE,
 				count: result.unmapped,
-				title: `Cantidades variables sin mapeo (${result.unmapped})`,
+				title: `Consumos sin producto asociado (${result.unmapped})`,
 				message:
-					`${result.unmapped} fila(s) del DWH del rango ${ventana} no se pudieron asociar a un ítem de contrato ` +
-					'porque no traen IDs Sapira ni IDs de Salesforce válidos.',
+					`${result.unmapped} consumo(s) del almacén de datos entre ${ventana} no se pudieron asociar a un producto de un contrato: ` +
+					'no traen una referencia válida al contrato ni a la cotización.',
 				recommendation:
-					'Revisa el listado en la auditoría del canal automático. Suele resolverse poblando contract_items.quote_item_number ' +
-					'desde la cotización; después puedes reprocesar sin volver a consultar BigQuery.',
+					'Revisa el listado de consumos importados. Suele resolverse completando en el contrato el número de ítem de la cotización; ' +
+					'después puedes volver a procesar sin volver a consultar el almacén de datos.',
 			},
 			{
 				type: QUANTITIES_BLOCKED_NOTIFICATION_TYPE,
 				count: result.blocked,
-				title: `Cantidades variables bloqueadas por estado de factura (${result.blocked})`,
-				message:
-					`${result.blocked} fila(s) del rango ${ventana} no se integraron porque la factura activa del período ` +
-					'no está en estado "Por Emitir".',
-				recommendation: 'Anula las facturas involucradas para que vuelvan a "Por Emitir" y reprocesa la integración.',
+				title: `Consumos que no entraron a la factura (${result.blocked})`,
+				message: `${result.blocked} consumo(s) entre ${ventana} no se integraron porque la factura del período ya no está por emitir.`,
+				recommendation: 'Anula las facturas involucradas para que vuelvan a estar por emitir y vuelve a procesar.',
 			},
 			{
 				type: QUANTITIES_CURRENCY_MISMATCH_NOTIFICATION_TYPE,
 				count: result.currencyMismatch,
-				title: `Cantidades variables con moneda distinta a la del contrato (${result.currencyMismatch})`,
+				title: `Consumos en otra moneda (${result.currencyMismatch})`,
 				message:
-					`${result.currencyMismatch} fila(s) del rango ${ventana} informan una moneda distinta a la del contrato. ` +
-					'No se integraron para evitar montos erróneos: quantities no tiene columna de moneda.',
-				recommendation: 'Verifica la moneda en el DWH o en el contrato antes de reprocesar.',
+					`${result.currencyMismatch} consumo(s) entre ${ventana} vienen en una moneda distinta a la del contrato. ` +
+					'No los integramos para no facturar montos errados.',
+				recommendation: 'Revisa la moneda en el almacén de datos o en el contrato y vuelve a procesar.',
 			},
 		];
 
@@ -1258,7 +1304,6 @@ export class BigQueryService {
 			}
 
 			await this.notificationsService.createOrUpdate(holdingId, {
-				recipients: { include_super_admins: true },
 				source: 'bigquery',
 				type: aggregate.type,
 				severity: 'warning',
@@ -1325,10 +1370,11 @@ export class BigQueryService {
 			throw new BadRequestException('El header x-holding-id es requerido');
 		}
 
-		const existing: QuantityRecord[] = await this.dataSource.query(
-			`SELECT id, unit_price, quantity, unit_of_measure, account
-			 FROM quantities
-			 WHERE id = $1 AND holding_id = $2`,
+		const existing: Array<QuantityRecord & { contract_id: string | null; period: string }> = await this.dataSource.query(
+			`SELECT q.id, q.unit_price, q.quantity, q.unit_of_measure, q.account, ci.contract_id, q.period::text AS period
+			 FROM quantities q
+			 JOIN contract_items ci ON ci.id = q.contract_item_id
+			 WHERE q.id = $1 AND q.holding_id = $2`,
 			[quantityId, holdingId]
 		);
 
@@ -1351,6 +1397,11 @@ export class BigQueryService {
 				incoming.account ?? null,
 			]
 		);
+
+		// Devengo del mes del override en adelante (el trigger `trg_rsm_on_quantity_change` que lo hacía se retiró el 04-10). Si
+		// falla, el reemplazo ya quedó guardado y el error sube: repetir la acción es idempotente y vuelve a recalcular.
+		const { contract_id: contractId, period } = existing[0];
+		if (contractId) await this.rebuildRevenueSchedule(contractId, period);
 
 		const relatedImports = await this.quantityImportRepository.find({ where: { holding_id: holdingId, quantity_id: quantityId } });
 		for (const importRow of relatedImports) {

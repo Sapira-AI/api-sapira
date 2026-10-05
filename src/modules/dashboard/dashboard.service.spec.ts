@@ -1,6 +1,10 @@
+// `TasksService` arrastra el scheduler de facturas (uuid ESM): se simula como en los otros specs.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+
 import { DataSource } from 'typeorm';
 
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+import type { TasksService } from '@/modules/tasks/tasks.service';
 
 import { DashboardService } from './dashboard.service';
 
@@ -15,7 +19,26 @@ describe('DashboardService', () => {
 				activeClients: { value: 8, previous: 10, trend: -20 },
 			}),
 		} as unknown as HoldingMetricsService;
-		return { service: new DashboardService(dataSource, metrics), query: (dataSource as unknown as { query: jest.Mock }).query };
+		// Tareas: la función compartida con el centro de notificaciones (se prueba en tasks.service.spec).
+		const tasks = {
+			forHolding: jest.fn().mockResolvedValue({
+				holding_id: 'holding-1',
+				as_of: '2026-09-22',
+				currency: 'CLP',
+				tasks: [
+					{ key: 'invoices_overdue', count: 2 },
+					{ key: 'service_starts_this_month', count: 5 },
+					{ key: 'credit_notes_to_issue', count: 0 },
+				],
+				dashboard: { renew_30: 1, renew_90: 4, expired_contracts: 2, invoices_to_emit: 3 },
+			}),
+		} as unknown as TasksService;
+		return {
+			service: new DashboardService(dataSource, metrics, tasks),
+			query: (dataSource as unknown as { query: jest.Mock }).query,
+			metrics: metrics as unknown as { monthMetrics: jest.Mock },
+			tasks: tasks as unknown as { forHolding: jest.Mock },
+		};
 	};
 
 	it('consulta solo el holding recibido (validado por HoldingScopeGuard) y no resuelve holdings por su cuenta', async () => {
@@ -31,10 +54,9 @@ describe('DashboardService', () => {
 	});
 
 	it('con holding resuelto arma los KPIs y tareas desde las consultas', async () => {
-		const { service } = buildService(async (sql) => {
+		const { service, metrics, tasks } = buildService(async (sql) => {
 			if (sql.includes('recognized_period_system_ccy')) return [{ value: '5400' }];
 			if (sql.includes('to_issue_count')) return [{ to_issue_count: '3', to_issue_amount: '900', overdue_count: '2' }];
-			if (sql.includes('renew_30')) return [{ renew_30: '1', renew_90: '4', expired_contracts: '2', starts_this_month: '5' }];
 			return [{}];
 		});
 
@@ -70,6 +92,14 @@ describe('DashboardService', () => {
 			contracts_to_renew_90: 4,
 			invoices_to_emit: 3,
 			items_starting_this_month: 5,
+			// Solo las tareas con algo por hacer.
+			items: [
+				{ key: 'invoices_overdue', count: 2 },
+				{ key: 'service_starts_this_month', count: 5 },
+			],
 		});
+		// MRR con el corte U14 del legacy (sin doble conteo) y tareas del holding del header, a la fecha pedida.
+		expect(metrics.monthMetrics).toHaveBeenCalledWith('holding-1', '2026-09-22', { legacyCut: true });
+		expect(tasks.forHolding).toHaveBeenCalledWith('holding-1', '2026-09-22');
 	});
 });

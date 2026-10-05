@@ -8,6 +8,20 @@ describe('normalizeTaxId', () => {
 	it('normaliza un RUT válido sin eliminar separadores significativos', () => {
 		expect(normalizeTaxId('76.517.784 - 7')).toBe('76517784-7');
 	});
+
+	it.each([
+		['RUT76771924-8', '76771924-8'],
+		['RUT: 76.771.924-8', '76771924-8'],
+		['R.U.T. 76.771.924-8', '76771924-8'],
+		['rut 7.654.321-k', '7654321-k'],
+	])('quita el prefijo de "%s" (caso real del CRM)', (value, expected) => {
+		expect(normalizeTaxId(value)).toBe(expected);
+	});
+
+	it('no recorta identificadores que empiezan con esas letras y no son RUT (RFC)', () => {
+		expect(normalizeTaxId('RUT850101AB1')).toBe('RUT850101AB1');
+		expect(normalizeTaxId('RUTA800101XY2')).toBe('RUTA800101XY2');
+	});
 });
 
 describe('isoToCountryName', () => {

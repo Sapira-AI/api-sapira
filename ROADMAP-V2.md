@@ -5,7 +5,8 @@
 > "00-plan-y-metodo" del 21-08 (historia en git) y reemplaza las copias que divergían en
 > `sapira-ai` y `front-sapira`. El backlog de fixes del producto vivo es **otra documentación**:
 > [`docs/ROADMAP-OPERATIVO.md`](docs/ROADMAP-OPERATIVO.md) (copia espejo; canónico en `sapira-ai/docs/ROADMAP-OPERATIVO.md`) (ver [convención](#-fixes-del-producto-vivo--convención)).
-> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-09-21**.
+> **Deciden:** Domi + Leon · **Ejecutan:** Claude Code (Domi) + Cursor (Leon) · Actualizado: **2026-10-03**.
+> **Estado al día y plan del switch:** [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) (leer primero en una sesión nueva).
 
 ## 🎯 Estrategia
 
@@ -24,6 +25,9 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
    reparto entre razones sociales, upsell/downsell simple — todo registrado y recalculado →
    [`docs/v2-rediseno/flexibilidad-con-trazabilidad.md`](docs/v2-rediseno/flexibilidad-con-trazabilidad.md).
 3. **Presupuesto vs proyección vs real** de ventas, facturación y caja → [`docs/v2-rediseno/budgets-forecast-real.md`](docs/v2-rediseno/budgets-forecast-real.md).
+4. **Pre-onboarding y prueba guiada** (propuesta en discusión 25-09): sandbox guiado en la demo,
+   acuerdo de evaluación clickwrap, propuesta en 72h desde sizing declarado, calculadora en la web →
+   [`docs/v2-rediseno/spec-preonboarding-prueba-guiada.md`](docs/v2-rediseno/spec-preonboarding-prueba-guiada.md).
 
 ## 📋 Las fases (los 7 pasos del plan del 21-08, tachados según avance)
 
@@ -70,7 +74,40 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
   - [ ] Contraseñas (REGISTRO punto 9) y el acuerdo de no operar la rama por Supabase
     (merge/rebase/reset) mientras convivan los dos mecanismos.
 
-### Fase 1 — Replicar el front que funciona en `front-sapira`, consumiendo la API 🔜 · ambos
+### Fase 1 — Replicar el front que funciona en `front-sapira`, consumiendo la API 🔄 EN CURSO · ambos
+
+> **Avance al 03-10:** Fases 1 y 2 se están haciendo juntas, módulo a módulo, en el laboratorio de `front-sapira`
+> (`/lab/<modulo>`): cada módulo se construye una sola vez contra `api-sapira`, ya con el diseño nuevo. Construidos:
+> Clientes, Contratos, Cotizaciones, Facturación, Ingresos, Métricas, la primera versión de Precios y Configuración ✅
+> (en producción 03-10: holding, compañías, usuarios y roles con matriz de permisos), gestión de usuarios con correos
+> propios, Centro de ayuda `/ayuda` (meta: dar de baja HelpKit y Notion), Notificaciones ✅, Integraciones (primera
+> versión ✅: ERP, CRM, Stripe y almacén de datos) y Mi perfil con avatares ✅. Siguen: configuración externa
+> (variables de correo, Secure password change, Skew Protection) → cierre de Integraciones (claves de API de Sapira y
+> documentación pública) → Automatizaciones → segunda vuelta de Precios → reglas de reconocimiento de ingresos →
+> onboarding/datos históricos →
+> switch.
+>
+> **Plan del switch (decidido por Domi el 03-10; se ejecuta ya).** Lo que queda en construcción (Automatizaciones,
+> segunda vuelta de Precios, onboarding legacy/setup) no lo usa nadie en producción y se termina después del switch,
+> en el lab (solo super admin). Pasos:
+> 1. Sacar los módulos del lab a sus rutas finales (`migrated: true`), cada pantalla protegida por el permiso de su
+>    módulo, sin enlaces al front viejo; el lab queda para lo que siga en construcción.
+> 2. Configuración pasa a llamarse **Administración** (pestañas Holding y compañías · Usuarios y permisos); se
+>    actualizan sidebar, centro de ayuda y documentación interna (mismos permisos y API).
+> 3. SII como pestaña de Compañía 360 (solo Chile) con interfaz nueva; se retira `/admin/empresas-sii`.
+> 4. Tests automáticos de enlaces entre módulos.
+> 5. Revisión de cron jobs, edge functions, triggers y costuras de Supabase.
+> 6. Rebuild completo del devengo **en producción**, con comparación detallada antes/después para que Domi apruebe
+>    (QA no sirve: datos sucios).
+> 7. Auditoría de datos por holding, en paralelo (no bloquea).
+> 8. Switch: banner, correo de aviso y video (avisar que los agentes visibles —Billing Wizard, Agentes en este cliente— son demostraciones y estarán funcionales próximamente); `app.aisapira.com` redirige al nuevo; permiso de ayuda a todos los roles;
+>    invitaciones pendientes; retiro del flujo de usuarios del front viejo; **acceso de usuarios al front viejo
+>    bloqueado** (no se borra de inmediato). No hay vuelta atrás.
+> 9. Domi con Leon: publicación (API antes que el front), variables de correo (apagadas hasta el switch), merge de su
+>    rama y urgentes de seguridad (no bloquean).
+>
+> Detalle, pendientes por decisión y pasos previos al switch en
+> [`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md).
 
 Los pasos 4–5 originales ("inventario y versión final de funciones/triggers") **reformulados**: la
 limpieza no es una gran sesión única sino **el paso 0 de cada módulo** que se migra — auditoría y
@@ -105,8 +142,26 @@ electrónica nativa, KAME. Cada grupo pasa por spec cerrada con Domi ANTES de co
 [GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md). Insumos: `docs/v2-rediseno/` + ítems
 20–25 del roadmap operativo.
 
-**Paso 7 — el switch — va módulo por módulo** al cierre de cada uno (Fase 1→2 por módulo), con
-`lib/app-links.ts` en `front-sapira` redirigiendo lo no migrado a la app actual.
+**Paso 7 — el switch.** Los módulos se construyen en el laboratorio y los usuarios siguen en la app actual hasta el
+switch (`lib/app-links.ts` en `front-sapira` redirige lo no migrado). Antes: auditoría de datos por holding y rebuild
+del devengo. Después, tras un tiempo prudente de pruebas: drop y limpieza de los triggers y funciones que solo usa el
+front actual. **Regla (Domi, 02-10): no se arreglan cosas que solo afectan al front actual.** Pasos en
+[`docs/v2-rediseno/estado-v2-y-plan-switch.md`](docs/v2-rediseno/estado-v2-y-plan-switch.md) §5.
+Tipos de cambio, MRR histórico y monto en moneda de sistema de las facturas:
+[`docs/v2-rediseno/analisis-fx-y-mrr-historico.md`](docs/v2-rediseno/analisis-fx-y-mrr-historico.md). Qué función y trigger se
+mantiene, se retira o ya se retiró: [`docs/v2-rediseno/catalogo-funciones-y-triggers.md`](docs/v2-rediseno/catalogo-funciones-y-triggers.md).
+Rebuild del devengo y su procedimiento de aplicación: [`docs/v2-rediseno/rebuild-devengo-comparacion.md`](docs/v2-rediseno/rebuild-devengo-comparacion.md).
+
+**Diferencias por tipo de cambio: cálculo y dónde mostrarlas** 🔮 (abierto por Domi el 04-10, al reemplazar la regla "sin vueltas"
+del 01-10 por la regla por estado: Por Emitir desde la moneda de contrato, documento emitido desde la moneda de factura). Por definir:
+- **Realizada al cobro**: diferencia entre el monto en moneda de sistema (o de compañía) a la tasa de emisión y el cobrado a la tasa del
+  pago (`invoice_payments`, conciliación bancaria).
+- **No realizada al cierre**: revaluación de lo por cobrar al cierre de cada mes (tasa de cierre vs tasa de emisión), sin tocar la factura.
+- **Reportes**: dónde se ven (Facturación, Ingresos, Métricas, export contable) y en qué moneda.
+- **Facturas en moneda distinta a la de la compañía** (p. ej. contrato USD facturado en CLP por una compañía chilena): la diferencia entre
+  el devengo en moneda de contrato y lo facturado en moneda de factura.
+- **Líneas en moneda de sistema dentro de facturas en otra moneda** (p. ej. una línea USD de una factura CLP): hoy entran con su monto en
+  moneda de factura a la tasa del holding ("con vueltas"); decidir si se separa la diferencia contra su monto original.
 
 ## 🛤️ Los tres carriles (forma de trabajo: sesiones separadas y frescas por carril)
 

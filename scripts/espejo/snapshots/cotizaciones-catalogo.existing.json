@@ -221,10 +221,57 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "valid_until": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "deleted_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {
+   "idx_quotes_valid_until": {
+    "columns": [
+     "valid_until"
+    ],
+    "unique": false,
+    "where": "(valid_until IS NOT NULL)"
+   },
+   "idx_quotes_holding_active": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": "(deleted_at IS NULL)"
+   },
    "idx_quotes_salesforce_opportunity_unique": {
     "columns": [
      "salesforce_opportunity_id",
@@ -659,10 +706,28 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "price_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {
+   "idx_quote_items_price_id": {
+    "columns": [
+     "price_id"
+    ],
+    "unique": false,
+    "where": "(price_id IS NOT NULL)"
+   },
    "idx_quote_items_custom_fields": {
     "columns": [],
     "unique": false,
@@ -736,6 +801,13 @@
     ],
     "table": "company_holdings",
     "onDelete": "CASCADE"
+   },
+   "quote_items_price_id_fkey": {
+    "columns": [
+     "price_id"
+    ],
+    "table": "prices",
+    "onDelete": "NO ACTION"
    },
    "quote_items_product_id_fkey": {
     "columns": [
@@ -833,6 +905,17 @@
     "scale": null,
     "array": false
    },
+   "kind": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "created_at": {
     "type": "timestamptz",
     "nullable": false,
@@ -866,8 +949,22 @@
     "name"
    ]
   },
-  "indices": {},
-  "checks": [],
+  "indices": {
+   "idx_quote_stages_holding_kind_unique": {
+    "columns": [
+     "holding_id",
+     "kind"
+    ],
+    "unique": true,
+    "where": "(kind = ANY (ARRAY['signed'::text, 'lost'::text]))"
+   }
+  },
+  "checks": [
+   {
+    "name": "quote_stages_kind_check",
+    "expression": "(kind IS NULL) OR (kind = ANY (ARRAY['draft'::text, 'sent'::text, 'signed'::text, 'lost'::text, 'contract_created'::text]))"
+   }
+  ],
   "foreignKeys": {
    "quote_stages_holding_id_fkey": {
     "columns": [
@@ -875,6 +972,203 @@
     ],
     "table": "company_holdings",
     "onDelete": "CASCADE"
+   }
+  }
+ },
+ "quote_events": {
+  "class": "QuoteEvent",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_stage_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_stage_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "from_kind": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "to_kind": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "actor_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reason": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "metadata": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": {},
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_quote_events_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   "idx_quote_events_quote_id": {
+    "columns": [
+     "quote_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "quote_events_type_check",
+    "expression": "\"type\" = ANY (ARRAY['CREATED'::text, 'UPDATED'::text, 'SENT'::text, 'SIGNED'::text, 'LOST'::text, 'REOPENED'::text, 'STAGE_CHANGED'::text, 'DUPLICATED_FROM'::text, 'CONTRACT_CREATED'::text, 'APPLIED_TO_CONTRACT'::text, 'DELETED'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "quote_events_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "quote_events_quote_id_fkey": {
+    "columns": [
+     "quote_id"
+    ],
+    "table": "quotes",
+    "onDelete": "CASCADE"
+   },
+   "quote_events_from_stage_id_fkey": {
+    "columns": [
+     "from_stage_id"
+    ],
+    "table": "quote_stages",
+    "onDelete": "SET NULL"
+   },
+   "quote_events_to_stage_id_fkey": {
+    "columns": [
+     "to_stage_id"
+    ],
+    "table": "quote_stages",
+    "onDelete": "SET NULL"
+   },
+   "quote_events_actor_id_fkey": {
+    "columns": [
+     "actor_id"
+    ],
+    "table": "users",
+    "onDelete": "NO ACTION"
    }
   }
  },
@@ -1184,6 +1478,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "active",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
@@ -1224,7 +1529,12 @@
     "where": "(odoo_product_id IS NOT NULL)"
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "products_status_check",
+    "expression": "status = ANY (ARRAY['active'::text, 'archived'::text])"
+   }
+  ],
   "foreignKeys": {
    "products_holding_id_fkey": {
     "columns": [

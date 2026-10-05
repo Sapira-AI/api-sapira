@@ -2,17 +2,42 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Raw, Repository } from 'typeorm';
 
+import { resolveCountryInput } from '@/core/utils/country-resolve';
+import { loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
+import { withApiWriter } from '@/modules/contracts/api-writer';
 
+import { conflict, joinEs, plural } from './client-directory.service';
 import { clientLifecycleSql, type ClientLifecycleStatus } from './client-lifecycle';
 import { AssignEntityToClientDto } from './dtos/assign-entity.dto';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { QueryClientsDto } from './dtos/query-clients.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
 import { IClientFilterOptions, IClientWithEntities, IPaginatedClients } from './interfaces/client.interface';
+
+/** Listas del holding que validan `market`, `segment` e `industry` de un cliente (Configuración › Catálogos, ronda 3). */
+const CLIENT_LISTS = [
+	{
+		field: 'market',
+		category: 'markets',
+		label: (value: string) => `El mercado "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+	{
+		field: 'segment',
+		category: 'segments',
+		label: (value: string) => `El segmento "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+	{
+		field: 'industry',
+		category: 'industries',
+		label: (value: string) => `La industria "${value}" no está en la lista del holding (Configuración › Catálogos)`,
+	},
+] as const;
+
+type ClientListField = (typeof CLIENT_LISTS)[number]['field'];
 
 @Injectable()
 export class ClientsService {
@@ -30,8 +55,74 @@ export class ClientsService {
 
 	/** Crea el cliente en el holding activo (validado por `HoldingScopeGuard`). */
 	async create(createClientDto: CreateClientDto, holdingId: string): Promise<Client> {
-		const client = this.clientRepository.create({ ...createClientDto, holding_id: holdingId });
+		const prepared = await this.prepareWrite(createClientDto, holdingId, null);
+		const client = this.clientRepository.create({ ...prepared, holding_id: holdingId } as unknown as Partial<Client>);
 		return await this.clientRepository.save(client);
+	}
+
+	/**
+	 * Ronda 3 de Configuración (contrato §8.8): país ISO (`country_code` manda y reescribe `country` en español; solo `country` busca su
+	 * código) y mercado/segmento/industria validados contra las listas activas del holding. Mandar el mismo valor que ya tiene el cliente no
+	 * se valida (los valores viejos fuera de la lista se conservan hasta la limpieza previa al switch); `''`/`null` lo borra.
+	 */
+	private async prepareWrite<T extends { country?: string | null; country_code?: string | null } & Partial<Record<ClientListField, string | null>>>(
+		dto: T,
+		holdingId: string,
+		current: Partial<Record<ClientListField, string | null>> | null
+	): Promise<T> {
+		const out = { ...dto };
+		const country = await resolveCountryInput(this.clientRepository, { country: dto.country, country_code: dto.country_code });
+
+		if (country) Object.assign(out, country);
+		const toCheck = CLIENT_LISTS.flatMap((list) => {
+			const raw = dto[list.field];
+
+			if (raw === undefined) return [];
+			const value = typeof raw === 'string' ? raw.trim() : raw;
+
+			(out as Record<string, unknown>)[list.field] = value === '' ? null : value;
+			if (!value || value === (current?.[list.field] ?? null)) return [];
+
+			return [{ ...list, value }];
+		});
+
+		if (toCheck.length) {
+			const rows = (await this.clientRepository.query(
+				`SELECT category, value FROM master_data WHERE holding_id = $1 AND is_active = true AND category = ANY($2::text[])`,
+				[holdingId, toCheck.map((item) => item.category)]
+			)) as Array<{ category: string; value: string }>;
+
+			for (const item of toCheck) {
+				if (!rows.some((row) => row.category === item.category && row.value === item.value))
+					throw new BadRequestException(item.label(item.value));
+			}
+		}
+
+		return out;
+	}
+
+	/** Opciones del formulario de clientes: mercados, segmentos e industrias activos del holding (Configuración › Catálogos). */
+	/**
+	 * Listas del holding para el formulario y `renewal_notice_days` (= `holding_settings.auto_renewal_notice_days`, Configuración ronda 4):
+	 * la ventana del aviso "vence pronto" del Cliente 360.
+	 */
+	async getFormOptions(holdingId: string): Promise<{ markets: string[]; segments: string[]; industries: string[]; renewal_notice_days: number }> {
+		const [rows, prefs] = await Promise.all([
+			this.clientRepository.query(
+				`SELECT category, value FROM master_data WHERE holding_id = $1 AND is_active = true AND category IN ('markets', 'segments', 'industries')
+				ORDER BY lower(value)`,
+				[holdingId]
+			) as Promise<Array<{ category: string; value: string }>>,
+			loadHoldingPreferences(this.clientRepository, holdingId),
+		]);
+		const of = (category: string) => rows.filter((row) => row.category === category).map((row) => row.value);
+
+		return {
+			markets: of('markets'),
+			segments: of('segments'),
+			industries: of('industries'),
+			renewal_notice_days: prefs.auto_renewal_notice_days,
+		};
 	}
 
 	/** Clientes del holding activo (validado por `HoldingScopeGuard`). */
@@ -196,17 +287,83 @@ export class ClientsService {
 		return new Map(rows.map((row) => [row.id, row.lifecycle]));
 	}
 
-	async update(id: string, updateClientDto: UpdateClientDto): Promise<Client> {
+	async update(id: string, updateClientDto: UpdateClientDto, holdingId?: string): Promise<Client> {
 		const client = await this.findOne(id);
 
-		Object.assign(client, updateClientDto);
+		Object.assign(client, await this.prepareWrite(updateClientDto, holdingId ?? String(client.holding_id), client));
 
 		return await this.clientRepository.save(client);
 	}
 
-	async remove(id: string): Promise<{ success: boolean; message: string }> {
-		const client = await this.findOne(id);
-		await this.clientRepository.remove(client);
+	/**
+	 * Lo que impide eliminar un cliente comercial. Historial (contratos, facturas, facturas históricas, MRR histórico,
+	 * suscripciones) y cotizaciones: sus FK no tienen cascada o la cascada borraría datos (cotizaciones `CASCADE`, facturas
+	 * históricas `SET NULL`). Razones sociales creadas con este cliente (`client_entities.client_id`, columna heredada con
+	 * `ON DELETE CASCADE`): se borrarían con él, así que también bloquean. Las razones sociales vinculadas solo por
+	 * `client_entity_clients` no bloquean: pierden el vínculo y quedan sin cliente asignado.
+	 */
+	async removalUsage(id: string, holdingId: string) {
+		const [row] = (await this.clientRepository.query(
+			`SELECT
+				(SELECT COUNT(*) FROM contracts WHERE client_id = $1) AS contracts,
+				(SELECT COUNT(*) FROM invoices WHERE client_id = $1) AS invoices,
+				(SELECT COUNT(*) FROM invoices_legacy WHERE client_id = $1) AS legacy_invoices,
+				(SELECT COUNT(*) FROM mrr_legacy WHERE client_id = $1) AS legacy_mrr,
+				(SELECT COUNT(*) FROM subscriptions WHERE client_id = $1) AS subscriptions,
+				(SELECT COUNT(*) FROM quotes WHERE client_id = $1) AS quotes,
+				(SELECT COUNT(*) FROM client_entities WHERE client_id = $1 AND holding_id = $2) AS owned_entities
+			FROM clients WHERE id = $1 AND holding_id = $2`,
+			[id, holdingId]
+		)) as Array<Record<string, unknown>>;
+
+		if (!row) throw new NotFoundException(`Cliente con id ${id} no encontrado`);
+		const n = (value: unknown) => Number(value ?? 0) || 0;
+
+		return {
+			contracts: n(row.contracts),
+			invoices: n(row.invoices),
+			legacy_invoices: n(row.legacy_invoices),
+			legacy_mrr: n(row.legacy_mrr),
+			subscriptions: n(row.subscriptions),
+			quotes: n(row.quotes),
+			owned_entities: n(row.owned_entities),
+		};
+	}
+
+	/**
+	 * Elimina un cliente comercial sin uso (ver `removalUsage`): 409 `client_in_use` con los conteos si tiene historial o
+	 * cotizaciones, y 409 `client_owns_entities` si borrarlo arrastraría razones sociales. Con la cascada de la base se van sus
+	 * contactos, documentos, notas, configuración de agentes y vínculos con razones sociales (que quedan sin cliente asignado).
+	 */
+	async remove(id: string, holdingId: string): Promise<{ success: boolean; message: string }> {
+		const usage = await this.removalUsage(id, holdingId);
+		const parts = [
+			plural(usage.contracts, 'contrato', 'contratos'),
+			plural(usage.invoices, 'factura', 'facturas'),
+			plural(usage.legacy_invoices, 'factura histórica', 'facturas históricas'),
+			plural(usage.legacy_mrr, 'registro de MRR histórico', 'registros de MRR histórico'),
+			plural(usage.subscriptions, 'suscripción', 'suscripciones'),
+			plural(usage.quotes, 'cotización', 'cotizaciones'),
+		].filter(Boolean);
+
+		if (parts.length) throw conflict('client_in_use', `No se puede eliminar: tiene ${joinEs(parts)}.`, { usage });
+		if (usage.owned_entities)
+			throw conflict(
+				'client_owns_entities',
+				`No se puede eliminar: ${plural(usage.owned_entities, 'razón social se creó', 'razones sociales se crearon')} con este cliente y se borrarían con él.`,
+				{ usage }
+			);
+
+		try {
+			await withApiWriter(this.clientRepository.manager.connection, (runner) =>
+				runner.query(`DELETE FROM clients WHERE id = $1 AND holding_id = $2`, [id, holdingId])
+			);
+		} catch (error) {
+			// FK que la revisión no conoce (tabla nueva): se explica en vez de un 500.
+			if ((error as { code?: string })?.code === '23503')
+				throw conflict('client_in_use', 'No se puede eliminar: el cliente todavía está referenciado por otros registros.', { usage });
+			throw error;
+		}
 
 		return {
 			success: true,
@@ -266,8 +423,19 @@ export class ClientsService {
 		};
 	}
 
-	async unassignEntity(clientId: string, entityId: string): Promise<{ success: boolean; message: string }> {
-		await this.findOne(clientId);
+	/**
+	 * Quita el vínculo razón social ↔ cliente comercial (`client_entity_clients`); la razón social no se elimina. 409
+	 * `entity_client_in_use` con los conteos si ESE cliente tiene contratos, facturas (también históricas) o suscripciones con
+	 * ESA razón social (mismo criterio de uso que `ClientDirectoryService.deletionCheck`, acotado al par; las cotizaciones no
+	 * apuntan a la razón social). Si era la principal, la siguiente más antigua del cliente pasa a serlo (misma regla que
+	 * eliminar razón social). `client_entities.client_id` (columna heredada) no se toca, igual que al asignar.
+	 */
+	async unassignEntity(
+		clientId: string,
+		entityId: string,
+		holdingId?: string
+	): Promise<{ success: boolean; message: string; new_primary_entity_id: string | null }> {
+		const client = await this.findOne(clientId, holdingId);
 
 		const relation = await this.clientEntityClientRepository.findOne({
 			where: {
@@ -280,11 +448,53 @@ export class ClientsService {
 			throw new NotFoundException('Relación no encontrada entre el cliente y la razón social');
 		}
 
-		await this.clientEntityClientRepository.remove(relation);
+		const [row] = (await this.clientRepository.query(
+			`SELECT
+				(SELECT COUNT(*) FROM contracts WHERE client_id = $1 AND client_entity_id = $2) AS contracts,
+				(SELECT COUNT(*) FROM invoices WHERE client_id = $1 AND client_entity_id = $2) AS invoices,
+				(SELECT COUNT(*) FROM invoices_legacy WHERE client_id = $1 AND client_entity_id = $2) AS legacy_invoices,
+				(SELECT COUNT(*) FROM subscriptions WHERE client_id = $1 AND client_entity_id = $2) AS subscriptions`,
+			[clientId, entityId]
+		)) as Array<Record<string, unknown>>;
+		const n = (value: unknown) => Number(value ?? 0) || 0;
+		const usage = {
+			contracts: n(row?.contracts),
+			invoices: n(row?.invoices),
+			legacy_invoices: n(row?.legacy_invoices),
+			subscriptions: n(row?.subscriptions),
+		};
+		const parts = [
+			plural(usage.contracts, 'contrato', 'contratos'),
+			plural(usage.invoices, 'factura', 'facturas'),
+			plural(usage.legacy_invoices, 'factura histórica', 'facturas históricas'),
+			plural(usage.subscriptions, 'suscripción', 'suscripciones'),
+		].filter(Boolean);
+
+		if (parts.length)
+			throw conflict('entity_client_in_use', `No se puede desasignar: tiene ${joinEs(parts)} con este cliente.`, {
+				usage,
+				next_step:
+					'Si la razón social está mal asignada, cámbiala en esos contratos (Modificar contrato › Cambiar razón social) y vuelve a intentarlo.',
+			});
+
+		const newPrimary = await withApiWriter(this.clientRepository.manager.connection, async (runner) => {
+			await runner.query(`DELETE FROM client_entity_clients WHERE id = $1 AND client_id = $2`, [relation.id, clientId]);
+			if (!relation.is_primary) return null;
+			const promoted = (await runner.query(
+				`UPDATE client_entity_clients SET is_primary = true WHERE id = (
+					SELECT id FROM client_entity_clients WHERE client_id = $1 AND holding_id = $2 ORDER BY created_at, id LIMIT 1)
+				RETURNING client_entity_id`,
+				[clientId, client.holding_id]
+			)) as Array<Record<string, unknown>> | [Array<Record<string, unknown>>, number];
+			const rows = (Array.isArray(promoted[0]) ? promoted[0] : promoted) as Array<Record<string, unknown>>;
+
+			return rows[0]?.client_entity_id ? String(rows[0].client_entity_id) : null;
+		});
 
 		return {
 			success: true,
 			message: 'Razón social desasignada exitosamente del cliente',
+			new_primary_entity_id: newPrimary,
 		};
 	}
 

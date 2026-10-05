@@ -144,6 +144,28 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "avatar_preset": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "avatar_path": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
@@ -171,6 +193,10 @@
    }
   },
   "checks": [
+   {
+    "name": "users_avatar_one_kind_check",
+    "expression": "avatar_preset IS NULL OR avatar_path IS NULL"
+   },
    {
     "name": "users_status_check",
     "expression": "((status = ANY (ARRAY['Pendiente'::text, 'Activo'::text, 'Inactivo'::text])))"
@@ -239,6 +265,17 @@
     "primary": false,
     "generated": null,
     "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "is_default": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": false,
     "length": null,
     "precision": null,
     "scale": null,
@@ -667,6 +704,17 @@
     "scale": null,
     "array": false
    },
+   "country_code": {
+    "type": "character",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": "2",
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "currency": {
     "type": "text",
     "nullable": true,
@@ -761,6 +809,17 @@
     "primary": false,
     "generated": null,
     "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fx_company_policy": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "monthly_avg",
     "length": null,
     "precision": null,
     "scale": null,
@@ -882,10 +941,29 @@
     ],
     "unique": false,
     "where": null
+   },
+   "idx_companies_country_code": {
+    "columns": [
+     "country_code"
+    ],
+    "unique": false,
+    "where": null
    }
   },
-  "checks": [],
+  "checks": [
+   {
+    "name": "companies_fx_company_policy_check",
+    "expression": "fx_company_policy = ANY (ARRAY['monthly_avg'::text])"
+   }
+  ],
   "foreignKeys": {
+   "companies_country_code_fkey": {
+    "columns": [
+     "country_code"
+    ],
+    "table": "countries",
+    "onDelete": "RESTRICT"
+   },
    "companies_holding_fk": {
     "columns": [
      "holding_id"
@@ -1320,11 +1398,127 @@
     "precision": null,
     "scale": null,
     "array": true
+   },
+   "auto_renewal_notice_days": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 30,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "timezone": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "America/Santiago",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "renewal_reminder_days": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{15,7,0}'",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": true
+   },
+   "renewal_overdue_every_days": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 7,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_numbering_mode": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "prefixed",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_number_prefix": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "COT",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_number_include_year": {
+    "type": "boolean",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": true,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "quote_number_width": {
+    "type": "smallint",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 4,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {},
   "checks": [
+   {
+    "name": "holding_settings_quote_number_width_check",
+    "expression": "\"quote_number_width\" >= 1 AND \"quote_number_width\" <= 8"
+   },
+   {
+    "name": "holding_settings_quote_number_prefix_check",
+    "expression": "\"quote_number_prefix\" ~ '^[A-Za-z0-9]{1,10}$'"
+   },
+   {
+    "name": "holding_settings_quote_numbering_mode_check",
+    "expression": "\"quote_numbering_mode\" = ANY (ARRAY['prefixed'::text, 'sequential'::text, 'manual'::text])"
+   },
+   {
+    "name": "holding_settings_renewal_overdue_every_days_check",
+    "expression": "\"renewal_overdue_every_days\" >= 1 AND \"renewal_overdue_every_days\" <= 90"
+   },
+   {
+    "name": "holding_settings_renewal_reminder_days_check",
+    "expression": "cardinality(\"renewal_reminder_days\") BETWEEN 1 AND 10 AND 0 <= ALL(\"renewal_reminder_days\") AND 180 >= ALL(\"renewal_reminder_days\")"
+   },
+   {
+    "name": "holding_settings_timezone_check",
+    "expression": "char_length(\"timezone\") BETWEEN 1 AND 64"
+   },
+   {
+    "name": "holding_settings_auto_renewal_notice_days_check",
+    "expression": "\"auto_renewal_notice_days\" >= 1 AND \"auto_renewal_notice_days\" <= 180"
+   },
    {
     "name": "holding_settings_fx_system_policy_check",
     "expression": "fx_system_policy = ANY (ARRAY['fixed_period'::text, 'monthly_avg'::text])"
@@ -1401,6 +1595,17 @@
    "field_type": {
     "type": "text",
     "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "options": {
+    "type": "jsonb",
+    "nullable": true,
     "primary": false,
     "generated": null,
     "default": null,
@@ -1507,8 +1712,12 @@
     "expression": "entity_type = ANY (ARRAY['client'::text, 'contract'::text, 'contract_item'::text, 'quote'::text, 'quote_item'::text, 'invoice'::text, 'invoice_item'::text])"
    },
    {
+    "name": "custom_field_definitions_options_check",
+    "expression": "(field_type = 'select') = (options IS NOT NULL AND jsonb_typeof(options) = 'array' AND jsonb_array_length(options) > 0)"
+   },
+   {
     "name": "custom_field_definitions_field_type_check",
-    "expression": "field_type = ANY (ARRAY['text'::text, 'number'::text])"
+    "expression": "field_type = ANY (ARRAY['text'::text, 'number'::text, 'select'::text, 'boolean'::text, 'date'::text])"
    }
   ],
   "foreignKeys": {
