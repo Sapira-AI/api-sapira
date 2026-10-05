@@ -503,7 +503,7 @@ export class CreateContractDto {
 
 	@ApiPropertyOptional({
 		description:
-			'Documento tributario del catálogo (`form-options.companies[].tax_document_types`). Debe ser del país de la compañía emisora (o genérico si el país no tiene catálogo). Default: `suggested_tax_document_type_id`. Fija `document_type` por su familia',
+			'Documento tributario del catálogo (`form-options.companies[].tax_document_types`). Debe ser del país de la compañía emisora (o genérico si el país no tiene catálogo). Default: `suggested_tax_document_type_id`. Fija `document_type` por su familia; con el sugerido, exportación si el país emisor y el receptor difieren aunque el documento sea el local (CFDI, 01)',
 	})
 	@IsUUID(undefined, { message: 'Documento tributario inválido' })
 	@IsOptional()

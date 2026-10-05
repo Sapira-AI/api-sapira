@@ -7,7 +7,7 @@ import { ConsumptionService } from '@/modules/contracts/consumption.service';
 import { RevenueMetricsService } from '@/modules/metrics/revenue-metrics.service';
 import { QUOTE_CONTRACT_LATERAL, quoteStatusLateral } from '@/modules/quotes/quote-status';
 
-import { type Bucket, buildTasks, monthBounds, monthCloseWindow, type Task, type TaskInputs } from './tasks';
+import { type Bucket, buildTasks, monthBounds, type Task, type TaskInputs } from './tasks';
 
 type Row = Record<string, unknown>;
 
@@ -51,14 +51,12 @@ export class TasksService {
 	async forHolding(holdingId: string, asOf?: string, companyIds: string[] = []): Promise<HoldingTasks> {
 		const today = asOf ?? (await this.billing.today(new Date(), holdingId));
 		const companies = [...new Set(companyIds)];
-		const window = monthCloseWindow(today);
-		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions, monthClose] = await Promise.all([
+		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions] = await Promise.all([
 			this.billing.systemCurrency(holdingId),
 			this.safe('cola Por emitir', () => this.queueBuckets(holdingId, today, companies), {
 				ready: empty(),
-				late: { ...empty(), first_month: null },
+				late: { ...empty(), first_month: null, this_month: empty(), previous_month: empty(), older: { ...empty(), first_month: null } },
 				blocked: { ...empty(), first_month: null, reasons: [] },
-				past_months: { ...empty(), first_month: null },
 				total: 0,
 			}),
 			this.safe('vencidas y notas de crédito', () => this.receivableBuckets(holdingId, today, companies), {
@@ -69,7 +67,6 @@ export class TasksService {
 			this.safe('cotizaciones', () => this.quoteBuckets(holdingId, today), { waiting_mapping: empty(), quotes_unprocessed: empty() }),
 			this.safe('consumos por informar', () => this.consumptionBucket(holdingId, today, companies), empty()),
 			this.safe('excepciones de Ingresos', () => this.exceptionsBucket(holdingId), empty()),
-			window ? this.safe('cierre de mes', () => this.monthCloseBucket(holdingId, window.month, companies), null) : Promise.resolve(null),
 		]);
 		const input: TaskInputs = {
 			today,
@@ -84,7 +81,6 @@ export class TasksService {
 			consumptions,
 			...quotes,
 			revenue_exceptions: exceptions,
-			month_close: monthClose && window && monthClose.count > 0 ? { ...monthClose, month: window.month } : null,
 			company_ids: companies,
 		};
 
@@ -152,7 +148,7 @@ export class TasksService {
 			for (const row of rows ?? [])
 				amounts.set(String(row.id), { amount: num(row.amount_system_currency), date: row.date ? String(row.date).slice(0, 10) : null });
 		}
-		const { first } = monthBounds(today);
+		const { first, month: currentMonth, previousMonth } = monthBounds(today);
 		const monthOf = (id: string) => amounts.get(id)?.date?.slice(0, 7) ?? null;
 		const firstMonth = (list: Array<{ id: string }>) =>
 			list
@@ -180,18 +176,28 @@ export class TasksService {
 				reasons.set(reason.code, current);
 			}
 		}
-		const past = entries.filter((entry) => {
+		// Atrasadas (Domi 05-10, una sola tarea): no bloqueadas, del grupo `late` o con fecha de un mes pasado; cada factura cuenta una vez y
+		// las bloqueadas solo en su tarea, para que el resumen de arriba no sume dos veces lo mismo.
+		const blockedIds = new Set(blocked.map((entry) => entry.id));
+		const late = entries.filter((entry) => {
+			if (blockedIds.has(entry.id) || entry.group === 'blocked') return false;
 			const date = amounts.get(entry.id)?.date;
 
-			return Boolean(date && date < first);
+			return entry.group === 'late' || Boolean(date && date < first);
 		});
-		const late = entries.filter((entry) => entry.group === 'late');
+		const byMonth = (match: (month: string | null) => boolean) => late.filter((entry) => match(monthOf(entry.id)));
+		const older = byMonth((month) => !!month && month < previousMonth);
 
 		return {
 			ready: bucket(entries.filter((entry) => entry.group === 'ready')),
-			late: { ...bucket(late), first_month: firstMonth(late) },
+			late: {
+				...bucket(late),
+				first_month: firstMonth(late),
+				this_month: bucket(byMonth((month) => !month || month >= currentMonth)),
+				previous_month: bucket(byMonth((month) => month === previousMonth)),
+				older: { ...bucket(older), first_month: firstMonth(older) },
+			},
 			blocked: { ...bucket(blocked), first_month: firstMonth(blocked), reasons: [...reasons.values()].sort((a, b) => b.count - a.count) },
-			past_months: { ...bucket(past), first_month: firstMonth(past) },
 			total: entries.length,
 		};
 	}
@@ -238,13 +244,20 @@ export class TasksService {
 				WHERE sc.holding_id = $1 AND sc.status = 'scheduled' AND sc.trigger IN ('on_date', 'every_n_months') AND sc.parent_id IS NULL
 					AND (CASE WHEN sc.trigger = 'on_date' THEN sc.effective_date ELSE COALESCE(sc.next_effective_date, sc.anchor_date) END) <= $2::date
 			), without_invoices AS (
+				-- Por ítem (Domi 05-10): un ítem recurrente vigente sin ninguna línea que lo cubra. Cubre una Por Emitir de cualquier fecha (las
+				-- atrasadas van en su propia tarea) o una factura vigente cuyo período llega a hoy (facturación anual, semestral o trimestral
+				-- ya cobrada: la próxima cae en la renovación).
 				SELECT live.id AS contract_id FROM live
 				WHERE EXISTS (
 					SELECT 1 FROM contract_items ci WHERE ci.contract_id = live.id AND ci.holding_id = $1 AND ci.is_recurring = true
-						AND ci.churn_date IS NULL AND (ci.end_date IS NULL OR ci.end_date >= $2::date)
-				) AND NOT EXISTS (
-					SELECT 1 FROM invoices i WHERE i.contract_id = live.id AND i.holding_id = $1 AND i.is_active = true AND i.status = 'Por Emitir'
-						AND COALESCE(i.issue_date, i.scheduled_at) >= $2::date
+						AND ci.churn_date IS NULL AND COALESCE(ci.categoria, '') NOT IN ('CHURN', 'DOWNSELL')
+						AND (ci.end_date IS NULL OR ci.end_date >= $2::date)
+						AND NOT EXISTS (
+							SELECT 1 FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+							WHERE ii.contract_item_id = ci.id AND i.holding_id = $1 AND i.is_active = true
+								AND COALESCE(i.document_type, 'FACTURA') NOT IN ('NC', 'ND')
+								AND (i.status = 'Por Emitir' OR (i.status NOT IN ('Cancelada', 'Anulada') AND ii.billing_period_end >= $2::date))
+						)
 				)
 			)
 			SELECT
@@ -343,8 +356,8 @@ export class TasksService {
 	}
 
 	/**
-	 * Cierre de mes (§8.6): Por Emitir activas (facturas, no NC) del mes a cerrar, por compañía, con monto en moneda del sistema. La usan la
-	 * tarea `month_close_pending` y la alerta del mismo nombre (`MonthCloseService`).
+	 * Cierre de mes (§8.6): Por Emitir activas (facturas, no NC) del mes a cerrar, por compañía, con monto en moneda del sistema. La usa la
+	 * alerta `month_close_pending` (`MonthCloseService`); en Tareas ese mes es el "Mes anterior" de las atrasadas (Domi 05-10).
 	 */
 	async monthCloseByCompany(
 		holdingId: string,
@@ -372,15 +385,6 @@ export class TasksService {
 			amount: Math.round(num(row.amount) * 100) / 100,
 			invoice_ids: ids(row.ids),
 		}));
-	}
-
-	private async monthCloseBucket(holdingId: string, month: string, companies: string[]): Promise<Bucket> {
-		const rows = await this.monthCloseByCompany(holdingId, month, companies);
-
-		return {
-			count: rows.reduce((sum, row) => sum + row.count, 0),
-			amount: Math.round(rows.reduce((sum, row) => sum + row.amount, 0) * 100) / 100,
-		};
 	}
 
 	/** Excepciones de Ingresos (misma lista que la pestaña Excepciones). */

@@ -19,7 +19,9 @@ export interface Task {
 	currency: string | null;
 	severity: TaskSeverity;
 	href: string;
-	breakdown?: Array<{ key: string; label: string; count: number; href: string }>;
+	/** Qué hacer para cerrar la tarea (tooltip del centro). */
+	hint?: string;
+	breakdown?: Array<{ key: string; label: string; count: number; href: string; amount?: number | null; hint?: string }>;
 }
 
 export interface Bucket {
@@ -36,14 +38,22 @@ export interface TaskInputs {
 	currency: string;
 	queue: {
 		ready: Bucket;
-		/** `first_month`: primer mes (`YYYY-MM`) de las facturas de la tarea; arma el enlace `desde=…&hasta=<mes en curso>`. */
-		late: Bucket & { first_month?: string | null };
+		/**
+		 * Por emitir atrasadas (Domi 05-10: una sola tarea en vez de "atrasadas", "de meses pasados" y "siguen sin emitir", que contaban las
+		 * mismas facturas): Por Emitir no bloqueadas cuya fecha de emisión ya pasó, por antigüedad (este mes, mes anterior, más antiguas).
+		 * `first_month` (`YYYY-MM`): primer mes de las facturas; arma el enlace `desde=…&hasta=<mes en curso>`.
+		 */
+		late: Bucket & {
+			first_month?: string | null;
+			this_month?: Bucket;
+			previous_month?: Bucket;
+			older?: Bucket & { first_month?: string | null };
+		};
 		/** Sin el motivo `no_contract` (facturas sin contrato: datos a sanear, no una tarea). */
 		blocked: Bucket & {
 			first_month?: string | null;
 			reasons: Array<{ code: string; label: string; count: number; first_month?: string | null }>;
 		};
-		past_months: Bucket & { first_month: string | null };
 	};
 	overdue: Bucket;
 	credit_notes: Bucket;
@@ -56,8 +66,6 @@ export interface TaskInputs {
 	waiting_mapping: Bucket;
 	quotes_unprocessed: Bucket;
 	revenue_exceptions: Bucket;
-	/** Cierre de mes (§8.6): Por Emitir del mes a cerrar; solo dentro de la ventana (null fuera de ella). */
-	month_close?: (Bucket & { month: string }) | null;
 	/** Compañías aplicadas ("Mis compañías"): se agregan al enlace de Facturación. */
 	company_ids?: string[];
 }
@@ -141,6 +149,13 @@ const contractHref = (bucket: Bucket, listHref: string, tab?: string) =>
 export const queueRange = (firstMonth: string | null | undefined, currentMonth: string) =>
 	firstMonth ? `desde=${firstMonth}&hasta=${firstMonth > currentMonth ? firstMonth : currentMonth}` : 'periodo=todo';
 
+/** `YYYY-MM` del mes anterior a `month` (`YYYY-MM`). */
+const monthBefore = (month: string) => monthBounds(`${month}-01`).previousMonth;
+
+/** Cómo se cierran las Por emitir atrasadas (tooltip de la tarea). */
+export const LATE_HINT =
+	'Para cerrarlas: emite las que corresponden; reprograma las que deben salir en otra fecha; y si el cliente se fue o redujo su plan, regístralo en el contrato (Modificar contrato) para que las facturas que sobran se cancelen.';
+
 /** Todas las tareas (también las en cero), en orden por gravedad. El centro muestra solo las con conteo. */
 export function buildTasks(input: TaskInputs): Task[] {
 	const { first, last, month, previousMonth } = monthBounds(input.today);
@@ -176,6 +191,43 @@ export function buildTasks(input: TaskInputs): Task[] {
 		),
 		{
 			...task(
+				'invoices_late',
+				'facturacion',
+				'Facturas por emitir atrasadas',
+				input.queue.late,
+				'warning',
+				`/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.first_month, month)}`,
+				true
+			),
+			hint: LATE_HINT,
+			breakdown: [
+				{
+					key: 'this_month',
+					label: 'Este mes',
+					bucket: input.queue.late.this_month,
+					href: `/facturacion?estado=${PENDING}&grupo=late&desde=${month}&hasta=${month}`,
+					hint: 'Su fecha de emisión ya pasó: emítelas o, si se adelantó o atrasó el cobro, reprográmalas.',
+				},
+				{
+					key: 'previous_month',
+					label: 'Mes anterior',
+					bucket: input.queue.late.previous_month,
+					href: `/facturacion?estado=${PENDING}&grupo=late&desde=${previousMonth}&hasta=${previousMonth}`,
+					hint: 'Del mes que se está cerrando: emítelas con fecha de ese mes o, si corresponden al siguiente, reprográmalas.',
+				},
+				{
+					key: 'older',
+					label: 'Más antiguas',
+					bucket: input.queue.late.older,
+					href: `/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.older?.first_month ?? null, monthBefore(previousMonth))}`,
+					hint: 'Llevan más de un mes: confirma si el servicio siguió. Si el cliente se fue o redujo, regístralo en el contrato (Modificar contrato › Termina el contrato o Quitó un producto) y las facturas que sobran se cancelan; si siguió, emítelas o reprográmalas.',
+				},
+			]
+				.filter((part) => (part.bucket?.count ?? 0) > 0)
+				.map(({ bucket, ...part }) => ({ ...part, count: bucket!.count, amount: bucket!.amount ?? null })),
+		},
+		{
+			...task(
 				'invoices_blocked',
 				'facturacion',
 				'Facturas por emitir bloqueadas',
@@ -191,24 +243,6 @@ export function buildTasks(input: TaskInputs): Task[] {
 				href: `${blockedBase}&${queueRange(reason.first_month, month)}&motivo=${encodeURIComponent(reason.code)}`,
 			})),
 		},
-		task(
-			'invoices_late',
-			'facturacion',
-			'Facturas por emitir atrasadas',
-			input.queue.late,
-			'warning',
-			`/facturacion?estado=${PENDING}&grupo=late&${queueRange(input.queue.late.first_month, month)}`,
-			true
-		),
-		task(
-			'invoices_past_months',
-			'facturacion',
-			'Por emitir de meses pasados',
-			input.queue.past_months,
-			'warning',
-			`/facturacion?estado=${PENDING}&desde=${input.queue.past_months.first_month ?? previousMonth}&hasta=${previousMonth}`,
-			true
-		),
 		task('invoices_overdue', 'facturacion', 'Facturas vencidas', input.overdue, 'warning', '/facturacion?pago=overdue&periodo=todo', true),
 		task(
 			'credit_notes_to_issue',
@@ -270,21 +304,6 @@ export function buildTasks(input: TaskInputs): Task[] {
 			true
 		),
 		task('revenue_exceptions', 'ingresos', 'Excepciones de Ingresos', input.revenue_exceptions, 'warning', '/ingresos?tab=excepciones'),
-		...(input.month_close
-			? [
-					task(
-						'month_close_pending',
-						'facturacion',
-						`${input.month_close.count} ${input.month_close.count === 1 ? 'factura Por Emitir' : 'facturas Por Emitir'} de ${monthLabel(
-							input.month_close.month
-						)} ${input.month_close.count === 1 ? 'sigue' : 'siguen'} sin emitir`,
-						input.month_close,
-						'warning',
-						monthQueueHref(input.month_close.month, input.company_ids),
-						true
-					),
-				]
-			: []),
 	];
 
 	const companies = input.company_ids ?? [];
