@@ -2,6 +2,8 @@
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
+import { defaultSubscriptions, notificationCatalogEntry } from '@/modules/notifications/notification-catalog';
+
 import { BigQueryService } from './bigquery.service';
 
 describe('BigQueryService', () => {
@@ -398,6 +400,28 @@ describe('BigQueryService', () => {
 			expect(ingest).toHaveBeenCalledWith('holding-1', { from: '2026-07-01', to: '2026-07-31' });
 			expect(integrate).toHaveBeenCalledWith('holding-1', { range: { from: '2026-07-01', to: '2026-07-31' } });
 			expect(result.range).toEqual({ from: '2026-07-01', to: '2026-07-31' });
+		});
+
+		it('los tipos del canal tienen destinatarios por catálogo: sin ellos nadie las ve', async () => {
+			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
+			quantityImportRepository.find.mockResolvedValue([buildImport({ quote_line_id: null, opportunity_id: null })]);
+			wireDataSource(dataSource, { candidates: [] });
+
+			await service.integrateSapiraQuantities('holding-1', { range: { from: '2026-07-01', to: '2026-07-31' } });
+
+			// El productor no pasa `recipients`: los resuelve `notification_role_subscriptions`, que la semilla
+			// `007-notification-default-subscriptions.sql` llena desde `defaultSubscriptions()`. Si un tipo del canal
+			// quedara fuera del catálogo o sin suscripción por defecto, nacería con recipient_count = 0 y el reemplazo
+			// manual —única salida de `conflict` y `changed_in_source`— sería inalcanzable.
+			const sembrados = new Set(defaultSubscriptions().map((subscription) => subscription.type));
+
+			expect(notificationsService.createOrUpdate).toHaveBeenCalled();
+
+			for (const [, dto] of notificationsService.createOrUpdate.mock.calls) {
+				expect(dto.recipients).toBeUndefined();
+				expect(notificationCatalogEntry(dto.type)?.subscribable).toBe(true);
+				expect(sembrados.has(dto.type)).toBe(true);
+			}
 		});
 
 		it('la clave de deduplicación de las agregadas lleva el rango, no el mes en curso', async () => {

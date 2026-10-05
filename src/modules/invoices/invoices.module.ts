@@ -15,8 +15,8 @@ import { BancoCentralModule } from '@/modules/banco-central/banco-central.module
 import { EmailsModule } from '@/modules/emails/emails.module';
 import { HoldingsModule } from '@/modules/holdings/holdings.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
-import { UsersModule } from '@/modules/users/users.module';
 import { OdooModule } from '@/modules/odoo/odoo.module';
+import { UsersModule } from '@/modules/users/users.module';
 
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerInitService } from './invoice-scheduler-init.service';

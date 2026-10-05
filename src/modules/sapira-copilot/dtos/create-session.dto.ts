@@ -12,10 +12,11 @@ export class CreateSessionDto {
 	@IsOptional()
 	description?: string;
 
-	@ApiProperty({ description: 'Holding ID (obligatorio)' })
+	/** Compatibilidad con el front viejo: el holding sale de `HoldingScopeGuard` y el servicio lo ignora. */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
 	@IsString()
-	@IsNotEmpty()
-	holding_id: string;
+	@IsOptional()
+	holding_id?: string;
 }
 
 export class UpdateSessionDto {
@@ -29,8 +30,9 @@ export class UpdateSessionDto {
 	@IsOptional()
 	description?: string;
 
-	@ApiProperty({ description: 'Holding ID (obligatorio)' })
+	/** Compatibilidad con el front viejo: el holding sale de `HoldingScopeGuard` y el servicio lo ignora. */
+	@ApiPropertyOptional({ deprecated: true, description: 'Compatibilidad: debe coincidir con x-holding-id; se ignora' })
 	@IsString()
-	@IsNotEmpty()
-	holding_id: string;
+	@IsOptional()
+	holding_id?: string;
 }

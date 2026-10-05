@@ -2,13 +2,10 @@ import { Logger } from '@nestjs/common';
 import { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
+import { getCorsOrigins } from '@/core/config/cors-origins';
+
 import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { ProcessInvoicesResponseDto } from './dtos/send-invoices.dto';
-
-const frontendOrigins = (process.env.FRONT_BASE_URL || 'http://localhost:8080,http://localhost:8081')
-	.split(',')
-	.map((origin) => origin.trim())
-	.filter(Boolean);
 
 interface SchedulerNotificationPayload {
 	id: string;
@@ -24,7 +21,7 @@ interface SchedulerNotificationPayload {
 
 @WebSocketGateway({
 	cors: {
-		origin: frontendOrigins,
+		origin: getCorsOrigins(),
 		credentials: true,
 	},
 	namespace: '/scheduler',

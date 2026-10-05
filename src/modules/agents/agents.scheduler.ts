@@ -6,6 +6,23 @@ import { RetryOnTimeout } from '@/decorators/retry-on-timeout.decorator';
 
 import { AgentsService } from './agents.service';
 
+/**
+ * Fila de `ai_agents` que devuelve la consulta del scheduler.
+ *
+ * Tiparla no es cosmético: mientras fue `any[]`, `agent.holding_id` era asignable al parámetro
+ * `mode: 'preview' | 'execute'` de `runAgent`, y los argumentos quedaron invertidos sin que el
+ * compilador dijera nada. El scheduler consultaba `WHERE holding_id = 'execute'`, Postgres rechazaba
+ * el UUID y el `catch` se lo comía: la ejecución automática nunca corrió.
+ */
+interface ScheduledAgentRow {
+	id: string;
+	type: string;
+	schedule: string;
+	holding_id: string;
+	auto_execute: boolean;
+	require_approval: boolean;
+}
+
 @Injectable()
 export class AgentsScheduler {
 	private readonly logger = new Logger(AgentsScheduler.name);
@@ -32,7 +49,7 @@ export class AgentsScheduler {
 					if (this.shouldExecuteNow(agent.schedule)) {
 						this.logger.log(`Executing scheduled agent: ${agent.type} (${agent.id})`);
 
-						await this.agentsService.runAgent(agent.id, agent.holding_id, 'execute');
+						await this.agentsService.runAgent(agent.id, 'execute', agent.holding_id);
 
 						this.logger.log(`Successfully executed agent: ${agent.type} (${agent.id})`);
 					}
@@ -52,7 +69,7 @@ export class AgentsScheduler {
 	}
 
 	@RetryOnTimeout({ maxAttempts: 3, delayMs: 1000 })
-	private async getScheduledAgentsWithRetry(): Promise<any[]> {
+	private async getScheduledAgentsWithRetry(): Promise<ScheduledAgentRow[]> {
 		return await this.dataSource.query(
 			`
 			SELECT 

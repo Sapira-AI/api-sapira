@@ -117,7 +117,14 @@ nuevo consume `api-sapira` vía BFF (cero `supabase.rpc()` directo), paridad fun
 
 - Scope, trenes y familias: [`docs/v2-rediseno/matriz-scope-migracion-front.md`](docs/v2-rediseno/matriz-scope-migracion-front.md)
 - Qué llama el front viejo / qué endpoints existen: [`docs/v2-rediseno/inventario-rpc-front-viejo.md`](docs/v2-rediseno/inventario-rpc-front-viejo.md)
-- Decisión de arranque pendiente: patrón de autorización (JWT propagado a Postgres vs service role)
+- ✅ Patrón de autorización decidido el 24-09: [`docs/v2-rediseno/autorizacion-y-tenancy.md`](docs/v2-rediseno/autorizacion-y-tenancy.md)
+  (`HoldingScopeGuard` + `@HoldingId()`, no JWT propagado a Postgres)
+- Controladores que faltan por migrar a esa regla: [`docs/v2-rediseno/inventario-tenancy-fase-2.md`](docs/v2-rediseno/inventario-tenancy-fase-2.md)
+- Plan del módulo Integraciones (el más grande, y el que cierra la Fase 2 de tenancy):
+  [`docs/v2-rediseno/plan-migracion-integraciones.md`](docs/v2-rediseno/plan-migracion-integraciones.md)
+- **Roadmap de los cuatro frentes** (cantidades variables, automatizaciones de proforma y cobranza,
+  facturación electrónica e integraciones), con el estado verificado de cada uno y su plan por etapas:
+  [`docs/v2-rediseno/roadmap-cuatro-frentes.md`](docs/v2-rediseno/roadmap-cuatro-frentes.md) · 02-10-2026
 
 ### Fase 2 — Rediseño UI/UX por módulo 🔄 parcial · Domi
 
@@ -189,7 +196,8 @@ El backlog operativo vive en **dos copias espejo**: [`docs/ROADMAP-OPERATIVO.md`
 - **Las IAs se comunican por documentación en el repo**, actualizada en cada cambio y limpia (sin
   docs zombis). Reglas de Cursor (Leon) y de Claude (Domi) conviven y se actualizan juntas.
 - **Ramas**: trabajo de Domi en `domi` (front-sapira y api-sapira). Commits de front/api con
-  `version-commit.sh` (`yarn vcp "comentario"`); `sapira-ai` usa `tipo(módulo): descripción`.
+  `scripts/version-commit.js` (`yarn vcp "comentario"`, `--notes` para el release notes contra
+  `dev`); `sapira-ai` usa `tipo(módulo): descripción`.
 - **HOY → DELTA**: toda propuesta estructural parte del diseño actual verificado (repo + prod en
   vivo) y especifica solo la diferencia. Nada se propone de cero si ya existe.
 - **Spec por secciones cerrada con Domi antes de construir** + **casos dorados** con datos reales
