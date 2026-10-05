@@ -298,29 +298,43 @@ describe('assets RSM: fixes 01-10 (U8, S5-16, U5)', () => {
 	});
 });
 
-describe('assets RSM: decisiones de Domi 04-10 (D2 + D3, rebuild-devengo-comparacion.md corrida final)', () => {
+describe('assets RSM: decisiones de Domi 04-10 y 05-10 (D2-c + D3, rebuild-devengo-comparacion.md §9 y §9.5)', () => {
 	const sql = fs.readFileSync(path.join(__dirname, 'functions', 'revenue_schedule_rebuild_contract_ccy.sql'), 'utf8');
 	const flat = sql.replace(/\s+/g, ' ');
 
-	it('D2: override del período (quantities) = devengo del mes con la regla de la factura; sin override, el plan; MRR sin cambio', () => {
+	it('D2-c (05-10): mes con desvío del plan (consumption_entries o línea manual) = lo facturado de su período de servicio; ya no lee quantities', () => {
 		const active = flat.slice(flat.indexOf('v_in_active := true;'), flat.indexOf('v_in_active := false;'));
 
-		// Regla de sync_invoice_items_amounts_from_quantities: unitario × cantidad (el que falte, del ítem; solo monto → monto).
-		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NOT NULL THEN q.unit_price * q.quantity');
-		expect(active).toContain('WHEN q.amount IS NOT NULL AND q.unit_price IS NULL AND q.quantity IS NULL THEN q.amount');
-		expect(active).toContain('WHEN q.quantity IS NOT NULL AND q.unit_price IS NULL THEN v_item.unit_price * q.quantity');
-		expect(active).toContain('WHEN q.unit_price IS NOT NULL AND q.quantity IS NULL THEN q.unit_price * v_item.quantity');
-		// × (1 − % de la línea del período, sin NC; sin línea, % del ítem).
-		expect(active).toContain("AND i.document_type IS DISTINCT FROM 'NC'");
-		expect(active).toContain("AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur");
+		// Fuentes del desvío: consumo del mes (entries, incluidos los overrides copiados desde quantities) y líneas editadas a mano.
+		expect(flat).not.toContain('FROM quantities');
+		expect(active).toContain(
+			"v_entry_in_month := EXISTS (SELECT 1 FROM consumption_entries e WHERE e.contract_item_id = v_item.id AND DATE_TRUNC('month', e.period_start)::date = v_cur);"
+		);
+		expect(active).toContain("COALESCE(bool_or(l.quantity_source = 'manual' AND l.document_type IS DISTINCT FROM 'NC'), false)");
+		expect(active).toContain('WHERE e.contract_item_id = v_item.id AND e.period_start IN (SELECT l2.ps FROM l l2)');
+		// Lo facturado: líneas del ítem en facturas activas Por Emitir (estimado) o emitidas; NC restan salvo las de descuento clasificadas (F2).
+		expect(active).toContain("AND i.status IN ('Por Emitir', 'Emitida', 'Enviada', 'Pagada', 'Vencida')");
+		expect(active).toContain("AND NOT (i.document_type = 'NC' AND i.credit_type = 'discount' AND i.nc_revenue_treatment IS NOT NULL)");
+		expect(active).toContain('WHERE ii.contract_item_id = v_item.id AND i.is_active = true');
+		// Multi-mes: partes iguales en los meses del período de servicio (n = meses hasta fin + 1 día, mínimo 1), redondeo telescópico.
+		expect(active).toContain('COALESCE(SUM(ROUND(l.amount * (l.k + 1) / l.n, 2) - ROUND(l.amount * l.k / l.n, 2)), 0)');
+		expect(active).toContain('AND s.k >= 0 AND s.k < s.n');
+		expect(active).toContain('SELECT GREATEST(1,');
+		// El descuento puntual (one_off) se suma de vuelta cuando nc_discount_revenue_adjustment lo mueve aparte (sin doble conteo).
+		expect(active).toContain("WHERE elem->>'kind' = 'discount' AND COALESCE((elem->>'one_off')::boolean, false)");
+		expect(active).toContain('IF (v_entry_in_month OR v_line_deviation) AND v_service_lines > 0 THEN v_recognized_period := v_service_billed;');
+		// Sin línea vigente: la regla de D2 con la entry (monto fijado o unitario × cantidad, × (1 − % de la línea / del ítem)).
+		expect(active).toContain(
+			'SELECT COALESCE(e.amount_override, v_item.unit_price * e.quantity) * CASE WHEN e.apply_item_discount THEN (1 - COALESCE('
+		);
 		expect(active).toContain("CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END");
-		expect(active).toContain('WHERE q.contract_item_id = v_item.id AND q.period = v_cur;');
 		expect(active).toContain('IF v_override_amount IS NOT NULL THEN v_recognized_period := ROUND(v_override_amount, 2); END IF;');
 		// Reemplaza el mensual ya prorrateado / pausado del mes (va después de la pausa) y solo en meses activos.
-		expect(active.indexOf('v_active_days := (LEAST(v_eom_of_cur')).toBeLessThan(active.indexOf('FROM quantities q'));
-		// El MRR sigue siendo el plan (el override no lo toca).
+		expect(active.indexOf('v_active_days := (LEAST(v_eom_of_cur')).toBeLessThan(active.indexOf('FROM consumption_entries e'));
+		// El MRR sigue siendo el plan.
 		expect(flat).toContain('v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);');
-		expect(flat).not.toMatch(/v_mrr_contracted := [^;]*v_override_amount/);
+		expect(flat).not.toMatch(/v_mrr_contracted := [^;]*(v_override_amount|v_service_billed)/);
+		expect(flat).toContain('v3.8 (05-10, Domi D2-c)');
 	});
 
 	it('D3: el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio; un rebuild parcial no cambia', () => {

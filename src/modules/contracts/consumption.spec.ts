@@ -102,8 +102,29 @@ describe('classifyPeriodLines (§4.3 pasos 1, 4 y 5)', () => {
 		expect(isRecomputable(line())).toBe(true);
 		// Una NC emitida del período no bloquea; la Por Emitir se recalcula igual.
 		expect(classifyPeriodLines([line({ document_type: 'NC', status: 'Emitida', invoice_id: 'nc' }), line()]).state).toBe('open');
-		// Solo una unificada emitida: no es candidata → se trata como período sin factura propia (void_only), no como emitida.
+		// Unificada histórica (sin evento v2) emitida: no es candidata → período sin factura propia (void_only), no emitida.
 		expect(classifyPeriodLines([line({ invoice_type: 'Unificada', status: 'Pagada' })]).state).toBe('void_only');
+	});
+
+	it('consolidación (Domi 05-10): el origen de un unificado v2 Por Emitir se recalcula; el unificado v2 emitido es la emitida del período', () => {
+		const origin = line({ is_active: false, consolidated_into_invoice_id: 'u-1', consolidated_pending: true });
+		const copy = line({ line_id: 'l-u', invoice_id: 'u-1', invoice_type: 'Unificada', unified_v2: true });
+
+		expect(isRecomputable(origin)).toBe(true);
+		// La copia Por Emitir no se toca (sus líneas se re-copian desde los orígenes).
+		expect(isRecomputable(copy)).toBe(false);
+		expect(classifyPeriodLines([origin, copy])).toMatchObject({
+			state: 'open',
+			target: { line_id: origin.line_id, invoice_id: origin.invoice_id },
+		});
+		// Origen de un unificado ya emitido: inactivo y sin `consolidated_pending` → no candidato; el unificado emitido manda.
+		const issuedCopy = line({ line_id: 'l-u', invoice_id: 'u-1', invoice_type: 'Unificada', unified_v2: true, status: 'Emitida' });
+
+		expect(isRecomputable(issuedCopy)).toBe(true);
+		expect(classifyPeriodLines([line({ is_active: false, consolidated_into_invoice_id: 'u-1' }), issuedCopy])).toMatchObject({
+			state: 'issued',
+			issued: { invoice_id: 'u-1' },
+		});
 	});
 });
 

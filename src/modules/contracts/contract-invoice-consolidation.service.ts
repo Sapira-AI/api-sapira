@@ -106,7 +106,8 @@ export type ConsolidationPreview = ConsolidationPlan;
  * **copias** de las líneas de los orígenes (prefijo de contrato, `contract_id` de la línea, tasa por par; spot entero si alguna línea lo es),
  * copia las referencias OC/HES sin repetir tipo+folio, deja los orígenes `is_active = false` con `consolidated_into_invoice_id` y registra
  * un evento `INVOICE_CONSOLIDATED` por contrato. Deshacer: el consolidado pasa a `Cancelada` (nunca DELETE) y los orígenes vuelven intactos.
- * El devengo no cambia (suma emitidas activas por `contract_item_id`): sin rebuild. Nunca escribe `invoices.updated_at`.
+ * El devengo no cambia (las copias llevan el mismo `contract_item_id` y monto que el origen, que queda inactivo): sin rebuild. Nunca escribe
+ * `invoices.updated_at`. Un consumo posterior sobre un origen re-copia sus líneas con `resyncFromOrigins`.
  */
 @Injectable()
 export class ContractInvoiceConsolidationService {
@@ -384,6 +385,50 @@ export class ContractInvoiceConsolidationService {
 		const consolidatedId = String(row.id);
 
 		// Líneas: copias (los orígenes quedan intactos para deshacer) con glosa prefijada, `contract_id` y montos/tasa de la valorización.
+		await this.insertCopies(runner, consolidatedId, plan, header.invoice_currency, header.issue_date, holdingId);
+
+		// Referencias OC/HES de los orígenes sin repetir tipo+folio: las propias se copian; las del contrato se vinculan.
+		if (plan.references.invoice_reference_ids.length) {
+			await runner.query(
+				`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
+				SELECT $1, r.holding_id, r.document_number, r.document_type_code, r.document_type_name, r.reference_code, r.reason, r.reference_date, r.created_by
+				FROM invoice_references r WHERE r.id = ANY($2::uuid[]) AND r.holding_id = $3`,
+				[consolidatedId, plan.references.invoice_reference_ids, holdingId]
+			);
+		}
+		if (plan.references.contract_reference_ids.length) {
+			await runner.query(
+				`INSERT INTO invoice_reference_links (invoice_id, reference_id, holding_id, linked_by)
+				SELECT $1, br.id, br.holding_id, $4 FROM billing_references br WHERE br.id = ANY($2::uuid[]) AND br.holding_id = $3
+				ON CONFLICT (invoice_id, reference_id) DO NOTHING`,
+				[consolidatedId, plan.references.contract_reference_ids, holdingId, userId]
+			);
+		}
+
+		// Orígenes: inactivos y apuntando al consolidado (siguen Por Emitir; deshacer los devuelve tal cual).
+		await runner.query(
+			`UPDATE invoices SET is_active = false, consolidated_into_invoice_id = $1
+			WHERE id = ANY($2::uuid[]) AND holding_id = $3 AND status = '${PENDING_STATUS}'`,
+			[consolidatedId, plan.invoices.map((invoice) => invoice.id), holdingId]
+		);
+		// Moneda de sistema con la regla por estado (04-10): el consolidado nace Por Emitir → desde la moneda de contrato del encabezado. En
+		// modo `mixed` no hay una sola moneda de contrato y el encabezado queda en moneda de factura (`amount_contract_currency` = neto en
+		// esa moneda): se convierte ese monto, igual que lo haría el trigger o cualquier edición posterior. Al emitir pasa a la moneda de
+		// factura (mismo monto en `mixed`).
+		await refreshInvoiceSystemAmounts(runner, holdingId, [consolidatedId]);
+
+		return consolidatedId;
+	}
+
+	/** Copias de las líneas de los orígenes en el consolidado (glosa prefijada, `contract_id`, montos y tasa de la valorización del plan). */
+	private async insertCopies(
+		runner: QueryRunner,
+		consolidatedId: string,
+		plan: ConsolidationPlan,
+		invoiceCurrency: string | null,
+		issueDate: string | null,
+		holdingId: string
+	): Promise<void> {
 		await runner.query(
 			`INSERT INTO invoice_items (
 				invoice_id, holding_id, contract_item_id, contract_id, product_id, description, description_locked, quantity, unit_of_measure,
@@ -423,43 +468,68 @@ export class ContractInvoiceConsolidationService {
 						total_invoice: line.total_invoice_currency,
 					}))
 				),
-				header.invoice_currency,
-				header.issue_date,
+				invoiceCurrency,
+				issueDate,
 				holdingId,
 			]
 		);
+	}
 
-		// Referencias OC/HES de los orígenes sin repetir tipo+folio: las propias se copian; las del contrato se vinculan.
-		if (plan.references.invoice_reference_ids.length) {
-			await runner.query(
-				`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
-				SELECT $1, r.holding_id, r.document_number, r.document_type_code, r.document_type_name, r.reference_code, r.reason, r.reference_date, r.created_by
-				FROM invoice_references r WHERE r.id = ANY($2::uuid[]) AND r.holding_id = $3`,
-				[consolidatedId, plan.references.invoice_reference_ids, holdingId]
-			);
-		}
-		if (plan.references.contract_reference_ids.length) {
-			await runner.query(
-				`INSERT INTO invoice_reference_links (invoice_id, reference_id, holding_id, linked_by)
-				SELECT $1, br.id, br.holding_id, $4 FROM billing_references br WHERE br.id = ANY($2::uuid[]) AND br.holding_id = $3
-				ON CONFLICT (invoice_id, reference_id) DO NOTHING`,
-				[consolidatedId, plan.references.contract_reference_ids, holdingId, userId]
-			);
-		}
+	/**
+	 * Consumo sobre un período consolidado (Domi 05-10): el consumo recalculó la factura de ORIGEN (inactiva) de un unificado v2 Por Emitir;
+	 * aquí se vuelven a copiar las líneas de TODOS sus orígenes al unificado (los unificados no se editan: sus líneas son siempre copias) y su
+	 * encabezado se recalcula con las mismas reglas que al consolidar (`planConsolidation`, ignorando los bloqueos de elegibilidad, que ya se
+	 * pasaron al consolidar). Conserva identidad, contrato principal, fechas y referencias del unificado; moneda de sistema con
+	 * `refreshInvoiceSystemAmounts`. Corre dentro de la transacción del llamador (costura y locks ya tomados). Devuelve el encabezado nuevo.
+	 */
+	async resyncFromOrigins(runner: QueryRunner, holdingId: string, consolidatedId: string) {
+		const [unified] = (await runner.query(
+			`SELECT id, invoice_number, status, invoice_currency, issue_date::text AS issue_date FROM invoices
+			WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}' AND is_active = true FOR UPDATE`,
+			[consolidatedId, holdingId]
+		)) as Row[];
 
-		// Orígenes: inactivos y apuntando al consolidado (siguen Por Emitir; deshacer los devuelve tal cual).
-		await runner.query(
-			`UPDATE invoices SET is_active = false, consolidated_into_invoice_id = $1
-			WHERE id = ANY($2::uuid[]) AND holding_id = $3 AND status = '${PENDING_STATUS}'`,
-			[consolidatedId, plan.invoices.map((invoice) => invoice.id), holdingId]
+		if (!unified)
+			throw new ConflictException({ message: 'El documento unificado ya no está Por Emitir: no se puede recalcular', code: 'not_pending' });
+		const origins = await this.loadOrigins(runner, holdingId, consolidatedId);
+
+		if (!origins.length) throw new ConflictException({ message: 'El documento unificado no tiene facturas de origen', code: 'no_origins' });
+		const ctx = await this.loadContext(
+			runner,
+			holdingId,
+			origins.map((origin) => origin.id)
 		);
-		// Moneda de sistema con la regla por estado (04-10): el consolidado nace Por Emitir → desde la moneda de contrato del encabezado. En
-		// modo `mixed` no hay una sola moneda de contrato y el encabezado queda en moneda de factura (`amount_contract_currency` = neto en
-		// esa moneda): se convierte ese monto, igual que lo haría el trigger o cualquier edición posterior. Al emitir pasa a la moneda de
-		// factura (mismo monto en `mixed`).
+		const plan = planConsolidation(ctx);
+		const header = plan.header;
+
+		await runner.query(`DELETE FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`, [consolidatedId, holdingId]);
+		await this.insertCopies(runner, consolidatedId, plan, toText(unified.invoice_currency), toText(unified.issue_date), holdingId);
+		await runner.query(
+			`UPDATE invoices SET vat = $3, amount_contract_currency = $4, amount_invoice_currency = $5, total_invoice_currency = $6,
+				contract_currency = $7, fx_contract_to_invoice = $8
+			WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
+			[
+				consolidatedId,
+				holdingId,
+				header.vat,
+				header.amount_contract_currency,
+				header.amount_invoice_currency,
+				header.total_invoice_currency,
+				header.contract_currency,
+				header.fx_contract_to_invoice,
+			]
+		);
 		await refreshInvoiceSystemAmounts(runner, holdingId, [consolidatedId]);
 
-		return consolidatedId;
+		return {
+			invoice_id: consolidatedId,
+			invoice_number: toText(unified.invoice_number),
+			amount_contract_currency: header.amount_contract_currency,
+			vat: header.vat,
+			amount_invoice_currency: header.amount_invoice_currency,
+			total_invoice_currency: header.total_invoice_currency,
+			lines_count: plan.lines.length,
+		};
 	}
 
 	private async insertEvent(

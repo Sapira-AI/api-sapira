@@ -352,8 +352,9 @@ constraint). Tipo → `integration`: erp → odoo, crm → salesforce, stripe �
 | L7 | **Respetar `holding_integration_settings.auto_enabled` en los crons de Salesforce, BigQuery y Stripe** (tu plan, paso 3) | El switch ya se escribe desde Integraciones (también para `stripe`, que entra al CHECK con la migración I2); hoy solo el envío a Odoo lo mira |
 | L8 | **`StripeService.getProducts` toma una sola cuenta activa** | Integraciones lista productos por cada cuenta con su clave (lectura); el mapeo (`stripe_product_mappings`) no guarda la cuenta |
 | L9 | **Locks con varias réplicas** | "Sincronizar ahora": ERP y CRM usan Mongo (jobs `running` < 3 h); Stripe, logs `running` < 2 h y `stripe_sync_jobs`; almacén de datos, lock en memoria de la réplica (igual que su cron) |
-| L10 | **Consulta del almacén de datos sin filtro de holding** | `ingestSapiraQuantities` lee `finance.sapira_base` por fecha sin acotar al holding: con dos holdings con conexión, ambos ingieren las mismas filas |
+| L10 | **Consulta del almacén de datos sin filtro de holding** | `ingestSapiraQuantities` lee `finance.sapira_base` por fecha sin acotar al holding: con dos holdings con conexión, ambos ingieren las mismas filas. (05-10: la fase 2 ya escribe en `consumption_entries` por `ConsumptionService`, §16; la ingesta sigue igual) |
 | L11 | **Cifrado de claves** | Las nuevas rutas no devuelven claves, pero en la base siguen en texto plano (salvo la contraseña del CRM) |
+| L12 | **Salesforce: traer modelos de precio y tablas de precios** (05-10, Domi; se analiza en sesión aparte) | SimpliRoute tiene en Salesforce una **tabla de precios** (entidad distinta, relacionada a las oportunidades) con tramos. Hoy la integración solo trae el precio unitario de cada línea, y al llevar una cotización a un contrato **existente** se pierden los tramos (el front envía `unit_price` y la API copia el modelo solo si no llega, `contract-changes.ts:3462`). Mejora: leer la tabla de precios de la oportunidad y mapearla al modelo de Pricing v2 (`prices`: modelo, tramos, mínimo, tope, cantidad fija o por consumo) para que viaje completo a la cotización y de ahí al contrato (nuevo o existente) |
 
 Copys de `translateErpError` (`erp-error-translation.ts`): los pasos que mandaban a "Integraciones › Odoo" ahora mandan a
 "Integraciones › ERP › Mapeos" (producto, impuestos, compañía) o "› Configuración" (conexión). El resto del mensaje sigue igual.
@@ -433,6 +434,42 @@ en SimpliRoute, TiMining y uPlanner).**
 Relacionado (mismo día): los enlaces que arma la API (tareas, actividad del Cliente 360, alertas nuevas, correos de alerta y resumen)
 apuntan a las rutas finales del front (`/facturacion`, `/contratos`, `/conexiones`, `/notificaciones`…) en vez de `/lab/...`. Las
 alertas ya guardadas no se tocan: el front redirige las rutas viejas.
+
+## 16. Consumos del almacén de datos → `consumption_entries` (05-10-2026, sin commit)
+
+**Decisión de Domi (05-10): una sola tabla de consumos, `consumption_entries` (Pricing v2, migración `1790630000000-CreatePricingV2`; no
+es tu staging `sapira_quantity_imports`).** Cierra la decisión #11 del catálogo (`catalogo-funciones-y-triggers.md` §1.5: "se quedan
+hasta que el DWH escriba `consumption_entries`") y toca el mismo flujo que L10. Cambio mínimo en `src/modules/bigquery/bigquery.service.ts`:
+
+- **Fase 2 (`integrateSapiraQuantities` → `integrateSingleQuantity`)** ya no hace `INSERT INTO quantities`: registra con
+  `ConsumptionService.recordFromDwh` (`src/modules/contracts/consumption.service.ts`), el mismo camino que la pantalla: costura
+  `sapira.writer = 'api'`, recálculo de la factura Por Emitir del período (o del unificado que la lleva), historial
+  (`consumption_entry_revisions`), evento `CONSUMPTION_RECORDED` con el actor del sistema y rebuild del devengo del mes, en una
+  transacción. `source = 'dwh'`; notas `DWH sapira_base · sf_id=…` como antes. El período es el de la línea del ítem que empieza en ese
+  mes (con día de ciclo puede no ser el 1). Un unitario del DWH distinto del del ítem entra como monto fijado (unitario × cantidad), igual
+  que el override de `quantities`.
+- **Insert-only igual que antes**: si el ítem ya tiene consumo en ese mes (`ConsumptionService.entryForMonth`) se compara unitario efectivo,
+  cantidad y cuenta (la unidad ya no: `consumption_entries` factura la del ítem); igual → `integrated`; distinto → `conflict` + notificación
+  `bigquery_quantities_diff`, cuyo `action_payload.quantity_id` ahora es el **id de la entry** (el front no cambia).
+- **Bloqueos**: el 409 del servicio (factura del período ya emitida, `consumption_period_issued`; ítem sin línea ese mes, `period_out_of_item`;
+  ítem que no se cobra por consumo, `item_not_metered`) deja la fila `blocked` sin tumbar el batch, como hacía `trg_validate_quantity_invoice_status`.
+  Desde el ajuste de Domi del 05-10 los ítems fijos no reciben consumo (era el override provisorio del front anterior): una fila del DWH mapeada a
+  un ítem sin precio por consumo queda `blocked` con ese motivo. Los 131 ítems variables de SimpliRoute pasan a precio por consumo con la
+  migración `1791700000000`; `isVariableContractItem` podría mirar `prices.quantity_type = 'metered'` (tu decisión).
+- **`replaceQuantityRecord`** corrige la entry por el mismo servicio (con motivo "Reemplazo con el dato del almacén de datos"); acepta el id
+  de una entry o el de una fila de `quantities` anterior (la migración `1791600000000` la copió con `idempotency_key = 'quantities:<id>'`).
+- **`sapira_quantity_imports.quantity_id`** sigue siendo FK a `quantities`: las filas nuevas quedan con `NULL` (la entry se encuentra por
+  ítem y mes). Si quieres trazabilidad fuerte, una columna `consumption_entry_id` (entity + migración) es tuya.
+- El devengo ya no se recalcula al final del batch (`rebuildRevenueAfterQuantities` se retiró): lo hace cada consumo en su transacción.
+- `BigQueryModule` importa `ContractsModule` (exporta `ConsumptionService`). Los specs que instancian `BigQueryService` mockean `uuid`
+  (la cadena de facturas lo importa), como los de contratos.
+- **`quantities` queda de solo lectura** (no se borra): sus triggers quedan sin uso y se retiran con la tabla después del período de
+  pruebas (catálogo §1.5). Las 315 filas se copiaron a `consumption_entries` con la migración `1791600000000-ConsumosDesdeQuantities`.
+- Tests: `bigquery.service.spec.ts` (registro por el servicio, idempotente, conflicto con id de la entry, 409 aislado, sin `quantities`,
+  reemplazo por id de entry o de `quantities`).
+
+Orden en producción: migración `1791600000000` **antes** de desplegar este código (si no, el DWH no vería los overrides copiados y los
+reintegraría como nuevos).
 
 ## Pendiente para Leon (no hecho): estado de la NC de anulación al emitirse
 

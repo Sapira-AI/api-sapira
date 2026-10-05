@@ -609,6 +609,13 @@ export interface NewItemRow {
 	price_name?: string | null;
 	/** Ciclo propio (§9.3.9): día de ciclo del ítem; null/ausente = ciclo del contrato. */
 	billing_anchor_day?: number | null;
+	/** `price_model_change`: el precio nuevo es la versión siguiente del anterior (`prices.version`, `supersedes_price_id`). */
+	price_version?: number | null;
+	supersedes_price_id?: string | null;
+	/** RENEWAL con otro mensual: unitario base (mensual anterior ÷ cantidad del original) para `apply_renewal_price_split`. */
+	renewal_base_unit_price?: number | null;
+	/** Consumos registrados por período que el generador usa al tarifar el ítem nuevo (precio medido). */
+	consumption?: ConsumptionInput[];
 }
 
 /** Fila nueva de `contract_scheduled_changes` (pacto registrado por el propio cambio, p. ej. la renovación con precio nuevo). */
@@ -696,6 +703,8 @@ export type WriteOp =
 	| { kind: 'update_pause'; id: string; set: { pause_end: string | null; status: 'ended' | 'cancelled' } }
 	/** `reactivate` (rama anular/revertir): quita el espejo CHURN/DOWNSELL (sin facturas propias) y sus filas de RSM. */
 	| { kind: 'delete_item'; item_id: string }
+	/** `price_model_change`: los consumos del ítem desde el corte pasan al ítem que lo continúa (RENEWAL con el modelo nuevo). */
+	| { kind: 'move_consumption'; from_item_id: string; to_key: string; from_period: string }
 	/** `change_entity` con `new_entity`: `client_entities` + `client_entity_clients` (`is_primary = false`); id → `NEW_ENTITY_KEY`. */
 	| {
 			kind: 'insert_entity';
@@ -812,6 +821,8 @@ export const ALLOWED_STATES: Record<ChangeType, ContractDerivedStatus[]> = {
 	resume: ['active', 'pending_renewal', 'paused'],
 	// Datos no comerciales del ítem (§9.2, cuenta): cualquier estado salvo En revisión (borrador: se edita el borrador) y Cancelado.
 	item_update: ['active', 'pending_renewal', 'expired', 'paused'],
+	// Cambio de modelo de precio (§9.3.11): contrato vigente (Activo o Por renovar).
+	price_model_change: ['active', 'pending_renewal'],
 };
 
 export const STATUS_LABELS: Record<ContractDerivedStatus, string> = {
@@ -1046,6 +1057,7 @@ export const engineItemFromNew = (item: NewItemRow): BillingEngineItem => ({
 	price: item.price_spec ?? null,
 	currency: item.currency,
 	billing_anchor_day: item.billing_anchor_day ?? null,
+	...(item.consumption?.length ? { consumption: item.consumption } : {}),
 });
 
 /** Ítem existente al formato del generador (solo lo que necesita `itemPeriods`/`nextPeriodStart`; con su ciclo propio, §9.3.9). */
@@ -4501,6 +4513,288 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 	});
 }
 
+/** Modelos que acepta `price_model_change` (los de la etapa 1 de Pricing v2). */
+export const PRICE_MODEL_CHANGE_CODES = {
+	same_model: 'price_model_unchanged',
+	corrections_on_fixed: 'quantity_corrections_after_cut',
+} as const;
+
+/**
+ * `price_model_change` (Domi 05-10, spec-modificaciones-contrato-v2 §9.3.11): cambiar el modelo de precio de UN ítem recurrente vigente
+ * (estándar ↔ tramos / volumen / paquete / asiento; cantidad fija ↔ por consumo con métrica; gratis, mínimo, tope, `invoice_line_mode`).
+ * Mismo patrón que el cambio de frecuencia (§9.3.7): el ítem (y sus ajustes vivos) se corta el día antes del **próximo inicio de período
+ * desde la fecha efectiva** y nace un **RENEWAL** que lo continúa con un precio propio del contrato nuevo (`version` + 1,
+ * `supersedes_price_id` = el anterior); los períodos ya facturados y los anteriores al corte siguen con el modelo anterior (el ítem
+ * original conserva su precio). Las Por Emitir desde el corte se regeneran con el modelo nuevo y con el consumo registrado de cada
+ * período (que pasa al RENEWAL: `move_consumption`); un período emitido después del corte bloquea (`issued_after_effective_date`).
+ * **MRR** = el nuevo monto base del plan: el modelo nuevo tarifado a la **cantidad base** (`quantity` del pedido o la del ítem) y
+ * mensualizado (`pricedMonthlyEquivalent`), con el descuento % del ítem; con tramos es el precio de esa cantidad por tramos. El delta va
+ * en el mismo RENEWAL (`renewal_base_unit_price`: el RSM separa el delta como UPSELL / DOWNSELL, `apply_renewal_price_split`). El
+ * devengo sigue lo facturado en los períodos con consumo (regla D2-c del rebuild).
+ */
+export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
+	const p = new Planner(ctx, req, 'price_model_change');
+	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
+	const field = 'change.items.0';
+	const ref = refs[0] ?? {};
+	const contractAnchor = anchorDayOf(ctx.contract, ctx.items);
+	let mrrDelta = 0;
+	let engineItem: NewItemRow | null = null;
+	let summary: Record<string, unknown> = {};
+
+	p.assertState();
+	if (req.origin?.type && req.origin.type !== 'manual') p.error('origin.type', 'El cambio de modelo de precio se registra a mano');
+	if (refs.length !== 1) p.error('change.items', 'Cambia el modelo de precio de un ítem a la vez');
+	const item = p.findItem(String(ref.item_id ?? ''), `${field}.item_id`);
+	const priceDto = (ref.price ?? null) as PriceSpec | null;
+
+	if (!priceDto || typeof priceDto !== 'object') p.error(`${field}.price`, 'Indica el modelo de precio nuevo');
+	const spec = priceDto && typeof priceDto === 'object' ? normalizePriceSpec(priceDto) : null;
+	let valid = Boolean(spec);
+
+	for (const error of spec ? validatePriceSpec(spec) : []) {
+		p.error(`${field}.price.${error.field}`, error.message);
+		valid = false;
+	}
+	if (item && spec && valid) {
+		const billingMethod = item.billing_method ?? 'Anticipado';
+
+		if (isMetered(spec)) {
+			const metricId = spec.billable_metric_id ?? null;
+			const status = metricId ? ctx.billable_metrics?.get(metricId) : undefined;
+
+			if (!metricId) p.error(`${field}.price.billable_metric_id`, 'Elige la métrica que se mide');
+			else if (!status) p.error(`${field}.price.billable_metric_id`, 'La métrica facturable no existe en el holding');
+			else if (status !== 'active') p.error(`${field}.price.billable_metric_id`, 'La métrica facturable está archivada');
+			if (billingMethod === 'Anticipado' && spec.model !== 'seat') p.error(`${field}.price`, METERED_ADVANCE_MESSAGE);
+		}
+		if (item.is_recurring === false || !item.start_date)
+			p.error(`${field}.item_id`, `"${item.product_name}" no es recurrente o no tiene inicio: su precio se corrige como dato del ítem`);
+	}
+	const current = item ? priceSpecFromRow(item.raw) : null;
+
+	if (item && spec && current && JSON.stringify(normalizePriceSpec(current)) === JSON.stringify(spec))
+		p.error(`${field}.price`, `"${item.product_name}" ya tiene ese modelo de precio`, PRICE_MODEL_CHANGE_CODES.same_model);
+
+	if (item && spec && valid && item.is_recurring !== false && item.start_date && p.assertRemovable(item)) {
+		const anchor = anchorOfItem(item, contractAnchor);
+		const cut = nextPeriodStart(engineShape(item), anchor, p.effective);
+
+		if (!cut || !item.end_date || cut > item.end_date) {
+			p.error(`${field}.item_id`, `"${item.product_name}" no tiene un próximo período antes de su fin (${item.end_date}): renuévalo primero`);
+		} else {
+			if (cut !== p.effective)
+				p.warn(
+					'price_model_from_next_period',
+					`El modelo nuevo de "${item.product_name}" rige desde el próximo inicio de período (${cut}): el período en curso sigue con el anterior`
+				);
+			p.assertOpenPeriod(cut, `El corte de "${item.product_name}"`);
+			const group = buildItemGroups(ctx.items, addDays(cut, -1)).find((row) => row.item_ids.includes(item.id));
+			const children = ctx.items.filter(
+				(row) =>
+					row.related_item_id === item.id &&
+					DELTA_CATEGORIES.has(row.categoria ?? '') &&
+					!row.churn_date &&
+					!row.renewed_by_item_id &&
+					(row.end_date ?? '9999-12-31') >= cut &&
+					(row.start_date ?? '') < cut
+			);
+			const cutIds = new Set([item.id, ...children.map((child) => child.id)]);
+			const frontier = ctx.invoices
+				.filter(isIssued)
+				.flatMap((invoice) => invoice.lines)
+				.filter((line) => line.contract_item_id && cutIds.has(line.contract_item_id) && (line.billing_period_end ?? '') >= cut)
+				.map((line) => line.billing_period_end ?? '')
+				.sort()
+				.reverse()[0];
+
+			if (frontier)
+				p.block(
+					'issued_after_effective_date',
+					`"${item.product_name}" ya está facturado en firme hasta el ${frontier}: el modelo nuevo (desde el ${cut}) caería en un período emitido`,
+					`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
+				);
+			p.assertNoUnified(cutIds, cut);
+			const recorded = recordedConsumption(ctx, item.id, cut);
+
+			if (recorded.length && !isMetered(spec))
+				p.block(
+					PRICE_MODEL_CHANGE_CODES.corrections_on_fixed,
+					`"${item.product_name}" tiene consumos registrados desde el ${cut} (${recorded.map((entry) => entry.period_start).join(', ')}) y el modelo nuevo es de cantidad fija`,
+					'Elige cantidad por consumo, o usa como fecha efectiva el período siguiente a la última corrección'
+				);
+			if (
+				ctx.invoices.some(
+					(invoice) =>
+						isEditablePending(invoice) &&
+						invoice.lines.some(
+							(line) =>
+								line.contract_item_id &&
+								cutIds.has(line.contract_item_id) &&
+								(line.billing_period_start ?? '') >= cut &&
+								line.quantity_source === 'manual'
+						)
+				)
+			)
+				p.warn(
+					'manual_edit_replaced',
+					`Hay líneas de "${item.product_name}" editadas a mano desde el ${cut}: se reemplazan por las del modelo nuevo`
+				);
+			const quantity = ref.quantity !== undefined && ref.quantity !== null ? num(ref.quantity) : (group?.quantity ?? num(item.quantity));
+			const pct =
+				ref.discount_value !== undefined && ref.discount_value !== null
+					? num(ref.discount_value)
+					: item.discount_type === 'Porcentaje'
+						? num(item.discount_value)
+						: 0;
+
+			if (item.discount_type === 'Monto fijo' && num(item.discount_value) > 0)
+				p.warn(
+					'fixed_discount_dropped',
+					`El descuento en monto fijo de "${item.product_name}" no aplica a un modelo de precio: el modelo nuevo se tarifa sin él`
+				);
+			const frequency = (item.billing_frequency ?? 'Mensual') as BillingFrequency;
+			const term = monthsCeil(cut, item.end_date);
+			const oldMonthly = round2(group?.mrr ?? itemMonthly(item));
+			const monthlyNew = round2(
+				pricedMonthlyEquivalent(spec, { quantity, billing_frequency: frequency, is_recurring: true, term_months: term }, pct)
+			);
+
+			if (quantity <= 0) p.error(`${field}.quantity`, 'La cantidad base debe ser mayor que 0');
+			const unit = quantity > 0 && pct < 100 ? round6(monthlyNew / (quantity * (1 - pct / 100))) : 0;
+			const origQuantity = num(item.quantity) > 0 ? num(item.quantity) : 1;
+			const key = p.newKey();
+			const renewalRow: NewItemRow = {
+				key,
+				product_id: item.product_id,
+				product_name: item.product_name ?? 'Producto',
+				account: item.account,
+				item_type: item.item_type,
+				unit_of_measure: item.unit_of_measure,
+				categoria: 'RENEWAL',
+				quantity,
+				unit_price: unit,
+				annual_unit_price: round6(unit * 12),
+				price_entry_mode: 'monthly',
+				discount_type: pct > 0 ? 'Porcentaje' : null,
+				discount_value: pct,
+				price: round2(unit * quantity * term),
+				final_price: round2(monthlyNew * term),
+				currency: item.currency ?? ctx.contract.contract_currency,
+				billing_frequency: frequency,
+				billing_method: item.billing_method ?? 'Anticipado',
+				is_recurring: true,
+				start_date: cut,
+				end_date: item.end_date,
+				term_months: term,
+				related_item_id: null,
+				renews_item_id: item.id,
+				booking_date: ctx.today,
+				auto_renew: item.auto_renew,
+				price_id: null,
+				quote_item_id: null,
+				billing_anchor_day: validAnchorDay(item.billing_anchor_day),
+				price_spec: spec,
+				price_name: typeof item.raw.price_name === 'string' && item.raw.price_name ? item.raw.price_name : null,
+				price_version: item.price_id ? num(item.raw.price_version ?? 1) + 1 : 1,
+				supersedes_price_id: item.price_id ?? null,
+				renewal_base_unit_price: Math.abs(monthlyNew - oldMonthly) >= 0.01 ? round6(oldMonthly / origQuantity) : null,
+				consumption: recorded,
+			};
+
+			p.insertItem(renewalRow);
+			// El original y sus ajustes vivos terminan el día antes del corte (mismo mensual: valor = mensual × meses que quedan).
+			for (const row of [item, ...children]) {
+				const start = row.start_date ?? cut;
+				const termBefore = monthsCeil(start, addDays(cut, -1));
+				const finalAfter = round2(itemMonthly(row) * termBefore);
+				const oldTerm = num(row.term_months);
+
+				p.ops.push({
+					kind: 'update_item',
+					item_id: row.id,
+					set: {
+						end_date: addDays(cut, -1),
+						term_months: termBefore,
+						final_price: finalAfter,
+						price: oldTerm > 0 ? round2((num(row.price) * termBefore) / oldTerm) : finalAfter,
+						renewed_by_key: key,
+					},
+				});
+				const after = p.itemsAfter.find((entry) => entry.id === row.id)!;
+
+				after.end_date = addDays(cut, -1);
+				after.term_months = termBefore;
+				after.final_price = finalAfter;
+				after.renewed_by_item_id = key;
+				p.adjusted.push({ ...previewOf(after), renews_item_id: null });
+			}
+			if (children.length)
+				p.warn(
+					'adjustments_absorbed',
+					`"${item.product_name}" tiene ${children.length} ajuste(s) vigentes: terminan con el corte y el modelo nuevo los reemplaza`
+				);
+			// Por Emitir del original (y sus ajustes) desde el corte: se quitan sus líneas; el generador crea las del modelo nuevo.
+			for (const invoice of ctx.invoices.filter(isEditablePending)) {
+				const lines = invoice.lines.filter(
+					(line) => line.contract_item_id && cutIds.has(line.contract_item_id) && (line.billing_period_start ?? '') >= cut
+				);
+
+				if (!lines.length || p.skipPartial(invoice)) continue;
+				for (const line of lines) p.deleteLine(invoice, line);
+			}
+			if (recorded.length) {
+				p.ops.push({ kind: 'move_consumption', from_item_id: item.id, to_key: key, from_period: cut });
+				p.warn(
+					'consumption_quantity_kept',
+					`Los consumos registrados de "${item.product_name}" desde el ${cut} (${recorded.length}) se conservan y se tarifan con el modelo nuevo`
+				);
+			}
+			p.touchRsm(cut);
+			mrrDelta = p.toContract(round2(monthlyNew - oldMonthly), item.currency, cut);
+			engineItem = renewalRow;
+			summary = {
+				item_id: item.id,
+				cut,
+				model_before: current?.model ?? 'standard',
+				quantity_type_before: current?.quantity_type ?? 'fixed',
+				model_after: spec.model,
+				quantity_type_after: spec.quantity_type,
+				base_quantity: quantity,
+				monthly_before: oldMonthly,
+				monthly_after: monthlyNew,
+				supersedes_price_id: item.price_id ?? null,
+				consumption_periods: recorded.map((entry) => entry.period_start),
+			};
+		}
+	}
+	if (engineItem) p.addGeneratedInvoices([engineItem], 'cycle');
+	p.closeHeaders('Cambio de modelo de precio');
+	p.mrrDelta = round2(mrrDelta);
+	const type = Math.abs(mrrDelta) < 0.005 ? 'RENEWAL' : mrrDelta > 0 ? 'UPSELL' : 'DOWNSELL';
+	const label: Record<string, string> = {
+		standard: 'estándar',
+		graduated: 'por tramos',
+		volume: 'por volumen',
+		package: 'por paquete',
+		seat: 'por asiento',
+	};
+
+	return p.finish({
+		type,
+		subtype: 'price_model',
+		title: 'Cambio de modelo de precio',
+		description: item
+			? `"${item.product_name}" pasa a precio ${label[String(spec?.model)] ?? spec?.model ?? ''}${
+					spec && isMetered(spec) ? ' por consumo' : ''
+				} desde el ${String(summary.cut ?? p.effective)}${mrrDelta ? ` · MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}` : ''}`
+			: 'Cambio de modelo de precio',
+		amount_delta: round2(mrrDelta),
+		items_affected: item ? [item.id] : [],
+		metadata: { price_model: summary },
+	});
+}
+
 /**
  * IVA de las Por Emitir según la familia del documento (`resolveTaxRate`: exportación 0; Colombia 0; la tasa del documento tributario si
  * la tiene y es de esa familia; si no, la de la compañía). `document` permite evaluar el documento NUEVO de un cambio de condiciones.
@@ -6505,7 +6799,7 @@ export function validateChangeRequest(req: ContractChangeRequestDto): void {
 		if (req.change?.type !== 'renewal')
 			errors.push({ field: 'origin.type', message: 'Una propuesta de renovación se confirma con change.type = renewal' });
 	}
-	const withItems: string[] = ['item_remove', 'renewal', 'item_add', 'item_change', 'item_update'];
+	const withItems: string[] = ['item_remove', 'renewal', 'item_add', 'item_change', 'item_update', 'price_model_change'];
 
 	if (withItems.includes(req.change?.type ?? '') && (!Array.isArray(req.change.items) || !req.change.items.length)) {
 		errors.push({ field: 'change.items', message: 'Indica al menos un ítem' });
@@ -6544,6 +6838,8 @@ export function planChange(ctx: ChangeContext, req: ContractChangeRequestDto, op
 			return planResume(ctx, req);
 		case 'item_update':
 			return planItemUpdate(ctx, req);
+		case 'price_model_change':
+			return planPriceModelChange(ctx, req);
 	}
 }
 

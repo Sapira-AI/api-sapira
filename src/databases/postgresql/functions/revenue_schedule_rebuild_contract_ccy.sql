@@ -21,6 +21,10 @@ AS $function$
 --         emisión (como ya llega hasta la última después del fin), así su facturado cae en el mes de su issue_date igual que las demás.
 --         En esos meses el ítem no está activo: devengo 0, MRR 0; el monto queda como facturado / diferido.
 --  Sin guard por estado: el rebuild procesa el contrato como está, también En revisión / Borrador (D1 descartada).
+-- Decisión de Domi 05-10 (D2-c, rebuild-devengo-comparacion.md §9.5; spec-pricing-v2 §4.5; spec-revenue R8):
+--  D2-c   una sola regla: mes con desvío del plan (consumo / corrección de cantidad en consumption_entries —incluidos los overrides
+--         del front anterior, copiados desde quantities por la migración 1791600000000— o línea editada a mano) = lo facturado para
+--         su período de servicio (Por Emitir como estimado). Ya no lee quantities.
 DECLARE
   v_contract RECORD;
   v_item RECORD;
@@ -79,8 +83,12 @@ DECLARE
   -- U8: mes de inicio normalizado al día 1 y última fila previa del ítem (rebuild parcial).
   v_from_month date := DATE_TRUNC('month', p_from_month)::date;
   v_prev RECORD;
-  -- D2: monto del override del mes (NULL = sin override → plan).
+  -- D2 / D2-c: monto del desvío del mes sin línea vigente (NULL = sin desvío → plan); líneas del período de servicio del mes.
   v_override_amount NUMERIC;
+  v_entry_in_month boolean;
+  v_line_deviation boolean;
+  v_service_lines int;
+  v_service_billed NUMERIC;
 BEGIN
   SELECT c.id, c.holding_id, c.company_id, c.contract_currency, c.billing_anchor_day,
     co.currency AS company_currency, COALESCE(hs.system_currency, 'USD') AS system_currency
@@ -289,36 +297,87 @@ BEGIN
         IF v_paused_days > 0 AND v_active_days > 0 THEN
           v_recognized_period := ROUND(v_recognized_period * GREATEST(v_active_days - v_paused_days, 0)::numeric / v_active_days, 2);
         END IF;
-        -- D2 (Domi 04-10): override del período en `quantities` (front actual) = devengo del mes, igual que la factura. Misma regla que
-        -- sync_invoice_items_amounts_from_quantities arma la línea: unitario × cantidad del override (el que falte, del ítem; solo monto →
-        -- monto) × (1 − descuento % de la línea de factura del período; sin línea, el % del ítem). Reemplaza el mensual del mes (con su
-        -- prorrateo o pausa), como la factura. Sin override: el plan. MRR: el plan (no se toca).
+        -- D2-c (Domi 05-10, generaliza D2): UNA regla de devengo para el mes con cantidad o monto distinto del plan. Si el ítem tiene
+        -- en el mes un desvío de cualquier fuente —consumo registrado (`consumption_entries`: Pricing v2, correcciones de cantidad de
+        -- ítems fijos, DWH y los overrides del front anterior copiados desde `quantities`) o una línea editada a mano
+        -- (`invoice_items.quantity_source = 'manual'`)—, el devengo del mes = lo FACTURADO para el período de servicio del ítem:
+        --   Σ subtotal_contract_currency de sus líneas en facturas activas Por Emitir (estimado) / Emitida / Enviada / Pagada / Vencida
+        --   (complementarias incluidas; NC restan, salvo las NC de descuento clasificadas, que mueve nc_discount_revenue_adjustment;
+        --   una reemisión neta: original + NC espejo + nueva). Cada línea se reparte en partes iguales (redondeo telescópico) entre los
+        --   meses de su período de servicio: n = meses entre el mes de inicio y el mes de (fin + 1 día), mínimo 1 (mensual = su mes de
+        --   inicio, igual que D2; trimestral = 3 cuotas; anual = 12). El descuento puntual de la línea (sublínea one_off) se suma de
+        --   vuelta cuando nc_discount_revenue_adjustment lo descuenta aparte (sin doble conteo). Las unificadas cuentan por línea: cada
+        --   copia apunta al ítem de su contrato (contract_item_id); el origen inactivo no cuenta.
+        -- Desvío sin ninguna línea vigente en el mes (p. ej. override de un período sin factura): la regla de D2 con la entry del mes
+        -- (monto fijado, o unitario del ítem × cantidad, × (1 − descuento %) si aplica el descuento del ítem). Reemplaza el mensual del
+        -- mes (con su prorrateo o pausa), como la factura. Sin desvío: el plan. MRR: el plan (no se toca).
         v_override_amount := NULL;
-        SELECT CASE
-                 WHEN q.unit_price IS NOT NULL AND q.quantity IS NOT NULL THEN q.unit_price * q.quantity
-                 WHEN q.amount IS NOT NULL AND q.unit_price IS NULL AND q.quantity IS NULL THEN q.amount
-                 WHEN q.quantity IS NOT NULL AND q.unit_price IS NULL THEN v_item.unit_price * q.quantity
-                 WHEN q.unit_price IS NOT NULL AND q.quantity IS NULL THEN q.unit_price * v_item.quantity
-               END
-               * (1 - COALESCE(
-                   (SELECT ii.discount_pct
-                      FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
-                     WHERE ii.contract_item_id = v_item.id
-                       AND i.is_active = true
-                       AND i.status IN ('Por Emitir', 'Emitida', 'Enviada', 'Pagada', 'Vencida')
-                       AND i.document_type IS DISTINCT FROM 'NC'
-                       AND ii.billing_period_start IS NOT NULL
-                       AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur
-                     ORDER BY i.issue_date DESC NULLS LAST, ii.id
-                     LIMIT 1),
-                   CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END,
-                   0) / 100.0)
-          INTO v_override_amount
-          FROM quantities q
-         WHERE q.contract_item_id = v_item.id
-           AND q.period = v_cur;
-        IF v_override_amount IS NOT NULL THEN
-          v_recognized_period := ROUND(v_override_amount, 2);
+        v_entry_in_month := EXISTS (SELECT 1 FROM consumption_entries e
+                                     WHERE e.contract_item_id = v_item.id AND DATE_TRUNC('month', e.period_start)::date = v_cur);
+        WITH l AS (
+          SELECT ii.billing_period_start AS ps, ii.quantity_source, i.document_type,
+                 COALESCE(ii.subtotal_contract_currency, 0)
+                   - CASE WHEN COALESCE(i.document_type, '') <> 'NC' AND i.nc_revenue_treatment IS NOT NULL
+                               AND NOT EXISTS (SELECT 1 FROM invoices dn
+                                                WHERE dn.related_invoice_id = i.id AND dn.document_type = 'NC'
+                                                  AND dn.credit_type = 'discount'
+                                                  AND dn.status IN ('Emitida', 'Enviada', 'Vencida', 'Pagada')
+                                                  AND dn.is_active = true AND dn.nc_revenue_treatment IS NOT NULL)
+                          THEN COALESCE((SELECT SUM((elem->>'amount')::numeric)
+                                           FROM jsonb_array_elements(CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array'
+                                                                          THEN ii.pricing_breakdown ELSE '[]'::jsonb END) elem
+                                          WHERE elem->>'kind' = 'discount' AND COALESCE((elem->>'one_off')::boolean, false)), 0)
+                          ELSE 0 END AS amount,
+                 s.n, s.k
+            FROM invoice_items ii
+            JOIN invoices i ON i.id = ii.invoice_id
+            CROSS JOIN LATERAL (
+              SELECT GREATEST(1,
+                       (EXTRACT(YEAR FROM (COALESCE(ii.billing_period_end, ii.billing_period_start) + 1)) * 12
+                        + EXTRACT(MONTH FROM (COALESCE(ii.billing_period_end, ii.billing_period_start) + 1)))
+                     - (EXTRACT(YEAR FROM ii.billing_period_start) * 12 + EXTRACT(MONTH FROM ii.billing_period_start)))::int AS n,
+                     ((EXTRACT(YEAR FROM v_cur) * 12 + EXTRACT(MONTH FROM v_cur))
+                     - (EXTRACT(YEAR FROM ii.billing_period_start) * 12 + EXTRACT(MONTH FROM ii.billing_period_start)))::int AS k
+            ) s
+           WHERE ii.contract_item_id = v_item.id
+             AND i.is_active = true
+             AND i.status IN ('Por Emitir', 'Emitida', 'Enviada', 'Pagada', 'Vencida')
+             AND ii.billing_period_start IS NOT NULL
+             AND NOT (i.document_type = 'NC' AND i.credit_type = 'discount' AND i.nc_revenue_treatment IS NOT NULL)
+             AND s.k >= 0 AND s.k < s.n
+        )
+        SELECT COUNT(*),
+               COALESCE(SUM(ROUND(l.amount * (l.k + 1) / l.n, 2) - ROUND(l.amount * l.k / l.n, 2)), 0),
+               COALESCE(bool_or(l.quantity_source = 'manual' AND l.document_type IS DISTINCT FROM 'NC'), false)
+                 OR EXISTS (SELECT 1 FROM consumption_entries e
+                             WHERE e.contract_item_id = v_item.id AND e.period_start IN (SELECT l2.ps FROM l l2))
+          INTO v_service_lines, v_service_billed, v_line_deviation
+          FROM l;
+        IF (v_entry_in_month OR v_line_deviation) AND v_service_lines > 0 THEN
+          v_recognized_period := v_service_billed;
+        ELSIF v_entry_in_month THEN
+          SELECT COALESCE(e.amount_override, v_item.unit_price * e.quantity)
+                 * CASE WHEN e.apply_item_discount THEN (1 - COALESCE(
+                     (SELECT ii.discount_pct
+                        FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+                       WHERE ii.contract_item_id = v_item.id
+                         AND i.is_active = true
+                         AND i.status IN ('Por Emitir', 'Emitida', 'Enviada', 'Pagada', 'Vencida')
+                         AND i.document_type IS DISTINCT FROM 'NC'
+                         AND ii.billing_period_start IS NOT NULL
+                         AND DATE_TRUNC('month', ii.billing_period_start)::date = v_cur
+                       ORDER BY i.issue_date DESC NULLS LAST, ii.id
+                       LIMIT 1),
+                     CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END,
+                     0) / 100.0) ELSE 1 END
+            INTO v_override_amount
+            FROM consumption_entries e
+           WHERE e.contract_item_id = v_item.id AND DATE_TRUNC('month', e.period_start)::date = v_cur
+           ORDER BY e.period_start
+           LIMIT 1;
+          IF v_override_amount IS NOT NULL THEN
+            v_recognized_period := ROUND(v_override_amount, 2);
+          END IF;
         END IF;
       ELSE
         -- Item no activo en este mes. v_billed_period puede ser > 0 (capturado arriba).
@@ -586,4 +645,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días. v3.6 (04-10, Domi D2): override del período (quantities) = devengo del mes con la regla de la factura (sync_invoice_items_amounts_from_quantities); el MRR sigue siendo el plan. v3.7 (04-10, Domi D3): el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio (devengo y MRR 0 en esos meses); sin guard por estado.';
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días. v3.6 (04-10, Domi D2): override del período (quantities) = devengo del mes con la regla de la factura (sync_invoice_items_amounts_from_quantities); el MRR sigue siendo el plan. v3.7 (04-10, Domi D3): el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio (devengo y MRR 0 en esos meses); sin guard por estado. v3.8 (05-10, Domi D2-c): mes con desvío del plan (consumption_entries o línea manual) = lo facturado para su período de servicio (Por Emitir estimado, NC restan, líneas multi-mes en partes iguales); sin línea vigente, regla D2 con la entry; ya no lee quantities.';

@@ -553,6 +553,8 @@ export class ContractChangesService {
 			'insert_entity',
 			'insert_item',
 			'update_item',
+			// `price_model_change`: los consumos pasan al RENEWAL ya insertado.
+			'move_consumption',
 			// §9.3.3: pausas después de los ítems (el devengo las lee al reconstruirse, después de todo).
 			'insert_pause',
 			'update_pause',
@@ -579,6 +581,12 @@ export class ContractChangesService {
 			'update_scheduled_change',
 		];
 		const ops = [...plan.ops].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+		// Por Emitir que reciben líneas del generador: `recompute_header` corre antes de `create_invoices`, así que una que quedó sin sus
+		// líneas viejas no se cancela ahí (la recalcula `create_invoices` al sumarle las nuevas). Antes se cancelaba (cambio de frecuencia
+		// o de modelo de precio con todas las filas del período reemplazadas).
+		const mergeTargets = new Set(
+			plan.ops.flatMap((op) => (op.kind === 'create_invoices' ? op.merge_into.filter((id): id is string => Boolean(id)) : []))
+		);
 		const resolveKey = (key: string) => {
 			const id = itemIds.get(key);
 
@@ -813,7 +821,7 @@ export class ContractChangesService {
 							) VALUES (
 								$1, 'contract', $2, $3, $4, $5, $6, $7, $8,
 								$9, $10::jsonb, $11, $12, $13, $14, $15, $16,
-								'active', 1, NULL, $17, $17, now(), $18, $19, $20
+								'active', $21, $22, $17, $17, now(), $18, $19, $20
 							) RETURNING id`,
 							[
 								holdingId,
@@ -836,6 +844,9 @@ export class ContractChangesService {
 								spec.invoice_line_mode ?? DEFAULT_INVOICE_LINE_MODE,
 								spec.charge_flat_when_free === true,
 								item.list_price_id ?? null,
+								// `price_model_change` (§9.3.11): versión siguiente del precio anterior del ítem.
+								item.price_version ?? 1,
+								item.supersedes_price_id ?? null,
 							]
 						)) as Row[];
 
@@ -845,8 +856,23 @@ export class ContractChangesService {
 							String(price.id),
 						]);
 					}
+					// RENEWAL con otro mensual (`price_model_change`): unitario base para que el RSM separe el delta (apply_renewal_price_split).
+					if (item.renewal_base_unit_price !== undefined && item.renewal_base_unit_price !== null)
+						await runner.query(`UPDATE contract_items SET renewal_base_unit_price = $3 WHERE id = $1 AND holding_id = $2`, [
+							id,
+							holdingId,
+							item.renewal_base_unit_price,
+						]);
 					break;
 				}
+				case 'move_consumption':
+					// `price_model_change`: los consumos del ítem desde el corte pasan al RENEWAL (misma factura; el historial sigue con la entry).
+					await runner.query(
+						`UPDATE consumption_entries SET contract_item_id = $3, updated_at = now()
+						WHERE contract_item_id = $1 AND holding_id = $2 AND contract_id = $4 AND period_start >= $5::date`,
+						[op.from_item_id, holdingId, resolveKey(op.to_key), contract.id, op.from_period]
+					);
+					break;
 				case 'update_item': {
 					const sets: string[] = [];
 					const params: unknown[] = [op.item_id, holdingId];
@@ -957,6 +983,7 @@ export class ContractChangesService {
 				}
 				case 'recompute_header':
 					touched.add(op.invoice_id);
+					if (mergeTargets.has(op.invoice_id)) break;
 					await this.recomputeHeader(runner, op.invoice_id, holdingId, byInvoice.get(op.invoice_id) ?? null, op.note, conversion);
 					break;
 				case 'cancel_invoice':
@@ -1468,7 +1495,7 @@ export class ContractChangesService {
 		const productIds =
 			change.type === 'item_add' ? [...new Set((change.items ?? []).map((item) => String(item.product_id ?? '')).filter(Boolean))] : [];
 		const metricIds =
-			change.type === 'item_add'
+			change.type === 'item_add' || change.type === 'price_model_change'
 				? [
 						...new Set(
 							(change.items ?? [])

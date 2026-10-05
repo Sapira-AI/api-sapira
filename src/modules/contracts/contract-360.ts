@@ -43,6 +43,21 @@ export const voidedSql = (
 		AND vn.document_type = 'NC' AND vn.credit_type = 'cancellation' AND vn.is_active = true)`;
 
 /**
+ * ¿El documento unificado es v2? (consolidación del 360, `spec-multimoneda-contrato.md` §7): tiene evento `INVOICE_CONSOLIDATED` que lo
+ * nombra. Los unificados históricos (front anterior) no lo tienen y no se recalculan. Fragmento SQL sobre el alias de `invoices` dado.
+ */
+export const unifiedV2Sql = (alias = 'i') => `EXISTS (SELECT 1 FROM contract_lifecycle_events ce WHERE ce.holding_id = ${alias}.holding_id
+		AND ce.event_type = 'INVOICE_CONSOLIDATED' AND ce.metadata->>'consolidated_invoice_id' = ${alias}.id::text)`;
+
+/**
+ * ¿La factura es el origen (inactivo) de un unificado v2 que sigue Por Emitir? Entonces el consumo del período recalcula el origen y la API
+ * vuelve a copiar sus líneas al unificado (decisión de Domi 05-10). Fragmento SQL sobre el alias de `invoices` dado.
+ */
+export const consolidatedPendingSql = (alias = 'i') => `(${alias}.consolidated_into_invoice_id IS NOT NULL AND EXISTS (
+		SELECT 1 FROM invoices cu WHERE cu.id = ${alias}.consolidated_into_invoice_id AND cu.holding_id = ${alias}.holding_id
+			AND cu.status = 'Por Emitir' AND cu.is_active = true AND ${unifiedV2Sql('cu')}))`;
+
+/**
  * Documentos vinculados por `related_invoice_id` en ambos sentidos (NC y reemisión de la factura; original de una NC o de una reemisión),
  * como jsonb `[{ id, invoice_number, document_type, credit_type, status, issue_date, total, relation }]`. `total` = total en moneda de
  * factura (o el neto en moneda de contrato si aún no se valoriza).
@@ -923,18 +938,7 @@ export function buildSchedule(invoices: ScheduleInvoice[], options: ScheduleOpti
 	};
 }
 
-// ---------------------------------------------------------------- consumo (Pricing v2 etapa 2 + cantidades del front viejo)
-
-/** Fila histórica de `quantities` (la escribe solo el front viejo; v2 la lee, spec §7). */
-export interface QuantityRow {
-	id: string;
-	contract_item_id: string;
-	period: string;
-	quantity: number | null;
-	unit_price: number | null;
-	amount: number | null;
-	account: string | null;
-}
+// ---------------------------------------------------------------- consumo (Pricing v2 etapa 2; única fuente `consumption_entries`)
 
 /** Consumo vigente de `consumption_entries` (una fila por ítem y período). */
 export interface ConsumptionEntryRow {
@@ -999,11 +1003,14 @@ export interface ConsumptionInvoiceLine {
 	document_type: string | null;
 	invoice_type: string | null;
 	is_legacy: boolean;
+	/** Origen inactivo de un unificado v2 Por Emitir (el consumo lo recalcula y re-copia al unificado). */
+	consolidated_pending?: boolean;
+	/** Línea de un unificado v2. */
+	unified_v2?: boolean;
 }
 
 export interface ConsumptionBuildInput {
 	entries: ConsumptionEntryRow[];
-	quantities: QuantityRow[];
 	items: ConsumptionItem[];
 	lines: ConsumptionInvoiceLine[];
 	/** `YYYY-MM-DD`: marca los períodos en curso y los pendientes con período terminado. */
@@ -1011,9 +1018,17 @@ export interface ConsumptionBuildInput {
 }
 
 const isMeteredItem = (item: ConsumptionItem) => item.price?.quantity_type === 'metered';
-/** Factura que el consumo puede tocar (mismo criterio que `consumption.ts`): activa, tipo factura, no unificada ni legacy. */
-const isRecomputableLine = (line: ConsumptionInvoiceLine) =>
-	line.is_active && !line.is_legacy && line.invoice_type !== 'Unificada' && !isCreditNote(line.document_type) && line.document_type !== 'ND';
+/**
+ * Factura que el consumo puede tocar (mismo criterio que `isRecomputable` de `consumption.ts`): tipo factura, no legacy, y activa no
+ * unificada, origen de un unificado v2 Por Emitir, o unificado v2 ya emitido.
+ */
+const isRecomputableLine = (line: ConsumptionInvoiceLine) => {
+	if (line.is_legacy || isCreditNote(line.document_type) || line.document_type === 'ND') return false;
+	if (line.invoice_type === 'Unificada') return line.is_active && line.unified_v2 === true && line.status !== PENDING_STATUS;
+	if (!line.is_active) return line.consolidated_pending === true;
+
+	return true;
+};
 const complementsOf = (line: ConsumptionInvoiceLine) => line.pricing_breakdown?.find((subline) => subline.kind === 'invoiced') ?? null;
 /** Factura de la línea; `is_complementary` y `complements_invoice_id` cuando es una complementaria por consumo adicional (spec §4.4). */
 const lineInvoice = (line: ConsumptionInvoiceLine) => {
@@ -1032,8 +1047,8 @@ const lineInvoice = (line: ConsumptionInvoiceLine) => {
 /**
  * Consumos del contrato (`GET /contracts/:id/consumption`, spec §5):
  * - `uses_usage_pricing`: existe un ítem con precio `metered`;
- * - `rows`: `consumption_entries` cruzadas con la línea del período (cantidad, origen, desglose, factura y estado) más las
- *   `quantities` históricas del front viejo (`source = legacy`), más nuevas primero;
+ * - `rows`: `consumption_entries` cruzadas con la línea del período (cantidad, origen, desglose, factura y estado), más nuevas primero
+ *   (los overrides del front anterior se copiaron a `consumption_entries` el 05-10 y se ven igual que cualquier consumo o corrección);
  * - `items[]`: **todos** los ítems (medidos y estándar) con `uses_usage_pricing`, precio, métrica y sus períodos facturables
  *   (`accepts_consumption` cuando la factura del período está Por Emitir, sea el ítem medido o estándar);
  * - `pending[]`: líneas medidas (solo ítems medidos) con período terminado y sin consumo informado.
@@ -1075,24 +1090,19 @@ export function groupConsumptionLines(lines: ConsumptionInvoiceLine[]): Array<Co
 }
 
 export function buildConsumption(input: ConsumptionBuildInput) {
-	const { entries, quantities, items, today } = input;
+	const { entries, items, today } = input;
 	const lines = groupConsumptionLines(input.lines);
 	const itemById = new Map(items.map((item) => [item.id, item]));
 	const linesFor = (itemId: string, periodStart: string) =>
 		lines.filter((line) => line.contract_item_id === itemId && !!line.billing_period_start && line.billing_period_start === periodStart);
+	// La línea que se muestra: la vigente Por Emitir (en un origen consolidado, la copia del unificado, que es el documento real), luego la
+	// recalculable Por Emitir, luego la emitida vigente.
 	const bestLine = (candidates: ConsumptionInvoiceLine[]) =>
+		candidates.find((line) => line.is_active && line.status === 'Por Emitir' && (isRecomputableLine(line) || line.unified_v2 === true)) ??
 		candidates.find((line) => isRecomputableLine(line) && line.status === 'Por Emitir') ??
 		candidates.find((line) => isRecomputableLine(line) && line.status !== CANCELLED_STATUS && line.status !== 'Anulada') ??
 		candidates[0] ??
 		null;
-	const legacyInvoice = (itemId: string, period: string) => {
-		const matches = lines.filter(
-			(line) => line.contract_item_id === itemId && !!line.billing_period_start && line.billing_period_start.slice(0, 7) === period.slice(0, 7)
-		);
-		const best = matches.find((line) => line.is_active && line.status !== CANCELLED_STATUS) ?? matches[0];
-
-		return best ? { id: best.invoice_id, number: best.invoice_number, status: best.status, issue_date: best.issue_date } : null;
-	};
 
 	const entryRows = entries.map((entry) => {
 		const item = itemById.get(entry.contract_item_id);
@@ -1132,36 +1142,7 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 			invoice: line ? lineInvoice(line) : null,
 		};
 	});
-	const legacyRows = quantities.map((row) => {
-		const item = itemById.get(row.contract_item_id);
-		const period = monthStart(row.period);
-
-		return {
-			id: row.id,
-			kind: 'legacy' as const,
-			item_id: row.contract_item_id,
-			product_name: item?.product_name ?? null,
-			account: row.account ?? item?.account ?? null,
-			period,
-			period_start: period,
-			period_end: null,
-			quantity: row.quantity,
-			unit: item?.unit_of_measure ?? null,
-			unit_price: row.unit_price,
-			amount: row.amount ?? (row.quantity !== null && row.unit_price !== null ? round2(row.quantity * row.unit_price) : null),
-			source: 'legacy',
-			revision: 1,
-			is_estimated: false,
-			in_progress: false,
-			upcoming: false,
-			quantity_source: null,
-			pricing_breakdown: null,
-			invoice: legacyInvoice(row.contract_item_id, period),
-		};
-	});
-	const rows = [...entryRows, ...legacyRows].sort(
-		(a, b) => b.period.localeCompare(a.period) || (a.product_name ?? '').localeCompare(b.product_name ?? '')
-	);
+	const rows = [...entryRows].sort((a, b) => b.period.localeCompare(a.period) || (a.product_name ?? '').localeCompare(b.product_name ?? ''));
 	const entryByKey = new Map(entries.map((entry) => [`${entry.contract_item_id}|${entry.period_start}`, entry]));
 	const pending: Array<{
 		item_id: string;
@@ -1211,10 +1192,12 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 				entry_id: entry?.id ?? null,
 				invoice: lineInvoice(line),
 				/**
-				 * Solo una Por Emitir activa acepta cantidad (también en ítems estándar: cantidad × unitario del período); emitida =
-				 * complementaria o reemisión (`apply_as`, S7-7).
+				 * Solo ítems por consumo con una Por Emitir activa aceptan cantidad; emitida = complementaria o reemisión (`apply_as`, S7-7). Un ítem
+				 * fijo no (Domi 05-10): su desvío puntual se hace con "Editar factura" de la Por Emitir.
 				 */
-				accepts_consumption: line.status === 'Por Emitir' && isRecomputableLine(line),
+				accepts_consumption:
+					isMeteredItem(item) &&
+					linesFor(item.id, periodStart).some((candidate) => candidate.status === 'Por Emitir' && isRecomputableLine(candidate)),
 			};
 		});
 

@@ -7,6 +7,7 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 import { SapiraQuantityImport } from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
 import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity';
+import { ContractsModule } from '@/modules/contracts/contracts.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { BigQueryConnectionController } from './bigquery-connection.controller';
@@ -20,6 +21,8 @@ import { BigQueryService } from './bigquery.service';
 		AuthModule,
 		ScheduleModule.forRoot(),
 		NotificationsModule,
+		// 05-10: la fase 2 de cantidades escribe consumos con `ConsumptionService` (una sola fuente, `consumption_entries`).
+		ContractsModule,
 		TypeOrmModule.forFeature([StripeCustomerBigQuery, CompanyHolding, BigQueryConnection, SapiraQuantityImport]),
 	],
 	controllers: [BigQueryController, BigQueryConnectionController],

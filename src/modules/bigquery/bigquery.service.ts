@@ -12,7 +12,7 @@ import {
 } from '@/databases/postgresql/entities/facturacion/sapira-quantity-import.entity';
 import { BigQueryConnection } from '@/databases/postgresql/entities/integraciones/otras/bigquery-connection.entity';
 import { StripeCustomerBigQuery } from '@/databases/postgresql/entities/integraciones/stripe/stripe-customer-bigquery.entity';
-import { withApiWriter } from '@/modules/contracts/api-writer';
+import { ConsumptionService, type DwhEntryView } from '@/modules/contracts/consumption.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { ListQuantityImportsDto } from './dtos/list-quantity-imports.dto';
@@ -141,7 +141,9 @@ export class BigQueryService {
 		private readonly quantityImportRepository: Repository<SapiraQuantityImport>,
 		private readonly notificationsService: NotificationsService,
 		@InjectDataSource()
-		private readonly dataSource: DataSource
+		private readonly dataSource: DataSource,
+		// 05-10 (Domi, una sola fuente de consumos): la fase 2 escribe en `consumption_entries` por el mismo servicio que la pantalla.
+		private readonly consumption: ConsumptionService
 	) {}
 
 	private parseCredentials(rawCredentials: string): any {
@@ -819,7 +821,7 @@ export class BigQueryService {
 	}
 
 	/**
-	 * Fase 2 — Integración: `sapira_quantity_imports` → `quantities`. No consulta BigQuery.
+	 * Fase 2 — Integración: `sapira_quantity_imports` → `consumption_entries` (desde el 05-10; antes `quantities`). No consulta BigQuery.
 	 *
 	 * Con `retryFailed` reprocesa además los estados recuperables, que es el camino para
 	 * recuperar filas después de poblar `quote_item_number` o de anular una factura.
@@ -886,7 +888,7 @@ export class BigQueryService {
 			byQuoteItemNumber.set(candidate.quote_item_number, bucket);
 		}
 
-		// Resolver, filtrar y validar antes de tocar quantities.
+		// Resolver, filtrar y validar antes de registrar consumos.
 		const resolved: Array<{ importRow: SapiraQuantityImport; candidate: ContractItemCandidate }> = [];
 
 		for (const importRow of pending) {
@@ -929,8 +931,7 @@ export class BigQueryService {
 			resolved.push({ importRow, candidate });
 		}
 
-		// Devengo: contrato → primer mes con una cantidad nueva. Se recalcula al final del batch (ver rebuildRevenueAfterQuantities).
-		const revenueFrom = new Map<string, string>();
+		// Devengo: lo recalcula `ConsumptionService` en la transacción de cada consumo (rebuild del mes), como en la pantalla.
 
 		// Deduplicar por la clave natural de quantities: dos filas del DWH que apunten al mismo
 		// (contract_item_id, period) con valores distintos no se integran.
@@ -965,7 +966,7 @@ export class BigQueryService {
 
 			// Duplicados idénticos: se integra el primero y los demás quedan apuntando a la misma fila.
 			const [first, ...rest] = bucket;
-			const outcome = await this.integrateSingleQuantity(holdingId, first.importRow, revenueFrom);
+			const outcome = await this.integrateSingleQuantity(holdingId, first.importRow);
 			this.countImportOutcome(result, outcome.status);
 
 			for (const duplicate of rest) {
@@ -974,8 +975,6 @@ export class BigQueryService {
 				this.countImportOutcome(result, outcome.status);
 			}
 		}
-
-		await this.rebuildRevenueAfterQuantities(revenueFrom);
 
 		await this.notifyQuantitiesAggregates(holdingId, result, resolvedRange);
 
@@ -990,82 +989,42 @@ export class BigQueryService {
 	}
 
 	/**
-	 * Inserta una fila en `quantities` respetando la semántica insert-only.
+	 * Registra el consumo de una fila del DWH en `consumption_entries` respetando la semántica insert-only (05-10, Domi: una sola fuente de
+	 * consumos; `quantities` queda de solo lectura). Va por `ConsumptionService.recordFromDwh`, el mismo camino que la pantalla: costura
+	 * `sapira.writer = 'api'`, recálculo de la factura Por Emitir del período (o del unificado que la lleva), historial, evento y rebuild del
+	 * devengo del mes, todo en su transacción. Si el período ya tiene consumo, se compara (`reconcileExistingQuantity`).
 	 *
-	 * Cada INSERT va aislado en su propio try/catch porque
-	 * `trg_validate_quantity_invoice_status` lanza excepción cuando la factura activa del período
-	 * no está en "Por Emitir": sin esto, una sola factura emitida tumbaría el batch completo.
-	 *
-	 * Si inserta, anota en `revenueFrom` el contrato y el mes para recalcular su devengo al final del batch (el trigger
-	 * `trg_rsm_on_quantity_change` que lo hacía se retiró el 04-10).
+	 * Cada fila va aislada en su try/catch: una factura del período ya emitida (409 `consumption_period_issued` / `item_not_metered`) o un
+	 * ítem sin línea en ese mes (409 `period_out_of_item`) deja la fila `blocked` sin tumbar el batch, como hacía el trigger de `quantities`.
 	 */
 	private async integrateSingleQuantity(
 		holdingId: string,
-		importRow: SapiraQuantityImport,
-		revenueFrom: Map<string, string>
+		importRow: SapiraQuantityImport
 	): Promise<{ status: QuantityImportStatus; reason: string | null; quantityId: string | null }> {
 		const contractItemId = importRow.resolved_contract_item_id as string;
+		const existing = await this.consumption.entryForMonth(holdingId, contractItemId, importRow.period);
 
-		const existingRows: QuantityRecord[] = await this.dataSource.query(
-			`SELECT id, unit_price, quantity, unit_of_measure, account
-			 FROM quantities
-			 WHERE contract_item_id = $1 AND period = $2`,
-			[contractItemId, importRow.period]
-		);
-
-		if (existingRows.length > 0) {
-			return this.reconcileExistingQuantity(holdingId, importRow, existingRows[0]);
+		if (existing) {
+			return this.reconcileExistingQuantity(holdingId, importRow, this.entryRecord(existing));
 		}
 
 		try {
-			// No se mandan holding_id (lo deriva trg_quantities_set_holding) ni amount: el canal automático
-			// informa unitario × cantidad, que es lo que factura y devenga (un amount solo cuenta sin ellos).
-			const inserted: Array<{ id: string }> = await this.dataSource.query(
-				`INSERT INTO quantities (contract_item_id, contract_id, period, unit_price, quantity,
-				                         unit_of_measure, account, salesforce_opportunity_id,
-				                         salesforce_line_item_id, notes)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-				 ON CONFLICT (contract_item_id, period) DO NOTHING
-				 RETURNING id`,
-				[
-					contractItemId,
-					importRow.resolved_contract_id,
-					importRow.period,
-					importRow.unit_price,
-					importRow.quantity,
-					importRow.unit_of_measure,
-					importRow.account,
-					importRow.opportunity_id,
-					importRow.quote_line_id,
-					`${QUANTITY_IMPORT_NOTES_SOURCE} · sf_id=${importRow.sf_id}`,
-				]
-			);
+			await this.consumption.recordFromDwh(holdingId, importRow.resolved_contract_id as string, contractItemId, importRow.period, {
+				quantity: Number(importRow.quantity ?? 0),
+				unit_price: importRow.unit_price === null || importRow.unit_price === undefined ? null : Number(importRow.unit_price),
+				account: importRow.account ?? null,
+				notes: `${QUANTITY_IMPORT_NOTES_SOURCE} · sf_id=${importRow.sf_id}`,
+			});
 
-			if (inserted.length === 0) {
-				// Carrera: otro proceso insertó la fila entremedio. Se reevalúa como existente.
-				const raced: QuantityRecord[] = await this.dataSource.query(
-					`SELECT id, unit_price, quantity, unit_of_measure, account
-					 FROM quantities
-					 WHERE contract_item_id = $1 AND period = $2`,
-					[contractItemId, importRow.period]
-				);
-
-				if (raced.length > 0) {
-					return this.reconcileExistingQuantity(holdingId, importRow, raced[0]);
-				}
-
-				return { status: 'blocked', reason: 'El INSERT no retornó fila y no se encontró el registro existente', quantityId: null };
-			}
-
-			importRow.quantity_id = inserted[0].id;
+			// `sapira_quantity_imports.quantity_id` apunta a `quantities` (FK): las filas nuevas quedan sin él; la entry se encuentra por ítem y mes.
+			importRow.quantity_id = null;
 			importRow.integrated_at = new Date();
-			this.trackRevenueFrom(revenueFrom, importRow.resolved_contract_id, importRow.period);
 			await this.markImport(importRow, 'integrated', null);
 			await this.notificationsService.resolveByDeduplicationKey(holdingId, this.quantityDiffDedupKey(holdingId, importRow));
 
-			return { status: 'integrated', reason: null, quantityId: inserted[0].id };
+			return { status: 'integrated', reason: null, quantityId: null };
 		} catch (error) {
-			const reason = error?.message ?? 'Error desconocido al insertar en quantities';
+			const reason = this.consumptionErrorReason(error);
 			this.logger.warn(`No se pudo integrar la cantidad ${importRow.sf_id} (${importRow.period}): ${reason}`);
 			await this.markImport(importRow, 'blocked', reason);
 
@@ -1073,70 +1032,52 @@ export class BigQueryService {
 		}
 	}
 
-	/** Anota el primer mes tocado de cada contrato (los períodos son `YYYY-MM-01`: el orden de texto es el cronológico). */
-	private trackRevenueFrom(revenueFrom: Map<string, string>, contractId: string | null, period: string): void {
-		if (!contractId || !period) return;
-		const current = revenueFrom.get(contractId);
-		if (!current || period < current) revenueFrom.set(contractId, period);
+	/** El consumo vigente con la forma que compara y notifica la fase 2 (unitario efectivo y cantidad como texto, como venían de `quantities`). */
+	private entryRecord(entry: DwhEntryView): QuantityRecord {
+		return {
+			id: entry.id,
+			unit_price: entry.unit_price === null ? null : String(entry.unit_price),
+			quantity: String(entry.quantity),
+			// `consumption_entries` no guarda unidad: se compara contra la del ítem (la que factura).
+			unit_of_measure: entry.unit_of_measure,
+			account: entry.account,
+		};
 	}
 
-	/**
-	 * Devengo (`revenue_schedule_monthly`) de un contrato desde el mes de la cantidad tocada. Lo hacían los triggers del front
-	 * viejo `trg_rsm_on_quantity_change` / `trg_restore_rsm_on_quantity_delete`, retirados el 04-10 (Domi): la API lo recalcula
-	 * explícito, como en todo camino v2 (`docs/reglas-desarrollo/logica-en-api-triggers.md`). El rebuild devenga el override del
-	 * período con la regla de la factura (D2, `revenue_schedule_rebuild_contract_ccy`).
-	 *
-	 * Va en su propia transacción con `sapira.writer = 'api'`, después del INSERT/UPDATE de `quantities`: esa escritura sigue sin
-	 * la marca para que corran los triggers de `quantities` que se conservan (holding, guard de factura emitida y sincronización
-	 * de líneas Por Emitir), que el rebuild lee.
-	 */
-	private async rebuildRevenueSchedule(contractId: string, fromPeriod: string): Promise<void> {
-		await withApiWriter(this.dataSource, (runner) =>
-			runner.query(`SELECT revenue_schedule_rebuild($1::uuid, date_trunc('month', $2::date)::date)`, [contractId, fromPeriod])
-		);
+	/** Mensaje legible de un error del servicio de consumos (409/400 con `message`) o de la base. */
+	private consumptionErrorReason(error: unknown): string {
+		const response = (error as { getResponse?: () => unknown })?.getResponse?.();
+		const message =
+			response && typeof response === 'object' && 'message' in (response as Record<string, unknown>)
+				? (response as { message: unknown }).message
+				: (error as Error)?.message;
+
+		return Array.isArray(message) ? message.join('; ') : String(message ?? 'Error desconocido al registrar el consumo');
 	}
 
-	/**
-	 * Recalcula el devengo de cada contrato con cantidades nuevas del batch, una vez por contrato desde su primer mes tocado. Un
-	 * fallo no tumba la integración (las cantidades ya quedaron guardadas): se registra como error con el contrato y el mes para
-	 * repetir el recálculo.
-	 */
-	private async rebuildRevenueAfterQuantities(revenueFrom: Map<string, string>): Promise<void> {
-		for (const [contractId, fromPeriod] of revenueFrom) {
-			try {
-				await this.rebuildRevenueSchedule(contractId, fromPeriod);
-			} catch (error) {
-				this.logger.error(
-					`No se pudo recalcular el devengo del contrato ${contractId} desde ${fromPeriod} tras integrar cantidades: ${error?.message ?? error}`
-				);
-			}
-		}
-	}
-
-	/** Decide qué hacer cuando ya existe un override para (contract_item_id, period). */
+	/** Decide qué hacer cuando el ítem ya tiene consumo registrado en ese mes. */
 	private async reconcileExistingQuantity(
 		holdingId: string,
 		importRow: SapiraQuantityImport,
 		existing: QuantityRecord
 	): Promise<{ status: QuantityImportStatus; reason: string | null; quantityId: string | null }> {
+		// `consumption_entries` no guarda unidad (factura la del ítem): se comparan unitario, cantidad y cuenta.
 		const isSame =
 			this.numericEquals(existing.unit_price, importRow.unit_price) &&
 			this.numericEquals(existing.quantity, importRow.quantity) &&
-			this.textEquals(existing.unit_of_measure, importRow.unit_of_measure) &&
 			this.textEquals(existing.account, importRow.account);
 
-		importRow.quantity_id = existing.id;
-
+		// `quantity_id` es FK a `quantities`: no se apunta a la entry (se conserva el de una fila histórica, si lo tenía).
 		if (isSame) {
 			importRow.integrated_at = importRow.integrated_at ?? new Date();
 			await this.markImport(importRow, 'integrated', null);
 			await this.notificationsService.resolveByDeduplicationKey(holdingId, this.quantityDiffDedupKey(holdingId, importRow));
 
-			return { status: 'integrated', reason: null, quantityId: existing.id };
+			return { status: 'integrated', reason: null, quantityId: null };
 		}
 
-		// Diff contra el override existente, solo sobre los campos que sí se propagan a quantities.
-		const diffs = QUANTITY_INTEGRATED_FIELDS.flatMap((field) => {
+		// Diff contra el consumo vigente, solo sobre los campos que se registran (unitario, cantidad y cuenta).
+		const diffs = QUANTITY_INTEGRATED_FIELDS.filter((field) => field !== 'unit_of_measure').flatMap((field) => {
 			const current = existing[field] ?? null;
 			const next = importRow[field] ?? null;
 			const equal =
@@ -1147,11 +1088,11 @@ export class BigQueryService {
 			return equal ? [] : [{ field, current: current === null ? null : String(current), incoming: next === null ? null : String(next) }];
 		});
 
-		const reason = 'Ya existe un override para este ítem y período con valores distintos; no se sobrescribe automáticamente';
+		const reason = 'Ya existe un consumo registrado para este ítem y período con valores distintos; no se sobrescribe automáticamente';
 		await this.markImport(importRow, 'conflict', reason);
 		await this.notifyQuantityDifference(holdingId, importRow, { diffs, current: existing });
 
-		return { status: 'conflict', reason, quantityId: existing.id };
+		return { status: 'conflict', reason, quantityId: null };
 	}
 
 	private async markImport(importRow: SapiraQuantityImport, status: QuantityImportStatus, reason: string | null): Promise<void> {
@@ -1222,7 +1163,8 @@ export class BigQueryService {
 				: 'Compara los valores. Si el cambio es esperado, reemplaza para dejar constancia y cerrar el aviso.',
 			action_type: REPLACE_QUANTITY_RECORD_ACTION,
 			action_payload: {
-				quantity_id: importRow.quantity_id,
+				// Id del consumo vigente (entry de `consumption_entries`) que reemplaza la acción; el nombre del campo se conserva para el front.
+				quantity_id: current?.id ?? importRow.quantity_id,
 				import_id: importRow.id,
 				incoming: {
 					unit_price: importRow.unit_price,
@@ -1362,54 +1304,44 @@ export class BigQueryService {
 	}
 
 	/**
-	 * Aplica los valores del DWH sobre un override existente de `quantities` y resuelve la
-	 * notificación. Es la contraparte manual de la semántica insert-only.
+	 * Aplica los valores del DWH sobre el consumo vigente del período y resuelve la notificación: contraparte manual de la semántica
+	 * insert-only. Desde el 05-10 el id es el de la entry de `consumption_entries` (o, para notificaciones anteriores, el de la fila de
+	 * `quantities`, que la migración `1791600000000` copió con `idempotency_key = 'quantities:<id>'`). Es una corrección por el mismo
+	 * camino que la pantalla (`recordFromDwh` con motivo): recalcula la Por Emitir del período (o 409 si ya se emitió) y el devengo del mes.
 	 */
 	async replaceQuantityRecord(holdingId: string, quantityId: string, incoming: ReplaceQuantityRecordDto): Promise<QuantityRecord> {
 		if (!holdingId) {
 			throw new BadRequestException('El header x-holding-id es requerido');
 		}
 
-		const existing: Array<QuantityRecord & { contract_id: string | null; period: string }> = await this.dataSource.query(
-			`SELECT q.id, q.unit_price, q.quantity, q.unit_of_measure, q.account, ci.contract_id, q.period::text AS period
-			 FROM quantities q
-			 JOIN contract_items ci ON ci.id = q.contract_item_id
-			 WHERE q.id = $1 AND q.holding_id = $2`,
-			[quantityId, holdingId]
-		);
+		const existing = await this.consumption.entryById(holdingId, quantityId);
 
-		if (existing.length === 0) {
-			throw new NotFoundException('Registro de quantities no encontrado para el holding');
+		if (!existing) {
+			throw new NotFoundException('Consumo no encontrado para el holding');
 		}
 
-		// amount queda fuera a propósito: el canal automático nunca lo escribe.
-		const updated: QuantityRecord[] = await this.dataSource.query(
-			`UPDATE quantities
-			 SET unit_price = $3, quantity = $4, unit_of_measure = $5, account = $6, updated_at = now()
-			 WHERE id = $1 AND holding_id = $2
-			 RETURNING id, unit_price, quantity, unit_of_measure, account`,
-			[
-				quantityId,
-				holdingId,
-				incoming.unit_price ?? null,
-				incoming.quantity ?? null,
-				incoming.unit_of_measure ?? null,
-				incoming.account ?? null,
-			]
-		);
+		await this.consumption.recordFromDwh(holdingId, existing.contract_id, existing.contract_item_id, existing.period_start, {
+			quantity: incoming.quantity === null || incoming.quantity === undefined ? existing.quantity : Number(incoming.quantity),
+			unit_price: incoming.unit_price === null || incoming.unit_price === undefined ? null : Number(incoming.unit_price),
+			account: incoming.account ?? null,
+			notes: null,
+			correction_reason: 'Reemplazo con el dato del almacén de datos',
+		});
+		const updated = await this.consumption.entryById(holdingId, existing.id);
 
-		// Devengo del mes del override en adelante (el trigger `trg_rsm_on_quantity_change` que lo hacía se retiró el 04-10). Si
-		// falla, el reemplazo ya quedó guardado y el error sube: repetir la acción es idempotente y vuelve a recalcular.
-		const { contract_id: contractId, period } = existing[0];
-		if (contractId) await this.rebuildRevenueSchedule(contractId, period);
-
-		const relatedImports = await this.quantityImportRepository.find({ where: { holding_id: holdingId, quantity_id: quantityId } });
+		// Filas del DWH del mismo ítem y mes (o que apuntaban a la fila de `quantities` anterior a la migración).
+		const relatedImports = await this.quantityImportRepository.find({
+			where: [
+				{ holding_id: holdingId, quantity_id: quantityId },
+				{ holding_id: holdingId, resolved_contract_item_id: existing.contract_item_id, period: `${existing.period_start.slice(0, 7)}-01` },
+			],
+		});
 		for (const importRow of relatedImports) {
 			importRow.integrated_at = new Date();
 			await this.markImport(importRow, 'integrated', null);
 			await this.notificationsService.resolveByDeduplicationKey(holdingId, this.quantityDiffDedupKey(holdingId, importRow));
 		}
 
-		return updated[0];
+		return this.entryRecord(updated ?? existing);
 	}
 }

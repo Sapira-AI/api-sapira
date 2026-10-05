@@ -59,9 +59,9 @@ mostrar sigue siendo real, pero no es MRR (la industria excluye uso medido y des
 - **MRR** = el plan (columna `mrr_period_contracted_*`, la que no pisa nadie) + **CMRR**. Un solo MRR en Métricas.
 - **Ingreso recurrente reconocido del mes** (Σ `recognized_period_*` de ítems recurrentes) en Revenue, junto al MRR, con la brecha
   "MRR vs reconocido" explicada (prorrateo, NC de descuento, consumo). En Hanka hay 30 filas donde difieren.
-- **Consumo variable**: hoy el consumo v2 (`consumption_entries`, Pricing v2) **no llega al devengo**: el rebuild reconoce
-  `final_price / term` y lo facturado sale de las líneas, así que en ítems medidos el diferido/por facturar refleja la diferencia
-  plan ↔ consumo. Es decisión del devengo (R8); Métricas lo muestra aparte ("Ingreso por uso" desde lo facturado) y no lo mete al MRR.
+- **Consumo variable** (R8 cerrado 05-10): un mes con consumo o cantidad corregida devenga **lo facturado para su período**
+  (`revenue_schedule_rebuild_contract_ccy` v3.8, regla D2-c, `spec-pricing-v2.md` §4.5); el MRR sigue siendo el plan. Métricas lo
+  sigue mostrando aparte ("Ingreso por uso" desde lo facturado) y no lo mete al MRR.
 
 ### 1.3 Filas sin convertir (`unconverted`)
 Una fila RSM no se suma si:
@@ -358,7 +358,7 @@ Barra: rango · base MRR/CMRR · compañía · segmentos (filtros guardados) · 
 | R5 | `rsm_rebuild_from_subscription`: MRR mensualizado (no el facturado del mes) y CHURN negativo | Anual = 12× en un mes | D4: entra como MRR; lo corrige la sesión de devengo (D-CTR-3) |
 | R6 | Retirar al switch `rsm_metrics`, `revenue_monthly_journal`, `revenue_monthly_summary`, `populate_initial_revenue_schedule`, `get_current_mrr_by_holding` | Sin uso o leen filas TOTAL inexistentes | — |
 | R7 | Traducción del diferido a moneda de compañía/sistema: tasa histórica de la factura (IFRIC 22: no monetario, no se revalúa) en vez de la tasa de cada mes | Hoy el saldo diferido "se mueve" con el tipo de cambio | Se lee como viene; la diferencia de cambio se informa aparte |
-| R8 | Devengo de ítems medidos (Pricing v2): que el rebuild reconozca el consumo del período (`consumption_entries`) en vez de `final_price / term`, y retirar el path legacy `revenue_schedule_update_period_quantities` | Hoy el consumo v2 no llega al reconocido; el viejo `quantities` pisa `mrr_period` | Métricas usa el plan; Revenue muestra la brecha |
+| R8 | ~~Devengo de ítems medidos (Pricing v2)~~ **Cerrado 05-10 (Domi, D2-c)**: el rebuild (v3.8) devenga lo facturado del período en todo mes con desvío del plan (`consumption_entries` —incluidos los overrides de `quantities`, copiados con `1791600000000`— o línea editada a mano); el path legacy `revenue_schedule_update_period_quantities` quedó sin llamadores con `1791300000000` | — | MRR = plan; Revenue y el 360 muestran el reconocido con el consumo |
 | R9 | Reglas de reconocimiento reales: granularidad por compañía (mensual / diaria, S1-6/M6), política de descuentos y método por producto o ítem (lineal, al facturar, por uso, por hito) como librería con prioridad (patrón Stripe/Zenskar), leídas por el rebuild; `financial_settings` se fusiona en la configuración tipada del holding (`spec-tablas-por-modulo.md`) | Hoy la pantalla vieja guarda valores que nadie lee | Pestaña Reglas oculta; la UI de Configuración del holding la toma cuando exista |
 
 ## 6. Dependencias (se anotan, no se construyen aquí)
