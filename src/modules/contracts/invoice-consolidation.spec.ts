@@ -139,7 +139,8 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(codes(invoiceBlockers(invoice({ is_legacy: true })))).toEqual(['legacy_invoice']);
 			expect(codes(invoiceBlockers(invoice({ contract_id: null })))).toEqual(['no_contract']);
 			expect(codes(invoiceBlockers(invoice({ internal_lines: 2 })))).toEqual(['partial_billing_invoice']);
-			expect(codes(invoiceBlockers(invoice({ open_lines: 1 })))).toEqual(['open_consumption']);
+			// Consumo abierto ya no bloquea (Domi 05-10): el consumo posterior re-copia sus líneas al unificado.
+			expect(codes(invoiceBlockers(invoice({ open_lines: 1 })))).toEqual([]);
 			expect(codes(invoiceBlockers(invoice({ cutoff_date: '2026-10-31' })))).toEqual([]); // un mes cerrado no bloquea (Domi 03-10)
 		});
 

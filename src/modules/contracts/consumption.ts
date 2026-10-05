@@ -12,7 +12,11 @@ import { isCreditNote, PENDING_STATUS } from './contract-360';
 import { type PricedLine, type PricedSubline, priceLine, type PriceLineOptions, type PriceSpec } from './pricing-engine';
 /** Estados que dejan a la factura fuera de juego para el consumo (una anulada no bloquea: la Por Emitir de reemplazo se recalcula). */
 export const VOID_STATUSES = new Set(['Cancelada', 'Anulada']);
-/** Facturas unificadas (multi-contrato) no se recalculan desde un ítem. */
+/**
+ * Documento unificado (consolidación entre contratos, `spec-multimoneda-contrato.md` §7). Por Emitir: el consumo recalcula la factura de
+ * ORIGEN del ítem (inactiva, `consolidated_into_invoice_id`) y la API vuelve a copiar sus líneas al unificado (`resyncFromOrigins`); emitido:
+ * `additional` / `reissue` se aplican sobre el unificado. Los unificados históricos (sin evento v2) no se tocan.
+ */
 export const UNIFIED_INVOICE_TYPE = 'Unificada';
 
 export const CONSUMPTION_PERIOD_ISSUED = 'consumption_period_issued';
@@ -105,6 +109,12 @@ export interface ConsumptionPeriodLine {
 	 * consumo del período queda libre para la reemisión (o para registrarse de nuevo si no se reemitió).
 	 */
 	voided?: boolean;
+	/** Factura de origen consolidada en un unificado (`invoices.consolidated_into_invoice_id`), o null. */
+	consolidated_into_invoice_id?: string | null;
+	/** El origen está consolidado en un unificado v2 que sigue Por Emitir: el consumo lo recalcula y se re-copia al unificado. */
+	consolidated_pending?: boolean;
+	/** La línea es de un documento unificado v2 (evento `INVOICE_CONSOLIDATED`); los históricos no se tocan. */
+	unified_v2?: boolean;
 }
 
 /**
@@ -146,13 +156,19 @@ export const periodQuantityOf = (lines: ConsumptionPeriodLine[]): number => {
 /** Anulada: estado Cancelada/Anulada o emitida con NC de anulación vinculada (§3.8). */
 export const isVoidLine = (line: Pick<ConsumptionPeriodLine, 'status' | 'voided'>) => VOID_STATUSES.has(line.status ?? '') || line.voided === true;
 
-/** Factura de tipo factura (no NC/ND), no unificada, no legacy y activa: la única que el consumo puede tocar. */
-export const isRecomputable = (line: ConsumptionPeriodLine) =>
-	line.is_active &&
-	!line.is_legacy &&
-	line.invoice_type !== UNIFIED_INVOICE_TYPE &&
-	!isCreditNote(line.document_type) &&
-	line.document_type !== 'ND';
+/**
+ * Factura que el consumo puede tocar: tipo factura (no NC/ND), no legacy y
+ * - activa y no unificada (el caso de siempre);
+ * - origen inactivo de un unificado v2 Por Emitir (`consolidated_pending`): se recalcula el origen y se re-copia al unificado;
+ * - unificado v2 ya emitido (`unified_v2`, no Por Emitir): `additional` / `reissue` sobre él.
+ */
+export function isRecomputable(line: ConsumptionPeriodLine): boolean {
+	if (line.is_legacy || isCreditNote(line.document_type) || line.document_type === 'ND') return false;
+	if (line.invoice_type === UNIFIED_INVOICE_TYPE) return line.is_active && line.unified_v2 === true && line.status !== PENDING_STATUS;
+	if (!line.is_active) return line.consolidated_pending === true;
+
+	return true;
+}
 
 /**
  * Clasifica las líneas del ítem cuyo período empieza en `period_start` (§4.3, pasos 1, 4 y 5):
@@ -382,6 +398,22 @@ export const outOfItemConflict = (periodStart: string, periods: string[]) =>
 			: `El ítem no tiene períodos de servicio facturables (sin facturas o contrato sin activar)`,
 		code: PERIOD_OUT_OF_ITEM,
 		periods,
+	});
+
+/**
+ * 409 de un ítem que no se cobra por consumo (Domi 05-10: la "corrección de cantidad" de un ítem fijo era una versión provisoria del front
+ * anterior y ya no existe). Un desvío puntual de un ítem fijo se hace editando la factura Por Emitir del período (el devengo sigue lo
+ * facturado, regla D2-c). Los consumos ya registrados sobre ítems fijos (copiados de `quantities`) siguen contando para el devengo.
+ */
+export const fixedItemConflict = (productName: string | null) =>
+	new ConflictException({
+		message:
+			`"${productName ?? ''}" no se cobra por consumo: para facturar otra cantidad en un período, edita la factura por emitir de ese período`.replace(
+				/\s+/g,
+				' '
+			),
+		code: ITEM_NOT_METERED,
+		next_step: 'Facturas › Editar factura',
 	});
 
 /**

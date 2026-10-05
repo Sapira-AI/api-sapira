@@ -228,7 +228,7 @@ consolidado ya enviado bloquea igual; (7) deshacer **no borra**: el consolidado 
   = preview + `applied, consolidated_invoice_id, event_ids, invoice` (409 `{ code: 'blocked', blockers, preview }`). Deshacer
   `{ consolidated, origins[], undone, consolidated_invoice_id, status: 'Cancelada', restored_invoice_ids, event_ids }`.
 - **Bloqueos**: `credit_note`, `not_pending`, `already_consolidated`, `legacy_invoice`, `no_contract`, `partial_billing_invoice`,
-  `open_consumption`, `sent_to_erp_draft` (`action: 'erp_reset'`), `single_contract` (sin `period_closed` desde 03-10), `company_mismatch`, `entity_mismatch`,
+  `sent_to_erp_draft` (`action: 'erp_reset'`), `single_contract` (sin `period_closed` desde 03-10), `company_mismatch`, `entity_mismatch`,
   `currency_mismatch`, `month_mismatch`, `document_type_mismatch`, `export_type_mismatch`, `series_mismatch`, `tax_rate_mismatch`
   (`multicurrency_spot_send_pending` se quitó con MM4: el consolidado spot con varios pares se valoriza por par al emitir). Deshacer: `not_consolidated`, `legacy_unified`, `not_pending`,
   `sent_to_erp_draft`, `no_origins`. Avisos: `auto_invoice_differs`, `auto_send_to_erp_differs`, `pair_rates_differ`, `spot_document`,
@@ -237,11 +237,29 @@ consolidado ya enviado bloquea igual; (7) deshacer **no borra**: el consolidado 
   OR de los orígenes y de `contracts.requires_references_for_billing`; (b) `auto_send_to_odoo` vive solo en el contrato: el envío sigue el
   del contrato principal (aviso `auto_send_to_erp_differs` si difieren); `auto_invoice` = AND de los orígenes; (c) encabezado en moneda de
   contrato: si todos los orígenes comparten moneda de contrato, Σ de los orígenes; si no, `contract_currency` = moneda de factura y
-  `amount_contract_currency` = Σ en moneda de factura (NULL si spot); (d) bloquean además consumo sin cerrar, facturada por OC, período
-  cerrado e IVA distinto; (e) mes de emisión = mes de `COALESCE(issue_date, scheduled_at)`; (f) las líneas se **copian** (los orígenes
+  `amount_contract_currency` = Σ en moneda de factura (NULL si spot); (d) bloquean además facturada por OC e IVA distinto (consumo sin
+  cerrar ya no bloquea desde el 05-10, ver abajo; período cerrado tampoco desde el 03-10); (e) mes de emisión = mes de `COALESCE(issue_date, scheduled_at)`; (f) las líneas se **copian** (los orígenes
   quedan intactos e inactivos); el consolidado vive en el 360 del contrato principal; sin rebuild del devengo (el RSM suma solo emitidas
   activas); (g) el consolidado v2 sigue bloqueado (`unified_invoice`) para las demás operaciones del 360: se deshace y se vuelve a operar
   (editarlo en sitio queda pendiente); (h) los tipos de evento son texto libre (sin CHECK): la migración no cambia.
+
+**Consolidación + consumo (Domi 05-10, construido; sin commit)**:
+- Se puede consolidar aunque un origen tenga consumo del período sin cerrar (`pending` / `estimated`): el bloqueo `open_consumption` ya no se
+  emite (el código se conserva en `CONSOLIDATION_BLOCKERS`, marcado obsoleto).
+- **Unificado Por Emitir**: registrar o corregir un consumo o una cantidad de cualquiera de sus contratos de origen recalcula la factura de
+  **origen** (inactiva, `consolidated_into_invoice_id`; reglas de `consumption.ts` `isRecomputable`: `consolidated_pending`) y, en la misma
+  transacción, `ContractInvoiceConsolidationService.resyncFromOrigins` vuelve a copiar las líneas de **todos** sus orígenes al unificado
+  (borra las copias e inserta las nuevas con `planConsolidation`: prefijo, `contract_id`, valorización por par) y recalcula su encabezado
+  (IVA, montos en moneda de contrato y de factura, `fx_contract_to_invoice`) y la moneda de sistema; conserva id, contrato principal,
+  fechas, referencias y estado. El origen nunca pasa a "sin cobro" (el documento es el unificado). Aviso `consolidated_resynced` en la
+  respuesta del consumo; el evento del consumo lleva `consolidated_invoice_id`. Deshacer devuelve los orígenes **con** el consumo aplicado.
+- **Unificado emitido**: el período queda `issued` sobre el unificado (`unified_v2` y no Por Emitir) y aplican los modos actuales:
+  `additional` (complementaria con la diferencia, clon del encabezado del unificado) o `reissue` (NC espejo del unificado completo + factura
+  nueva). Los unificados históricos (sin evento v2) siguen sin tocarse.
+- Lectura (`GET /contracts/:id/consumption`): las líneas se buscan por el contrato del **ítem** (un unificado lleva el contrato principal);
+  el período muestra la copia del unificado y `accepts_consumption` sale del origen recalculable.
+- Devengo: sin cambio por consolidar (las copias llevan el mismo `contract_item_id` y monto; el origen queda inactivo y no cuenta); el
+  consumo reconstruye el mes del contrato del ítem (regla D2-c: devengo del mes = lo facturado del período, línea por línea a su ítem).
 
 ## 8. Validadores y funciones legacy
 

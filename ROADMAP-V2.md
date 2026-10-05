@@ -152,6 +152,12 @@ Tipos de cambio, MRR histórico y monto en moneda de sistema de las facturas:
 mantiene, se retira o ya se retiró: [`docs/v2-rediseno/catalogo-funciones-y-triggers.md`](docs/v2-rediseno/catalogo-funciones-y-triggers.md).
 Rebuild del devengo y su procedimiento de aplicación: [`docs/v2-rediseno/rebuild-devengo-comparacion.md`](docs/v2-rediseno/rebuild-devengo-comparacion.md).
 
+**Salesforce → modelos y tablas de precios** 🔮 (abierto por Domi el 05-10): que la integración del CRM traiga la tabla de precios de
+cada oportunidad (tramos, mínimo, tope; en SimpliRoute es una entidad aparte relacionada a las oportunidades) como modelo de Pricing v2, y
+que viaje completo de la cotización al contrato, nuevo o existente (hoy se pierden los tramos al asociar a un contrato existente). Detalle:
+[`cambios-integracion-para-leon.md`](docs/v2-rediseno/cambios-integracion-para-leon.md) L12. Mientras tanto, en un contrato activo el
+modelo se cambia desde Contrato 360 › Modificar contrato › "Cambiar el modelo de precio" (en construcción, 05-10).
+
 **Diferencias por tipo de cambio: cálculo y dónde mostrarlas** 🔮 (abierto por Domi el 04-10, al reemplazar la regla "sin vueltas"
 del 01-10 por la regla por estado: Por Emitir desde la moneda de contrato, documento emitido desde la moneda de factura). Por definir:
 - **Realizada al cobro**: diferencia entre el monto en moneda de sistema (o de compañía) a la tasa de emisión y el cobrado a la tasa del

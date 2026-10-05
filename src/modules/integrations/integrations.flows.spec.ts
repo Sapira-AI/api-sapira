@@ -518,7 +518,8 @@ describe('Almacén de datos · Sincronizar ahora e Importar (BigQueryService rea
 			{ findOne: jest.fn(async () => connection), find: jest.fn(async () => [connection]) } as never,
 			{ find, findOne: jest.fn(async () => null) } as never,
 			new Proxy({}, { get: () => jest.fn(async () => undefined) }) as never,
-			{ query: jest.fn(async () => []) } as never
+			{ query: jest.fn(async () => []) } as never,
+			{ entryForMonth: jest.fn(async () => null), entryById: jest.fn(async () => null), recordFromDwh: jest.fn(async () => ({})) } as never
 		);
 		const adapter = new DatosAdapter(
 			{ query: jest.fn(async (sql: string) => (sql.includes('min(period)') ? [pendingPeriods] : [])) } as never,

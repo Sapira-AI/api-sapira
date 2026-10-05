@@ -16,6 +16,7 @@ import {
 	classifyPeriodLines,
 	type ConsumptionPeriodLine,
 	discountPctFor,
+	fixedItemConflict,
 	headerAmounts,
 	invoicedReferenceName,
 	isPendingLine,
@@ -36,18 +37,21 @@ import {
 import {
 	buildConsumption,
 	CANCELLED_STATUS,
+	consolidatedPendingSql,
 	type ConsumptionEntryRow,
 	type ConsumptionInvoiceLine,
 	type ConsumptionItem,
 	noChargeSql,
 	PENDING_STATUS,
-	type QuantityRow,
+	unifiedV2Sql,
 	voidedSql,
 } from './contract-360';
 import { ERP_DRAFT_STALE_MESSAGE } from './contract-changes';
 import { insertMirrorCreditNote } from './contract-changes.service';
 import { cleanPaymentTerms, resolveUserId } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { INVOICE_EVENT_TYPES } from './contract-invoices';
+import { SYSTEM_ACTOR_ID } from './contract-renewals';
 import { ContractsService } from './contracts.service';
 import {
 	DEFAULT_TEMPLATE,
@@ -96,6 +100,48 @@ const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 type PeriodLine = ConsumptionPeriodLine & { sent_to_odoo_at?: string | null };
 const hasErpDraft = (line: PeriodLine) => (line.odoo_invoice_id !== null && line.odoo_invoice_id !== undefined) || Boolean(line.sent_to_odoo_at);
 export const ERP_DRAFT_STALE_CODE = 'erp_draft_stale';
+/** Aviso: el consumo recalculó también el documento unificado Por Emitir que lleva la factura de origen del período. */
+export const CONSOLIDATED_RESYNC_CODE = 'consolidated_resynced';
+/** Origen de una escritura de consumo (`consumption_entries.source`): pantalla, CSV o sincronización del almacén de datos. */
+export type ConsumptionWriteSource = 'manual' | 'csv' | 'dwh';
+
+/** Consumo vigente tal como lo compara la sincronización del almacén de datos. */
+export interface DwhEntryView {
+	id: string;
+	contract_id: string;
+	contract_item_id: string;
+	period_start: string;
+	quantity: number;
+	/** Unitario efectivo: monto fijado ÷ cantidad, o el del ítem. */
+	unit_price: number | null;
+	unit_of_measure: string | null;
+	account: string | null;
+}
+
+const dwhEntryView = (row: Row): DwhEntryView => {
+	const quantity = toNumber(row.quantity);
+	const override = toNullableNumber(row.amount_override);
+
+	return {
+		id: String(row.id),
+		contract_id: String(row.contract_id),
+		contract_item_id: String(row.contract_item_id),
+		period_start: String(row.period_start).slice(0, 10),
+		quantity,
+		unit_price: override !== null && quantity > 0 ? Math.round((override / quantity) * 1e6) / 1e6 : toNullableNumber(row.unit_price),
+		unit_of_measure: toText(row.unit_of_measure),
+		account: toText(row.account),
+	};
+};
+
+/**
+ * Monto fijado de un consumo informado con unitario (DWH, override del front anterior): unitario × cantidad cuando el unitario difiere del
+ * del ítem; null (cantidad × precio del ítem) si es el mismo o no viene. Misma regla que la migración `1791600000000`.
+ */
+export const dwhAmountOverride = (quantity: number, unitPrice: number | null, itemUnitPrice: number | null): number | null =>
+	unitPrice === null || unitPrice === undefined || (itemUnitPrice !== null && Math.abs(Number(unitPrice) - Number(itemUnitPrice)) < 1e-9)
+		? null
+		: round2(Number(unitPrice) * Number(quantity));
 
 /** Fila de respuesta sin los montos internos (`amounts`) que solo usa la escritura. */
 const stripAmounts = (part: ConsumptionLineRow & { amounts: LineAmounts }): ConsumptionLineRow => {
@@ -376,18 +422,20 @@ export class ConsumptionService {
 
 	constructor(
 		private readonly dataSource: DataSource,
-		private readonly contracts: ContractsService
+		private readonly contracts: ContractsService,
+		private readonly consolidation: ContractInvoiceConsolidationService
 	) {}
 
 	// ---------------------------------------------------------------- lectura: GET /contracts/:id/consumption
 
 	/**
-	 * Consumos del contrato: `consumption_entries` (v2) más las `quantities` del front viejo (solo lectura, §7), los ítems con
-	 * su precio y métrica, los períodos facturables de cada ítem y los pendientes de informar.
+	 * Consumos del contrato: `consumption_entries` (única fuente desde el 05-10: los overrides del front anterior se copiaron desde
+	 * `quantities` con la migración `1791600000000` y se muestran igual que cualquier consumo o corrección), todos los ítems con su precio y
+	 * métrica, los períodos facturables de cada ítem y los pendientes de informar.
 	 */
 	async list(idOrNumber: string, holdingId: string, today = new Date()) {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const [entryRows, revisionRows, quantityRows, itemRows, lineRows] = await Promise.all([
+		const [entryRows, revisionRows, itemRows, lineRows] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT e.id, e.contract_item_id, e.period_start::text AS period_start, e.period_end::text AS period_end, e.quantity, e.amount_override,
 					e.apply_item_discount, e.account, e.is_estimated, e.source, e.revision, e.correction_reason, e.notes, e.idempotency_key, e.invoice_id,
@@ -411,14 +459,6 @@ export class ConsumptionService {
 				[contract.id, holdingId]
 			),
 			this.dataSource.query<Row[]>(
-				`SELECT q.id, q.contract_item_id, q.period::text AS period, q.quantity, q.unit_price, q.amount, q.account
-				FROM quantities q
-				JOIN contract_items ci ON ci.id = q.contract_item_id
-				JOIN contracts c ON c.id = ci.contract_id
-				WHERE ci.contract_id = $1 AND c.holding_id = $2 AND q.period IS NOT NULL`,
-				[contract.id, holdingId]
-			),
-			this.dataSource.query<Row[]>(
 				`SELECT ci.id, ci.product_name, ci.account, ci.quantity, ci.unit_of_measure, ${PRICE_COLUMNS},
 					bm.id AS metric_id, bm.code AS metric_code, bm.name AS metric_name, bm.unit AS metric_unit, bm.aggregation AS metric_aggregation
 				FROM contract_items ci
@@ -433,10 +473,13 @@ export class ConsumptionService {
 				`SELECT ii.id AS line_id, ii.contract_item_id, ii.billing_period_start::text AS billing_period_start,
 					ii.billing_period_end::text AS billing_period_end, ii.quantity, ii.quantity_source, ii.subtotal_contract_currency, ii.pricing_breakdown,
 					i.id AS invoice_id, i.invoice_number, i.status, i.is_active, i.issue_date::text AS issue_date, i.document_type, i.invoice_type,
-					COALESCE(i.is_legacy, false) AS is_legacy
+					COALESCE(i.is_legacy, false) AS is_legacy, ${consolidatedPendingSql('i')} AS consolidated_pending,
+					(i.invoice_type = '${UNIFIED_INVOICE_TYPE}' AND ${unifiedV2Sql('i')}) AS unified_v2
 				FROM invoice_items ii
 				JOIN invoices i ON i.id = ii.invoice_id
-				WHERE i.contract_id = $1 AND i.holding_id = $2 AND ii.contract_item_id IS NOT NULL
+				-- Por el contrato del ÍTEM (no el del encabezado): un unificado lleva el contrato principal y líneas de los demás.
+				JOIN contract_items lci ON lci.id = ii.contract_item_id
+				WHERE lci.contract_id = $1 AND i.holding_id = $2
 				ORDER BY ii.billing_period_start, i.issue_date DESC NULLS LAST, i.id`,
 				[contract.id, holdingId]
 			),
@@ -464,15 +507,6 @@ export class ConsumptionService {
 			recorded_by: recordedBy(row),
 			recorded_at: iso(row.updated_at),
 			revisions: revisionsByEntry.get(String(row.id)) ?? [],
-		}));
-		const quantities: QuantityRow[] = quantityRows.map((row) => ({
-			id: String(row.id),
-			contract_item_id: String(row.contract_item_id),
-			period: String(row.period).slice(0, 10),
-			quantity: toNullableNumber(row.quantity),
-			unit_price: toNullableNumber(row.unit_price),
-			amount: toNullableNumber(row.amount),
-			account: toText(row.account) || null,
 		}));
 		const items: ConsumptionItem[] = itemRows.map((row) => ({
 			id: String(row.id),
@@ -508,9 +542,90 @@ export class ConsumptionService {
 			document_type: toText(row.document_type),
 			invoice_type: toText(row.invoice_type),
 			is_legacy: row.is_legacy === true,
+			consolidated_pending: row.consolidated_pending === true,
+			unified_v2: row.unified_v2 === true,
 		}));
 
-		return buildConsumption({ entries, quantities, items, lines, today: todayFor(await holdingTimezone(this.dataSource, holdingId), today) });
+		return buildConsumption({ entries, items, lines, today: todayFor(await holdingTimezone(this.dataSource, holdingId), today) });
+	}
+
+	// ---------------------------------------------------------------- integración: almacén de datos (DWH)
+
+	/**
+	 * Consumo vigente del ítem en el MES (`YYYY-MM-01`): la entry cuyo período empieza en ese mes (con el día de ciclo del contrato el
+	 * período puede empezar después del día 1). Lo usa la sincronización del almacén de datos (`BigQueryService`) para su semántica
+	 * insert-only. Devuelve también el unitario efectivo: monto fijado ÷ cantidad, o el del ítem.
+	 */
+	async entryForMonth(holdingId: string, itemId: string, month: string): Promise<DwhEntryView | null> {
+		const [row] = (await this.dataSource.query(
+			`SELECT e.id, e.contract_id, e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.account,
+				ci.unit_price, ci.unit_of_measure
+			FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
+			WHERE e.holding_id = $1 AND e.contract_item_id = $2 AND date_trunc('month', e.period_start) = date_trunc('month', $3::date)
+			ORDER BY e.period_start LIMIT 1`,
+			[holdingId, itemId, month]
+		)) as Row[];
+
+		return row ? dwhEntryView(row) : null;
+	}
+
+	/** Entry por id (o, para un id de `quantities` anterior a la migración `1791600000000`, la entry que se copió de esa fila). */
+	async entryById(holdingId: string, id: string): Promise<DwhEntryView | null> {
+		const [row] = (await this.dataSource.query(
+			`SELECT e.id, e.contract_id, e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.account,
+				ci.unit_price, ci.unit_of_measure
+			FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
+			WHERE e.holding_id = $1 AND (e.id::text = $2 OR e.idempotency_key = 'quantities:' || $2)
+			ORDER BY (e.id::text = $2) DESC LIMIT 1`,
+			[holdingId, id]
+		)) as Row[];
+
+		return row ? dwhEntryView(row) : null;
+	}
+
+	/**
+	 * Registra (o, con `correction_reason`, corrige) el consumo de un ítem informado por el almacén de datos: mismo camino que la pantalla
+	 * (`write`: costura `sapira.writer = 'api'`, recálculo de la Por Emitir del período —o 409 si ya se emitió—, historial, evento y rebuild
+	 * del devengo del mes), con `source = 'dwh'` y sin usuaria (evento con el actor del sistema). El período es el de la línea del ítem que
+	 * empieza en ese mes. El unitario del DWH distinto del del ítem entra como monto fijado (unitario × cantidad), igual que el override
+	 * del front anterior. 409 `period_out_of_item` si el ítem no tiene línea en ese mes.
+	 */
+	async recordFromDwh(
+		holdingId: string,
+		contractId: string,
+		itemId: string,
+		month: string,
+		values: { quantity: number; unit_price: number | null; account: string | null; notes: string | null; correction_reason?: string | null }
+	): Promise<ConsumptionWriteResult> {
+		const [line] = (await this.dataSource.query(
+			`SELECT ii.billing_period_start::text AS period_start, ci.unit_price
+			FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id JOIN contract_items ci ON ci.id = ii.contract_item_id
+			WHERE ii.contract_item_id = $1 AND i.holding_id = $2 AND ci.contract_id = $3
+				AND date_trunc('month', ii.billing_period_start) = date_trunc('month', $4::date)
+			ORDER BY (i.status IS DISTINCT FROM '${CANCELLED_STATUS}') DESC, (i.status = '${PENDING_STATUS}') DESC, ii.billing_period_start
+			LIMIT 1`,
+			[itemId, holdingId, contractId, month]
+		)) as Row[];
+
+		if (!line) throw outOfItemConflict(month, []);
+		const itemUnit = toNullableNumber(line.unit_price);
+		const amountOverride = dwhAmountOverride(values.quantity, values.unit_price, itemUnit);
+
+		return await this.write(
+			contractId,
+			itemId,
+			String(line.period_start).slice(0, 10),
+			{
+				quantity: values.quantity,
+				amount_override: amountOverride,
+				account: values.account ?? undefined,
+				notes: values.notes ?? undefined,
+				correction_reason: values.correction_reason ?? undefined,
+			} as UpsertConsumptionDto,
+			holdingId,
+			null,
+			'dwh'
+		);
 	}
 
 	// ---------------------------------------------------------------- lectura: pendientes de informar
@@ -797,6 +912,8 @@ export class ConsumptionService {
 		periodStart: string,
 		dto: UpsertConsumptionDto
 	): WritePlan {
+		// Solo ítems por consumo (Domi 05-10): un ítem fijo no recibe cantidad por período; se corrige con "Editar factura" de la Por Emitir.
+		if (!item.is_metered) throw fixedItemConflict(item.product_name);
 		const classification = classifyPeriodLines(lines);
 
 		if (classification.state === 'none') {
@@ -962,8 +1079,14 @@ export class ConsumptionService {
 		// Sin cobro (spec facturas §3.4): si la factura queda con TODAS sus líneas en 0 pasa a Cancelada; una sin cobro que recupera
 		// cantidad vuelve a Por Emitir. Con borrador en el ERP también (aviso `erp_draft_stale`: eliminarlo allí y restablecerlo aquí).
 		const allZero = parts.every((part) => part.quantity === 0 && part.subtotal === 0) && (target.other_nonzero_lines ?? 0) === 0;
-		const noCharge: WritePlan['no_charge'] =
-			target.no_charge && !allZero ? 'reverted' : !target.no_charge && target.status === PENDING_STATUS && allZero ? 'becomes' : null;
+		// Un origen consolidado (inactivo, dentro de un unificado Por Emitir) nunca pasa a sin cobro: el documento es el unificado.
+		const noCharge: WritePlan['no_charge'] = target.consolidated_pending
+			? null
+			: target.no_charge && !allZero
+				? 'reverted'
+				: !target.no_charge && target.status === PENDING_STATUS && allZero
+					? 'becomes'
+					: null;
 		const warningCodes: string[] = [];
 
 		// Borrador en el ERP: no bloquea (decisión de Domi 01-10); el recálculo sigue y se avisa que el borrador del ERP quedó desactualizado.
@@ -1424,8 +1547,8 @@ export class ConsumptionService {
 		periodStart: string,
 		dto: UpsertConsumptionDto,
 		holdingId: string,
-		userId: string,
-		source: 'manual' | 'csv'
+		userId: string | null,
+		source: ConsumptionWriteSource
 	): Promise<ConsumptionWriteResult> {
 		const runner = this.dataSource.createQueryRunner();
 
@@ -1481,6 +1604,7 @@ export class ConsumptionService {
 			let cancelledInvoice: ConsumptionWriteResult['cancelled_invoice'] = null;
 			const created: ConsumptionWriteResult['created'] = {};
 			const eventMeta: Record<string, unknown> = {};
+			let unified: Awaited<ReturnType<ContractInvoiceConsolidationService['resyncFromOrigins']>> | null = null;
 
 			// 1. Factura: recálculo de la Por Emitir (§4.3), complementaria o reemisión (§4.4). Nunca la emitida.
 			if (plan.mode === 'recompute' && plan.target && plan.priced) {
@@ -1493,6 +1617,16 @@ export class ConsumptionService {
 					);
 				}
 				const header = await this.recomputeHeader(runner, plan.target.invoice_id, holdingId, plan.target.tax_rate, plan.target.fx);
+
+				// Origen consolidado (Domi 05-10): el documento real es el unificado Por Emitir; se vuelven a copiar las líneas de sus orígenes
+				// (con la de este ítem ya recalculada) y se recalcula su encabezado, con las mismas reglas que al consolidar.
+				if (plan.target.consolidated_pending && plan.target.consolidated_into_invoice_id) {
+					unified = await this.consolidation.resyncFromOrigins(runner, holdingId, plan.target.consolidated_into_invoice_id);
+					plan.warnings.push(
+						`La factura del período está consolidada en ${unified.invoice_number ?? 'un documento unificado'} (Por Emitir): se recalculó también el unificado`
+					);
+					plan.warning_codes.push(CONSOLIDATED_RESYNC_CODE);
+				}
 
 				// Sin cobro: con el encabezado ya en 0, pasa a Cancelada (las líneas en 0 se conservan para poder reactivarla).
 				if (plan.no_charge === 'becomes') {
@@ -1516,7 +1650,7 @@ export class ConsumptionService {
 							plan.no_charge === 'becomes'
 								? `Consumo 0 de "${item.product_name ?? ''}" (${periodStart}): todas las líneas de la factura quedaron en 0; pasa a Cancelada sin cobro`
 								: `Consumo ${entry.quantity} de "${item.product_name ?? ''}" (${periodStart}): la factura sin cobro vuelve a Por Emitir`,
-							userId,
+							userId ?? SYSTEM_ACTOR_ID,
 							plan.target.issue_date,
 							JSON.stringify({
 								source: 'api_v2',
@@ -1645,9 +1779,12 @@ export class ConsumptionService {
 				userId
 			);
 
-			// 3. Devengo del mes del período.
-			if (invoice)
-				await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, date_trunc('month', $2::date)::date)`, [contractId, periodStart]);
+			if (unified)
+				Object.assign(eventMeta, { consolidated_invoice_id: unified.invoice_id, consolidated_invoice_number: unified.invoice_number });
+
+			// 3. Devengo del mes del período: siempre (D2-c, Domi 05-10: un mes con consumo devenga lo facturado del período; sin línea vigente,
+			// la regla del consumo), también cuando solo había facturas anuladas.
+			await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, date_trunc('month', $2::date)::date)`, [contractId, periodStart]);
 
 			// 4. Evento.
 			const previousQuantity = existing?.quantity ?? null;
@@ -1686,7 +1823,7 @@ export class ConsumptionService {
 					`${verbs[plan.event]} el consumo de "${item.product_name ?? ''}" del período ${entry.period_start} a ${entry.period_end}: ${
 						previousQuantity === null ? '' : `${previousQuantity} → `
 					}${entry.quantity}${item.metric?.unit ? ` ${item.metric.unit}` : ''}${suffix}`.replace(/\s+/g, ' '),
-					userId,
+					userId ?? SYSTEM_ACTOR_ID,
 					entry.period_start,
 					JSON.stringify([item.id]),
 					JSON.stringify({
@@ -1747,9 +1884,9 @@ export class ConsumptionService {
 		item: MeteredItem,
 		entry: Omit<EntryView, 'id'>,
 		existing: EntryView | null,
-		source: 'manual' | 'csv',
+		source: ConsumptionWriteSource,
 		holdingId: string,
-		userId: string
+		userId: string | null
 	): Promise<string> {
 		let entryId: string;
 
@@ -2252,6 +2389,8 @@ export class ConsumptionService {
 				ii.discount_pct, ii.quantity, ii.unit_price_contract_currency, ii.subtotal_contract_currency, ii.description, ii.product_id, ii.unit_of_measure,
 				ii.quantity_source, ii.pricing_breakdown, ii.fx_rate_source, ii.description_locked,
 				${noChargeSql('i')} AS no_charge, i.odoo_invoice_id, i.sent_to_odoo_at, ${voidedSql('i')} AS voided,
+				i.consolidated_into_invoice_id, ${consolidatedPendingSql('i')} AS consolidated_pending,
+				(i.invoice_type = '${UNIFIED_INVOICE_TYPE}' AND ${unifiedV2Sql('i')}) AS unified_v2,
 				(SELECT COUNT(*) FROM invoice_items o WHERE o.invoice_id = i.id AND (o.quantity <> 0 OR o.subtotal_contract_currency <> 0)
 					AND NOT (o.contract_item_id IS NOT DISTINCT FROM ii.contract_item_id AND o.billing_period_start IS NOT DISTINCT FROM ii.billing_period_start)
 				) AS other_nonzero_lines,
@@ -2305,6 +2444,9 @@ export class ConsumptionService {
 			other_nonzero_lines: toNumber(row.other_nonzero_lines),
 			invoice_total: toNullableNumber(row.invoice_total),
 			voided: row.voided === true,
+			consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
+			consolidated_pending: row.consolidated_pending === true,
+			unified_v2: row.unified_v2 === true,
 		}));
 
 		if (periodRows.length) return periodRows;

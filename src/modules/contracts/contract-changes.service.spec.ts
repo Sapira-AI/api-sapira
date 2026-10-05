@@ -525,6 +525,36 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(JSON.parse(line[24] as string)).toHaveLength(2);
 	});
 
+	it('price_model_change: precio v+1 que reemplaza al anterior, base del RENEWAL, consumos al ítem nuevo y la Por Emitir vaciada no se cancela', async () => {
+		const { service, runner } = build((sql) => (sql.includes('INSERT INTO prices') ? [{ id: 'price-2' }] : undefined));
+		const price = {
+			model: 'graduated',
+			quantity_type: 'fixed',
+			tiers: [
+				{ from: 1, to: 5, per_unit_amount: 100 },
+				{ from: 6, to: null, per_unit_amount: 80 },
+			],
+		};
+
+		await service.apply(
+			CONTRACT_ID,
+			request({ type: 'price_model_change', items: [{ item_id: LICENCIA, price }] } as never, { effective_date: '2026-11-01', reason: 'ok' }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		const sql = sqlOf(runner.query);
+		const [priceInsert] = calls(runner.query, 'INSERT INTO prices');
+
+		expect(priceInsert[1].slice(5, 7)).toEqual(['graduated', 'fixed']);
+		expect(priceInsert[1].slice(20)).toEqual([1, null]);
+		expect(calls(runner.query, 'SET renewal_base_unit_price')[0][1]).toEqual(['item-new-1', HOLDING, 100]);
+		// La Por Emitir que recibe las filas nuevas no pasa por la cancelación de "sin líneas" antes de recibirlas.
+		expect(sql.some((text) => text.includes(`SET status = 'Cancelada'`))).toBe(false);
+		expect(firstIndex(sql, 'DELETE FROM invoice_items')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoice_items'));
+	});
+
 	it('item_add con `price_id`: lee el catálogo del holding y la fila de prices es una copia (nombre del catálogo, list_price_id)', async () => {
 		const CATALOG = 'ca000000-0000-4000-8000-000000000001';
 		const { service, runner } = build((sql) => {
@@ -571,7 +601,9 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 
 		expect(priceInsert[0]).toContain(`'contract'`);
 		expect(params.slice(0, 7)).toEqual([HOLDING, PRODUCT_LICENCIA, CONTRACT_ID, 'Licencia por tramos', 'CLP', 'graduated', 'fixed']);
-		expect(params[params.length - 1]).toBe(CATALOG);
+		// list_price_id ($20); detrás van la versión y el precio que reemplaza (price_model_change).
+		expect(params[19]).toBe(CATALOG);
+		expect(params.slice(20)).toEqual([1, null]);
 		expect(calls(runner.query, 'UPDATE contract_items SET price_id')[0][1]).toEqual(['item-new-1', HOLDING, 'price-1']);
 		expect((calls(runner.query, 'INSERT INTO invoice_items')[0][1] as unknown[])[7]).toBe(250);
 	});

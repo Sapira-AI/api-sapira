@@ -14,12 +14,13 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { lineDescription } from './billing-engine';
 import { todayFor } from './business-date';
 import { ConsumptionController } from './consumption.controller';
-import { ConsumptionService, fitConsumptionGlosa } from './consumption.service';
+import { ConsumptionService, dwhAmountOverride, fitConsumptionGlosa } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
 import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { ContractInvoicesService } from './contract-invoices.service';
@@ -87,6 +88,23 @@ const standardItemRow: Row = {
 	price_quantity_type: null,
 	metric_id: null,
 };
+/** El mismo Soporte con precio por consumo estándar (100 por unidad del período): los ítems fijos ya no reciben consumo (Domi 05-10). */
+const standardMeteredRow: Row = {
+	...standardItemRow,
+	price_id: 'price-std',
+	price_name: 'Soporte por unidad',
+	price_version: 1,
+	price_status: 'active',
+	price_model: 'standard',
+	price_quantity_type: 'metered',
+	price_billable_metric_id: 'm-2',
+	price_unit_amount: '100',
+	metric_id: 'm-2',
+	metric_code: 'tickets',
+	metric_name: 'Tickets',
+	metric_unit: 'ticket',
+	metric_aggregation: 'sum',
+};
 /** Sobrescrituras de la línea de octubre para el ítem estándar: 1 × 100 = 100 neto. */
 const standardLine: Row = {
 	quantity: '1',
@@ -151,7 +169,13 @@ const build = (handler: Handler = () => undefined) => {
 	const dataSource = { query: jest.fn(route), createQueryRunner: jest.fn(() => runner) } as unknown as DataSource;
 	const contracts = { resolveContract: jest.fn().mockResolvedValue({ id: CONTRACT, status: 'Activo' }) } as unknown as ContractsService;
 
-	return { service: new ConsumptionService(dataSource, contracts), runner, dataSource, contracts };
+	const consolidation = {
+		resyncFromOrigins: jest
+			.fn()
+			.mockResolvedValue({ invoice_id: 'unified-1', invoice_number: null, amount_contract_currency: 0, vat: 0, lines_count: 0 }),
+	} as unknown as ContractInvoiceConsolidationService;
+
+	return { service: new ConsumptionService(dataSource, contracts, consolidation), runner, dataSource, contracts, consolidation };
 };
 const calls = (mock: jest.Mock, needle: string) => mock.mock.calls.filter(([sql]) => (sql as string).includes(needle));
 const rejection = async <T extends HttpException>(promise: Promise<unknown>, type: new (...args: never[]) => T) => {
@@ -377,46 +401,21 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 		await rejection(service.upsert(CONTRACT, ITEM, '2026-10', { quantity: 1 }, HOLDING, 'auth-1'), BadRequestException);
 	});
 
-	it('ítem estándar con la Por Emitir: la cantidad se aplica como cantidad × unitario del período (glosa intacta, desglose tier, quantity_source consumption)', async () => {
+	it('ítem de cantidad fija (sin precio por consumo): 409 item_not_metered, sin escribir nada; el desvío se hace con Editar factura (Domi 05-10)', async () => {
 		const { service, runner } = build((sql) => {
 			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
 			if (sql.includes('ii.billing_period_start = $3::date')) return [pendingLine(standardLine)];
-			if (sql.includes('SELECT COALESCE(SUM(subtotal_contract_currency)')) return [{ subtotal: '500', tax: '95' }];
 
 			return undefined;
 		});
-		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5 }, HOLDING, 'auth-1');
+		const error = await rejection(service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5 }, HOLDING, 'auth-1'), ConflictException);
 
-		expect(runner.commitTransaction).toHaveBeenCalled();
-		const [update] = calls(runner.query, 'UPDATE invoice_items SET quantity');
-
-		// 5 × 100 = 500; IVA 95; total 595; una sublínea "Por unidad"; la glosa no cambia (como las cantidades variables del front viejo).
-		expect(update[1].slice(0, 11)).toEqual(['line-oct', HOLDING, 5, 100, 100, 500, 500, 95, 95, 595, 595]);
-		expect(JSON.parse(update[1][11] as string)).toEqual([{ kind: 'tier', quantity: 5, unit_amount: 100, amount: 500, label: 'Por unidad' }]);
-		expect(update[1].slice(12)).toEqual(['consumption', ITEM, 'Soporte - Periodo 01/10/2026 a 31/10/2026']);
-		expect(calls(runner.query, 'UPDATE invoices SET amount_contract_currency')[0][1]).toEqual(['inv-oct', HOLDING, 500, 95, 500, 595, 19]);
-		expect(calls(runner.query, 'INSERT INTO consumption_entries')).toHaveLength(1);
-		expect(calls(runner.query, 'INSERT INTO contract_lifecycle_events')[0][1][2]).toBe('CONSUMPTION_RECORDED');
-		expect(result).toMatchObject({
-			mode: 'recompute',
-			apply_as: 'recompute',
-			on_issued: 'block',
-			complements_invoice: null,
-			entry: { quantity: 5, invoice_id: 'inv-oct' },
-			line: { quantity: 5, effective_unit_price: 100, subtotal: 500, quantity_source: 'consumption' },
-			lines: [{ id: 'line-oct', quantity: 5, unit_price: 100, subtotal: 500, tax_amount: 95, total: 595 }],
-			invoice: { id: 'inv-oct', subtotal: 500, tax: 95, total: 595 },
-		});
-		// Sin unitario en la línea, usa el del ítem.
-		const fallback = build((sql) => {
-			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
-			if (sql.includes('ii.billing_period_start = $3::date')) return [pendingLine({ ...standardLine, unit_price_contract_currency: null })];
-
-			return undefined;
-		});
-		const preview = await fallback.service.preview(CONTRACT, ITEM, '2026-10-01', { quantity: 2 }, HOLDING);
-
-		expect(preview.line).toMatchObject({ quantity: 2, subtotal: 200 });
+		expect(error.getResponse()).toMatchObject({ code: 'item_not_metered', next_step: 'Facturas › Editar factura' });
+		expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
+		expect(calls(runner.query, 'UPDATE invoice_items')).toHaveLength(0);
+		expect(runner.rollbackTransaction).toHaveBeenCalled();
+		// Tampoco por la vista previa ni como complementaria / reemisión.
+		await rejection(service.preview(CONTRACT, ITEM, '2026-10-01', { quantity: 5, apply_as: 'additional' }, HOLDING), ConflictException);
 	});
 
 	it('solo facturas anuladas en el período: guarda la entry sin recalcular (la Por Emitir de reemplazo la tomará)', async () => {
@@ -427,7 +426,8 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 
 		expect(calls(runner.query, 'INSERT INTO consumption_entries')).toHaveLength(1);
 		expect(calls(runner.query, 'UPDATE invoice_items')).toHaveLength(0);
-		expect(calls(runner.query, 'revenue_schedule_rebuild')).toHaveLength(0);
+		// D2-c (05-10): el devengo del mes se recalcula siempre (el consumo del mes manda aunque no haya línea vigente).
+		expect(calls(runner.query, 'revenue_schedule_rebuild')).toHaveLength(1);
 		expect(result.line).toBeNull();
 		expect(result.invoice).toBeNull();
 		expect(result.warnings[0]).toContain('solo tiene facturas anuladas');
@@ -672,7 +672,7 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 			lines: { 'inv-new': [mcStoredLine('line-new-1', 'USD', { subtotal_contract_currency: '400', tax_amount_contract_currency: '76' })] },
 		});
 		const additional = build((sql, params) => {
-			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
+			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardMeteredRow];
 			if (sql.includes('ii.billing_period_start = $3::date')) return [paidLine(standardLine)];
 			if (sql.includes('FROM invoices i') && sql.includes('WHERE i.id = $1') && sql.includes('requires_multicurrency_billing'))
 				return [{ ...paidHeader, requires_multicurrency_billing: true }];
@@ -691,65 +691,6 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 			expect.objectContaining({ id: 'inv-new', fx: 950, amount_invoice_currency: 380000, amount_contract_currency: 360000 }),
 		]);
 		expect(result.invoice).toMatchObject({ id: 'inv-new', fx: 950, subtotal: 360000, tax: 72200, total: 452200 });
-	});
-
-	it('ítem estándar con la factura del período emitida: recompute → 409 item_not_metered con la emitida y las dos salidas; additional y reissue funcionan con la misma diferencia', async () => {
-		const standardIssued = (): Handler => {
-			const world = issuedWorld();
-
-			return (sql, params) => {
-				if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
-				if (sql.includes('ii.billing_period_start = $3::date')) return [paidLine(standardLine)];
-
-				return world(sql, params);
-			};
-		};
-		const blocked = build(standardIssued());
-		const error = await rejection(blocked.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5 }, HOLDING, 'auth-1'), ConflictException);
-
-		expect(error.getResponse()).toMatchObject({
-			code: 'item_not_metered',
-			invoice: { id: 'inv-paid', invoice_number: 'F-0042', status: 'Pagada' },
-			options: [expect.objectContaining({ apply_as: 'additional' }), expect.objectContaining({ apply_as: 'reissue' })],
-		});
-		expect(calls(blocked.runner.query, 'INSERT INTO')).toHaveLength(0);
-
-		// additional: 5 × 100 = 500 − 100 ya facturados = 400 en 4 unidades adicionales; la emitida no se toca.
-		const additional = build(standardIssued());
-		const result = await additional.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5, apply_as: 'additional' }, HOLDING, 'auth-1');
-		const [line] = calls(additional.runner.query, 'INSERT INTO invoice_items');
-
-		expect((line[1] as unknown[]).slice(4, 6)).toEqual(['Soporte - Periodo 01/10/2026 a 31/10/2026 - Consumo adicional sobre F-0042', 4]);
-		expect((line[1] as unknown[]).slice(8, 16)).toEqual([100, 100, 400, 400, 76, 76, 476, 476]);
-		expect(JSON.parse(line[1][24] as string)).toEqual([
-			{ kind: 'tier', quantity: 5, unit_amount: 100, amount: 500, label: 'Por unidad' },
-			{ kind: 'invoiced', quantity: 1, amount: -100, label: 'Ya facturado en F-0042', invoice_id: 'inv-paid' },
-		]);
-		expect(calls(additional.runner.query, 'UPDATE invoices')).toHaveLength(0);
-		expect(result).toMatchObject({
-			mode: 'additional',
-			apply_as: 'additional',
-			on_issued: 'additional',
-			event: 'CONSUMPTION_ADDITIONAL_INVOICE',
-			complements_invoice: { id: 'inv-paid', invoice_number: 'F-0042', status: 'Pagada' },
-			issued_invoice: { id: 'inv-paid' },
-			additional_amount: 400,
-			invoice: { id: 'inv-new', subtotal: 400, tax: 76, total: 476 },
-			entry: { invoice_id: 'inv-new', quantity: 5 },
-		});
-
-		// reissue: NC espejo + factura nueva con la línea del ítem recalculada (5 × 100) y la otra línea intacta.
-		const reissue = build(standardIssued());
-		const reissued = await reissue.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5, apply_as: 'reissue' }, HOLDING, 'auth-1');
-
-		expect(reissued).toMatchObject({
-			mode: 'reissue',
-			event: 'CONSUMPTION_REISSUE',
-			credit_note: { id: 'nc-1' },
-			cancelled_invoice: { id: 'inv-paid', invoice_number: 'F-0042' },
-			invoice: { id: 'inv-new', subtotal: 600 },
-			lines: [{ quantity: 5, unit_price: 100, subtotal: 500 }],
-		});
 	});
 
 	it('Por Emitir + additional: la factura del período no se toca y la diferencia va a una factura nueva Por Emitir con fecha de hoy (vencimiento según condición de pago)', async () => {
@@ -1423,7 +1364,7 @@ describe('ConsumptionService.pending y list', () => {
 		expect(revisionsSql).toContain('LEFT JOIN users u ON u.id = r.changed_by');
 	});
 
-	it('list acota todo al contrato y al holding y delega en buildConsumption (entries + quantities + ítems + líneas)', async () => {
+	it('list acota todo al contrato y al holding y delega en buildConsumption (entries + ítems + líneas; sin quantities)', async () => {
 		const { service, dataSource, contracts } = build();
 		const result = await service.list('CTR-2026-001', HOLDING);
 
@@ -1434,7 +1375,9 @@ describe('ConsumptionService.pending y list', () => {
 			expect(params).toEqual([CONTRACT, HOLDING]);
 			expect(sql).toMatch(/holding_id = \$2/);
 		}
-		expect((dataSource.query as jest.Mock).mock.calls.some(([sql]) => (sql as string).includes('FROM quantities q'))).toBe(true);
+		// Una sola fuente (05-10): ya no lee `quantities`; las líneas se buscan por el contrato del ítem (unificados incluidos).
+		expect((dataSource.query as jest.Mock).mock.calls.some(([sql]) => (sql as string).includes('quantities'))).toBe(false);
+		expect((dataSource.query as jest.Mock).mock.calls.some(([sql]) => (sql as string).includes('lci.contract_id = $1'))).toBe(true);
 		expect((dataSource.query as jest.Mock).mock.calls.some(([sql]) => (sql as string).includes('FROM consumption_entries e'))).toBe(true);
 	});
 });
@@ -1578,7 +1521,7 @@ describe('ConsumptionService · ediciones manuales, glosas protegidas y sin cobr
 			const custom = extra(sql, params);
 
 			if (custom !== undefined) return custom;
-			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardItemRow];
+			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardMeteredRow];
 			if (sql.includes('ii.billing_period_start = $3::date')) return lines;
 			if (sql.includes('SELECT contract_id FROM invoices')) return [{ contract_id: CONTRACT }];
 
@@ -1753,5 +1696,132 @@ describe('fitConsumptionGlosa (glosas del consumo ajustadas al límite, decisió
 		expect(fitted.length).toBeLessThanOrEqual(80);
 		expect(fitted.endsWith('oct-26 - Tramo 1 (1-500)')).toBe(true);
 		expect(counter.count).toBe(1);
+	});
+});
+
+describe('Consumo sobre un período consolidado y desde el almacén de datos (Domi 05-10)', () => {
+	/** El origen inactivo (consolidado en un unificado v2 Por Emitir) y la copia en el unificado, del mismo ítem y período. */
+	const consolidatedLines = () => [
+		pendingLine({ is_active: false, consolidated_into_invoice_id: 'unified-1', consolidated_pending: true, unified_v2: false }),
+		pendingLine({
+			line_id: 'line-unified',
+			invoice_id: 'unified-1',
+			invoice_type: 'Unificada',
+			is_active: true,
+			consolidated_into_invoice_id: null,
+			consolidated_pending: false,
+			unified_v2: true,
+		}),
+	];
+
+	it('origen consolidado Por Emitir: recalcula el ORIGEN (nunca la copia), re-copia al unificado y rebuild del mes', async () => {
+		const { service, runner, consolidation } = build((sql, params) =>
+			sql.includes('ii.billing_period_start = $3::date') && params[2] === '2026-10-01' ? consolidatedLines() : undefined
+		);
+		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250 }, HOLDING, 'auth-1');
+
+		expect(result.mode).toBe('recompute');
+		expect(result.invoice?.id).toBe('inv-oct');
+		const [lineUpdate] = calls(runner.query, 'UPDATE invoice_items SET quantity = $3');
+
+		expect(lineUpdate[1][0]).toBe('line-oct');
+		expect(calls(runner.query, 'UPDATE invoice_items').every(([, params]) => (params as unknown[])[0] !== 'line-unified')).toBe(true);
+		expect(consolidation.resyncFromOrigins).toHaveBeenCalledWith(runner, HOLDING, 'unified-1');
+		expect(result.warning_codes).toContain('consolidated_resynced');
+		// El origen nunca pasa a sin cobro (el documento es el unificado).
+		expect(calls(runner.query, `SET status = 'Cancelada'`)).toHaveLength(0);
+		// Re-copia antes del rebuild y del commit.
+		const resyncOrder = (consolidation.resyncFromOrigins as jest.Mock).mock.invocationCallOrder[0];
+		const rebuildIndex = runner.query.mock.calls.findIndex(([sql]) => (sql as string).includes('revenue_schedule_rebuild'));
+
+		expect(runner.query.mock.invocationCallOrder[rebuildIndex]).toBeGreaterThan(resyncOrder);
+		expect(runner.commitTransaction).toHaveBeenCalled();
+	});
+
+	it('unificado ya emitido: 409 consumption_period_issued sobre el unificado (additional / reissue aplican sobre él)', async () => {
+		const { service, consolidation } = build((sql, params) =>
+			sql.includes('ii.billing_period_start = $3::date') && params[2] === '2026-10-01'
+				? [
+						pendingLine({ is_active: false, consolidated_into_invoice_id: 'unified-1', consolidated_pending: false }),
+						pendingLine({
+							line_id: 'line-unified',
+							invoice_id: 'unified-1',
+							invoice_number: 'F-900',
+							invoice_type: 'Unificada',
+							status: 'Emitida',
+							unified_v2: true,
+						}),
+					]
+				: undefined
+		);
+		const error = await rejection(service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250 }, HOLDING, 'auth-1'), ConflictException);
+
+		expect(error.getResponse()).toMatchObject({ code: 'consumption_period_issued', invoice: { id: 'unified-1', invoice_number: 'F-900' } });
+		expect(consolidation.resyncFromOrigins).not.toHaveBeenCalled();
+	});
+
+	it('recordFromDwh: usa el período de la línea del mes, source dwh, sin usuaria (actor del sistema en el evento) y monto fijado si el unitario difiere', async () => {
+		const { service, runner } = build((sql) =>
+			sql.includes("date_trunc('month', ii.billing_period_start) = date_trunc('month', $4::date)")
+				? [{ period_start: '2026-10-01', unit_price: '0.05' }]
+				: undefined
+		);
+
+		await service.recordFromDwh(HOLDING, CONTRACT, ITEM, '2026-10-01', {
+			quantity: 1000,
+			unit_price: 0.07,
+			account: null,
+			notes: 'DWH sapira_base · sf_id=x',
+		});
+
+		const [entryInsert] = calls(runner.query, 'INSERT INTO consumption_entries');
+
+		expect(entryInsert[1].slice(3, 12)).toEqual(['2026-10-01', '2026-10-31', 1000, 70, true, null, false, 'dwh', null]);
+		expect(entryInsert[1][13]).toBeNull(); // created_by
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1]).toContain('00000000-0000-0000-0000-000000000000');
+		expect(calls(runner.query, 'revenue_schedule_rebuild')).toHaveLength(1);
+	});
+
+	it('recordFromDwh: 409 period_out_of_item si el ítem no tiene línea en ese mes', async () => {
+		const { service } = build();
+		const error = await rejection(
+			service.recordFromDwh(HOLDING, CONTRACT, ITEM, '2027-03-01', { quantity: 1, unit_price: null, account: null, notes: null }),
+			ConflictException
+		);
+
+		expect(error.getResponse()).toMatchObject({ code: 'period_out_of_item' });
+	});
+
+	it('dwhAmountOverride: unitario × cantidad solo si difiere del del ítem', () => {
+		expect(dwhAmountOverride(1000, 0.07, 0.05)).toBe(70);
+		expect(dwhAmountOverride(1000, 0.05, 0.05)).toBeNull();
+		expect(dwhAmountOverride(1000, null, 0.05)).toBeNull();
+		expect(dwhAmountOverride(3, 0.333, null)).toBe(1);
+	});
+
+	it('entryById acepta el id de la entry o el de la fila de quantities copiada (idempotency_key quantities:<id>)', async () => {
+		const { service, dataSource } = build((sql) =>
+			sql.includes("e.idempotency_key = 'quantities:' || $2")
+				? [
+						{
+							id: 'entry-9',
+							contract_id: CONTRACT,
+							contract_item_id: ITEM,
+							period_start: '2026-10-01',
+							quantity: '10',
+							amount_override: '7',
+							account: null,
+							unit_price: '0.5',
+							unit_of_measure: 'UND',
+						},
+					]
+				: undefined
+		);
+		const entry = await service.entryById(HOLDING, 'q-1');
+
+		expect(entry).toMatchObject({ id: 'entry-9', quantity: 10, unit_price: 0.7 });
+		expect((dataSource.query as jest.Mock).mock.calls[0][1]).toEqual([HOLDING, 'q-1']);
 	});
 });

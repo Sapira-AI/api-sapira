@@ -1,3 +1,5 @@
+// ClientsService → BigQueryService → ConsumptionService arrastra `uuid` (ESM) por la cadena de facturas: se reemplaza como en contratos.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 import { ClientsService } from './clients.service';
