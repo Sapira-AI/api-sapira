@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { resolveEffectiveConfig, resolveEmailSender } from '../helpers/agent-config.helper';
 import { renderTemplate } from '../helpers/template.helper';
 import { ProcessorResult } from '../interfaces/run-response.interface';
+
+const DEFAULT_DAYS_BEFORE_ISSUE = 10;
 
 @Injectable()
 export class ProformaProcessor {
@@ -26,10 +29,11 @@ export class ProformaProcessor {
 		};
 
 		try {
-			const daysBefore = globalConfig.days_before_issue || 10;
+			const defaultDays = Number(globalConfig.days_before_issue) || DEFAULT_DAYS_BEFORE_ISSUE;
+			const maxDays = await this.getMaxDaysBeforeIssue(holdingId, defaultDays);
 			const today = new Date();
 			const futureDate = new Date();
-			futureDate.setDate(today.getDate() + daysBefore);
+			futureDate.setDate(today.getDate() + maxDays);
 
 			const invoices = await this.dataSource.query(
 				`
@@ -55,16 +59,18 @@ export class ProformaProcessor {
 
 			for (const [clientId, clientInvoices] of Object.entries(invoicesByClient)) {
 				try {
-					const effectiveConfig = await this.getEffectiveConfigForClient(clientId, 'proforma', holdingId);
+					const effectiveConfig = await resolveEffectiveConfig(this.dataSource, clientId, 'proforma', holdingId);
 
 					if (!effectiveConfig) {
 						stats.clients_skipped++;
 						continue;
 					}
 
-					const emailSender = await this.getEffectiveEmailSender(effectiveConfig, holdingId);
+					const emailSender = await resolveEmailSender(this.dataSource, effectiveConfig, holdingId);
+					const clientLimit = new Date(today);
+					clientLimit.setDate(today.getDate() + (Number(effectiveConfig.days_before_issue) || defaultDays));
 
-					for (const invoice of clientInvoices as any[]) {
+					for (const invoice of (clientInvoices as any[]).filter((inv) => new Date(inv.scheduled_at) <= clientLimit)) {
 						const existingRequest = await this.dataSource.query(`SELECT id FROM reference_requests WHERE invoice_id = $1 LIMIT 1`, [
 							invoice.id,
 						]);
@@ -92,8 +98,8 @@ export class ProformaProcessor {
 
 						if (mode === 'execute') {
 							await this.dataSource.query(
-								`INSERT INTO reference_requests (contract_id, invoice_id, reference_type, status, requested_at) VALUES ($1, $2, $3, $4, $5)`,
-								[invoice.contract_id, invoice.id, 'OC', 'requested', new Date().toISOString()]
+								`INSERT INTO reference_requests (holding_id, contract_id, invoice_id, reference_type, status, requested_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+								[holdingId, invoice.contract_id, invoice.id, 'OC', 'requested', new Date().toISOString()]
 							);
 						}
 					}
@@ -126,57 +132,20 @@ export class ProformaProcessor {
 		return grouped;
 	}
 
-	private async getEffectiveConfigForClient(clientId: string, agentType: string, holdingId: string): Promise<Record<string, any> | null> {
-		const clientConfig = await this.dataSource.query(
-			`SELECT * FROM client_agent_configs WHERE client_id = $1 AND agent_type = $2 AND holding_id = $3 LIMIT 1`,
-			[clientId, agentType, holdingId]
-		);
-
-		if (clientConfig && clientConfig.length > 0) {
-			if (!clientConfig[0].is_enabled) {
-				return null;
-			}
-			return clientConfig[0].config_json;
-		}
-
-		const holdingConfig = await this.dataSource.query(
-			`SELECT * FROM client_agent_configs WHERE client_id IS NULL AND agent_type = $1 AND holding_id = $2 LIMIT 1`,
-			[agentType, holdingId]
-		);
-
-		if (holdingConfig && holdingConfig.length > 0) {
-			if (!holdingConfig[0].is_enabled) {
-				return null;
-			}
-			return holdingConfig[0].config_json;
-		}
-
-		return null;
-	}
-
-	private async getEffectiveEmailSender(config: Record<string, any>, holdingId: string): Promise<any> {
-		if (config.email_sender_address_id) {
-			const sender = await this.dataSource.query(`SELECT from_name, from_email, reply_to_email FROM email_sender_addresses WHERE id = $1`, [
-				config.email_sender_address_id,
-			]);
-
-			if (sender && sender.length > 0) {
-				return sender[0];
-			}
-		}
-
-		const defaultSender = await this.dataSource.query(
-			`
-			SELECT esa.from_name, esa.from_email, esa.reply_to_email
-			FROM email_sender_addresses esa
-			INNER JOIN holding_email_sender_settings hess ON esa.id = hess.email_sender_address_id
-			WHERE hess.holding_id = $1 AND hess.is_default = true AND esa.is_active = true
-			LIMIT 1
-		`,
+	/**
+	 * Ventana de la consulta: el mayor `days_before_issue` entre las configuraciones habilitadas del holding (propias y global) y
+	 * el del agente. Cada cliente se filtra después con el suyo: antes solo contaba el del agente y lo que se guardaba por cliente
+	 * no tenía efecto.
+	 */
+	private async getMaxDaysBeforeIssue(holdingId: string, defaultDays: number): Promise<number> {
+		const rows = await this.dataSource.query(
+			`SELECT MAX((config_json->>'days_before_issue')::int) AS max_days
+			FROM client_agent_configs
+			WHERE holding_id = $1 AND agent_type = 'proforma' AND is_enabled = true AND config_json->>'days_before_issue' ~ '^[0-9]+$'`,
 			[holdingId]
 		);
 
-		return defaultSender && defaultSender.length > 0 ? defaultSender[0] : { from_name: 'Sapira', from_email: 'noreply@sapira.cl' };
+		return Math.max(defaultDays, Number(rows?.[0]?.max_days) || 0);
 	}
 
 	private async generateMessage(invoice: any, contact: any, config: Record<string, any>, emailSender: any, runId: string, mode: string) {

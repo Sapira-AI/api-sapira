@@ -1,23 +1,102 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	HttpCode,
+	HttpStatus,
+	Param,
+	ParseEnumPipe,
+	ParseUUIDPipe,
+	Post,
+	Put,
+	Query,
+	Request,
+	UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
+import { PERMISSION_CODES } from '@/guards/permission-codes';
+import type { PermissionContext } from '@/guards/permissions.service';
+import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
 import { AgentsService } from './agents.service';
 import { CreateClientAgentConfigDto, CreateHoldingAgentConfigDto, UpdateClientAgentConfigDto } from './dtos/client-config.dto';
+import { ListRunsQueryDto } from './dtos/list-runs.dto';
 import { RenderEmailDto } from './dtos/render-email.dto';
 import { RunAgentDto } from './dtos/run-agent.dto';
 import { UpdateAgentConfigDto } from './dtos/update-agent-config.dto';
 
+type AgentsRequest = { permissionContext?: PermissionContext };
+
+/**
+ * Automatizaciones (agentes de proforma y cobranza). Leer = VIEW_AGENTES_IA; ejecutar, aprobar, descartar y configurar =
+ * EDIT_AGENTES_IA ("Editar incluye Ver"). Documentación: `README.md` de este módulo.
+ */
 @ApiTags('Agents')
 @Controller('agents')
-@UseGuards(SupabaseAuthGuard, HoldingScopeGuard)
+@UseGuards(SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard)
+@RequirePermission(PERMISSION_CODES.viewAgents)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true, description: 'Holding activo (validado contra user_holdings)' })
 export class AgentsController {
 	constructor(private readonly agentsService: AgentsService) {}
+
+	@Get()
+	@ApiOperation({ summary: 'Listar agentes del holding', description: 'Agentes de proforma y cobranza con su programación.' })
+	async listAgents(@HoldingId() holdingId: string) {
+		return { success: true, data: await this.agentsService.listAgents(holdingId) };
+	}
+
+	@Get('runs')
+	@ApiOperation({ summary: 'Historial de ejecuciones', description: 'Paginado; filtros opcionales por agente, tipo y estado.' })
+	async listRuns(@Query() query: ListRunsQueryDto, @HoldingId() holdingId: string) {
+		return { success: true, data: await this.agentsService.listRuns(holdingId, query) };
+	}
+
+	@Get('runs/:runId')
+	@ApiOperation({ summary: 'Detalle de una ejecución' })
+	async getRun(@Param('runId', ParseUUIDPipe) runId: string, @HoldingId() holdingId: string) {
+		return { success: true, data: await this.agentsService.getRunDetail(runId, holdingId) };
+	}
+
+	@Get('runs/:runId/messages')
+	@ApiOperation({ summary: 'Mensajes de una ejecución' })
+	async listRunMessages(@Param('runId', ParseUUIDPipe) runId: string, @HoldingId() holdingId: string) {
+		return { success: true, data: await this.agentsService.listRunMessages(runId, holdingId) };
+	}
+
+	@Post('runs/:runId/cancel')
+	@HttpCode(HttpStatus.OK)
+	@RequirePermission(PERMISSION_CODES.editAgents)
+	@ApiOperation({
+		summary: 'Descartar ejecución',
+		description: 'Descarta un run pendiente de aprobación sin enviar sus mensajes (409 si no está pendiente).',
+	})
+	async cancelRun(@Param('runId', ParseUUIDPipe) runId: string, @HoldingId() holdingId: string, @Request() req: AgentsRequest) {
+		return { success: true, data: await this.agentsService.cancelRun(runId, holdingId, req.permissionContext?.userId) };
+	}
+
+	@Get('client-configs/summary')
+	@ApiOperation({ summary: 'Resumen de configuraciones por cliente', description: 'Conteo por tipo y clientes con configuración propia.' })
+	async clientConfigsSummary(@HoldingId() holdingId: string) {
+		return { success: true, data: await this.agentsService.clientConfigsSummary(holdingId) };
+	}
+
+	@Delete('client-configs/:client_id/:agent_type')
+	@HttpCode(HttpStatus.NO_CONTENT)
+	@RequirePermission(PERMISSION_CODES.editAgents)
+	@ApiOperation({ summary: 'Volver a la configuración global', description: 'Borra la configuración propia del cliente para ese agente.' })
+	async deleteClientConfig(
+		@Param('client_id', ParseUUIDPipe) clientId: string,
+		@Param('agent_type', new ParseEnumPipe(['proforma', 'collections'])) agentType: string,
+		@HoldingId() holdingId: string
+	) {
+		await this.agentsService.deleteClientConfig(clientId, agentType, holdingId);
+	}
 
 	@Post(':agentId/run')
 	@ApiOperation({
@@ -32,6 +111,7 @@ export class AgentsController {
 		status: HttpStatus.BAD_REQUEST,
 		description: 'Agente deshabilitado o configuración inválida',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
 	async runAgent(@Param('agentId') agentId: string, @Body() dto: RunAgentDto, @HoldingId() holdingId: string) {
 		const result = await this.agentsService.runAgent(agentId, dto.mode, holdingId);
@@ -55,9 +135,10 @@ export class AgentsController {
 		status: HttpStatus.BAD_REQUEST,
 		description: 'Run no está en estado queued',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
-	async approveRun(@Param('runId') runId: string, @HoldingId() holdingId: string) {
-		const result = await this.agentsService.approveRun(runId, holdingId);
+	async approveRun(@Param('runId', ParseUUIDPipe) runId: string, @HoldingId() holdingId: string, @Request() req: AgentsRequest) {
+		const result = await this.agentsService.approveRun(runId, holdingId, req.permissionContext?.userId);
 
 		return {
 			success: true,
@@ -74,6 +155,7 @@ export class AgentsController {
 		status: HttpStatus.OK,
 		description: 'Configuración creada/actualizada exitosamente',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
 	async createClientConfig(@Body() dto: CreateClientAgentConfigDto, @HoldingId() holdingId: string) {
 		const config = await this.agentsService.updateClientConfig(dto.client_id, dto.agent_type, holdingId, {
@@ -134,6 +216,7 @@ export class AgentsController {
 		status: HttpStatus.OK,
 		description: 'Configuración actualizada exitosamente',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
 	async updateClientConfig(
 		@Param('client_id') clientId: string,
@@ -237,6 +320,7 @@ export class AgentsController {
 		status: HttpStatus.OK,
 		description: 'Configuración global creada/actualizada exitosamente',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
 	async updateHoldingConfig(@Body() dto: CreateHoldingAgentConfigDto, @HoldingId() holdingId: string) {
 		const config = await this.agentsService.updateHoldingConfig(holdingId, dto.agent_type, {
@@ -259,6 +343,7 @@ export class AgentsController {
 		status: HttpStatus.OK,
 		description: 'Configuración actualizada exitosamente',
 	})
+	@RequirePermission(PERMISSION_CODES.editAgents)
 	@HttpCode(HttpStatus.OK)
 	async updateAgentConfig(@Param('agentId') agentId: string, @Body() dto: UpdateAgentConfigDto, @HoldingId() holdingId: string) {
 		const agent = await this.agentsService.updateAgentConfig(agentId, holdingId, dto);
