@@ -1,5 +1,73 @@
 # Nota para Leon · actualizar `leon` con `qa` (03-10-2026, actualizada 04-10)
 
+## Pendientes de Leon (05-10)
+
+Lista vigente; el resto de esta nota es contexto del merge.
+
+1. **Test del front que falla por timeout** (desde antes del switch): `front-sapira/lib/api/factura-proxy.test.ts` › "propaga
+   X-Factura-Company-Id desde empresaId en multipart cuando falta el header" (también falla corrido solo). Es el proxy de la API de
+   facturación electrónica (SII) cuando se sube un archivo (multipart).
+2. **17 assets de staging/mapeo de Odoo** en el repo que no existen ni en QA ni en prod (p. ej. `detect_invoice_changes`,
+   `get_hierarchical_mapping`, `classify_invoice_before_insert`); 3 de ellos (`process_partner_staging_to_client_entities`,
+   `apply_field_transformations_from_frontend`, `apply_partner_mapping_with_transformations`) llaman funciones ya borradas el 04-10
+   (`apply_field_mapping_to_data`, `resolve_field_transformation`; la API las reemplaza con `odoo/services/field-transformation.service.ts`).
+   Decidir: borrarlos del repo o aplicarlos (corregidos). Hoy un `postgres:assets --apply` sin `--only` los crearía.
+3. **Escritores de facturas sin `sapira.writer = 'api'`**: `invoice-scheduler.service.ts` (envío al ERP), `invoices.service.ts`,
+   `stripe-sync.service.ts` (además inserta líneas sin la marca; revisar `standardize_invoice_items`) y el webhook de Odoo. Envolverlos
+   en `withApiWriter` y que escriban ellos los campos derivados (moneda de sistema, etc.: `refreshInvoiceSystemAmounts`). Mientras no,
+   los triggers del front viejo sobre `invoices` siguen corriendo para esas escrituras y no se pueden retirar.
+4. **Interruptor "Sincronización automática"** (`holding_integration_settings.auto_enabled`): hoy solo lo respeta el cron de facturas a
+   Odoo. Falta en los crons de Salesforce, BigQuery (DWH) y Stripe.
+5. **Edge functions `agents-run`, `agents-render-email`, `agents-approve`** (y el stub `agents-webhook`): sin uso, sin fuente en repo,
+   escriben con service role. ¿Se borran? (Automatizaciones las rehará en la API.)
+6. **Urgentes de seguridad de [`revision-seguridad-api.md`](./revision-seguridad-api.md) que son de integraciones**: #1 `GET
+   /odoo/connections` y rutas `:id` exponen la `api_key` de Odoo de todos los clientes (falta `HoldingScopeGuard` y enmascarar); #2
+   `/stripe/connections` devuelve `secret_key` (mismo arreglo); #3 `POST /odoo/webhooks` es `@Public` sin firma (cualquiera marca facturas
+   como Pagadas/Enviadas o cambia montos): secreto por conexión + validar holding, con ventana coordinada para reconfigurar cada Odoo.
+   (#11 y #16 son del bloque común Domi/Claude: ver abajo.)
+7. **Integración, pendientes que afectan al front nuevo** (revisión de cobertura 05-10):
+   - Salesforce calcula el fin del contrato sin restar 1 día.
+   - El webhook de Odoo marca como **Pagada** un pago parcial o "en proceso".
+   - Notas de crédito hacia Odoo como `out_refund`.
+   - Al restablecer una factura, el borrador queda en Odoo.
+   - El rechazo electrónico (SII) no se muestra en Sapira.
+   - No hay bloqueo de envío por tipo de cambio desactualizado (ver también el caso Ironside → Ninja Hubs: aviso previo a la emisión
+     si falta la tasa fija; con política spot, usar la del día de emisión).
+   - Dedup del import legacy.
+   - Atraso del sync de suscripciones de Stripe.
+   - Pedidos L1–L11 de [`cambios-integracion-para-leon.md`](./cambios-integracion-para-leon.md).
+   - 3 commits de `origin/leon` sin integrar (este merge).
+8. **Probar una invitación de punta a punta** con las variables de correo nuevas de Railway, y `NOTIFICATION_JOBS_ENABLED=false` en
+   **QA** (QA y prod comparten clave de Resend y la misma llave de idempotencia: el 05-10 los resúmenes semanales chocaron y unos salieron
+   de QA y otros de prod).
+
+### Seguridad: lista completa para la sesión del 05-10
+
+Fuente: [`revision-seguridad-api.md`](./revision-seguridad-api.md). Con el front nuevo como único front en producción, todos pesan más.
+
+| # | Qué | Dueño | Arreglo |
+|---|---|---|---|
+| 1 | `GET /odoo/connections` sin header devuelve las conexiones (con `api_key`) de todos los holdings; rutas `:id` sin validar holding | Leon | `HoldingScopeGuard`, quitar la rama "todas", enmascarar `api_key` |
+| 2 | `/stripe/connections` sin guard; devuelve `secret_key` | Leon | `HoldingScopeGuard`, no devolver la clave |
+| 3 | `POST /odoo/webhooks` `@Public` sin firma | Leon | secreto por conexión + validar holding; ventana coordinada para reconfigurar cada Odoo |
+| 11 | `POST /holdings/assign-to-all-holdings/:userId` solo pide sesión (`holdings.controller.ts`) | Domi/Claude | `@SuperAdminOnlyRoute` (Domi y Leon son los únicos super admin) |
+| 16 | Módulos de plantilla montados y sin uso: `database` (`/database/*`, **público**: esquema completo incl. `auth` y RLS, escribe archivos en el servidor), `security` (`/security/*`: bloqueo/lista blanca de IPs, con sesión se puede bloquear la IP del front), `audit` (`/audit/*`), `devices` (`/devices/*`) (`app.module.ts`) | Domi/Claude | sacarlos de `app.module.ts` o solo super admin sin `@Public` |
+| 22 | Política RLS `users_update_v2` sin `WITH CHECK` | Domi/Claude | agregar `WITH CHECK` (asset RLS) |
+| — | Swagger público | Leon | protegerlo o apagarlo en prod |
+| — | CORS acepta cualquier `*.vercel.app` (`cors-origins.ts`) | Leon | limitar a los dominios propios |
+| — | `invoices.controller` sin `HoldingScopeGuard` | Leon | agregar guard + `@HoldingId()` |
+| — | Permisos por rol en la API: solo Facturación, Presupuestos, Productos, Integraciones y Administración los exigen; Contratos, Cotizaciones, Clientes, Precios, Métricas y Dashboard solo los filtra la BFF (quien llame la API directo se los salta) | Domi/Claude | `RequirePermission` por módulo en la API |
+| 23 | (resuelto) | — | — |
+
+### Otros chicos
+
+- `CONTRACT_JOBS_ENABLED` (jobs de contratos, encendidos por defecto) no está en `.env.example`: documentarla. Lo mismo con
+  `FX_MONTH_CLOSE_ENABLED`, `NOTIFICATION_JOBS_ENABLED` y `NOTIFICATION_EMAILS_ENABLED`: **una API local conectada a prod debe tenerlas en
+  `false`** (si no, corre los procesos automáticos sobre producción a la vez que Railway).
+
+Cerrados el 04-10/05-10: variables de correo en Railway, usuarios de Sapira sin login en Supabase marcados Inactivos (prod 5, QA 3;
+05-10), merge en curso.
+
 ## Actualización 04-10: switch hecho
 
 `qa` y `main` ya traen el switch (API v0.0.106, front v0.1.65). Volvimos a simular `git merge origin/qa` sobre `origin/leon`
