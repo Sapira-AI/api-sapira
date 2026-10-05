@@ -58,6 +58,7 @@ export const CHANGE_TYPES = [
 	'pause',
 	'resume',
 	'item_update',
+	'price_model_change',
 ] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 /** Tipos que no se construyen como cambio: se rechazan con 400 explicando el camino (reajuste = pactos §9.3.6). */

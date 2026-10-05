@@ -111,12 +111,18 @@ retiran solo cuando cada uno de esos escritores fije `sapira.writer = 'api'` y e
 
 ### 1.5 Consumos (`quantities`)
 
-Los usa el **sync del DWH de la API** (`bigquery.service.ts`, que escribe `quantities`), además del front viejo. Se quedan hasta que el DWH
-escriba `consumption_entries` (decisión #11, Leon); entonces pasan a la lista 2 con `quantities`.
+**05-10 (Domi): sin uso desde la API.** Una sola tabla de consumos, `consumption_entries`: la migración
+`1791600000000-ConsumosDesdeQuantities` copió las 315 filas de `quantities` y el sync del DWH (`bigquery.service.ts`) ya escribe en
+`consumption_entries` por `ConsumptionService` (decisión #11 cerrada; `cambios-integracion-para-leon.md` §16). `quantities` queda **de solo
+lectura** (no se borra); la regla de devengo (`revenue_schedule_rebuild_contract_ccy` v3.8) y la pestaña Consumos ya no la leen. Estos
+triggers solo corren si alguien escribe `quantities` (el front viejo, hasta que se bloquee su acceso): entonces bloquean una factura
+emitida (`validate_…`, con su propia marca), reescriben la línea Por Emitir (`sync_…`, misma regla que el monto fijado de la entry: el
+devengo da lo mismo, porque lee lo facturado) o la restauran al borrar. **Se retiran con la tabla después del período de pruebas** (migración
+de `DROP`); no se retiran ahora.
 
 | Nombre | Tipo | Qué hace |
 |---|---|---|
-| `quantities_set_holding_from_contract_item` | trigger fn · `quantities.trg_quantities_set_holding` | Al cargar una cantidad, encuentra su contrato, ítem y holding (la API cuenta con esto). |
+| `quantities_set_holding_from_contract_item` | trigger fn · `quantities.trg_quantities_set_holding` | Al cargar una cantidad, encuentra su contrato, ítem y holding (la API ya no escribe `quantities` desde el 05-10). |
 | `validate_invoice_status_for_quantity_change` | trigger fn · `quantities.trg_validate_quantity_invoice_status` | Bloquea cambiar una cantidad si la factura de ese mes ya no está Por Emitir. |
 | `sync_invoice_items_amounts_from_quantities` | trigger fn · `quantities.trg_sync_invoice_items_from_quantities` | Lleva la cantidad nueva a la línea de la factura Por Emitir del mismo mes. |
 | `restore_invoice_items_amounts_on_quantity_delete` | trigger fn · `quantities.trg_restore_invoice_items_on_quantity_delete` | Al borrar una cantidad, devuelve la línea Por Emitir al monto del contrato. |

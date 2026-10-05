@@ -767,16 +767,19 @@ devengo de contratos del holding (en sep-2026: 0 en las dos versiones). "Proyect
 | D1 | **13 En revisión que el rebuild procesa** (SimpliRoute): CTR-2026-05, -34, -63, -177, -178, -179, -180, -181, -182, -183, -217, -219, ctr-2026-218 | 163 filas nuevas; MRR sep-2026 17.722 (con CTR-2026-176, que ya tenía 5 filas en producción y queda igual). CTR-2026-05 y -63 muestran sus facturas Vencidas (2026-02/03). U14 corta el legacy de los que son destino de MRR legacy | Activar los que corresponda; los que no, cancelar/borrar o dejar sin ítems, y volver a correr |
 | D1-b | CTR-2026-004 (otro holding, `05583c6e…`, fuera de esta copia) | 12 filas 2026-10..2027-09 en producción | Igual que D1 |
 | D3 | Facturas previas al inicio (ahora visibles, son datos válidos) | SimpliRoute CTR-2026-02 (factura 2026-01, inicio 2026-08) y S06821; uPlanner 194, 200, 218, 221 | Nada que corregir salvo que una fecha esté mal |
-| D2-a | 3 meses con override distinto de lo facturado | CTR-2026-110 2026-07, CTR-2026-157 2026-06, CTR-2026-167-SSTT 2026-07 (§10.2) | Si el dato bueno es la factura, corregir el override |
+| D2-a | 3 meses con override distinto de lo facturado | CTR-2026-110 2026-07, CTR-2026-157 2026-06, CTR-2026-167-SSTT 2026-07 (§10.2) | **Resuelto por D2-c (§11)**: el devengo sigue lo facturado |
 | D4 | Ajustes con fin a mitad de ciclo / que pasan el fin de la base | Anexo C | Fechas |
 | — | Ítems negativos del modelo anterior | Anexo B | Caso a caso |
 | — | Filas sin tasa de compañía (`calc_version` `missing_fx_rate` con la del sistema convertida) | SimpliRoute 159, TiMining 428, uPlanner 470 (tasas de compañía no cargadas, sobre todo 2026-11+) | Cargar tasas de compañía y repetir el rebuild |
 
 ### 9.5 Queda por decidir
 
-- **D2-c · Consumos v2** (`consumption_entries`): el rebuild no los lee (0 filas en prod; la regla del monto vive en el motor de precios
-  TS). R8: que la API escriba el devengo del período al registrar el consumo, o que el rebuild tome el subtotal de las líneas del
-  período de ítems medidos. Decidir antes de habilitar Pricing v2 a clientes.
+- ~~**D2-c · Consumos v2**~~ **Decidido e implementado 05-10 (Domi; sin aplicar), §11**: una sola regla. Todo mes activo con desvío del plan
+  —consumo en `consumption_entries` (Pricing v2, el almacén de datos y los
+  overrides del front anterior, copiados desde `quantities` con la migración `1791600000000`) o línea editada a mano
+  (`quantity_source = 'manual'`)— devenga **lo facturado para su período de servicio** (Σ líneas del ítem, Por Emitir como estimado,
+  complementarias, NC que restan; multi-mes en partes iguales). D2 es el caso particular (mismo resultado en los 65 contratos salvo los 3
+  de D2-a). El rebuild ya no lee `quantities`. Regla completa y casos borde: `spec-pricing-v2.md` §4.5.
 - **Filas proyectadas que pasan a ser el mes en curso**: conservan la tasa proyectada hasta el siguiente recálculo (registrar la tasa
   del mes lo dispara; un rebuild o `apply_fx` también). Si se quiere que al cambiar de mes queden "Sin tipo de cambio" sin esperar, hace
   falta un recálculo programado al inicio de mes (no implementado).
@@ -1059,3 +1062,88 @@ UPSELL / CROSS-SELL / DOWNSELL recurrentes cuyo fin pasa el fin de los ítems ba
 | TiMining | PEL-01 | Activo | UPSELL | `69db853b` | 2025-05-01 | 2026-04-30 | 12 | 2026-02-28 | 1 | pasa el fin base |
 | TiMining | PEL-01 | Activo | CROSS-SELL | `5caf7f4e` | 2025-01-01 | 2026-12-31 | 24 | 2026-02-28 | 1 | pasa el fin base |
 | TiMining | SCO-01 | Activo | UPSELL | `1d9a5fdb` | 2026-05-01 | 2027-04-30 | 12 | 2026-09-30 | 1 | pasa el fin base |
+
+## 11. Corrida D2-c · una sola regla de devengo con consumos (05-10, sin aplicar)
+
+Decisión de Domi (05-10): el devengo del mes de un ítem = lo facturado para ese período cuando el período tiene una cantidad o un monto
+distinto del plan, venga de donde venga; el MRR sigue siendo el plan. Una sola fuente de consumos: `consumption_entries`.
+
+### 11.1 Qué cambió
+
+| Pieza | Cambio |
+|---|---|
+| `revenue_schedule_rebuild_contract_ccy` **v3.8** (asset) | En cada mes activo: desvío = entry en `consumption_entries` cuyo período empieza en el mes (o en una línea que cubre el mes) o línea `quantity_source = 'manual'`. Con desvío y líneas vigentes: devengo = Σ `subtotal_contract_currency` de las líneas del ítem que cubren el mes (Por Emitir / Emitida / Enviada / Pagada / Vencida, activas; NC restan salvo las de descuento clasificadas; `one_off` sumado de vuelta si `nc_discount_revenue_adjustment` lo mueve), cada línea repartida en partes iguales entre los meses de su período (n = meses hasta fin + 1 día, mínimo 1). Sin línea vigente: la regla de D2 con la entry. Ya no lee `quantities`. MRR y CMRR sin cambio |
+| Migración `1791600000000-ConsumosDesdeQuantities` | Copia las 315 filas de `quantities` a `consumption_entries` (+ historial), respaldo `sapira_backups.consumption_entries_1791600000000`, idempotente, `down` exacto (probado up → down → up) |
+| Migración `1791700000000-PreciosMedidosSimpliRoute` | 131 ítems `Variable` de SimpliRoute → precio propio del contrato `standard` + `metered` y 6 métricas (`vehiculos`, `mensajes`, `rutas`, `visitas`, `bolsas`, `unidades`); quedan fuera 3 espejos de baja con unitario negativo. No cambia montos ni devengo |
+| API | `ConsumptionService` (siempre rebuild del mes; unificado Por Emitir re-copiado; lectura sin `quantities`); DWH por `ConsumptionService` (`cambios-integracion-para-leon.md` §16); consolidación sin `open_consumption` |
+
+### 11.2 Verificación en la copia local
+
+Base `sapira_cons` / `sapira_cons2` (`createdb -T sapira_blk`, bloque del 04-10 aplicado). "Antes" = rebuild de los 674 contratos con
+v3.7 (D2, lee `quantities`); "después" = migraciones `1791600000000` + `1791700000000`, asset v3.8 y rebuild de los mismos 674 (0 errores).
+Comparación fila a fila (montos en las tres monedas, acumulados, saldos, MRR, `calc_version`): `scratchpad/cons/cmp.sql`.
+
+| Holding | Filas distintas | Contratos | Devengo del mes distinto | MRR distinto | Facturado distinto |
+|---|---:|---:|---:|---:|---:|
+| SimpliRoute | 19 | 3 | 3 meses | 0 | 0 |
+| TiMining | 0 | 0 | 0 | 0 | 0 |
+| uPlanner | 0 | 0 | 0 | 0 | 0 |
+
+Las 19 filas son esos 3 meses y el arrastre de sus acumulados y saldos. Son exactamente los 3 casos D2-a (§9.4), donde el override no
+coincidía con lo facturado; los otros 62 contratos con overrides de §5.5 (y los 78 con `quantities`) dan **idéntico** a D2:
+
+| Contrato | Mes | Antes (D2) | Después | Moneda sistema (USD) | Por qué |
+|---|---|---:|---:|---:|---|
+| CTR-2026-110 | 2026-07 | 0,00 USD | 54,00 USD | 0 → 54,00 | Override 0 unidades, pero FAC 027825 (Vencida) facturó 2 × 27 |
+| CTR-2026-167-SSTT | 2026-07 | 14,25 CLF | 17,57 CLF | 612,77 → 755,54 | Override 19 × 0,75; facturado FAC 027808 (14,25) + FAC 027844 (3,315, complementaria de 4,42 unidades) |
+| CTR-2026-157 | 2026-06 | 17,85 CLF | 14,87 CLF | 767,58 → 639,43 | Override 21 × 0,85 = FAC 027415 (17,85), menos la NC de descuento por churn (5/30 días, −2,98, sin clasificar) |
+
+Efecto neto en el reconocido de SimpliRoute (USD): jun-2026 −128,15; jul-2026 +196,77.
+
+**Simulación (copia local, servicio real de la API, `scratchpad/cons/sim.ts` y `simu.ts`)**:
+- CTR-2026-46, oct-2026 Por Emitir: consumo v2 de PATHFINDER+ (medido tras la migración, 41.250 × 0,053) → línea 2.186,25, devengo del
+  mes 2.186,25, MRR 0,05 (plan); corrección de cantidad del ítem fijo (50.000 → 42.000 × 0,05, camino cerrado después, §11.5) → línea 2.100, devengo 2.100, MRR 2.500.
+- Consolidación de las Por Emitir de oct-2026 de CTR-2026-93-CL y CTR-2026-94-CO (sin bloqueo por consumo) y consumo de un ítem medido
+  del origen (18,62 → 44,24): la línea del origen y su copia en el unificado quedan en 30,97, el unificado se recalcula (aviso
+  `consolidated_resynced`) y el devengo del mes = 30,97 con MRR 13,03.
+- `GET /contracts/CTR-2026-46/consumption` antes de las migraciones: 3 ítems sin precio, 0 filas; después: 2 ítems "por consumo"
+  (`standard/metered`, métrica "visita") y 1 de cantidad fija, 9 consumos (los overrides del front anterior, `source = manual`, sin marca
+  de origen) con su factura.
+
+### 11.3 Para aplicar (no ejecutado)
+
+Orden en QA y luego producción (con `schema:status` antes y después, GUIA): 1) migración `1791600000000`; 2) migración `1791700000000`;
+3) asset `revenue_schedule_rebuild_contract_ccy` con `--only`; 4) desplegar la API (DWH y consumos por `consumption_entries`); 5) rebuild de
+SimpliRoute (`revenue_schedule_rebuild(contract_id, NULL)` de sus contratos, como §7). Mientras el front viejo siga abierto, un override que
+escriba en `quantities` ya no llega a `consumption_entries` ni al devengo: bloquear la escritura de overrides del front viejo con el switch.
+
+### 11.4 Cambiar el modelo de precio (`price_model_change`, 05-10, sin aplicar)
+
+Copia `sapira_pm` (`scratchpad/cons/newpm.sh`: `sapira_blk` + migraciones `1791600000000` y `1791700000000` + asset v3.8), servicio real de la API
+(`scratchpad/cons/simpm.ts`). CTR-2026-211 (SimpliRoute, USD), PATHFINDER+ 50 vehículos × 35 (precio por consumo del parche `1791700000000`):
+
+1. Consumo de noviembre registrado **antes** del cambio: 120 vehículos (4.200 al precio por unidad).
+2. `price_model_change` desde el 01-10: tramos 1–40 a 35, 41–100 a 30, 101+ a 25, una fila por tramo. Resultado: el ítem original termina el
+   30-09; RENEWAL desde el 01-10 con precio `graduated`/`metered` **v2** (`supersedes_price_id` = el del parche), mensual 1.700 (50 por tramos),
+   `renewal_base_unit_price` 35; el consumo de noviembre pasa al RENEWAL y su Por Emitir queda en 3 filas: 40 × 35 + 60 × 30 + 20 × 25 = 3.700.
+3. Consumo de octubre después del cambio: 80 → Por Emitir de octubre 40 × 35 + 40 × 30 = 2.600 (dos filas por tramo).
+4. RSM: oct-2026 devengo 2.600 = facturado; MRR 1.750 (fila RENEWAL) − 50 (fila DOWNSELL) = 1.700; nov-2026 devengo 3.700 = facturado, MRR
+   1.700; dic-2026 (sin consumo) devengo 1.700 = plan. Las Por Emitir siguen Por Emitir (antes de la corrección de `recompute_header` quedaban
+   `Cancelada`).
+
+### 11.5 Sin consumo en ítems fijos (Domi 05-10, ajuste)
+
+La "corrección de cantidad" de un ítem fijo (override del front anterior) ya no existe como concepto: Consumos muestra solo ítems por consumo y la
+API responde 409 `item_not_metered` a un consumo sobre un ítem sin precio `metered` (desvío puntual = "Editar factura" de la Por Emitir). De las
+**315 filas** copiadas de `quantities`, tras la migración de precios medidos (`1791700000000`, 131 ítems): **311** quedan sobre ítems por
+consumo (76 contratos) y **4** sobre ítems fijos sin precio (`item_type = 'Fijo'`), que siguen contando para el devengo (regla D2-c) pero no
+aparecen en la pestaña:
+
+| Contrato | Estado | Ítem | Filas | Meses |
+|---|---|---|---:|---|
+| CTR-2026-106 | Activo | RENEWAL fijo, unitario 1,10 | 1 | 2026-07 |
+| CTR-2026-13 | Activo | RENEWAL fijo, unitario 109 | 2 | 2026-07, 2026-08 |
+| CTR-2026-48 | Activo | RENEWAL fijo, unitario 144.569 | 1 | 2026-08 |
+
+Los 4 son meses ya facturados: el devengo de esos meses = lo facturado (igual que D2), sin cambio frente a §11.2.
+

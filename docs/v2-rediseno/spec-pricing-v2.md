@@ -425,18 +425,53 @@ Respuesta del PUT y del preview (misma forma; el preview no escribe y devuelve `
 - Preview del borrador (`POST /contracts/preview` y `GET /contracts/:id/invoices/preview`): el motor recibe plantilla de glosa, contexto,
   límite del documento y los consumos ya registrados, igual que la activación.
 
-### 4.5 Devengo de ítems variables (pendiente)
+### 4.5 Devengo de ítems variables y de cantidades corregidas (implementado 05-10, sin aplicar)
 
-**Hallazgo (29-09, CTR-2026-142):** el RSM legado (`revenue_schedule_rebuild`) devenga solo el MRR base del ítem (19,62 plano
-por mes) e ignora las cantidades variables facturadas, así que en el Contrato 360 "Devengado a la fecha (MRR base)" queda
-por debajo de lo facturado y el widget lo avisa ("Los consumos variables aún no entran al devengo"). **Sin código todavía.**
+**Hallazgo (29-09, CTR-2026-142):** el RSM devengaba solo el MRR base del ítem e ignoraba las cantidades variables facturadas. **Decisión de
+Domi (05-10, definitiva): una sola regla de devengo**, en `revenue_schedule_rebuild_contract_ccy` **v3.8** (asset; un rebuild nunca la
+pisa porque vive dentro del rebuild). Es la generalización de D2 (`rebuild-devengo-comparacion.md` §9.5 D2-c).
 
-Regla a implementar: el devengo de un ítem variable en un período de servicio = **el monto facturado para ese período**
-(Σ de sus líneas de factura, complementarias incluidas, en moneda del contrato). Una Por Emitir cuenta como **estimado**
-hasta emitirse (se marca así en el RSM); una corrección de consumo (§4.3/§4.4, cualquier `apply_as`) **re-devenga el
-período** con el nuevo monto, nunca el siguiente. Los ítems estándar siguen con el MRR base. Se implementa en la API
-(servicio propio que escribe `revenue_schedule_monthly` para los ítems medidos) **sin tocar la función legada del RSM**
-hasta el switch; hasta entonces `overview.financial.recognized_to_date` sigue siendo el MRR base y el front lo dice.
+- **Cuándo**: el mes activo del ítem tiene un **desvío del plan** de cualquier fuente: un consumo registrado en `consumption_entries`
+  (Pricing v2, el almacén de datos y los overrides del front anterior, copiados desde `quantities` con
+  la migración `1791600000000`) cuyo período empieza en el mes o en el inicio de una línea que cubre el mes, o una línea editada a mano
+  (`invoice_items.quantity_source = 'manual'`).
+- **Qué**: devengo del mes = **lo facturado para el período de servicio** del ítem = Σ `subtotal_contract_currency` de sus líneas en facturas
+  activas Por Emitir (**estimado** hasta emitirse), Emitida, Enviada, Pagada o Vencida, con complementarias. Una corrección re-devenga el
+  mismo período (el consumo y la edición de factura llaman el rebuild del mes). Sin desvío: el plan, como hoy. **El MRR sigue siendo el plan.**
+- **Casos borde decididos**:
+  - *Facturación no mensual*: cada línea se reparte en partes iguales (redondeo telescópico) entre los meses de su período de servicio;
+    n = meses entre el mes de inicio y el mes de (fin + 1 día), mínimo 1 (mensual con día de ciclo = su mes de inicio, como D2; trimestral 3;
+    anual 12). El consumo de un período trimestral marca los 3 meses.
+  - *Prorrateo y pausas*: el facturado reemplaza el mensual ya prorrateado o pausado del mes (como la factura).
+  - *Notas de crédito*: restan (la NC espejo de una reemisión neta la original: original + NC + nueva = la nueva). Las NC de descuento
+    **clasificadas** (`nc_revenue_treatment`) no se suman: las mueve `nc_discount_revenue_adjustment` con su tratamiento (sin doble conteo);
+    el descuento puntual de una línea (`one_off`) se suma de vuelta cuando ese ajuste lo descuenta aparte.
+  - *Moneda*: los montos de la línea en `subtotal_contract_currency`, con la misma regla que el facturado del RSM (tasa `item` a contrato
+    en multimoneda).
+  - *Unificadas*: cada copia apunta al ítem de su contrato (`contract_item_id`): se atribuye por línea; el origen inactivo no cuenta.
+  - *Desvío sin línea vigente* (p. ej. override de un período sin factura): la regla de D2 con la entry (monto fijado, o unitario del ítem
+    × cantidad, × (1 − % de la línea / del ítem)). Consumo 0 con la factura en "sin cobro": 0.
+  - *Meses fuera de la vigencia del ítem*: sin cambio (devengo 0, el facturado queda diferido), como D2.
+- **Solo ítems por consumo (Domi 05-10)**: la "corrección de cantidad" de un ítem fijo era provisoria del front anterior y ya no existe.
+  `ConsumptionService` responde 409 `item_not_metered` ("edita la factura por emitir de ese período") para ítems sin precio `metered`, también
+  como complementaria o reemisión, CSV y almacén de datos (la fila queda `blocked`); `GET /consumption` sigue listando todos los ítems pero
+  `accepts_consumption` solo es `true` en los por consumo y la pestaña muestra solo esos. Un desvío puntual de un ítem fijo se hace con
+  "Editar factura" (`quantity_source = 'manual'`), que el devengo ya sigue. Las 4 entries copiadas de `quantities` sobre ítems fijos (3
+  contratos de SimpliRoute) siguen contando para el devengo y no se ven en la pestaña (`rebuild-devengo-comparacion.md` §11.5).
+- **Escritores**: `ConsumptionService.write` (pantalla, CSV y almacén de datos) siempre llama `revenue_schedule_rebuild(contrato, mes)`;
+  `ContractInvoiceEditService` lo llama desde el primer mes tocado cuando cambia un monto. `GET /contracts/:id` (`recognized_to_date`) y
+  Métricas/Ingresos leen el RSM: ya incluyen el consumo.
+- **Verificación** (copia local, rebuild de SimpliRoute, TiMining y uPlanner, `rebuild-devengo-comparacion.md` §11): idéntico a D2 salvo 3
+  meses de SimpliRoute donde el override difería de lo facturado (D2-a); consumo v2 simulado: devengo = facturado.
+
+**Cambiar el modelo de un ítem vigente** (precio × cantidad → tramos, u otro): intención "Cambiar el modelo de precio" de Modificar contrato
+(`price_model_change`, `spec-modificaciones-contrato-v2.md` §9.3.11): precio propio nuevo (versión siguiente, `supersedes_price_id`) desde el
+próximo período sin facturar; MRR = el modelo a la cantidad base.
+
+**Variable = precio por consumo de Pricing v2.** La marca de "variable" en el front nuevo es `contract_items.price_id` → `prices.quantity_type
+= 'metered'`, nunca `contract_items.item_type` (dato maestro por holding). La migración `1791700000000-PreciosMedidosSimpliRoute` crea para los
+131 ítems `item_type = 'Variable'` de SimpliRoute (unitario > 0) un precio propio del contrato `standard` + `metered` (unitario del período =
+mensual × meses de la frecuencia; con descuento en monto fijo, el neto) y una métrica por unidad de medida, sin cambiar montos.
 
 ## 5. API (todo tras `SupabaseAuthGuard` + `HoldingScopeGuard` + `@HoldingId()`, body validado con DTO espejo en la BFF)
 
@@ -508,27 +543,26 @@ agregación, unidad, fuente (manual / DWH con referencia de consulta).
 ## 7. Migración y compatibilidad
 
 -   **Ningún dato se migra en etapa 1.** Ítems existentes: `price_id NULL` = standard fijo; el generador se comporta igual.
--   **`quantities` sigue viva y la escribe solo el front viejo** hasta el switch de Contratos; v2 la lee como hoy
-    (`GET /:id/consumption`) y no la escribe. En el switch: `quantities` pasa a **solo lectura** (REVOKE INSERT/UPDATE/DELETE,
-    triggers anotados "reemplazados por consumption.service") y se migran a `consumption_entries` solo los períodos **no
-    emitidos o futuros** de contratos activos; los emitidos quedan como historia en `quantities` (la factura ya tiene sus montos).
--   **Canal DWH** (`sapira_quantity_imports`, `bigquery.service.ts`): hoy integra a `quantities` (0 filas integradas, B7). En
-    etapa 2 pasa a escribir `consumption_entries` con `source = dwh`, `idempotency_key` = clave natural del origen, ventana de
-    backfill configurable y la regla 4 de §4.3 para períodos emitidos.
+-   **Una sola fuente desde el 05-10 (decisión de Domi, reemplaza el plan anterior de esta sección):** `consumption_entries`.
+    La migración `1791600000000-ConsumosDesdeQuantities` (respaldo en `sapira_backups`, idempotente, `down` exacto) copia **todas** las
+    filas de `quantities` (315 en producción, 78 contratos de SimpliRoute), también las de períodos emitidos, porque la regla de devengo
+    (§4.5) ya no lee `quantities` y debe dar lo mismo que D2. `quantities` queda **de solo lectura** (no se borra; sus triggers se retiran
+    con la tabla tras el período de pruebas, `catalogo-funciones-y-triggers.md` §1.5).
+-   **Canal DWH** (`sapira_quantity_imports`, `bigquery.service.ts`): desde el 05-10 escribe `consumption_entries` con `source = dwh` por
+    `ConsumptionService.recordFromDwh` (mismo camino que la pantalla; la regla 4 de §4.3 para períodos emitidos deja la fila `blocked`).
+    Detalle para Leon: `cambios-integracion-para-leon.md` §16.
 
-| `quantities`                                    | `consumption_entries`                                                                 | Nota                                                                                           |
+| `quantities`                                    | `consumption_entries` (migración `1791600000000`)                                     | Nota                                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `contract_item_id`, `contract_id`, `holding_id` | iguales                                                                               |                                                                                                |
-| `period` (día 1 del mes)                        | `period_start` / `period_end` de la línea cuyo mes de `billing_period_start` coincide | Con día de ciclo ≠ 1 se toma el período de la línea, no el mes calendario                      |
-| `quantity`                                      | `quantity`                                                                            | NULL → no se migra (heredaba la del ítem)                                                      |
-| `unit_price` (override de precio)               | **no se migra**                                                                       | El precio vive en `prices`; se lista para revisión manual (Domi): crear precio inline o ajuste |
-| `amount`                                        | `amount_override`                                                                     | S7 §7 (monto final, cantidad informativa)                                                      |
+| `contract_item_id`, `contract_id`, `holding_id` | iguales (contrato y holding del ítem)                                                 |                                                                                                |
+| `period` (día 1 del mes)                        | `period_start` / `period_end` de la línea del ítem cuyo `billing_period_start` cae en el mes (vigente y Por Emitir primero); sin línea, el mes calendario | Con día de ciclo ≠ 1 se toma el período de la línea, no el mes calendario |
+| `quantity`                                      | `quantity`                                                                            | NULL → la cantidad del ítem                                                                    |
+| `unit_price` (override de precio)               | `amount_override` = unitario × cantidad **si difiere** del unitario del ítem          | Misma regla con que D2 devengaba y `sync_invoice_items_amounts_from_quantities` armaba la línea |
+| `amount`                                        | `amount_override` solo si la fila no trae unitario ni cantidad                        | Como D2                                                                                        |
 | `account`, `notes`                              | `account`, `notes`                                                                    |                                                                                                |
-| `created_by` (nunca lleno), `created_at`        | `created_by`, `created_at`, `source = manual`, `revision = 1`                         |                                                                                                |
-| `salesforce_*`                                  | `idempotency_key` = `sf:<line_item>:<period>`                                         | Trazabilidad DWH                                                                               |
-
-El front viejo no cambia: sus 5 triggers de `quantities` siguen operando su flujo. El fix compartido U13 (sync excluye NC) se
-hace igual porque conviven.
+| `created_by`, `created_at`, `updated_at`        | `created_by` (si es usuario de `users`), `created_at`, `updated_at`, `revision = 1` + fila de historial | `source` = `dwh` si `notes` empieza con "DWH sapira_base", si no `manual` (sin etiqueta visible de "front anterior") |
+| `id`                                            | `idempotency_key = 'quantities:<id>'`                                                 | Trazabilidad y reemplazo desde notificaciones viejas del DWH                                    |
+| —                                               | `invoice_id` = factura vigente (no NC/ND) de esa línea; `apply_item_discount = true`  |                                                                                                |
 
 ## 8. Preguntas abiertas para Domi — estado (28-09)
 

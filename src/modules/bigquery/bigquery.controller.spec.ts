@@ -1,3 +1,5 @@
+// BigQueryService → ConsumptionService arrastra `uuid` (ESM) por la cadena de facturas: se reemplaza como en los specs de contratos.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 import { BadRequestException } from '@nestjs/common';
 
 import { BigQueryController } from './bigquery.controller';

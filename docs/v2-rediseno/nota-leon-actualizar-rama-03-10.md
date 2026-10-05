@@ -41,6 +41,12 @@ Lista vigente; el resto de esta nota es contexto del merge.
    **QA** (QA y prod comparten clave de Resend y la misma llave de idempotencia: el 05-10 los resúmenes semanales chocaron y unos salieron
    de QA y otros de prod).
 
+**Agregado 05-10 (Domi): el DWH escribe consumos en `consumption_entries`.** Revisar el cambio mínimo en `bigquery.service.ts`
+(`integrateSingleQuantity`, `reconcileExistingQuantity`, `replaceQuantityRecord` vía `ConsumptionService.recordFromDwh`) y decidir si
+`sapira_quantity_imports` suma `consumption_entry_id` (hoy `quantity_id` queda `NULL` en filas nuevas). Detalle y orden de aplicación:
+[`cambios-integracion-para-leon.md` §16](./cambios-integracion-para-leon.md). `quantities` queda de solo lectura; sus triggers se retiran
+con la tabla tras el período de pruebas.
+
 ### Seguridad: lista completa para la sesión del 05-10
 
 Fuente: [`revision-seguridad-api.md`](./revision-seguridad-api.md). Con el front nuevo como único front en producción, todos pesan más.

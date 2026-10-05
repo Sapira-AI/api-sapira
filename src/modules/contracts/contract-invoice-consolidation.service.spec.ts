@@ -423,3 +423,51 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 		expect(consolidation.undo).toHaveBeenCalledWith(CONS, { reason: 'x' }, HOLDING, 'auth-1');
 	});
 });
+
+describe('resyncFromOrigins: consumo sobre un origen consolidado (Domi 05-10)', () => {
+	const origins = [
+		invoiceRow({ is_active: false, consolidated_into_invoice_id: CONS }),
+		invoiceB({ is_active: false, consolidated_into_invoice_id: CONS }),
+	];
+
+	it('borra las copias del unificado Por Emitir, vuelve a copiar las de todos los orígenes y recalcula su encabezado (sin tocar contrato ni fechas)', async () => {
+		const { service, runner } = build({ origins });
+		const route = runner.query.getMockImplementation()!;
+
+		runner.query.mockImplementation((sql: string, params: unknown[] = []) =>
+			sql.includes('FOR UPDATE') && sql.includes('SELECT id, invoice_number, status')
+				? [{ id: CONS, invoice_number: 'U-1', status: 'Por Emitir', invoice_currency: 'CLP', issue_date: '2026-10-05' }]
+				: route(sql, params)
+		);
+		const result = await service.resyncFromOrigins(runner as never, HOLDING, CONS);
+		const sql = sqlOf(runner.query);
+
+		expect(result).toMatchObject({ invoice_id: CONS, invoice_number: 'U-1', lines_count: 2, amount_contract_currency: 3000 });
+		const del = sql.findIndex((text) => text.includes('DELETE FROM invoice_items WHERE invoice_id = $1'));
+		const ins = sql.findIndex((text) => text.includes('INSERT INTO invoice_items'));
+		const upd = sql.findIndex((text) => text.includes('UPDATE invoices SET vat = $3'));
+
+		expect(del).toBeGreaterThan(-1);
+		expect(ins).toBeGreaterThan(del);
+		expect(upd).toBeGreaterThan(ins);
+		const [insert] = calls(runner.query, 'INSERT INTO invoice_items');
+		const copies = JSON.parse(insert[1][1] as string) as Array<{ source_id: string; description: string }>;
+
+		expect(copies.map((copy) => copy.source_id).sort()).toEqual(['la', 'lb']);
+		expect(copies.every((copy) => /^CTR-2026-\d - /.test(copy.description))).toBe(true);
+		expect(insert[1].slice(2, 4)).toEqual(['CLP', '2026-10-05']);
+		expect(sql[upd]).not.toContain('contract_id');
+		expect(sql[upd]).toContain(`status = 'Por Emitir'`);
+		// Ni INSERT de encabezado nuevo ni eventos: es el mismo documento.
+		expect(calls(runner.query, 'INSERT INTO invoices')).toHaveLength(0);
+		expect(calls(runner.query, 'INSERT INTO contract_lifecycle_events')).toHaveLength(0);
+	});
+
+	it('409 si el unificado ya no está Por Emitir (emitido o deshecho)', async () => {
+		const { service, runner } = build({ origins });
+		const error = await rejection(service.resyncFromOrigins(runner as never, HOLDING, CONS));
+
+		expect(error).toBeInstanceOf(ConflictException);
+		expect(calls(runner.query, 'DELETE FROM invoice_items')).toHaveLength(0);
+	});
+});

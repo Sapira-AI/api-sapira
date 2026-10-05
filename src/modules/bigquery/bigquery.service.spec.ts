@@ -1,4 +1,6 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+// BigQueryService → ConsumptionService arrastra `uuid` (ESM) por la cadena de facturas: se reemplaza como en los specs de contratos.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 import { BigQueryService } from './bigquery.service';
 
@@ -34,13 +36,20 @@ describe('BigQueryService', () => {
 			query: jest.fn().mockResolvedValue([]),
 		};
 		const dataSource = { query: jest.fn().mockResolvedValue([]), createQueryRunner: jest.fn(() => runner) };
+		// 05-10: la fase 2 registra consumos con `ConsumptionService` (una sola fuente, `consumption_entries`).
+		const consumption = {
+			entryForMonth: jest.fn().mockResolvedValue(null),
+			entryById: jest.fn().mockResolvedValue(null),
+			recordFromDwh: jest.fn().mockResolvedValue({ mode: 'recompute' }),
+		};
 
 		const service = new BigQueryService(
 			stripeCustomerRepository as any,
 			bigQueryConnectionRepository as any,
 			quantityImportRepository as any,
 			notificationsService as any,
-			dataSource as any
+			dataSource as any,
+			consumption as any
 		);
 
 		return {
@@ -51,6 +60,7 @@ describe('BigQueryService', () => {
 			notificationsService,
 			dataSource,
 			runner,
+			consumption,
 		};
 	};
 
@@ -604,37 +614,32 @@ describe('BigQueryService', () => {
 	});
 
 	describe('integrateSapiraQuantities', () => {
-		it('mapea por quote_line_id e inserta en quantities sin amount ni holding_id', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+		// 05-10 (Domi): una sola fuente de consumos. La fase 2 ya no escribe `quantities`: registra en `consumption_entries` con
+		// `ConsumptionService.recordFromDwh` (mismo camino que la pantalla: costura, factura Por Emitir, historial, evento y rebuild del mes).
+		const writesQuantities = (dataSource: { query: jest.Mock }) =>
+			dataSource.query.mock.calls.some(([sql]) => /(INSERT INTO|UPDATE) quantities/.test(sql as string));
+
+		it('mapea por quote_line_id y registra el consumo con ConsumptionService (source dwh), sin tocar quantities', async () => {
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport()]);
 			wireDataSource(dataSource, { candidates: [buildCandidate()] });
 
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ integrated: 1, unmapped: 0, blocked: 0, conflict: 0 });
-
-			const insertCall = dataSource.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO quantities'));
-			expect(insertCall).toBeDefined();
-			// amount no lo escribe el canal automático (cuenta unitario × cantidad);
-			// holding_id lo deriva trg_quantities_set_holding.
-			expect(insertCall[0]).not.toMatch(/\bamount\b/);
-			expect(insertCall[0]).not.toMatch(/\bholding_id\b/);
-			expect(insertCall[1]).toEqual([
-				CONTRACT_ITEM_ID,
-				CONTRACT_ID,
-				'2026-08-01',
-				'0.05',
-				'15000',
-				'Mensajes',
-				null,
-				'006RO00000c2p8bYAA',
-				'0QLRO00000INNuP4AX',
-				'DWH sapira_base · sf_id=0015w00002sxiepAAA',
-			]);
+			expect(consumption.entryForMonth).toHaveBeenCalledWith('holding-1', CONTRACT_ITEM_ID, '2026-08-01');
+			expect(consumption.recordFromDwh).toHaveBeenCalledWith('holding-1', CONTRACT_ID, CONTRACT_ITEM_ID, '2026-08-01', {
+				quantity: 15000,
+				unit_price: 0.05,
+				account: null,
+				notes: 'DWH sapira_base · sf_id=0015w00002sxiepAAA',
+			});
+			expect(writesQuantities(dataSource)).toBe(false);
 			expect(quantityImportRepository.save.mock.calls[0][0]).toMatchObject({
 				integration_status: 'integrated',
 				resolution_source: 'salesforce_ids',
-				quantity_id: 'quantity-1',
+				// FK a `quantities`: las filas nuevas no lo llevan.
+				quantity_id: null,
 			});
 		});
 
@@ -650,7 +655,7 @@ describe('BigQueryService', () => {
 		});
 
 		it('deja unmapped la fila del DWH que no trae ninguno de los cuatro IDs', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([
 				buildImport({ id: 'import-2', sf_id: '001RO00000DkSLBYA3', quote_line_id: null, opportunity_id: null }),
 			]);
@@ -659,7 +664,7 @@ describe('BigQueryService', () => {
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ unmapped: 1, integrated: 0 });
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO quantities'))).toBe(false);
+			expect(consumption.recordFromDwh).not.toHaveBeenCalled();
 			expect(quantityImportRepository.save.mock.calls[0][0]).toMatchObject({
 				integration_status: 'unmapped',
 				integration_reason: expect.stringContaining('no es mapeable'),
@@ -679,14 +684,14 @@ describe('BigQueryService', () => {
 		});
 
 		it('descarta ítems que no son variables', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport()]);
 			wireDataSource(dataSource, { candidates: [buildCandidate({ quantity: '0' })] });
 
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ notVariable: 1, integrated: 0 });
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO quantities'))).toBe(false);
+			expect(consumption.recordFromDwh).not.toHaveBeenCalled();
 		});
 
 		it('descarta filas cuya moneda difiere de la del contrato', async () => {
@@ -701,7 +706,7 @@ describe('BigQueryService', () => {
 		});
 
 		it('marca ambiguas dos filas que apuntan al mismo ítem y período con valores distintos', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([
 				buildImport({ id: 'import-1', quantity: '15000' }),
 				buildImport({ id: 'import-2', quantity: '99999' }),
@@ -711,74 +716,79 @@ describe('BigQueryService', () => {
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ ambiguous: 2, integrated: 0 });
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO quantities'))).toBe(false);
+			expect(consumption.recordFromDwh).not.toHaveBeenCalled();
 		});
 
-		it('es idempotente cuando ya existe un override idéntico', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+		it('es idempotente cuando el mes ya tiene el mismo consumo registrado (unitario efectivo, cantidad y cuenta)', async () => {
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport()]);
-			wireDataSource(dataSource, {
-				candidates: [buildCandidate()],
-				existingQuantities: {
-					[`${CONTRACT_ITEM_ID}|2026-08-01`]: [
-						{ id: 'quantity-1', unit_price: '0.050000', quantity: '15000.000000', unit_of_measure: 'Mensajes', account: null },
-					],
-				},
+			wireDataSource(dataSource, { candidates: [buildCandidate()] });
+			consumption.entryForMonth.mockResolvedValue({
+				id: 'entry-1',
+				contract_id: CONTRACT_ID,
+				contract_item_id: CONTRACT_ITEM_ID,
+				period_start: '2026-08-01',
+				quantity: 15000,
+				unit_price: 0.05,
+				unit_of_measure: 'Vehículo',
+				account: null,
 			});
 
 			const result = await service.integrateSapiraQuantities('holding-1');
 
+			// La unidad no se compara (`consumption_entries` factura la del ítem).
 			expect(result).toMatchObject({ integrated: 1, conflict: 0 });
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO quantities'))).toBe(false);
+			expect(consumption.recordFromDwh).not.toHaveBeenCalled();
 		});
 
-		it('marca conflict y notifica cuando ya existe un override con valores distintos, sin sobrescribir', async () => {
-			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
+		it('marca conflict y notifica con el id del consumo vigente cuando difiere, sin sobrescribir', async () => {
+			const { service, quantityImportRepository, dataSource, notificationsService, consumption } = buildService();
 			quantityImportRepository.find.mockResolvedValue([buildImport()]);
-			wireDataSource(dataSource, {
-				candidates: [buildCandidate()],
-				existingQuantities: {
-					[`${CONTRACT_ITEM_ID}|2026-08-01`]: [
-						{ id: 'quantity-1', unit_price: '0.050000', quantity: '999.000000', unit_of_measure: 'Mensajes', account: null },
-					],
-				},
+			wireDataSource(dataSource, { candidates: [buildCandidate()] });
+			consumption.entryForMonth.mockResolvedValue({
+				id: 'entry-1',
+				contract_id: CONTRACT_ID,
+				contract_item_id: CONTRACT_ITEM_ID,
+				period_start: '2026-08-01',
+				quantity: 999,
+				unit_price: 0.05,
+				unit_of_measure: 'Mensajes',
+				account: null,
 			});
 
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ conflict: 1, integrated: 0 });
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO quantities'))).toBe(false);
-			expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('UPDATE quantities'))).toBe(false);
-
+			expect(consumption.recordFromDwh).not.toHaveBeenCalled();
 			const diff = notificationsService.createOrUpdate.mock.calls.find(([, dto]) => dto.type === 'bigquery_quantities_diff');
 			expect(diff[1].action_type).toBe('replace_quantity_record');
-			expect(diff[1].action_payload.quantity_id).toBe('quantity-1');
+			expect(diff[1].action_payload.quantity_id).toBe('entry-1');
+			expect(diff[1].metadata.differences.map((d: { field: string }) => d.field)).toEqual(['quantity']);
+			expect(quantityImportRepository.save.mock.calls.every(([row]) => row.quantity_id !== 'entry-1')).toBe(true);
 		});
 
-		it('aísla el error del trigger de estado de factura y sigue integrando el resto del batch', async () => {
-			const { service, quantityImportRepository, dataSource } = buildService();
+		it('aísla el 409 de factura ya emitida y sigue integrando el resto del batch', async () => {
+			const { service, quantityImportRepository, dataSource, consumption } = buildService();
 			const otroItem = '33333333-3333-4333-8333-333333333333';
 			quantityImportRepository.find.mockResolvedValue([
 				buildImport({ id: 'import-1' }),
 				buildImport({ id: 'import-2', sf_id: 'sf-2', quote_line_id: 'QLI-2' }),
 			]);
-			wireDataSource(dataSource, {
-				candidates: [buildCandidate(), buildCandidate({ id: otroItem, quote_item_number: 'QLI-2' })],
-				onInsert: (params) => {
-					if (params[0] === CONTRACT_ITEM_ID) {
-						return Promise.reject(
-							new Error('No se puede modificar el override del período 2026-08: la factura FAC-1 está en estado "Emitida".')
-						);
-					}
-					return Promise.resolve([{ id: 'quantity-2' }]);
-				},
+			wireDataSource(dataSource, { candidates: [buildCandidate(), buildCandidate({ id: otroItem, quote_item_number: 'QLI-2' })] });
+			consumption.recordFromDwh.mockImplementation(async (_h: string, _c: string, itemId: string) => {
+				if (itemId === CONTRACT_ITEM_ID)
+					throw new ConflictException({
+						message: 'La factura FAC-1 del período ya fue emitida: anula y reemite, o registra el consumo adicional',
+						code: 'consumption_period_issued',
+					});
+				return { mode: 'recompute' };
 			});
 
 			const result = await service.integrateSapiraQuantities('holding-1');
 
 			expect(result).toMatchObject({ blocked: 1, integrated: 1 });
 			const blocked = quantityImportRepository.save.mock.calls.find(([row]) => row.integration_status === 'blocked');
-			expect(blocked[0].integration_reason).toContain('Emitida');
+			expect(blocked[0].integration_reason).toContain('ya fue emitida');
 		});
 
 		it('agrupa los no mapeados en una sola notificación en vez de una por fila', async () => {
@@ -800,64 +810,15 @@ describe('BigQueryService', () => {
 			expect(unmappedNotifications[0][1].metadata.count).toBe(3);
 		});
 
-		describe('devengo sin los triggers de quantities (retirados el 04-10)', () => {
-			it('recalcula el devengo del contrato desde el mes integrado, en una transacción con sapira.writer = api', async () => {
-				const { service, quantityImportRepository, dataSource, runner } = buildService();
-				quantityImportRepository.find.mockResolvedValue([buildImport()]);
-				wireDataSource(dataSource, { candidates: [buildCandidate()] });
+		it('el devengo lo recalcula el servicio de consumos (rebuild del mes en su transacción): la fase 2 no abre otra', async () => {
+			const { service, quantityImportRepository, dataSource, runner } = buildService();
+			quantityImportRepository.find.mockResolvedValue([buildImport()]);
+			wireDataSource(dataSource, { candidates: [buildCandidate()] });
 
-				await service.integrateSapiraQuantities('holding-1');
+			await service.integrateSapiraQuantities('holding-1');
 
-				expect(runner.startTransaction).toHaveBeenCalledTimes(1);
-				expect(runner.query.mock.calls.map(([sql]) => sql)).toEqual([`SELECT set_config('sapira.writer', 'api', true)`, REBUILD_SQL]);
-				expect(rebuildCalls(runner)[0][1]).toEqual([CONTRACT_ID, '2026-08-01']);
-				expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
-				// El INSERT de quantities va sin la marca: los triggers que se conservan (holding, factura emitida, líneas Por Emitir) corren.
-				expect(dataSource.query.mock.calls.some(([sql]) => sql.includes('sapira.writer'))).toBe(false);
-			});
-
-			it('recalcula una vez por contrato, desde el primer mes con cantidad nueva', async () => {
-				const { service, quantityImportRepository, dataSource, runner } = buildService();
-				const otroItem = '33333333-3333-4333-8333-333333333333';
-				quantityImportRepository.find.mockResolvedValue([
-					buildImport({ id: 'import-1', period: '2026-08-01' }),
-					buildImport({ id: 'import-2', sf_id: 'sf-2', quote_line_id: 'QLI-2', period: '2026-07-01' }),
-				]);
-				wireDataSource(dataSource, { candidates: [buildCandidate(), buildCandidate({ id: otroItem, quote_item_number: 'QLI-2' })] });
-
-				await service.integrateSapiraQuantities('holding-1');
-
-				expect(rebuildCalls(runner).map(([, params]) => params)).toEqual([[CONTRACT_ID, '2026-07-01']]);
-			});
-
-			it('no recalcula si no insertó nada (override idéntico, conflicto o bloqueada)', async () => {
-				const { service, quantityImportRepository, dataSource, runner } = buildService();
-				quantityImportRepository.find.mockResolvedValue([buildImport()]);
-				wireDataSource(dataSource, {
-					candidates: [buildCandidate()],
-					onInsert: () => Promise.reject(new Error('la factura FAC-1 está en estado "Emitida"')),
-				});
-
-				const result = await service.integrateSapiraQuantities('holding-1');
-
-				expect(result).toMatchObject({ blocked: 1, integrated: 0 });
-				expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
-				expect(rebuildCalls(runner)).toHaveLength(0);
-			});
-
-			it('un fallo del recálculo no tumba la integración: revierte esa transacción y registra el error', async () => {
-				const { service, quantityImportRepository, dataSource, runner } = buildService();
-				quantityImportRepository.find.mockResolvedValue([buildImport()]);
-				wireDataSource(dataSource, { candidates: [buildCandidate()] });
-				runner.query.mockImplementation((sql: string) => (sql === REBUILD_SQL ? Promise.reject(new Error('boom')) : Promise.resolve([])));
-				const errorSpy = jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
-
-				const result = await service.integrateSapiraQuantities('holding-1');
-
-				expect(result).toMatchObject({ integrated: 1 });
-				expect(runner.rollbackTransaction).toHaveBeenCalledTimes(1);
-				expect(errorSpy.mock.calls[0][0]).toContain(CONTRACT_ID);
-			});
+			expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
+			expect(rebuildCalls(runner)).toHaveLength(0);
 		});
 
 		it('con retryFailed incluye los estados recuperables además de pending', async () => {
@@ -878,60 +839,57 @@ describe('BigQueryService', () => {
 	});
 
 	describe('replaceQuantityRecord', () => {
-		it('aplica los valores del DWH, marca la importación e ignora amount', async () => {
-			const { service, quantityImportRepository, dataSource, notificationsService } = buildService();
-			wireDataSource(dataSource, {
-				existingQuantities: { 'quantity-1|holding-1': [{ id: 'quantity-1', unit_price: '0.05', quantity: '1' }] },
-			});
+		const entry = {
+			id: 'entry-1',
+			contract_id: CONTRACT_ID,
+			contract_item_id: CONTRACT_ITEM_ID,
+			period_start: '2026-08-01',
+			quantity: 1,
+			unit_price: 0.05,
+			unit_of_measure: 'Mensajes',
+			account: null,
+		};
+
+		it('corrige el consumo vigente por ConsumptionService (con motivo), marca las importaciones y resuelve la notificación', async () => {
+			const { service, quantityImportRepository, dataSource, notificationsService, consumption } = buildService();
+			consumption.entryById.mockResolvedValue(entry);
 			quantityImportRepository.find.mockResolvedValue([buildImport({ quantity_id: 'quantity-1' })]);
 
-			await service.replaceQuantityRecord('holding-1', 'quantity-1', { unit_price: 0.07, quantity: 20000 } as any);
+			await service.replaceQuantityRecord('holding-1', 'entry-1', { unit_price: 0.07, quantity: 20000 } as any);
 
-			const updateCall = dataSource.query.mock.calls.find(([sql]) => sql.includes('UPDATE quantities'));
-			expect(updateCall[0]).not.toMatch(/\bamount\b/);
-			expect(updateCall[1]).toEqual(['quantity-1', 'holding-1', 0.07, 20000, null, null]);
+			expect(consumption.recordFromDwh).toHaveBeenCalledWith('holding-1', CONTRACT_ID, CONTRACT_ITEM_ID, '2026-08-01', {
+				quantity: 20000,
+				unit_price: 0.07,
+				account: null,
+				notes: null,
+				correction_reason: 'Reemplazo con el dato del almacén de datos',
+			});
+			expect(dataSource.query.mock.calls.some(([sql]) => /quantities/.test(sql as string))).toBe(false);
 			expect(quantityImportRepository.save.mock.calls[0][0].integration_status).toBe('integrated');
 			expect(notificationsService.resolveByDeduplicationKey).toHaveBeenCalled();
 		});
 
-		it('recalcula el devengo del contrato desde el mes del override (contrato del ítem), con sapira.writer = api', async () => {
-			const { service, quantityImportRepository, dataSource, runner } = buildService();
-			wireDataSource(dataSource, {
-				existingQuantities: {
-					'quantity-1|holding-1': [{ id: 'quantity-1', unit_price: '0.05', quantity: '1', contract_id: CONTRACT_ID, period: '2026-08-01' }],
-				},
-			});
+		it('acepta el id de una fila de quantities anterior (la entry copiada por la migración 1791600000000)', async () => {
+			const { service, quantityImportRepository, consumption } = buildService();
+			consumption.entryById.mockResolvedValue(entry);
 			quantityImportRepository.find.mockResolvedValue([]);
 
-			await service.replaceQuantityRecord('holding-1', 'quantity-1', { unit_price: 0.07, quantity: 20000 } as any);
+			await service.replaceQuantityRecord('holding-1', 'quantity-1', { quantity: 5 } as any);
 
-			const select = dataSource.query.mock.calls.find(([sql]) => sql.includes('FROM quantities'));
-			expect(select[0]).toContain('JOIN contract_items ci ON ci.id = q.contract_item_id');
-			expect(runner.query.mock.calls[0][0]).toBe(`SELECT set_config('sapira.writer', 'api', true)`);
-			expect(rebuildCalls(runner).map(([, params]) => params)).toEqual([[CONTRACT_ID, '2026-08-01']]);
-			// El recálculo va después del UPDATE.
-			const updateOrder =
-				dataSource.query.mock.invocationCallOrder[dataSource.query.mock.calls.findIndex(([sql]) => sql.includes('UPDATE quantities'))];
-			expect(runner.query.mock.invocationCallOrder[1]).toBeGreaterThan(updateOrder);
+			expect(consumption.entryById).toHaveBeenCalledWith('holding-1', 'quantity-1');
+			expect(consumption.recordFromDwh.mock.calls[0][4]).toMatchObject({ quantity: 5, unit_price: null });
 		});
 
-		it('si el recálculo falla, el error sube (repetir el reemplazo es idempotente)', async () => {
-			const { service, quantityImportRepository, dataSource, runner } = buildService();
-			wireDataSource(dataSource, {
-				existingQuantities: {
-					'quantity-1|holding-1': [{ id: 'quantity-1', unit_price: '0.05', quantity: '1', contract_id: CONTRACT_ID, period: '2026-08-01' }],
-				},
-			});
-			quantityImportRepository.find.mockResolvedValue([]);
-			runner.query.mockImplementation((sql: string) => (sql === REBUILD_SQL ? Promise.reject(new Error('boom')) : Promise.resolve([])));
+		it('si el servicio de consumos falla (p. ej. factura emitida), el error sube', async () => {
+			const { service, consumption } = buildService();
+			consumption.entryById.mockResolvedValue(entry);
+			consumption.recordFromDwh.mockRejectedValue(new Error('boom'));
 
-			await expect(service.replaceQuantityRecord('holding-1', 'quantity-1', { unit_price: 0.07 } as any)).rejects.toThrow('boom');
-			expect(runner.rollbackTransaction).toHaveBeenCalledTimes(1);
+			await expect(service.replaceQuantityRecord('holding-1', 'entry-1', { unit_price: 0.07 } as any)).rejects.toThrow('boom');
 		});
 
-		it('lanza NotFoundException cuando el override no pertenece al holding', async () => {
-			const { service, dataSource } = buildService();
-			wireDataSource(dataSource, { existingQuantities: {} });
+		it('lanza NotFoundException cuando el consumo no pertenece al holding', async () => {
+			const { service } = buildService();
 
 			await expect(service.replaceQuantityRecord('holding-1', 'quantity-x', {} as any)).rejects.toBeInstanceOf(NotFoundException);
 		});
