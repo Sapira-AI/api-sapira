@@ -2,7 +2,7 @@
  "revenue_schedule_monthly": {
   "name": "public.revenue_schedule_monthly",
   "rls_enabled": true,
-  "rows": 21434,
+  "rows": 21238,
   "columns": [
    {
     "name": "id",

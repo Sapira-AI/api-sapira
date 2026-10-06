@@ -420,7 +420,7 @@
  "stripe_subscriptions_stg": {
   "name": "public.stripe_subscriptions_stg",
   "rls_enabled": true,
-  "rows": 581,
+  "rows": 490,
   "columns": [
    {
     "name": "id",

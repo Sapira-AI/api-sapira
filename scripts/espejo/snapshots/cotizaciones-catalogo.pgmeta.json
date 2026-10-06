@@ -366,7 +366,7 @@
  "quote_items": {
   "name": "public.quote_items",
   "rls_enabled": true,
-  "rows": 510,
+  "rows": 518,
   "columns": [
    {
     "name": "id",
