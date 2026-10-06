@@ -31,6 +31,8 @@ export interface Bucket {
 	currency?: string | null;
 	/** Hasta 2 contratos distintos: con uno solo, el enlace va a su 360. */
 	contract_ids?: string[];
+	/** Hasta 2 razones sociales distintas: con una sola, el enlace va a su 360. */
+	entity_ids?: string[];
 }
 
 export interface TaskInputs {
@@ -66,6 +68,8 @@ export interface TaskInputs {
 	waiting_mapping: Bucket;
 	quotes_unprocessed: Bucket;
 	revenue_exceptions: Bucket;
+	/** Razones sociales con unificación recurrente activa y contratos activos fuera de la regla (D2 de Domi 05-10: no se suman solos). */
+	consolidation_new_contracts?: Bucket;
 	/** Compañías aplicadas ("Mis compañías"): se agregan al enlace de Facturación. */
 	company_ids?: string[];
 }
@@ -304,6 +308,19 @@ export function buildTasks(input: TaskInputs): Task[] {
 			true
 		),
 		task('revenue_exceptions', 'ingresos', 'Excepciones de Ingresos', input.revenue_exceptions, 'warning', '/ingresos?tab=excepciones'),
+		{
+			...task(
+				'consolidation_new_contracts',
+				'facturacion',
+				'Contratos nuevos para unificar',
+				input.consolidation_new_contracts ?? { count: 0 },
+				'warning',
+				input.consolidation_new_contracts?.count && input.consolidation_new_contracts.entity_ids?.length === 1
+					? `/clientes/razones-sociales/${input.consolidation_new_contracts.entity_ids[0]}`
+					: '/clientes?tab=razones-sociales'
+			),
+			hint: 'La razón social tiene facturación unificada y un contrato activo que no está en ella. Ábrela y usa "Sumar a la unificación" si corresponde; si no, puedes dejarlo aparte.',
+		},
 	];
 
 	const companies = input.company_ids ?? [];

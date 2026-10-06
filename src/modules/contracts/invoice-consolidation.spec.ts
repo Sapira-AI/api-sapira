@@ -299,6 +299,22 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(codes(plan.warnings)).toEqual(['auto_invoice_differs']);
 		});
 
+		it('unificación recurrente (Domi 05-10): el principal fijado por la regla lleva el encabezado y la fecha de su factura del mes', () => {
+			const plan = planConsolidation(
+				ctx({ invoices: [{ ...A, issue_date: '2026-10-20', scheduled_at: '2026-10-20' }, B], main_contract_id: 'ctr-a' })
+			);
+
+			expect(plan.main_contract_id).toBe('ctr-a');
+			expect(plan.header).toMatchObject({ contract_id: 'ctr-a', template_invoice_id: 'inv-a', issue_date: '2026-10-20' });
+			// Sin principal fijado: el de mayor aporte y la fecha más temprana, como siempre.
+			expect(planConsolidation(ctx({ invoices: [{ ...A, issue_date: '2026-10-20', scheduled_at: '2026-10-20' }, B] })).header).toMatchObject({
+				contract_id: 'ctr-b',
+				issue_date: B.issue_date,
+			});
+			// Un principal que no está entre las facturas no se usa.
+			expect(planConsolidation(ctx({ main_contract_id: 'ctr-x' })).main_contract_id).toBe('ctr-b');
+		});
+
 		it('AND de banderas: aviso si difieren envío automático; requisito de referencias heredado', () => {
 			const plan = planConsolidation(
 				ctx({ invoices: [A, { ...B, auto_invoice: true, contract_auto_send_to_erp: false, contract_requires_references: true }] })

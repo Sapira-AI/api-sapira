@@ -51,7 +51,7 @@ export class TasksService {
 	async forHolding(holdingId: string, asOf?: string, companyIds: string[] = []): Promise<HoldingTasks> {
 		const today = asOf ?? (await this.billing.today(new Date(), holdingId));
 		const companies = [...new Set(companyIds)];
-		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions] = await Promise.all([
+		const [currency, queue, receivables, contracts, quotes, consumptions, exceptions, consolidationNew] = await Promise.all([
 			this.billing.systemCurrency(holdingId),
 			this.safe('cola Por emitir', () => this.queueBuckets(holdingId, today, companies), {
 				ready: empty(),
@@ -67,6 +67,7 @@ export class TasksService {
 			this.safe('cotizaciones', () => this.quoteBuckets(holdingId, today), { waiting_mapping: empty(), quotes_unprocessed: empty() }),
 			this.safe('consumos por informar', () => this.consumptionBucket(holdingId, today, companies), empty()),
 			this.safe('excepciones de Ingresos', () => this.exceptionsBucket(holdingId), empty()),
+			this.safe('contratos nuevos para unificar', () => this.consolidationNewContractsBucket(holdingId, companies), empty()),
 		]);
 		const input: TaskInputs = {
 			today,
@@ -81,6 +82,7 @@ export class TasksService {
 			consumptions,
 			...quotes,
 			revenue_exceptions: exceptions,
+			consolidation_new_contracts: consolidationNew,
 			company_ids: companies,
 		};
 
@@ -385,6 +387,22 @@ export class TasksService {
 			amount: Math.round(num(row.amount) * 100) / 100,
 			invoice_ids: ids(row.ids),
 		}));
+	}
+
+	/**
+	 * Unificación recurrente (05-10): razones sociales con regla activa y algún contrato **activo** que no está en ella (no se suman solos,
+	 * D2 de Domi). Con "Mis compañías", solo contratos de esas compañías.
+	 */
+	private async consolidationNewContractsBucket(holdingId: string, companies: string[] = []): Promise<Bucket> {
+		const rows = (await this.dataSource.query(
+			`SELECT DISTINCT r.client_entity_id::text AS entity_id FROM invoice_consolidation_rules r
+			JOIN contracts c ON c.holding_id = r.holding_id AND c.client_entity_id = r.client_entity_id
+			WHERE r.holding_id = $1 AND r.status = 'active' AND c.deleted_at IS NULL AND c.status = 'Activo' AND NOT (c.id = ANY(r.contract_ids))
+				AND (cardinality($2::uuid[]) = 0 OR c.company_id = ANY($2::uuid[]))`,
+			[holdingId, companies]
+		)) as Row[];
+
+		return { count: rows.length, entity_ids: rows.slice(0, 2).map((row) => String(row.entity_id)) };
 	}
 
 	/** Excepciones de Ingresos (misma lista que la pestaña Excepciones). */

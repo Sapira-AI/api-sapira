@@ -28,6 +28,7 @@ import {
 import { ContractRenewalsService } from './contract-renewals.service';
 import { ContractsScheduler } from './contracts.scheduler';
 import { ContractsService } from './contracts.service';
+import { InvoiceConsolidationRulesService } from './invoice-consolidation-rules.service';
 
 type Row = Record<string, unknown>;
 type Handler = (sql: string, params: unknown[]) => unknown[] | undefined;
@@ -503,8 +504,11 @@ describe('ContractsScheduler', () => {
 			remindRenewals: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 3 }]),
 		} as unknown as ContractRenewalsService;
 		const config = { get: jest.fn().mockReturnValue(enabled) } as unknown as ConfigService;
+		const consolidationRules = {
+			runAll: jest.fn().mockResolvedValue([{ holding_id: HOLDING, success: true, events: 4 }]),
+		} as unknown as InvoiceConsolidationRulesService;
 
-		return { scheduler: new ContractsScheduler(renewals, config), renewals };
+		return { scheduler: new ContractsScheduler(renewals, consolidationRules, config), renewals, consolidationRules };
 	};
 
 	it('crons contracts-scheduled-changes (05:30) y contracts-auto-renewal (06:00) en America/Santiago; CONTRACT_JOBS_ENABLED=false los apaga', async () => {
@@ -532,5 +536,14 @@ describe('ContractsScheduler', () => {
 		});
 		expect(await on.scheduler.renewalRemindersDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 3 }]);
 		expect(await off.scheduler.renewalRemindersDaily()).toBeNull();
+		// Unificación recurrente (05-10): 06:30, después de horizonte y renovaciones y antes del envío automático.
+		expect(meta('consolidationRulesDaily')).toMatchObject({
+			cronTime: '30 6 * * *',
+			name: 'contracts-consolidation-rules',
+			timeZone: 'America/Santiago',
+		});
+		expect(await on.scheduler.consolidationRulesDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 4 }]);
+		expect(await off.scheduler.consolidationRulesDaily()).toBeNull();
+		expect(off.consolidationRules.runAll).not.toHaveBeenCalled();
 	});
 });

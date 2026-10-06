@@ -107,7 +107,7 @@ describe('tareas (Notificaciones v2 §4)', () => {
 		);
 		const byKey = Object.fromEntries(tasks.map((task) => [task.key, task]));
 
-		expect(tasks).toHaveLength(14);
+		expect(tasks).toHaveLength(15);
 		expect(tasks[0].severity).toBe('error');
 		expect(byKey.invoices_to_issue_today).toMatchObject({
 			count: 3,
@@ -140,6 +140,18 @@ describe('tareas (Notificaciones v2 §4)', () => {
 			href: '/cotizaciones?f=booking_desde:2026-10-01;booking_hasta:2026-10-31;con_contrato:no;estado:signed',
 		});
 		expect(byKey.revenue_exceptions).toMatchObject({ module: 'ingresos', module_label: 'Ingresos', href: '/ingresos?tab=excepciones' });
+		// Unificación recurrente (05-10): sin fuente, en cero y a la lista de razones sociales; con una sola razón social, a su 360.
+		expect(byKey.consolidation_new_contracts).toMatchObject({ count: 0, href: '/clientes?tab=razones-sociales' });
+		expect(
+			buildTasks(inputs({ consolidation_new_contracts: { count: 1, entity_ids: ['e-1'] } })).find(
+				(task) => task.key === 'consolidation_new_contracts'
+			)
+		).toMatchObject({
+			count: 1,
+			title: 'Contratos nuevos para unificar',
+			href: '/clientes/razones-sociales/e-1',
+			hint: expect.stringContaining('Sumar a la unificación'),
+		});
 	});
 
 	describe('TasksService', () => {

@@ -157,21 +157,38 @@ export class ContractInvoiceConsolidationService {
 
 	// ---------------------------------------------------------------- preview y aplicar
 
-	async preview(dto: ConsolidateInvoicesDto, holdingId: string): Promise<ConsolidationPreview> {
+	async preview(dto: ConsolidateInvoicesDto, holdingId: string, mainContractId: string | null = null): Promise<ConsolidationPreview> {
 		const ctx = await this.loadContext(this.dataSource, holdingId, dto.invoice_ids);
 
-		return planConsolidation(ctx);
+		return planConsolidation({ ...ctx, main_contract_id: mainContractId });
 	}
 
 	/** Aplica la consolidación. 409 `blocked` con `blockers[]` y el preview; devuelve el preview más `applied`, el id nuevo y los eventos. */
 	async apply(dto: ConsolidateInvoicesDto, holdingId: string, authId: string, today = new Date()) {
 		const userId = await resolveUserId(this.dataSource, authId);
-		const contractIds = await this.contractIdsOf(this.dataSource, holdingId, dto.invoice_ids);
+
+		return await this.applyInvoices(dto.invoice_ids, holdingId, userId, { notes: dto.notes?.trim() || null }, today);
+	}
+
+	/**
+	 * Consolidación de un conjunto de Por Emitir. La usan la acción manual (`apply`) y la unificación recurrente de una razón social
+	 * (`InvoiceConsolidationRulesService`), que fija el contrato principal (`main_contract_id`: encabezado y fecha de emisión), marca los
+	 * eventos con `rule_id` y puede correr sin usuario (job diario: `userId` null).
+	 */
+	async applyInvoices(
+		invoiceIds: string[],
+		holdingId: string,
+		userId: string | null,
+		options: { notes?: string | null; main_contract_id?: string | null; rule_id?: string | null; source?: string } = {},
+		today = new Date()
+	) {
+		const contractIds = await this.contractIdsOf(this.dataSource, holdingId, invoiceIds);
+		const dto = { invoice_ids: invoiceIds, notes: options.notes ?? undefined } as ConsolidateInvoicesDto;
 
 		const result = await this.transaction(contractIds, holdingId, async (runner) => {
 			await this.lockInvoices(runner, holdingId, dto.invoice_ids);
 			const ctx = await this.loadContext(runner, holdingId, dto.invoice_ids);
-			const plan = planConsolidation(ctx);
+			const plan = planConsolidation({ ...ctx, main_contract_id: options.main_contract_id ?? null });
 			const changed = ctx.invoices.some((invoice) => invoice.contract_id && !contractIds.includes(invoice.contract_id));
 
 			if (changed)
@@ -233,6 +250,8 @@ export class ContractInvoiceConsolidationService {
 								references: plan.references.items,
 								notes: dto.notes?.trim() || null,
 								warnings: plan.warnings.map((warning) => warning.code),
+								...(options.rule_id ? { rule_id: options.rule_id } : {}),
+								...(options.source ? { source: options.source } : {}),
 							},
 						}
 					)
@@ -262,6 +281,13 @@ export class ContractInvoiceConsolidationService {
 	 */
 	async undo(invoiceId: string, dto: UndoConsolidationDto, holdingId: string, authId: string, today = new Date()) {
 		const userId = await resolveUserId(this.dataSource, authId);
+
+		return await this.undoInvoice(invoiceId, dto.reason, holdingId, userId, today);
+	}
+
+	/** Deshacer sin pasar por el DTO: lo usan `undo` y la unificación recurrente (re-unificar o pausar la regla; `userId` null en el job). */
+	async undoInvoice(invoiceId: string, reason: string, holdingId: string, userId: string | null, today = new Date(), source?: string) {
+		const dto = { reason } as UndoConsolidationDto;
 		const [consolidated] = await this.loadInvoices(this.dataSource, holdingId, [invoiceId]);
 		const origins = await this.loadOrigins(this.dataSource, holdingId, invoiceId);
 		const contractIds = [
@@ -314,6 +340,7 @@ export class ContractInvoiceConsolidationService {
 							contract_source_invoice_ids: ids,
 							contracts: [...byContract.entries()].map(([id, invoiceIds]) => ({ contract_id: id, invoice_ids: invoiceIds })),
 							reason: dto.reason.trim(),
+							...(source ? { source } : {}),
 						},
 					})
 				);
@@ -338,7 +365,7 @@ export class ContractInvoiceConsolidationService {
 		holdingId: string,
 		plan: ConsolidationPlan,
 		dto: ConsolidateInvoicesDto,
-		userId: string
+		userId: string | null
 	): Promise<string> {
 		const header = plan.header;
 		const [row] = (await runner.query(
@@ -535,7 +562,7 @@ export class ContractInvoiceConsolidationService {
 	private async insertEvent(
 		runner: QueryRunner,
 		holdingId: string,
-		userId: string,
+		userId: string | null,
 		contractId: string,
 		type: string,
 		effectiveDate: string,
