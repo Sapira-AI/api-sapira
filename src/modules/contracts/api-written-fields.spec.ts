@@ -143,6 +143,7 @@ describe('costura en todos los servicios v2 que escriben (texto de los servicios
 				'contract-invoice-reorganize.service.ts',
 				'contract-invoice-void.service.ts',
 				'contract-invoices.service.ts',
+				'invoice-consolidation-rules.service.ts',
 				'contract-renewals.service.ts',
 				'contract-scheduled-changes.service.ts',
 				'prices.service.ts',

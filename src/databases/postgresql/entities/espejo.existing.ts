@@ -70,6 +70,7 @@ export { ContractScheduledChange } from '@/databases/postgresql/entities/contrat
 export { ContractTemplate } from '@/databases/postgresql/entities/contratos/contract-template.entity';
 export { ContractWorkflowHistory } from '@/databases/postgresql/entities/contratos/contract-workflow-history.entity';
 export { Contract } from '@/databases/postgresql/entities/contratos/contract.entity';
+export { InvoiceConsolidationRule } from '@/databases/postgresql/entities/contratos/invoice-consolidation-rule.entity';
 export { Price } from '@/databases/postgresql/entities/contratos/price.entity';
 export { TaxDocumentType } from '@/databases/postgresql/entities/contratos/tax-document-type.entity';
 export { WorkflowStepDocument } from '@/databases/postgresql/entities/contratos/workflow-step-document.entity';

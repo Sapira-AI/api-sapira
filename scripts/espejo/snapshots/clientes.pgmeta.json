@@ -598,6 +598,17 @@
     ]
    },
    {
+    "name": "invoice_consolidation_rules_client_entity_id_fkey",
+    "source_table": "public.invoice_consolidation_rules",
+    "source_columns": [
+     "client_entity_id"
+    ],
+    "target_table": "public.client_entities",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "invoices_client_entity_id_fkey",
     "source_table": "public.invoices",
     "source_columns": [

@@ -2805,6 +2805,101 @@
    }
   ]
  },
+ "invoice_consolidation_rules": {
+  "comment": "Unificación recurrente de facturas de una razón social: contratos que se facturan en un solo documento cada mes y su contrato principal",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "invoice_consolidation_rules_client_entity_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (client_entity_id) REFERENCES client_entities(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_consolidation_rules_contract_ids_check",
+    "type": "c",
+    "expr": "cardinality(contract_ids) >= 2"
+   },
+   {
+    "name": "invoice_consolidation_rules_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "invoice_consolidation_rules_holding_id_client_entity_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id",
+     "client_entity_id"
+    ]
+   },
+   {
+    "name": "invoice_consolidation_rules_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_consolidation_rules_main_contract_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (main_contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "invoice_consolidation_rules_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_consolidation_rules_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['active'::text, 'paused'::text])"
+   },
+   {
+    "name": "invoice_consolidation_rules_updated_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (updated_by) REFERENCES users(id)"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_invoice_consolidation_rules_holding_status",
+    "cols": [
+     "holding_id",
+     "status"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_invoice_consolidation_rules (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_invoice_consolidation_rules",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
  "contract_scheduled_changes": {
   "comment": "Ajustes pactados del contrato o de un ítem (renovación con precio, IPC/UF, escalamientos, plazo, frecuencia): disparo, valor y estado (spec modificaciones §9.3.6)",
   "rls": true,

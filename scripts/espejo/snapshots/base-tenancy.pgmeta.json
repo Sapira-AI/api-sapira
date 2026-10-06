@@ -497,6 +497,28 @@
     ]
    },
    {
+    "name": "invoice_consolidation_rules_created_by_fkey",
+    "source_table": "public.invoice_consolidation_rules",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_consolidation_rules_updated_by_fkey",
+    "source_table": "public.invoice_consolidation_rules",
+    "source_columns": [
+     "updated_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "invoice_emails_sent_by_fkey",
     "source_table": "public.invoice_emails",
     "source_columns": [
@@ -1790,6 +1812,17 @@
    {
     "name": "integration_record_discards_holding_id_fkey",
     "source_table": "public.integration_record_discards",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "invoice_consolidation_rules_holding_id_fkey",
+    "source_table": "public.invoice_consolidation_rules",
     "source_columns": [
      "holding_id"
     ],

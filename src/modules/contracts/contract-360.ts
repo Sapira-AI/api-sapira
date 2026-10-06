@@ -1007,6 +1007,12 @@ export interface ConsumptionInvoiceLine {
 	consolidated_pending?: boolean;
 	/** Línea de un unificado v2. */
 	unified_v2?: boolean;
+	/** `cancellation` en la NC que anula una factura; otra NC (parcial) resta del monto del período. */
+	credit_type?: string | null;
+	/** Cancelada "sin cobro" (consumo 0): sigue siendo la factura del período y vuelve a Por Emitir si se registra consumo. */
+	no_charge?: boolean;
+	/** Emitida con NC de anulación vinculada (`voidedSql`). */
+	voided?: boolean;
 }
 
 export interface ConsumptionBuildInput {
@@ -1039,10 +1045,33 @@ const lineInvoice = (line: ConsumptionInvoiceLine) => {
 		number: line.invoice_number,
 		status: line.status,
 		issue_date: line.issue_date,
+		document_type: line.document_type,
 		is_complementary: Boolean(complements),
 		complements_invoice_id: complements?.invoice_id ?? null,
+		no_charge: line.no_charge === true,
 	};
 };
+
+/**
+ * Documento que cuenta en el consumo del período (decisión de Domi 05-10): factura activa (no NC/ND), no anulada con NC y no Cancelada,
+ * salvo la Cancelada "sin cobro" (consumo 0, se reactiva al registrar consumo). El origen inactivo de un unificado no cuenta: cuenta su copia
+ * en el unificado.
+ */
+const countsInPeriod = (line: ConsumptionInvoiceLine) =>
+	line.is_active &&
+	!isCreditNote(line.document_type) &&
+	line.document_type !== 'ND' &&
+	line.voided !== true &&
+	(line.no_charge === true || (line.status !== CANCELLED_STATUS && line.status !== 'Anulada'));
+/** NC parcial vigente del período (no la de anulación): resta del monto, como en el devengo. */
+const subtractsInPeriod = (line: ConsumptionInvoiceLine) =>
+	line.is_active &&
+	isCreditNote(line.document_type) &&
+	line.credit_type !== 'cancellation' &&
+	line.status !== CANCELLED_STATUS &&
+	line.status !== 'Anulada';
+const sumOrNull = (values: Array<number | null>) =>
+	values.every((value) => value === null) ? null : round2(values.reduce<number>((sum, value) => sum + (value ?? 0), 0));
 
 /**
  * Consumos del contrato (`GET /contracts/:id/consumption`, spec §5):
@@ -1052,7 +1081,8 @@ const lineInvoice = (line: ConsumptionInvoiceLine) => {
  * - `items[]`: **todos** los ítems (medidos y estándar) con `uses_usage_pricing`, precio, métrica y sus períodos facturables
  *   (`accepts_consumption` cuando la factura del período está Por Emitir, sea el ítem medido o estándar);
  * - `pending[]`: líneas medidas (solo ítems medidos) con período terminado y sin consumo informado.
- * Si un período tiene varias facturas, gana la vigente (activa, tipo factura, no anulada).
+ * Un período suma sus facturas vigentes (original y complementaria) y resta las NC parciales; sin factura vigente (cancelado o
+ * anulado con NC) no se lista. La NC nunca representa el período.
  */
 /**
  * Junta las filas `per_tier` (spec §3.8) de un mismo ítem, período y factura en una sola línea lógica: cantidad del período
@@ -1103,12 +1133,47 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 		candidates.find((line) => isRecomputableLine(line) && line.status !== CANCELLED_STATUS && line.status !== 'Anulada') ??
 		candidates[0] ??
 		null;
+	/**
+	 * El período de un ítem visto como un todo (decisión de Domi 05-10): suma las facturas vigentes (la original y su complementaria) y resta
+	 * las NC parciales; un período sin factura vigente (cancelado al terminar el contrato o anulado con NC) no es un período de consumo
+	 * (`null`). La NC nunca representa el período.
+	 */
+	const periodView = (itemId: string, periodStart: string) => {
+		const candidates = linesFor(itemId, periodStart);
+		const counted = candidates.filter(countsInPeriod);
+
+		if (!counted.length) return null;
+		const credits = candidates.filter(subtractsInPeriod);
+		const main = bestLine(counted)!;
+		const byIssue = (a: ConsumptionInvoiceLine, b: ConsumptionInvoiceLine) =>
+			Number(Boolean(complementsOf(a))) - Number(Boolean(complementsOf(b))) ||
+			(a.issue_date ?? '9999-12-31').localeCompare(b.issue_date ?? '9999-12-31') ||
+			a.invoice_id.localeCompare(b.invoice_id);
+		const docs = [...new Map([...counted].sort(byIssue).map((line) => [line.invoice_id, line])).values()];
+		// Dos facturas vigentes del mismo ítem y período: la posterior es la complementaria (también las del front anterior, sin marca).
+		const invoices = [
+			...docs.map((line, index) => {
+				const invoice = lineInvoice(line);
+
+				return index > 0 && !invoice.is_complementary ? { ...invoice, is_complementary: true } : invoice;
+			}),
+			...[...new Map(credits.map((line) => [line.invoice_id, line])).values()].map(lineInvoice),
+		];
+
+		return {
+			main,
+			invoices,
+			quantity: docs.length > 1 ? sumOrNull(counted.map((line) => line.quantity)) : main.quantity,
+			amount: sumOrNull([...counted, ...credits].map((line) => line.subtotal)),
+		};
+	};
 
 	const entryRows = entries.map((entry) => {
 		const item = itemById.get(entry.contract_item_id);
-		const candidates = linesFor(entry.contract_item_id, entry.period_start);
-		// La entry sabe qué factura la lleva (complementaria o reemitida); si no, gana la vigente del período.
-		const line = (entry.invoice_id ? candidates.find((candidate) => candidate.invoice_id === entry.invoice_id) : null) ?? bestLine(candidates);
+		const view = periodView(entry.contract_item_id, entry.period_start);
+		const counted = view ? linesFor(entry.contract_item_id, entry.period_start).filter(countsInPeriod) : [];
+		// La entry sabe qué factura la lleva (complementaria o reemitida); si no, gana la vigente del período. Sin factura vigente, ninguna.
+		const line = (entry.invoice_id ? counted.find((candidate) => candidate.invoice_id === entry.invoice_id) : null) ?? view?.main ?? null;
 
 		return {
 			id: entry.id,
@@ -1137,9 +1202,10 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 			recorded_at: entry.recorded_at,
 			revisions: entry.revisions,
 			quantity_source: line?.quantity_source ?? null,
-			amount: line?.subtotal ?? null,
+			amount: view?.amount ?? null,
 			pricing_breakdown: line?.pricing_breakdown ?? null,
 			invoice: line ? lineInvoice(line) : null,
+			invoices: view?.invoices ?? [],
 		};
 	});
 	const rows = [...entryRows].sort((a, b) => b.period.localeCompare(a.period) || (a.product_name ?? '').localeCompare(b.product_name ?? ''));
@@ -1159,8 +1225,11 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 				lines.filter((line) => line.contract_item_id === item.id && line.billing_period_start).map((line) => line.billing_period_start!)
 			),
 		].sort();
-		const periods = periodStarts.map((periodStart) => {
-			const line = bestLine(linesFor(item.id, periodStart))!;
+		const periods = periodStarts.flatMap((periodStart) => {
+			const view = periodView(item.id, periodStart);
+
+			if (!view) return [];
+			const line = view.main;
 			const entry = entryByKey.get(`${item.id}|${periodStart}`) ?? null;
 			const ended = !!line.billing_period_end && line.billing_period_end < today;
 			const isPending =
@@ -1185,12 +1254,15 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 				// En curso = hoy cae dentro del período; los que aún no empiezan son `upcoming` (no "en curso").
 				in_progress: !ended && periodStart <= today,
 				upcoming: periodStart > today,
-				quantity: line.quantity,
+				// Con consumo registrado, su cantidad (la complementaria lleva solo las unidades adicionales, o 1 si subió solo el monto).
+				quantity: entry ? entry.quantity : view.quantity,
 				quantity_source: line.quantity_source,
-				amount: line.subtotal,
+				amount: view.amount,
 				pricing_breakdown: line.pricing_breakdown,
 				entry_id: entry?.id ?? null,
 				invoice: lineInvoice(line),
+				/** Facturas vigentes del período (la original y su complementaria) y NC parciales; `amount` y `quantity` las suman. */
+				invoices: view.invoices,
 				/**
 				 * Solo ítems por consumo con una Por Emitir activa aceptan cantidad; emitida = complementaria o reemisión (`apply_as`, S7-7). Un ítem
 				 * fijo no (Domi 05-10): su desvío puntual se hace con "Editar factura" de la Por Emitir.

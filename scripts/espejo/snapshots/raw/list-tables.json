@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 310,
+			"rows": 388,
 			"columns": [
 				{
 					"name": "id",
@@ -1155,7 +1155,7 @@
 		{
 			"name": "public.app_notifications",
 			"rls_enabled": true,
-			"rows": 16,
+			"rows": 52,
 			"columns": [
 				{
 					"name": "id",
@@ -2069,7 +2069,7 @@
 		{
 			"name": "public.billable_metrics",
 			"rls_enabled": true,
-			"rows": 1,
+			"rows": 7,
 			"columns": [
 				{
 					"name": "id",
@@ -3824,6 +3824,17 @@
 				{
 					"name": "fk_invoices_client_entity",
 					"source_table": "public.invoices_legacy",
+					"source_columns": [
+						"client_entity_id"
+					],
+					"target_table": "public.client_entities",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_client_entity_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
 					"source_columns": [
 						"client_entity_id"
 					],
@@ -5978,6 +5989,17 @@
 					]
 				},
 				{
+					"name": "invoice_consolidation_rules_holding_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "invoice_items_holding_id_fkey",
 					"source_table": "public.invoice_items",
 					"source_columns": [
@@ -6574,7 +6596,7 @@
 		{
 			"name": "public.consumption_entries",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 315,
 			"columns": [
 				{
 					"name": "id",
@@ -6879,7 +6901,7 @@
 		{
 			"name": "public.consumption_entry_revisions",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 315,
 			"columns": [
 				{
 					"name": "id",
@@ -8783,7 +8805,7 @@
 		{
 			"name": "public.contract_items",
 			"rls_enabled": true,
-			"rows": 1201,
+			"rows": 1223,
 			"columns": [
 				{
 					"name": "id",
@@ -10485,7 +10507,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 699,
+			"rows": 701,
 			"columns": [
 				{
 					"name": "id",
@@ -11381,6 +11403,17 @@
 					"source_table": "public.workflow_step_documents",
 					"source_columns": [
 						"contract_id"
+					],
+					"target_table": "public.contracts",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_main_contract_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"main_contract_id"
 					],
 					"target_table": "public.contracts",
 					"target_columns": [
@@ -13946,6 +13979,173 @@
 			"foreign_key_constraints": []
 		},
 		{
+			"name": "public.invoice_consolidation_rules",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "client_entity_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"comment": "Razón social receptora de las facturas unificadas"
+				},
+				{
+					"name": "main_contract_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"comment": "Contrato principal: la unificada se emite en la fecha de su factura del mes y lleva su encabezado"
+				},
+				{
+					"name": "contract_ids",
+					"data_type": "ARRAY",
+					"format": "_uuid",
+					"type": "uuid[]",
+					"options": [
+						"updatable"
+					],
+					"comment": "Contratos que se unifican (incluye al principal; 2 o más)"
+				},
+				{
+					"name": "status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'active'::text",
+					"comment": "active o paused (la regla se pausa, nunca se borra)"
+				},
+				{
+					"name": "created_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "updated_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "updated_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "invoice_consolidation_rules_client_entity_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"client_entity_id"
+					],
+					"target_table": "public.client_entities",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_created_by_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_holding_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_main_contract_id_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"main_contract_id"
+					],
+					"target_table": "public.contracts",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_updated_by_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"updated_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.invoice_emails",
 			"rls_enabled": true,
 			"rows": 0,
@@ -14078,7 +14278,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 11942,
+			"rows": 11955,
 			"columns": [
 				{
 					"name": "id",
@@ -15410,7 +15610,7 @@
 		{
 			"name": "public.invoice_references",
 			"rls_enabled": true,
-			"rows": 230,
+			"rows": 292,
 			"columns": [
 				{
 					"name": "id",
@@ -15797,7 +15997,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9883,
+			"rows": 9905,
 			"columns": [
 				{
 					"name": "id",
@@ -17901,7 +18101,7 @@
 		{
 			"name": "public.notification_email_log",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 31,
 			"columns": [
 				{
 					"name": "id",
@@ -19407,7 +19607,7 @@
 		{
 			"name": "public.prices",
 			"rls_enabled": true,
-			"rows": 1,
+			"rows": 132,
 			"columns": [
 				{
 					"name": "id",
@@ -20705,7 +20905,7 @@
 		{
 			"name": "public.quote_items",
 			"rls_enabled": true,
-			"rows": 510,
+			"rows": 518,
 			"columns": [
 				{
 					"name": "id",
@@ -21966,7 +22166,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21434,
+			"rows": 21238,
 			"columns": [
 				{
 					"name": "id",
@@ -22830,7 +23030,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 121,
+			"rows": 122,
 			"columns": [
 				{
 					"name": "id",
@@ -23381,7 +23581,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 179,
+			"rows": 181,
 			"columns": [
 				{
 					"name": "id",
@@ -23980,7 +24180,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 162,
+			"rows": 164,
 			"columns": [
 				{
 					"name": "id",
@@ -26480,7 +26680,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 581,
+			"rows": 490,
 			"columns": [
 				{
 					"name": "id",
@@ -28577,6 +28777,28 @@
 					"source_table": "public.invoice_adjustments",
 					"source_columns": [
 						"adjusted_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_created_by_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "invoice_consolidation_rules_updated_by_fkey",
+					"source_table": "public.invoice_consolidation_rules",
+					"source_columns": [
+						"updated_by"
 					],
 					"target_table": "public.users",
 					"target_columns": [
