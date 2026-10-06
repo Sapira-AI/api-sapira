@@ -474,7 +474,8 @@ export class ConsumptionService {
 					ii.billing_period_end::text AS billing_period_end, ii.quantity, ii.quantity_source, ii.subtotal_contract_currency, ii.pricing_breakdown,
 					i.id AS invoice_id, i.invoice_number, i.status, i.is_active, i.issue_date::text AS issue_date, i.document_type, i.invoice_type,
 					COALESCE(i.is_legacy, false) AS is_legacy, ${consolidatedPendingSql('i')} AS consolidated_pending,
-					(i.invoice_type = '${UNIFIED_INVOICE_TYPE}' AND ${unifiedV2Sql('i')}) AS unified_v2
+					(i.invoice_type = '${UNIFIED_INVOICE_TYPE}' AND ${unifiedV2Sql('i')}) AS unified_v2,
+					i.credit_type, ${noChargeSql('i')} AS no_charge, ${voidedSql('i')} AS voided
 				FROM invoice_items ii
 				JOIN invoices i ON i.id = ii.invoice_id
 				-- Por el contrato del ÍTEM (no el del encabezado): un unificado lleva el contrato principal y líneas de los demás.
@@ -544,6 +545,9 @@ export class ConsumptionService {
 			is_legacy: row.is_legacy === true,
 			consolidated_pending: row.consolidated_pending === true,
 			unified_v2: row.unified_v2 === true,
+			credit_type: toText(row.credit_type),
+			no_charge: row.no_charge === true,
+			voided: row.voided === true,
 		}));
 
 		return buildConsumption({ entries, items, lines, today: todayFor(await holdingTimezone(this.dataSource, holdingId), today) });

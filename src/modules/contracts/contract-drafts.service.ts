@@ -1154,11 +1154,18 @@ export class ContractDraftsService {
 		// documento, la familia `document_type` se deriva de él; sin catálogo (país sin filas y sin genéricos), la regla vieja.
 		const taxDocumentType =
 			context.tax_document_type ?? suggestTaxDocumentType(context.tax_document_types, context.company.country, context.entity.country);
-		const documentType: ContractDocumentType = taxDocumentType
-			? documentTypeFromKind(taxDocumentType.kind)
-			: dto.document_type && (CONTRACT_DOCUMENT_TYPES as readonly string[]).includes(dto.document_type)
-				? dto.document_type
-				: suggestDocumentType(context.company.country, context.entity.country);
+		// Familia: la del documento elegido; con el documento sugerido, la del país emisor vs receptor (Domi 05-10: en México o Perú la
+		// exportación usa el documento local —CFDI, 01— y antes quedaba como factura nacional con IVA); sin catálogo, la regla vieja.
+		const countryFamily = suggestDocumentType(context.company.country, context.entity.country);
+		const documentType: ContractDocumentType = context.tax_document_type
+			? documentTypeFromKind(context.tax_document_type.kind)
+			: taxDocumentType
+				? documentTypeFromKind(taxDocumentType.kind) === 'FACTURA_EXPORTACION'
+					? 'FACTURA_EXPORTACION'
+					: countryFamily
+				: dto.document_type && (CONTRACT_DOCUMENT_TYPES as readonly string[]).includes(dto.document_type)
+					? dto.document_type
+					: countryFamily;
 		const fx = ContractDraftsService.resolveFx(dto, context, items);
 
 		return {

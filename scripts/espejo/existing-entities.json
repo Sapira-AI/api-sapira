@@ -135,6 +135,11 @@
   "file": "src/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/otras/integration-record-discard.entity"
  },
+ "invoice_consolidation_rules": {
+  "class": "InvoiceConsolidationRule",
+  "file": "src/databases/postgresql/entities/contratos/invoice-consolidation-rule.entity.ts",
+  "import": "@/databases/postgresql/entities/contratos/invoice-consolidation-rule.entity"
+ },
  "invoice_items": {
   "class": "InvoiceItem",
   "file": "src/databases/postgresql/entities/facturacion/invoice-item.entity.ts",

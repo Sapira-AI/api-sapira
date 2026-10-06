@@ -458,6 +458,13 @@ pisa porque vive dentro del rebuild). Es la generalización de D2 (`rebuild-deve
   `accepts_consumption` solo es `true` en los por consumo y la pestaña muestra solo esos. Un desvío puntual de un ítem fijo se hace con
   "Editar factura" (`quantity_source = 'manual'`), que el devengo ya sigue. Las 4 entries copiadas de `quantities` sobre ítems fijos (3
   contratos de SimpliRoute) siguen contando para el devengo y no se ven en la pestaña (`rebuild-devengo-comparacion.md` §11.5).
+- **Un período, una fila (Domi 05-10)**: `GET /consumption` arma cada período del ítem con sus documentos vigentes (`buildConsumption`
+  → `periodView`): factura activa no NC/ND, no anulada con NC (`voidedSql`) y no Cancelada, salvo la Cancelada "sin cobro" (`noChargeSql`).
+  `amount` = Σ subtotales de esas facturas (la original y su complementaria) − NC parciales vigentes (`credit_type` ≠ `cancellation`);
+  `quantity` = la del consumo registrado o, sin él, Σ cantidades; `invoices[]` las lista (la posterior marcada `is_complementary`, también
+  las del front anterior sin sublínea `invoiced`) y `invoice` sigue siendo la principal. Un período sin documento vigente (Por Emitir
+  cancelada al terminar el contrato, factura anulada con NC) no se lista en `items[].periods[]` y la NC nunca representa el período;
+  un consumo registrado en ese período sigue en `rows[]` sin factura (queda para la de reemplazo).
 - **Escritores**: `ConsumptionService.write` (pantalla, CSV y almacén de datos) siempre llama `revenue_schedule_rebuild(contrato, mes)`;
   `ContractInvoiceEditService` lo llama desde el primer mes tocado cuando cambia un monto. `GET /contracts/:id` (`recognized_to_date`) y
   Métricas/Ingresos leen el RSM: ya incluyen el consumo.

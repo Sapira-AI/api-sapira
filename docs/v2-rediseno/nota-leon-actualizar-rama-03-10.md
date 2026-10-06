@@ -70,6 +70,12 @@ Fuente: [`revision-seguridad-api.md`](./revision-seguridad-api.md). Con el front
 - `CONTRACT_JOBS_ENABLED` (jobs de contratos, encendidos por defecto) no está en `.env.example`: documentarla. Lo mismo con
   `FX_MONTH_CLOSE_ENABLED`, `NOTIFICATION_JOBS_ENABLED` y `NOTIFICATION_EMAILS_ENABLED`: **una API local conectada a prod debe tenerlas en
   `false`** (si no, corre los procesos automáticos sobre producción a la vez que Railway).
+- **Deriva de `schema:log` (06-10):** con `TYPEORM_LOAD_MIRROR_ENTITIES=true`, QA da 71 sentencias y producción 61; la guía
+  (`GUIA-CAMBIOS-DE-ESQUEMA.md`) dice 53 conocidas. Las extra no son de la tabla nueva `invoice_consolidation_rules` (0 sentencias): son
+  FKs/índices de `invoice_payments` (`idx_invoice_payments_holding_date`), `client_entities` (`idx_client_entities_odoo_partner_holding`),
+  `contract_scheduled_changes`, `holding_settings`, `salesforce_*`, `user_access_events`, `overdue_check_log`… Revisar cuál entity quedó
+  desalineada y actualizar el número de la guía.
+- **Test `lib/api/factura-proxy.test.ts` del front** sigue fallando ("propaga X-Factura-Company-Id desde empresaId en multipart").
 
 Cerrados el 04-10/05-10: variables de correo en Railway, usuarios de Sapira sin login en Supabase marcados Inactivos (prod 5, QA 3;
 05-10), merge en curso.

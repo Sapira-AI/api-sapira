@@ -21,11 +21,12 @@ describe('ContractsModule (cableado)', () => {
 	const available = new Set<unknown>([...providers, ...exported, DataSource, ConfigService]);
 	const dependenciesOf = (target: unknown) => (Reflect.getMetadata('design:paramtypes', target as object) as unknown[] | undefined) ?? [];
 
-	it('registra los controladores de contratos, métricas facturables, consumo y catálogo de precios', () => {
+	it('registra los controladores de contratos, métricas facturables, consumo, catálogo de precios y unificación recurrente', () => {
 		expect(controllers.map((controller) => controller.name).sort()).toEqual([
 			'BillableMetricsController',
 			'ConsumptionController',
 			'ContractsController',
+			'InvoiceConsolidationRulesController',
 			'PricesController',
 		]);
 	});

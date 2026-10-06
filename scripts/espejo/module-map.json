@@ -70,6 +70,7 @@
   "prices",
   "consumption_entries",
   "consumption_entry_revisions",
+  "invoice_consolidation_rules",
   "contract_scheduled_changes",
   "contract_item_pauses"
  ],

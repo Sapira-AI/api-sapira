@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { EmailsService } from '../emails/emails.service';
 
+import { ListRunsQueryDto } from './dtos/list-runs.dto';
 import { stripHtml } from './helpers/template.helper';
 import { ApproveResponse, RunResponse } from './interfaces/run-response.interface';
 import { CollectionsProcessor } from './processors/collections.processor';
@@ -52,16 +53,15 @@ export class AgentsService {
 			throw error;
 		}
 
-		if (mode === 'execute' && !agent.require_approval) {
-			await this.sendMessages(run.id, messages);
-			await this.updateRunStatus(run.id, 'sent', stats);
-		} else {
-			await this.updateRunStatus(run.id, 'queued', stats);
-		}
+		// Preview no guarda mensajes: el run queda `cancelled` (con `mode: 'preview'`) para que nadie apruebe un run vacío.
+		const status = mode === 'preview' ? 'cancelled' : agent.require_approval ? 'queued' : 'sent';
+
+		if (status === 'sent') await this.sendMessages(run.id, messages);
+		await this.updateRunStatus(run.id, status, mode === 'preview' ? { ...stats, mode } : stats);
 
 		return {
 			run_id: run.id,
-			status: mode === 'execute' && !agent.require_approval ? 'sent' : 'queued',
+			status,
 			stats,
 			messages: messages.map((m) => ({
 				id: m.id,
@@ -74,24 +74,44 @@ export class AgentsService {
 		};
 	}
 
-	async approveRun(runId: string, holdingId: string): Promise<ApproveResponse> {
+	/**
+	 * Aprueba y envía un run `queued`. El paso a `approved` es atómico (`WHERE status = 'queued'`): dos aprobaciones simultáneas no
+	 * envían dos veces. Guarda quién aprobó y conserva las estadísticas de la generación.
+	 */
+	async approveRun(runId: string, holdingId: string, approverUserId?: string | null): Promise<ApproveResponse> {
 		const run = await this.getRun(runId, holdingId);
 
 		if (run.status !== 'queued') {
-			throw new BadRequestException('El run no está en estado queued');
+			throw new ConflictException('Solo se puede aprobar una ejecución pendiente de aprobación');
 		}
 
 		const messages = await this.getRunMessages(runId);
-		const results = await this.sendMessages(runId, messages);
 
-		await this.updateRunStatus(runId, 'sent', {
+		if (messages.length === 0) {
+			throw new ConflictException('La ejecución no tiene mensajes para enviar');
+		}
+
+		const claimed = await this.dataSource.query(
+			`UPDATE ai_runs SET status = 'approved', approver_user_id = $3 WHERE id = $1 AND holding_id = $2 AND status = 'queued' RETURNING id`,
+			[runId, holdingId, approverUserId ?? null]
+		);
+
+		if (!claimed?.length) {
+			throw new ConflictException('Solo se puede aprobar una ejecución pendiente de aprobación');
+		}
+
+		const results = await this.sendMessages(runId, messages);
+		const status = results.success === 0 ? 'error' : 'sent';
+
+		await this.updateRunStatus(runId, status, {
+			...(run.stats_json ?? {}),
 			messages_sent: results.success,
-			errors: results.errors,
+			send_errors: results.errors,
 		});
 
 		return {
 			run_id: runId,
-			status: 'sent',
+			status,
 			messages_sent: results.success,
 			messages_error: results.errors.length,
 			total_messages: messages.length,
@@ -141,15 +161,14 @@ export class AgentsService {
 			};
 		}
 
+		const client = await this.assertClientInHolding(clientId, holdingId);
 		const holdingConfig = await this.getHoldingConfig(holdingId, agentType);
 
 		if (holdingConfig) {
-			const clientInfo = await this.dataSource.query(`SELECT name_commercial FROM clients WHERE id = $1`, [clientId]);
-
 			return {
 				...holdingConfig,
 				client_id: clientId,
-				client_name: clientInfo && clientInfo.length > 0 ? clientInfo[0].name_commercial : null,
+				client_name: client.name_commercial ?? null,
 			};
 		}
 
@@ -162,6 +181,8 @@ export class AgentsService {
 		holdingId: string,
 		updates: { is_enabled?: boolean; config_json?: Record<string, any> }
 	) {
+		await this.assertClientInHolding(clientId, holdingId);
+
 		if (updates.config_json?.email_sender_address_id) {
 			await this.validateEmailSender(updates.config_json.email_sender_address_id, holdingId);
 		}
@@ -398,6 +419,135 @@ export class AgentsService {
 		return this.getAgent(agentId, holdingId);
 	}
 
+	/** Agentes del holding (uno por tipo; los crea el trigger `create_standard_agents_for_holding`). */
+	async listAgents(holdingId: string) {
+		return this.dataSource.query(
+			`SELECT id, type, name, is_enabled, schedule, auto_execute, require_approval, created_at, updated_at
+			FROM ai_agents
+			WHERE holding_id = $1 AND type IN ('proforma', 'collections')
+			ORDER BY type DESC, created_at`,
+			[holdingId]
+		);
+	}
+
+	/** Historial de ejecuciones, paginado (`{ data, total, currentPage, pages, limit }`), con el nombre y tipo del agente. */
+	async listRuns(holdingId: string, query: ListRunsQueryDto) {
+		const page = query.page ?? 1;
+		const limit = query.limit ?? 20;
+		const params: unknown[] = [holdingId];
+		const where = ['r.holding_id = $1'];
+
+		if (query.agent_id) {
+			params.push(query.agent_id);
+			where.push(`r.agent_id = $${params.length}`);
+		}
+		if (query.type) {
+			params.push(query.type);
+			where.push(`a.type = $${params.length}`);
+		}
+		if (query.status) {
+			params.push(query.status);
+			where.push(`r.status = $${params.length}`);
+		}
+
+		const from = `FROM ai_runs r INNER JOIN ai_agents a ON a.id = r.agent_id WHERE ${where.join(' AND ')}`;
+		const [{ total }] = await this.dataSource.query(`SELECT COUNT(*)::int AS total ${from}`, params);
+		const data = await this.dataSource.query(
+			`SELECT r.id, r.agent_id, a.name AS agent_name, a.type AS agent_type, r.status, r.started_at, r.ended_at, r.stats_json,
+				r.error_message, r.approver_user_id, r.created_at
+			${from}
+			ORDER BY r.started_at DESC NULLS LAST, r.created_at DESC
+			LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+			[...params, limit, (page - 1) * limit]
+		);
+
+		return { data, total, currentPage: page, pages: Math.max(1, Math.ceil(total / limit)), limit };
+	}
+
+	/** Detalle de una ejecución del holding (404 si es de otro), con el nombre de quien aprobó. */
+	async getRunDetail(runId: string, holdingId: string) {
+		const rows = await this.dataSource.query(
+			`SELECT r.id, r.agent_id, a.name AS agent_name, a.type AS agent_type, r.status, r.started_at, r.ended_at, r.stats_json,
+				r.error_message, r.approver_user_id, u.name AS approver_name, r.created_at,
+				(SELECT COUNT(*)::int FROM ai_messages m WHERE m.run_id = r.id) AS message_count
+			FROM ai_runs r
+			INNER JOIN ai_agents a ON a.id = r.agent_id
+			LEFT JOIN users u ON u.id = r.approver_user_id
+			WHERE r.id = $1 AND r.holding_id = $2
+			LIMIT 1`,
+			[runId, holdingId]
+		);
+
+		if (!rows?.length) throw new NotFoundException('Ejecución no encontrada');
+
+		return rows[0];
+	}
+
+	/** Mensajes (salientes y entrantes) de una ejecución del holding. */
+	async listRunMessages(runId: string, holdingId: string) {
+		await this.getRun(runId, holdingId);
+
+		return this.dataSource.query(
+			`SELECT id, run_id, direction, channel, "to", subject, body, meta_json, created_at FROM ai_messages WHERE run_id = $1 ORDER BY created_at`,
+			[runId]
+		);
+	}
+
+	/** Descarta una ejecución pendiente de aprobación: no envía nada y sus mensajes no cuentan para la frecuencia de cobranza. */
+	async cancelRun(runId: string, holdingId: string, userId?: string | null) {
+		const rows = await this.dataSource.query(
+			`UPDATE ai_runs SET status = 'cancelled', approver_user_id = $3, ended_at = NOW()
+			WHERE id = $1 AND holding_id = $2 AND status = 'queued'
+			RETURNING id, status`,
+			[runId, holdingId, userId ?? null]
+		);
+
+		if (rows?.length) return rows[0];
+
+		await this.getRun(runId, holdingId);
+		throw new ConflictException('Solo se puede descartar una ejecución pendiente de aprobación');
+	}
+
+	/** Borra la configuración propia del cliente: desde ahí usa la configuración global del holding. */
+	async deleteClientConfig(clientId: string, agentType: string, holdingId: string) {
+		const rows = await this.dataSource.query(
+			`DELETE FROM client_agent_configs WHERE client_id = $1 AND agent_type = $2 AND holding_id = $3 RETURNING id`,
+			[clientId, agentType, holdingId]
+		);
+
+		if (!rows?.length) throw new NotFoundException('El cliente no tiene configuración propia para este agente');
+	}
+
+	/** Cuántos clientes tienen configuración propia (y cuántas habilitadas) por tipo, y qué clientes la tienen. */
+	async clientConfigsSummary(holdingId: string) {
+		const rows: Array<{ client_id: string; agent_type: 'proforma' | 'collections'; is_enabled: boolean }> = await this.dataSource.query(
+			`SELECT client_id, agent_type, is_enabled FROM client_agent_configs WHERE holding_id = $1 AND client_id IS NOT NULL`,
+			[holdingId]
+		);
+		const count = (type: string) => {
+			const ofType = rows.filter((row) => row.agent_type === type);
+
+			return { total: ofType.length, enabled: ofType.filter((row) => row.is_enabled).length };
+		};
+
+		return {
+			proforma: count('proforma'),
+			collections: count('collections'),
+			client_ids: [...new Set(rows.map((row) => row.client_id))],
+		};
+	}
+
+	private async assertClientInHolding(clientId: string, holdingId: string): Promise<{ id: string; name_commercial: string | null }> {
+		const rows = await this.dataSource.query(`SELECT id, name_commercial FROM clients WHERE id = $1 AND holding_id = $2 LIMIT 1`, [
+			clientId,
+			holdingId,
+		]);
+
+		if (!rows?.length) throw new NotFoundException('Cliente no encontrado');
+
+		return rows[0];
+	}
+
 	private async validateEmailSender(senderId: string, holdingId: string) {
 		const result = await this.dataSource.query(
 			`
@@ -494,6 +644,6 @@ export class AgentsService {
 	}
 
 	private async getRunMessages(runId: string) {
-		return await this.dataSource.query(`SELECT * FROM ai_messages WHERE run_id = $1`, [runId]);
+		return await this.dataSource.query(`SELECT * FROM ai_messages WHERE run_id = $1 AND direction = 'out' ORDER BY created_at`, [runId]);
 	}
 }

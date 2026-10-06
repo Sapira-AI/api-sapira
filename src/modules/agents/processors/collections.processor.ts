@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { resolveEffectiveConfig, resolveEmailSender } from '../helpers/agent-config.helper';
 import { calculateDaysOverdue, formatCurrency, renderTemplate } from '../helpers/template.helper';
 import { CollectionsConfig, ReminderLevel } from '../interfaces/collections-config.interface';
 import { ProcessorResult } from '../interfaces/run-response.interface';
@@ -53,7 +54,7 @@ export class CollectionsProcessor {
 
 			for (const [clientId, clientInvoices] of Object.entries(invoicesByClient)) {
 				try {
-					const effectiveConfig = await this.getEffectiveConfigForClient(clientId, 'collections', holdingId);
+					const effectiveConfig = await this.getEffectiveConfigForClient(clientId, holdingId);
 
 					if (!effectiveConfig || !effectiveConfig.reminder_levels) {
 						stats.clients_skipped++;
@@ -150,7 +151,7 @@ export class CollectionsProcessor {
 			return { messages };
 		}
 
-		const emailSender = await this.getEffectiveEmailSender(config, holdingId);
+		const emailSender = await resolveEmailSender(this.dataSource, config, holdingId);
 		// Filtrar solo contactos de tipo 'cobranza'
 		const contacts = await this.dataSource.query(`SELECT * FROM client_contacts WHERE client_id = $1 AND contact_type = $2`, [
 			clientId,
@@ -171,13 +172,16 @@ export class CollectionsProcessor {
 	}
 
 	private async checkFrequency(clientId: string, levelNumber: number, frequencyHours: number): Promise<boolean> {
+		// Un run descartado (`cancelled`) no cuenta como envío: si no, bloquearía el siguiente recordatorio durante `frequency_hours`.
 		const lastMessage = await this.dataSource.query(
 			`
-			SELECT created_at 
-			FROM ai_messages 
-			WHERE meta_json->>'client_id' = $1 
-			AND meta_json->>'reminder_level' = $2
-			ORDER BY created_at DESC
+			SELECT m.created_at
+			FROM ai_messages m
+			INNER JOIN ai_runs r ON r.id = m.run_id
+			WHERE m.meta_json->>'client_id' = $1
+			AND m.meta_json->>'reminder_level' = $2
+			AND r.status <> 'cancelled'
+			ORDER BY m.created_at DESC
 			LIMIT 1
 		`,
 			[clientId, String(levelNumber)]
@@ -229,32 +233,10 @@ export class CollectionsProcessor {
 		return maxDays;
 	}
 
-	private async getEffectiveConfigForClient(clientId: string, agentType: string, holdingId: string): Promise<CollectionsConfig | null> {
-		const clientConfig = await this.dataSource.query(
-			`SELECT * FROM client_agent_configs WHERE client_id = $1 AND agent_type = $2 AND holding_id = $3 LIMIT 1`,
-			[clientId, agentType, holdingId]
-		);
+	private async getEffectiveConfigForClient(clientId: string, holdingId: string): Promise<CollectionsConfig | null> {
+		const config = await resolveEffectiveConfig(this.dataSource, clientId, 'collections', holdingId);
 
-		if (clientConfig && clientConfig.length > 0) {
-			if (!clientConfig[0].is_enabled) {
-				return null;
-			}
-			return this.normalizeConfig(clientConfig[0].config_json);
-		}
-
-		const holdingConfig = await this.dataSource.query(
-			`SELECT * FROM client_agent_configs WHERE client_id IS NULL AND agent_type = $1 AND holding_id = $2 LIMIT 1`,
-			[agentType, holdingId]
-		);
-
-		if (holdingConfig && holdingConfig.length > 0) {
-			if (!holdingConfig[0].is_enabled) {
-				return null;
-			}
-			return this.normalizeConfig(holdingConfig[0].config_json);
-		}
-
-		return null;
+		return config ? this.normalizeConfig(config) : null;
 	}
 
 	private normalizeConfig(config: any): CollectionsConfig {
@@ -279,31 +261,6 @@ export class CollectionsProcessor {
 		}
 
 		return config as CollectionsConfig;
-	}
-
-	private async getEffectiveEmailSender(config: Record<string, any>, holdingId: string): Promise<any> {
-		if (config.email_sender_address_id) {
-			const sender = await this.dataSource.query(`SELECT from_name, from_email, reply_to_email FROM email_sender_addresses WHERE id = $1`, [
-				config.email_sender_address_id,
-			]);
-
-			if (sender && sender.length > 0) {
-				return sender[0];
-			}
-		}
-
-		const defaultSender = await this.dataSource.query(
-			`
-			SELECT esa.from_name, esa.from_email, esa.reply_to_email
-			FROM email_sender_addresses esa
-			INNER JOIN holding_email_sender_settings hess ON esa.id = hess.email_sender_address_id
-			WHERE hess.holding_id = $1 AND hess.is_default = true AND esa.is_active = true
-			LIMIT 1
-		`,
-			[holdingId]
-		);
-
-		return defaultSender && defaultSender.length > 0 ? defaultSender[0] : { from_name: 'Sapira', from_email: 'noreply@sapira.cl' };
 	}
 
 	private async generateMessage(

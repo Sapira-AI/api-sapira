@@ -53,6 +53,12 @@ describe('billing-engine', () => {
 		it('normaliza países escritos a mano y sugiere el tipo de documento', () => {
 			expect(normalizeCountry('México')).toBe('MX');
 			expect(normalizeCountry(' mexico ')).toBe('MX');
+			// Países escritos en inglés o sin alias hasta el 05-10 (contratos de SimpliRoute en producción).
+			expect(normalizeCountry('Dominican Republic')).toBe('DO');
+			expect(normalizeCountry('República Dominicana')).toBe('DO');
+			expect(normalizeCountry('BOLIVIA')).toBe('BO');
+			expect(normalizeCountry('Venezuela')).toBe('VE');
+			expect(normalizeCountry('AUSTRALIA')).toBe('AU');
 			expect(normalizeCountry('Perú')).toBe('PE');
 			expect(normalizeCountry('CR')).toBe('CR');
 			expect(normalizeCountry('')).toBeNull();

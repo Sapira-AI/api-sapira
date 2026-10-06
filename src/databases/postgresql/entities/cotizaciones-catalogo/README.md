@@ -1,7 +1,7 @@
-# Módulo 4 · Cotizaciones y catálogo — 6 tablas de prod (2026-10-04)
+# Módulo 4 · Cotizaciones y catálogo — 6 tablas de prod (2026-10-06)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-04 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/cotizaciones-catalogo.{pgmeta,catalog}.json`); metadata real de las entities existentes en `cotizaciones-catalogo.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-06 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/cotizaciones-catalogo.{pgmeta,catalog}.json`); metadata real de las entities existentes en `cotizaciones-catalogo.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (5) — no se tocaron ni se duplicaron
 
@@ -10,7 +10,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
 | `quotes` (424) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote.entity.ts` · `Quote` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `quotes_pkey` |
-| `quote_items` (510) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity.ts` · `QuoteItem` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_items_pkey`<br>CHECK `chk_quote_items_price_entry_mode`<br>CHECK `quote_items_billing_frequency_check`<br>CHECK `quote_items_billing_method_check`<br>CHECK `quote_items_discount_type_check`<br>índice con expresión `idx_quote_items_custom_fields` |
+| `quote_items` (518) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-item.entity.ts` · `QuoteItem` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_items_pkey`<br>CHECK `chk_quote_items_price_entry_mode`<br>CHECK `quote_items_billing_frequency_check`<br>CHECK `quote_items_billing_method_check`<br>CHECK `quote_items_discount_type_check`<br>índice con expresión `idx_quote_items_custom_fields` |
 | `quote_stages` (43) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-stage.entity.ts` · `QuoteStage` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_stages_pkey` |
 | `quote_events` (1) | `src/databases/postgresql/entities/cotizaciones-catalogo/quote-event.entity.ts` · `QuoteEvent` | ⚠️ difiere de prod | — | — | — | nombre de PK `quote_events_pkey`<br>CHECK `quote_events_type_check` |
 | `products` (88) | `src/databases/postgresql/entities/cotizaciones-catalogo/products.entity.ts` · `Product` | ⚠️ difiere de prod | — | — | — | nombre de PK `products_pkey` |

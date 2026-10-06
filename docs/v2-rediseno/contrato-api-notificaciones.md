@@ -118,19 +118,22 @@ sin leer. **Resolver** no es manual: las alertas se cierran solas (§5).
 |---|---|---|---|---|---|
 | `invoices_to_issue_today` | facturacion | Facturas por emitir hoy | sí | info | `/lab/facturacion?estado=Por+Emitir&grupo=ready` |
 | `invoices_blocked` | facturacion | Facturas por emitir bloqueadas (+ `breakdown` por motivo; **sin** `no_contract`) | sí | error | `/lab/facturacion?estado=Por+Emitir&grupo=blocked&desde=<primer mes>&hasta=<mes en curso>` (+ `&motivo=<código>`, con el primer mes de ese motivo) |
-| `invoices_late` | facturacion | Facturas por emitir atrasadas | sí | warning | `/lab/facturacion?estado=Por+Emitir&grupo=late&desde=<primer mes>&hasta=<mes en curso>` |
-| `invoices_past_months` | facturacion | Por emitir de meses pasados | sí | warning | `/lab/facturacion?estado=Por+Emitir&desde=<mes más antiguo>&hasta=<mes anterior>` |
+| `invoices_late` | facturacion | Facturas por emitir atrasadas (+ `breakdown` por antigüedad con `amount` y `hint`: `this_month` Este mes, `previous_month` Mes anterior, `older` Más antiguas; + `hint` de la tarea) | sí | warning | `/facturacion?estado=Por+Emitir&grupo=late&desde=<primer mes>&hasta=<mes en curso>` (cada tramo, su rango de meses) |
 | `invoices_overdue` | facturacion | Facturas vencidas | sí (saldo) | warning | `/lab/facturacion?pago=overdue&periodo=todo` |
 | `credit_notes_to_issue` | facturacion | Notas de crédito por emitir | no | warning | `/lab/facturacion?tab=notas-credito&dte=pending_emission&periodo=todo` |
 | `renewals_to_decide` | contratos | Renovaciones por confirmar | no | warning | `/lab/contratos?f=estado:pending_renewal` (1 contrato → su 360) |
 | `expirations_without_decision` | contratos | Vencidos sin decisión | no | error | `/lab/contratos?f=estado:expired` (1 contrato → su 360) |
 | `scheduled_changes_due` | contratos | Ajustes pactados por aplicar | no | warning | `/lab/contratos` (1 contrato → su 360) |
 | `consumptions_to_report` | contratos | Consumos por informar | no | warning | `/lab/contratos` (1 contrato → `/lab/contratos/<id>?tab=consumos`) |
-| `contracts_without_invoices` | contratos | Contratos activos sin facturas programadas | no | warning | `/lab/contratos?f=estado:active` (1 contrato → su 360) |
+| `contracts_without_invoices` | contratos | Contratos activos sin facturas programadas: algún ítem recurrente vigente (sin CHURN/DOWNSELL) sin línea que lo cubra — ni Por Emitir (de cualquier fecha; las atrasadas van en `invoices_late`) ni factura vigente cuyo período llegue a hoy (anual, semestral o trimestral ya cobrada) — (05-10) | no | warning | `/contratos?f=estado:active` (1 contrato → su 360) |
 | `service_starts_this_month` | contratos | Inicios de servicio del mes | no | info | `/lab/contratos?f=inicio_desde:<1.º del mes>;inicio_hasta:<fin de mes>` |
 | `quotes_waiting_mapping` | cotizaciones | Cotizaciones del CRM en espera de mapeo | no | warning | `/lab/cotizaciones` (el aviso "Revisar" abre el panel) |
 | `quotes_unprocessed_this_month` | cotizaciones | Cotizaciones firmadas del mes sin contrato | sí (por moneda: null si hay varias) | warning | `/lab/cotizaciones?f=booking_desde:<1.º>;booking_hasta:<fin>;con_contrato:no;estado:signed` |
 | `revenue_exceptions` | ingresos | Excepciones de Ingresos | no | warning | `/lab/revenue?tab=excepciones` |
+
+**Atrasadas (05-10)**: una sola tarea para las Por Emitir **no bloqueadas** cuya fecha ya pasó (grupo `late` de la cola o fecha de un
+mes pasado); una bloqueada cuenta solo en `invoices_blocked`, así el resumen por gravedad no suma dos veces la misma factura. `hint`
+(tooltip) dice cómo cerrarlas: emitir, reprogramar o, si el cliente se fue o redujo, registrarlo en el contrato (Modificar contrato).
 
 Montos en moneda del sistema del holding (`currency`). Fuentes: cola Por emitir de Facturación (`BillingReadService.queue`,
 mismos motivos que la pantalla), `invoicesCte` (vencidas y NC), consumos por informar (`ConsumptionService.pending`),
@@ -286,8 +289,8 @@ Orden: N1 → N2 → N3 → función → desplegar la API.
 - Catálogo nuevo: "Facturas del mes sin emitir", módulo Facturación, ícono `calendar-check`, gravedad `warning`, suscribible; por defecto
   Administrador, Finanzas, Facturación y Cobranza. Acción `open_billing_queue` → "Ver facturas por emitir".
 - Ventana: **último día hábil del mes M** (lunes a viernes, sin feriados) y **3 primeros días hábiles de M+1**; el mes a cerrar es M.
-- **Tarea** `month_close_pending` (Facturación, warning): "N facturas Por Emitir de {mes} siguen sin emitir", monto en moneda del sistema,
-  `href` `/lab/facturacion?estado=Por+Emitir&desde=<M>&hasta=<M>` (+ `&company_id=<ids>` si hay filtro). Respeta compañías.
+- **Tarea**: desde el 05-10 no hay tarea aparte; el mes a cerrar es el tramo "Mes anterior" de `invoices_late` (Domi: las tareas
+  `invoices_late`, `invoices_past_months` y `month_close_pending` contaban las mismas facturas y el resumen sumaba tres veces).
 - **Alerta** (cron horario, a las 07:xx de la zona del holding, en la ventana): una por compañía con facturas pendientes
   (dedup `month-close:<M>:<compañía>`, escalón = día de la ventana → vuelve a "sin leer" cada día); se resuelve sola cuando la compañía
   queda en 0 o al salir de la ventana. `action_payload`: `{ month, company_id, href, invoice_ids (≤ 200), secondary: { type:

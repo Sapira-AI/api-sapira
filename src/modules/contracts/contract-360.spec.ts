@@ -792,8 +792,10 @@ describe('buildConsumption', () => {
 					number: 'F-3',
 					status: 'Por Emitir',
 					issue_date: '2026-11-01',
+					document_type: 'FACTURA',
 					is_complementary: false,
 					complements_invoice_id: null,
+					no_charge: false,
 				},
 			},
 		]);
@@ -1275,6 +1277,110 @@ describe('groupConsumptionLines (per_tier, §3.8) y complementarias (§4.4)', ()
 		expect(grouped[1]).toMatchObject({ line_id: 'l-single', line_ids: ['l-single'], quantity: 1000, subtotal: 64.8 });
 	});
 
+	it('buildConsumption (Domi 05-10): suma la complementaria sin marca, omite períodos cancelados y anulados con NC, y la NC nunca representa el período', () => {
+		const items = [
+			{
+				id: 'it-1',
+				product_name: 'Rutas',
+				account: null,
+				quantity: 18,
+				unit_of_measure: 'vehículo',
+				price: { quantity_type: 'metered' } as never,
+				metric: null,
+			},
+		];
+		const line = (patch: Record<string, unknown>) => ({ ...base, pricing_breakdown: null, ...patch }) as never;
+		const result = buildConsumption({
+			today: '2026-10-05',
+			entries: [],
+			items,
+			lines: [
+				// Julio: original + complementaria del front anterior (sin sublínea `invoiced`).
+				line({
+					line_id: 'j1',
+					billing_period_start: '2026-07-01',
+					billing_period_end: '2026-07-31',
+					invoice_id: 'f-808',
+					invoice_number: 'FAC 027808',
+					status: 'Vencida',
+					issue_date: '2026-08-10',
+					quantity: 19,
+					subtotal: 14.25,
+				}),
+				line({
+					line_id: 'j2',
+					billing_period_start: '2026-07-01',
+					billing_period_end: '2026-07-31',
+					invoice_id: 'f-844',
+					invoice_number: 'FAC 027844',
+					status: 'Vencida',
+					issue_date: '2026-08-19',
+					quantity: 4.42,
+					subtotal: 3.32,
+				}),
+				// Agosto: anulada con NC (flujo viejo: las dos Canceladas).
+				line({
+					line_id: 'a1',
+					billing_period_start: '2026-08-01',
+					billing_period_end: '2026-08-31',
+					invoice_id: 'f-716',
+					invoice_number: 'FAC 027716',
+					status: 'Cancelada',
+					issue_date: '2026-08-30',
+					quantity: 18,
+					subtotal: 15.3,
+				}),
+				line({
+					line_id: 'a2',
+					billing_period_start: '2026-08-01',
+					billing_period_end: '2026-08-31',
+					invoice_id: 'nc-1877',
+					invoice_number: 'NC 1877',
+					document_type: 'NC',
+					credit_type: 'cancellation',
+					status: 'Cancelada',
+					issue_date: '2026-08-31',
+					quantity: 18,
+					subtotal: -15.3,
+				}),
+				// Septiembre: Por Emitir cancelada al terminar el contrato.
+				line({
+					line_id: 's1',
+					billing_period_start: '2026-09-01',
+					billing_period_end: '2026-09-30',
+					invoice_id: 'f-sep',
+					invoice_number: null,
+					status: 'Cancelada',
+					issue_date: '2026-09-01',
+					quantity: 18,
+					subtotal: 15.3,
+				}),
+				// Octubre: Cancelada "sin cobro" (consumo 0): sigue siendo el período y acepta consumo.
+				line({
+					line_id: 'o1',
+					billing_period_start: '2026-10-01',
+					billing_period_end: '2026-10-31',
+					invoice_id: 'f-oct',
+					invoice_number: null,
+					status: 'Cancelada',
+					no_charge: true,
+					issue_date: '2026-11-01',
+					quantity: 0,
+					subtotal: 0,
+				}),
+			],
+		});
+		const periods = result.items[0].periods;
+
+		expect(periods.map((period) => period.period_start)).toEqual(['2026-07-01', '2026-10-01']);
+		expect(periods[0]).toMatchObject({ quantity: 23.42, amount: 17.57, invoice: { id: 'f-808' } });
+		expect(periods[0].invoices.map((invoice) => [invoice.number, invoice.is_complementary])).toEqual([
+			['FAC 027808', false],
+			['FAC 027844', true],
+		]);
+		expect(periods[1]).toMatchObject({ amount: 0, invoice: { id: 'f-oct', no_charge: true } });
+	});
+
 	it('buildConsumption: la entry con invoice_id se cruza con esa factura y marca la complementaria con la emitida a la que complementa', () => {
 		const items = [{ id: 'it-1', product_name: 'Rutas', account: null, quantity: 1000, unit_of_measure: 'ruta', price: null, metric: null }];
 		const entry = {
@@ -1327,11 +1433,17 @@ describe('groupConsumptionLines (per_tier, §3.8) y complementarias (§4.4)', ()
 			],
 		});
 
+		// El monto es el del período completo (decisión de Domi 05-10): la emitida más su complementaria, con las dos facturas.
 		expect(result.rows[0]).toMatchObject({
 			quantity: 1250,
-			amount: 13.5,
+			amount: 78.3,
 			invoice: { id: 'inv-comp', status: 'Por Emitir', is_complementary: true, complements_invoice_id: 'inv-paid' },
 		});
+		expect(result.rows[0].invoices.map((invoice) => [invoice.id, invoice.is_complementary])).toEqual([
+			['inv-paid', false],
+			['inv-comp', true],
+		]);
+		expect(result.items[0].periods[0]).toMatchObject({ quantity: 1250, amount: 78.3 });
 		// Sin invoice_id en la entry, gana la Por Emitir vigente igual; una emitida normal no es complementaria.
 		const plain = buildConsumption({
 			today: '2026-12-01',
@@ -1351,7 +1463,7 @@ describe('groupConsumptionLines (per_tier, §3.8) y complementarias (§4.4)', ()
 			],
 		});
 
-		expect(plain.rows[0].invoice).toEqual({
+		expect(plain.rows[0].invoice).toMatchObject({
 			id: 'inv-paid',
 			number: 'F-0042',
 			status: 'Pagada',

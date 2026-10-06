@@ -4,6 +4,9 @@ import { Cron } from '@nestjs/schedule';
 
 import { AUTO_RENEWAL_JOB, EXTEND_HORIZON_JOB, RENEWAL_REMINDERS_JOB, SCHEDULED_CHANGES_JOB } from './contract-renewals';
 import { ContractRenewalsService, type JobHoldingResult } from './contract-renewals.service';
+import { InvoiceConsolidationRulesService } from './invoice-consolidation-rules.service';
+
+export const CONSOLIDATION_RULES_JOB = 'contracts-consolidation-rules';
 
 /**
  * Jobs diarios de contratos v2 (spec modificaciones §9.3.5 y §9.3.6, B2-4). Se disparan a su hora en `America/Santiago` (hora del
@@ -13,6 +16,8 @@ import { ContractRenewalsService, type JobHoldingResult } from './contract-renew
  *   12 períodos desde hoy (`HORIZON_PERIODS_AHEAD`, fijo por sistema: calendario rodante)
  *   (evento `HORIZON_EXTENDED` por contrato solo si creó algo; idempotente con el contrato bloqueado).
  * - `contracts-auto-renewal` (06:00): ítems `auto_renew` por vencer → evento `RENEWAL_PROPOSED` + notificación. **Nunca renueva sola.**
+ * - `contracts-consolidation-rules` (06:30): unificación recurrente de cada razón social con regla activa
+ *   (`InvoiceConsolidationRulesService.runAll`): une las Por Emitir que nacieron después de guardarla, antes del envío automático.
  * - `contracts-renewal-reminders` (06:15): ítems que terminan sin decisión → alertas crecientes (`auto_renewal_notice_days` y la escalera del
  *   holding `renewal_reminder_days`, default 60/30/15/7/0 días antes del fin; vencido, cada `renewal_overdue_every_days`, default 7),
  *   evento `RENEWAL_REMINDER` (idempotente por contrato, fin y escalón) + notificación (S2-1 / S5-4).
@@ -28,6 +33,7 @@ export class ContractsScheduler {
 
 	constructor(
 		private readonly renewals: ContractRenewalsService,
+		private readonly consolidationRules: InvoiceConsolidationRulesService,
 		private readonly configService: ConfigService
 	) {
 		this.enabled = this.configService.get<string>('CONTRACT_JOBS_ENABLED') !== 'false';
@@ -51,6 +57,11 @@ export class ContractsScheduler {
 	@Cron('15 6 * * *', { name: RENEWAL_REMINDERS_JOB, timeZone: 'America/Santiago' })
 	async renewalRemindersDaily(): Promise<JobHoldingResult[] | null> {
 		return await this.run(RENEWAL_REMINDERS_JOB, () => this.renewals.remindRenewals(new Date()));
+	}
+
+	@Cron('30 6 * * *', { name: CONSOLIDATION_RULES_JOB, timeZone: 'America/Santiago' })
+	async consolidationRulesDaily(): Promise<JobHoldingResult[] | null> {
+		return await this.run(CONSOLIDATION_RULES_JOB, () => this.consolidationRules.runAll(new Date()));
 	}
 
 	private async run(job: string, work: () => Promise<JobHoldingResult[]>): Promise<JobHoldingResult[] | null> {

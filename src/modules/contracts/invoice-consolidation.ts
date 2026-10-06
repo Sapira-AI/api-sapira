@@ -151,6 +151,12 @@ export interface ConsolidationContext {
 	references: ConsolidationReference[];
 	/** Límite de la glosa por contrato (`resolveDescriptionMaxChars`); se usa el del contrato principal. */
 	max_chars_by_contract: Map<string, number | null>;
+	/**
+	 * Contrato principal fijado por una regla de unificación recurrente (`spec-unificacion-recurrente.md`, D1 de Domi 05-10): lleva el
+	 * encabezado y la unificada se emite en la fecha de su factura del mes. Sin él (consolidación manual), el de mayor peso y la fecha más
+	 * temprana, como siempre.
+	 */
+	main_contract_id?: string | null;
 }
 
 export interface ConsolidationContribution {
@@ -615,7 +621,8 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 			main: false,
 		};
 	});
-	const mainContractId = mainContractOf(contributions);
+	const fixedMain = ctx.main_contract_id && contributions.some((contribution) => contribution.contract_id === ctx.main_contract_id) ? ctx.main_contract_id : null;
+	const mainContractId = fixedMain ?? mainContractOf(contributions);
 
 	for (const contribution of contributions) contribution.main = contribution.contract_id === mainContractId;
 	const ordered = [...contributions].sort(
@@ -671,8 +678,10 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 	const autoInvoice = invoices.every((invoice) => invoice.auto_invoice);
 	const autoSend = invoices.every((invoice) => invoice.contract_auto_send_to_erp);
 	const requiresReferences = invoices.some((invoice) => invoice.requires_references || invoice.contract_requires_references);
+	// Con principal fijado por la regla, las fechas son las de su factura del mes; si no, la más temprana de todas.
+	const dateSource = fixedMain ? invoices.filter((invoice) => invoice.contract_id === fixedMain) : invoices;
 	const dates = (pick: (invoice: ConsolidationInvoice) => string | null) =>
-		invoices
+		dateSource
 			.map(pick)
 			.filter((value): value is string => !!value)
 			.sort();

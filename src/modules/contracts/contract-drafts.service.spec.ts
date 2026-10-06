@@ -864,6 +864,33 @@ describe('ContractDraftsService', () => {
 			expect(params.slice(-4, -2)).toEqual(['FACTURA_EXPORTACION', TDT_110]);
 		});
 
+		it('sin elección y sin documento de exportación en el catálogo (México): el CFDI con familia de exportación, sin IVA (Domi 05-10)', async () => {
+			const cfdi = {
+				id: 'cfdi-i',
+				country_code: 'MX',
+				code: 'CFDI-I',
+				name: 'Factura CFDI de ingreso',
+				kind: 'invoice',
+				is_electronic: true,
+				sort: 10,
+				tax_rate: 16,
+			};
+			const { service, runner } = build((sql) =>
+				sql.includes('FROM companies WHERE id')
+					? [{ id: COMPANY, legal_name: 'SimpliRoute MX', country: 'México', currency: 'USD', contract_prefix: 'CTR-', tax_rate: '16' }]
+					: sql.includes('FROM client_entities ce WHERE ce.id')
+						? [{ id: ENTITY, legal_name: 'ACME CR', country: 'Costa Rica', payment_terms: null, belongs: true }]
+						: sql.includes('FROM tax_document_types')
+							? [cfdi]
+							: undefined
+			);
+
+			await service.create(baseDto({ document_type: 'FACTURA' }), 'h-1', 'auth-1', NOW);
+			const [[, params]] = calls(runner.query, 'INSERT INTO contracts');
+
+			expect(params.slice(-4, -2)).toEqual(['FACTURA_EXPORTACION', 'cfdi-i']);
+		});
+
 		it('con elección válida del país de la compañía: guarda el documento y deriva la familia de su kind', async () => {
 			const { service, runner } = build();
 

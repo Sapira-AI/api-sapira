@@ -397,6 +397,14 @@ genéricos `*` = `null`. No se crean ni editan tipos desde la API.
   multimoneda) **heredan la tasa de la factura de origen**. Solo hacia adelante: no se recalculan Por Emitir existentes (los contratos
   activos conservan sus facturas; un recálculo ocurre solo por una acción de la usuaria, p. ej. una modificación). Detalle por camino en
   [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) §13.
+- **Familia del documento en el alta (05-10)**: con el documento **sugerido**, la familia sale del país emisor vs el receptor; en México,
+  Perú y Colombia la exportación usa el documento local (CFDI, 01, FE) y antes el contrato quedaba como factura nacional con IVA. Un
+  documento **elegido** sigue fijando la familia por su `kind`.
+- **Corrección de datos del 05-10 (OK de Domi)**: 614 contratos activos sin `document_type`/`tax_document_type_id` quedaron con la familia
+  por país y el documento del catálogo de esa familia (si el país no tiene uno de exportación, sin documento), y 421 Por Emitir con
+  documento, exportación, tasa, IVA y totales según `resolveTaxRate` (netos sin tocar; Chile 18 % → 19 %, Colombia → 0, exportaciones →
+  0). Fuera: Hanka Inc. (demo). Después, con OK, U-PLANNER INC (EE. UU. → EE. UU., 21 % → 0, contrato 237: 3 Por Emitir).
+  Respaldo en `sapira_backups.contracts_documento_20261005[b]`, `invoices_iva_20261005[b]` e `invoice_items_iva_20261005[b]`.
 
 ### 8.2 Comunicaciones (dominios y remitentes del holding) · `/settings/communications/*`
 
