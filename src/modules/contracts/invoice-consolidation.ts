@@ -1,9 +1,10 @@
 import { round2 } from './billing-engine';
-import { isCreditNote, PENDING_STATUS } from './contract-360';
+import { isCreditNote, isVisibleLine, PENDING_STATUS } from './contract-360';
 import { type ContractInvoiceRow, erpDraftBlocker, type InvoiceBlocker, type InvoiceWarning } from './contract-invoices';
 import { isUnifiedType } from './invoice-consolidation-read';
-import { DESCRIPTION_FITTED_CODE, fitDescription, referenceKind } from './invoice-description';
+import { cutAtWord, DESCRIPTION_FITTED_CODE, referenceKind } from './invoice-description';
 import { pairKey, upperCode } from './multicurrency';
+import { asciiGlosa } from './pricing-engine';
 
 /**
  * Consolidación opcional entre contratos (caso socio, `docs/v2-rediseno/spec-multimoneda-contrato.md` §7) y lectura del historial
@@ -18,9 +19,9 @@ export const CONSOLIDATED_INVOICE_TYPE = 'Unificada';
 export const CONSOLIDATION_MIN_INVOICES = 2;
 export const CONSOLIDATION_MAX_INVOICES = 50;
 export const CONSOLIDATION_NOTES_MAX = 500;
-/** Separador del prefijo de contrato en la glosa (guion ASCII, regla del DTE). */
-export const CONSOLIDATION_PREFIX_SEPARATOR = ' - ';
-export const LEGACY_UNIFIED_STEP = 'Los documentos unificados históricos se editan o deshacen en la app actual (Facturación) hasta el switch';
+/** Separador del número de contrato al final de la glosa (guion ASCII, regla del DTE). */
+export const CONSOLIDATION_CONTRACT_SEPARATOR = ' - ';
+export const LEGACY_UNIFIED_STEP = 'Es una factura unificada histórica (de antes del cambio de versión): no se deshace desde Sapira';
 
 /** Códigos de bloqueo de la consolidación (409 `blocked`). */
 export const CONSOLIDATION_BLOCKERS = {
@@ -57,6 +58,14 @@ export const CONSOLIDATION_WARNINGS = {
 	references_inherited: 'references_inherited',
 	description_fitted: DESCRIPTION_FITTED_CODE,
 } as const;
+
+/**
+ * Aviso de la consolidación (Domi 07-10): `code` estable, `label` corto (2–4 palabras) para mostrarlo como chip y `message` de una línea,
+ * sin jerga, para el tooltip.
+ */
+export interface ConsolidationWarning extends InvoiceWarning {
+	label: string;
+}
 
 // ------------------------------------------------------------------ tipos
 
@@ -157,6 +166,11 @@ export interface ConsolidationContext {
 	 * temprana, como siempre.
 	 */
 	main_contract_id?: string | null;
+	/**
+	 * Re-unificar por la regla (Domi 07-10): referencias OC/HES que tenía la unificada anterior (las propias en `invoice_references` y las
+	 * vinculadas del contrato) y que la nueva hereda. Van después de las de los orígenes y pasan por la misma deduplicación tipo+folio.
+	 */
+	carried_references?: ConsolidationReference[];
 }
 
 export interface ConsolidationContribution {
@@ -186,7 +200,13 @@ export interface ConsolidatedLine {
 	contract_item_id: string | null;
 	description_before: string;
 	description: string;
+	/** La glosa no cabía con el número de contrato al final: se quitó el número o se recortó el final de la glosa. */
 	description_fitted: boolean;
+	/**
+	 * ¿La línea va al documento y al ERP? Misma regla que el detalle (`isVisibleLine`: cantidad distinta de 0). Las de cantidad 0 se copian
+	 * igual (no cambia qué se copia), pero no se envían: el front las pliega o atenúa.
+	 */
+	is_visible: boolean;
 	currency: string;
 	quantity: number;
 	subtotal: number;
@@ -270,7 +290,7 @@ export interface ConsolidationPlan {
 		items: Array<{ kind: string; code: string; source: 'invoice' | 'contract' }>;
 		deduped: number;
 	};
-	warnings: InvoiceWarning[];
+	warnings: ConsolidationWarning[];
 	blockers: InvoiceBlocker[];
 	can_apply: boolean;
 }
@@ -418,25 +438,34 @@ const dedupeBlockers = (blockers: InvoiceBlocker[]) => {
 
 // ------------------------------------------------------------------ glosa, referencias y valorización
 
-/** `CTR-2026-12 - <glosa>` ajustada al límite del documento con `fitDescription` (recorta la glosa, conserva el número). No duplica el prefijo. */
-export function prefixDescription(contractNumber: string | null, description: string, maxChars: number | null): { text: string; fitted: boolean } {
-	const glosa = (description ?? '').trim();
-	const prefix = (contractNumber ?? '').trim();
+/**
+ * `<glosa> - CTR-2026-12` (Domi 07-10): la glosa original primero (producto, período y lo que siga) y el número de contrato al final, para
+ * que el límite del documento (`description_max_chars`) nunca se coma el período. Si no cabe: primero se quita el número de contrato; si la
+ * glosa sola tampoco cabe, se recorta su final (lo menos importante), nunca el comienzo. No duplica el número (ni al final ni el prefijo de
+ * antes del 07-10). `fitted` = se quitó el número o se recortó; `contract_dropped` / `trimmed` dicen cuál.
+ */
+export function suffixContractNumber(
+	contractNumber: string | null,
+	description: string,
+	maxChars: number | null
+): { text: string; fitted: boolean; contract_dropped: boolean; trimmed: boolean } {
+	const contract = asciiGlosa(contractNumber ?? '');
+	const separator = CONSOLIDATION_CONTRACT_SEPARATOR;
+	let body = asciiGlosa(description ?? '');
 
-	if (!prefix) return { text: glosa, fitted: false };
-	const body = glosa.startsWith(`${prefix}${CONSOLIDATION_PREFIX_SEPARATOR}`)
-		? glosa.slice(prefix.length + CONSOLIDATION_PREFIX_SEPARATOR.length)
-		: glosa;
-	const fitted = fitDescription(
-		{
-			separator: CONSOLIDATION_PREFIX_SEPARATOR,
-			blocks: [{ type: 'contract_number' }, ...(body ? [{ type: 'text' as const, text: body }] : [])],
-		},
-		{ line_kind: 'standard', contract_number: prefix },
-		maxChars
-	);
+	if (contract) {
+		if (body === contract) body = '';
+		else if (body.endsWith(`${separator}${contract}`)) body = body.slice(0, -(separator.length + contract.length)).trim();
+		else if (body.startsWith(`${contract}${separator}`)) body = body.slice(contract.length + separator.length).trim();
+	}
+	const full = contract ? (body ? `${body}${separator}${contract}` : contract) : body;
 
-	return { text: fitted.text, fitted: fitted.fitted };
+	if (maxChars === null || full.length <= maxChars) return { text: full, fitted: false, contract_dropped: false, trimmed: false };
+	const dropped = !!contract && !!body;
+
+	if (body && body.length <= maxChars) return { text: body, fitted: true, contract_dropped: dropped, trimmed: false };
+
+	return { text: cutAtWord(body || contract, maxChars).slice(0, maxChars), fitted: true, contract_dropped: dropped, trimmed: true };
 }
 
 /** Tipo+folio de una referencia: OC (801 / PO), HES u otro nombre; folio sin espacios y en mayúsculas. */
@@ -485,7 +514,7 @@ export function valueLinesForConsolidation(
 	lines: Array<ConsolidationLine & { origin_currency: string | null }>,
 	invoiceCurrency: string
 ): {
-	lines: Array<Omit<ConsolidatedLine, 'contract_number' | 'description_before' | 'description' | 'description_fitted'>>;
+	lines: Array<Omit<ConsolidatedLine, 'contract_number' | 'description_before' | 'description' | 'description_fitted' | 'is_visible'>>;
 	spot: boolean;
 	pairs: string[];
 } {
@@ -584,7 +613,7 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 	const { invoices } = ctx;
 	const byId = new Map(invoices.map((invoice) => [invoice.id, invoice]));
 	const blockers = groupBlockers(invoices);
-	const warnings: InvoiceWarning[] = [];
+	const warnings: ConsolidationWarning[] = [];
 	const invoiceCurrency = upperCode(invoices[0]?.invoice_currency);
 	const lines = ctx.lines
 		.filter((line) => byId.has(line.invoice_id))
@@ -621,7 +650,8 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 			main: false,
 		};
 	});
-	const fixedMain = ctx.main_contract_id && contributions.some((contribution) => contribution.contract_id === ctx.main_contract_id) ? ctx.main_contract_id : null;
+	const fixedMain =
+		ctx.main_contract_id && contributions.some((contribution) => contribution.contract_id === ctx.main_contract_id) ? ctx.main_contract_id : null;
 	const mainContractId = fixedMain ?? mainContractOf(contributions);
 
 	for (const contribution of contributions) contribution.main = contribution.contract_id === mainContractId;
@@ -634,7 +664,7 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 			.filter((invoice) => invoice.contract_id === mainContractId)
 			.sort((a, b) => (a.issue_date ?? '').localeCompare(b.issue_date ?? ''))[0] ?? invoices[0];
 
-	// ---- líneas: prefijo de contrato, ordenadas por contrato (principal primero) y período
+	// ---- líneas: número de contrato al final de la glosa, ordenadas por contrato (principal primero) y período
 	const maxChars = mainContractId ? (ctx.max_chars_by_contract.get(mainContractId) ?? null) : null;
 	const rank = new Map(ordered.map((contribution, index) => [contribution.contract_id, index]));
 	const sourceById = new Map(lines.map((line) => [line.id, line]));
@@ -650,16 +680,17 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 		.map(({ line }) => {
 			const before = sourceById.get(line.source_line_id)?.description ?? '';
 			const contractNumber = line.contract_id ? (numberOf.get(line.contract_id) ?? null) : null;
-			const prefixed = prefixDescription(contractNumber, before, maxChars);
+			const suffixed = suffixContractNumber(contractNumber, before, maxChars);
 
-			if (prefixed.fitted) fittedCount++;
+			if (suffixed.fitted) fittedCount++;
 
 			return {
 				...line,
 				contract_number: contractNumber,
 				description_before: before,
-				description: prefixed.text,
-				description_fitted: prefixed.fitted,
+				description: suffixed.text,
+				description_fitted: suffixed.fitted,
+				is_visible: isVisibleLine(line.quantity),
 			};
 		});
 
@@ -676,7 +707,10 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 	const amountContract = same ? round2(invoices.reduce((sum, invoice) => sum + (invoice.amount_contract_currency ?? 0), 0)) : amountInvoice;
 	const vat = allValued ? taxInvoice : same ? round2(invoices.reduce((sum, invoice) => sum + vatInContractCurrency(invoice), 0)) : null;
 	const autoInvoice = invoices.every((invoice) => invoice.auto_invoice);
-	const autoSend = invoices.every((invoice) => invoice.contract_auto_send_to_erp);
+	// El envío automático al ERP no se guarda en la factura: el job (`InvoiceSchedulerService.pendingInvoicesQuery`) mira
+	// `contracts.auto_send_to_odoo` del contrato de la factura, y la unificada lleva el contrato principal. El encabezado dice eso.
+	const mainInvoice = invoices.find((invoice) => invoice.contract_id === mainContractId);
+	const autoSend = mainInvoice ? mainInvoice.contract_auto_send_to_erp : invoices.every((invoice) => invoice.contract_auto_send_to_erp);
 	const requiresReferences = invoices.some((invoice) => invoice.requires_references || invoice.contract_requires_references);
 	// Con principal fijado por la regla, las fechas son las de su factura del mes; si no, la más temprana de todas.
 	const dateSource = fixedMain ? invoices.filter((invoice) => invoice.contract_id === fixedMain) : invoices;
@@ -715,19 +749,31 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 		requires_references_for_billing: requiresReferences,
 	};
 
-	// ---- avisos
+	// ---- avisos (Domi 07-10: `label` corto para el chip, `message` de una línea para el tooltip; los `code` no cambian)
 	if (new Set(invoices.map((invoice) => invoice.auto_invoice)).size > 1)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.auto_invoice_differs,
-			message: 'Los orígenes difieren en emisión automática: el consolidado queda sin emisión automática (AND de los orígenes)',
+			label: 'Emisión manual',
+			message: 'Un contrato se emite solo y otro no: la factura unificada no se emite sola; emítela tú.',
 		});
-	if (new Set(invoices.map((invoice) => invoice.contract_auto_send_to_erp)).size > 1)
-		warnings.push({
-			code: CONSOLIDATION_WARNINGS.auto_send_to_erp_differs,
-			message: `Los contratos difieren en envío automático al ERP: el consolidado sigue al contrato principal (${
-				numberOf.get(mainContractId ?? '') ?? mainContractId ?? ''
-			}), que ${invoices.find((invoice) => invoice.contract_id === mainContractId)?.contract_auto_send_to_erp ? 'sí' : 'no'} envía automático`,
-		});
+	if (new Set(invoices.map((invoice) => invoice.contract_auto_send_to_erp)).size > 1) {
+		const mainNumber = numberOf.get(mainContractId ?? '') ?? null;
+		const follows = mainNumber ? `sigue al contrato principal (${mainNumber})` : 'sigue al contrato principal';
+
+		warnings.push(
+			autoSend
+				? {
+						code: CONSOLIDATION_WARNINGS.auto_send_to_erp_differs,
+						label: 'Envío al ERP: automático',
+						message: `Un contrato envía solo al ERP y otro no: la factura unificada ${follows} y se envía sola.`,
+					}
+				: {
+						code: CONSOLIDATION_WARNINGS.auto_send_to_erp_differs,
+						label: 'Envío al ERP: manual',
+						message: `Un contrato envía solo al ERP y otro no: la factura unificada ${follows} y no se envía sola; envíala tú.`,
+					}
+		);
+	}
 	const pairRates = new Map<string, Set<number | null>>();
 
 	for (const line of converting) {
@@ -740,24 +786,28 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 	if (!valued.spot && differing.length)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.pair_rates_differ,
-			message: `Las líneas de ${differing.join(', ')} conservan tasas distintas por factura de origen (cada línea lleva la suya)`,
+			label: 'Tipos de cambio distintos',
+			message: `Las líneas en ${differing.join(', ')} mantienen el tipo de cambio de su factura: no hay uno solo.`,
 		});
 	if (valued.spot && converting.length)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.spot_document,
-			message: `Alguna línea que convierte es spot: el documento queda spot entero y se valoriza al emitir${
-				consolidatedLines.some((line) => line.spot_propagated) ? ' (las líneas con tasa fija la pierden en el consolidado)' : ''
-			}`,
+			label: 'Cambio al emitir',
+			message: consolidatedLines.some((line) => line.spot_propagated)
+				? 'Hay líneas sin tipo de cambio: toda la factura usa el del día de emisión, también las que tenían uno fijo.'
+				: 'Hay líneas sin tipo de cambio: toda la factura usa el del día de emisión.',
 		});
 	if (requiresReferences)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.references_inherited,
-			message: 'Algún contrato u origen exige OC/HES: el consolidado hereda el requisito de referencias',
+			label: 'Pide OC',
+			message: 'Pide OC: puedes enviarla como borrador y agregar la OC antes de emitir.',
 		});
 	if (fittedCount)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.description_fitted,
-			message: `${fittedCount} ${fittedCount === 1 ? 'glosa se ajustó' : 'glosas se ajustaron'} al límite del documento para anteponer el número de contrato`,
+			label: 'Descripciones acortadas',
+			message: `${fittedCount === 1 ? '1 descripción no cabe' : `${fittedCount} descripciones no caben`} en el documento: va sin número de contrato o acortada al final.`,
 		});
 
 	return {
@@ -783,10 +833,84 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 		main_contract_id: mainContractId,
 		header,
 		lines: consolidatedLines,
-		references: dedupeReferences(ctx.references.filter((reference) => byId.has(reference.invoice_id))),
+		references: dedupeReferences([...ctx.references.filter((reference) => byId.has(reference.invoice_id)), ...(ctx.carried_references ?? [])]),
 		warnings,
 		blockers,
 		can_apply: blockers.length === 0,
+	};
+}
+
+// ------------------------------------------------------------------ re-copia: glosas editadas en la unificada
+
+/** Clave de una línea para reconocerla entre el origen y su copia en la unificada (ítem, período y fila del tramo). */
+export interface CopyLineKey {
+	contract_id: string | null;
+	contract_item_id: string | null;
+	billing_period_start: string | null;
+	billing_period_end: string | null;
+	/** `pricing_breakdown[0].line_index` de una fila por tramo; null en las demás. */
+	tier_index: string | null;
+}
+
+export const copyLineKey = (line: CopyLineKey) =>
+	[line.contract_id ?? '', line.contract_item_id ?? '', line.billing_period_start ?? '', line.billing_period_end ?? '', line.tier_index ?? ''].join(
+		'|'
+	);
+
+/**
+ * Glosas escritas a mano en la unificada (Por Emitir, `description_locked`) que una re-copia por consumo (`resyncFromOrigins`) conserva:
+ * por línea de origen, solo si la clave identifica UNA línea en cada lado y el texto difiere del que daría la copia (si es igual, no hay
+ * nada que conservar). Las ambiguas se regeneran.
+ */
+export function keptUnifiedDescriptions(
+	unifiedLocked: Array<CopyLineKey & { description: string | null }>,
+	copies: Array<CopyLineKey & { source_line_id: string; description: string }>
+): Map<string, string> {
+	const count = <T extends CopyLineKey>(rows: T[]) => {
+		const counts = new Map<string, number>();
+
+		for (const row of rows) counts.set(copyLineKey(row), (counts.get(copyLineKey(row)) ?? 0) + 1);
+
+		return counts;
+	};
+	const unifiedCounts = count(unifiedLocked);
+	const copyCounts = count(copies);
+	const byKey = new Map(unifiedLocked.map((row) => [copyLineKey(row), row.description ?? '']));
+	const kept = new Map<string, string>();
+
+	for (const copy of copies) {
+		const key = copyLineKey(copy);
+
+		if (unifiedCounts.get(key) !== 1 || copyCounts.get(key) !== 1) continue;
+		const text = byKey.get(key)!;
+
+		if (text && text !== copy.description) kept.set(copy.source_line_id, text);
+	}
+
+	return kept;
+}
+
+/** Fechas de una unificada: emisión, programada y vencimiento. */
+export interface UnifiedDates {
+	issue_date: string | null;
+	scheduled_at: string | null;
+	due_date: string | null;
+}
+
+/**
+ * Re-unificar por la regla (Domi 07-10): si la unificada anterior se reprogramó (su emisión o su fecha programada no son las que da el plan),
+ * la nueva conserva sus tres fechas (emisión, programada y vencimiento); si no, las del plan (la factura del principal del mes).
+ */
+export function keptUnifiedDates<T extends UnifiedDates>(header: T, previous: UnifiedDates | null): { header: T; kept: boolean } {
+	if (!previous) return { header, kept: false };
+	const day = (value: string | null) => (value ? value.slice(0, 10) : null);
+	const rescheduled = day(previous.issue_date) !== day(header.issue_date) || day(previous.scheduled_at) !== day(header.scheduled_at);
+
+	if (!rescheduled) return { header, kept: false };
+
+	return {
+		header: { ...header, issue_date: day(previous.issue_date), scheduled_at: day(previous.scheduled_at), due_date: day(previous.due_date) },
+		kept: true,
 	};
 }
 

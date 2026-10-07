@@ -4,11 +4,24 @@ import { DataSource } from 'typeorm';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter, withApiWriter } from './api-writer';
+import { todayFor } from './business-date';
 import { resolveUserId } from './contract-drafts.service';
+import { derivedStatusLateral } from './contract-status';
 import { normalizePriceSpec, PRICE_COLUMNS, priceSpecFromRow } from './price-rows';
+import {
+	buildModelsUsage,
+	CONTRACT_PRICE_SORT_SQL,
+	CONTRACT_PRICES_FROM,
+	CONTRACT_PRICES_SELECT,
+	contractPriceView,
+	USAGE_BY_MODEL_SQL,
+	USAGE_BY_QUANTITY_SQL,
+	USAGE_ITEMS_SQL,
+	USAGE_PRICES_SQL,
+} from './price-usage';
 import { isMetered, type PriceSpec, validatePriceSpec } from './pricing-engine';
 
-import type { CreatePriceDto, NewPriceVersionDto, PriceSortField, QueryPricesDto, UpdatePriceDto } from './dtos/price.dto';
+import type { CreatePriceDto, NewPriceVersionDto, PriceSortField, QueryContractPricesDto, QueryPricesDto, UpdatePriceDto } from './dtos/price.dto';
 
 type Row = Record<string, unknown>;
 type Queryable = Pick<DataSource, 'query'>;
@@ -128,6 +141,63 @@ export class PricesService {
 		const total = toNumber(count?.total);
 
 		return { data: rows.map(PricesService.toView), total, currentPage: page, pages: Math.max(1, Math.ceil(total / limit)), limit };
+	}
+
+	/**
+	 * `GET /prices/models/usage`: por modelo y tipo de cantidad, ítems vivos y contratos que lo usan, precios de catálogo
+	 * (no archivados) y precios propios de contratos. Grilla completa con ceros + `none` (ítems vivos sin precio).
+	 */
+	async modelsUsage(holdingId: string, now: Date = new Date()) {
+		const today = todayFor(null, now);
+		const [items, prices, byModel, byQuantity] = await Promise.all([
+			this.dataSource.query(USAGE_ITEMS_SQL, [holdingId, today]) as Promise<Row[]>,
+			this.dataSource.query(USAGE_PRICES_SQL, [holdingId]) as Promise<Row[]>,
+			this.dataSource.query(USAGE_BY_MODEL_SQL, [holdingId, today]) as Promise<Row[]>,
+			this.dataSource.query(USAGE_BY_QUANTITY_SQL, [holdingId, today]) as Promise<Row[]>,
+		]);
+
+		return buildModelsUsage(items, prices, byModel, byQuantity);
+	}
+
+	/**
+	 * `GET /prices/contract-prices`: precios propios de los contratos (`owner = contract`) de contratos no eliminados, con
+	 * contrato (estado mostrado), cliente, producto, métrica, modelo y cantidad de ítems que lo usan. Paginado
+	 * `{ data, total, currentPage, pages, limit }`. Solo lectura: el modelo se cambia en el contrato (Modificar contrato).
+	 */
+	async contractPrices(holdingId: string, query: QueryContractPricesDto, now: Date = new Date()) {
+		const limit = query.limit ?? DEFAULT_LIMIT;
+		const page = query.page ?? 1;
+		const params: unknown[] = [holdingId];
+		const where: string[] = [`p.holding_id = $1`, `p.owner = 'contract'`];
+		const add = (clause: string, value: unknown) => {
+			params.push(value);
+			where.push(clause.replace('?', `$${params.length}`));
+		};
+
+		if (query.model) add(`p.model = ?`, query.model);
+		if (query.quantity_type) add(`p.quantity_type = ?`, query.quantity_type);
+		if (query.product_id) add(`p.product_id = ?::uuid`, query.product_id);
+		if (query.search?.trim()) {
+			params.push(`%${query.search.trim()}%`);
+			const n = params.length;
+
+			where.push(`(c.contract_number ILIKE $${n} OR cl.name_commercial ILIKE $${n} OR pr.name ILIKE $${n} OR p.name ILIKE $${n})`);
+		}
+		const order = `${CONTRACT_PRICE_SORT_SQL[query.sortBy ?? 'contract_number']} ${query.sortOrder === 'desc' ? 'DESC' : 'ASC'} NULLS LAST`;
+		const whereSql = `WHERE ${where.join(' AND ')}`;
+		// Hoy (estado mostrado del contrato) va como último parámetro, solo en la consulta de filas.
+		const lateral = derivedStatusLateral(`$${params.length + 1}`);
+		const [[count], rows] = await Promise.all([
+			this.dataSource.query(`SELECT COUNT(*) AS total ${CONTRACT_PRICES_FROM} ${whereSql}`, params) as Promise<Row[]>,
+			this.dataSource.query(
+				`SELECT ${CONTRACT_PRICES_SELECT} ${CONTRACT_PRICES_FROM} ${lateral} ${whereSql}
+				ORDER BY ${order}, p.id LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+				[...params, todayFor(null, now)]
+			) as Promise<Row[]>,
+		]);
+		const total = toNumber(count?.total);
+
+		return { data: rows.map(contractPriceView), total, currentPage: page, pages: Math.max(1, Math.ceil(total / limit)), limit };
 	}
 
 	private async row(db: Queryable, id: string, holdingId: string): Promise<Row | undefined> {

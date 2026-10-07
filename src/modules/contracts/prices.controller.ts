@@ -5,7 +5,7 @@ import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
-import { CreatePriceDto, NewPriceVersionDto, QueryPricesDto, UpdatePriceDto } from './dtos/price.dto';
+import { CreatePriceDto, NewPriceVersionDto, QueryContractPricesDto, QueryPricesDto, UpdatePriceDto } from './dtos/price.dto';
 import { PricesService } from './prices.service';
 
 type AuthRequest = { user?: { sub?: string; id?: string } };
@@ -37,6 +37,37 @@ export class PricesController {
 	@ApiResponse({ status: 200, description: `{ data: [${PRICE_SHAPE}], total, currentPage, pages, limit }` })
 	async list(@Query() query: QueryPricesDto, @HoldingId() holdingId: string) {
 		return await this.prices.list(holdingId, query);
+	}
+
+	// Rutas fijas antes de `:id` (Nest las resuelve en orden de declaración).
+	@Get('models/usage')
+	@ApiOperation({
+		summary: 'Uso de los modelos de precio en el holding',
+		description:
+			'Por modelo (standard, graduated, volume, package, seat) y tipo de cantidad (fixed, metered): ítems vivos (fin y churn nulos o desde hoy) de contratos no eliminados ni cancelados, contratos distintos, precios de catálogo no archivados y precios propios de contratos. Grilla completa con ceros; `model = none` = ítems vivos sin precio (fijo heredado). `totals.contracts` = contratos distintos con algún ítem vivo con precio',
+	})
+	@ApiResponse({
+		status: 200,
+		description:
+			'{ models: [{ model, quantity_type, items_in_use, contracts, catalog_prices, contract_prices }], by_model: [{ model, items_in_use, contracts }], by_quantity_type: [{ quantity_type, items_in_use, contracts }], totals: { items_in_use, contracts, catalog_prices, contract_prices } }',
+	})
+	async modelsUsage(@HoldingId() holdingId: string) {
+		return await this.prices.modelsUsage(holdingId);
+	}
+
+	@Get('contract-prices')
+	@ApiOperation({
+		summary: 'Precios propios de los contratos (solo lectura)',
+		description:
+			'`owner = contract` de contratos no eliminados, paginado y filtrado (búsqueda por contrato, cliente, producto o precio; modelo; tipo de cantidad; producto). El modelo de un contrato se cambia en Modificar contrato',
+	})
+	@ApiResponse({
+		status: 200,
+		description:
+			'{ data: [{ id, name, currency, model, quantity_type, contract: { id, number, status }, client: { id, name } | null, product: { id, name }, billable_metric | null, list_price_id, items_count, item_ids: string[] (el de inicio más reciente primero), updated_at, spec: PriceSpec }], total, currentPage, pages, limit }',
+	})
+	async contractPrices(@Query() query: QueryContractPricesDto, @HoldingId() holdingId: string) {
+		return await this.prices.contractPrices(holdingId, query);
 	}
 
 	@Post()

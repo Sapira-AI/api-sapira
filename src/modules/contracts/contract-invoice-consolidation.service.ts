@@ -16,10 +16,14 @@ import {
 	type ConsolidationLine,
 	type ConsolidationPlan,
 	type ConsolidationReference,
+	type CopyLineKey,
 	invoiceBlockers,
+	keptUnifiedDates,
+	keptUnifiedDescriptions,
 	planConsolidation,
 	undoBlockers,
 	UNIFIED_INVOICE_TYPES,
+	type UnifiedDates,
 } from './invoice-consolidation';
 import { DESCRIPTION_LIMITS_SQL, descriptionMaxCharsOfRow } from './tax-document-types';
 
@@ -93,17 +97,39 @@ const LIMITS_SQL = `SELECT c.id, c.tax_document_type_id, tdt.description_max_cha
 	LEFT JOIN tax_document_types tdt ON tdt.id = c.tax_document_type_id
 	WHERE c.id = ANY($1::uuid[]) AND c.holding_id = $2`;
 
+/** Columnas de `copyLineKey` sobre `invoice_items ii` (la fila del tramo sale del desglose). */
+const COPY_KEY_SQL = `ii.contract_id, ii.contract_item_id, ii.billing_period_start::text AS billing_period_start,
+	ii.billing_period_end::text AS billing_period_end,
+	CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array' THEN ii.pricing_breakdown->0->>'line_index' END AS tier_index`;
+
 const EVENT_SQL = `SELECT e.id, e.metadata FROM contract_lifecycle_events e
 	WHERE e.holding_id = $1 AND e.event_type = '${CONSOLIDATION_EVENT_TYPES.consolidated}' AND e.metadata->>'consolidated_invoice_id' = $2::text
 	ORDER BY e.created_at DESC LIMIT 1`;
 
 export type ConsolidationPreview = ConsolidationPlan;
 
+/** Opciones de `applyInvoices`: notas (manual) o principal, regla y origen (unificación recurrente). */
+export interface ApplyOptions {
+	notes?: string | null;
+	main_contract_id?: string | null;
+	rule_id?: string | null;
+	source?: string;
+}
+
+/** Lo que la unificada anterior traspasa a la nueva al re-unificar (`reunifyInvoices`). */
+interface UnifiedCarry {
+	previous_id: string;
+	/** Fechas de la anterior: si se reprogramó, la nueva las conserva (`keptUnifiedDates`). */
+	dates: UnifiedDates | null;
+	references: ConsolidationReference[];
+	locked: Array<CopyLineKey & { description: string | null }>;
+}
+
 /**
  * Consolidación opcional entre contratos (caso socio, `docs/v2-rediseno/spec-multimoneda-contrato.md` §7): candidatas, preview, aplicar y
  * deshacer. Plan puro en `invoice-consolidation.ts`. Aplicar va en **una transacción** con `setApiWriter` como primera sentencia, los
  * contratos involucrados bloqueados (`FOR UPDATE`, en orden de id) y las facturas también; crea un documento `Unificada` (grupo propio) con
- * **copias** de las líneas de los orígenes (prefijo de contrato, `contract_id` de la línea, tasa por par; spot entero si alguna línea lo es),
+ * **copias** de las líneas de los orígenes (glosa con el número de contrato al final, `contract_id` de la línea, tasa por par; spot entero si alguna línea lo es),
  * copia las referencias OC/HES sin repetir tipo+folio, deja los orígenes `is_active = false` con `consolidated_into_invoice_id` y registra
  * un evento `INVOICE_CONSOLIDATED` por contrato. Deshacer: el consolidado pasa a `Cancelada` (nunca DELETE) y los orígenes vuelven intactos.
  * El devengo no cambia (las copias llevan el mismo `contract_item_id` y monto que el origen, que queda inactivo): sin rebuild. Nunca escribe
@@ -157,6 +183,7 @@ export class ContractInvoiceConsolidationService {
 
 	// ---------------------------------------------------------------- preview y aplicar
 
+	/** Vista previa. La unificación recurrente fija el principal (encabezado y fecha de emisión). */
 	async preview(dto: ConsolidateInvoicesDto, holdingId: string, mainContractId: string | null = null): Promise<ConsolidationPreview> {
 		const ctx = await this.loadContext(this.dataSource, holdingId, dto.invoice_ids);
 
@@ -175,92 +202,165 @@ export class ContractInvoiceConsolidationService {
 	 * (`InvoiceConsolidationRulesService`), que fija el contrato principal (`main_contract_id`: encabezado y fecha de emisión), marca los
 	 * eventos con `rule_id` y puede correr sin usuario (job diario: `userId` null).
 	 */
-	async applyInvoices(
+	async applyInvoices(invoiceIds: string[], holdingId: string, userId: string | null, options: ApplyOptions = {}, today = new Date()) {
+		const contractIds = await this.contractIdsOf(this.dataSource, holdingId, invoiceIds);
+		const result = await this.transaction(contractIds, holdingId, (runner) =>
+			this.applyIn(runner, invoiceIds, holdingId, userId, options, today, contractIds)
+		);
+
+		return await this.appliedView(result, holdingId);
+	}
+
+	/**
+	 * Re-unificar un mes (unificación recurrente, apareció una factura nueva): deshace la unificada anterior y arma la nueva con
+	 * `invoiceIds` en **una sola transacción**, y traspasa a la nueva lo que la usuaria le agregó a la anterior (Domi 07-10): sus
+	 * referencias OC/HES (propias y vinculadas del contrato, sin repetir tipo+folio con las de los orígenes) y las glosas escritas a mano en
+	 * sus líneas (`description_locked`, emparejadas por ítem, período y fila de tramo como en `resyncFromOrigins`); si estaba reprogramada,
+	 * también su emisión, fecha programada y vencimiento (`keptUnifiedDates`). Si algo bloquea, nada
+	 * cambia (rollback): la anterior sigue vigente.
+	 */
+	async reunifyInvoices(
+		previousId: string,
+		invoiceIds: string[],
+		reason: string,
+		holdingId: string,
+		userId: string | null,
+		options: ApplyOptions = {},
+		today = new Date()
+	) {
+		const [previous] = await this.loadInvoices(this.dataSource, holdingId, [previousId]);
+		const previousOrigins = await this.loadOrigins(this.dataSource, holdingId, previousId);
+		const contractIds = [
+			...new Set(
+				[
+					previous.contract_id,
+					...previousOrigins.map((origin) => origin.contract_id),
+					...(await this.contractIdsOf(this.dataSource, holdingId, invoiceIds)),
+				].filter((id): id is string => !!id)
+			),
+		];
+		const result = await this.transaction(contractIds, holdingId, async (runner) => {
+			const carry = await this.carryFrom(runner, holdingId, previousId);
+			const undone = await this.undoIn(runner, previousId, reason, holdingId, userId, today, options.source);
+			const applied = await this.applyIn(runner, invoiceIds, holdingId, userId, options, today, contractIds, carry);
+
+			return { ...applied, undone, carried: { references: carry.references.length, descriptions: applied.kept_descriptions } };
+		});
+
+		return { ...(await this.appliedView(result, holdingId)), undone: result.undone, carried: result.carried };
+	}
+
+	/** Lo que la unificada anterior lleva a la nueva al re-unificar: fechas, referencias (propias y vinculadas) y glosas protegidas. */
+	private async carryFrom(runner: QueryRunner, holdingId: string, previousId: string): Promise<UnifiedCarry> {
+		const [[previous], references, locked] = await Promise.all([
+			this.loadInvoices(runner, holdingId, [previousId]),
+			runner.query(REFERENCES_SQL, [[previousId], holdingId]) as Promise<Row[]>,
+			runner.query(
+				`SELECT ${COPY_KEY_SQL}, ii.description FROM invoice_items ii WHERE ii.invoice_id = $1 AND ii.holding_id = $2 AND ii.description_locked = true`,
+				[previousId, holdingId]
+			) as Promise<Row[]>,
+		]);
+
+		return {
+			previous_id: previousId,
+			dates: previous ? { issue_date: previous.issue_date, scheduled_at: previous.scheduled_at, due_date: previous.due_date } : null,
+			references: references.map((row) => this.referenceOf(row)),
+			locked: locked.map((row) => ({ ...this.copyKeyOf(row), description: toText(row.description) })),
+		};
+	}
+
+	/** Consolidación dentro de una transacción ya abierta (costura y contratos bloqueados). `carry`: lo heredado al re-unificar. */
+	private async applyIn(
+		runner: QueryRunner,
 		invoiceIds: string[],
 		holdingId: string,
 		userId: string | null,
-		options: { notes?: string | null; main_contract_id?: string | null; rule_id?: string | null; source?: string } = {},
-		today = new Date()
+		options: ApplyOptions,
+		today: Date,
+		contractIds: string[],
+		carry: UnifiedCarry | null = null
 	) {
-		const contractIds = await this.contractIdsOf(this.dataSource, holdingId, invoiceIds);
 		const dto = { invoice_ids: invoiceIds, notes: options.notes ?? undefined } as ConsolidateInvoicesDto;
 
-		const result = await this.transaction(contractIds, holdingId, async (runner) => {
-			await this.lockInvoices(runner, holdingId, dto.invoice_ids);
-			const ctx = await this.loadContext(runner, holdingId, dto.invoice_ids);
-			const plan = planConsolidation({ ...ctx, main_contract_id: options.main_contract_id ?? null });
-			const changed = ctx.invoices.some((invoice) => invoice.contract_id && !contractIds.includes(invoice.contract_id));
-
-			if (changed)
-				throw this.blocked(
-					[
-						{
-							code: 'concurrent_change',
-							message: 'Las facturas cambiaron de contrato mientras se consolidaban',
-							next_step: 'Vuelve a intentarlo',
-						},
-					],
-					plan
-				);
-			if (plan.blockers.length) throw this.blocked(plan.blockers, plan);
-			const consolidatedId = await this.write(runner, holdingId, plan, dto, userId);
-			const sourceIds = plan.invoices.map((invoice) => invoice.id);
-			const eventIds: string[] = [];
-
-			for (const contribution of plan.contributions) {
-				eventIds.push(
-					await this.insertEvent(
-						runner,
-						holdingId,
-						userId,
-						contribution.contract_id,
-						CONSOLIDATION_EVENT_TYPES.consolidated,
-						isoDate(today),
-						{
-							title: 'Facturas consolidadas en un documento',
-							description: `${sourceIds.length} facturas de ${plan.contributions.length} contratos consolidadas${
-								contribution.main ? ' (contrato principal)' : ''
-							}`,
-							metadata: {
-								invoice_id: consolidatedId,
-								invoice_ids: [consolidatedId, ...sourceIds],
-								consolidated_invoice_id: consolidatedId,
-								source_invoice_ids: sourceIds,
-								contract_source_invoice_ids: contribution.invoice_ids,
-								main_contract_id: plan.main_contract_id,
-								contracts: plan.contributions.map((entry) => ({
-									contract_id: entry.contract_id,
-									contract_number: entry.contract_number,
-									client_id: entry.client_id,
-									invoice_ids: entry.invoice_ids,
-									subtotal_invoice_currency: entry.subtotal_invoice_currency,
-									subtotal_by_currency: entry.subtotal_by_currency,
-									main: entry.main,
-								})),
-								header: {
-									invoice_currency: plan.header.invoice_currency,
-									contract_currency: plan.header.contract_currency,
-									amount_contract_currency: plan.header.amount_contract_currency,
-									amount_invoice_currency: plan.header.amount_invoice_currency,
-									total_invoice_currency: plan.header.total_invoice_currency,
-									fx_contract_to_invoice: plan.header.fx_contract_to_invoice,
-									spot: plan.header.spot,
-									pairs: plan.header.pairs,
-								},
-								references: plan.references.items,
-								notes: dto.notes?.trim() || null,
-								warnings: plan.warnings.map((warning) => warning.code),
-								...(options.rule_id ? { rule_id: options.rule_id } : {}),
-								...(options.source ? { source: options.source } : {}),
-							},
-						}
-					)
-				);
-			}
-
-			return { plan, consolidatedId, eventIds };
+		await this.lockInvoices(runner, holdingId, dto.invoice_ids);
+		const ctx = await this.loadContext(runner, holdingId, dto.invoice_ids);
+		const planned = planConsolidation({
+			...ctx,
+			main_contract_id: options.main_contract_id ?? null,
+			carried_references: carry?.references ?? [],
 		});
+		// Re-unificar: si la anterior estaba reprogramada, la nueva conserva su emisión, fecha programada y vencimiento.
+		const dates = keptUnifiedDates(planned.header, carry?.dates ?? null);
+		const plan = dates.kept ? { ...planned, header: dates.header } : planned;
+		const changed = ctx.invoices.some((invoice) => invoice.contract_id && !contractIds.includes(invoice.contract_id));
 
+		if (changed)
+			throw this.blocked(
+				[
+					{
+						code: 'concurrent_change',
+						message: 'Las facturas cambiaron de contrato mientras se consolidaban',
+						next_step: 'Vuelve a intentarlo',
+					},
+				],
+				plan
+			);
+		if (plan.blockers.length) throw this.blocked(plan.blockers, plan);
+		const kept = carry?.locked.length ? await this.keptDescriptions(runner, holdingId, carry.locked, plan) : new Map<string, string>();
+		const consolidatedId = await this.write(runner, holdingId, plan, dto, userId, kept);
+		const sourceIds = plan.invoices.map((invoice) => invoice.id);
+		const eventIds: string[] = [];
+
+		for (const contribution of plan.contributions) {
+			eventIds.push(
+				await this.insertEvent(runner, holdingId, userId, contribution.contract_id, CONSOLIDATION_EVENT_TYPES.consolidated, isoDate(today), {
+					title: 'Facturas consolidadas en un documento',
+					description: `${sourceIds.length} facturas de ${plan.contributions.length} contratos consolidadas${
+						contribution.main ? ' (contrato principal)' : ''
+					}`,
+					metadata: {
+						invoice_id: consolidatedId,
+						invoice_ids: [consolidatedId, ...sourceIds],
+						consolidated_invoice_id: consolidatedId,
+						source_invoice_ids: sourceIds,
+						contract_source_invoice_ids: contribution.invoice_ids,
+						main_contract_id: plan.main_contract_id,
+						contracts: plan.contributions.map((entry) => ({
+							contract_id: entry.contract_id,
+							contract_number: entry.contract_number,
+							client_id: entry.client_id,
+							invoice_ids: entry.invoice_ids,
+							subtotal_invoice_currency: entry.subtotal_invoice_currency,
+							subtotal_by_currency: entry.subtotal_by_currency,
+							main: entry.main,
+						})),
+						header: {
+							invoice_currency: plan.header.invoice_currency,
+							contract_currency: plan.header.contract_currency,
+							amount_contract_currency: plan.header.amount_contract_currency,
+							amount_invoice_currency: plan.header.amount_invoice_currency,
+							total_invoice_currency: plan.header.total_invoice_currency,
+							fx_contract_to_invoice: plan.header.fx_contract_to_invoice,
+							spot: plan.header.spot,
+							pairs: plan.header.pairs,
+						},
+						references: plan.references.items,
+						notes: dto.notes?.trim() || null,
+						warnings: plan.warnings.map((warning) => warning.code),
+						...(options.rule_id ? { rule_id: options.rule_id } : {}),
+						...(options.source ? { source: options.source } : {}),
+						...(carry
+							? { previous_consolidated_invoice_id: carry.previous_id, kept_descriptions: kept.size, kept_dates: dates.kept }
+							: {}),
+					},
+				})
+			);
+		}
+
+		return { plan, consolidatedId, eventIds, kept_descriptions: kept.size };
+	}
+
+	private async appliedView(result: { plan: ConsolidationPlan; consolidatedId: string; eventIds: string[] }, holdingId: string) {
 		return {
 			...result.plan,
 			applied: true,
@@ -287,74 +387,87 @@ export class ContractInvoiceConsolidationService {
 
 	/** Deshacer sin pasar por el DTO: lo usan `undo` y la unificación recurrente (re-unificar o pausar la regla; `userId` null en el job). */
 	async undoInvoice(invoiceId: string, reason: string, holdingId: string, userId: string | null, today = new Date(), source?: string) {
-		const dto = { reason } as UndoConsolidationDto;
 		const [consolidated] = await this.loadInvoices(this.dataSource, holdingId, [invoiceId]);
 		const origins = await this.loadOrigins(this.dataSource, holdingId, invoiceId);
 		const contractIds = [
 			...new Set([consolidated.contract_id, ...origins.map((origin) => origin.contract_id)].filter((id): id is string => !!id)),
 		];
 
-		return await this.transaction(contractIds, holdingId, async (runner) => {
-			await this.lockInvoices(runner, holdingId, [invoiceId, ...origins.map((origin) => origin.id)]);
-			const [current] = await this.loadInvoices(runner, holdingId, [invoiceId]);
-			const currentOrigins = await this.loadOrigins(runner, holdingId, invoiceId);
-			const [event] = (await runner.query(EVENT_SQL, [holdingId, invoiceId])) as Row[];
-			const preview = {
-				consolidated: { id: current.id, invoice_number: current.invoice_number, status: current.status, contract_id: current.contract_id },
-				origins: currentOrigins.map((origin) => ({
-					id: origin.id,
-					invoice_number: origin.invoice_number,
-					contract_id: origin.contract_id,
-					contract_number: origin.contract_number,
-				})),
-			};
-			const blockers = undoBlockers(current, !!event, currentOrigins.length);
+		return await this.transaction(contractIds, holdingId, (runner) => this.undoIn(runner, invoiceId, reason, holdingId, userId, today, source));
+	}
 
-			if (blockers.length) throw this.blocked(blockers, preview);
-			await runner.query(
-				`UPDATE invoices SET status = '${CANCELLED_STATUS}' WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`,
-				[invoiceId, holdingId]
+	/** Deshacer dentro de una transacción ya abierta (costura y contratos bloqueados). */
+	private async undoIn(
+		runner: QueryRunner,
+		invoiceId: string,
+		reason: string,
+		holdingId: string,
+		userId: string | null,
+		today: Date,
+		source?: string
+	) {
+		const dto = { reason } as UndoConsolidationDto;
+		const origins = await this.loadOrigins(runner, holdingId, invoiceId);
+
+		await this.lockInvoices(runner, holdingId, [invoiceId, ...origins.map((origin) => origin.id)]);
+		const [current] = await this.loadInvoices(runner, holdingId, [invoiceId]);
+		const currentOrigins = await this.loadOrigins(runner, holdingId, invoiceId);
+		const [event] = (await runner.query(EVENT_SQL, [holdingId, invoiceId])) as Row[];
+		const preview = {
+			consolidated: { id: current.id, invoice_number: current.invoice_number, status: current.status, contract_id: current.contract_id },
+			origins: currentOrigins.map((origin) => ({
+				id: origin.id,
+				invoice_number: origin.invoice_number,
+				contract_id: origin.contract_id,
+				contract_number: origin.contract_number,
+			})),
+		};
+		const blockers = undoBlockers(current, !!event, currentOrigins.length);
+
+		if (blockers.length) throw this.blocked(blockers, preview);
+		await runner.query(`UPDATE invoices SET status = '${CANCELLED_STATUS}' WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}'`, [
+			invoiceId,
+			holdingId,
+		]);
+		const restored = (await runner.query(
+			`UPDATE invoices SET is_active = true, consolidated_into_invoice_id = NULL
+			WHERE consolidated_into_invoice_id = $1 AND holding_id = $2 RETURNING id`,
+			[invoiceId, holdingId]
+		)) as Row[];
+		const restoredIds = restored.map((row) => String(row.id));
+		const byContract = new Map<string, string[]>();
+
+		for (const origin of currentOrigins)
+			if (origin.contract_id) byContract.set(origin.contract_id, [...(byContract.get(origin.contract_id) ?? []), origin.id]);
+		const eventIds: string[] = [];
+
+		for (const [contractId, ids] of byContract) {
+			eventIds.push(
+				await this.insertEvent(runner, holdingId, userId, contractId, CONSOLIDATION_EVENT_TYPES.undone, isoDate(today), {
+					title: 'Consolidación de facturas deshecha',
+					description: `Documento consolidado ${current.invoice_number ?? current.id} cancelado; ${restoredIds.length} facturas restauradas`,
+					metadata: {
+						invoice_id: invoiceId,
+						invoice_ids: [invoiceId, ...restoredIds],
+						consolidated_invoice_id: invoiceId,
+						source_invoice_ids: restoredIds,
+						contract_source_invoice_ids: ids,
+						contracts: [...byContract.entries()].map(([id, invoiceIds]) => ({ contract_id: id, invoice_ids: invoiceIds })),
+						reason: dto.reason.trim(),
+						...(source ? { source } : {}),
+					},
+				})
 			);
-			const restored = (await runner.query(
-				`UPDATE invoices SET is_active = true, consolidated_into_invoice_id = NULL
-				WHERE consolidated_into_invoice_id = $1 AND holding_id = $2 RETURNING id`,
-				[invoiceId, holdingId]
-			)) as Row[];
-			const restoredIds = restored.map((row) => String(row.id));
-			const byContract = new Map<string, string[]>();
+		}
 
-			for (const origin of currentOrigins)
-				if (origin.contract_id) byContract.set(origin.contract_id, [...(byContract.get(origin.contract_id) ?? []), origin.id]);
-			const eventIds: string[] = [];
-
-			for (const [contractId, ids] of byContract) {
-				eventIds.push(
-					await this.insertEvent(runner, holdingId, userId, contractId, CONSOLIDATION_EVENT_TYPES.undone, isoDate(today), {
-						title: 'Consolidación de facturas deshecha',
-						description: `Documento consolidado ${current.invoice_number ?? current.id} cancelado; ${restoredIds.length} facturas restauradas`,
-						metadata: {
-							invoice_id: invoiceId,
-							invoice_ids: [invoiceId, ...restoredIds],
-							consolidated_invoice_id: invoiceId,
-							source_invoice_ids: restoredIds,
-							contract_source_invoice_ids: ids,
-							contracts: [...byContract.entries()].map(([id, invoiceIds]) => ({ contract_id: id, invoice_ids: invoiceIds })),
-							reason: dto.reason.trim(),
-							...(source ? { source } : {}),
-						},
-					})
-				);
-			}
-
-			return {
-				...preview,
-				undone: true,
-				consolidated_invoice_id: invoiceId,
-				status: CANCELLED_STATUS,
-				restored_invoice_ids: restoredIds,
-				event_ids: eventIds,
-			};
-		});
+		return {
+			...preview,
+			undone: true,
+			consolidated_invoice_id: invoiceId,
+			status: CANCELLED_STATUS,
+			restored_invoice_ids: restoredIds,
+			event_ids: eventIds,
+		};
 	}
 
 	// ---------------------------------------------------------------- escritura
@@ -365,7 +478,8 @@ export class ContractInvoiceConsolidationService {
 		holdingId: string,
 		plan: ConsolidationPlan,
 		dto: ConsolidateInvoicesDto,
-		userId: string | null
+		userId: string | null,
+		kept: Map<string, string> = new Map()
 	): Promise<string> {
 		const header = plan.header;
 		const [row] = (await runner.query(
@@ -411,10 +525,11 @@ export class ContractInvoiceConsolidationService {
 		)) as Row[];
 		const consolidatedId = String(row.id);
 
-		// Líneas: copias (los orígenes quedan intactos para deshacer) con glosa prefijada, `contract_id` y montos/tasa de la valorización.
-		await this.insertCopies(runner, consolidatedId, plan, header.invoice_currency, header.issue_date, holdingId);
+		// Líneas: copias (los orígenes quedan intactos para deshacer) con la glosa y el número de contrato al final, `contract_id` y montos/tasa.
+		await this.insertCopies(runner, consolidatedId, plan, header.invoice_currency, header.issue_date, holdingId, kept);
 
-		// Referencias OC/HES de los orígenes sin repetir tipo+folio: las propias se copian; las del contrato se vinculan.
+		// Referencias OC/HES de los orígenes (y, al re-unificar, las de la unificada anterior) sin repetir tipo+folio: las propias se copian;
+		// las del contrato se vinculan.
 		if (plan.references.invoice_reference_ids.length) {
 			await runner.query(
 				`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
@@ -447,14 +562,18 @@ export class ContractInvoiceConsolidationService {
 		return consolidatedId;
 	}
 
-	/** Copias de las líneas de los orígenes en el consolidado (glosa prefijada, `contract_id`, montos y tasa de la valorización del plan). */
+	/**
+	 * Copias de las líneas de los orígenes en el consolidado (glosa con el número de contrato al final, `contract_id`, montos y tasa de la
+	 * valorización del plan). `kept` (re-copia): glosas escritas a mano en la unificada que se conservan, por línea de origen.
+	 */
 	private async insertCopies(
 		runner: QueryRunner,
 		consolidatedId: string,
 		plan: ConsolidationPlan,
 		invoiceCurrency: string | null,
 		issueDate: string | null,
-		holdingId: string
+		holdingId: string,
+		kept: Map<string, string> = new Map()
 	): Promise<void> {
 		await runner.query(
 			`INSERT INTO invoice_items (
@@ -465,14 +584,14 @@ export class ContractInvoiceConsolidationService {
 				contract_currency, invoice_currency, fx_contract_to_invoice, fx_rate_source, fx_rate_date,
 				billing_period_start, billing_period_end, status, issue_date
 			) SELECT
-				$1::uuid, s.holding_id, s.contract_item_id, p.contract_id, s.product_id, p.description, s.description_locked, s.quantity, s.unit_of_measure,
+				$1::uuid, s.holding_id, s.contract_item_id, p.contract_id, s.product_id, p.description, COALESCE(p.locked, s.description_locked), s.quantity, s.unit_of_measure,
 				s.discount_pct, s.tax_code, s.odoo_tax_id, s.custom_fields, s.subscription_item_id, s.pricing_breakdown, s.quantity_source,
 				s.unit_price_contract_currency, s.subtotal_contract_currency, s.tax_amount_contract_currency, s.total_contract_currency,
 				p.unit_price_invoice, p.subtotal_invoice, p.tax_invoice, p.total_invoice,
 				p.currency, $3, p.fx, p.fx_rate_source, p.fx_rate_date,
 				s.billing_period_start, s.billing_period_end, '${PENDING_STATUS}', $4::date
 			FROM jsonb_to_recordset($2::jsonb) AS p(
-				source_id uuid, ord int, contract_id uuid, description text, currency text, fx numeric, fx_rate_source text, fx_rate_date date,
+				source_id uuid, ord int, contract_id uuid, description text, locked boolean, currency text, fx numeric, fx_rate_source text, fx_rate_date date,
 				unit_price_invoice numeric, subtotal_invoice numeric, tax_invoice numeric, total_invoice numeric
 			)
 			JOIN invoice_items s ON s.id = p.source_id AND s.holding_id = $5
@@ -484,7 +603,8 @@ export class ContractInvoiceConsolidationService {
 						source_id: line.source_line_id,
 						ord: index,
 						contract_id: line.contract_id,
-						description: line.description,
+						description: kept.get(line.source_line_id) ?? line.description,
+						locked: kept.has(line.source_line_id) ? true : null,
 						currency: line.currency,
 						fx: line.fx,
 						fx_rate_source: line.fx_rate_source,
@@ -507,11 +627,12 @@ export class ContractInvoiceConsolidationService {
 	 * aquí se vuelven a copiar las líneas de TODOS sus orígenes al unificado (los unificados no se editan: sus líneas son siempre copias) y su
 	 * encabezado se recalcula con las mismas reglas que al consolidar (`planConsolidation`, ignorando los bloqueos de elegibilidad, que ya se
 	 * pasaron al consolidar). Conserva identidad, contrato principal, fechas y referencias del unificado; moneda de sistema con
-	 * `refreshInvoiceSystemAmounts`. Corre dentro de la transacción del llamador (costura y locks ya tomados). Devuelve el encabezado nuevo.
+	 * `refreshInvoiceSystemAmounts`. Las glosas escritas a mano en la unificada (`description_locked`, Editar descripción) se conservan
+	 * (`keptUnifiedDescriptions`). Corre dentro de la transacción del llamador (costura y locks ya tomados). Devuelve el encabezado nuevo.
 	 */
 	async resyncFromOrigins(runner: QueryRunner, holdingId: string, consolidatedId: string) {
 		const [unified] = (await runner.query(
-			`SELECT id, invoice_number, status, invoice_currency, issue_date::text AS issue_date FROM invoices
+			`SELECT id, invoice_number, status, contract_id, invoice_currency, issue_date::text AS issue_date FROM invoices
 			WHERE id = $1 AND holding_id = $2 AND status = '${PENDING_STATUS}' AND is_active = true FOR UPDATE`,
 			[consolidatedId, holdingId]
 		)) as Row[];
@@ -526,11 +647,22 @@ export class ContractInvoiceConsolidationService {
 			holdingId,
 			origins.map((origin) => origin.id)
 		);
-		const plan = planConsolidation(ctx);
+		// El principal es el de la unificada (orden de las líneas y límite de la glosa iguales a los de la primera copia).
+		const plan = planConsolidation({ ...ctx, main_contract_id: toText(unified.contract_id) });
 		const header = plan.header;
+		const unifiedLocked = (await runner.query(
+			`SELECT ${COPY_KEY_SQL}, ii.description FROM invoice_items ii WHERE ii.invoice_id = $1 AND ii.holding_id = $2 AND ii.description_locked = true`,
+			[consolidatedId, holdingId]
+		)) as Row[];
+		const kept = await this.keptDescriptions(
+			runner,
+			holdingId,
+			unifiedLocked.map((row) => ({ ...this.copyKeyOf(row), description: toText(row.description) })),
+			plan
+		);
 
 		await runner.query(`DELETE FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`, [consolidatedId, holdingId]);
-		await this.insertCopies(runner, consolidatedId, plan, toText(unified.invoice_currency), toText(unified.issue_date), holdingId);
+		await this.insertCopies(runner, consolidatedId, plan, toText(unified.invoice_currency), toText(unified.issue_date), holdingId, kept);
 		await runner.query(
 			`UPDATE invoices SET vat = $3, amount_contract_currency = $4, amount_invoice_currency = $5, total_invoice_currency = $6,
 				contract_currency = $7, fx_contract_to_invoice = $8
@@ -556,6 +688,59 @@ export class ContractInvoiceConsolidationService {
 			amount_invoice_currency: header.amount_invoice_currency,
 			total_invoice_currency: header.total_invoice_currency,
 			lines_count: plan.lines.length,
+			kept_descriptions: kept.size,
+		};
+	}
+
+	/**
+	 * Glosas protegidas de una unificada (`description_locked`) que la copia nueva conserva, por línea de origen (`keptUnifiedDescriptions`:
+	 * ítem, período y fila de tramo). La usan la re-copia por consumo (`resyncFromOrigins`) y re-unificar por la regla (`reunifyInvoices`).
+	 */
+	private async keptDescriptions(
+		db: Queryable,
+		holdingId: string,
+		locked: Array<CopyLineKey & { description: string | null }>,
+		plan: ConsolidationPlan
+	): Promise<Map<string, string>> {
+		if (!locked.length || !plan.lines.length) return new Map();
+		const sourceTiers = (await db.query(
+			`SELECT ii.id, ${COPY_KEY_SQL} FROM invoice_items ii WHERE ii.id = ANY($1::uuid[]) AND ii.holding_id = $2`,
+			[plan.lines.map((line) => line.source_line_id), holdingId]
+		)) as Row[];
+		const tierOf = new Map(sourceTiers.map((row) => [String(row.id), toText(row.tier_index)]));
+
+		return keptUnifiedDescriptions(
+			locked,
+			plan.lines.map((line) => ({
+				source_line_id: line.source_line_id,
+				contract_id: line.contract_id,
+				contract_item_id: line.contract_item_id,
+				billing_period_start: line.billing_period_start,
+				billing_period_end: line.billing_period_end,
+				tier_index: tierOf.get(line.source_line_id) ?? null,
+				description: line.description,
+			}))
+		);
+	}
+
+	private referenceOf(row: Row): ConsolidationReference {
+		return {
+			id: String(row.id),
+			source: row.source === 'contract' ? 'contract' : 'invoice',
+			invoice_id: String(row.invoice_id),
+			type: toText(row.type) ?? '',
+			name: toText(row.name),
+			code: toText(row.code) ?? '',
+		};
+	}
+
+	private copyKeyOf(row: Row) {
+		return {
+			contract_id: toText(row.contract_id),
+			contract_item_id: toText(row.contract_item_id),
+			billing_period_start: toText(row.billing_period_start),
+			billing_period_end: toText(row.billing_period_end),
+			tier_index: toText(row.tier_index),
 		};
 	}
 
@@ -602,16 +787,7 @@ export class ContractInvoiceConsolidationService {
 		return {
 			invoices,
 			lines: lines.map((row) => this.lineOf(row)),
-			references: references.map(
-				(row): ConsolidationReference => ({
-					id: String(row.id),
-					source: row.source === 'contract' ? 'contract' : 'invoice',
-					invoice_id: String(row.invoice_id),
-					type: toText(row.type) ?? '',
-					name: toText(row.name),
-					code: toText(row.code) ?? '',
-				})
-			),
+			references: references.map((row) => this.referenceOf(row)),
 			max_chars_by_contract: new Map(limits.map((row) => [String(row.id), descriptionMaxCharsOfRow(row)])),
 		};
 	}

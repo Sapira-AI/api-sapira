@@ -10,7 +10,7 @@ import type { LastSendAttempt } from '@/modules/invoices/last-send-attempt';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
-import { noChargeSql, PENDING_STATUS } from './contract-360';
+import { noChargeSql, PENDING_STATUS, unifiedV2Sql } from './contract-360';
 import { resolveUserId } from './contract-drafts.service';
 import {
 	type ContractInvoiceContext,
@@ -72,7 +72,7 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 			WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id AND e.event_type = 'INVOICE_FX_CHANGED' AND e.metadata->>'invoice_id' = i.id::text) AS fx_confirmed_at,
 		EXISTS (SELECT 1 FROM contract_lifecycle_events e
 			WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
-		${noChargeSql('i')} AS no_charge,
+		${noChargeSql('i')} AS no_charge, (i.invoice_type = 'Unificada' AND ${unifiedV2Sql('i')}) AS unified_v2,
 		i.odoo_invoice_id, i.sent_to_odoo_at, i.sent_at, i.auto_invoice, i.requires_references_for_billing, i.consolidated_into_invoice_id,
 		i.client_entity_id, i.company_id, ce.legal_name,
 		l.period_start::text AS period_start, l.period_end::text AS period_end,
@@ -165,6 +165,7 @@ export function contractInvoiceRowOf(row: Row): ContractInvoiceRow {
 		internal_lines: toNumber(row.internal_lines),
 		nc_revenue_treatment: toText(row.nc_revenue_treatment),
 		fx_explicit: row.fx_explicit === true,
+		unified_v2: row.unified_v2 === true,
 	};
 }
 

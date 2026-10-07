@@ -223,6 +223,7 @@ const build = (fixture: Fixture = {}) => {
 	const contracts = {
 		resolveContract: jest.fn().mockResolvedValue({ id: CONTRACT_ID, status: 'Activo' }),
 		invoiceDetail: jest.fn().mockResolvedValue({ id: INV_A }),
+		invoicedVsTotal: jest.fn().mockResolvedValue({ invoices_count: 2, invoiced_total: 1300, total_value: 1500 }),
 	} as unknown as ContractsService;
 	const invoicesService = new ContractInvoicesService(dataSource, contracts, {} as never);
 
@@ -507,8 +508,14 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 
 			expect(result.total).toBe(1);
 			expect(result.data).toEqual([
-				expect.objectContaining({ invoice_id: INV_A, deviation: expect.objectContaining({ has_deviation: true, total_diff: -200 }) }),
+				expect.objectContaining({
+					invoice_id: INV_A,
+					deviation: expect.objectContaining({ has_deviation: true, total_diff: -200 }),
+					cause: null,
+				}),
 			]);
+			// Caso S02762: la diferencia de "las facturas suman" (−200) es la misma de los desvíos → el front muestra un solo aviso.
+			expect(result.invoices_vs_total).toEqual({ difference: -200, deviations_total: -200, explained_by_deviations: true });
 		});
 	});
 

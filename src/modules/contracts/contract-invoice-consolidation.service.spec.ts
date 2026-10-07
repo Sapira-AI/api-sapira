@@ -214,7 +214,7 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 		await expect(service.preview(dto([INV_A, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd']), HOLDING)).rejects.toBeInstanceOf(NotFoundException);
 	});
 
-	it('aplica: api primero, contratos bloqueados en orden, documento Unificada con copias prefijadas, referencias, orígenes inactivos y un evento por contrato', async () => {
+	it('aplica: api primero, contratos bloqueados en orden, documento Unificada con copias (número de contrato al final), referencias, orígenes inactivos y un evento por contrato', async () => {
 		const { service, runner, contracts } = build();
 		const result = await service.apply(dto(undefined, 'Socio octubre'), HOLDING, 'auth-1', TODAY);
 		const sql = sqlOf(runner.query);
@@ -252,8 +252,8 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 		const payload = JSON.parse((lines[1] as unknown[])[1] as string) as Row[];
 
 		expect(payload.map((entry) => [entry.source_id, entry.contract_id, entry.description, entry.fx])).toEqual([
-			['lb', CTR_B, 'CTR-2026-2 - GLOSA lb', 950],
-			['la', CTR_A, 'CTR-2026-1 - GLOSA la', 950],
+			['lb', CTR_B, 'GLOSA lb - CTR-2026-2', 950],
+			['la', CTR_A, 'GLOSA la - CTR-2026-1', 950],
 		]);
 		expect(calls(runner.query, 'INSERT INTO invoice_references')[0][1]).toEqual([CONS, ['ref-1'], HOLDING]);
 		expect(calls(runner.query, 'INSERT INTO invoice_reference_links')[0][1]).toEqual([CONS, ['br-1'], HOLDING, 'user-1']);
@@ -384,6 +384,125 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 		expect(undo.map((error) => error.message)).toContain('Escribe el motivo');
 	});
 
+	describe('re-unificar (regla de la razón social, Domi 07-10)', () => {
+		const OLD = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+		const previous = (overrides: Row = {}) =>
+			invoiceRow({
+				id: OLD,
+				invoice_type: 'Unificada',
+				contract_id: CTR_B,
+				contract_number: 'CTR-2026-2',
+				issue_date: '2026-10-20',
+				scheduled_at: '2026-10-20',
+				due_date: '2026-11-19',
+				...overrides,
+			});
+		const origins = [
+			invoiceRow({ is_active: false, consolidated_into_invoice_id: OLD }),
+			invoiceB({ is_active: false, consolidated_into_invoice_id: OLD }),
+		];
+		const withCarry = (fixture: Fixture) => {
+			const built = build(fixture);
+			const route = built.runner.query.getMockImplementation()!;
+
+			built.runner.query.mockImplementation((sql: string, params: unknown[] = []) => {
+				if (sql.includes('FROM invoice_references r') && JSON.stringify(params[0]) === JSON.stringify([OLD]))
+					return [
+						// Copia en la anterior de la OC del origen (se descarta: ya viene del origen).
+						{ id: 'ref-old-copy', source: 'invoice', invoice_id: OLD, type: '801', name: 'Orden de Compra', code: '4500' },
+						// OC agregada a mano a la unificada ("Pide OC"): pasa a la nueva.
+						{ id: 'ref-old', source: 'invoice', invoice_id: OLD, type: '801', name: 'Orden de Compra', code: '7788' },
+						{ id: 'br-1', source: 'contract', invoice_id: OLD, type: 'HES', name: null, code: 'H-1' },
+					];
+				if (sql.includes('ii.description_locked = true'))
+					return [
+						{
+							contract_id: CTR_B,
+							contract_item_id: 'item-lb',
+							billing_period_start: '2026-10-01',
+							billing_period_end: '2026-10-31',
+							tier_index: null,
+							description: 'Soporte octubre (texto propio)',
+						},
+					];
+
+				return route(sql, params);
+			});
+
+			return built;
+		};
+
+		it('una transacción: cancela la anterior y arma la nueva con sus referencias, glosas a mano y fechas reprogramadas', async () => {
+			const { service, runner, dataSource } = withCarry({ consolidated: previous(), origins });
+			const result = await service.reunifyInvoices(OLD, [INV_A, INV_B], 'Factura nueva del mes', HOLDING, 'user-1', {
+				main_contract_id: CTR_B,
+				rule_id: 'rule-1',
+				source: 'consolidation_rule_job',
+			});
+			const sql = sqlOf(runner.query);
+
+			expect((dataSource.createQueryRunner as jest.Mock).mock.calls).toHaveLength(1);
+			expect(runner.startTransaction).toHaveBeenCalledTimes(1);
+			expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
+			const cancelled = sql.findIndex((text) => text.includes("UPDATE invoices SET status = 'Cancelada'"));
+			const created = sql.findIndex((text) => text.includes('INSERT INTO invoices'));
+
+			expect(cancelled).toBeGreaterThan(-1);
+			expect(created).toBeGreaterThan(cancelled);
+			// Fechas reprogramadas de la anterior (no las de la factura del principal).
+			expect((calls(runner.query, 'INSERT INTO invoices')[0][1] as unknown[]).slice(3, 6)).toEqual(['2026-10-20', '2026-10-20', '2026-11-19']);
+			// Referencias: las de los orígenes más la OC agregada a la anterior, sin repetir tipo+folio; la del contrato, vinculada una vez.
+			expect(calls(runner.query, 'INSERT INTO invoice_references')[0][1]).toEqual([CONS, ['ref-1', 'ref-old'], HOLDING]);
+			expect(calls(runner.query, 'INSERT INTO invoice_reference_links')[0][1]).toEqual([CONS, ['br-1'], HOLDING, 'user-1']);
+			// Glosa escrita a mano en la anterior: se conserva (protegida) en la línea que calza por ítem y período.
+			const copies = JSON.parse((calls(runner.query, 'INSERT INTO invoice_items')[0][1] as unknown[])[1] as string) as Row[];
+
+			expect(copies.map((copy) => [copy.source_id, copy.description, copy.locked])).toEqual([
+				['lb', 'Soporte octubre (texto propio)', true],
+				['la', 'GLOSA la - CTR-2026-1', null],
+			]);
+			const [consolidated] = calls(runner.query, 'INSERT INTO contract_lifecycle_events').filter(
+				([, params]) => (params as unknown[])[2] === 'INVOICE_CONSOLIDATED'
+			);
+
+			expect(JSON.parse((consolidated[1] as unknown[])[7] as string)).toMatchObject({
+				rule_id: 'rule-1',
+				previous_consolidated_invoice_id: OLD,
+				kept_descriptions: 1,
+				kept_dates: true,
+			});
+			expect(result).toMatchObject({
+				applied: true,
+				consolidated_invoice_id: CONS,
+				undone: { undone: true },
+				carried: { references: 3, descriptions: 1 },
+			});
+		});
+
+		it('sin reprogramar: la nueva toma las fechas de la factura del principal del mes', async () => {
+			const { service, runner } = withCarry({
+				consolidated: previous({ issue_date: '2026-10-05', scheduled_at: '2026-10-05', due_date: '2026-11-04' }),
+				origins,
+			});
+
+			await service.reunifyInvoices(OLD, [INV_A, INV_B], 'x', HOLDING, null, { main_contract_id: CTR_B });
+			expect((calls(runner.query, 'INSERT INTO invoices')[0][1] as unknown[]).slice(3, 6)).toEqual(['2026-10-05', '2026-10-05', '2026-11-04']);
+		});
+
+		it('si la nueva queda bloqueada, rollback: la anterior no se cancela', async () => {
+			const { service, runner } = withCarry({
+				consolidated: previous(),
+				origins,
+				invoices: [invoiceRow(), invoiceB({ invoice_series: 'FEX' })],
+			});
+			const error = await rejection(service.reunifyInvoices(OLD, [INV_A, INV_B], 'x', HOLDING, null, { main_contract_id: CTR_B }));
+
+			expect(error).toBeInstanceOf(ConflictException);
+			expect(runner.rollbackTransaction).toHaveBeenCalled();
+			expect(runner.commitTransaction).not.toHaveBeenCalled();
+		});
+	});
+
 	it('rutas: candidatas bajo el contrato; consolidar y deshacer como rutas fijas `invoices/consolidations…`', () => {
 		const proto = ContractsController.prototype as unknown as Record<string, object>;
 		const route = (name: string) => [Reflect.getMetadata(METHOD_METADATA, proto[name]), Reflect.getMetadata(PATH_METADATA, proto[name])];
@@ -454,13 +573,49 @@ describe('resyncFromOrigins: consumo sobre un origen consolidado (Domi 05-10)', 
 		const copies = JSON.parse(insert[1][1] as string) as Array<{ source_id: string; description: string }>;
 
 		expect(copies.map((copy) => copy.source_id).sort()).toEqual(['la', 'lb']);
-		expect(copies.every((copy) => /^CTR-2026-\d - /.test(copy.description))).toBe(true);
+		expect(copies.every((copy) => /^GLOSA l[ab] - CTR-2026-\d$/.test(copy.description))).toBe(true);
 		expect(insert[1].slice(2, 4)).toEqual(['CLP', '2026-10-05']);
 		expect(sql[upd]).not.toContain('contract_id');
 		expect(sql[upd]).toContain(`status = 'Por Emitir'`);
 		// Ni INSERT de encabezado nuevo ni eventos: es el mismo documento.
 		expect(calls(runner.query, 'INSERT INTO invoices')).toHaveLength(0);
 		expect(calls(runner.query, 'INSERT INTO contract_lifecycle_events')).toHaveLength(0);
+	});
+
+	it('conserva la glosa escrita a mano en la unificada (Editar descripción) y respeta el principal de la unificada', async () => {
+		const { service, runner } = build({ origins });
+		const route = runner.query.getMockImplementation()!;
+
+		runner.query.mockImplementation((sql: string, params: unknown[] = []) => {
+			if (sql.includes('FOR UPDATE') && sql.includes('SELECT id, invoice_number, status'))
+				return [
+					{ id: CONS, invoice_number: 'U-1', status: 'Por Emitir', contract_id: CTR_A, invoice_currency: 'CLP', issue_date: '2026-10-05' },
+				];
+			if (sql.includes('ii.description_locked = true'))
+				return [
+					{
+						contract_id: CTR_B,
+						contract_item_id: 'item-lb',
+						billing_period_start: '2026-10-01',
+						billing_period_end: '2026-10-31',
+						tier_index: null,
+						description: 'Soporte octubre (texto propio)',
+					},
+				];
+
+			return route(sql, params);
+		});
+		const result = await service.resyncFromOrigins(runner as never, HOLDING, CONS);
+		const [insert] = calls(runner.query, 'INSERT INTO invoice_items');
+		const copies = JSON.parse(insert[1][1] as string) as Array<{ source_id: string; description: string; locked: boolean | null }>;
+
+		expect(result.kept_descriptions).toBe(1);
+		// Principal fijado = el de la unificada (CTR_A): sus líneas van primero aunque aporte menos.
+		expect(copies.map((copy) => [copy.source_id, copy.description, copy.locked])).toEqual([
+			['la', 'GLOSA la - CTR-2026-1', null],
+			['lb', 'Soporte octubre (texto propio)', true],
+		]);
+		expect(insert[0]).toContain('COALESCE(p.locked, s.description_locked)');
 	});
 
 	it('409 si el unificado ya no está Por Emitir (emitido o deshecho)', async () => {

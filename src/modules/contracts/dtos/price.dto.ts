@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 
-import { PRICE_MODELS, type PriceModel } from '../pricing-engine';
+import { PRICE_MODELS, PRICE_QUANTITY_TYPES, type PriceModel, type PriceQuantityType } from '../pricing-engine';
 
 import { PriceSpecDto } from './create-contract.dto';
 
@@ -135,3 +135,60 @@ export class UpdatePriceDto {
 
 /** Body de `POST /prices/:id/new-version`: copia la versión como borrador; lo que venga reemplaza a la copia. */
 export class NewPriceVersionDto extends UpdatePriceDto {}
+
+/** Columnas por las que se ordena `GET /prices/contract-prices` (lista blanca). */
+export const CONTRACT_PRICE_SORT_FIELDS = ['contract_number', 'client_name', 'product_name', 'model', 'items_count', 'updated_at'] as const;
+export type ContractPriceSortField = (typeof CONTRACT_PRICE_SORT_FIELDS)[number];
+
+/**
+ * Query de `GET /prices/contract-prices`: precios propios de los contratos (`owner = contract`), solo lectura. El holding
+ * sale de `HoldingScopeGuard`, nunca de la query.
+ */
+export class QueryContractPricesDto {
+	@ApiPropertyOptional({ description: 'Busca por número de contrato, cliente, producto o nombre del precio' })
+	@Transform(trim)
+	@IsString()
+	@MaxLength(120)
+	@IsOptional()
+	search?: string;
+
+	@ApiPropertyOptional({ enum: PRICE_MODELS })
+	@IsIn(PRICE_MODELS, { message: 'Modelo inválido' })
+	@IsOptional()
+	model?: PriceModel;
+
+	@ApiPropertyOptional({ enum: PRICE_QUANTITY_TYPES, description: 'fixed = cantidad del ítem; metered = consumo de una métrica facturable' })
+	@IsIn(PRICE_QUANTITY_TYPES, { message: 'Tipo de cantidad inválido: fixed o metered' })
+	@IsOptional()
+	quantity_type?: PriceQuantityType;
+
+	@ApiPropertyOptional({ description: 'Producto del catálogo' })
+	@IsUUID(undefined, { message: 'Producto inválido' })
+	@IsOptional()
+	product_id?: string;
+
+	@ApiPropertyOptional({ enum: CONTRACT_PRICE_SORT_FIELDS, default: 'contract_number' })
+	@IsIn(CONTRACT_PRICE_SORT_FIELDS, { message: 'Orden inválido' })
+	@IsOptional()
+	sortBy?: ContractPriceSortField;
+
+	@ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'asc' })
+	@IsIn(['asc', 'desc'], { message: 'Orden inválido' })
+	@IsOptional()
+	sortOrder?: 'asc' | 'desc';
+
+	@ApiPropertyOptional({ default: 1 })
+	@Type(() => Number)
+	@IsInt({ message: 'Página inválida' })
+	@Min(1, { message: 'Página inválida' })
+	@IsOptional()
+	page?: number;
+
+	@ApiPropertyOptional({ default: 25, maximum: 200 })
+	@Type(() => Number)
+	@IsInt({ message: 'Límite inválido' })
+	@Min(1, { message: 'Límite inválido' })
+	@Max(200, { message: 'Máximo 200 por página' })
+	@IsOptional()
+	limit?: number;
+}

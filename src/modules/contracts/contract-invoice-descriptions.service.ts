@@ -6,12 +6,11 @@ import { DataSource, type QueryRunner } from 'typeorm';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
-import { PENDING_STATUS } from './contract-360';
+import { PENDING_STATUS, unifiedV2Sql } from './contract-360';
 import { resolveUserId } from './contract-drafts.service';
 import {
-	commonBlockers,
 	type ContractInvoiceRow,
-	erpDraftBlocker,
+	descriptionBlockers,
 	INVOICE_EVENT_TYPES,
 	type InvoiceBlocker,
 	type InvoiceReferenceRow,
@@ -413,7 +412,8 @@ export class ContractInvoiceDescriptionsService {
 
 	/**
 	 * Reemplaza las referencias propias de la factura (`invoice_references`; las del contrato vinculadas no se tocan) y, si viene,
-	 * `invoices.requires_references_for_billing`. Por Emitir siempre; emitidas solo si no se enviaron al ERP. Evento
+	 * `invoices.requires_references_for_billing`. Por Emitir siempre (también la unificada v2, sin borrador en el ERP); emitidas solo si no
+	 * se enviaron al ERP. Evento
 	 * `INVOICE_REFERENCES_UPDATED` con antes/después. Devuelve las referencias como las lee el detalle.
 	 */
 	async updateReferences(idOrNumber: string, invoiceId: string, dto: UpdateInvoiceReferencesDto, holdingId: string, authId: string) {
@@ -423,7 +423,9 @@ export class ContractInvoiceDescriptionsService {
 		const warnings = await this.transaction(contract.id, holdingId, async (runner) => {
 			const invoice = await this.invoices.loadInvoice(runner, contract.id, invoiceId, holdingId, true);
 			const existing = await this.loadReferences(runner, invoice.id, holdingId);
-			const plan = planReferences(invoice, dto.references, existing);
+			// La unificada v2 Por Emitir admite sus referencias (Domi 07-10: hereda "Pide OC" y la OC se agrega antes de emitir).
+			const unifiedV2 = await this.unifiedV2Ids(runner, holdingId, [invoice]);
+			const plan = planReferences(invoice, dto.references, existing, { unified_v2: unifiedV2.has(invoice.id) });
 
 			if (plan.duplicates.length) {
 				throw validationException(
@@ -594,13 +596,14 @@ export class ContractInvoiceDescriptionsService {
 
 	/**
 	 * Líneas elegidas (todas las de `invoice_ids` más las de `line_ids`), con el bloqueo de su factura: solo se tocan Por Emitir activas,
-	 * no unificadas, no legacy, no NC/ND y que no estén ya en el ERP. 404 si una factura o línea no es del contrato.
+	 * no unificadas, no legacy, no NC/ND y que no estén ya en el ERP. Excepción: la unificada v2 Por Emitir (que vive en el 360 de su
+	 * contrato principal) acepta el texto manual (`set`, Domi 07-10). 404 si una factura o línea no es del contrato.
 	 */
 	private async selectedLines(
 		db: Queryable,
 		contractId: string,
 		holdingId: string,
-		dto: Pick<UpdateInvoiceDescriptionsDto, 'invoice_ids' | 'line_ids'>,
+		dto: Pick<UpdateInvoiceDescriptionsDto, 'invoice_ids' | 'line_ids' | 'mode'>,
 		lock = false
 	): Promise<DescriptionLineInput[]> {
 		const lineIds = [...new Set(dto.line_ids ?? [])];
@@ -614,7 +617,25 @@ export class ContractInvoiceDescriptionsService {
 			? await this.linesOf(db, contractId, holdingId, `AND i.id = ANY($3::uuid[])`, [[...new Set(dto.invoice_ids)]])
 			: [];
 
-		return this.withBlockers([...ofInvoices, ...byLine.filter((line) => !ofInvoices.some((own) => own.line_id === line.line_id))], invoices);
+		const unifiedV2 = await this.unifiedV2Ids(db, holdingId, invoices);
+
+		return this.withBlockers([...ofInvoices, ...byLine.filter((line) => !ofInvoices.some((own) => own.line_id === line.line_id))], invoices, {
+			mode: dto.mode,
+			unified_v2: unifiedV2,
+		});
+	}
+
+	/** Unificadas v2 (con evento `INVOICE_CONSOLIDATED`) entre las facturas dadas. */
+	private async unifiedV2Ids(db: Queryable, holdingId: string, invoices: ContractInvoiceRow[]): Promise<Set<string>> {
+		const ids = invoices.filter((invoice) => invoice.invoice_type === 'Unificada').map((invoice) => invoice.id);
+
+		if (!ids.length) return new Set();
+		const rows = (await db.query(`SELECT i.id FROM invoices i WHERE i.holding_id = $1 AND i.id = ANY($2::uuid[]) AND ${unifiedV2Sql('i')}`, [
+			holdingId,
+			ids,
+		])) as Row[];
+
+		return new Set(rows.map((row) => String(row.id)));
 	}
 
 	/** Líneas de las Por Emitir activas del contrato (para `apply_to_pending`), con el bloqueo de su factura. */
@@ -627,10 +648,14 @@ export class ContractInvoiceDescriptionsService {
 		return this.withBlockers(lines, invoices);
 	}
 
-	private withBlockers(lines: DescriptionLineRow[], invoices: ContractInvoiceRow[]): DescriptionLineInput[] {
+	private withBlockers(
+		lines: DescriptionLineRow[],
+		invoices: ContractInvoiceRow[],
+		options: { mode?: string | null; unified_v2?: Set<string> } = {}
+	): DescriptionLineInput[] {
 		const reasons = new Map(
 			invoices.map((invoice) => {
-				const blockers = [...commonBlockers(invoice), erpDraftBlocker(invoice)].filter((blocker): blocker is InvoiceBlocker => !!blocker);
+				const blockers = descriptionBlockers(invoice, { mode: options.mode, unified_v2: options.unified_v2?.has(invoice.id) === true });
 
 				return [invoice.id, blockers[0]?.code ?? null];
 			})

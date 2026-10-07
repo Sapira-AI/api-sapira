@@ -132,7 +132,7 @@ export function planRuleGroups(invoices: RuleInvoice[], unifiedById: Map<string,
 }
 
 /** Día del mes en que emite un contrato: el de su próxima Por Emitir (desde hoy), o el de la última si no hay próximas. */
-export function issueDayOf(dates: string[], today: string): number | null {
+export function emissionDayOf(dates: string[], today: string): number | null {
 	const sorted = [...dates].filter(Boolean).sort();
 	const next = sorted.find((date) => date >= today) ?? sorted.at(-1) ?? null;
 

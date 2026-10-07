@@ -772,6 +772,15 @@ describe('ContractsService', () => {
 			});
 		});
 
+		it('Restablecer borrador del ERP: la unificada v2 Por Emitir vinculada sí; la histórica, sus orígenes y las Consolidada no (Domi 07-10)', () => {
+			const draft = { status: 'Por Emitir', is_active: true, odoo_invoice_id: 5, sent_to_odoo_at: null, doc_type: 'FACTURA' };
+
+			expect(ContractsService.erpResetAvailable({ ...draft, invoice_type: 'Unificada' }, true)).toBe(true);
+			expect(ContractsService.erpResetAvailable({ ...draft, invoice_type: 'Unificada' })).toBe(false);
+			expect(ContractsService.erpResetAvailable({ ...draft, invoice_type: 'Consolidada' }, true)).toBe(false);
+			expect(ContractsService.erpResetAvailable({ ...draft, is_active: false, consolidated_into_invoice_id: 'u-1' }, true)).toBe(false);
+		});
+
 		it('facturas: por defecto ordena por período de servicio y desempata por emisión; por emisión no repite el desempate', async () => {
 			const rows = (sql: string) => (sql.includes('LIMIT 1') ? [{ id: CONTRACT_ID }] : sql.includes('all_count') ? [{ all_count: '0' }] : []);
 			const byPeriod = build(rows);
