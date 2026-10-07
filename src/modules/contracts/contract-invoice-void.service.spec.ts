@@ -301,6 +301,8 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 
 		expect(referenceCall[1].slice(0, 2)).toEqual(['nc-1', 'h-1']);
 		expect(referenceCall[1][5]).toBe('1');
+		// created_by apunta a auth.users: se guarda el auth_id del usuario, no su id de `users` (500 del 07-10 en FAC 028209).
+		expect(referenceCall[0]).toMatch(/SELECT u\.auth_id FROM users u WHERE u\.id = \$9::uuid/);
 		expect(sql.some((statement) => statement.includes('updated_at') && /UPDATE invoices\b/.test(statement))).toBe(false);
 		expect(result).toMatchObject({ applied: true, credit_note_id: 'nc-1', reissue_invoice_id: 'reissue-1' });
 		expect(runner.commitTransaction).toHaveBeenCalled();

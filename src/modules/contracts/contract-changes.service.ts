@@ -2074,9 +2074,10 @@ export async function insertCreditNoteReference(
 ): Promise<void> {
 	const [doc] = (await runner.query(ORIGINAL_DOCUMENT_CODE_SQL, [original.id, holdingId])) as Row[];
 
+	// `created_by` apunta a auth.users: los llamadores traen el id de `users` (resolveUserId); se guarda su auth_id (07-10: la NC daba 500 por la FK).
 	await runner.query(
 		`INSERT INTO invoice_references (invoice_id, holding_id, document_number, document_type_code, document_type_name, reference_code, reason, reference_date, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, (SELECT u.auth_id FROM users u WHERE u.id = $9::uuid OR u.auth_id = $9::uuid LIMIT 1))`,
 		[
 			creditNoteId,
 			holdingId,
