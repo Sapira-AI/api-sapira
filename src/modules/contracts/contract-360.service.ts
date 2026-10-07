@@ -12,6 +12,7 @@ import {
 	buildSchedule,
 	computeBlockers,
 	computeFinancial,
+	computeWarnings,
 	contractDocumentPath,
 	type FactsItem,
 	fixedFxRate,
@@ -124,7 +125,7 @@ export class Contract360Service {
 			`SELECT i.id, i.invoice_number, i.status, i.document_type, i.is_active,
 				i.issue_date::text AS issue_date, i.original_issue_date::text AS original_issue_date, i.due_date::text AS due_date,
 				i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.fx_contract_to_invoice,
-				i.requires_references_for_billing, i.related_invoice_id,
+				i.requires_references_for_billing, COALESCE(i.auto_invoice, false) AS auto_invoice, i.related_invoice_id,
 				l.period_start::text AS period_start, l.period_end::text AS period_end,
 				COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product,
 				COALESCE(l.has_non_recurring, false) AS has_non_recurring,
@@ -166,6 +167,7 @@ export class Contract360Service {
 			unmapped_products: Array.isArray(row.unmapped_products) ? row.unmapped_products.map(String) : [],
 			has_non_recurring: row.has_non_recurring === true,
 			references_count: toNumber(row.references_count),
+			auto_invoice: row.auto_invoice === true,
 			related_invoice_id: toText(row.related_invoice_id),
 		}));
 	}
@@ -349,6 +351,8 @@ export class Contract360Service {
 						invoice_currency: next.invoice_currency,
 						status: next.status,
 						blockers: computeBlockers(next, Contract360Service.blockerContext(context, today)),
+						/** Avisos que no bloquean (prefactura sin la referencia exigida: va como borrador). */
+						warnings: computeWarnings(next, Contract360Service.blockerContext(context, today)),
 						/** Envío automático al ERP (NULL cuenta como sí, igual que el scheduler) y si la razón social está vinculada al ERP. */
 						auto_send_to_erp: context.auto_send_to_odoo !== false,
 						erp_partner_linked: context.odoo_partner_id !== null && context.odoo_partner_id !== undefined,

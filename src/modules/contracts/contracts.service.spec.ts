@@ -23,7 +23,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { deriveContractStatus, type StatusItem } from './contract-status';
 import { ContractSubscriptionsService, parseSubscriptionStatus } from './contract-subscriptions.service';
 import { ContractsController } from './contracts.controller';
-import { ContractsService, electronicEmissionOf, parseStatusFilter } from './contracts.service';
+import { ContractsService, electronicEmissionOf, INVOICED_BY_CONTRACT_SQL, parseStatusFilter } from './contracts.service';
 import { QueryContractSubscriptionsDto } from './dtos/query-contract-subscriptions.dto';
 import { QueryContractsDto } from './dtos/query-contracts.dto';
 
@@ -682,6 +682,40 @@ describe('ContractsService', () => {
 			});
 		});
 
+		it('facturas: un origen de unificación (inactivo) trae la unificada que lo reemplaza y no cuenta como anulada ni Por Emitir', async () => {
+			const { service, query } = build((sql) => {
+				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
+				if (sql.includes('all_count')) return [{ all_count: '2', pending_count: '0', issued_count: '1', cancelled_count: '0' }];
+				if (sql.includes('OFFSET'))
+					return [
+						{
+							id: 'orig-jul',
+							status: 'Por Emitir',
+							is_active: false,
+							consolidated_into_invoice_id: 'uni-1',
+							consolidated_into_number: 'F-28209',
+							consolidated_into_status: 'Emitida',
+						},
+						{ id: 'inv-2', status: 'Emitida', is_active: true, consolidated_into_invoice_id: null },
+					];
+
+				return [];
+			});
+			const result = await service.invoices(CONTRACT_ID, 'h-1', { status: 'all' });
+			const [sql] = query.mock.calls.find(([text]) => (text as string).includes('OFFSET'))!;
+			const [countSql] = query.mock.calls.find(([text]) => (text as string).includes('all_count'))!;
+
+			expect(sql).toContain('LEFT JOIN invoices ui ON ui.id = i.consolidated_into_invoice_id');
+			expect(countSql).toContain(`COUNT(*) FILTER (WHERE i.is_active = true AND i.status = 'Por Emitir') AS pending_count`);
+			expect(countSql).toContain('(i.is_active = false AND i.consolidated_into_invoice_id IS NULL)');
+			expect(result.data[0]).toMatchObject({
+				is_active: false,
+				consolidated_into_invoice_id: 'uni-1',
+				consolidated_into: { id: 'uni-1', invoice_number: 'F-28209', status: 'Emitida' },
+			});
+			expect(result.data[1]).toMatchObject({ consolidated_into: null });
+		});
+
 		it('facturas (etapa 4): motivo del desvío, líneas manuales, sin cobro y "Restablecer borrador del ERP" por fila', async () => {
 			const { service, query } = build((sql) => {
 				if (sql.includes('LIMIT 1')) return [{ id: CONTRACT_ID }];
@@ -1128,6 +1162,35 @@ describe('ContractsService', () => {
 					auto_send_to_odoo: false,
 				})
 			).toEqual([]);
+		});
+	});
+
+	describe('facturado del contrato (alerta "Las facturas del contrato suman…")', () => {
+		const sql = INVOICED_BY_CONTRACT_SQL.replace(/\s+/g, ' ');
+
+		it('suma líneas del contrato en moneda del contrato (una unificada aporta solo las líneas de cada contrato), no el encabezado', () => {
+			expect(sql).toContain('FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id');
+			expect(sql).toContain('COALESCE(ii.subtotal_contract_currency, 0)');
+			expect(sql).toContain('COALESCE(ii.contract_id, ci.contract_id, i.contract_id) = c.id');
+			// La línea de otro contrato no exige que la factura sea de este contrato (la unificada vive en el contrato principal).
+			expect(sql.split('UNION ALL')[0]).not.toContain('i.contract_id = c.id AND');
+		});
+
+		it('orígenes de una unificación no cuentan (inactivos o consolidados en otra); la copia activa sí; NC restan; Canceladas fuera', () => {
+			for (const part of sql.split('UNION ALL')) {
+				expect(part).toContain('i.is_active = true');
+				expect(part).toContain('i.consolidated_into_invoice_id IS NULL');
+				expect(part).toContain(`i.status IS DISTINCT FROM 'Cancelada'`);
+				expect(part).toContain(`WHEN i.document_type = 'NC' THEN -ABS(`);
+			}
+		});
+
+		it('una factura sin líneas (registro antiguo) cuenta por su encabezado, solo en su contrato', () => {
+			const legacy = sql.split('UNION ALL')[1];
+
+			expect(legacy).toContain('COALESCE(i.amount_contract_currency, 0)');
+			expect(legacy).toContain('i.contract_id = c.id');
+			expect(legacy).toContain('NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = i.id)');
 		});
 	});
 

@@ -868,7 +868,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Vista previa: enviar una factura al ERP ahora',
 		description:
-			'Bloqueos del 360 (already_sent, erp_send_disabled, no_erp_integration, no_erp_partner, needs_reference, item_without_product, product_without_erp_mapping, fixed_fx_without_rate, tax_rate_missing, not_pending…), avisos (past_issue_date, spot_fx) y resumen (receptor, documento, total, FX). No escribe nada',
+			'Bloqueos del 360 (already_sent, erp_send_disabled, no_erp_integration, no_erp_partner, needs_reference si se emite con auto_invoice, item_without_product, product_without_erp_mapping, fixed_fx_without_rate, tax_rate_missing, not_pending…), avisos (past_issue_date, spot_fx, needs_reference si va como borrador sin la referencia exigida) y resumen (receptor, documento, total, FX). No escribe nada',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiParam(INVOICE_PARAM)

@@ -2,9 +2,12 @@ import { addMonths, computeDueDate, diffDays, round2 } from './billing-engine';
 import { type HeaderAmounts, headerFromLines } from './consumption';
 import {
 	creditNotePendingEmission,
+	DRAFT_WITHOUT_REFERENCE_MESSAGE,
 	isCreditNote,
+	NEEDS_REFERENCE_CODE,
 	PENDING_STATUS,
 	PRODUCT_WITHOUT_ERP_MAPPING_CODE,
+	referenceRequirement,
 	UNMAPPED_PRODUCTS_SQL,
 	unmappedProductsMessage,
 } from './contract-360';
@@ -316,7 +319,8 @@ export interface SendNowPlan {
 
 /**
  * Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `erp_send_disabled`, `tax_rate_missing`,
- * `product_without_erp_mapping`).
+ * `product_without_erp_mapping`). La falta de la referencia exigida bloquea solo si la factura se emite (`auto_invoice`); como borrador
+ * es el aviso `needs_reference` (`referenceRequirement`).
  */
 export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoiceContext): SendNowPlan {
 	// NC/ND: el envío al ERP (`out_refund`) todavía no existe (Leon); se rechaza con un código propio, no el genérico de edición.
@@ -367,12 +371,21 @@ export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoic
 				: 'Asigna la razón social en el contrato',
 		});
 	}
-	if ((context.contract_requires_references || invoice.requires_references) && invoice.references_count === 0) {
+	// Prefactura sin OC (Domi 07-10): sin la referencia exigida bloquea solo si la factura se emite; como borrador, avisa.
+	const references = referenceRequirement({
+		requires_references: context.contract_requires_references || invoice.requires_references,
+		references_count: invoice.references_count,
+		auto_invoice: invoice.auto_invoice,
+	});
+
+	if (references === 'blocker') {
 		blockers.push({
-			code: 'needs_reference',
-			message: 'El contrato exige referencias para facturar (por ejemplo, una orden de compra) y esta factura todavía no tiene ninguna',
-			next_step: 'Agrega la referencia a la factura',
+			code: NEEDS_REFERENCE_CODE,
+			message: 'El contrato exige referencias para facturar (por ejemplo, una orden de compra) y esta factura se emite sin ninguna',
+			next_step: 'Agrega la referencia a la factura, o envíala como borrador (sin emisión automática)',
 		});
+	} else if (references === 'warning') {
+		warnings.push({ code: NEEDS_REFERENCE_CODE, message: DRAFT_WITHOUT_REFERENCE_MESSAGE });
 	}
 	if (invoice.lines_count === 0) {
 		blockers.push({ code: 'no_lines', message: 'La factura no tiene líneas', next_step: null });
