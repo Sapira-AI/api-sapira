@@ -22,6 +22,7 @@ import {
 	addDays,
 	addMonths,
 	BILLING_FREQUENCY_MONTHS,
+	BILLING_METHODS,
 	type BillingEngineContract,
 	type BillingEngineItem,
 	type BillingFrequency,
@@ -4562,9 +4563,16 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 		p.error(`${field}.price.${error.field}`, error.message);
 		valid = false;
 	}
-	if (item && spec && valid) {
-		const billingMethod = item.billing_method ?? 'Anticipado';
+	// Modo de cobro del ítem que continúa (07-10, caso Ninja): pasar a consumo exige Vencido y el ítem vigente puede venir Anticipado.
+	const requestedMethod = ref.billing_method === undefined || ref.billing_method === null ? null : String(ref.billing_method);
 
+	if (requestedMethod !== null && !(BILLING_METHODS as readonly string[]).includes(requestedMethod)) {
+		p.error(`${field}.billing_method`, 'Modo de cobro inválido: Anticipado o Vencido');
+		valid = false;
+	}
+	const billingMethod = requestedMethod ?? item?.billing_method ?? 'Anticipado';
+
+	if (item && spec && valid) {
 		if (isMetered(spec)) {
 			const metricId = spec.billable_metric_id ?? null;
 			const status = metricId ? ctx.billable_metrics?.get(metricId) : undefined;
@@ -4572,7 +4580,7 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 			if (!metricId) p.error(`${field}.price.billable_metric_id`, 'Elige la métrica que se mide');
 			else if (!status) p.error(`${field}.price.billable_metric_id`, 'La métrica facturable no existe en el holding');
 			else if (status !== 'active') p.error(`${field}.price.billable_metric_id`, 'La métrica facturable está archivada');
-			if (billingMethod === 'Anticipado' && spec.model !== 'seat') p.error(`${field}.price`, METERED_ADVANCE_MESSAGE);
+			if (billingMethod === 'Anticipado' && spec.model !== 'seat') p.error(`${field}.billing_method`, METERED_ADVANCE_MESSAGE);
 		}
 		if (item.is_recurring === false || !item.start_date)
 			p.error(`${field}.item_id`, `"${item.product_name}" no es recurrente o no tiene inicio: su precio se corrige como dato del ítem`);
@@ -4688,7 +4696,7 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 				final_price: round2(monthlyNew * term),
 				currency: item.currency ?? ctx.contract.contract_currency,
 				billing_frequency: frequency,
-				billing_method: item.billing_method ?? 'Anticipado',
+				billing_method: billingMethod,
 				is_recurring: true,
 				start_date: cut,
 				end_date: item.end_date,
@@ -4767,6 +4775,8 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 				model_after: spec.model,
 				quantity_type_after: spec.quantity_type,
 				base_quantity: quantity,
+				billing_method_before: item.billing_method ?? 'Anticipado',
+				billing_method_after: billingMethod,
 				monthly_before: oldMonthly,
 				monthly_after: monthlyNew,
 				supersedes_price_id: item.price_id ?? null,
