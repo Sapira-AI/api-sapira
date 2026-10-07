@@ -282,7 +282,7 @@ export function planVoid(
 	if (invoice.odoo_invoice_id !== null || invoice.sent_to_odoo_at !== null)
 		warnings.push({
 			code: 'credit_note_to_erp',
-			message: 'La factura está en el ERP: la NC queda Por Emitir y se emite desde Facturación contra ese documento',
+			message: 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada',
 		});
 	const ratios = remainingRatios(invoice, rows, previous);
 	const mirror: MirrorInput = rows
@@ -646,7 +646,7 @@ export function planDiscountCreditNote(
 	if (invoice.odoo_invoice_id !== null || invoice.sent_to_odoo_at !== null)
 		warnings.push({
 			code: 'credit_note_to_erp',
-			message: 'La factura está en el ERP: la NC queda Por Emitir y se emite desde Facturación contra ese documento',
+			message: 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada',
 		});
 	if (invoice.paid || invoice.status === 'Pagada')
 		warnings.push({
