@@ -56,6 +56,7 @@ import {
 	countGroups,
 	CREDIT_TYPES,
 	DOCUMENT_KINDS,
+	draftReferenceByPath,
 	ELECTRONIC_STATES,
 	emptyBuckets,
 	ERP_STATES,
@@ -187,6 +188,8 @@ export class BillingReadService {
 			return {
 				...mapInvoiceRow(row),
 				blocked_reasons: entry?.blocked_reasons ?? [],
+				/** Avisos de la cola que no bloquean (p. ej. `needs_reference` de la prefactura sin OC que va como borrador). */
+				warnings: entry?.warnings ?? [],
 				to_issue_group: entry?.group ?? null,
 				issue_path: entry?.issue_path ?? null,
 				related_documents: relatedById.get(id) ?? [],
@@ -425,9 +428,10 @@ export class BillingReadService {
 				}
 				const plan = planSendNow(invoice, context);
 				const issuePath: IssuePath = context.auto_send_to_erp && context.has_erp_integration ? 'erp' : 'external';
+				const { blockers: sendBlockers, warnings } = draftReferenceByPath(plan, issuePath);
 				// Sin `period_closed`: el cierre de períodos protege contratos e ítems, no facturas (Domi 03-10).
 				const blockers = queueBlockers(
-					[...plan.blockers, erpDraftBlocker(invoice)].filter((blocker): blocker is NonNullable<typeof blocker> => !!blocker),
+					[...sendBlockers, erpDraftBlocker(invoice)].filter((blocker): blocker is NonNullable<typeof blocker> => !!blocker),
 					issuePath
 				);
 
@@ -437,7 +441,7 @@ export class BillingReadService {
 					group: toIssueGroupOf(invoice, blockers, today),
 					issue_path: issuePath,
 					blocked_reasons: blockers,
-					warnings: plan.warnings,
+					warnings,
 				};
 			});
 	}

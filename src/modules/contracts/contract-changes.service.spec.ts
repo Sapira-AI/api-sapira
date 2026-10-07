@@ -1430,6 +1430,30 @@ describe('ContractChangesService · item_update (spec modificaciones §9.2, corr
 		expect(result.rsm.mrr_delta).toBe(0);
 	});
 
+	it('fecha de inicio (CTR-2026-191): escribe el inicio con plazo y valor, genera la PE del tramo nuevo y reconstruye el devengo', async () => {
+		const { service, runner } = build();
+		const result = await service.apply(
+			CONTRACT_ID,
+			request({ type: 'item_update', items: [{ item_id: LICENCIA, start_date: '2025-12-01' }] }, { effective_date: '2026-09-28' }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		const sql = sqlOf(runner.query);
+		const [update] = calls(runner.query, 'UPDATE contract_items SET start_date');
+
+		expect(update[1]).toEqual([LICENCIA, HOLDING, '2025-12-01', 13, 13000, 13000]);
+		expect(sql.some((text) => text.includes('INSERT INTO invoices'))).toBe(true);
+		expect(sql.some((text) => text.includes('revenue_schedule_rebuild'))).toBe(true);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1][2]).toBe('ITEM_CORRECTED');
+		expect(result.invoices.created.map((invoice) => [invoice.billing_period_start, invoice.billing_period_end, invoice.subtotal])).toEqual([
+			['2025-12-01', '2025-12-31', 1000],
+		]);
+	});
+
 	it('corrección de cantidad: escribe el ítem en su lugar, reescribe las PE, registra el motivo del ajuste, regenera glosas después y reconstruye el devengo completo', async () => {
 		const { service, runner, descriptions } = build();
 		const regenerate = jest.spyOn(descriptions, 'regenerateLines').mockResolvedValue([]);

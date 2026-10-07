@@ -167,16 +167,23 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 		});
 
 		it('previewSendNow devuelve resumen, bloqueos y avisos con la forma del 360; 404 si la factura no es del contrato', async () => {
-			const { service } = build({ [INV_A]: invoiceRow(INV_A, { requires_references_for_billing: true }) });
+			const { service } = build({ [INV_A]: invoiceRow(INV_A, { requires_references_for_billing: true, auto_invoice: true }) });
 			const preview = await service.previewSendNow(CONTRACT_ID, INV_A, HOLDING, TODAY);
 
 			expect(preview).toMatchObject({
 				invoice: { id: INV_A, status: 'Por Emitir', issue_date: '2026-10-01' },
-				summary: { legal_name: 'Cliente SpA', invoice_currency: 'CLP', fx_policy: 'spot', references_count: 0 },
+				summary: { legal_name: 'Cliente SpA', invoice_currency: 'CLP', fx_policy: 'spot', references_count: 0, auto_invoice: true },
 				can_apply: false,
 			});
 			expect(preview.blockers.map((blocker) => blocker.code)).toEqual(['needs_reference']);
 			expect(preview.warnings.map((warning) => warning.code)).toEqual(['spot_fx']);
+
+			// Prefactura sin OC: como borrador (sin emisión automática) se puede enviar con el aviso.
+			const { service: draftService } = build({ [INV_A]: invoiceRow(INV_A, { requires_references_for_billing: true, auto_invoice: false }) });
+			const draft = await draftService.previewSendNow(CONTRACT_ID, INV_A, HOLDING, TODAY);
+
+			expect(draft).toMatchObject({ can_apply: true, blockers: [] });
+			expect(draft.warnings.map((warning) => warning.code)).toEqual(['needs_reference', 'spot_fx']);
 			await expect(service.previewSendNow(CONTRACT_ID, INV_B, HOLDING, TODAY)).rejects.toBeInstanceOf(NotFoundException);
 		});
 

@@ -314,6 +314,11 @@ export interface ScheduleInvoice {
 	has_non_recurring: boolean;
 	/** Referencias cargadas (propias o vinculadas desde una referencia del contrato). */
 	references_count: number;
+	/**
+	 * Emisión automática (`invoices.auto_invoice`): true = el ERP la emite; false = va como borrador. Decide si la falta de referencia
+	 * bloquea o solo avisa (`referenceRequirement`). Ausente = se trata como emisión (bloqueo, lo conservador).
+	 */
+	auto_invoice?: boolean;
 	/** Factura que corrige (notas de crédito). */
 	related_invoice_id?: string | null;
 }
@@ -566,13 +571,51 @@ export interface BlockerContext {
 	today: string;
 }
 
+export const NEEDS_REFERENCE_CODE = 'needs_reference';
+/** Aviso de la prefactura sin OC: la factura va al ERP como borrador sin la referencia exigida. */
+export const DRAFT_WITHOUT_REFERENCE_MESSAGE =
+	'Va como borrador sin la referencia que exige el contrato (por ejemplo, la OC). Agrégala antes de emitir.';
+
+/**
+ * Prefactura sin OC (Domi 07-10, caso Alicorp): si el contrato o la factura exigen referencias y la factura no tiene ninguna, la falta
+ * **bloquea** solo cuando la factura se emite (`auto_invoice` = true; ausente cuenta como emisión); si va al ERP como borrador
+ * (`auto_invoice` = false) es un **aviso**: el cliente pide la prefactura para emitir la OC. Igual en el envío manual, la cola, el 360 y
+ * el envío automático (`invoice-scheduler.service.ts`).
+ */
+export function referenceRequirement(input: {
+	requires_references: boolean;
+	references_count: number;
+	auto_invoice?: boolean | null;
+}): 'ok' | 'warning' | 'blocker' {
+	if (!input.requires_references || input.references_count > 0) return 'ok';
+
+	return input.auto_invoice === false ? 'warning' : 'blocker';
+}
+
+/** Avisos de una factura por emitir que no impiden enviarla: hoy, la prefactura sin la referencia exigida (`referenceRequirement`). */
+export function computeWarnings(invoice: ScheduleInvoice, context: Pick<BlockerContext, 'requires_references'>): Blocker[] {
+	const requirement = referenceRequirement({
+		requires_references: context.requires_references || invoice.requires_references,
+		references_count: invoice.references_count,
+		auto_invoice: invoice.auto_invoice,
+	});
+
+	return requirement === 'warning' ? [{ code: NEEDS_REFERENCE_CODE, message: DRAFT_WITHOUT_REFERENCE_MESSAGE }] : [];
+}
+
 /** Lo que impediría enviar una factura por emitir (o la dejaría mal). Solo aplica a facturas Por Emitir. */
 export function computeBlockers(invoice: ScheduleInvoice, context: BlockerContext): Blocker[] {
 	const blockers: Blocker[] = [];
+	const references = referenceRequirement({
+		requires_references: context.requires_references || invoice.requires_references,
+		references_count: invoice.references_count,
+		auto_invoice: invoice.auto_invoice,
+	});
 
-	if ((context.requires_references || invoice.requires_references) && invoice.references_count === 0) {
+	// Sin referencia y con emisión automática: bloquea. Si va como borrador es un aviso (`computeWarnings`).
+	if (references === 'blocker') {
 		blockers.push({
-			code: 'needs_reference',
+			code: NEEDS_REFERENCE_CODE,
 			message: 'El contrato exige referencias para facturar (por ejemplo, una orden de compra) y esta factura todavía no tiene ninguna.',
 		});
 	}
@@ -818,6 +861,8 @@ export interface ScheduleRow {
 	lines_count: number;
 	is_setup: boolean;
 	blockers: Blocker[];
+	/** Avisos que no bloquean el envío (prefactura sin la referencia exigida, `computeWarnings`). */
+	warnings: Blocker[];
 	/** Varias facturas futuras iguales en una fila: `amount_*` es el de cada una y `total_*` la suma. */
 	grouped: { count: number; invoice_ids: string[]; total_contract_ccy: number; total_invoice_ccy: number | null } | null;
 }
@@ -829,7 +874,7 @@ export const GROUP_KEEP_FIRST = 2;
 
 /**
  * Agrupa la cola del calendario: facturas **futuras** por emitir, consecutivas al final, con el mismo monto, sin
- * bloqueos y sin ítems de única vez, en una sola fila cuando son más de `GROUP_MIN_ROWS`. Las primeras
+ * bloqueos ni avisos y sin ítems de única vez, en una sola fila cuando son más de `GROUP_MIN_ROWS`. Las primeras
  * `GROUP_KEEP_FIRST` facturas futuras por emitir siempre quedan sueltas.
  */
 export function groupTrailingRows(rows: ScheduleRow[], today: string): ScheduleRow[] {
@@ -840,7 +885,8 @@ export function groupTrailingRows(rows: ScheduleRow[], today: string): ScheduleR
 	if (!last) return rows;
 	const sameAmount = (row: ScheduleRow) =>
 		row.amount_contract_ccy === last.amount_contract_ccy && row.amount_invoice_ccy === last.amount_invoice_ccy;
-	const eligible = (row: ScheduleRow) => isFuture(row) && !keep.has(row) && row.blockers.length === 0 && !row.is_setup && sameAmount(row);
+	const eligible = (row: ScheduleRow) =>
+		isFuture(row) && !keep.has(row) && row.blockers.length === 0 && row.warnings.length === 0 && !row.is_setup && sameAmount(row);
 	let start = rows.length;
 
 	while (start > 0 && eligible(rows[start - 1])) start -= 1;
@@ -905,6 +951,7 @@ export function buildSchedule(invoices: ScheduleInvoice[], options: ScheduleOpti
 				lines_count: invoice.lines_count,
 				is_setup: invoice.has_non_recurring,
 				blockers: state === 'scheduled' ? computeBlockers(invoice, options.blockerContext) : [],
+				warnings: state === 'scheduled' ? computeWarnings(invoice, options.blockerContext) : [],
 				grouped: null,
 			};
 		})

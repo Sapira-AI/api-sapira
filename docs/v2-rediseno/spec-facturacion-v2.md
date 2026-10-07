@@ -155,7 +155,7 @@ consolidados quedan `is_active = false` con `consolidated_into_invoice_id`.
 ### 4.2 Por emitir (cola de trabajo)
 Lista de PE activas con `COALESCE(issue_date, scheduled_at)` en el rango (default: hasta fin de mes) agrupada en **Listas** (sin bloqueos) /
 **Con bloqueo** (agrupadas por código, con la acción que lo resuelve) / **Rezagadas** (emisión < hoy; S6 propuesta 6) / **En el ERP como borrador**.
-Bloqueos (§5.3): `needs_reference` (OC/HES) → Referencias; `fixed_fx_without_rate` / `fx_rate_missing` → Tipo de cambio (`period_closed` →
+Bloqueos (§5.3): `needs_reference` (OC/HES) → Referencias (solo si la factura se emite con `auto_invoice` o fuera del ERP; la prefactura que va al ERP como borrador sin OC lleva el aviso `needs_reference` y queda en Listas, Domi 07-10); `fixed_fx_without_rate` / `fx_rate_missing` → Tipo de cambio (`period_closed` →
 Reprogramar salió el 03-10: el cierre no bloquea facturas); `sent_to_erp_draft` → Restablecer; `no_erp_partner`, `item_without_product`, `tax_rate_missing` → enlace a Configuración/Clientes.
 Acciones por lote = §4.7. Vista "Calendario" (mes × cliente) del viejo como alternativa de lectura (F5). **Construido (01-10):** dos vistas
 **Lista · Calendario** (`?vista=calendario`); el calendario es la misma cola (`GET /billing/to-issue?until=<fin del mes «Hasta»>`, sin API nueva)

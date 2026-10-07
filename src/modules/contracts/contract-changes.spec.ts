@@ -2066,3 +2066,181 @@ describe('preview por factura (`detail`): la factura real antes → después', (
 		expect(december.detail!.after).toEqual({ subtotal: 2120, tax: 402.8, total: 2522.8 });
 	});
 });
+
+describe('item_update · corregir la fecha de inicio (caso CTR-2026-191, decisión 07-10)', () => {
+	const ANALITICA = '33333333-3333-4333-8333-333333333333';
+	const LAST: Record<string, string> = { '09': '30', '10': '31', '11': '30', '12': '31' };
+	const analitica = (overrides: Partial<ReturnType<typeof itemRow>> = {}) =>
+		itemRow({
+			id: ANALITICA,
+			product_id: PRODUCT_NUEVO,
+			product_name: 'Analítica',
+			categoria: 'CROSS-SELL',
+			quantity: 1,
+			unit_price: 300,
+			annual_unit_price: 3600,
+			monthly_price: 300,
+			billing_period_price: 300,
+			price: 1200,
+			final_price: 1200,
+			term_months: 4,
+			start_date: '2026-09-01',
+			end_date: '2026-12-31',
+			booking_date: '2026-09-01',
+			...overrides,
+		});
+	/** Factura propia de Analítica del mes `mm` (300 neto): emitida en septiembre, Por Emitir después. */
+	const anaInvoice = (mm: string, overrides: Partial<ReturnType<typeof invoiceRow>> = {}) => {
+		const base = invoiceRow(mm);
+
+		return {
+			...base,
+			id: `ana-${mm}`,
+			invoice_number: mm === '09' ? 'F-A09' : null,
+			subtotal: 300,
+			vat: 57,
+			amount_invoice: 300,
+			total_invoice: 357,
+			lines: [
+				{
+					...base.lines[0],
+					id: `line-${mm}-ana`,
+					invoice_id: `ana-${mm}`,
+					contract_item_id: ANALITICA,
+					product_id: PRODUCT_NUEVO,
+					description: `Analítica - Periodo 01/${mm}/2026 a ${LAST[mm]}/${mm}/2026`,
+					quantity: 1,
+					unit_price: 300,
+					unit_price_invoice: 300,
+					subtotal: 300,
+					subtotal_invoice: 300,
+					tax_amount: 57,
+					tax_amount_invoice: 57,
+					total: 357,
+					total_invoice: 357,
+				},
+			],
+			...overrides,
+		};
+	};
+	const ninja = (september: Partial<ReturnType<typeof invoiceRow>> = { voided: true }) =>
+		context({
+			items: [itemRow(), soporteRow(), analitica()],
+			invoices: [
+				...['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((mm) => invoiceRow(mm)),
+				anaInvoice('09', september),
+				anaInvoice('10'),
+				anaInvoice('11'),
+				anaInvoice('12'),
+			],
+		});
+	const move = (ctx: ReturnType<typeof context>, start: string, extra: Record<string, unknown> = {}) =>
+		planChange(
+			ctx,
+			request({ type: 'item_update', items: [{ item_id: ANALITICA, start_date: start, ...extra }] } as never, { effective_date: '2026-09-28' })
+		);
+
+	it('Ninja: la de septiembre anulada con NC (sin reemitir) → mover el inicio al 01-10 corrige el ítem en su lugar sin tocar facturas', () => {
+		const plan = move(ninja(), '2026-10-01');
+
+		expect(plan.preview.can_apply).toBe(true);
+		expect(plan.preview.blockers).toEqual([]);
+		expect(inserted(plan)).toEqual([]);
+		expect(ops(plan, 'update_item')).toEqual([
+			{ kind: 'update_item', item_id: ANALITICA, set: { start_date: '2026-10-01', term_months: 3, price: 900, final_price: 900 } },
+		]);
+		// Las Por Emitir de octubre en adelante ya parten el 01-10: nada que quitar ni generar; la anulada no se toca.
+		expect([...ops(plan, 'delete_line'), ...ops(plan, 'create_invoices'), ...ops(plan, 'cancel_invoice')]).toEqual([]);
+		expect(ops(plan, 'regenerate_descriptions')).toEqual([]);
+		expect(plan.preview.contract.after.total_value).toBe(12000 + 2400 + 900);
+		expect(plan.preview.rsm).toMatchObject({ first_month: '2026-09-01', momentum: 'ITEM_CORRECTED' });
+		expect(plan.event).toMatchObject({
+			type: 'ITEM_CORRECTED',
+			subtype: 'start',
+			amount_delta: 0,
+			description: '"Analítica": fecha de inicio 2026-09-01 → 2026-10-01',
+			metadata: expect.objectContaining({
+				items: [
+					{ item_id: ANALITICA, product_name: 'Analítica', changes: [{ field: 'start_date', before: '2026-09-01', after: '2026-10-01' }] },
+				],
+			}),
+		});
+	});
+
+	it('bloquea si queda una emitida vigente del ítem antes del nuevo inicio: hay que anularla con NC primero', () => {
+		const plan = move(ninja({}), '2026-10-01');
+
+		expect(plan.preview.can_apply).toBe(false);
+		expect(plan.preview.blockers).toEqual([
+			{
+				code: 'issued_invoice_before_start',
+				message: 'Anula con nota de crédito la factura F-A09 antes de mover el inicio: cobra "Analítica" antes del 2026-10-01',
+				next_step: 'Anúlala desde su vista rápida con una nota de crédito, sin reemitir, y vuelve a corregir la fecha',
+			},
+		]);
+	});
+
+	it('las Por Emitir del ítem antes del nuevo inicio se cancelan y el primer período queda prorrateado como al crear', () => {
+		const plan = move(ninja(), '2026-10-15');
+
+		expect(plan.preview.can_apply).toBe(true);
+		expect(ops(plan, 'delete_line')).toEqual([{ kind: 'delete_line', invoice_id: 'ana-10', line_id: 'line-10-ana' }]);
+		const [created] = ops(plan, 'create_invoices');
+		const lines = created.invoices.flatMap((invoice: { lines: PreviewLine[] }) => invoice.lines);
+
+		// 15-10 → 31-10: 17 de 31 días de 300; como al crear, el tramo inicial va con la factura del ciclo siguiente (PE de noviembre).
+		expect(lines.map((line: PreviewLine) => [line.billing_period_start, line.billing_period_end, line.subtotal])).toEqual([
+			['2026-10-15', '2026-10-31', 164.52],
+		]);
+		expect(created.merge_into).toEqual(['inv-11']);
+		expect(plan.preview.invoices.cancelled.map((invoice) => invoice.id)).toEqual(['ana-10']);
+		expect(plan.preview.invoices.updated).toEqual([
+			expect.objectContaining({
+				id: 'inv-11',
+				subtotal_before: 1200,
+				subtotal_after: 1364.52,
+				change: 'se suma el tramo del nuevo inicio a la factura del 2026-11-01',
+			}),
+		]);
+		// Las Por Emitir propias de noviembre y diciembre siguen como estaban.
+		expect(plan.ops.some((op) => 'invoice_id' in op && /ana-1[12]/.test(String(op.invoice_id)))).toBe(false);
+	});
+
+	it('adelantar el inicio genera la Por Emitir del tramo que falta (solo los días sin factura vigente)', () => {
+		const ctx = context({
+			items: [itemRow(), soporteRow(), analitica({ start_date: '2026-10-01', term_months: 3, price: 900, final_price: 900 })],
+			invoices: [
+				...['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((mm) => invoiceRow(mm)),
+				anaInvoice('10'),
+				anaInvoice('11'),
+				anaInvoice('12'),
+			],
+		});
+		const plan = move(ctx, '2026-09-15');
+
+		expect(plan.preview.can_apply).toBe(true);
+		expect(ops(plan, 'update_item')[0].set).toMatchObject({ start_date: '2026-09-15', term_months: 4 });
+		expect(ops(plan, 'delete_line')).toEqual([]);
+		const [created] = ops(plan, 'create_invoices');
+
+		// 15-09 → 30-09: 16 de 30 días de 300; el tramo inicial va con la factura del ciclo siguiente (como al crear) y se funde con la PE de octubre.
+		expect(
+			created.invoices.flatMap((invoice: { lines: PreviewLine[] }) =>
+				invoice.lines.map((line) => [line.billing_period_start, line.billing_period_end, line.subtotal])
+			)
+		).toEqual([['2026-09-15', '2026-09-30', 160]]);
+		expect(created.merge_into).toEqual(['inv-10']);
+		expect(plan.preview.invoices.updated).toEqual([expect.objectContaining({ id: 'inv-10', subtotal_before: 1200, subtotal_after: 1360 })]);
+		expect(plan.preview.contract.after.total_value).toBe(12000 + 2400 + 1060);
+		expect(plan.preview.rsm.first_month).toBe('2026-09-01');
+	});
+
+	it('valida: fecha real, ≤ fin del ítem, sin cambiar el valor en el mismo paso y con el mes abierto', () => {
+		expect(fields(() => move(ninja(), '2026-02-30'))).toEqual(['change.items.0.start_date']);
+		expect(fields(() => move(ninja(), '2027-01-15'))).toEqual(['change.items.0.start_date']);
+		expect(fields(() => move(ninja(), '2026-10-01', { quantity: 2 }))).toEqual(['change.items']);
+		const closed = move({ ...ninja(), contract: contractRow({ cutoff_date: '2026-09-30' }) }, '2026-10-01');
+
+		expect(closed.preview.blockers.map((blocker) => blocker.code)).toEqual(['period_closed']);
+	});
+});

@@ -220,6 +220,36 @@ export function withInternalLines<T extends { id: string; visible_line_id: strin
 	return views.map((view) => ({ ...view, internal_lines: views.filter((entry) => entry.visible_line_id === view.id) }));
 }
 
+/**
+ * Facturado del contrato para la alerta "Las facturas del contrato suman X y el valor total es Y" (`invoices_count`, `invoiced_total`), con
+ * `c` = el contrato y `$2` = el holding. Suma **líneas** (`invoice_items.subtotal_contract_currency`, moneda del contrato) de este contrato
+ * (`invoice_items.contract_id`, o el contrato de su ítem, o el de la factura) en facturas vigentes (Por Emitir incluidas, no Canceladas):
+ * así una factura unificada aporta solo las líneas de cada contrato y en su moneda (antes se sumaba el encabezado de la unificada, en la
+ * moneda de factura, al contrato principal). Los orígenes de una unificación (inactivos o con `consolidated_into_invoice_id`) no cuentan;
+ * la copia activa sí. Una factura sin líneas (registro antiguo) cuenta por su encabezado. Facturas suman, notas de crédito restan.
+ */
+export const INVOICED_BY_CONTRACT_SQL = `
+	SELECT COUNT(DISTINCT x.invoice_id) AS invoices_count, COALESCE(SUM(x.amount), 0) AS invoiced_total
+	FROM (
+		SELECT i.id AS invoice_id,
+			CASE WHEN i.document_type = 'NC' THEN -ABS(COALESCE(ii.subtotal_contract_currency, 0)) ELSE COALESCE(ii.subtotal_contract_currency, 0) END AS amount
+		FROM invoice_items ii
+		JOIN invoices i ON i.id = ii.invoice_id
+		LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
+		WHERE i.holding_id = $2 AND i.is_active = true AND i.status IS DISTINCT FROM 'Cancelada' AND i.status IS DISTINCT FROM 'Consolidada'
+			AND i.consolidated_into_invoice_id IS NULL
+			AND (i.document_type IS NULL OR i.document_type ILIKE 'FACTURA%' OR i.document_type IN ('Invoice', 'NC'))
+			AND COALESCE(ii.contract_id, ci.contract_id, i.contract_id) = c.id
+		UNION ALL
+		SELECT i.id,
+			CASE WHEN i.document_type = 'NC' THEN -ABS(COALESCE(i.amount_contract_currency, 0)) ELSE COALESCE(i.amount_contract_currency, 0) END
+		FROM invoices i
+		WHERE i.contract_id = c.id AND i.holding_id = $2 AND i.is_active = true AND i.status IS DISTINCT FROM 'Cancelada' AND i.status IS DISTINCT FROM 'Consolidada'
+			AND i.consolidated_into_invoice_id IS NULL
+			AND (i.document_type IS NULL OR i.document_type ILIKE 'FACTURA%' OR i.document_type IN ('Invoice', 'NC'))
+			AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = i.id)
+	) x`;
+
 @Injectable()
 export class ContractsService {
 	constructor(
@@ -798,15 +828,7 @@ export class ContractsService {
 				) AS expired_items
 			FROM contracts c
 			LEFT JOIN client_entities ce ON ce.id = c.client_entity_id
-			LEFT JOIN LATERAL (
-				-- Facturas vigentes del contrato (Por Emitir incluidas): facturas suman, notas de crédito restan.
-				SELECT COUNT(*) AS invoices_count,
-					COALESCE(SUM(CASE WHEN i.document_type = 'NC' THEN -ABS(COALESCE(i.amount_contract_currency, 0))
-						ELSE COALESCE(i.amount_contract_currency, 0) END), 0) AS invoiced_total
-				FROM invoices i
-				WHERE i.contract_id = c.id AND i.holding_id = $2 AND i.is_active = true AND i.status IS DISTINCT FROM 'Cancelada'
-					AND (i.document_type IS NULL OR i.document_type ILIKE 'FACTURA%' OR i.document_type IN ('Invoice', 'NC'))
-			) inv ON true
+			LEFT JOIN LATERAL (${INVOICED_BY_CONTRACT_SQL}) inv ON true
 			WHERE c.id = $1 AND c.holding_id = $2`,
 			[contractId, holdingId, today]
 		);
@@ -1021,7 +1043,8 @@ export class ContractsService {
 			pending: `i.is_active = true AND i.status = 'Por Emitir'`,
 			// Literal (no `$n`): un parámetro que la consulta no usa rompe el tipado de Postgres.
 			issued: `i.is_active = true AND i.status IN (${ISSUED_INVOICE_STATUSES.map((value) => `'${value}'`).join(', ')})`,
-			cancelled: `(i.status = 'Cancelada' OR i.is_active = false)`,
+			// Un origen de unificación (inactivo, `consolidated_into_invoice_id`) no es una anulada: se ve en "Todas" como "Unificada en …".
+			cancelled: `(i.status = 'Cancelada' OR (i.is_active = false AND i.consolidated_into_invoice_id IS NULL))`,
 		};
 		const statusFilter = status === 'all' ? '' : `AND ${statusSql[status]}`;
 		// Lista blanca: el campo de orden nunca viene del usuario tal cual. Por período (defecto) desempata por emisión.
@@ -1051,10 +1074,12 @@ export class ContractsService {
 					${noChargeSql('i')} AS no_charge, i.document_type AS doc_type,
 					${voidedSql('i')} AS voided, ${relatedDocumentsSql('i')} AS related_documents, ${partialBillingEventSql('i')} AS partial_billing_event,
 					i.split_reason, i.split_from_invoice_id,
+					i.consolidated_into_invoice_id, ui.invoice_number AS consolidated_into_number, ui.status AS consolidated_into_status,
 					adj.id AS deviation_id, adj.type AS deviation_type, adj.amount_diff AS deviation_amount_diff, adj.notes AS deviation_reason,
 					adj.adjusted_at AS deviation_adjusted_at, adj.adjusted_by_name AS deviation_adjusted_by_name
 				FROM invoices i
 				LEFT JOIN client_entities ce ON ce.id = i.client_entity_id
+				LEFT JOIN invoices ui ON ui.id = i.consolidated_into_invoice_id AND ui.holding_id = i.holding_id
 				LEFT JOIN LATERAL (
 					SELECT a.id, a.type, a.amount_diff, a.notes, a.adjusted_at, COALESCE(u.name, u.email) AS adjusted_by_name
 					FROM invoice_adjustments a LEFT JOIN users u ON u.id = a.adjusted_by
@@ -1139,6 +1164,16 @@ export class ContractsService {
 				partial_billing: partialBillingOf(String(row.id), row.partial_billing_event),
 				split_reason: toText(row.split_reason),
 				split_from_invoice_id: toText(row.split_from_invoice_id),
+				// Origen de una unificación (histórica del front anterior o v2): inactiva y apuntando al documento que la reemplaza. La lista la
+				// muestra "Unificada en <folio>" con enlace; no cuenta como Por Emitir ni como anulada.
+				consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
+				consolidated_into: row.consolidated_into_invoice_id
+					? {
+							id: String(row.consolidated_into_invoice_id),
+							invoice_number: toText(row.consolidated_into_number),
+							status: toText(row.consolidated_into_status),
+						}
+					: null,
 				...(unified.get(String(row.id)) ?? {}),
 			})),
 			items: total,

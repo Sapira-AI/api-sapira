@@ -190,6 +190,7 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 					lines_without_product: 2,
 					tax_rate: null,
 					requires_references: true,
+					auto_invoice: true,
 					fx_contract_to_invoice: null,
 				}),
 				context({ auto_send_to_erp: false, has_erp_integration: false, has_erp_partner: false })
@@ -206,6 +207,41 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			]);
 			expect(plan.can_apply).toBe(false);
 			expect(plan.blockers.find((blocker) => blocker.code === 'item_without_product')?.message).toContain('2 líneas');
+		});
+
+		it('prefactura sin OC (Domi 07-10): sin la referencia exigida, como borrador avisa y se envía; si se emite, bloquea', () => {
+			const draft = planSendNow(invoice({ fx_contract_to_invoice: 950, requires_references: true, auto_invoice: false }), context());
+
+			expect(draft.can_apply).toBe(true);
+			expect(draft.blockers).toEqual([]);
+			expect(draft.warnings).toEqual([
+				{
+					code: 'needs_reference',
+					message: 'Va como borrador sin la referencia que exige el contrato (por ejemplo, la OC). Agrégala antes de emitir.',
+				},
+			]);
+
+			const viaContract = planSendNow(
+				invoice({ fx_contract_to_invoice: 950, auto_invoice: false }),
+				context({ contract_requires_references: true })
+			);
+
+			expect(codes(viaContract.warnings)).toEqual(['needs_reference']);
+			expect(viaContract.can_apply).toBe(true);
+
+			const issued = planSendNow(invoice({ fx_contract_to_invoice: 950, requires_references: true, auto_invoice: true }), context());
+
+			expect(codes(issued.blockers)).toEqual(['needs_reference']);
+			expect(codes(issued.warnings)).not.toContain('needs_reference');
+			expect(issued.can_apply).toBe(false);
+
+			const withReference = planSendNow(
+				invoice({ fx_contract_to_invoice: 950, requires_references: true, auto_invoice: true, references_count: 1 }),
+				context()
+			);
+
+			expect(withReference.blockers).toEqual([]);
+			expect(codes(withReference.warnings)).not.toContain('needs_reference');
 		});
 
 		it('la política fija del CONTRATO también exige tasa (transición), y `no_erp_partner` distingue sin razón social', () => {
